@@ -1,0 +1,17 @@
+Convert Load JSON to use the sidebar thing
+finish Bradparams editor
+  Network access, compose components to one process
+completion dialog needs better css to make type-correct things more obvious, etc
+  "new" should be differentiated
+Find References
+structured Typescript
+Better type system
+  Polymorphism
+  Structural Typing?
+  Function types?
+Partial invalidation
+  Writer for logging data you access
+Better display language
+  Wrapping should be a function of available width
+Undo/Redo
+Version Control

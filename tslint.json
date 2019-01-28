@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "adjacent-overload-signatures": true,
+    "array-type": [ true, "array" ],
+    "no-invalid-this": true,
+    "no-var-keyword": true,
+    "triple-equals": true,
+    "ordered-imports": [true],
+    "indent": [true, "spaces"],
+    "no-trailing-whitespace": false,
+    "trailing-comma": [
+      true,
+      {"multiline": "never", "singleline": "never"} ]}}

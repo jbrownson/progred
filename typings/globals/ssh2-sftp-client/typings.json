@@ -1,0 +1,8 @@
+{
+  "resolution": "main",
+  "tree": {
+    "src": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/663c838a5805b3032c46302cca7841a3eef0e545/ssh2-sftp-client/ssh2-sftp-client.d.ts",
+    "raw": "registry:dt/ssh2-sftp-client#1.0.5+20160705172730",
+    "typings": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/663c838a5805b3032c46302cca7841a3eef0e545/ssh2-sftp-client/ssh2-sftp-client.d.ts"
+  }
+}

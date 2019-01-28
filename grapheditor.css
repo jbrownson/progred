@@ -1,0 +1,42 @@
+* { font-family: sans-serif; font-weight: 500 }
+body { background-color: white; color: #555; font-size: 100%; white-space: nowrap; overflow: hidden; margin: 0 }
+#root { width: 100%; height: 100% }
+.scrollparent { padding: 0px; width: 100%; height: 100%; overflow: scroll }
+unselectable {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+  display: inline-block }
+.uneditable { color: #aaa }
+span.unmatching { border-bottom: 1px solid red }
+.selected { outline: black solid 1px }
+.hinted { outline: #ccc dotted 1px }
+.i { height: 16px; border: none; outline: none; color: inherit; font: inherit; background-color: transparent; padding: 0 }
+textarea.i { resize: none; overflow: auto; white-space: nowrap; width: 0; vertical-align: text-top }
+.string { color: #808dd3 }
+.number { color: #f66153 }
+.boolean { color: #f66153 }
+.edgefield { display: inline-block }
+.entrylist {
+  position: absolute;
+  background: white;
+  z-index: 1;
+  outline: 1px solid #555;
+  overflow: scroll;
+  max-height: 200px;
+  min-width: 100px }
+.entrylist > ul { list-style-type: none; margin: 0; padding: 0 }
+.entrylist > ul > li { list-style-type: none; margin: 0; white-space: nowrap; color: #aaa }
+.entrylist > ul > li.selected { background-color: #eee }
+.entrylist > ul > li > span.matching { color: black }
+.entrylist > ul > li.unmatching > span.matching { color: #888 }
+.entrylist > ul > li.unmatching { color: #bbb }
+.entrylist > ul > li.external { font-style: italic }
+.disambiguation::before { content: " (" }
+.disambiguation::after { content: ")" }
+.disambiguation { color: #ccc }
+.doc, .views { padding: 8px }
+.separator { width: 0px; border-left: 1px #555 solid }
+.sidebar { height: 100%; background-color: #f2f2f2 }

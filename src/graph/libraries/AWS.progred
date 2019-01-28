@@ -1,0 +1,645 @@
+{
+  "root": "07a187bad2780449924a5ce262b5517c",
+  "guidMap": {
+    "07a187bad2780449924a5ce262b5517c": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "3c0e5c714e551ef48390f803fa17569b"
+        }
+      },
+      {
+        "label": {
+          "guid": "1088fc911436441ca7f0b569fcf72da5"
+        },
+        "to": {
+          "guid": "905bab86ce6e7eb5b947c96b800da10b"
+        }
+      }
+    ],
+    "a7c69c270fd4e689d47cc548bc70ff9a": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "6a7470f06cd2aa3ab4fed77aafe84fb6": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "a7200dfde3951c9d41634e9fc5fbf414"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "3184682ef8bff8421abc525d3c292e09"
+        }
+      }
+    ],
+    "3184682ef8bff8421abc525d3c292e09": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "e35d27082ac44a759a4e4c0535f243d7"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Load AWS"
+        }
+      },
+      {
+        "label": {
+          "guid": "210a5f0ea35c4677bf37192a69f0fb84"
+        },
+        "to": {
+          "guid": "b89d6f4dac9a42a2cab513ee90054d6e"
+        }
+      }
+    ],
+    "2202651d4d6b98535f23acfa9ea4395e": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "b89d6f4dac9a42a2cab513ee90054d6e": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "616d9fc008553474c908c66b7f7ae303"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "3c92672106547a6fa857e3a75f29a3e3"
+        }
+      }
+    ],
+    "3c92672106547a6fa857e3a75f29a3e3": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "bucket"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "70d1d53107174f88858da0cdad6050d5"
+        }
+      }
+    ],
+    "616d9fc008553474c908c66b7f7ae303": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "b7fed2b5451b47895e46da338a2c89c3"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "9cb3cca5dcdc302d2f6f62359ba8cc38"
+        }
+      }
+    ],
+    "905bab86ce6e7eb5b947c96b800da10b": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "6a7470f06cd2aa3ab4fed77aafe84fb6"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "bbeaf300c9c0e027dac6d7c91c3fab66"
+        }
+      }
+    ],
+    "bbeaf300c9c0e027dac6d7c91c3fab66": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "e35d27082ac44a759a4e4c0535f243d7"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "AWS Credentials"
+        }
+      },
+      {
+        "label": {
+          "guid": "210a5f0ea35c4677bf37192a69f0fb84"
+        },
+        "to": {
+          "guid": "adbdd4a0fec60a2ef85e0ba4f4d7609a"
+        }
+      }
+    ],
+    "3420d8bbd1faf06220ddfbfdffceed4a": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "adbdd4a0fec60a2ef85e0ba4f4d7609a": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "19e21f2b4d1b7a67d8525cc67a9579bd"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "17b303d4b1ff8f745cf761e6c9be64cb"
+        }
+      }
+    ],
+    "17b303d4b1ff8f745cf761e6c9be64cb": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "access key id"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "70d1d53107174f88858da0cdad6050d5"
+        }
+      }
+    ],
+    "19e21f2b4d1b7a67d8525cc67a9579bd": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "3420d8bbd1faf06220ddfbfdffceed4a"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "23e6e46577eeb97fd232639c42e866f2"
+        }
+      }
+    ],
+    "23e6e46577eeb97fd232639c42e866f2": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "secret access key"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "70d1d53107174f88858da0cdad6050d5"
+        }
+      }
+    ],
+    "9cb3cca5dcdc302d2f6f62359ba8cc38": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "credentials"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "bbeaf300c9c0e027dac6d7c91c3fab66"
+        }
+      }
+    ],
+    "b7fed2b5451b47895e46da338a2c89c3": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "2202651d4d6b98535f23acfa9ea4395e"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "8273a691bc098cd29d21d39049e2871f"
+        }
+      }
+    ],
+    "a7200dfde3951c9d41634e9fc5fbf414": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "4ddc3e8e436b79012701a5df11d9111c"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "a44c85987be19b3ea473ae0be2e048cb"
+        }
+      }
+    ],
+    "a44c85987be19b3ea473ae0be2e048cb": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "e35d27082ac44a759a4e4c0535f243d7"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Put AWS"
+        }
+      },
+      {
+        "label": {
+          "guid": "210a5f0ea35c4677bf37192a69f0fb84"
+        },
+        "to": {
+          "guid": "cff2184716c8138238a48f0055ddba9f"
+        }
+      }
+    ],
+    "9d6e484db49e8c0463f25bad21a15d94": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "cff2184716c8138238a48f0055ddba9f": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "e1b571ea7314327b52b1e7df6a96565d"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "3c92672106547a6fa857e3a75f29a3e3"
+        }
+      }
+    ],
+    "e1b571ea7314327b52b1e7df6a96565d": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "e8e699eca7e77a48b71916f6dc83afc9"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "9cb3cca5dcdc302d2f6f62359ba8cc38"
+        }
+      }
+    ],
+    "4ddc3e8e436b79012701a5df11d9111c": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "a7c69c270fd4e689d47cc548bc70ff9a"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "fe3f998b2fd0a3700a9d29a9460821d1"
+        }
+      }
+    ],
+    "fe3f998b2fd0a3700a9d29a9460821d1": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "e35d27082ac44a759a4e4c0535f243d7"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Put AWS Succeeded"
+        }
+      },
+      {
+        "label": {
+          "guid": "210a5f0ea35c4677bf37192a69f0fb84"
+        },
+        "to": {
+          "guid": "9683385e4c4385c476101a8d92183829"
+        }
+      }
+    ],
+    "9683385e4c4385c476101a8d92183829": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "e8e699eca7e77a48b71916f6dc83afc9": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "747b0fd52438de4a938ae42902c94831"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "8273a691bc098cd29d21d39049e2871f"
+        }
+      }
+    ],
+    "747b0fd52438de4a938ae42902c94831": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "9d6e484db49e8c0463f25bad21a15d94"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "c4c842eda0ff65ab2857163315ca35f5"
+        }
+      }
+    ],
+    "c4c842eda0ff65ab2857163315ca35f5": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "70d1d53107174f88858da0cdad6050d5"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "string"
+        }
+      }
+    ]
+  }
+}

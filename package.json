@@ -1,0 +1,31 @@
+{
+  "name": "progred",
+  "version": "0.0.1",
+  "description": "",
+  "scripts": {
+    "webpack": "webpack --watch",
+    "start": "electron .",
+    "gen": "node build/generator.js",
+    "dist": "electron-builder"
+  },
+  "main": "build/main.js",
+  "author": "Jake Brownson (jake@brainiumstudios.com)",
+  "devDependencies": {
+    "@types/react": "^16.0.25",
+    "@types/react-dom": "^16.0.3",
+    "electron": "^1.7.9",
+    "electron-packager": "^10.1.0",
+    "json-loader": "^0.5.7",
+    "ts-loader": "^3.1.1",
+    "tslint": "^5.8.0",
+    "tslint-loader": "latest",
+    "typescript": "^2.6.2",
+    "typings": "latest",
+    "webpack": "^3.8.1"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.157.0",
+    "react": "^16.1.1",
+    "react-dom": "^16.1.1"
+  }
+}

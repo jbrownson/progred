@@ -1,0 +1,1 @@
+export function TODO<A = any>(): A { throw "TODO" }

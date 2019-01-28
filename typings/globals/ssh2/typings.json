@@ -1,0 +1,8 @@
+{
+  "resolution": "main",
+  "tree": {
+    "src": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/aa3428bea8460de571d8c7de88d2bd83a0ee6f63/ssh2/ssh2.d.ts",
+    "raw": "registry:dt/ssh2#0.0.0+20160514170459",
+    "typings": "https://raw.githubusercontent.com/DefinitelyTyped/DefinitelyTyped/aa3428bea8460de571d8c7de88d2bd83a0ee6f63/ssh2/ssh2.d.ts"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "globalDependencies": {
+    "ssh2": "registry:dt/ssh2#0.0.0+20160514170459",
+    "ssh2-sftp-client": "registry:dt/ssh2-sftp-client#1.0.5+20160705172730"
+  },
+  "dependencies": {
+    "react": "registry:npm/react#15.0.1+20170104200836",
+    "react-dom": "registry:npm/react-dom#15.0.1+20160826174104"
+  }
+}

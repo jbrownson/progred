@@ -1,0 +1,16 @@
+to run:
+
+1. install Homebrew: http://brew.sh/
+2. brew install yarn
+from the root of the git repo:
+3. yarn install
+4. ./node_modules/.bin/typings install
+5. yarn run webpack
+6. (in a separate terminal) yarn start
+
+to debug in vscode
+1. install https://marketplace.visualstudio.com/items?itemName=msjsdiag.debugger-for-chrome
+2. in the debug pane, click the play button
+
+to run the wrapper generator
+$ yarn run gen
