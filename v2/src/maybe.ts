@@ -1,5 +1,13 @@
 export type Maybe<T> = T | undefined
 
+export function mapMaybe<T, R>(value: Maybe<T>, f: (v: T) => R): Maybe<R> {
+  return value !== undefined ? f(value) : undefined
+}
+
+export function flatMapMaybe<T, R>(value: Maybe<T>, f: (v: T) => Maybe<R>): Maybe<R> {
+  return value !== undefined ? f(value) : undefined
+}
+
 export function* map<T, R>(items: Iterable<T>, f: (item: T) => R): Iterable<R> {
   for (const item of items) yield f(item)
 }

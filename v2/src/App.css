@@ -23,11 +23,7 @@
 
 .container {
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  padding: 1em;
 }
 
 .logo {
@@ -57,7 +53,7 @@ a:hover {
 }
 
 h1 {
-  text-align: center;
+  margin-top: 0;
 }
 
 input,
@@ -143,6 +139,73 @@ button {
 }
 
 .id.number {
+  color: #2a6a9d;
+}
+
+/* Tree view styles */
+.tree-view {
+  text-align: left;
+}
+
+.tree-node {
+  margin-left: 1em;
+}
+
+.tree-node-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.25em;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.tree-node-header:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.toggle {
+  width: 1em;
+  font-size: 0.75em;
+  color: #666;
+}
+
+.arrow {
+  color: #999;
+  font-size: 0.85em;
+}
+
+.identicon {
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+.identicon.label {
+  border-radius: 50%;
+}
+
+.tree-node-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid #ddd;
+  margin-left: 0.5em;
+}
+
+.tree-leaf {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.25em;
+  margin-left: 1.5em;
+}
+
+.value.string {
+  color: #2a9d2a;
+}
+
+.value.number {
   color: #2a6a9d;
 }
 
