@@ -89,7 +89,11 @@ function TreeNode(
   return el('div', { class: 'tree-node' }, header, children)
 }
 
-export function TreeView(gid: Gid, root: Maybe<GuidId>): HTMLDivElement {
+export type TreeViewCallbacks = {
+  onDelete?: (cursor: Cursor) => void
+}
+
+export function TreeView(gid: Gid, root: Maybe<GuidId>, callbacks: TreeViewCallbacks = {}): HTMLDivElement {
   let tree = emptySpanningTree()
   let selection: Maybe<Cursor> = undefined
 
@@ -98,11 +102,19 @@ export function TreeView(gid: Gid, root: Maybe<GuidId>): HTMLDivElement {
     tabIndex: 0,
     onClick: () => { selection = undefined; render() },
     onKeyDown: (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { selection = undefined; render() }
+      if (e.key === 'Escape') {
+        selection = undefined
+        render()
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
+        callbacks.onDelete?.(selection)
+        selection = undefined
+        render()
+      }
     }
   })
 
-  const callbacks: TreeNodeCallbacks = {
+  const nodeCallbacks: TreeNodeCallbacks = {
     onToggle: (cursor, currentlyCollapsed) => {
       tree = setCollapsed(tree, cursor, !currentlyCollapsed)
       render()
@@ -114,7 +126,7 @@ export function TreeView(gid: Gid, root: Maybe<GuidId>): HTMLDivElement {
   }
 
   const render = () => {
-    const content = TreeNode(gid, root, rootCursor, tree, selection, false, callbacks)
+    const content = TreeNode(gid, root, rootCursor, tree, selection, false, nodeCallbacks)
     if (container.firstChild) {
       container.replaceChild(content, container.firstChild)
     } else {
