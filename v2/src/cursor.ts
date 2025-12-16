@@ -21,7 +21,7 @@ export function matchCursor<T>(cursor: Cursor, handlers: {
 export function cursorNode(cursor: Cursor, gid: Gid, root: Maybe<Id>): Maybe<Id> {
   return matchCursor(cursor, {
     root: () => root,
-    child: (parentCursor, label) => flatMapMaybe(cursorNode(parentCursor, gid, root), parentNode => gid(parentNode, label))
+    child: (parentCursor, label) => flatMapMaybe(cursorNode(parentCursor, gid, root), parentNode => gid(parentNode)?.get(label))
   })
 }
 

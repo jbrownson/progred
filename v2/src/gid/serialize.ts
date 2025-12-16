@@ -9,9 +9,9 @@ type SerializedGid = {
 
 export function serialize(gid: MutGid): string {
   const nodes = Object.fromEntries(
-    map(gid.nodes(), ([node, edges]) => [
-      node.guid,
-      Object.fromEntries(edges.map(([label, value]) => [label.guid, value.toJSON()]))
+    map(gid.entities(), entity => [
+      entity.guid,
+      Object.fromEntries([...gid.edges(entity)!].map(([label, value]) => [label.guid, value.toJSON()]))
     ])
   )
   return JSON.stringify({ nodes }, null, 2)

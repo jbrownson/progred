@@ -1,43 +1,41 @@
+import { Map } from 'immutable'
 import type { Id } from './id'
 import { GuidId } from './id'
-import { Gid } from './gid'
-import { Maybe, map } from '../maybe'
+import type { Gid } from './gid'
+import type { Maybe } from '../maybe'
 
 export class MutGid {
-  private data: Map<string, Map<string, Id>> = new Map()
+  private data = Map<GuidId, Map<GuidId, Id>>()
 
-  get(node: Id, label: Id): Maybe<Id> {
-    if (!(node instanceof GuidId)) return undefined
-    if (!(label instanceof GuidId)) return undefined
-    return this.data.get(node.guid)?.get(label.guid)
+  get(entity: Id, label: GuidId): Maybe<Id> {
+    if (!(entity instanceof GuidId)) return undefined
+    return this.data.get(entity)?.get(label)
   }
 
-  set(node: GuidId, label: GuidId, value: Id): void {
-    let edges = this.data.get(node.guid)
-    if (!edges) {
-      edges = new Map()
-      this.data.set(node.guid, edges)
-    }
-    edges.set(label.guid, value)
+  edges(entity: Id): Maybe<Map<GuidId, Id>> {
+    if (!(entity instanceof GuidId)) return undefined
+    return this.data.get(entity)
   }
 
-  delete(node: GuidId, label: GuidId): void {
-    const edges = this.data.get(node.guid)
+  set(entity: GuidId, label: GuidId, value: Id): void {
+    const edges = this.data.get(entity) ?? Map<GuidId, Id>()
+    this.data = this.data.set(entity, edges.set(label, value))
+  }
+
+  delete(entity: GuidId, label: GuidId): void {
+    const edges = this.data.get(entity)
     if (edges) {
-      edges.delete(label.guid)
-      if (edges.size === 0) {
-        this.data.delete(node.guid)
-      }
+      const newEdges = edges.delete(label)
+      this.data = newEdges.size === 0
+        ? this.data.delete(entity)
+        : this.data.set(entity, newEdges)
     }
   }
 
-  edges(node: GuidId): Maybe<Map<string, Id>> { return this.data.get(node.guid) }
-  has(node: GuidId): boolean { return this.data.has(node.guid) }
-  asGid(): Gid { return (node, label) => this.get(node, label) }
+  has(entity: GuidId): boolean { return this.data.has(entity) }
+  asGid(): Gid { return entity => this.edges(entity) }
 
-  nodes(): Iterable<[GuidId, [GuidId, Id][]]> {
-    return map(this.data, ([guid, edges]) =>
-      [new GuidId(guid), [...edges].map(([labelGuid, value]) => [new GuidId(labelGuid), value])]
-    )
+  entities(): Iterable<GuidId> {
+    return this.data.keys()
   }
 }
