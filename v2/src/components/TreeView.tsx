@@ -109,10 +109,7 @@ export function TreeView(props: { gid: MutGid, root: Maybe<GuidId> }) {
   const [tree, setTree] = createSignal(emptySpanningTree())
 
   const toggle = (cursor: Cursor, currentlyCollapsed: boolean) => {
-    setTree(prev => {
-      setCollapsed(prev, cursor, !currentlyCollapsed)
-      return { ...prev }  // shallow copy to trigger reactivity
-    })
+    setTree(prev => setCollapsed(prev, cursor, !currentlyCollapsed))
   }
 
   return (
