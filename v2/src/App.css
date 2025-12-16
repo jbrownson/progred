@@ -164,6 +164,21 @@ button {
   background: rgba(0, 0, 0, 0.05);
 }
 
+.tree-node-header.selected {
+  background: rgba(59, 130, 246, 0.2);
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+}
+
+.tree-node.empty.selected,
+.tree-leaf.selected {
+  background: rgba(59, 130, 246, 0.2);
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+}
+
+.tree-view:focus {
+  outline: none;
+}
+
 .toggle {
   width: 1em;
   font-size: 0.75em;
@@ -199,6 +214,12 @@ button {
   gap: 0.5em;
   padding: 0.25em;
   margin-left: 1.5em;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.tree-leaf:hover {
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .value.string {

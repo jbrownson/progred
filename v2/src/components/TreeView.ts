@@ -4,7 +4,7 @@ import { GuidId, StringId, NumberId } from '../gid/id'
 import { Identicon } from './Identicon'
 import type { Gid } from '../gid/gid'
 import type { Cursor } from '../cursor'
-import { rootCursor, childCursor, cursorNode, isCycle, matchCursor } from '../cursor'
+import { rootCursor, childCursor, cursorNode, isCycle, matchCursor, cursorsEqual } from '../cursor'
 import type { Maybe } from '../maybe'
 import type { SpanningTree } from '../spanningtree'
 import { emptySpanningTree, getCollapsed, setCollapsed } from '../spanningtree'
@@ -17,29 +17,44 @@ function ValueView(id: Id): HTMLSpanElement | null {
       : null
 }
 
+type TreeNodeCallbacks = {
+  onToggle: (cursor: Cursor, currentlyCollapsed: boolean) => void
+  onSelect: (cursor: Cursor) => void
+}
+
 function TreeNode(
   gid: Gid,
   root: Maybe<GuidId>,
   cursor: Cursor,
   tree: SpanningTree,
+  selection: Maybe<Cursor>,
   inCycle: boolean,
-  onToggle: (cursor: Cursor, currentlyCollapsed: boolean) => void
-): HTMLDivElement { // 
+  callbacks: TreeNodeCallbacks
+): HTMLDivElement {
   const currentNode = cursorNode(cursor, gid, root)
   const cycle = inCycle || isCycle(cursor, gid, root)
   const edges = currentNode ? [...gid(currentNode) ?? []] : []
   const explicit = getCollapsed(tree, cursor)
   const collapsed = explicit !== undefined ? explicit : cycle
+  const selected = selection !== undefined && cursorsEqual(cursor, selection)
 
   if (!currentNode) {
-    return el('div', { class: 'tree-node empty' }, '(empty)')
+    return el('div', {
+      class: selected ? 'tree-node empty selected' : 'tree-node empty',
+      onClick: (e: Event) => { e.stopPropagation(); callbacks.onSelect(cursor) }
+    }, '(empty)')
   }
 
   const header = el('div', {
-    class: 'tree-node-header',
-    onClick: () => onToggle(cursor, collapsed)
+    class: selected ? 'tree-node-header selected' : 'tree-node-header',
+    onClick: (e: Event) => { e.stopPropagation(); callbacks.onSelect(cursor) }
   },
-    edges.length > 0 ? el('span', { class: 'toggle' }, collapsed ? '▶' : '▼') : null,
+    edges.length > 0
+      ? el('span', {
+          class: 'toggle',
+          onClick: (e: Event) => { e.stopPropagation(); callbacks.onToggle(cursor, collapsed) }
+        }, collapsed ? '▶' : '▼')
+      : null,
     ...matchCursor(cursor, {
       root: () => [],
       child: (_, label) => [
@@ -53,17 +68,22 @@ function TreeNode(
   )
 
   const children = !collapsed ? el('ul', { class: 'tree-node-children' },
-    ...edges.map(([edgeLabel, value]) =>
-      el('li', {},
+    ...edges.map(([edgeLabel, value]) => {
+      const edgeCursor = childCursor(cursor, edgeLabel)
+      const edgeSelected = selection !== undefined && cursorsEqual(edgeCursor, selection)
+      return el('li', {},
         value instanceof GuidId
-          ? TreeNode(gid, root, childCursor(cursor, edgeLabel), tree, cycle, onToggle)
-          : el('div', { class: 'tree-leaf' },
+          ? TreeNode(gid, root, edgeCursor, tree, selection, cycle, callbacks)
+          : el('div', {
+              class: edgeSelected ? 'tree-leaf selected' : 'tree-leaf',
+              onClick: (e: Event) => { e.stopPropagation(); callbacks.onSelect(edgeCursor) }
+            },
               Identicon(edgeLabel.guid, 18, true),
               el('span', { class: 'arrow' }, '→'),
               ValueView(value)
             )
       )
-    )
+    })
   ) : null
 
   return el('div', { class: 'tree-node' }, header, children)
@@ -71,20 +91,35 @@ function TreeNode(
 
 export function TreeView(gid: Gid, root: Maybe<GuidId>): HTMLDivElement {
   let tree = emptySpanningTree()
-  const container = el('div', { class: 'tree-view' })
+  let selection: Maybe<Cursor> = undefined
+
+  const container = el('div', {
+    class: 'tree-view',
+    tabIndex: 0,
+    onClick: () => { selection = undefined; render() },
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { selection = undefined; render() }
+    }
+  })
+
+  const callbacks: TreeNodeCallbacks = {
+    onToggle: (cursor, currentlyCollapsed) => {
+      tree = setCollapsed(tree, cursor, !currentlyCollapsed)
+      render()
+    },
+    onSelect: (cursor) => {
+      selection = cursor
+      render()
+    }
+  }
 
   const render = () => {
-    const content = TreeNode(gid, root, rootCursor, tree, false, toggle)
+    const content = TreeNode(gid, root, rootCursor, tree, selection, false, callbacks)
     if (container.firstChild) {
       container.replaceChild(content, container.firstChild)
     } else {
       container.appendChild(content)
     }
-  }
-
-  const toggle = (cursor: Cursor, currentlyCollapsed: boolean) => {
-    tree = setCollapsed(tree, cursor, !currentlyCollapsed)
-    render()
   }
 
   render()

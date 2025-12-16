@@ -11,6 +11,13 @@ export type Cursor = RootCursor | ChildCursor
 export const rootCursor: RootCursor = { type: 'root' }
 export function childCursor(parent: Cursor, label: GuidId): ChildCursor { return { type: 'child', parent, label } }
 
+export function cursorsEqual(a: Cursor, b: Cursor): boolean {
+  if (a.type !== b.type) return false
+  if (a.type === 'root') return true
+  return (a as ChildCursor).label.equals((b as ChildCursor).label)
+    && cursorsEqual((a as ChildCursor).parent, (b as ChildCursor).parent)
+}
+
 export function matchCursor<T>(cursor: Cursor, handlers: {
   root: () => T,
   child: (parent: Cursor, label: GuidId) => T
