@@ -1,37 +1,41 @@
-import { GuidID, idFromJSON } from './id'
-import { Maybe } from '../maybe'
-import { Store } from './store'
+import type { Id } from './id'
+import { GuidId, idFromJSON } from './id'
+import { Maybe, map, traverse } from '../maybe'
+import { MutGid } from './mutgid'
 
-type SerializedGraph = {
+type SerializedGid = {
   nodes: Record<string, Record<string, unknown>>
 }
 
-export function serialize(store: Store): string {
-  const nodes: SerializedGraph['nodes'] = {}
-
-  for (const [node, edges] of store.nodes()) {
-    const edgeObj: Record<string, unknown> = {}
-    for (const [label, value] of edges) {
-      edgeObj[label.guid] = value.toJSON()
-    }
-    nodes[node.guid] = edgeObj
-  }
-
+export function serialize(gid: MutGid): string {
+  const nodes = Object.fromEntries(
+    map(gid.nodes(), ([node, edges]) => [
+      node.guid,
+      Object.fromEntries(edges.map(([label, value]) => [label.guid, value.toJSON()]))
+    ])
+  )
   return JSON.stringify({ nodes }, null, 2)
 }
 
-export function deserialize(json: string): Maybe<Store> {
-  const data: SerializedGraph = JSON.parse(json)
-  const store = new Store()
+type ParsedEdge = { node: GuidId, label: GuidId, id: Id }
 
-  for (const [nodeGuid, edges] of Object.entries(data.nodes)) {
-    const node = new GuidID(nodeGuid)
-    for (const [labelGuid, value] of Object.entries(edges)) {
-      const id = idFromJSON(value)
-      if (id === undefined) return undefined
-      store.set(node, new GuidID(labelGuid), id)
-    }
-  }
+export function deserialize(json: string): Maybe<MutGid> {
+  const data: SerializedGid = JSON.parse(json)
 
-  return store
+  const parsed = traverse(
+    Object.entries(data.nodes),
+    ([nodeGuid, edges]) => traverse(
+      Object.entries(edges),
+      ([labelGuid, value]): Maybe<ParsedEdge> => {
+        const id = idFromJSON(value)
+        return id && { node: new GuidId(nodeGuid), label: new GuidId(labelGuid), id }
+      }
+    )
+  )
+
+  if (parsed === undefined) return undefined
+
+  const gid = new MutGid()
+  parsed.flat().forEach(({ node, label, id }) => gid.set(node, label, id))
+  return gid
 }

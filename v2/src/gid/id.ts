@@ -1,7 +1,7 @@
 import { Maybe, firstMap } from '../maybe'
 
-export interface ID {
-  equals(other: ID): boolean
+export interface Id {
+  equals(other: Id): boolean
   toJSON(): object
 }
 
@@ -11,31 +11,30 @@ function parse<V, T>(s: unknown, key: string, type: string, ctor: new (v: V) => 
     : undefined
 }
 
-export class GuidID implements ID {
+export class GuidId implements Id {
   constructor(public readonly guid: string) {}
-  equals(other: ID): boolean { return other instanceof GuidID && other.guid === this.guid }
+  equals(other: Id): boolean { return other instanceof GuidId && other.guid === this.guid }
   toJSON() { return { guid: this.guid } }
-  static fromJSON(s: unknown): Maybe<GuidID> { return parse(s, 'guid', 'string', GuidID) }
+  static fromJSON(s: unknown): Maybe<GuidId> { return parse(s, 'guid', 'string', GuidId) }
+  static generate(): GuidId {
+    const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
+    return new GuidId(s4() + s4() + s4() + s4() + s4() + s4() + s4() + s4())
+  }
 }
 
-export class StringID implements ID {
+export class StringId implements Id {
   constructor(public readonly value: string) {}
-  equals(other: ID): boolean { return other instanceof StringID && other.value === this.value }
+  equals(other: Id): boolean { return other instanceof StringId && other.value === this.value }
   toJSON() { return { string: this.value } }
-  static fromJSON(s: unknown): Maybe<StringID> { return parse(s, 'string', 'string', StringID) }
+  static fromJSON(s: unknown): Maybe<StringId> { return parse(s, 'string', 'string', StringId) }
 }
 
-export class NumberID implements ID {
+export class NumberId implements Id {
   constructor(public readonly value: number) {}
-  equals(other: ID): boolean { return other instanceof NumberID && other.value === this.value }
+  equals(other: Id): boolean { return other instanceof NumberId && other.value === this.value }
   toJSON() { return { number: this.value } }
-  static fromJSON(s: unknown): Maybe<NumberID> { return parse(s, 'number', 'number', NumberID) }
+  static fromJSON(s: unknown): Maybe<NumberId> { return parse(s, 'number', 'number', NumberId) }
 }
 
-const idParsers = [GuidID.fromJSON, StringID.fromJSON, NumberID.fromJSON]
-export function idFromJSON(s: unknown): Maybe<ID> { return firstMap(idParsers, parser => parser(s)) }
-
-export function generateGuid(): GuidID {
-  const s4 = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
-  return new GuidID(s4() + s4() + s4() + s4() + s4() + s4() + s4() + s4())
-}
+const idParsers = [GuidId.fromJSON, StringId.fromJSON, NumberId.fromJSON]
+export function idFromJSON(s: unknown): Maybe<Id> { return firstMap(idParsers, parser => parser(s)) }
