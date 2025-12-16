@@ -95,6 +95,57 @@ button {
   margin-right: 5px;
 }
 
+/* gid viewer styles */
+.gid-view {
+  text-align: left;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.node {
+  margin-bottom: 1em;
+  padding: 0.5em;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+}
+
+.edges {
+  margin: 0;
+  padding-left: 1.5em;
+  list-style: none;
+}
+
+.edge {
+  margin: 0.25em 0;
+}
+
+.id {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+}
+
+.id.guid code {
+  color: #666;
+  font-size: 0.85em;
+}
+
+.id.string {
+  color: #2a9d2a;
+}
+
+.id.number {
+  color: #2a6a9d;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f6f6f6;
