@@ -1,5 +1,6 @@
 import { el } from './dom'
-import { TreeView } from './components/TreeView'
+import { TreeView, emptyTreeViewState } from './components/TreeView'
+import type { TreeViewState } from './components/TreeView'
 import { MutGid } from './gid/mutgid'
 import { GuidId, StringId, NumberId } from './gid/id'
 import { cursorNode } from './cursor'
@@ -31,19 +32,13 @@ testGid.set(carol, friend, alice)  // Cycle back to alice!
 
 export default function App(): HTMLElement {
   let root: GuidId | undefined = alice
+  let viewState: TreeViewState = emptyTreeViewState()
   const treeContainer = el('div', {})
 
   const renderTree = () => {
-    const tree = TreeView(testGid.asGid(), root, {
-      onDelete: (cursor) => {
-        if (cursor.type === 'root') {
-          root = undefined
-        } else {
-          const entity = cursorNode(cursor.parent, testGid.asGid(), root)
-          if (entity instanceof GuidId) {
-            testGid.delete(entity, cursor.label)
-          }
-        }
+    const tree = TreeView(testGid.asGid(), root, viewState, {
+      onStateChange: (newState) => {
+        viewState = newState
         renderTree()
       }
     })
@@ -53,6 +48,33 @@ export default function App(): HTMLElement {
       treeContainer.appendChild(tree)
     }
   }
+
+  const handleDelete = () => {
+    const selection = viewState.selection
+    if (selection === undefined) return
+    if (selection.type === 'root') {
+      root = undefined
+    } else {
+      const entity = cursorNode(selection.parent, testGid.asGid(), root)
+      if (entity instanceof GuidId) {
+        testGid.delete(entity, selection.label)
+      }
+    }
+    viewState = { ...viewState, selection: undefined }
+    renderTree()
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      viewState = { ...viewState, selection: undefined }
+      renderTree()
+    }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Don't delete if user is typing in an input
+      if (document.activeElement?.tagName === 'INPUT') return
+      handleDelete()
+    }
+  })
 
   renderTree()
 

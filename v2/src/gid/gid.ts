@@ -2,7 +2,7 @@ import { Map } from 'immutable'
 import type { Id, GuidId } from './id'
 import { Maybe } from '../maybe'
 
-export type Gid = (entity: Id) => Maybe<Map<GuidId, Id>>
+export type Gid = (entity: Id) => Maybe<Map<GuidId, Id>> // TODO should this be Maybe<Map<Id, Id>>?
 export const empty: Gid = () => undefined
 export function compose(a: Gid, b: Gid): Gid {
   return entity => {

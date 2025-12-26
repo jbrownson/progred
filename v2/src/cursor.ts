@@ -1,7 +1,7 @@
 import type { Id } from './gid/id'
 import { GuidId } from './gid/id'
 import type { Gid } from './gid/gid'
-import { flatMapMaybe, mapMaybe } from './maybe'
+import { flatMapMaybe } from './maybe'
 import type { Maybe } from './maybe'
 
 export type RootCursor = { type: 'root' }
@@ -33,21 +33,18 @@ export function cursorNode(cursor: Cursor, gid: Gid, root: Maybe<Id>): Maybe<Id>
 }
 
 export function isCycle(cursor: Cursor, gid: Gid, root: Maybe<Id>): boolean {
-  return matchCursor(cursor, {
-    root: () => false,
-    child: (parent, label) =>
-      mapMaybe(cursorNode(parent, gid, root), parentNode =>
-        hasAncestorEdge(parent, parentNode, label, gid, root)
-      ) ?? false
-  })
+  const node = cursorNode(cursor, gid, root)
+  if (node === undefined) return false
+  return hasAncestorNode(cursor, node, gid, root)
 }
 
 // TODO: O(depth²) - cursorNode re-walks from root at each level. Could cache nodes on descent.
-function hasAncestorEdge(cursor: Cursor, node: Id, label: GuidId, gid: Gid, root: Maybe<Id>): boolean {
+function hasAncestorNode(cursor: Cursor, node: Id, gid: Gid, root: Maybe<Id>): boolean {
   return matchCursor(cursor, {
     root: () => false,
-    child: (parent, l) =>
-      (l.equals(label) && mapMaybe(cursorNode(parent, gid, root), parentNode => parentNode.equals(node))) ||
-        hasAncestorEdge(parent, node, label, gid, root)
+    child: (parent, _) => {
+      const parentNode = cursorNode(parent, gid, root)
+      return (parentNode !== undefined && node.equals(parentNode)) || hasAncestorNode(parent, node, gid, root)
+    }
   })
 }

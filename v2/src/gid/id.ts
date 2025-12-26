@@ -1,7 +1,9 @@
 import { hash } from 'immutable'
 import { Maybe, firstMap } from '../maybe'
 
-export interface Id {
+export type Id = GuidId | StringId | NumberId
+
+export interface IdInterface {
   equals(other: Id): boolean
   hashCode(): number
   toJSON(): object
@@ -13,7 +15,7 @@ function parse<V, T>(s: unknown, key: string, type: string, ctor: new (v: V) => 
     : undefined
 }
 
-export class GuidId implements Id {
+export class GuidId implements IdInterface {
   constructor(public readonly guid: string) {}
   equals(other: Id): boolean { return other instanceof GuidId && other.guid === this.guid }
   hashCode(): number { return hash(this.guid) }
@@ -25,7 +27,7 @@ export class GuidId implements Id {
   }
 }
 
-export class StringId implements Id {
+export class StringId implements IdInterface {
   constructor(public readonly value: string) {}
   equals(other: Id): boolean { return other instanceof StringId && other.value === this.value }
   hashCode(): number { return hash('s:' + this.value) }
@@ -33,7 +35,7 @@ export class StringId implements Id {
   static fromJSON(s: unknown): Maybe<StringId> { return parse(s, 'string', 'string', StringId) }
 }
 
-export class NumberId implements Id {
+export class NumberId implements IdInterface {
   constructor(public readonly value: number) {}
   equals(other: Id): boolean { return other instanceof NumberId && other.value === this.value }
   hashCode(): number { return hash(this.value) }
