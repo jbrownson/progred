@@ -117,12 +117,12 @@ You can always request a "raw" view—the default spanning-tree render—to see 
 ## Architecture (v2)
 
 ### Tech Stack
-- **Frontend**: Solid.js + TypeScript
+- **Frontend**: TypeScript with Immutable.js, custom reactivity
 - **Desktop**: Tauri 2.0 (Rust)
 - **Build**: Vite
 - **Serialization**: JSON for now, binary formats later when tooling supports it
 
-Most logic lives in TypeScript—Solid's signals for reactivity, TypeScript's compiler API for language integration. Tauri's Rust backend is there if we hit performance walls, but crossing the FFI boundary isn't worth it until then.
+Most logic lives in TypeScript. We use Immutable.js for proper hashCode/equals semantics on ID-keyed maps, and a lightweight custom reactivity model tailored to the graph's update patterns—no framework magic needed. Tauri's Rust backend is there if we hit performance walls, but crossing the FFI boundary isn't worth it until then.
 
 ### Core Data Model
 
@@ -183,7 +183,7 @@ Some components are necessary but not where the innovation lies:
 ## Relationship to v1
 
 V1 (in parent directory) is a working proof-of-concept using older tech (React, Electron, TypeScript 2.x). The core ideas are sound; v2 is a fresh implementation with:
-- Modern tooling (Tauri, Solid.js, TypeScript 5.x)
+- Modern tooling (Tauri, TypeScript 5.x, Vite)
 - True bootstrap capability (create semantics from within)
 - Cleaner separation of core vs conventions
 - Lessons learned from v1's architecture
