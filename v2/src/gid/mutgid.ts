@@ -1,6 +1,6 @@
 import { Map } from 'immutable'
 import type { Id } from './id'
-import { GuidId } from './id'
+import { GuidId, idFromJSON } from './id'
 import type { Gid } from './gid'
 import type { Maybe } from '../maybe'
 
@@ -37,5 +37,32 @@ export class MutGid {
 
   entities(): Iterable<GuidId> {
     return this.data.keys()
+  }
+
+  toJSON(): Record<string, Record<string, object>> {
+    const result: Record<string, Record<string, object>> = {}
+    for (const [entity, edges] of this.data) {
+      const edgeObj: Record<string, object> = {}
+      for (const [label, value] of edges) {
+        edgeObj[label.guid] = value.toJSON()
+      }
+      result[entity.guid] = edgeObj
+    }
+    return result
+  }
+
+  static fromJSON(json: Record<string, Record<string, unknown>>): MutGid {
+    const gid = new MutGid()
+    for (const [entityGuid, edges] of Object.entries(json)) {
+      const entity = new GuidId(entityGuid)
+      for (const [labelGuid, value] of Object.entries(edges)) {
+        const label = new GuidId(labelGuid)
+        const id = idFromJSON(value)
+        if (id) {
+          gid.set(entity, label, id)
+        }
+      }
+    }
+    return gid
   }
 }

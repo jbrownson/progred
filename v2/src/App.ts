@@ -7,43 +7,42 @@ import { emptySpanningTree, setCollapsedAtPath } from './spanningtree'
 import type { SpanningTree } from './spanningtree'
 import type { Maybe } from './maybe'
 import type { Path } from './path'
+import { saveDocument, openDocument } from './persistence'
+import { listen } from '@tauri-apps/api/event'
 import './App.css'
 
-const testGid = new MutGid()
+function createTestData(): { gid: MutGid, root: GuidId } {
+  const gid = new MutGid()
+  const alice = GuidId.generate()
+  const bob = GuidId.generate()
+  const carol = GuidId.generate()
+  const name = GuidId.generate()
+  const age = GuidId.generate()
+  const friend = GuidId.generate()
 
-const alice = GuidId.generate()
-const bob = GuidId.generate()
-const carol = GuidId.generate()
+  gid.set(alice, name, new StringId('Alice'))
+  gid.set(alice, age, new NumberId(30))
+  gid.set(alice, friend, bob)
+  gid.set(bob, name, new StringId('Bob'))
+  gid.set(bob, age, new NumberId(25))
+  gid.set(bob, friend, carol)
+  gid.set(carol, name, new StringId('Carol'))
+  gid.set(carol, age, new NumberId(28))
+  gid.set(carol, friend, alice)
 
-const name = GuidId.generate()
-const age = GuidId.generate()
-const friend = GuidId.generate()
-
-testGid.set(alice, name, new StringId('Alice'))
-testGid.set(alice, age, new NumberId(30))
-testGid.set(alice, friend, bob)
-
-testGid.set(bob, name, new StringId('Bob'))
-testGid.set(bob, age, new NumberId(25))
-testGid.set(bob, friend, carol)
-
-testGid.set(carol, name, new StringId('Carol'))
-testGid.set(carol, age, new NumberId(28))
-testGid.set(carol, friend, alice)  // Cycle
+  return { gid, root: alice }
+}
 
 type AppState = {
+  gid: MutGid
   root: Maybe<GuidId>
   tree: SpanningTree
   selection: Maybe<Path>
 }
 
-function makeContext(
-  gid: MutGid,
-  state: AppState,
-  rerender: () => void
-): TreeContext {
+function makeContext(state: AppState, rerender: () => void): TreeContext {
   return {
-    gid: gid.asGid(),
+    gid: state.gid.asGid(),
     root: state.root,
     tree: state.tree,
     selection: state.selection,
@@ -61,7 +60,7 @@ function makeContext(
       rerender()
     },
     setEdge: (parent, label, value) => {
-      gid.set(parent, label, value)
+      state.gid.set(parent, label, value)
       state.selection = undefined
       rerender()
     },
@@ -71,7 +70,7 @@ function makeContext(
       rerender()
     },
     deleteEdge: (parent, label) => {
-      gid.delete(parent, label)
+      state.gid.delete(parent, label)
       state.selection = undefined
       rerender()
     },
@@ -95,15 +94,32 @@ function handleDelete(ctx: TreeContext): void {
 }
 
 export default function App(): HTMLElement {
+  const testData = createTestData()
   const state: AppState = {
-    root: alice,
+    gid: testData.gid,
+    root: testData.root,
     tree: emptySpanningTree(),
     selection: undefined
   }
   const treeContainer = el('div', {})
   const rerender = () => {
-    const ctx = makeContext(testGid, state, rerender)
+    const ctx = makeContext(state, rerender)
     renderTree(ctx, treeContainer)
+  }
+
+  const handleSave = async () => {
+    await saveDocument(state.gid, state.root)
+  }
+
+  const handleOpen = async () => {
+    const result = await openDocument()
+    if (result) {
+      state.gid = result.gid
+      state.root = result.root
+      state.tree = emptySpanningTree()
+      state.selection = undefined
+      rerender()
+    }
   }
 
   document.addEventListener('keydown', (e) => {
@@ -113,15 +129,17 @@ export default function App(): HTMLElement {
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (document.activeElement?.tagName === 'INPUT') return
-      const ctx = makeContext(testGid, state, rerender)
+      const ctx = makeContext(state, rerender)
       handleDelete(ctx)
     }
   })
 
+  listen('menu-save', () => handleSave())
+  listen('menu-open', () => handleOpen())
+
   rerender()
 
   return el('main', { style: { margin: 0, padding: '1em' } },
-    el('h1', { style: { marginTop: 0 } }, 'gid viewer'),
     treeContainer
   )
 }
