@@ -10,6 +10,8 @@ export function el<K extends keyof HTMLElementTagNameMap>(
     for (const [key, value] of Object.entries(attrs)) {
       if (key === 'class') {
         element.className = value as string
+      } else if (key === 'style' && typeof value === 'object' && value !== null) {
+        Object.assign(element.style, value)
       } else if (key.startsWith('on') && typeof value === 'function') {
         const event = key.slice(2).toLowerCase()
         element.addEventListener(event, value as EventListener)

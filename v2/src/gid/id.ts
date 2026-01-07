@@ -45,3 +45,16 @@ export class NumberId implements IdInterface {
 
 const idParsers = [GuidId.fromJSON, StringId.fromJSON, NumberId.fromJSON]
 export function idFromJSON(s: unknown): Maybe<Id> { return firstMap(idParsers, parser => parser(s)) }
+
+export function matchId<T>(
+  id: Id,
+  cases: {
+    guid: (id: GuidId) => T
+    string: (id: StringId) => T
+    number: (id: NumberId) => T
+  }
+): T {
+  if (id instanceof GuidId) return cases.guid(id)
+  if (id instanceof StringId) return cases.string(id)
+  return cases.number(id)
+}

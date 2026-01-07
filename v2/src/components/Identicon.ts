@@ -7,6 +7,10 @@ export function Identicon(value: string, size = 16, label = false): HTMLImageEle
     src: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`,
     width: size,
     height: size,
-    class: label ? 'identicon label' : 'identicon'
+    style: {
+      background: '#f0f0f0',
+      border: '1px solid #ccc',
+      borderRadius: label ? '50%' : '3px'
+    }
   })
 }

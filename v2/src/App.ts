@@ -1,19 +1,20 @@
 import { el } from './dom'
-import { TreeView, emptyTreeViewState } from './components/TreeView'
-import type { TreeViewState } from './components/TreeView'
+import { TreeView, setAtPath } from './components/TreeView'
+import type { TreeContext } from './components/TreeView'
 import { MutGid } from './gid/mutgid'
 import { GuidId, StringId, NumberId } from './gid/id'
-import { cursorNode } from './cursor'
+import { emptySpanningTree, setCollapsedAtPath } from './spanningtree'
+import type { SpanningTree } from './spanningtree'
+import type { Maybe } from './maybe'
+import type { Path } from './path'
 import './App.css'
 
-// Create some test data with a cycle
 const testGid = new MutGid()
 
 const alice = GuidId.generate()
 const bob = GuidId.generate()
 const carol = GuidId.generate()
 
-// Labels
 const name = GuidId.generate()
 const age = GuidId.generate()
 const friend = GuidId.generate()
@@ -28,58 +29,99 @@ testGid.set(bob, friend, carol)
 
 testGid.set(carol, name, new StringId('Carol'))
 testGid.set(carol, age, new NumberId(28))
-testGid.set(carol, friend, alice)  // Cycle back to alice!
+testGid.set(carol, friend, alice)  // Cycle
+
+type AppState = {
+  root: Maybe<GuidId>
+  tree: SpanningTree
+  selection: Maybe<Path>
+}
+
+function makeContext(
+  gid: MutGid,
+  state: AppState,
+  rerender: () => void
+): TreeContext {
+  return {
+    gid: gid.asGid(),
+    root: state.root,
+    tree: state.tree,
+    selection: state.selection,
+    setCollapsed: (path, collapsed) => {
+      state.tree = setCollapsedAtPath(state.tree, path, collapsed)
+      rerender()
+    },
+    select: path => {
+      state.selection = path
+      rerender()
+    },
+    setRoot: value => {
+      state.root = value
+      state.selection = undefined
+      rerender()
+    },
+    setEdge: (parent, label, value) => {
+      gid.set(parent, label, value)
+      state.selection = undefined
+      rerender()
+    },
+    clearRoot: () => {
+      state.root = undefined
+      state.selection = undefined
+      rerender()
+    },
+    deleteEdge: (parent, label) => {
+      gid.delete(parent, label)
+      state.selection = undefined
+      rerender()
+    },
+    newNode: () => GuidId.generate()
+  }
+}
+
+function renderTree(ctx: TreeContext, container: HTMLDivElement): void {
+  const tree = TreeView(ctx)
+  if (container.firstChild) {
+    container.replaceChild(tree, container.firstChild)
+  } else {
+    container.appendChild(tree)
+  }
+}
+
+function handleDelete(ctx: TreeContext): void {
+  if (ctx.selection) {
+    setAtPath(ctx, ctx.selection, undefined)
+  }
+}
 
 export default function App(): HTMLElement {
-  let root: GuidId | undefined = alice
-  let viewState: TreeViewState = emptyTreeViewState()
-  const treeContainer = el('div', {})
-
-  const renderTree = () => {
-    const tree = TreeView(testGid.asGid(), root, viewState, {
-      onStateChange: (newState) => {
-        viewState = newState
-        renderTree()
-      }
-    })
-    if (treeContainer.firstChild) {
-      treeContainer.replaceChild(tree, treeContainer.firstChild)
-    } else {
-      treeContainer.appendChild(tree)
-    }
+  const state: AppState = {
+    root: alice,
+    tree: emptySpanningTree(),
+    selection: undefined
   }
-
-  const handleDelete = () => {
-    const selection = viewState.selection
-    if (selection === undefined) return
-    if (selection.type === 'root') {
-      root = undefined
-    } else {
-      const entity = cursorNode(selection.parent, testGid.asGid(), root)
-      if (entity instanceof GuidId) {
-        testGid.delete(entity, selection.label)
-      }
-    }
-    viewState = { ...viewState, selection: undefined }
-    renderTree()
+  const treeContainer = el('div', {})
+  const rerender = () => {
+    const ctx = makeContext(testGid, state, rerender)
+    renderTree(ctx, treeContainer)
   }
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      viewState = { ...viewState, selection: undefined }
-      renderTree()
+      state.selection = undefined
+      rerender()
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      // Don't delete if user is typing in an input
       if (document.activeElement?.tagName === 'INPUT') return
-      handleDelete()
+      const ctx = makeContext(testGid, state, rerender)
+      handleDelete(ctx)
     }
   })
 
-  renderTree()
+  rerender()
 
-  return el('main', { class: 'container' },
-    el('h1', {}, 'gid viewer'),
+  return el('main', { style: { margin: 0, padding: '1em' } },
+    el('h1', { style: { marginTop: 0 } }, 'gid viewer'),
     treeContainer
   )
 }
