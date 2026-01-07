@@ -42,6 +42,8 @@ Projectional:  Structure → Project → Display → Edit → Structure
 
 The projection can be anything: tree view, text-like syntax, visual blocks, tables. The same structure could render as `a + b` or `Add(left: a, right: b)` or a node-and-wire diagram.
 
+A key capability is **dual projection**: edit in a tree view (natural for hierarchical navigation) while visualizing in a bubbles-and-arrows graph view (shows true topology, cycles, multiple paths to the same node). Synchronized selection between views lets you work in whichever is most natural for the task.
+
 Note: text files are also projected—syntax highlighting, fonts, line wrapping, unicode rendering. You're never seeing "raw bytes." Progred just projects from a higher level of abstraction.
 
 This means code style (tabs/spaces, brace placement) becomes a projection preference, not a property of the data. No more flame wars—just different views of the same structure.

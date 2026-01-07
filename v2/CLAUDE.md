@@ -33,3 +33,4 @@ Haskell-inspired, expression-oriented TypeScript.
 ## Collaboration
 - Push back if something seems wrong or the user may have missed something
 - Don't agree too quickly with suggested changes without thinking them through
+- Read README.md for project vision and goals
