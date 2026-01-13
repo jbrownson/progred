@@ -15,46 +15,28 @@ const colors = {
   selectedOutline: 'rgba(59, 130, 246, 0.5)'
 }
 
-// All layout in px for consistent alignment
 const layout = {
-  // Core sizes
   rowHeight: 28,
   labelWidth: 20,
   nodeIdenticonSize: 20,
   labelIdenticonSize: 15,
-
-  // Header layout
   headerGap: 4,
   headerPadding: 4,
-
-  // Spacing
   itemPaddingY: 2,
   contentPaddingX: 4,
-
-  // Lines
   lineWidth: 1,
-
-  // Insertion point
   insertionHeight: 8,
   insertionCaretOffset: 4,
   insertionCaretSize: 12,
-
-  // Styling
   borderRadius: 4,
   outlineWidth: 2,
   inputWidthPadding: 4,
 
-  // Derived: childIndent = headerPadding so label centers align with parent identicon center
   get childIndent() { return this.headerPadding },
-  // Derived: where vertical line should be (center of label column = center of parent identicon)
   get lineX() { return this.childIndent + this.labelWidth / 2 },
-  // Derived: line left position accounting for line width
   get lineLeft() { return this.lineX - this.lineWidth / 2 },
-  // Derived: horizontal line starts at right edge of label identicon
   get hLineStart() { return (this.labelWidth + this.labelIdenticonSize) / 2 },
-  // Derived: horizontal line ends at child identicon left edge (gap + child padding)
   get hLineEnd() { return this.labelWidth + this.headerGap + this.headerPadding },
-  // Derived: vertical line starts at bottom of parent identicon
   get vLineTop() { return this.headerPadding + this.nodeIdenticonSize }
 }
 
@@ -408,7 +390,6 @@ export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | nul
     return el('div', { style: { flex: '1' } }, header)
   }
 
-  // Vertical line connecting parent to children, positioned at center of label column
   const line = el('div', {
     style: {
       position: 'absolute',

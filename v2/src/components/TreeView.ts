@@ -242,9 +242,14 @@ export function TreeView(ctx: TreeContext): HTMLDivElement {
   const selectedPath = getSelectedPath(selection)
   const selectedIndex = getSelectedInsertIndex(selection)
 
-  const elements: (HTMLElement | null)[] = []
+  if (roots.length === 0) {
+    return TreeViewContainer(
+      () => ctx.select(undefined),
+      NewNodeButton(() => ctx.insertRoot(0, ctx.newNode()))
+    )
+  }
 
-  // Render insertion points interleaved with roots
+  const elements: (HTMLElement | null)[] = []
   for (let i = 0; i <= roots.length; i++) {
     elements.push(RootInsertionPoint(ctx, i))
     if (i < roots.length) {
