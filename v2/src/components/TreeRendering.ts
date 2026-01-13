@@ -18,13 +18,12 @@ const colors = {
 // All layout in px for consistent alignment
 const layout = {
   // Core sizes
-  rowHeight: 24,
+  rowHeight: 28,
   labelWidth: 20,
   nodeIdenticonSize: 20,
   labelIdenticonSize: 15,
 
   // Header layout
-  toggleWidth: 14,
   headerGap: 4,
   headerPadding: 4,
 
@@ -45,12 +44,18 @@ const layout = {
   outlineWidth: 2,
   inputWidthPadding: 4,
 
-  // Derived: childIndent positions children so label centers align with parent identicon center
-  get childIndent() { return this.headerPadding + this.toggleWidth + this.headerGap },
-  // Derived: where vertical line should be (center of label column)
+  // Derived: childIndent = headerPadding so label centers align with parent identicon center
+  get childIndent() { return this.headerPadding },
+  // Derived: where vertical line should be (center of label column = center of parent identicon)
   get lineX() { return this.childIndent + this.labelWidth / 2 },
   // Derived: line left position accounting for line width
-  get lineLeft() { return this.lineX - this.lineWidth / 2 }
+  get lineLeft() { return this.lineX - this.lineWidth / 2 },
+  // Derived: horizontal line starts at right edge of label identicon
+  get hLineStart() { return (this.labelWidth + this.labelIdenticonSize) / 2 },
+  // Derived: horizontal line ends at child identicon left edge (gap + child padding)
+  get hLineEnd() { return this.labelWidth + this.headerGap + this.headerPadding },
+  // Derived: vertical line starts at bottom of parent identicon
+  get vLineTop() { return this.headerPadding + this.nodeIdenticonSize }
 }
 
 const selectedStyle = {
@@ -109,16 +114,17 @@ export function CollapseToggle(collapsed: boolean, onClick: () => void): HTMLSpa
   return el('span', {
     style: {
       ...inlineFlexCenter,
-      width: `${layout.toggleWidth}px`,
-      fontSize: '0.75em',
-      color: colors.toggle
+      fontSize: '0.7em',
+      color: colors.toggle,
+      marginLeft: `${layout.headerGap}px`,
+      width: '1.4em',
+      height: '1.4em',
+      borderRadius: '4px',
+      background: colors.btnBg,
+      border: `1px solid ${colors.border}`
     },
     ...clickable(onClick)
-  }, collapsed ? '▶' : '▼')
-}
-
-export function ToggleSpacer(): HTMLSpanElement {
-  return el('span', { style: { width: `${layout.toggleWidth}px` } })
+  }, collapsed ? '▸' : '▾')
 }
 
 function ActionButton(
@@ -219,6 +225,7 @@ export function EmptyNode(selected: boolean, onClick: () => void): HTMLDivElemen
       flex: '1',
       minHeight: `${layout.rowHeight}px`,
       padding: `0 ${layout.contentPaddingX}px`,
+      marginLeft: `${layout.headerGap}px`,
       borderRadius: `${layout.borderRadius}px`,
       ...(selected ? selectedStyle : {})
     },
@@ -237,6 +244,7 @@ export function LeafNode(
       ...flexCenter,
       minHeight: `${layout.rowHeight}px`,
       padding: `0 ${layout.contentPaddingX}px`,
+      marginLeft: `${layout.headerGap}px`,
       borderRadius: `${layout.borderRadius}px`,
       ...(selected ? selectedStyle : {})
     },
@@ -372,15 +380,27 @@ export function ChildrenList(...children: HTMLElement[]): HTMLUListElement {
 }
 
 export function ChildItem(label: HTMLElement, content: HTMLElement): HTMLLIElement {
+  const hLine = el('div', {
+    style: {
+      position: 'absolute',
+      left: `${layout.hLineStart}px`,
+      width: `${layout.hLineEnd - layout.hLineStart}px`,
+      top: `${layout.itemPaddingY + layout.rowHeight / 2 - layout.lineWidth / 2}px`,
+      height: `${layout.lineWidth}px`,
+      background: colors.border
+    }
+  })
+
   return el('li', {
     style: {
       display: 'grid',
       gridTemplateColumns: `${layout.labelWidth}px 1fr`,
       alignItems: 'start',
       gap: `${layout.headerGap}px`,
-      padding: `${layout.itemPaddingY}px 0`
+      padding: `${layout.itemPaddingY}px 0`,
+      position: 'relative'
     }
-  }, label, content)
+  }, label, hLine, content)
 }
 
 export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | null): HTMLDivElement {
@@ -393,7 +413,7 @@ export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | nul
     style: {
       position: 'absolute',
       left: `${layout.lineLeft}px`,
-      top: `${layout.rowHeight}px`,
+      top: `${layout.vLineTop}px`,
       bottom: '0',
       width: `${layout.lineWidth}px`,
       background: colors.border,

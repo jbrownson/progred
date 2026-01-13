@@ -7,7 +7,7 @@ import { emptySpanningTree } from '../spanningtree'
 import { pathsEqual, pathNode, rootPath, childPath, popPath } from '../path'
 import type { Path } from '../path'
 import {
-  EdgeLabel, NodeIdenticon, CollapseToggle, ToggleSpacer,
+  EdgeLabel, NodeIdenticon, CollapseToggle,
   SetTargetButton, UseAsLabelButton, NewNodeButton,
   NodeHeader, EmptyNode, LeafNode, EditableStringNode, EditableNumberNode,
   ChildrenList, ChildItem, GuidNodeWrapper, TreeViewContainer, InsertionPoint
@@ -153,13 +153,13 @@ function renderGuidNodeHeader(
   ctx: TreeContext,
   node: GuidId,
   path: Path,
-  edges: [GuidId, Id][],
+  hasChildren: boolean,
   collapsed: boolean,
   selected: boolean
 ): HTMLDivElement {
   return NodeHeader(selected, () => selectPath(ctx, path),
-    edges.length > 0 ? CollapseToggle(collapsed, () => ctx.setCollapsed(path, !collapsed)) : ToggleSpacer(),
     NodeIdenticon(node),
+    hasChildren ? CollapseToggle(collapsed, () => ctx.setCollapsed(path, !collapsed)) : null,
     ...renderActionButtons(ctx, node)
   )
 }
@@ -197,10 +197,11 @@ function GuidNode(
 ): HTMLDivElement {
   const { gid } = ctx
   const edges = [...gid(node) ?? []]
+  const hasChildren = edges.length > 0
   const collapsed = subtree.collapsed ?? ancestors.has(node)
   const childAncestors = new Set([...ancestors, node])
 
-  const header = renderGuidNodeHeader(ctx, node, path, edges, collapsed, isSelectedPath(ctx.selection, path))
+  const header = renderGuidNodeHeader(ctx, node, path, hasChildren, collapsed, isSelectedPath(ctx.selection, path))
   const children = collapsed ? null : renderChildren(ctx, path, subtree, childAncestors, edges)
 
   return GuidNodeWrapper(header, children)
