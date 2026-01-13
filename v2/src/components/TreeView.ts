@@ -4,31 +4,65 @@ import type { Gid } from '../gid/gid'
 import type { Maybe } from '../maybe'
 import type { SpanningTree } from '../spanningtree'
 import { emptySpanningTree } from '../spanningtree'
-import { pathsEqual, pathNode, emptyPath, childPath, popPath } from '../path'
+import { pathsEqual, pathNode, rootPath, childPath, popPath } from '../path'
 import type { Path } from '../path'
 import {
-  EdgeLabel, NodeIdenticon, CollapseToggle,
+  EdgeLabel, NodeIdenticon, CollapseToggle, ToggleSpacer,
   SetTargetButton, UseAsLabelButton, NewNodeButton,
-  NodeHeader, EmptyNode, LeafNode, ChildrenList, ChildItem,
-  GuidNodeWrapper, TreeViewContainer
+  NodeHeader, EmptyNode, LeafNode, EditableStringNode, EditableNumberNode,
+  ChildrenList, ChildItem, GuidNodeWrapper, TreeViewContainer, InsertionPoint
 } from './TreeRendering'
+
+export type RootSlot = { id: GuidId, node: GuidId }
+
+// TODO: insertAt index is not stable over list mutations
+export type Selection =
+  | { type: 'insertAt', index: number }
+  | { type: 'path', path: Path }
 
 export type TreeContext = {
   gid: Gid
-  root: Maybe<GuidId>
+  roots: RootSlot[]
   tree: SpanningTree
-  selection: Maybe<Path>
+  selection: Maybe<Selection>
   setCollapsed: (path: Path, collapsed: boolean) => void
-  select: (path: Maybe<Path>) => void
-  setRoot: (value: GuidId) => void
-  setEdge: (parent: GuidId, label: GuidId, value: GuidId) => void
-  clearRoot: () => void
+  select: (selection: Maybe<Selection>) => void
+  insertRoot: (index: number, node: GuidId) => void
+  setRootNode: (slotId: GuidId, node: GuidId) => void
+  deleteRoot: (slotId: GuidId) => void
+  setEdge: (parent: GuidId, label: GuidId, value: Id) => void
   deleteEdge: (parent: GuidId, label: GuidId) => void
   newNode: () => GuidId
 }
 
-function isSelected(selection: Maybe<Path>, path: Path): boolean {
-  return selection !== undefined && pathsEqual(path, selection)
+function getRootNode(ctx: TreeContext, slot: GuidId): Maybe<GuidId> {
+  return ctx.roots.find(r => r.id.equals(slot))?.node
+}
+
+function resolvePathNode(ctx: TreeContext, path: Path): Maybe<Id> {
+  const root = getRootNode(ctx, path.rootSlot)
+  return pathNode(ctx.gid, root, path)
+}
+
+function getSelectedPath(selection: Maybe<Selection>): Maybe<Path> {
+  return selection?.type === 'path' ? selection.path : undefined
+}
+
+function getSelectedInsertIndex(selection: Maybe<Selection>): Maybe<number> {
+  return selection?.type === 'insertAt' ? selection.index : undefined
+}
+
+function isSelectedPath(selection: Maybe<Selection>, path: Path): boolean {
+  const selectedPath = getSelectedPath(selection)
+  return selectedPath !== undefined && pathsEqual(path, selectedPath)
+}
+
+function selectPath(ctx: TreeContext, path: Path): void {
+  ctx.select({ type: 'path', path })
+}
+
+function selectInsertAt(ctx: TreeContext, index: number): void {
+  ctx.select({ type: 'insertAt', index })
 }
 
 function TreeNode(
@@ -48,15 +82,43 @@ function TreeNode(
 }
 
 function PlaceholderNode(ctx: TreeContext, path: Path): HTMLDivElement {
-  return EmptyNode(isSelected(ctx.selection, path), () => ctx.select(path))
+  return EmptyNode(isSelectedPath(ctx.selection, path), () => selectPath(ctx, path))
 }
 
 function StringNode(ctx: TreeContext, node: StringId, path: Path): HTMLDivElement {
-  return LeafNode(node, isSelected(ctx.selection, path), () => ctx.select(path))
+  const selected = isSelectedPath(ctx.selection, path)
+  if (selected) {
+    const popped = popPath(path)
+    if (popped) {
+      const parentNode = resolvePathNode(ctx, popped.parent)
+      if (parentNode instanceof GuidId) {
+        return EditableStringNode(
+          node.value,
+          value => ctx.setEdge(parentNode, popped.label, new StringId(value)),
+          () => ctx.select(undefined)
+        )
+      }
+    }
+  }
+  return LeafNode(node, selected, () => selectPath(ctx, path))
 }
 
 function NumberNode(ctx: TreeContext, node: NumberId, path: Path): HTMLDivElement {
-  return LeafNode(node, isSelected(ctx.selection, path), () => ctx.select(path))
+  const selected = isSelectedPath(ctx.selection, path)
+  if (selected) {
+    const popped = popPath(path)
+    if (popped) {
+      const parentNode = resolvePathNode(ctx, popped.parent)
+      if (parentNode instanceof GuidId) {
+        return EditableNumberNode(
+          node.value,
+          value => ctx.setEdge(parentNode, popped.label, new NumberId(value)),
+          () => ctx.select(undefined)
+        )
+      }
+    }
+  }
+  return LeafNode(node, selected, () => selectPath(ctx, path))
 }
 
 function getPendingEdge(
@@ -64,7 +126,7 @@ function getPendingEdge(
   path: Path,
   edges: [GuidId, Id][]
 ): Maybe<GuidId> {
-  if (!selection || selection.length !== path.length + 1) return undefined
+  if (!selection || selection.edges.length !== path.edges.length + 1) return undefined
   const popped = popPath(selection)
   if (!popped || !pathsEqual(popped.parent, path)) return undefined
   return edges.some(([edgeLabel]) => edgeLabel.equals(popped.label)) ? undefined : popped.label
@@ -74,15 +136,15 @@ function renderActionButtons(
   ctx: TreeContext,
   node: GuidId
 ): HTMLButtonElement[] {
-  const { gid, root, selection } = ctx
-  if (!selection) return []
+  const selectedPath = getSelectedPath(ctx.selection)
+  if (!selectedPath) return []
 
-  const selectionNode = pathNode(gid, root, selection)
+  const selectionNode = resolvePathNode(ctx, selectedPath)
 
   return [
-    SetTargetButton(() => setAtPath(ctx, selection, node)),
+    SetTargetButton(() => setAtPath(ctx, selectedPath, node)),
     ...(selectionNode instanceof GuidId
-      ? [UseAsLabelButton(() => ctx.select(childPath(selection, node)))]
+      ? [UseAsLabelButton(() => selectPath(ctx, childPath(selectedPath, node)))]
       : [])
   ]
 }
@@ -95,8 +157,8 @@ function renderGuidNodeHeader(
   collapsed: boolean,
   selected: boolean
 ): HTMLDivElement {
-  return NodeHeader(selected, () => ctx.select(path),
-    edges.length > 0 ? CollapseToggle(collapsed, () => ctx.setCollapsed(path, !collapsed)) : null,
+  return NodeHeader(selected, () => selectPath(ctx, path),
+    edges.length > 0 ? CollapseToggle(collapsed, () => ctx.setCollapsed(path, !collapsed)) : ToggleSpacer(),
     NodeIdenticon(node),
     ...renderActionButtons(ctx, node)
   )
@@ -109,18 +171,18 @@ function renderChildren(
   ancestors: Set<Id>,
   edges: [GuidId, Id][]
 ): HTMLUListElement {
-  const pendingEdge = getPendingEdge(ctx.selection, path, edges)
+  const pendingEdge = getPendingEdge(getSelectedPath(ctx.selection), path, edges)
   return ChildrenList(
     ...edges.map(([edgeLabel, childNode]) => {
       const edgePath = childPath(path, edgeLabel)
       const childSubtree = subtree.children.get(edgeLabel) ?? emptySpanningTree()
       return ChildItem(
-        ...EdgeLabel(edgeLabel),
+        EdgeLabel(edgeLabel),
         TreeNode(ctx, childNode, edgePath, childSubtree, ancestors)
       )
     }),
     ...(pendingEdge ? [ChildItem(
-      ...EdgeLabel(pendingEdge),
+      EdgeLabel(pendingEdge),
       TreeNode(ctx, undefined, childPath(path, pendingEdge), emptySpanningTree(), ancestors)
     )] : [])
   )
@@ -133,12 +195,12 @@ function GuidNode(
   subtree: SpanningTree,
   ancestors: Set<Id>
 ): HTMLDivElement {
-  const { gid, selection } = ctx
+  const { gid } = ctx
   const edges = [...gid(node) ?? []]
   const collapsed = subtree.collapsed ?? ancestors.has(node)
   const childAncestors = new Set([...ancestors, node])
 
-  const header = renderGuidNodeHeader(ctx, node, path, edges, collapsed, isSelected(selection, path))
+  const header = renderGuidNodeHeader(ctx, node, path, edges, collapsed, isSelectedPath(ctx.selection, path))
   const children = collapsed ? null : renderChildren(ctx, path, subtree, childAncestors, edges)
 
   return GuidNodeWrapper(header, children)
@@ -147,7 +209,7 @@ function GuidNode(
 export function setAtPath(ctx: TreeContext, path: Path, value: Maybe<GuidId>): void {
   const popped = popPath(path)
   if (popped) {
-    const parentNode = pathNode(ctx.gid, ctx.root, popped.parent)
+    const parentNode = resolvePathNode(ctx, popped.parent)
     if (parentNode instanceof GuidId) {
       if (value) {
         ctx.setEdge(parentNode, popped.label, value)
@@ -157,20 +219,46 @@ export function setAtPath(ctx: TreeContext, path: Path, value: Maybe<GuidId>): v
     }
   } else {
     if (value) {
-      ctx.setRoot(value)
+      ctx.setRootNode(path.rootSlot, value)
     } else {
-      ctx.clearRoot()
+      ctx.deleteRoot(path.rootSlot)
     }
   }
 }
 
+function RootSlotView(ctx: TreeContext, slot: RootSlot): HTMLDivElement {
+  const path = rootPath(slot.id)
+  return TreeNode(ctx, slot.node, path, ctx.tree, new Set())
+}
+
+function RootInsertionPoint(ctx: TreeContext, index: number): HTMLDivElement {
+  const selectedIndex = getSelectedInsertIndex(ctx.selection)
+  return InsertionPoint(selectedIndex === index, () => selectInsertAt(ctx, index))
+}
+
 export function TreeView(ctx: TreeContext): HTMLDivElement {
-  const { root, tree, selection } = ctx
+  const { roots, selection } = ctx
+  const selectedPath = getSelectedPath(selection)
+  const selectedIndex = getSelectedInsertIndex(selection)
+
+  const elements: (HTMLElement | null)[] = []
+
+  // Render insertion points interleaved with roots
+  for (let i = 0; i <= roots.length; i++) {
+    elements.push(RootInsertionPoint(ctx, i))
+    if (i < roots.length) {
+      elements.push(RootSlotView(ctx, roots[i]))
+    }
+  }
+
   return TreeViewContainer(
     () => ctx.select(undefined),
-    TreeNode(ctx, root, emptyPath, tree, new Set()),
-    selection
-      ? NewNodeButton(() => setAtPath(ctx, selection, ctx.newNode()))
+    ...elements,
+    selectedIndex !== undefined
+      ? NewNodeButton(() => ctx.insertRoot(selectedIndex, ctx.newNode()))
+      : null,
+    selectedPath
+      ? NewNodeButton(() => setAtPath(ctx, selectedPath, ctx.newNode()))
       : null
   )
 }

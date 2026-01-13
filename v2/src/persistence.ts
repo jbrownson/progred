@@ -2,39 +2,44 @@ import { open, save } from '@tauri-apps/plugin-dialog'
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
 import { MutGid } from './gid/mutgid'
 import { GuidId } from './gid/id'
-import type { Maybe } from './maybe'
+import type { RootSlot } from './components/TreeView'
+
+type RootSlotData = { id: string, node: string }
 
 export type DocumentData = {
   graph: Record<string, Record<string, unknown>>
-  root: { guid: string } | null
+  roots: RootSlotData[]
 }
 
-export function serializeDocument(gid: MutGid, root: Maybe<GuidId>): string {
+export function serializeDocument(gid: MutGid, roots: RootSlot[]): string {
   const data: DocumentData = {
     graph: gid.toJSON(),
-    root: root ? { guid: root.guid } : null
+    roots: roots.map(r => ({ id: r.id.guid, node: r.node.guid }))
   }
   return JSON.stringify(data, null, 2)
 }
 
-export function deserializeDocument(json: string): { gid: MutGid, root: Maybe<GuidId> } {
+export function deserializeDocument(json: string): { gid: MutGid, roots: RootSlot[] } {
   const data: DocumentData = JSON.parse(json)
   const gid = MutGid.fromJSON(data.graph)
-  const root = data.root ? new GuidId(data.root.guid) : undefined
-  return { gid, root }
+  const roots: RootSlot[] = data.roots.map(r => ({
+    id: new GuidId(r.id),
+    node: new GuidId(r.node)
+  }))
+  return { gid, roots }
 }
 
-export async function saveDocument(gid: MutGid, root: Maybe<GuidId>): Promise<boolean> {
+export async function saveDocument(gid: MutGid, roots: RootSlot[]): Promise<boolean> {
   const path = await save({
     filters: [{ name: 'Progred', extensions: ['progred'] }]
   })
   if (!path) return false
-  const content = serializeDocument(gid, root)
+  const content = serializeDocument(gid, roots)
   await writeTextFile(path, content)
   return true
 }
 
-export async function openDocument(): Promise<{ gid: MutGid, root: Maybe<GuidId> } | null> {
+export async function openDocument(): Promise<{ gid: MutGid, roots: RootSlot[] } | null> {
   const path = await open({
     filters: [{ name: 'Progred', extensions: ['progred'] }]
   })

@@ -5,7 +5,6 @@ import { Identicon } from './Identicon'
 const colors = {
   string: '#2a9d2a',
   number: '#2a6a9d',
-  arrow: '#999',
   toggle: '#666',
   border: '#ddd',
   btnBg: '#f8f8f8',
@@ -16,6 +15,75 @@ const colors = {
   selectedOutline: 'rgba(59, 130, 246, 0.5)'
 }
 
+// All layout in px for consistent alignment
+const layout = {
+  // Core sizes
+  rowHeight: 24,
+  labelWidth: 20,
+  nodeIdenticonSize: 20,
+  labelIdenticonSize: 15,
+
+  // Header layout
+  toggleWidth: 14,
+  headerGap: 4,
+  headerPadding: 4,
+
+  // Spacing
+  itemPaddingY: 2,
+  contentPaddingX: 4,
+
+  // Lines
+  lineWidth: 1,
+
+  // Insertion point
+  insertionHeight: 8,
+  insertionCaretOffset: 4,
+  insertionCaretSize: 12,
+
+  // Styling
+  borderRadius: 4,
+  outlineWidth: 2,
+  inputWidthPadding: 4,
+
+  // Derived: childIndent positions children so label centers align with parent identicon center
+  get childIndent() { return this.headerPadding + this.toggleWidth + this.headerGap },
+  // Derived: where vertical line should be (center of label column)
+  get lineX() { return this.childIndent + this.labelWidth / 2 },
+  // Derived: line left position accounting for line width
+  get lineLeft() { return this.lineX - this.lineWidth / 2 }
+}
+
+const selectedStyle = {
+  background: colors.selected,
+  outline: `${layout.outlineWidth}px solid ${colors.selectedOutline}`
+}
+
+const flexCenter = {
+  display: 'flex',
+  alignItems: 'center'
+}
+
+const inlineFlexCenter = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center'
+}
+
+const resetInputStyle = {
+  fontFamily: 'inherit',
+  fontSize: 'inherit',
+  border: 'none',
+  background: 'transparent',
+  padding: '0',
+  margin: '0',
+  outline: 'none'
+}
+
+const clickable = (onClick: () => void) => ({
+  cursor: 'pointer',
+  onClick: (e: Event) => { e.stopPropagation(); onClick() }
+})
+
 export function ValueView(id: StringId | NumberId): HTMLSpanElement {
   const isString = id instanceof StringId
   return el('span', {
@@ -23,22 +91,34 @@ export function ValueView(id: StringId | NumberId): HTMLSpanElement {
   }, isString ? `"${id.value}"` : String(id.value))
 }
 
-export function EdgeLabel(label: GuidId): [HTMLImageElement, HTMLSpanElement] {
-  return [
-    Identicon(label.guid, 18, true),
-    el('span', { style: { color: colors.arrow, fontSize: '0.85em' } }, '→')
-  ]
+export function EdgeLabel(label: GuidId): HTMLSpanElement {
+  return el('span', {
+    style: {
+      ...inlineFlexCenter,
+      width: `${layout.labelWidth}px`,
+      height: `${layout.rowHeight}px`
+    }
+  }, Identicon(label.guid, layout.labelIdenticonSize, true))
 }
 
 export function NodeIdenticon(node: GuidId): HTMLImageElement {
-  return Identicon(node.guid, 20)
+  return Identicon(node.guid, layout.nodeIdenticonSize)
 }
 
 export function CollapseToggle(collapsed: boolean, onClick: () => void): HTMLSpanElement {
   return el('span', {
-    style: { width: '1em', fontSize: '0.75em', color: colors.toggle, cursor: 'pointer' },
-    onClick: (e: Event) => { e.stopPropagation(); onClick() }
+    style: {
+      ...inlineFlexCenter,
+      width: `${layout.toggleWidth}px`,
+      fontSize: '0.75em',
+      color: colors.toggle
+    },
+    ...clickable(onClick)
   }, collapsed ? '▶' : '▼')
+}
+
+export function ToggleSpacer(): HTMLSpanElement {
+  return el('span', { style: { width: `${layout.toggleWidth}px` } })
 }
 
 function ActionButton(
@@ -63,12 +143,11 @@ function ActionButton(
       marginTop: isNewNode ? '0.5em' : undefined,
       fontSize: isNewNode ? '0.85em' : '0.75em',
       border: `1px solid ${color}`,
-      borderRadius: '3px',
+      borderRadius: `${layout.borderRadius}px`,
       background: colors.btnBg,
-      color: color,
-      cursor: 'pointer'
+      color: color
     },
-    onClick: (e: Event) => { e.stopPropagation(); onClick() },
+    ...clickable(onClick),
     title
   }, label)
 }
@@ -85,6 +164,31 @@ export function NewNodeButton(onClick: () => void): HTMLButtonElement {
   return ActionButton('new-node', '+ New Node', 'Create new node', onClick)
 }
 
+export function InsertionPoint(selected: boolean, onClick: () => void): HTMLDivElement {
+  const caret = el('span', {
+    style: {
+      position: 'absolute',
+      left: `${layout.insertionCaretOffset}px`,
+      top: '50%',
+      transform: 'translateY(-50%)',
+      fontSize: `${layout.insertionCaretSize}px`,
+      color: selected ? colors.setTarget : colors.toggle,
+      opacity: selected ? '1' : '0',
+      transition: 'opacity 0.1s'
+    }
+  }, '▶')
+
+  return el('div', {
+    style: {
+      position: 'relative',
+      height: `${layout.insertionHeight}px`
+    },
+    ...clickable(onClick),
+    onMouseEnter: () => { if (!selected) caret.style.opacity = '0.5' },
+    onMouseLeave: () => { if (!selected) caret.style.opacity = '0' }
+  }, caret)
+}
+
 export function NodeHeader(
   selected: boolean,
   onClick: () => void,
@@ -93,13 +197,12 @@ export function NodeHeader(
   return el('div', {
     class: 'hoverable',
     style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '0.5em',
-      padding: '0.25em',
+      ...flexCenter,
+      gap: `${layout.headerGap}px`,
+      padding: `${layout.headerPadding}px`,
       cursor: 'pointer',
-      borderRadius: '4px',
-      ...(selected ? { background: colors.selected, outline: `2px solid ${colors.selectedOutline}` } : {})
+      borderRadius: `${layout.borderRadius}px`,
+      ...(selected ? selectedStyle : {})
     },
     onClick: (e: Event) => {
       e.stopPropagation()
@@ -114,12 +217,12 @@ export function EmptyNode(selected: boolean, onClick: () => void): HTMLDivElemen
     class: 'hoverable',
     style: {
       flex: '1',
-      padding: '0.25em',
-      cursor: 'pointer',
-      borderRadius: '4px',
-      ...(selected ? { background: colors.selected, outline: `2px solid ${colors.selectedOutline}` } : {})
+      minHeight: `${layout.rowHeight}px`,
+      padding: `0 ${layout.contentPaddingX}px`,
+      borderRadius: `${layout.borderRadius}px`,
+      ...(selected ? selectedStyle : {})
     },
-    onClick: (e: Event) => { e.stopPropagation(); onClick() }
+    ...clickable(onClick)
   }, '(empty)')
 }
 
@@ -131,16 +234,130 @@ export function LeafNode(
   return el('div', {
     class: 'hoverable',
     style: {
-      flex: '1',
-      display: 'flex',
-      alignItems: 'center',
-      padding: '0.25em',
-      cursor: 'pointer',
-      borderRadius: '4px',
-      ...(selected ? { background: colors.selected, outline: `2px solid ${colors.selectedOutline}` } : {})
+      ...flexCenter,
+      minHeight: `${layout.rowHeight}px`,
+      padding: `0 ${layout.contentPaddingX}px`,
+      borderRadius: `${layout.borderRadius}px`,
+      ...(selected ? selectedStyle : {})
     },
-    onClick: (e: Event) => { e.stopPropagation(); onClick() }
+    ...clickable(onClick)
   }, ValueView(value))
+}
+
+function resizeTextarea(textarea: HTMLTextAreaElement): void {
+  textarea.style.width = '0'
+  textarea.style.height = '0'
+  textarea.style.width = `${textarea.scrollWidth}px`
+  textarea.style.height = `${textarea.scrollHeight}px`
+}
+
+export function EditableStringNode(
+  value: string,
+  onChange: (value: string) => void,
+  onBlur: () => void
+): HTMLDivElement {
+  const textarea = el('textarea', {
+    style: {
+      ...resetInputStyle,
+      color: colors.string,
+      resize: 'none',
+      overflow: 'hidden'
+    },
+    value,
+    onInput: (e: Event) => {
+      const target = e.target as HTMLTextAreaElement
+      onChange(target.value)
+      resizeTextarea(target)
+    },
+    onBlur: () => onBlur(),
+    onClick: (e: Event) => e.stopPropagation(),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLTextAreaElement).value.length === 0)) {
+        e.stopPropagation()
+      }
+    }
+  }) as HTMLTextAreaElement
+
+  requestAnimationFrame(() => {
+    resizeTextarea(textarea)
+    textarea.focus()
+  })
+
+  return el('div', {
+    style: {
+      ...flexCenter,
+      flex: '1',
+      padding: `0 ${layout.contentPaddingX}px`,
+      borderRadius: `${layout.borderRadius}px`,
+      ...selectedStyle
+    },
+    onClick: (e: Event) => e.stopPropagation()
+  }, el('span', { style: { color: colors.string } }, '"'), textarea, el('span', { style: { color: colors.string } }, '"'))
+}
+
+function getTextWidth(text: string): number {
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')!
+  context.font = getComputedStyle(document.body).font
+  return context.measureText(text).width
+}
+
+export function EditableNumberNode(
+  value: number,
+  onChange: (value: number) => void,
+  onBlur: () => void
+): HTMLDivElement {
+  let currentText = String(value)
+
+  const updateWidth = (target: HTMLInputElement) => {
+    target.style.width = `${getTextWidth(currentText) + layout.inputWidthPadding}px`
+  }
+
+  const input = el('input', {
+    type: 'text',
+    style: {
+      ...resetInputStyle,
+      color: colors.number
+    },
+    value: currentText,
+    onInput: (e: Event) => {
+      const target = e.target as HTMLInputElement
+      currentText = target.value
+      updateWidth(target)
+    },
+    onBlur: () => {
+      const num = +currentText
+      if (!isNaN(num)) onChange(num)
+      onBlur()
+    },
+    onClick: (e: Event) => e.stopPropagation(),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        const num = +currentText
+        if (!isNaN(num)) onChange(num)
+        onBlur()
+      } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
+        e.stopPropagation()
+      }
+    }
+  }) as HTMLInputElement
+
+  requestAnimationFrame(() => {
+    updateWidth(input)
+    input.focus()
+  })
+
+  return el('div', {
+    style: {
+      ...flexCenter,
+      flex: '1',
+      padding: `0 ${layout.contentPaddingX}px`,
+      borderRadius: `${layout.borderRadius}px`,
+      ...selectedStyle
+    },
+    onClick: (e: Event) => e.stopPropagation()
+  }, input)
 }
 
 export function ChildrenList(...children: HTMLElement[]): HTMLUListElement {
@@ -149,30 +366,47 @@ export function ChildrenList(...children: HTMLElement[]): HTMLUListElement {
       listStyle: 'none',
       margin: '0',
       padding: '0',
-      borderLeft: `1px solid ${colors.border}`,
-      marginLeft: '0.5em'
+      marginLeft: `${layout.childIndent}px`
     }
   }, ...children)
 }
 
-export function ChildItem(...children: (HTMLElement | HTMLImageElement | HTMLSpanElement)[]): HTMLLIElement {
+export function ChildItem(label: HTMLElement, content: HTMLElement): HTMLLIElement {
   return el('li', {
     style: {
-      display: 'flex',
-      alignItems: 'flex-start',
-      gap: '0.5em',
-      padding: '0.25em 0 0.25em 0.5em'
+      display: 'grid',
+      gridTemplateColumns: `${layout.labelWidth}px 1fr`,
+      alignItems: 'start',
+      gap: `${layout.headerGap}px`,
+      padding: `${layout.itemPaddingY}px 0`
     }
-  }, ...children)
+  }, label, content)
 }
 
 export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | null): HTMLDivElement {
-  return el('div', { style: { flex: '1' } }, header, children)
+  if (!children) {
+    return el('div', { style: { flex: '1' } }, header)
+  }
+
+  // Vertical line connecting parent to children, positioned at center of label column
+  const line = el('div', {
+    style: {
+      position: 'absolute',
+      left: `${layout.lineLeft}px`,
+      top: `${layout.rowHeight}px`,
+      bottom: '0',
+      width: `${layout.lineWidth}px`,
+      background: colors.border,
+      zIndex: '-1'
+    }
+  })
+
+  return el('div', { style: { flex: '1', position: 'relative' } }, header, line, children)
 }
 
 export function TreeViewContainer(onDeselect: () => void, ...children: (HTMLElement | null)[]): HTMLDivElement {
   return el('div', {
-    style: { textAlign: 'left', marginLeft: '1em' },
+    style: { textAlign: 'left' },
     onClick: onDeselect
   }, ...children)
 }
