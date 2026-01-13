@@ -147,7 +147,7 @@ export default function App(): HTMLElement {
 
   rerender()
 
-  return el('main', { style: { margin: 0, padding: '0.5em' } },
+  return el('main', { style: { margin: 0 } },
     treeContainer
   )
 }

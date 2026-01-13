@@ -407,7 +407,7 @@ export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | nul
 
 export function TreeViewContainer(onDeselect: () => void, ...children: (HTMLElement | null)[]): HTMLDivElement {
   return el('div', {
-    style: { textAlign: 'left' },
+    style: { textAlign: 'left', padding: '0.5em', minHeight: '100vh', boxSizing: 'border-box' },
     onClick: onDeselect
   }, ...children)
 }
