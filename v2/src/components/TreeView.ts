@@ -9,7 +9,7 @@ import type { Path } from '../path'
 import {
   EdgeLabel, NodeIdenticon, CollapseToggle,
   SetTargetButton, UseAsLabelButton, NewNodeButton,
-  NodeHeader, EmptyNode, LeafNode, EditableStringNode, EditableNumberNode,
+  NodeHeader, EmptyNode, EditablePlaceholder, LeafNode, EditableStringNode, EditableNumberNode,
   ChildrenList, ChildItem, GuidNodeWrapper, TreeViewContainer, InsertionPoint
 } from './TreeRendering'
 
@@ -92,7 +92,20 @@ function TreeNode(
 }
 
 function PlaceholderNode(ctx: TreeContext, path: Path): HTMLDivElement {
-  return EmptyNode(isSelectedPath(ctx.selection, path), () => selectPath(ctx, path))
+  const selected = isSelectedPath(ctx.selection, path)
+  if (selected) {
+    const popped = popPath(path)
+    if (popped) {
+      const parentNode = resolvePathNode(ctx, popped.parent)
+      if (parentNode instanceof GuidId) {
+        return EditablePlaceholder(
+          id => ctx.setEdge(parentNode, popped.label, id),
+          () => ctx.select(undefined)
+        )
+      }
+    }
+  }
+  return EmptyNode(selected, () => selectPath(ctx, path))
 }
 
 function StringNode(ctx: TreeContext, node: StringId, path: Path): HTMLDivElement {

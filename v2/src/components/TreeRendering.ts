@@ -138,7 +138,8 @@ function ActionButton(
       background: colors.btnBg,
       color: color
     },
-    ...clickable(onClick),
+    cursor: 'pointer',
+    onMouseDown: (e: Event) => { e.preventDefault(); e.stopPropagation(); onClick() },
     title
   }, label)
 }
@@ -204,6 +205,17 @@ export function NodeHeader(
   }, ...children)
 }
 
+function getTextWidth(text: string): number {
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')!
+  context.font = getComputedStyle(document.body).font
+  return context.measureText(text).width
+}
+
+function resizeInput(input: HTMLInputElement): void {
+  input.style.width = `${getTextWidth(input.value) + layout.inputWidthPadding}px`
+}
+
 export function EmptyNode(selected: boolean, onClick: () => void): HTMLDivElement {
   return el('div', {
     class: 'hoverable',
@@ -217,6 +229,63 @@ export function EmptyNode(selected: boolean, onClick: () => void): HTMLDivElemen
     },
     ...clickable(onClick)
   }, '(empty)')
+}
+
+// TODO: Auto-detecting number vs string is too simplistic - "123" can't be entered as a string.
+// Need completion UI with named entries (like v1's PlaceholderComponent) to let user pick type explicitly.
+export function EditablePlaceholder(
+  onCreate: (id: StringId | NumberId) => void,
+  onBlur: () => void
+): HTMLDivElement {
+  const commit = (input: HTMLInputElement) => {
+    const value = input.value
+    if (value.length > 0) {
+      const num = +value
+      onCreate(isNaN(num) ? new StringId(value) : new NumberId(num))
+    }
+    onBlur()
+  }
+
+  const input = el('input', {
+    type: 'text',
+    placeholder: 'value...',
+    style: {
+      ...resetInputStyle,
+      color: colors.toggle
+    },
+    onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
+    onBlur: (e: Event) => commit(e.target as HTMLInputElement),
+    onClick: (e: Event) => e.stopPropagation(),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        commit(e.target as HTMLInputElement)
+      } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        if ((e.target as HTMLInputElement).value.length === 0) {
+          onBlur()
+        } else {
+          e.stopPropagation()
+        }
+      } else {
+        e.stopPropagation()
+      }
+    }
+  }) as HTMLInputElement
+
+  requestAnimationFrame(() => input.focus())
+
+  return el('div', {
+    style: {
+      ...flexCenter,
+      flex: '1',
+      minHeight: `${layout.rowHeight}px`,
+      padding: `0 ${layout.contentPaddingX}px`,
+      marginLeft: `${layout.headerGap}px`,
+      borderRadius: `${layout.borderRadius}px`,
+      ...selectedStyle
+    },
+    onClick: (e: Event) => e.stopPropagation()
+  }, input)
 }
 
 export function LeafNode(
@@ -238,43 +307,39 @@ export function LeafNode(
   }, ValueView(value))
 }
 
-function resizeTextarea(textarea: HTMLTextAreaElement): void {
-  textarea.style.width = '0'
-  textarea.style.height = '0'
-  textarea.style.width = `${textarea.scrollWidth}px`
-  textarea.style.height = `${textarea.scrollHeight}px`
-}
-
 export function EditableStringNode(
   value: string,
   onChange: (value: string) => void,
   onBlur: () => void
 ): HTMLDivElement {
-  const textarea = el('textarea', {
+  const commit = (input: HTMLInputElement) => {
+    onChange(input.value)
+    onBlur()
+  }
+
+  const input = el('input', {
+    type: 'text',
+    value,
     style: {
       ...resetInputStyle,
-      color: colors.string,
-      resize: 'none',
-      overflow: 'hidden'
+      color: colors.string
     },
-    value,
-    onInput: (e: Event) => {
-      const target = e.target as HTMLTextAreaElement
-      onChange(target.value)
-      resizeTextarea(target)
-    },
-    onBlur: () => onBlur(),
+    onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
+    onBlur: (e: Event) => commit(e.target as HTMLInputElement),
     onClick: (e: Event) => e.stopPropagation(),
     onKeyDown: (e: KeyboardEvent) => {
-      if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLTextAreaElement).value.length === 0)) {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        commit(e.target as HTMLInputElement)
+      } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
         e.stopPropagation()
       }
     }
-  }) as HTMLTextAreaElement
+  }) as HTMLInputElement
 
   requestAnimationFrame(() => {
-    resizeTextarea(textarea)
-    textarea.focus()
+    resizeInput(input)
+    input.focus()
   })
 
   return el('div', {
@@ -286,14 +351,7 @@ export function EditableStringNode(
       ...selectedStyle
     },
     onClick: (e: Event) => e.stopPropagation()
-  }, el('span', { style: { color: colors.string } }, '"'), textarea, el('span', { style: { color: colors.string } }, '"'))
-}
-
-function getTextWidth(text: string): number {
-  const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d')!
-  context.font = getComputedStyle(document.body).font
-  return context.measureText(text).width
+  }, el('span', { style: { color: colors.string } }, '"'), input, el('span', { style: { color: colors.string } }, '"'))
 }
 
 export function EditableNumberNode(
@@ -301,36 +359,26 @@ export function EditableNumberNode(
   onChange: (value: number) => void,
   onBlur: () => void
 ): HTMLDivElement {
-  let currentText = String(value)
-
-  const updateWidth = (target: HTMLInputElement) => {
-    target.style.width = `${getTextWidth(currentText) + layout.inputWidthPadding}px`
+  const commit = (input: HTMLInputElement) => {
+    const num = +input.value
+    if (!isNaN(num)) onChange(num)
+    onBlur()
   }
 
   const input = el('input', {
     type: 'text',
+    value: String(value),
     style: {
       ...resetInputStyle,
       color: colors.number
     },
-    value: currentText,
-    onInput: (e: Event) => {
-      const target = e.target as HTMLInputElement
-      currentText = target.value
-      updateWidth(target)
-    },
-    onBlur: () => {
-      const num = +currentText
-      if (!isNaN(num)) onChange(num)
-      onBlur()
-    },
+    onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
+    onBlur: (e: Event) => commit(e.target as HTMLInputElement),
     onClick: (e: Event) => e.stopPropagation(),
     onKeyDown: (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         e.preventDefault()
-        const num = +currentText
-        if (!isNaN(num)) onChange(num)
-        onBlur()
+        commit(e.target as HTMLInputElement)
       } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
         e.stopPropagation()
       }
@@ -338,7 +386,7 @@ export function EditableNumberNode(
   }) as HTMLInputElement
 
   requestAnimationFrame(() => {
-    updateWidth(input)
+    resizeInput(input)
     input.focus()
   })
 
