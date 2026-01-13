@@ -234,7 +234,7 @@ function RootSlotView(ctx: TreeContext, slot: RootSlot): HTMLDivElement {
 
 function RootInsertionPoint(ctx: TreeContext, index: number): HTMLDivElement {
   const selectedIndex = getSelectedInsertIndex(ctx.selection)
-  return InsertionPoint(selectedIndex === index, () => selectInsertAt(ctx, index))
+  return InsertionPoint(selectedIndex === index, index === 0, () => selectInsertAt(ctx, index))
 }
 
 export function TreeView(ctx: TreeContext): HTMLDivElement {

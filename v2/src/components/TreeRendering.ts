@@ -24,6 +24,7 @@ const layout = {
   headerPadding: 4,
   itemPaddingY: 2,
   contentPaddingX: 4,
+  containerPadding: 8,
   lineWidth: 1,
   insertionHeight: 8,
   insertionCaretOffset: 4,
@@ -37,7 +38,9 @@ const layout = {
   get lineLeft() { return this.lineX - this.lineWidth / 2 },
   get hLineStart() { return (this.labelWidth + this.labelIdenticonSize) / 2 },
   get hLineEnd() { return this.labelWidth + this.headerGap + this.headerPadding },
-  get vLineTop() { return this.headerPadding + this.nodeIdenticonSize }
+  get vLineTop() { return this.headerPadding + this.nodeIdenticonSize },
+  get insertionCaretOverhang() { return (this.insertionCaretSize - this.insertionHeight) / 2 },
+  get firstInsertionPullUp() { return this.containerPadding - this.insertionCaretOverhang }
 }
 
 const selectedStyle = {
@@ -152,7 +155,7 @@ export function NewNodeButton(onClick: () => void): HTMLButtonElement {
   return ActionButton('new-node', '+ New Node', 'Create new node', onClick)
 }
 
-export function InsertionPoint(selected: boolean, onClick: () => void): HTMLDivElement {
+export function InsertionPoint(selected: boolean, isFirst: boolean, onClick: () => void): HTMLDivElement {
   const caret = el('span', {
     style: {
       position: 'absolute',
@@ -169,7 +172,8 @@ export function InsertionPoint(selected: boolean, onClick: () => void): HTMLDivE
   return el('div', {
     style: {
       position: 'relative',
-      height: `${layout.insertionHeight}px`
+      height: `${layout.insertionHeight}px`,
+      marginTop: isFirst ? `${-layout.firstInsertionPullUp}px` : undefined
     },
     ...clickable(onClick),
     onMouseEnter: () => { if (!selected) caret.style.opacity = '0.5' },
@@ -407,7 +411,7 @@ export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | nul
 
 export function TreeViewContainer(onDeselect: () => void, ...children: (HTMLElement | null)[]): HTMLDivElement {
   return el('div', {
-    style: { textAlign: 'left', padding: '0.5em', minHeight: '100vh', boxSizing: 'border-box' },
+    style: { textAlign: 'left', padding: `${layout.containerPadding}px`, minHeight: '100vh', boxSizing: 'border-box' },
     onClick: onDeselect
   }, ...children)
 }
