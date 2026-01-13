@@ -44,12 +44,22 @@ function resolvePathNode(ctx: TreeContext, path: Path): Maybe<Id> {
   return pathNode(ctx.gid, root, path)
 }
 
+function matchSelection<T>(
+  selection: Maybe<Selection>,
+  cases: { path: (p: Path) => T, insertAt: (i: number) => T, none: () => T }
+): T {
+  if (!selection) return cases.none()
+  return selection.type === 'path'
+    ? cases.path(selection.path)
+    : cases.insertAt(selection.index)
+}
+
 function getSelectedPath(selection: Maybe<Selection>): Maybe<Path> {
-  return selection?.type === 'path' ? selection.path : undefined
+  return matchSelection(selection, { path: p => p, insertAt: () => undefined, none: () => undefined })
 }
 
 function getSelectedInsertIndex(selection: Maybe<Selection>): Maybe<number> {
-  return selection?.type === 'insertAt' ? selection.index : undefined
+  return matchSelection(selection, { path: () => undefined, insertAt: i => i, none: () => undefined })
 }
 
 function isSelectedPath(selection: Maybe<Selection>, path: Path): boolean {
@@ -239,8 +249,6 @@ function RootInsertionPoint(ctx: TreeContext, index: number): HTMLDivElement {
 
 export function TreeView(ctx: TreeContext): HTMLDivElement {
   const { roots, selection } = ctx
-  const selectedPath = getSelectedPath(selection)
-  const selectedIndex = getSelectedInsertIndex(selection)
 
   if (roots.length === 0) {
     return TreeViewContainer(
@@ -249,22 +257,20 @@ export function TreeView(ctx: TreeContext): HTMLDivElement {
     )
   }
 
-  const elements: (HTMLElement | null)[] = []
-  for (let i = 0; i <= roots.length; i++) {
-    elements.push(RootInsertionPoint(ctx, i))
-    if (i < roots.length) {
-      elements.push(RootSlotView(ctx, roots[i]))
-    }
-  }
+  const elements = roots.flatMap((root, i) => [
+    RootInsertionPoint(ctx, i),
+    RootSlotView(ctx, root)
+  ]).concat([RootInsertionPoint(ctx, roots.length)])
+
+  const newNodeButton = matchSelection(selection, {
+    path: p => NewNodeButton(() => setAtPath(ctx, p, ctx.newNode())),
+    insertAt: i => NewNodeButton(() => ctx.insertRoot(i, ctx.newNode())),
+    none: () => null
+  })
 
   return TreeViewContainer(
     () => ctx.select(undefined),
     ...elements,
-    selectedIndex !== undefined
-      ? NewNodeButton(() => ctx.insertRoot(selectedIndex, ctx.newNode()))
-      : null,
-    selectedPath
-      ? NewNodeButton(() => setAtPath(ctx, selectedPath, ctx.newNode()))
-      : null
+    newNodeButton
   )
 }
