@@ -1,4 +1,5 @@
 import { el } from '../dom'
+import type { VNode } from '../dom'
 import { GuidId, StringId, NumberId, matchId } from '../gid/id'
 import type { Id } from '../gid/id'
 import type { Gid } from '../gid/gid'
@@ -91,7 +92,7 @@ function TreeNode(
   path: Path,
   subtree: SpanningTree,
   ancestors: Set<Id>
-): HTMLDivElement {
+): VNode {
   return node
     ? matchId(node, {
         guid: id => GuidNode(ctx, id, path, subtree, ancestors),
@@ -101,7 +102,7 @@ function TreeNode(
     : PlaceholderNode(ctx, path)
 }
 
-function PlaceholderNode(ctx: TreeContext, path: Path): HTMLDivElement {
+function PlaceholderNode(ctx: TreeContext, path: Path): VNode {
   const selected = isSelectedPath(ctx.selection, path)
   if (selected) {
     const popped = popPath(path)
@@ -118,7 +119,7 @@ function PlaceholderNode(ctx: TreeContext, path: Path): HTMLDivElement {
   return EmptyNode(selected, () => selectPath(ctx, path))
 }
 
-function StringNode(ctx: TreeContext, node: StringId, path: Path): HTMLDivElement {
+function StringNode(ctx: TreeContext, node: StringId, path: Path): VNode {
   const selected = isSelectedPath(ctx.selection, path)
   if (selected) {
     const popped = popPath(path)
@@ -136,7 +137,7 @@ function StringNode(ctx: TreeContext, node: StringId, path: Path): HTMLDivElemen
   return LeafNode(node, selected, () => selectPath(ctx, path))
 }
 
-function NumberNode(ctx: TreeContext, node: NumberId, path: Path): HTMLDivElement {
+function NumberNode(ctx: TreeContext, node: NumberId, path: Path): VNode {
   const selected = isSelectedPath(ctx.selection, path)
   if (selected) {
     const popped = popPath(path)
@@ -171,7 +172,7 @@ function getPendingEdge(
 function renderActionButtons(
   ctx: TreeContext,
   node: GuidId
-): HTMLButtonElement[] {
+): VNode[] {
   const { selection } = ctx
 
   if (selection?.type === 'nameLabel') {
@@ -211,7 +212,7 @@ function getNodeIsaName(ctx: TreeContext, node: GuidId): Maybe<string> {
   return getNodeName(ctx, isaNode)
 }
 
-function renderIsaProjection(ctx: TreeContext, node: GuidId): HTMLElement | null {
+function renderIsaProjection(ctx: TreeContext, node: GuidId): VNode | null {
   const isaName = getNodeIsaName(ctx, node)
   if (!isaName) return null
   return el('span', { style: { color: '#666', fontStyle: 'italic' } }, isaName)
@@ -221,7 +222,7 @@ function renderNameProjection(
   ctx: TreeContext,
   node: GuidId,
   path: Path
-): HTMLElement | null {
+): VNode | null {
   if (!ctx.nameLabel) return null
   const namePath = childPath(path, ctx.nameLabel)
   const nameSelected = isSelectedPath(ctx.selection, namePath)
@@ -238,8 +239,7 @@ function renderNameProjection(
 
   return el('span', {
     style: { color: '#2a9d2a', cursor: 'pointer' },
-    onMouseDown: (e: Event) => {
-      if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
+    onClick: (e: Event) => {
       e.stopPropagation()
       selectPath(ctx, namePath)
     }
@@ -253,7 +253,7 @@ function renderGuidNodeHeader(
   hasChildren: boolean,
   collapsed: boolean,
   selected: boolean
-): HTMLDivElement {
+): VNode {
   const name = getNodeName(ctx, node)
   const isaName = getNodeIsaName(ctx, node)
 
@@ -266,7 +266,7 @@ function renderGuidNodeHeader(
   )
 }
 
-function renderEdgeLabel(ctx: TreeContext, label: GuidId): HTMLSpanElement {
+function renderEdgeLabel(ctx: TreeContext, label: GuidId): VNode {
   const name = getNodeName(ctx, label)
   return name
     ? el('span', { style: { fontSize: '0.85em', color: '#666' } }, name)
@@ -279,7 +279,7 @@ function renderChildren(
   subtree: SpanningTree,
   ancestors: Set<Id>,
   edges: [GuidId, Id][]
-): HTMLUListElement {
+): VNode {
   const pendingEdge = getPendingEdge(ctx, getSelectedPath(ctx.selection), path, edges)
   return ChildrenList(
     ...edges.map(([edgeLabel, childNode]) => {
@@ -307,7 +307,7 @@ function GuidNode(
   path: Path,
   subtree: SpanningTree,
   ancestors: Set<Id>
-): HTMLDivElement {
+): VNode {
   const { gid } = ctx
   const allEdges = [...gid(node) ?? []]
   const edges = allEdges.filter(([label]) => !isProjectedLabel(ctx, label))
@@ -341,27 +341,27 @@ export function setAtPath(ctx: TreeContext, path: Path, value: Maybe<GuidId>): v
   }
 }
 
-function RootSlotView(ctx: TreeContext, slot: RootSlot): HTMLDivElement {
+function RootSlotView(ctx: TreeContext, slot: RootSlot): VNode {
   const path = rootPath(slot.id)
   return TreeNode(ctx, slot.node, path, ctx.tree, new Set())
 }
 
-function RootInsertionPoint(ctx: TreeContext, index: number): HTMLDivElement {
+function RootInsertionPoint(ctx: TreeContext, index: number): VNode {
   const selectedIndex = getSelectedInsertIndex(ctx.selection)
   return InsertionPoint(selectedIndex === index, index === 0, () => selectInsertAt(ctx, index))
 }
 
-function NameLabelSlot(ctx: TreeContext): HTMLDivElement {
+function NameLabelSlot(ctx: TreeContext): VNode {
   const selected = ctx.selection?.type === 'nameLabel'
   return LabelSlot('name', ctx.nameLabel, selected, () => ctx.select({ type: 'nameLabel' }))
 }
 
-function IsaLabelSlot(ctx: TreeContext): HTMLDivElement {
+function IsaLabelSlot(ctx: TreeContext): VNode {
   const selected = ctx.selection?.type === 'isaLabel'
   return LabelSlot('isa', ctx.isaLabel, selected, () => ctx.select({ type: 'isaLabel' }))
 }
 
-export function TreeView(ctx: TreeContext): HTMLDivElement {
+export function TreeView(ctx: TreeContext): VNode {
   const { roots, selection } = ctx
 
   const labelSlots = el('div', {

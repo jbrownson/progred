@@ -17,7 +17,8 @@
     "@tauri-apps/plugin-fs": "^2.4.4",
     "@tauri-apps/plugin-opener": "^2",
     "immutable": "^5.1.4",
-    "minidenticons": "^4.2.1"
+    "minidenticons": "^4.2.1",
+    "snabbdom": "^3.6.3"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

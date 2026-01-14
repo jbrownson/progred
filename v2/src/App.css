@@ -17,3 +17,7 @@ body {
 }
 
 .hoverable:hover { background: rgba(0, 0, 0, 0.05); }
+
+.insertion-caret { opacity: 0; }
+.insertion-caret.selected { opacity: 1; }
+.insertion-point:hover .insertion-caret { opacity: 1; }

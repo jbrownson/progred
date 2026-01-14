@@ -1,4 +1,5 @@
-import { el } from './dom'
+import { patch } from './dom'
+import type { VNode } from './dom'
 import { TreeView, setAtPath } from './components/TreeView'
 import type { TreeContext, RootSlot, Selection } from './components/TreeView'
 import { MutGid } from './gid/mutgid'
@@ -100,13 +101,10 @@ function makeContext(state: AppState, rerender: () => void): TreeContext {
   }
 }
 
-function renderTree(ctx: TreeContext, container: HTMLDivElement): void {
-  const tree = TreeView(ctx)
-  if (container.firstChild) {
-    container.replaceChild(tree, container.firstChild)
-  } else {
-    container.appendChild(tree)
-  }
+function renderTree(ctx: TreeContext, currentVNode: VNode | Element): VNode {
+  const newVNode = TreeView(ctx)
+  patch(currentVNode, newVNode)
+  return newVNode
 }
 
 function handleDelete(ctx: TreeContext): void {
@@ -133,10 +131,8 @@ export default function App(): HTMLElement {
     nameLabel: testData.nameLabel,
     isaLabel: testData.isaLabel
   }
-  const treeContainer = el('div', {})
-  // TODO: Current approach tears down and rebuilds entire DOM on each render.
-  // This requires setTimeout(0) batching and mousedown handlers (see TreeRendering.ts).
-  // Future: targeted updates for select/collapse to avoid full re-render.
+  const container = document.createElement('div')
+  let currentVNode: VNode | Element = container
   let renderScheduled = false
   const scheduleRender = () => {
     if (renderScheduled) return
@@ -144,7 +140,7 @@ export default function App(): HTMLElement {
     setTimeout(() => {
       renderScheduled = false
       const ctx = makeContext(state, scheduleRender)
-      renderTree(ctx, treeContainer)
+      currentVNode = renderTree(ctx, currentVNode)
     }, 0)
   }
 
@@ -180,7 +176,5 @@ export default function App(): HTMLElement {
 
   scheduleRender()
 
-  return el('main', { style: { margin: 0 } },
-    treeContainer
-  )
+  return container
 }

@@ -1,7 +1,8 @@
 import { el } from '../dom'
+import type { VNode } from '../dom'
 import { minidenticon } from 'minidenticons'
 
-export function Identicon(value: string, size = 16, label = false): HTMLImageElement {
+export function Identicon(value: string, size = 16, label = false): VNode {
   const svg = minidenticon(value)
   return el('img', {
     src: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`,

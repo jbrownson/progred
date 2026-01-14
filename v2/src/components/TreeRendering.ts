@@ -1,4 +1,5 @@
 import { el } from '../dom'
+import type { VNode } from '../dom'
 import { GuidId, StringId, NumberId } from '../gid/id'
 import { Identicon } from './Identicon'
 
@@ -69,27 +70,19 @@ const resetInputStyle = {
   outline: 'none'
 }
 
-// TODO: Using mousedown instead of click because full DOM re-render on blur
-// causes the click target to be replaced before click fires (mousedown and
-// mouseup hit different elements = no click event). Manual blur() ensures
-// input commits before selection changes. Fix properly with targeted DOM updates.
 const clickable = (onClick: () => void) => ({
   cursor: 'pointer',
-  onMouseDown: (e: Event) => {
-    if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
-    e.stopPropagation()
-    onClick()
-  }
+  onClick: (e: Event) => { e.stopPropagation(); onClick() }
 })
 
-export function ValueView(id: StringId | NumberId): HTMLSpanElement {
+export function ValueView(id: StringId | NumberId): VNode {
   const isString = id instanceof StringId
   return el('span', {
     style: { color: isString ? colors.string : colors.number }
   }, isString ? `"${id.value}"` : String(id.value))
 }
 
-export function EdgeLabel(label: GuidId): HTMLSpanElement {
+export function EdgeLabel(label: GuidId): VNode {
   return el('span', {
     style: {
       ...inlineFlexCenter,
@@ -99,11 +92,11 @@ export function EdgeLabel(label: GuidId): HTMLSpanElement {
   }, Identicon(label.guid, layout.labelIdenticonSize, true))
 }
 
-export function NodeIdenticon(node: GuidId): HTMLImageElement {
+export function NodeIdenticon(node: GuidId): VNode {
   return Identicon(node.guid, layout.nodeIdenticonSize)
 }
 
-export function CollapseToggle(collapsed: boolean, onClick: () => void): HTMLSpanElement {
+export function CollapseToggle(collapsed: boolean, onClick: () => void): VNode {
   return el('span', {
     style: {
       ...inlineFlexCenter,
@@ -125,7 +118,7 @@ function ActionButton(
   label: string,
   title: string,
   onClick: () => void
-): HTMLButtonElement {
+): VNode {
   const variantColors = {
     'set-target': colors.setTarget,
     'use-as-label': colors.useAsLabel,
@@ -147,47 +140,46 @@ function ActionButton(
       color: color
     },
     cursor: 'pointer',
-    onMouseDown: (e: Event) => { e.preventDefault(); e.stopPropagation(); onClick() },
+    onClick: (e: Event) => { e.preventDefault(); e.stopPropagation(); onClick() },
     title
   }, label)
 }
 
-export function SetTargetButton(onClick: () => void): HTMLButtonElement {
+export function SetTargetButton(onClick: () => void): VNode {
   return ActionButton('set-target', '⎆', 'Set as target', onClick)
 }
 
-export function UseAsLabelButton(onClick: () => void): HTMLButtonElement {
+export function UseAsLabelButton(onClick: () => void): VNode {
   return ActionButton('use-as-label', '+⏍', 'Add edge with this as label', onClick)
 }
 
-export function NewNodeButton(onClick: () => void): HTMLButtonElement {
+export function NewNodeButton(onClick: () => void): VNode {
   return ActionButton('new-node', '+ New Node', 'Create new node', onClick)
 }
 
-export function InsertionPoint(selected: boolean, isFirst: boolean, onClick: () => void): HTMLDivElement {
-  const caret = el('span', {
-    style: {
-      position: 'absolute',
-      left: `${layout.insertionCaretOffset}px`,
-      top: '50%',
-      transform: 'translateY(-50%)',
-      fontSize: `${layout.insertionCaretSize}px`,
-      color: selected ? colors.setTarget : colors.toggle,
-      opacity: selected ? '1' : '0',
-      transition: 'opacity 0.1s'
-    }
-  }, '▶')
-
+export function InsertionPoint(selected: boolean, isFirst: boolean, onClick: () => void): VNode {
   return el('div', {
+    class: `insertion-point${selected ? ' selected' : ''}`,
     style: {
       position: 'relative',
       height: `${layout.insertionHeight}px`,
       marginTop: isFirst ? `${-layout.firstInsertionPullUp}px` : undefined
     },
-    ...clickable(onClick),
-    onMouseEnter: () => { if (!selected) caret.style.opacity = '0.5' },
-    onMouseLeave: () => { if (!selected) caret.style.opacity = '0' }
-  }, caret)
+    ...clickable(onClick)
+  },
+    el('span', {
+      class: `insertion-caret${selected ? ' selected' : ''}`,
+      style: {
+        position: 'absolute',
+        left: `${layout.insertionCaretOffset}px`,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        fontSize: `${layout.insertionCaretSize}px`,
+        color: selected ? colors.setTarget : colors.toggle,
+        transition: 'opacity 0.1s'
+      }
+    }, '▶')
+  )
 }
 
 export function LabelSlot(
@@ -195,7 +187,7 @@ export function LabelSlot(
   value: GuidId | undefined,
   selected: boolean,
   onClick: () => void
-): HTMLDivElement {
+): VNode {
   return el('div', {
     class: 'hoverable',
     style: {
@@ -216,8 +208,8 @@ export function LabelSlot(
 export function NodeHeader(
   selected: boolean,
   onClick: () => void,
-  ...children: (HTMLElement | null)[]
-): HTMLDivElement {
+  ...children: (VNode | null)[]
+): VNode {
   return el('div', {
     class: 'hoverable',
     style: {
@@ -228,11 +220,7 @@ export function NodeHeader(
       borderRadius: `${layout.borderRadius}px`,
       ...(selected ? selectedStyle : {})
     },
-    onMouseDown: (e: Event) => {
-      if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
-      e.stopPropagation()
-      onClick()
-    }
+    onClick: (e: Event) => { e.stopPropagation(); onClick() }
   }, ...children)
 }
 
@@ -247,7 +235,7 @@ function resizeInput(input: HTMLInputElement): void {
   input.style.width = `${getTextWidth(input.value) + layout.inputWidthPadding}px`
 }
 
-export function EmptyNode(selected: boolean, onClick: () => void): HTMLDivElement {
+export function EmptyNode(selected: boolean, onClick: () => void): VNode {
   return el('div', {
     class: 'hoverable',
     style: {
@@ -267,7 +255,7 @@ export function EmptyNode(selected: boolean, onClick: () => void): HTMLDivElemen
 export function EditablePlaceholder(
   onCreate: (id: StringId | NumberId) => void,
   onBlur: () => void
-): HTMLDivElement {
+): VNode {
   let hasFocused = false
 
   const commit = (input: HTMLInputElement) => {
@@ -281,37 +269,6 @@ export function EditablePlaceholder(
     onBlur()
   }
 
-  const input = el('input', {
-    type: 'text',
-    placeholder: 'value...',
-    style: {
-      ...resetInputStyle,
-      color: colors.toggle
-    },
-    onFocus: () => { hasFocused = true },
-    onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
-    onBlur: (e: Event) => commit(e.target as HTMLInputElement),
-    onClick: (e: Event) => e.stopPropagation(),
-    onKeyDown: (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        commit(e.target as HTMLInputElement)
-      } else if (e.key === 'Escape') {
-        // Let Escape bubble to document handler
-      } else if (e.key === 'Backspace' || e.key === 'Delete') {
-        if ((e.target as HTMLInputElement).value.length === 0) {
-          commit(e.target as HTMLInputElement)
-        } else {
-          e.stopPropagation()
-        }
-      } else {
-        e.stopPropagation()
-      }
-    }
-  }) as HTMLInputElement
-
-  requestAnimationFrame(() => input.focus())
-
   return el('div', {
     style: {
       ...flexCenter,
@@ -323,14 +280,49 @@ export function EditablePlaceholder(
       ...selectedStyle
     },
     onClick: (e: Event) => e.stopPropagation()
-  }, input)
+  },
+    el('input', {
+      type: 'text',
+      placeholder: 'value...',
+      style: {
+        ...resetInputStyle,
+        color: colors.toggle
+      },
+      hook: {
+        insert: (vnode: VNode) => {
+          const input = vnode.elm as HTMLInputElement
+          input.focus()
+        }
+      },
+      onFocus: () => { hasFocused = true },
+      onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
+      onBlur: (e: Event) => commit(e.target as HTMLInputElement),
+      onClick: (e: Event) => e.stopPropagation(),
+      onKeyDown: (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit(e.target as HTMLInputElement)
+        } else if (e.key === 'Escape') {
+          // Let Escape bubble to document handler
+        } else if (e.key === 'Backspace' || e.key === 'Delete') {
+          if ((e.target as HTMLInputElement).value.length === 0) {
+            commit(e.target as HTMLInputElement)
+          } else {
+            e.stopPropagation()
+          }
+        } else {
+          e.stopPropagation()
+        }
+      }
+    })
+  )
 }
 
 export function LeafNode(
   value: StringId | NumberId,
   selected: boolean,
   onClick: () => void
-): HTMLDivElement {
+): VNode {
   return el('div', {
     class: 'hoverable',
     style: {
@@ -349,8 +341,7 @@ export function EditableStringNode(
   value: string,
   onChange: (value: string) => void,
   onBlur: () => void
-): HTMLDivElement {
-  // hasFocused guard: blur can fire before focus succeeds (race with DOM replacement)
+): VNode {
   let hasFocused = false
 
   const commit = (input: HTMLInputElement) => {
@@ -359,34 +350,6 @@ export function EditableStringNode(
     onChange(input.value)
     onBlur()
   }
-
-  const input = el('input', {
-    type: 'text',
-    value,
-    style: {
-      ...resetInputStyle,
-      color: colors.string
-    },
-    onFocus: () => { hasFocused = true },
-    onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
-    onBlur: (e: Event) => commit(e.target as HTMLInputElement),
-    onClick: (e: Event) => e.stopPropagation(),
-    onKeyDown: (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        commit(e.target as HTMLInputElement)
-      } else if (e.key === 'Escape') {
-        // Let Escape bubble to document handler
-      } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
-        e.stopPropagation()
-      }
-    }
-  }) as HTMLInputElement
-
-  requestAnimationFrame(() => {
-    resizeInput(input)
-    input.focus()
-  })
 
   return el('div', {
     style: {
@@ -397,14 +360,46 @@ export function EditableStringNode(
       ...selectedStyle
     },
     onClick: (e: Event) => e.stopPropagation()
-  }, el('span', { style: { color: colors.string } }, '"'), input, el('span', { style: { color: colors.string } }, '"'))
+  },
+    el('span', { style: { color: colors.string } }, '"'),
+    el('input', {
+      type: 'text',
+      value,
+      style: {
+        ...resetInputStyle,
+        color: colors.string
+      },
+      hook: {
+        insert: (vnode: VNode) => {
+          const input = vnode.elm as HTMLInputElement
+          resizeInput(input)
+          input.focus()
+        }
+      },
+      onFocus: () => { hasFocused = true },
+      onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
+      onBlur: (e: Event) => commit(e.target as HTMLInputElement),
+      onClick: (e: Event) => e.stopPropagation(),
+      onKeyDown: (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit(e.target as HTMLInputElement)
+        } else if (e.key === 'Escape') {
+          // Let Escape bubble to document handler
+        } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
+          e.stopPropagation()
+        }
+      }
+    }),
+    el('span', { style: { color: colors.string } }, '"')
+  )
 }
 
 export function EditableNumberNode(
   value: number,
   onChange: (value: number) => void,
   onBlur: () => void
-): HTMLDivElement {
+): VNode {
   let hasFocused = false
 
   const commit = (input: HTMLInputElement) => {
@@ -415,34 +410,6 @@ export function EditableNumberNode(
     onBlur()
   }
 
-  const input = el('input', {
-    type: 'text',
-    value: String(value),
-    style: {
-      ...resetInputStyle,
-      color: colors.number
-    },
-    onFocus: () => { hasFocused = true },
-    onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
-    onBlur: (e: Event) => commit(e.target as HTMLInputElement),
-    onClick: (e: Event) => e.stopPropagation(),
-    onKeyDown: (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        commit(e.target as HTMLInputElement)
-      } else if (e.key === 'Escape') {
-        // Let Escape bubble to document handler
-      } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
-        e.stopPropagation()
-      }
-    }
-  }) as HTMLInputElement
-
-  requestAnimationFrame(() => {
-    resizeInput(input)
-    input.focus()
-  })
-
   return el('div', {
     style: {
       ...flexCenter,
@@ -452,10 +419,40 @@ export function EditableNumberNode(
       ...selectedStyle
     },
     onClick: (e: Event) => e.stopPropagation()
-  }, input)
+  },
+    el('input', {
+      type: 'text',
+      value: String(value),
+      style: {
+        ...resetInputStyle,
+        color: colors.number
+      },
+      hook: {
+        insert: (vnode: VNode) => {
+          const input = vnode.elm as HTMLInputElement
+          resizeInput(input)
+          input.focus()
+        }
+      },
+      onFocus: () => { hasFocused = true },
+      onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
+      onBlur: (e: Event) => commit(e.target as HTMLInputElement),
+      onClick: (e: Event) => e.stopPropagation(),
+      onKeyDown: (e: KeyboardEvent) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit(e.target as HTMLInputElement)
+        } else if (e.key === 'Escape') {
+          // Let Escape bubble to document handler
+        } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
+          e.stopPropagation()
+        }
+      }
+    })
+  )
 }
 
-export function ChildrenList(...children: HTMLElement[]): HTMLUListElement {
+export function ChildrenList(...children: VNode[]): VNode {
   return el('ul', {
     style: {
       listStyle: 'none',
@@ -466,7 +463,7 @@ export function ChildrenList(...children: HTMLElement[]): HTMLUListElement {
   }, ...children)
 }
 
-export function ChildItem(label: HTMLElement, content: HTMLElement): HTMLLIElement {
+export function ChildItem(label: VNode, content: VNode): VNode {
   const hLine = el('div', {
     style: {
       position: 'absolute',
@@ -490,7 +487,7 @@ export function ChildItem(label: HTMLElement, content: HTMLElement): HTMLLIEleme
   }, label, hLine, content)
 }
 
-export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | null): HTMLDivElement {
+export function GuidNodeWrapper(header: VNode, children: VNode | null): VNode {
   if (!children) {
     return el('div', { style: { flex: '1' } }, header)
   }
@@ -510,13 +507,9 @@ export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | nul
   return el('div', { style: { flex: '1', position: 'relative' } }, header, line, children)
 }
 
-export function TreeViewContainer(onDeselect: () => void, ...children: (HTMLElement | null)[]): HTMLDivElement {
+export function TreeViewContainer(onDeselect: () => void, ...children: (VNode | null)[]): VNode {
   return el('div', {
     style: { textAlign: 'left', padding: `${layout.containerPadding}px`, minHeight: '100vh', boxSizing: 'border-box' },
-    onMouseDown: () => {
-      if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
-      onDeselect()
-    }
+    onClick: onDeselect
   }, ...children)
 }
-
