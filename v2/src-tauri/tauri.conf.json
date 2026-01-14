@@ -15,8 +15,7 @@
         "title": "v2",
         "width": 800,
         "height": 600,
-        "backgroundColor": "#f6f6f6",
-        "titleBarStyle": "transparent"
+        "backgroundColor": "#f6f6f6"
       }
     ],
     "security": {

@@ -2,7 +2,7 @@ import { el } from './dom'
 import { TreeView, setAtPath } from './components/TreeView'
 import type { TreeContext, RootSlot, Selection } from './components/TreeView'
 import { MutGid } from './gid/mutgid'
-import { GuidId, StringId, NumberId } from './gid/id'
+import { GuidId, StringId } from './gid/id'
 import { emptySpanningTree, setCollapsedAtPath } from './spanningtree'
 import type { SpanningTree } from './spanningtree'
 import type { Maybe } from './maybe'
@@ -10,26 +10,27 @@ import { saveDocument, openDocument } from './persistence'
 import { listen } from '@tauri-apps/api/event'
 import './App.css'
 
-function createTestData(): { gid: MutGid, root: GuidId } {
+function createTestData(): { gid: MutGid, roots: GuidId[], nameLabel: GuidId, isaLabel: GuidId } {
   const gid = new MutGid()
-  const alice = GuidId.generate()
-  const bob = GuidId.generate()
-  const carol = GuidId.generate()
+
+  // Bootstrap: define 'field' and 'name'/'isa' as fields
+  const field = GuidId.generate()
   const name = GuidId.generate()
-  const age = GuidId.generate()
-  const friend = GuidId.generate()
+  const isa = GuidId.generate()
 
-  gid.set(alice, name, new StringId('Alice'))
-  gid.set(alice, age, new NumberId(30))
-  gid.set(alice, friend, bob)
-  gid.set(bob, name, new StringId('Bob'))
-  gid.set(bob, age, new NumberId(25))
-  gid.set(bob, friend, carol)
-  gid.set(carol, name, new StringId('Carol'))
-  gid.set(carol, age, new NumberId(28))
-  gid.set(carol, friend, alice)
+  // field is-a field, named "field"
+  gid.set(field, isa, field)
+  gid.set(field, name, new StringId('field'))
 
-  return { gid, root: alice }
+  // name is-a field, named "name"
+  gid.set(name, isa, field)
+  gid.set(name, name, new StringId('name'))
+
+  // isa is-a field, named "isa"
+  gid.set(isa, isa, field)
+  gid.set(isa, name, new StringId('isa'))
+
+  return { gid, roots: [field, name, isa], nameLabel: name, isaLabel: isa }
 }
 
 type AppState = {
@@ -37,6 +38,8 @@ type AppState = {
   roots: RootSlot[]
   tree: SpanningTree
   selection: Maybe<Selection>
+  nameLabel: Maybe<GuidId>
+  isaLabel: Maybe<GuidId>
 }
 
 function makeContext(state: AppState, rerender: () => void): TreeContext {
@@ -45,6 +48,8 @@ function makeContext(state: AppState, rerender: () => void): TreeContext {
     roots: state.roots,
     tree: state.tree,
     selection: state.selection,
+    nameLabel: state.nameLabel,
+    isaLabel: state.isaLabel,
     setCollapsed: (path, collapsed) => {
       state.tree = setCollapsedAtPath(state.tree, path, collapsed)
       rerender()
@@ -81,6 +86,16 @@ function makeContext(state: AppState, rerender: () => void): TreeContext {
       state.selection = undefined
       rerender()
     },
+    setNameLabel: label => {
+      state.nameLabel = label
+      state.selection = undefined
+      rerender()
+    },
+    setIsaLabel: label => {
+      state.isaLabel = label
+      state.selection = undefined
+      rerender()
+    },
     newNode: () => GuidId.generate()
   }
 }
@@ -95,24 +110,42 @@ function renderTree(ctx: TreeContext, container: HTMLDivElement): void {
 }
 
 function handleDelete(ctx: TreeContext): void {
-  if (ctx.selection?.type === 'path') {
-    setAtPath(ctx, ctx.selection.path, undefined)
+  switch (ctx.selection?.type) {
+    case 'path':
+      setAtPath(ctx, ctx.selection.path, undefined)
+      break
+    case 'nameLabel':
+      ctx.setNameLabel(undefined)
+      break
+    case 'isaLabel':
+      ctx.setIsaLabel(undefined)
+      break
   }
 }
 
 export default function App(): HTMLElement {
   const testData = createTestData()
-  const initialSlot: RootSlot = { id: GuidId.generate(), node: testData.root }
   const state: AppState = {
     gid: testData.gid,
-    roots: [initialSlot],
+    roots: testData.roots.map(node => ({ id: GuidId.generate(), node })),
     tree: emptySpanningTree(),
-    selection: undefined
+    selection: undefined,
+    nameLabel: testData.nameLabel,
+    isaLabel: testData.isaLabel
   }
   const treeContainer = el('div', {})
-  const rerender = () => {
-    const ctx = makeContext(state, rerender)
-    renderTree(ctx, treeContainer)
+  // TODO: Current approach tears down and rebuilds entire DOM on each render.
+  // This requires setTimeout(0) batching and mousedown handlers (see TreeRendering.ts).
+  // Future: targeted updates for select/collapse to avoid full re-render.
+  let renderScheduled = false
+  const scheduleRender = () => {
+    if (renderScheduled) return
+    renderScheduled = true
+    setTimeout(() => {
+      renderScheduled = false
+      const ctx = makeContext(state, scheduleRender)
+      renderTree(ctx, treeContainer)
+    }, 0)
   }
 
   const handleSave = async () => {
@@ -126,18 +159,18 @@ export default function App(): HTMLElement {
       state.roots = result.roots
       state.tree = emptySpanningTree()
       state.selection = undefined
-      rerender()
+      scheduleRender()
     }
   }
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       state.selection = undefined
-      rerender()
+      scheduleRender()
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (document.activeElement?.tagName === 'INPUT') return
-      const ctx = makeContext(state, rerender)
+      const ctx = makeContext(state, scheduleRender)
       handleDelete(ctx)
     }
   })
@@ -145,7 +178,7 @@ export default function App(): HTMLElement {
   listen('menu-save', () => handleSave())
   listen('menu-open', () => handleOpen())
 
-  rerender()
+  scheduleRender()
 
   return el('main', { style: { margin: 0 } },
     treeContainer

@@ -69,9 +69,17 @@ const resetInputStyle = {
   outline: 'none'
 }
 
+// TODO: Using mousedown instead of click because full DOM re-render on blur
+// causes the click target to be replaced before click fires (mousedown and
+// mouseup hit different elements = no click event). Manual blur() ensures
+// input commits before selection changes. Fix properly with targeted DOM updates.
 const clickable = (onClick: () => void) => ({
   cursor: 'pointer',
-  onClick: (e: Event) => { e.stopPropagation(); onClick() }
+  onMouseDown: (e: Event) => {
+    if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
+    e.stopPropagation()
+    onClick()
+  }
 })
 
 export function ValueView(id: StringId | NumberId): HTMLSpanElement {
@@ -182,6 +190,29 @@ export function InsertionPoint(selected: boolean, isFirst: boolean, onClick: () 
   }, caret)
 }
 
+export function LabelSlot(
+  label: string,
+  value: GuidId | undefined,
+  selected: boolean,
+  onClick: () => void
+): HTMLDivElement {
+  return el('div', {
+    class: 'hoverable',
+    style: {
+      ...flexCenter,
+      gap: `${layout.headerGap}px`,
+      padding: `${layout.headerPadding}px`,
+      marginBottom: `${layout.headerGap}px`,
+      borderRadius: `${layout.borderRadius}px`,
+      ...(selected ? selectedStyle : {})
+    },
+    ...clickable(onClick)
+  },
+    el('span', { style: { color: colors.toggle, fontSize: '0.85em' } }, `${label}:`),
+    value ? Identicon(value.guid, layout.nodeIdenticonSize) : el('span', { style: { color: colors.toggle } }, '(empty)')
+  )
+}
+
 export function NodeHeader(
   selected: boolean,
   onClick: () => void,
@@ -197,9 +228,9 @@ export function NodeHeader(
       borderRadius: `${layout.borderRadius}px`,
       ...(selected ? selectedStyle : {})
     },
-    onClick: (e: Event) => {
+    onMouseDown: (e: Event) => {
+      if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
       e.stopPropagation()
-      if ((e.target as HTMLElement).tagName === 'BUTTON') return
       onClick()
     }
   }, ...children)
@@ -237,7 +268,11 @@ export function EditablePlaceholder(
   onCreate: (id: StringId | NumberId) => void,
   onBlur: () => void
 ): HTMLDivElement {
+  let hasFocused = false
+
   const commit = (input: HTMLInputElement) => {
+    if (!input.isConnected) return
+    if (!hasFocused) return
     const value = input.value
     if (value.length > 0) {
       const num = +value
@@ -253,6 +288,7 @@ export function EditablePlaceholder(
       ...resetInputStyle,
       color: colors.toggle
     },
+    onFocus: () => { hasFocused = true },
     onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
     onBlur: (e: Event) => commit(e.target as HTMLInputElement),
     onClick: (e: Event) => e.stopPropagation(),
@@ -260,9 +296,11 @@ export function EditablePlaceholder(
       if (e.key === 'Enter') {
         e.preventDefault()
         commit(e.target as HTMLInputElement)
+      } else if (e.key === 'Escape') {
+        // Let Escape bubble to document handler
       } else if (e.key === 'Backspace' || e.key === 'Delete') {
         if ((e.target as HTMLInputElement).value.length === 0) {
-          onBlur()
+          commit(e.target as HTMLInputElement)
         } else {
           e.stopPropagation()
         }
@@ -312,7 +350,12 @@ export function EditableStringNode(
   onChange: (value: string) => void,
   onBlur: () => void
 ): HTMLDivElement {
+  // hasFocused guard: blur can fire before focus succeeds (race with DOM replacement)
+  let hasFocused = false
+
   const commit = (input: HTMLInputElement) => {
+    if (!input.isConnected) return
+    if (!hasFocused) return
     onChange(input.value)
     onBlur()
   }
@@ -324,6 +367,7 @@ export function EditableStringNode(
       ...resetInputStyle,
       color: colors.string
     },
+    onFocus: () => { hasFocused = true },
     onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
     onBlur: (e: Event) => commit(e.target as HTMLInputElement),
     onClick: (e: Event) => e.stopPropagation(),
@@ -331,6 +375,8 @@ export function EditableStringNode(
       if (e.key === 'Enter') {
         e.preventDefault()
         commit(e.target as HTMLInputElement)
+      } else if (e.key === 'Escape') {
+        // Let Escape bubble to document handler
       } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
         e.stopPropagation()
       }
@@ -359,7 +405,11 @@ export function EditableNumberNode(
   onChange: (value: number) => void,
   onBlur: () => void
 ): HTMLDivElement {
+  let hasFocused = false
+
   const commit = (input: HTMLInputElement) => {
+    if (!input.isConnected) return
+    if (!hasFocused) return
     const num = +input.value
     if (!isNaN(num)) onChange(num)
     onBlur()
@@ -372,6 +422,7 @@ export function EditableNumberNode(
       ...resetInputStyle,
       color: colors.number
     },
+    onFocus: () => { hasFocused = true },
     onInput: (e: Event) => resizeInput(e.target as HTMLInputElement),
     onBlur: (e: Event) => commit(e.target as HTMLInputElement),
     onClick: (e: Event) => e.stopPropagation(),
@@ -379,6 +430,8 @@ export function EditableNumberNode(
       if (e.key === 'Enter') {
         e.preventDefault()
         commit(e.target as HTMLInputElement)
+      } else if (e.key === 'Escape') {
+        // Let Escape bubble to document handler
       } else if (!((e.key === 'Backspace' || e.key === 'Delete') && (e.target as HTMLInputElement).value.length === 0)) {
         e.stopPropagation()
       }
@@ -460,7 +513,10 @@ export function GuidNodeWrapper(header: HTMLElement, children: HTMLElement | nul
 export function TreeViewContainer(onDeselect: () => void, ...children: (HTMLElement | null)[]): HTMLDivElement {
   return el('div', {
     style: { textAlign: 'left', padding: `${layout.containerPadding}px`, minHeight: '100vh', boxSizing: 'border-box' },
-    onClick: onDeselect
+    onMouseDown: () => {
+      if (document.activeElement instanceof HTMLInputElement) document.activeElement.blur()
+      onDeselect()
+    }
   }, ...children)
 }
 
