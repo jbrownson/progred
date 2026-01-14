@@ -181,6 +181,9 @@ function renderActionButtons(
   if (selection?.type === 'isaLabel') {
     return [SetTargetButton(() => ctx.setIsaLabel(node))]
   }
+  if (selection?.type === 'insertAt') {
+    return [SetTargetButton(() => ctx.insertRoot(selection.index, node))]
+  }
 
   const selectedPath = getSelectedPath(selection)
   if (!selectedPath) return []
