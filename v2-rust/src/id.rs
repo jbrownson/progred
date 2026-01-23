@@ -1,51 +1,21 @@
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Id {
     Uuid(Uuid),
     String(String),
-    Number(f64),
+    Number(OrderedFloat<f64>),
 }
 
-impl Id {
-    pub fn new_uuid() -> Self {
-        Id::Uuid(Uuid::new_v4())
-    }
-}
-
-impl PartialEq for Id {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Id::Uuid(a), Id::Uuid(b)) => a == b,
-            (Id::String(a), Id::String(b)) => a == b,
-            (Id::Number(a), Id::Number(b)) => a == b || (a.is_nan() && b.is_nan()),
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Id {}
-
-impl Hash for Id {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        std::mem::discriminant(self).hash(state);
-        match self {
-            Id::Uuid(u) => u.hash(state),
-            Id::String(s) => s.hash(state),
-            Id::Number(n) => {
-                if n.is_nan() {
-                    state.write_u64(0);
-                } else {
-                    state.write_u64(n.to_bits());
-                }
-            }
-        }
-    }
-}
+impl Id { pub fn new_uuid() -> Self { Id::Uuid(Uuid::new_v4()) } }
+impl From<Uuid> for Id { fn from(u: Uuid) -> Self { Id::Uuid(u) } }
+impl From<String> for Id { fn from(s: String) -> Self { Id::String(s) } }
+impl From<&str> for Id { fn from(s: &str) -> Self { Id::String(s.to_string()) } }
+impl From<f64> for Id { fn from(n: f64) -> Self { Id::Number(OrderedFloat(n)) } }
 
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -62,7 +32,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_guid_serialization() {
+    fn test_uuid_serialization() {
         let uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let id = Id::Uuid(uuid);
         let json = serde_json::to_string(&id).unwrap();
@@ -74,7 +44,7 @@ mod tests {
 
     #[test]
     fn test_string_serialization() {
-        let id = Id::String("hello".into());
+        let id: Id = "hello".into();
         let json = serde_json::to_string(&id).unwrap();
         assert_eq!(json, r#"{"string":"hello"}"#);
 
@@ -84,7 +54,7 @@ mod tests {
 
     #[test]
     fn test_number_serialization() {
-        let id = Id::Number(42.5);
+        let id: Id = 42.5.into();
         let json = serde_json::to_string(&id).unwrap();
         assert_eq!(json, r#"{"number":42.5}"#);
 
@@ -97,8 +67,8 @@ mod tests {
         let uuid = Uuid::new_v4();
         assert_eq!(Id::Uuid(uuid), Id::Uuid(uuid));
         assert_ne!(Id::Uuid(Uuid::new_v4()), Id::Uuid(Uuid::new_v4()));
-        assert_ne!(Id::String("abc".into()), Id::Number(123.0));
-        assert_eq!(Id::Number(f64::NAN), Id::Number(f64::NAN));
+        assert_ne!(Id::from("abc"), Id::from(123.0));
+        assert_eq!(Id::from(f64::NAN), Id::from(f64::NAN));
     }
 
     #[test]
@@ -108,11 +78,11 @@ mod tests {
         let uuid = Uuid::new_v4();
         let mut set = HashSet::new();
         set.insert(Id::Uuid(uuid));
-        set.insert(Id::String("abc".into()));
-        set.insert(Id::Number(123.0));
+        set.insert(Id::from("abc"));
+        set.insert(Id::from(123.0));
 
         assert!(set.contains(&Id::Uuid(uuid)));
-        assert!(set.contains(&Id::String("abc".into())));
-        assert!(set.contains(&Id::Number(123.0)));
+        assert!(set.contains(&Id::from("abc")));
+        assert!(set.contains(&Id::from(123.0)));
     }
 }
