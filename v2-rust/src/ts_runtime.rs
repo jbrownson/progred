@@ -141,7 +141,7 @@ impl TypeScriptRuntime {
         println!("Loading TypeScript compiler...");
 
         // Load the real TypeScript compiler (8.6MB)
-        self.execute(include_str!("typescript.js"))?;
+        self.execute(include_str!("../assets/typescript-compiler.js"))?;
 
         // Set up the compile function that uses TSC with full type checking
         self.execute(
