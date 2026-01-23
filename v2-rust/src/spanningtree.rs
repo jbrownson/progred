@@ -1,10 +1,10 @@
-use crate::id::{GuidId, Id};
+use crate::id::Id;
 use crate::path::Path;
 use im::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct SpanningTree {
-    pub roots: HashMap<GuidId, TreeNode>,
+    pub roots: HashMap<Id, TreeNode>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ impl SpanningTree {
         }
     }
 
-    pub fn get_root(&self, root_slot: &GuidId) -> Option<&TreeNode> {
+    pub fn get_root(&self, root_slot: &Id) -> Option<&TreeNode> {
         self.roots.get(root_slot)
     }
 }
@@ -45,7 +45,7 @@ impl TreeNode {
         }
     }
 
-    fn set_collapsed_at_edges(&self, edges: &[GuidId], collapsed: bool) -> Self {
+    fn set_collapsed_at_edges(&self, edges: &[Id], collapsed: bool) -> Self {
         if edges.is_empty() {
             Self {
                 collapsed: Some(collapsed),
@@ -56,13 +56,13 @@ impl TreeNode {
             let tail = &edges[1..];
             let child_tree = self
                 .children
-                .get(&Id::Guid(head.clone()))
+                .get(head)
                 .cloned()
                 .unwrap_or_else(TreeNode::empty);
             let new_child = child_tree.set_collapsed_at_edges(tail, collapsed);
             Self {
                 collapsed: self.collapsed,
-                children: self.children.update(Id::Guid(head.clone()), new_child),
+                children: self.children.update(head.clone(), new_child),
             }
         }
     }

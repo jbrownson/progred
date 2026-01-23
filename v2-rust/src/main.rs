@@ -6,7 +6,7 @@ mod spanningtree;
 mod ts_runtime;
 
 use eframe::egui;
-use id::{GuidId, Id, StringId};
+use id::Id;
 use mutgid::MutGid;
 use spanningtree::SpanningTree;
 
@@ -26,7 +26,7 @@ fn main() -> eframe::Result {
 }
 
 struct RootSlot {
-    id: GuidId,
+    id: Id,
     node: Option<Id>,
 }
 
@@ -34,8 +34,8 @@ struct ProgredApp {
     gid: MutGid,
     roots: Vec<RootSlot>,
     tree: SpanningTree,
-    name_label: Option<GuidId>,
-    isa_label: Option<GuidId>,
+    name_label: Option<Id>,
+    isa_label: Option<Id>,
 }
 
 impl ProgredApp {
@@ -50,62 +50,34 @@ impl ProgredApp {
         }
     }
 
-    fn create_test_data() -> (MutGid, Vec<RootSlot>, GuidId, GuidId) {
+    fn create_test_data() -> (MutGid, Vec<RootSlot>, Id, Id) {
         let mut gid = MutGid::new();
 
-        // Bootstrap: define 'field' and 'name'/'isa' as fields
-        let field = GuidId::generate();
-        let name = GuidId::generate();
-        let isa = GuidId::generate();
+        let field = Id::new_uuid();
+        let name = Id::new_uuid();
+        let isa = Id::new_uuid();
 
-        // field is-a field, named "field"
-        gid.set(
-            field.clone(),
-            isa.clone(),
-            Id::Guid(field.clone()),
-        );
-        gid.set(
-            field.clone(),
-            name.clone(),
-            Id::String(StringId::new("field".to_string())),
-        );
+        gid.set(field.clone(), isa.clone(), field.clone());
+        gid.set(field.clone(), name.clone(), Id::String("field".into()));
 
-        // name is-a field, named "name"
-        gid.set(
-            name.clone(),
-            isa.clone(),
-            Id::Guid(field.clone()),
-        );
-        gid.set(
-            name.clone(),
-            name.clone(),
-            Id::String(StringId::new("name".to_string())),
-        );
+        gid.set(name.clone(), isa.clone(), field.clone());
+        gid.set(name.clone(), name.clone(), Id::String("name".into()));
 
-        // isa is-a field, named "isa"
-        gid.set(
-            isa.clone(),
-            isa.clone(),
-            Id::Guid(field.clone()),
-        );
-        gid.set(
-            isa.clone(),
-            name.clone(),
-            Id::String(StringId::new("isa".to_string())),
-        );
+        gid.set(isa.clone(), isa.clone(), field.clone());
+        gid.set(isa.clone(), name.clone(), Id::String("isa".into()));
 
         let roots = vec![
             RootSlot {
-                id: GuidId::generate(),
-                node: Some(Id::Guid(field)),
+                id: Id::new_uuid(),
+                node: Some(field),
             },
             RootSlot {
-                id: GuidId::generate(),
-                node: Some(Id::Guid(name.clone())),
+                id: Id::new_uuid(),
+                node: Some(name.clone()),
             },
             RootSlot {
-                id: GuidId::generate(),
-                node: Some(Id::Guid(isa.clone())),
+                id: Id::new_uuid(),
+                node: Some(isa.clone()),
             },
         ];
 
@@ -120,33 +92,27 @@ impl eframe::App for ProgredApp {
 
             ui.separator();
 
-            // Display roots with identicons
             for root_slot in &self.roots {
                 if let Some(node) = &root_slot.node {
                     ui.horizontal(|ui| {
-                        // Draw identicon
                         let size = 20.0;
                         let (rect, _response) =
                             ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
-                        if let Id::Guid(guid) = node {
-                            identicon::paint_identicon(ui.painter(), rect, guid);
+                        if let Id::Uuid(uuid) = node {
+                            identicon::paint_identicon(ui.painter(), rect, uuid);
                         }
 
-                        // Show name if available, otherwise show ID
-                        let label = if let Id::Guid(guid) = node {
-                            self.name_label
+                        let label = match node {
+                            Id::Uuid(_) => self
+                                .name_label
                                 .as_ref()
-                                .and_then(|name_label| self.gid.get(guid, name_label))
-                                .and_then(|id| {
-                                    if let Id::String(s) = id {
-                                        Some(s.value.clone())
-                                    } else {
-                                        None
-                                    }
+                                .and_then(|name_label| self.gid.get(node, name_label))
+                                .and_then(|id| match id {
+                                    Id::String(s) => Some(s.clone()),
+                                    _ => None,
                                 })
-                                .unwrap_or_else(|| format!("{}", node))
-                        } else {
-                            format!("{}", node)
+                                .unwrap_or_else(|| format!("{}", node)),
+                            _ => format!("{}", node),
                         };
                         ui.label(label);
                     });

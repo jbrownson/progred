@@ -1,18 +1,11 @@
 use eframe::egui::{Color32, Painter, Pos2, Rect, Rounding, Vec2};
 use std::hash::{DefaultHasher, Hash, Hasher};
-
-use crate::id::GuidId;
+use uuid::Uuid;
 
 const GRID_SIZE: usize = 5;
 
-pub fn paint_identicon(painter: &Painter, rect: Rect, guid: &GuidId) {
-    let hash = hash_value(&guid.guid);
-    let (pattern, color) = extract_pattern_and_color(hash);
-    draw_identicon(painter, rect, &pattern, color);
-}
-
-pub fn paint_identicon_for<T: Hash>(painter: &Painter, rect: Rect, value: &T) {
-    let hash = hash_value(value);
+pub fn paint_identicon(painter: &Painter, rect: Rect, uuid: &Uuid) {
+    let hash = hash_value(uuid);
     let (pattern, color) = extract_pattern_and_color(hash);
     draw_identicon(painter, rect, &pattern, color);
 }
@@ -97,19 +90,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn same_guid_same_pattern() {
-        let guid = GuidId::new("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4".to_string());
-        let hash1 = hash_value(&guid.guid);
-        let hash2 = hash_value(&guid.guid);
+    fn same_uuid_same_pattern() {
+        let uuid = Uuid::parse_str("a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4").unwrap();
+        let hash1 = hash_value(&uuid);
+        let hash2 = hash_value(&uuid);
         assert_eq!(hash1, hash2);
     }
 
     #[test]
-    fn different_guids_different_patterns() {
-        let guid1 = GuidId::new("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4".to_string());
-        let guid2 = GuidId::new("ffffffffffffffffffffffffffffffff".to_string());
-        let hash1 = hash_value(&guid1.guid);
-        let hash2 = hash_value(&guid2.guid);
+    fn different_uuids_different_patterns() {
+        let uuid1 = Uuid::parse_str("a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4").unwrap();
+        let uuid2 = Uuid::parse_str("ffffffff-ffff-ffff-ffff-ffffffffffff").unwrap();
+        let hash1 = hash_value(&uuid1);
+        let hash2 = hash_value(&uuid2);
         assert_ne!(hash1, hash2);
     }
 

@@ -1,21 +1,21 @@
-use crate::id::{GuidId, Id};
+use crate::id::Id;
 use crate::mutgid::MutGid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {
-    pub root_slot: GuidId,
-    pub edges: Vec<GuidId>,
+    pub root_slot: Id,
+    pub edges: Vec<Id>,
 }
 
 impl Path {
-    pub fn root(root_slot: GuidId) -> Self {
+    pub fn root(root_slot: Id) -> Self {
         Self {
             root_slot,
             edges: Vec::new(),
         }
     }
 
-    pub fn child(&self, label: GuidId) -> Self {
+    pub fn child(&self, label: Id) -> Self {
         let mut edges = self.edges.clone();
         edges.push(label);
         Self {
@@ -24,7 +24,7 @@ impl Path {
         }
     }
 
-    pub fn pop(&self) -> Option<(Path, GuidId)> {
+    pub fn pop(&self) -> Option<(Path, Id)> {
         if self.edges.is_empty() {
             None
         } else {
@@ -44,8 +44,10 @@ impl Path {
     pub fn node<'a>(&self, gid: &'a MutGid, root_node: Option<&'a Id>) -> Option<&'a Id> {
         let mut current = root_node?;
         for label in &self.edges {
-            let guid = current.as_guid()?;
-            current = gid.get(guid, label)?;
+            if !matches!(current, Id::Uuid(_)) {
+                return None;
+            }
+            current = gid.get(current, label)?;
         }
         Some(current)
     }
