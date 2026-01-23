@@ -1,5 +1,5 @@
-use crate::id::Id;
-use crate::mutgid::MutGid;
+use super::id::Id;
+use super::mutgid::MutGid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Path {

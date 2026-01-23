@@ -1,4 +1,4 @@
-use crate::id::Id;
+use super::id::Id;
 use im::HashMap;
 use std::collections::HashMap as StdHashMap;
 use uuid::Uuid;

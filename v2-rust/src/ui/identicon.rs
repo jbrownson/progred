@@ -1,19 +1,18 @@
-use eframe::egui::{Color32, Painter, Pos2, Rect, Rounding, Vec2};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use eframe::egui::{Color32, Pos2, Response, Rect, Rounding, Sense, Ui, Vec2};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{BuildHasher, BuildHasherDefault};
 use uuid::Uuid;
 
 const GRID_SIZE: usize = 5;
 
-pub fn paint_identicon(painter: &Painter, rect: Rect, uuid: &Uuid) {
-    let hash = hash_value(uuid);
-    let (pattern, color) = extract_pattern_and_color(hash);
-    draw_identicon(painter, rect, &pattern, color);
-}
-
-fn hash_value<T: Hash>(value: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    hasher.finish()
+pub fn identicon(ui: &mut Ui, size: f32, uuid: &Uuid) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+    if ui.is_rect_visible(rect) {
+        let hash = BuildHasherDefault::<DefaultHasher>::default().hash_one(uuid);
+        let (pattern, color) = extract_pattern_and_color(hash);
+        draw_identicon(ui.painter(), rect, &pattern, color);
+    }
+    response
 }
 
 fn extract_pattern_and_color(hash: u64) -> ([[bool; GRID_SIZE]; GRID_SIZE], Color32) {
@@ -34,7 +33,7 @@ fn extract_pattern_and_color(hash: u64) -> ([[bool; GRID_SIZE]; GRID_SIZE], Colo
 }
 
 fn draw_identicon(
-    painter: &Painter,
+    painter: &eframe::egui::Painter,
     rect: Rect,
     pattern: &[[bool; GRID_SIZE]; GRID_SIZE],
     foreground: Color32,
@@ -89,11 +88,15 @@ fn hsl_to_rgb(hue: u8, saturation: f32, lightness: f32) -> Color32 {
 mod tests {
     use super::*;
 
+    fn hash(uuid: &Uuid) -> u64 {
+        BuildHasherDefault::<DefaultHasher>::default().hash_one(uuid)
+    }
+
     #[test]
     fn same_uuid_same_pattern() {
         let uuid = Uuid::parse_str("a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4").unwrap();
-        let hash1 = hash_value(&uuid);
-        let hash2 = hash_value(&uuid);
+        let hash1 = hash(&uuid);
+        let hash2 = hash(&uuid);
         assert_eq!(hash1, hash2);
     }
 
@@ -101,9 +104,7 @@ mod tests {
     fn different_uuids_different_patterns() {
         let uuid1 = Uuid::parse_str("a1b2c3d4-e5f6-a1b2-c3d4-e5f6a1b2c3d4").unwrap();
         let uuid2 = Uuid::parse_str("ffffffff-ffff-ffff-ffff-ffffffffffff").unwrap();
-        let hash1 = hash_value(&uuid1);
-        let hash2 = hash_value(&uuid2);
-        assert_ne!(hash1, hash2);
+        assert_ne!(hash(&uuid1), hash(&uuid2));
     }
 
     #[test]

@@ -1,5 +1,5 @@
-use crate::id::Id;
-use crate::path::Path;
+use super::id::Id;
+use super::path::Path;
 use im::HashMap;
 
 #[derive(Debug, Clone)]

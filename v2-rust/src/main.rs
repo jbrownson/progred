@@ -1,14 +1,9 @@
-mod id;
-mod identicon;
-mod mutgid;
-mod path;
-mod spanningtree;
+mod graph;
 mod ts_runtime;
+mod ui;
 
 use eframe::egui;
-use id::Id;
-use mutgid::MutGid;
-use spanningtree::SpanningTree;
+use graph::{Id, MutGid, SpanningTree};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -95,11 +90,8 @@ impl eframe::App for ProgredApp {
             for root_slot in &self.roots {
                 if let Some(node) = &root_slot.node {
                     ui.horizontal(|ui| {
-                        let size = 20.0;
-                        let (rect, _response) =
-                            ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
                         if let Id::Uuid(uuid) = node {
-                            identicon::paint_identicon(ui.painter(), rect, uuid);
+                            ui::identicon(ui, 20.0, uuid);
                         }
 
                         let label = match node {
