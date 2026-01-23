@@ -1,4 +1,5 @@
 mod id;
+mod identicon;
 mod mutgid;
 mod path;
 mod spanningtree;
@@ -119,10 +120,36 @@ impl eframe::App for ProgredApp {
 
             ui.separator();
 
-            // Display roots
+            // Display roots with identicons
             for root_slot in &self.roots {
                 if let Some(node) = &root_slot.node {
-                    ui.label(format!("Root: {}", node));
+                    ui.horizontal(|ui| {
+                        // Draw identicon
+                        let size = 20.0;
+                        let (rect, _response) =
+                            ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+                        if let Id::Guid(guid) = node {
+                            identicon::paint_identicon(ui.painter(), rect, guid);
+                        }
+
+                        // Show name if available, otherwise show ID
+                        let label = if let Id::Guid(guid) = node {
+                            self.name_label
+                                .as_ref()
+                                .and_then(|name_label| self.gid.get(guid, name_label))
+                                .and_then(|id| {
+                                    if let Id::String(s) = id {
+                                        Some(s.value.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or_else(|| format!("{}", node))
+                        } else {
+                            format!("{}", node)
+                        };
+                        ui.label(label);
+                    });
                 }
             }
 
