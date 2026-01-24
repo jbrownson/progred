@@ -64,10 +64,40 @@ impl ProgredApp {
     }
 }
 
+impl ProgredApp {
+    fn delete_path(&mut self, path: &Path) {
+        match path.pop() {
+            None => {
+                if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
+                    self.roots.remove(idx);
+                }
+            }
+            Some((parent_path, label)) => {
+                if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
+                    if let Id::Uuid(_) = parent_node {
+                        self.gid.delete(&parent_node, &label);
+                    }
+                }
+            }
+        }
+    }
+
+    fn delete_selection(&mut self) {
+        if let Some(Selection::Edge(ref path)) = self.selection.clone() {
+            self.delete_path(&path);
+            self.selection = None;
+        }
+    }
+}
+
 impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             self.selection = None;
+        }
+
+        if ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
+            self.delete_selection();
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
