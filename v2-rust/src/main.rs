@@ -71,6 +71,7 @@ impl ProgredApp {
                 "roots": root_ids,
             });
             if let Ok(json) = serde_json::to_string_pretty(&doc) {
+                // TODO: show error to user if write fails
                 let _ = std::fs::write(path, json);
             }
         }
@@ -134,9 +135,16 @@ impl ProgredApp {
 
         (gid, roots)
     }
-}
 
-impl ProgredApp {
+    fn load_test_data(&mut self) {
+        let (gid, roots) = Self::create_test_data();
+        self.gid = gid;
+        self.roots = roots;
+        self.tree = SpanningTree::empty();
+        self.selection = None;
+        self.file_path = None;
+    }
+
     fn delete_path(&mut self, path: &Path) {
         match path.pop() {
             None => {
@@ -196,28 +204,23 @@ impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.selection = None;
-        }
-
-        if ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
-            self.delete_selection();
-        }
-
-        let ctrl_shift_n = ctx.input(|i| i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N));
-        if ctrl_shift_n && self.selection.is_some() {
-            self.insert_new_node();
-        }
-
-        if ctx.input(|i| i.modifiers.command && !i.modifiers.shift && i.key_pressed(egui::Key::N)) {
-            self.new_document();
-        } else if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::O)) {
-            self.open();
-        } else if ctx.input(|i| i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S)) {
-            self.save_as();
-        } else if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
-            self.save();
-        }
+        ctx.input(|i| {
+            if i.key_pressed(egui::Key::Escape) {
+                self.selection = None;
+            } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
+                self.delete_selection();
+            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
+                if self.selection.is_some() { self.insert_new_node(); }
+            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
+                self.save_as();
+            } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
+                self.new_document();
+            } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
+                self.open();
+            } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
+                self.save();
+            }
+        });
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
@@ -240,12 +243,7 @@ impl eframe::App for ProgredApp {
                     }
                     ui.separator();
                     if ui.add(egui::Button::new("Load Test Data")).clicked() {
-                        let (gid, roots) = Self::create_test_data();
-                        self.gid = gid;
-                        self.roots = roots;
-                        self.tree = SpanningTree::empty();
-                        self.selection = None;
-                        self.file_path = None;
+                        self.load_test_data();
                         ui.close_menu();
                     }
                 });
