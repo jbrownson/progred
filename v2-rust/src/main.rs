@@ -171,10 +171,17 @@ impl ProgredApp {
             }
             Some(Selection::Edge(path)) => {
                 let new_id = Id::new_uuid();
-                if let Some((parent_path, label)) = path.pop() {
-                    if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
-                        if let Id::Uuid(_) = parent_node {
-                            self.gid.set(parent_node, label, new_id);
+                match path.pop() {
+                    Some((parent_path, label)) => {
+                        if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
+                            if let Id::Uuid(_) = parent_node {
+                                self.gid.set(parent_node, label, new_id);
+                            }
+                        }
+                    }
+                    None => {
+                        if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
+                            self.roots[idx] = RootSlot::new(new_id);
                         }
                     }
                 }
