@@ -66,7 +66,17 @@ impl ProgredApp {
 
 impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.selection = None;
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
+            let bg_response = ui.interact(
+                ui.max_rect(),
+                ui.id().with("background"),
+                egui::Sense::click(),
+            );
+
             ui.heading("Progred - Graph Editor");
 
             ui.separator();
@@ -85,6 +95,10 @@ impl eframe::App for ProgredApp {
 
             ui.separator();
             ui.label(format!("Entities in graph: {}", self.gid.entities().count()));
+
+            if bg_response.clicked() {
+                self.selection = None;
+            }
         });
     }
 }
