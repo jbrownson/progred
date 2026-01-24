@@ -3,7 +3,7 @@ mod ts_runtime;
 mod ui;
 
 use eframe::egui;
-use graph::{Id, MutGid, SpanningTree};
+use graph::{Id, MutGid, RootSlot, SpanningTree};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -18,11 +18,6 @@ fn main() -> eframe::Result {
         options,
         Box::new(|_cc| Ok(Box::new(ProgredApp::new()))),
     )
-}
-
-struct RootSlot {
-    id: Id,
-    node: Option<Id>,
 }
 
 struct ProgredApp {
@@ -62,18 +57,9 @@ impl ProgredApp {
         gid.set(isa.clone(), name.clone(), Id::String("isa".into()));
 
         let roots = vec![
-            RootSlot {
-                id: Id::new_uuid(),
-                node: Some(field),
-            },
-            RootSlot {
-                id: Id::new_uuid(),
-                node: Some(name.clone()),
-            },
-            RootSlot {
-                id: Id::new_uuid(),
-                node: Some(isa.clone()),
-            },
+            RootSlot::new(field),
+            RootSlot::new(name.clone()),
+            RootSlot::new(isa.clone()),
         ];
 
         (gid, roots, name, isa)
@@ -88,27 +74,26 @@ impl eframe::App for ProgredApp {
             ui.separator();
 
             for root_slot in &self.roots {
-                if let Some(node) = &root_slot.node {
-                    ui.horizontal(|ui| {
-                        if let Id::Uuid(uuid) = node {
-                            ui::identicon(ui, 20.0, uuid);
-                        }
+                let node = root_slot.node();
+                ui.horizontal(|ui| {
+                    if let Id::Uuid(uuid) = node {
+                        ui::identicon(ui, 20.0, uuid);
+                    }
 
-                        let label = match node {
-                            Id::Uuid(_) => self
-                                .name_label
-                                .as_ref()
-                                .and_then(|name_label| self.gid.get(node, name_label))
-                                .and_then(|id| match id {
-                                    Id::String(s) => Some(s.clone()),
-                                    _ => None,
-                                })
-                                .unwrap_or_else(|| format!("{}", node)),
-                            _ => format!("{}", node),
-                        };
-                        ui.label(label);
-                    });
-                }
+                    let label = match node {
+                        Id::Uuid(_) => self
+                            .name_label
+                            .as_ref()
+                            .and_then(|name_label| self.gid.get(node, name_label))
+                            .and_then(|id| match id {
+                                Id::String(s) => Some(s.clone()),
+                                _ => None,
+                            })
+                            .unwrap_or_else(|| format!("{}", node)),
+                        _ => format!("{}", node),
+                    };
+                    ui.label(label);
+                });
             }
 
             ui.separator();

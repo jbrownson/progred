@@ -1,10 +1,10 @@
 use super::id::Id;
-use super::path::Path;
+use super::path::{Path, RootSlot};
 use im::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct SpanningTree {
-    pub roots: HashMap<Id, TreeNode>,
+    pub roots: HashMap<RootSlot, TreeNode>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,17 +23,17 @@ impl SpanningTree {
     pub fn set_collapsed_at_path(&self, path: &Path, collapsed: bool) -> Self {
         let root_tree = self
             .roots
-            .get(&path.root_slot)
+            .get(&path.root)
             .cloned()
             .unwrap_or_else(TreeNode::empty);
         let new_root_tree = root_tree.set_collapsed_at_edges(&path.edges, collapsed);
         Self {
-            roots: self.roots.update(path.root_slot.clone(), new_root_tree),
+            roots: self.roots.update(path.root.clone(), new_root_tree),
         }
     }
 
-    pub fn get_root(&self, root_slot: &Id) -> Option<&TreeNode> {
-        self.roots.get(root_slot)
+    pub fn get_root(&self, root: &RootSlot) -> Option<&TreeNode> {
+        self.roots.get(root)
     }
 }
 

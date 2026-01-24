@@ -1,16 +1,45 @@
 use super::id::Id;
 use super::mutgid::MutGid;
+use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+pub struct RootSlot(Rc<Id>);
+
+impl RootSlot {
+    pub fn new(node: Id) -> Self {
+        RootSlot(Rc::new(node))
+    }
+
+    pub fn node(&self) -> &Id {
+        &self.0
+    }
+}
+
+impl PartialEq for RootSlot {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for RootSlot {}
+
+impl Hash for RootSlot {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Rc::as_ptr(&self.0).hash(state);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {
-    pub root_slot: Id,
+    pub root: RootSlot,
     pub edges: Vec<Id>,
 }
 
 impl Path {
-    pub fn root(root_slot: Id) -> Self {
+    pub fn new(root: RootSlot) -> Self {
         Self {
-            root_slot,
+            root,
             edges: Vec::new(),
         }
     }
@@ -19,7 +48,7 @@ impl Path {
         let mut edges = self.edges.clone();
         edges.push(label);
         Self {
-            root_slot: self.root_slot.clone(),
+            root: self.root.clone(),
             edges,
         }
     }
@@ -29,7 +58,7 @@ impl Path {
             None
         } else {
             let parent = Path {
-                root_slot: self.root_slot.clone(),
+                root: self.root.clone(),
                 edges: self.edges[..self.edges.len() - 1].to_vec(),
             };
             let label = self.edges[self.edges.len() - 1].clone();
@@ -41,8 +70,8 @@ impl Path {
         self.edges.is_empty()
     }
 
-    pub fn node<'a>(&self, gid: &'a MutGid, root_node: Option<&'a Id>) -> Option<&'a Id> {
-        let mut current = root_node?;
+    pub fn node<'a>(&'a self, gid: &'a MutGid) -> Option<&'a Id> {
+        let mut current = self.root.node();
         for label in &self.edges {
             if !matches!(current, Id::Uuid(_)) {
                 return None;
