@@ -3,7 +3,7 @@ mod ts_runtime;
 mod ui;
 
 use eframe::egui;
-use graph::{Id, MutGid, Path, RootSlot, SpanningTree};
+use graph::{Id, MutGid, Path, RootSlot, Selection, SpanningTree};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -24,6 +24,7 @@ struct ProgredApp {
     gid: MutGid,
     roots: Vec<RootSlot>,
     tree: SpanningTree,
+    selection: Option<Selection>,
 }
 
 impl ProgredApp {
@@ -33,6 +34,7 @@ impl ProgredApp {
             gid,
             roots,
             tree: SpanningTree::empty(),
+            selection: None,
         }
     }
 
@@ -72,8 +74,13 @@ impl eframe::App for ProgredApp {
             let root_slots: Vec<_> = self.roots.iter().cloned().collect();
             for root_slot in root_slots {
                 let path = Path::new(root_slot);
-                ui::project(ui, &self.gid, &mut self.tree, &path);
+                ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path);
                 ui.add_space(8.0);
+            }
+
+            if let Some(ref sel) = self.selection {
+                ui.separator();
+                ui.label(format!("Selection: {:?}", sel));
             }
 
             ui.separator();
