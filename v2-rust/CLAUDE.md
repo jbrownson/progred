@@ -10,6 +10,10 @@ When running cargo commands, unset these:
 unset CARGO_HOME RUSTUP_HOME && cargo build
 ```
 
+## Future Considerations
+
+- `muda` crate for native OS menus (instead of egui menus)
+
 ## Code Style
 
 - very limited comments - code should be self-documenting

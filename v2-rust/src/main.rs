@@ -88,6 +88,29 @@ impl ProgredApp {
             self.selection = None;
         }
     }
+
+    fn insert_new_node(&mut self) {
+        match &self.selection {
+            Some(Selection::InsertRoot(index)) => {
+                let new_id = Id::new_uuid();
+                let index = (*index).min(self.roots.len());
+                self.roots.insert(index, RootSlot::new(new_id));
+                self.selection = None;
+            }
+            Some(Selection::Edge(path)) => {
+                let new_id = Id::new_uuid();
+                if let Some((parent_path, label)) = path.pop() {
+                    if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
+                        if let Id::Uuid(_) = parent_node {
+                            self.gid.set(parent_node, label, new_id);
+                        }
+                    }
+                }
+                self.selection = None;
+            }
+            None => {}
+        }
+    }
 }
 
 impl eframe::App for ProgredApp {
@@ -99,6 +122,29 @@ impl eframe::App for ProgredApp {
         if ctx.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace)) {
             self.delete_selection();
         }
+
+        let ctrl_shift_n = ctx.input(|i| i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N));
+        if ctrl_shift_n && self.selection.is_some() {
+            self.insert_new_node();
+        }
+
+        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                ui.menu_button("Edit", |ui| {
+                    let can_insert = self.selection.is_some();
+                    let can_delete = matches!(self.selection, Some(Selection::Edge(_)));
+                    
+                    if ui.add_enabled(can_insert, egui::Button::new("New Node").shortcut_text("Shift+Cmd+N")).clicked() {
+                        self.insert_new_node();
+                        ui.close_menu();
+                    }
+                    if ui.add_enabled(can_delete, egui::Button::new("Delete").shortcut_text("Backspace")).clicked() {
+                        self.delete_selection();
+                        ui.close_menu();
+                    }
+                });
+            });
+        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             let bg_response = ui.interact(
