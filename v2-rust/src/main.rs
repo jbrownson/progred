@@ -153,10 +153,6 @@ impl eframe::App for ProgredApp {
                 egui::Sense::click(),
             );
 
-            ui.heading("Progred - Graph Editor");
-
-            ui.separator();
-
             let root_slots: Vec<_> = self.roots.iter().cloned().collect();
             for (i, root_slot) in root_slots.iter().enumerate() {
                 ui::insertion_point(ui, &mut self.selection, i);
@@ -164,14 +160,6 @@ impl eframe::App for ProgredApp {
                 ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path);
             }
             ui::insertion_point(ui, &mut self.selection, root_slots.len());
-
-            if let Some(ref sel) = self.selection {
-                ui.separator();
-                ui.label(format!("Selection: {:?}", sel));
-            }
-
-            ui.separator();
-            ui.label(format!("Entities in graph: {}", self.gid.entities().count()));
 
             if bg_response.clicked() {
                 self.selection = None;
