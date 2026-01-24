@@ -38,12 +38,21 @@ fn draw_identicon(
     pattern: &[[bool; GRID_SIZE]; GRID_SIZE],
     foreground: Color32,
 ) {
-    let background = Color32::from_gray(240);
-    painter.rect_filled(rect, Rounding::same(2.0), background);
+    let background = Color32::from_gray(250);
+    let border = Color32::from_gray(180);
+    let rounding = Rounding::same(2.0);
+    
+    // Draw background with border
+    painter.rect_filled(rect, rounding, background);
+    painter.rect_stroke(rect, rounding, eframe::epaint::Stroke::new(1.0, border));
 
+    // Inset slightly for the pattern
+    let inset = 1.0;
+    let inner_rect = rect.shrink(inset);
+    
     let cell_size = Vec2::new(
-        rect.width() / GRID_SIZE as f32,
-        rect.height() / GRID_SIZE as f32,
+        inner_rect.width() / GRID_SIZE as f32,
+        inner_rect.height() / GRID_SIZE as f32,
     );
 
     for row in 0..GRID_SIZE {
@@ -51,8 +60,8 @@ fn draw_identicon(
             if pattern[row][col] {
                 let cell_rect = Rect::from_min_size(
                     Pos2::new(
-                        rect.min.x + col as f32 * cell_size.x,
-                        rect.min.y + row as f32 * cell_size.y,
+                        inner_rect.min.x + col as f32 * cell_size.x,
+                        inner_rect.min.y + row as f32 * cell_size.y,
                     ),
                     cell_size,
                 );
