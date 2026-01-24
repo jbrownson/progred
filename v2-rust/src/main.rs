@@ -112,11 +112,12 @@ impl eframe::App for ProgredApp {
             ui.separator();
 
             let root_slots: Vec<_> = self.roots.iter().cloned().collect();
-            for root_slot in root_slots {
-                let path = Path::new(root_slot);
+            for (i, root_slot) in root_slots.iter().enumerate() {
+                ui::insertion_point(ui, &mut self.selection, i);
+                let path = Path::new(root_slot.clone());
                 ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path);
-                ui.add_space(8.0);
             }
+            ui::insertion_point(ui, &mut self.selection, root_slots.len());
 
             if let Some(ref sel) = self.selection {
                 ui.separator();

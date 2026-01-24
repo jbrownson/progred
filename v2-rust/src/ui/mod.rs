@@ -2,4 +2,4 @@ mod identicon;
 mod projection;
 
 pub use identicon::identicon;
-pub use projection::project;
+pub use projection::{insertion_point, project};

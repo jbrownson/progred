@@ -28,7 +28,6 @@ fn selectable_widget(
     let rounding = Rounding::same(3.0);
     
     if selected {
-        // Strong selection highlight with border
         ui.painter().set(
             where_to_put_background,
             eframe::epaint::Shape::rect_filled(rect, rounding, Color32::from_rgb(59, 130, 246).gamma_multiply(0.3)),
@@ -47,11 +46,48 @@ fn selectable_widget(
     response
 }
 
+pub fn insertion_point(ui: &mut Ui, selection: &mut Option<Selection>, index: usize) -> Response {
+    let selected = matches!(selection, Some(Selection::InsertRoot(i)) if *i == index);
+    let width = ui.available_width().min(200.0);
+    
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 0.0), Sense::hover());
+    
+    let hit_rect = eframe::egui::Rect::from_center_size(rect.center(), Vec2::new(width, 10.0));
+    let response = ui.interact(hit_rect, ui.id().with(("insertion", index)), Sense::click());
+    
+    if selected || response.hovered() {
+        let color = if selected {
+            Color32::from_rgb(59, 130, 246)
+        } else {
+            Color32::from_gray(150)
+        };
+        
+        let caret_size = 10.0;
+        let center_y = rect.center().y;
+        let left_x = rect.min.x - 5.0;
+        
+        ui.painter().add(eframe::epaint::Shape::convex_polygon(
+            vec![
+                pos2(left_x, center_y - caret_size * 0.4),
+                pos2(left_x + caret_size * 0.6, center_y),
+                pos2(left_x, center_y + caret_size * 0.4),
+            ],
+            color,
+            eframe::epaint::Stroke::NONE,
+        ));
+    }
+    
+    if response.clicked() {
+        *selection = Some(Selection::InsertRoot(index));
+    }
+    
+    response
+}
+
 fn render_label(ui: &mut Ui, id: &Id) {
     let label_color = Color32::from_gray(120);
     match id {
         Id::Uuid(uuid) => {
-            // Smaller identicon for labels
             identicon(ui, 12.0, uuid);
         }
         Id::String(s) => {
@@ -83,10 +119,8 @@ fn label_arrow(ui: &mut Ui) {
         let left = rect.min.x + 1.0;
         let right = rect.max.x - 2.0;
         
-        // Draw line with small arrowhead
         ui.painter().line_segment([pos2(left, center_y), pos2(right, center_y)], stroke);
         
-        // Small arrowhead at end
         let arrow_size = 3.0;
         ui.painter().line_segment([pos2(right - arrow_size, center_y - arrow_size), pos2(right, center_y)], stroke);
         ui.painter().line_segment([pos2(right - arrow_size, center_y + arrow_size), pos2(right, center_y)], stroke);
@@ -104,7 +138,6 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
             Color32::from_gray(150)
         };
         
-        // Draw hover background
         if response.hovered() {
             ui.painter().rect_filled(
                 rect.expand(1.0),
