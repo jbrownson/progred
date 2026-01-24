@@ -3,7 +3,7 @@ mod ts_runtime;
 mod ui;
 
 use eframe::egui;
-use graph::{Id, MutGid, RootSlot, SpanningTree};
+use graph::{Id, MutGid, Path, RootSlot, SpanningTree};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -24,23 +24,19 @@ struct ProgredApp {
     gid: MutGid,
     roots: Vec<RootSlot>,
     tree: SpanningTree,
-    name_label: Option<Id>,
-    isa_label: Option<Id>,
 }
 
 impl ProgredApp {
     fn new() -> Self {
-        let (gid, roots, name_label, isa_label) = Self::create_test_data();
+        let (gid, roots) = Self::create_test_data();
         Self {
             gid,
             roots,
             tree: SpanningTree::empty(),
-            name_label: Some(name_label),
-            isa_label: Some(isa_label),
         }
     }
 
-    fn create_test_data() -> (MutGid, Vec<RootSlot>, Id, Id) {
+    fn create_test_data() -> (MutGid, Vec<RootSlot>) {
         let mut gid = MutGid::new();
 
         let field = Id::new_uuid();
@@ -58,11 +54,11 @@ impl ProgredApp {
 
         let roots = vec![
             RootSlot::new(field),
-            RootSlot::new(name.clone()),
-            RootSlot::new(isa.clone()),
+            RootSlot::new(name),
+            RootSlot::new(isa),
         ];
 
-        (gid, roots, name, isa)
+        (gid, roots)
     }
 }
 
@@ -73,27 +69,11 @@ impl eframe::App for ProgredApp {
 
             ui.separator();
 
-            for root_slot in &self.roots {
-                let node = root_slot.node();
-                ui.horizontal(|ui| {
-                    if let Id::Uuid(uuid) = node {
-                        ui::identicon(ui, 20.0, uuid);
-                    }
-
-                    let label = match node {
-                        Id::Uuid(_) => self
-                            .name_label
-                            .as_ref()
-                            .and_then(|name_label| self.gid.get(node, name_label))
-                            .and_then(|id| match id {
-                                Id::String(s) => Some(s.clone()),
-                                _ => None,
-                            })
-                            .unwrap_or_else(|| format!("{}", node)),
-                        _ => format!("{}", node),
-                    };
-                    ui.label(label);
-                });
+            let root_slots: Vec<_> = self.roots.iter().cloned().collect();
+            for root_slot in root_slots {
+                let path = Path::new(root_slot);
+                ui::project(ui, &self.gid, &mut self.tree, &path);
+                ui.add_space(8.0);
             }
 
             ui.separator();

@@ -35,6 +35,11 @@ impl SpanningTree {
     pub fn get_root(&self, root: &RootSlot) -> Option<&TreeNode> {
         self.roots.get(root)
     }
+
+    pub fn is_collapsed(&self, path: &Path) -> Option<bool> {
+        let root_tree = self.roots.get(&path.root)?;
+        root_tree.is_collapsed_at_edges(&path.edges)
+    }
 }
 
 impl TreeNode {
@@ -64,6 +69,15 @@ impl TreeNode {
                 collapsed: self.collapsed,
                 children: self.children.update(head.clone(), new_child),
             }
+        }
+    }
+
+    fn is_collapsed_at_edges(&self, edges: &[Id]) -> Option<bool> {
+        if edges.is_empty() {
+            self.collapsed
+        } else {
+            let child = self.children.get(&edges[0])?;
+            child.is_collapsed_at_edges(&edges[1..])
         }
     }
 }

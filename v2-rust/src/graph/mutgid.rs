@@ -1,3 +1,4 @@
+use super::gid::Gid;
 use super::id::Id;
 use im::HashMap;
 use std::collections::HashMap as StdHashMap;
@@ -14,15 +15,15 @@ impl MutGid {
             data: HashMap::new(),
         }
     }
+}
 
-    pub fn get(&self, entity: &Id, label: &Id) -> Option<&Id> {
-        self.data.get(entity)?.get(label)
-    }
-
-    pub fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>> {
+impl Gid for MutGid {
+    fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>> {
         self.data.get(entity)
     }
+}
 
+impl MutGid {
     pub fn set(&mut self, entity: Id, label: Id, value: Id) {
         let edges = match self.data.get(&entity) {
             Some(e) => e.update(label, value),

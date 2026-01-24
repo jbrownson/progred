@@ -1,5 +1,5 @@
+use super::gid::Gid;
 use super::id::Id;
-use super::mutgid::MutGid;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
@@ -70,7 +70,7 @@ impl Path {
         self.edges.is_empty()
     }
 
-    pub fn node<'a>(&'a self, gid: &'a MutGid) -> Option<&'a Id> {
+    pub fn node<'a>(&'a self, gid: &'a impl Gid) -> Option<&'a Id> {
         let mut current = self.root.node();
         for label in &self.edges {
             if !matches!(current, Id::Uuid(_)) {
