@@ -8,6 +8,7 @@ fn selectable_widget(
     ui: &mut Ui,
     selected: bool,
     shift_target: bool,
+    cmd_target: bool,
     add_contents: impl FnOnce(&mut Ui) -> Response,
 ) -> Response {
     let id = ui.next_auto_id();
@@ -24,6 +25,10 @@ fn selectable_widget(
     let (bg, border) = if selected {
         let color = Color32::from_rgb(59, 130, 246);
         (Some(color.gamma_multiply(0.3)), Some(eframe::epaint::Stroke::new(1.5, color)))
+    } else if cmd_target {
+        let color = Color32::from_rgb(234, 179, 8);
+        let intensity = if response.hovered() { 0.4 } else { 0.2 };
+        (Some(color.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, color.gamma_multiply(0.6))))
     } else if shift_target {
         let color = Color32::from_rgb(34, 197, 94);
         let intensity = if response.hovered() { 0.4 } else { 0.2 };
@@ -77,9 +82,9 @@ pub fn insertion_point(ui: &mut Ui, selected: bool) -> Response {
     response
 }
 
-fn render_label(ui: &mut Ui, id: &Id, shift_target: bool) -> Response {
+fn render_label(ui: &mut Ui, id: &Id, shift_target: bool, cmd_target: bool) -> Response {
     let label_color = Color32::from_gray(120);
-    selectable_widget(ui, false, shift_target, |ui| match id {
+    selectable_widget(ui, false, shift_target, cmd_target, |ui| match id {
         Id::Uuid(uuid) => identicon(ui, 12.0, uuid),
         Id::String(s) => ui.label(eframe::egui::RichText::new(s.to_string()).color(label_color).italics()),
         Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(label_color).italics()),
@@ -146,8 +151,9 @@ pub fn project(
     selection: &mut Option<Selection>,
     path: &Path,
     shift_source: Option<&Path>,
+    cmd: Option<(&Path, &mut Option<Id>)>,
 ) {
-    project_inner(ui, gid, tree, selection, path, HashSet::new(), shift_source)
+    project_inner(ui, gid, tree, selection, path, HashSet::new(), shift_source, cmd)
 }
 
 fn project_inner(
@@ -158,16 +164,17 @@ fn project_inner(
     path: &Path,
     ancestors: HashSet<Id>,
     shift_source: Option<&Path>,
+    cmd: Option<(&Path, &mut Option<Id>)>,
 ) {
     match path.node(gid) {
-        Some(id) => project_id(ui, gid, tree, selection, path, id, ancestors, shift_source),
+        Some(id) => project_id(ui, gid, tree, selection, path, id, ancestors, shift_source, cmd),
         None => project_placeholder(ui, selection, path),
     }
 }
 
 fn project_placeholder(ui: &mut Ui, selection: &mut Option<Selection>, path: &Path) {
     let selected = matches!(selection, Some(Selection::Edge(p)) if p == path);
-    let response = selectable_widget(ui, selected, false, |ui| ui.label("(empty)"));
+    let response = selectable_widget(ui, selected, false, false, |ui| ui.label("(empty)"));
     if response.clicked() {
         *selection = Some(Selection::Edge(path.clone()));
     }
@@ -182,9 +189,10 @@ fn project_id(
     id: &Id,
     ancestors: HashSet<Id>,
     shift_source: Option<&Path>,
+    cmd: Option<(&Path, &mut Option<Id>)>,
 ) {
     match id {
-        Id::Uuid(uuid) => project_uuid(ui, gid, tree, selection, path, uuid, ancestors, shift_source),
+        Id::Uuid(uuid) => project_uuid(ui, gid, tree, selection, path, uuid, ancestors, shift_source, cmd),
         Id::String(s) => project_leaf(ui, selection, path, format!("\"{}\"", s)),
         Id::Number(n) => project_leaf(ui, selection, path, n.to_string()),
     }
@@ -192,7 +200,7 @@ fn project_id(
 
 fn project_leaf(ui: &mut Ui, selection: &mut Option<Selection>, path: &Path, text: String) {
     let selected = matches!(selection, Some(Selection::Edge(p)) if p == path);
-    let response = selectable_widget(ui, selected, false, |ui| ui.label(text));
+    let response = selectable_widget(ui, selected, false, false, |ui| ui.label(text));
     if response.clicked() {
         *selection = Some(Selection::Edge(path.clone()));
     }
@@ -207,6 +215,7 @@ fn project_uuid(
     uuid: &uuid::Uuid,
     ancestors: HashSet<Id>,
     shift_source: Option<&Path>,
+    mut cmd: Option<(&Path, &mut Option<Id>)>,
 ) {
     let id = Id::Uuid(*uuid);
     let edges = gid.edges(&id);
@@ -225,10 +234,14 @@ fn project_uuid(
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
-            let response = selectable_widget(ui, selected, shift_source.is_some(), |ui| identicon(ui, 18.0, uuid));
+            let response = selectable_widget(ui, selected, shift_source.is_some(), cmd.is_some(), |ui| identicon(ui, 18.0, uuid));
 
             if response.clicked() {
-                *selection = Some(Selection::Edge(shift_source.map(|s| s.child(id.clone())).unwrap_or_else(|| path.clone())));
+                if let Some((_, ref mut clicked)) = cmd {
+                    **clicked = Some(Id::Uuid(*uuid));
+                } else {
+                    *selection = Some(Selection::Edge(shift_source.map(|s| s.child(id.clone())).unwrap_or_else(|| path.clone())));
+                }
             }
 
             if !all_labels.is_empty() && collapse_toggle(ui, is_collapsed).clicked() {
@@ -244,16 +257,19 @@ fn project_uuid(
                     let child_path = path.child(label.clone());
 
                     ui.horizontal(|ui| {
-                        let label_response = render_label(ui, label, shift_source.is_some());
+                        let label_response = render_label(ui, label, shift_source.is_some(), cmd.is_some());
 
-                        if let Some(source) = shift_source {
-                            if label_response.clicked() {
+                        if label_response.clicked() {
+                            if let Some((_, ref mut clicked)) = cmd {
+                                **clicked = Some(label.clone());
+                            } else if let Some(source) = shift_source {
                                 *selection = Some(Selection::Edge(source.child(label.clone())));
                             }
                         }
 
                         label_arrow(ui);
-                        project_inner(ui, gid, tree, selection, &child_path, child_ancestors.clone(), shift_source);
+                        project_inner(ui, gid, tree, selection, &child_path, child_ancestors.clone(), shift_source,
+                            cmd.as_mut().map(|(p, c)| (*p, &mut **c)));
                     });
                     ui.add_space(2.0);
                 }

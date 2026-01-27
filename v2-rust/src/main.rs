@@ -270,12 +270,20 @@ impl eframe::App for ProgredApp {
                 egui::Sense::click(),
             );
 
-            let shift_source = match (ctx.input(|i| i.modifiers.shift), &self.selection) {
-                (true, Some(Selection::Edge(path))) if matches!(path.node(&self.gid), Some(Id::Uuid(_))) => Some(path.clone()),
+            let modifiers = ctx.input(|i| i.modifiers);
+            let cmd_target = match (modifiers.command, &self.selection) {
+                (true, Some(Selection::Edge(path))) => Some(path.clone()),
                 _ => None,
+            };
+            let shift_source = if cmd_target.is_some() { None } else {
+                match (modifiers.shift, &self.selection) {
+                    (true, Some(Selection::Edge(path))) if matches!(path.node(&self.gid), Some(Id::Uuid(_))) => Some(path.clone()),
+                    _ => None,
+                }
             };
 
             let root_slots: Vec<_> = self.roots.iter().cloned().collect();
+            let mut cmd_clicked_node: Option<Id> = None;
 
             if root_slots.is_empty() {
                 if ui.button("Add root node").clicked() {
@@ -289,12 +297,31 @@ impl eframe::App for ProgredApp {
                         self.selection = Some(Selection::InsertRoot(i));
                     }
                     let path = Path::new(root_slot.clone());
-                    ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path, shift_source.as_ref());
+                    ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path, shift_source.as_ref(),
+                        cmd_target.as_ref().map(|t| (t, &mut cmd_clicked_node)));
                 }
                 let selected = matches!(self.selection, Some(Selection::InsertRoot(idx)) if idx == root_slots.len());
                 if ui::insertion_point(ui, selected).clicked() {
                     self.selection = Some(Selection::InsertRoot(root_slots.len()));
                 }
+            }
+
+            if let (Some(target), Some(node_id)) = (&cmd_target, cmd_clicked_node) {
+                match target.pop() {
+                    Some((parent_path, label)) => {
+                        if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
+                            if let Id::Uuid(_) = &parent_node {
+                                self.gid.set(parent_node, label, node_id);
+                            }
+                        }
+                    }
+                    None => {
+                        if let Some(idx) = self.roots.iter().position(|r| r == &target.root) {
+                            self.roots[idx] = RootSlot::new(node_id);
+                        }
+                    }
+                }
+                self.selection = None;
             }
 
             if bg_response.clicked() {
