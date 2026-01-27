@@ -4,6 +4,7 @@ use eframe::egui::{pos2, Color32, Response, Rounding, Sense, Ui, Vec2};
 use im::HashSet;
 
 use super::identicon;
+use super::placeholder::PlaceholderResult;
 
 pub enum InteractionMode {
     Normal,
@@ -23,8 +24,7 @@ fn selectable_widget(
     let where_to_put_background = ui.painter().add(eframe::epaint::Shape::Noop);
     let where_to_put_border = ui.painter().add(eframe::epaint::Shape::Noop);
 
-    let inner_response = add_contents(ui);
-    let rect = inner_response.rect.expand(2.0);
+    let rect = add_contents(ui).rect.expand(2.0);
     let response = ui.interact(rect, id, Sense::click());
 
     let rounding = Rounding::same(3.0);
@@ -99,9 +99,7 @@ fn render_label(ui: &mut Ui, id: &Id, shift_target: bool, cmd_target: bool) -> R
 }
 
 fn label_arrow(ui: &mut Ui) {
-    let width = 12.0;
-    let height = 10.0;
-    let (rect, _response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(12.0, 10.0), Sense::hover());
 
     if ui.is_rect_visible(rect) {
         let color = Color32::from_gray(160);
@@ -152,27 +150,8 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
 }
 
 pub fn project(ui: &mut Ui, editor: &mut Editor, path: &Path, mode: &InteractionMode) {
-    project_inner(ui, editor, path, HashSet::new(), mode)
-}
-
-fn project_inner(
-    ui: &mut Ui,
-    editor: &mut Editor,
-    path: &Path,
-    ancestors: HashSet<Id>,
-    mode: &InteractionMode,
-) {
-    match path.node(&editor.doc.gid).cloned() {
-        Some(id) => project_id(ui, editor, path, &id, ancestors, mode),
-        None => project_placeholder(ui, editor, path),
-    }
-}
-
-fn project_placeholder(ui: &mut Ui, editor: &mut Editor, path: &Path) {
-    let selected = matches!(&editor.selection, Some(Selection::Edge(p)) if p == path);
-    let response = selectable_widget(ui, selected, false, false, |ui| ui.label("(empty)"));
-    if response.clicked() {
-        editor.selection = Some(Selection::Edge(path.clone()));
+    if let Some(id) = path.node(&editor.doc.gid).cloned() {
+        project_id(ui, editor, path, &id, HashSet::new(), mode);
     }
 }
 
@@ -192,10 +171,13 @@ fn project_id(
 }
 
 fn project_leaf(ui: &mut Ui, editor: &mut Editor, path: &Path, text: String) {
-    let selected = matches!(&editor.selection, Some(Selection::Edge(p)) if p == path);
-    let response = selectable_widget(ui, selected, false, false, |ui| ui.label(text));
-    if response.clicked() {
-        editor.selection = Some(Selection::Edge(path.clone()));
+    if selectable_widget(
+        ui,
+        editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path),
+        false, false,
+        |ui| ui.label(text),
+    ).clicked() {
+        editor.selection = Some(Selection::edge(path.clone()));
     }
 }
 
@@ -206,10 +188,10 @@ fn handle_pick(editor: &mut Editor, mode: &InteractionMode, value: Id, path: &Pa
             editor.selection = None;
         }
         InteractionMode::Shift(source) => {
-            editor.selection = Some(Selection::Edge(source.child(value)));
+            editor.selection = Some(Selection::edge(source.child(value)));
         }
         InteractionMode::Normal => {
-            editor.selection = Some(Selection::Edge(path.clone()));
+            editor.selection = Some(Selection::edge(path.clone()));
         }
     }
 }
@@ -224,50 +206,67 @@ fn project_uuid(
 ) {
     let id = Id::Uuid(*uuid);
     let edges = editor.doc.gid.edges(&id);
-    let new_edge_label = match &editor.selection {
-        Some(Selection::Edge(sel)) => sel.pop()
-            .filter(|(parent, _)| parent == path)
-            .map(|(_, label)| label)
-            .filter(|label| !edges.map(|e| e.contains_key(label)).unwrap_or(false)),
-        _ => None,
-    };
-    let all_labels: Vec<Id> = new_edge_label.into_iter()
-        .chain(edges.into_iter().flat_map(|e| e.keys().cloned()))
+    let new_edge_label = editor.selection.as_ref()
+        .and_then(|s| s.edge_path())
+        .and_then(|sel| sel.pop())
+        .filter(|(parent, _)| parent == path)
+        .map(|(_, label)| label)
+        .filter(|label| !edges.map(|e| e.contains_key(label)).unwrap_or(false));
+    let all_edges: Vec<(Id, Id)> = edges.into_iter()
+        .flat_map(|e| e.iter().map(|(k, v)| (k.clone(), v.clone())))
         .collect();
+    let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
-    let selected = matches!(&editor.selection, Some(Selection::Edge(p)) if p == path);
     let shift_active = matches!(mode, InteractionMode::Shift(_));
     let cmd_active = matches!(mode, InteractionMode::Cmd(_));
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
-            let response = selectable_widget(ui, selected, shift_active, cmd_active, |ui| identicon(ui, 18.0, uuid));
-
-            if response.clicked() {
+            if selectable_widget(
+                ui,
+                editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path),
+                shift_active, cmd_active,
+                |ui| identicon(ui, 18.0, uuid),
+            ).clicked() {
                 handle_pick(editor, mode, Id::Uuid(*uuid), path);
             }
 
-            if !all_labels.is_empty() && collapse_toggle(ui, is_collapsed).clicked() {
+            if has_content && collapse_toggle(ui, is_collapsed).clicked() {
                 editor.tree = editor.tree.set_collapsed_at_path(path, !is_collapsed);
             }
         });
 
-        if !is_collapsed && !all_labels.is_empty() {
+        if !is_collapsed && has_content {
             let child_ancestors = ancestors.update(id.clone());
             ui.add_space(2.0);
             ui.indent("edges", |ui| {
-                for label in &all_labels {
-                    let child_path = path.child(label.clone());
-
+                for (label, value) in &all_edges {
                     ui.horizontal(|ui| {
-                        let label_response = render_label(ui, label, shift_active, cmd_active);
-
-                        if label_response.clicked() && !matches!(mode, InteractionMode::Normal) {
+                        if render_label(ui, label, shift_active, cmd_active).clicked()
+                            && !matches!(mode, InteractionMode::Normal)
+                        {
                             handle_pick(editor, mode, label.clone(), path);
                         }
 
                         label_arrow(ui);
-                        project_inner(ui, editor, &child_path, child_ancestors.clone(), mode);
+                        project_id(ui, editor, &path.child(label.clone()), value, child_ancestors.clone(), mode);
+                    });
+                    ui.add_space(2.0);
+                }
+                if let Some(ref new_label) = new_edge_label {
+                    ui.horizontal(|ui| {
+                        render_label(ui, new_label, false, false);
+                        label_arrow(ui);
+                        let ps = editor.selection.as_mut().unwrap()
+                            .placeholder.get_or_insert_default();
+                        match super::placeholder::render(ui, ps) {
+                            PlaceholderResult::Commit(value) => {
+                                editor.doc.set_edge(&path.child(new_label.clone()), value);
+                                editor.selection = None;
+                            }
+                            PlaceholderResult::Dismiss => editor.selection = None,
+                            PlaceholderResult::Active => {}
+                        }
                     });
                     ui.add_space(2.0);
                 }

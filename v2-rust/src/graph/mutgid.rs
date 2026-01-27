@@ -35,38 +35,31 @@ impl MutGid {
     pub fn delete(&mut self, entity: &Id, label: &Id) {
         if let Some(edges) = self.data.get(entity) {
             let new_edges = edges.without(label);
-            if new_edges.is_empty() {
-                self.data = self.data.without(entity);
+            self.data = if new_edges.is_empty() {
+                self.data.without(entity)
             } else {
-                self.data.insert(entity.clone(), new_edges);
-            }
+                self.data.update(entity.clone(), new_edges)
+            };
         }
-    }
-
-    pub fn has(&self, entity: &Id) -> bool {
-        self.data.contains_key(entity)
-    }
-
-    pub fn entities(&self) -> impl Iterator<Item = &Id> {
-        self.data.keys()
     }
 
     pub fn to_json(&self) -> StdHashMap<String, StdHashMap<String, serde_json::Value>> {
-        let mut result = StdHashMap::new();
-        for (entity, edges) in self.data.iter() {
-            if let Id::Uuid(entity_uuid) = entity {
-                let mut edge_obj = StdHashMap::new();
-                for (label, value) in edges.iter() {
-                    if let Id::Uuid(label_uuid) = label {
-                        if let Ok(json) = serde_json::to_value(value) {
-                            edge_obj.insert(label_uuid.to_string(), json);
-                        }
-                    }
-                }
-                result.insert(entity_uuid.to_string(), edge_obj);
-            }
-        }
-        result
+        self.data
+            .iter()
+            .filter_map(|(entity, edges)| {
+                let Id::Uuid(entity_uuid) = entity else { return None };
+                let edge_obj = edges
+                    .iter()
+                    .filter_map(|(label, value)| {
+                        let Id::Uuid(label_uuid) = label else { return None };
+                        serde_json::to_value(value)
+                            .ok()
+                            .map(|json| (label_uuid.to_string(), json))
+                    })
+                    .collect();
+                Some((entity_uuid.to_string(), edge_obj))
+            })
+            .collect()
     }
 
     pub fn from_json(

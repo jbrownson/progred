@@ -14,13 +14,26 @@ impl Document {
         }
     }
 
+    pub fn delete_path(&mut self, path: &Path) {
+        match path.pop() {
+            None => {
+                if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
+                    self.roots.remove(idx);
+                }
+            }
+            Some((parent_path, label)) => {
+                if let Some(parent_node @ Id::Uuid(_)) = parent_path.node(&self.gid).cloned() {
+                    self.gid.delete(&parent_node, &label);
+                }
+            }
+        }
+    }
+
     pub fn set_edge(&mut self, path: &Path, value: Id) {
         match path.pop() {
             Some((parent_path, label)) => {
-                if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
-                    if let Id::Uuid(_) = &parent_node {
-                        self.gid.set(parent_node, label, value);
-                    }
+                if let Some(parent_node @ Id::Uuid(_)) = parent_path.node(&self.gid).cloned() {
+                    self.gid.set(parent_node, label, value);
                 }
             }
             None => {

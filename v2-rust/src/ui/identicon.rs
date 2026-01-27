@@ -19,15 +19,12 @@ fn extract_pattern_and_color(hash: u64) -> ([[bool; GRID_SIZE]; GRID_SIZE], Colo
     let pattern_bits = hash & 0x7FFF;
     let hue = ((hash >> 15) & 0xFF) as u8;
 
-    let mut pattern = [[false; GRID_SIZE]; GRID_SIZE];
-    for row in 0..GRID_SIZE {
-        for col in 0..3 {
-            let bit_index = row * 3 + col;
-            let is_on = (pattern_bits >> bit_index) & 1 == 1;
-            pattern[row][col] = is_on;
-            pattern[row][GRID_SIZE - 1 - col] = is_on;
-        }
-    }
+    let pattern = std::array::from_fn(|row| {
+        std::array::from_fn(|col| {
+            let bit_index = row * 3 + col.min(GRID_SIZE - 1 - col);
+            (pattern_bits >> bit_index) & 1 == 1
+        })
+    });
 
     (pattern, hsl_to_rgb(hue, 0.65, 0.50))
 }

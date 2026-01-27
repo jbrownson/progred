@@ -16,6 +16,14 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 
 ## Code Style
 
-- very limited comments - code should be self-documenting
+- Very limited comments — code should be self-documenting
 - Expression-oriented where possible
+- Prefer long expressions broken across multiple lines over multiple statements with intermediate names — naming is hard, avoid unnecessary names
+- Factor out common assignments: `x = if cond { a } else { b }` not `if cond { x = a } else { x = b }`
+- Functional style: iterator chains, `try_fold`, `filter_map`, `std::array::from_fn` over mutable accumulators and loops where it doesn't make things worse
+- Avoid `let mut` when a functional alternative is equally clear
+- No `isX()` predicate methods — use `matches!` or pattern matching at the call site
+- Eliminate partial functions: use `split_first`/`split_last` over manual indexing, `let-else` over `if let` + separate `else`
+- Return references for non-trivial types (let caller decide to clone), but methods on small structs (like `Document`) enable disjoint borrow checking over methods on the parent (`ProgredApp`)
+- Dead code should be deleted, not commented out
 - Push back if something seems wrong

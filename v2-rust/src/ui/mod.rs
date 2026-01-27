@@ -1,4 +1,5 @@
 mod identicon;
+pub mod placeholder;
 mod projection;
 
 pub use identicon::identicon;

@@ -45,39 +45,26 @@ impl Path {
     }
 
     pub fn child(&self, label: Id) -> Self {
-        let mut edges = self.edges.clone();
-        edges.push(label);
         Self {
             root: self.root.clone(),
-            edges,
+            edges: self.edges.iter().cloned().chain([label]).collect(),
         }
     }
 
     pub fn pop(&self) -> Option<(Path, Id)> {
-        if self.edges.is_empty() {
-            None
-        } else {
-            let parent = Path {
-                root: self.root.clone(),
-                edges: self.edges[..self.edges.len() - 1].to_vec(),
-            };
-            let label = self.edges[self.edges.len() - 1].clone();
-            Some((parent, label))
-        }
-    }
-
-    pub fn is_root(&self) -> bool {
-        self.edges.is_empty()
+        let (label, parent_edges) = self.edges.split_last()?;
+        Some((
+            Path { root: self.root.clone(), edges: parent_edges.to_vec() },
+            label.clone(),
+        ))
     }
 
     pub fn node<'a>(&'a self, gid: &'a impl Gid) -> Option<&'a Id> {
-        let mut current = self.root.node();
-        for label in &self.edges {
-            if !matches!(current, Id::Uuid(_)) {
-                return None;
+        self.edges.iter().try_fold(self.root.node(), |current, label| {
+            match current {
+                Id::Uuid(_) => gid.get(current, label),
+                _ => None,
             }
-            current = gid.get(current, label)?;
-        }
-        Some(current)
+        })
     }
 }

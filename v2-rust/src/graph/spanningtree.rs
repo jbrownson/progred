@@ -32,10 +32,6 @@ impl SpanningTree {
         }
     }
 
-    pub fn get_root(&self, root: &RootSlot) -> Option<&TreeNode> {
-        self.roots.get(root)
-    }
-
     pub fn is_collapsed(&self, path: &Path) -> Option<bool> {
         let root_tree = self.roots.get(&path.root)?;
         root_tree.is_collapsed_at_edges(&path.edges)
@@ -51,33 +47,28 @@ impl TreeNode {
     }
 
     fn set_collapsed_at_edges(&self, edges: &[Id], collapsed: bool) -> Self {
-        if edges.is_empty() {
-            Self {
+        match edges.split_first() {
+            None => Self {
                 collapsed: Some(collapsed),
                 children: self.children.clone(),
-            }
-        } else {
-            let head = &edges[0];
-            let tail = &edges[1..];
-            let child_tree = self
-                .children
-                .get(head)
-                .cloned()
-                .unwrap_or_else(TreeNode::empty);
-            let new_child = child_tree.set_collapsed_at_edges(tail, collapsed);
-            Self {
-                collapsed: self.collapsed,
-                children: self.children.update(head.clone(), new_child),
+            },
+            Some((head, tail)) => {
+                let child = self.children.get(head)
+                    .cloned()
+                    .unwrap_or_else(TreeNode::empty)
+                    .set_collapsed_at_edges(tail, collapsed);
+                Self {
+                    collapsed: self.collapsed,
+                    children: self.children.update(head.clone(), child),
+                }
             }
         }
     }
 
     fn is_collapsed_at_edges(&self, edges: &[Id]) -> Option<bool> {
-        if edges.is_empty() {
-            self.collapsed
-        } else {
-            let child = self.children.get(&edges[0])?;
-            child.is_collapsed_at_edges(&edges[1..])
+        match edges.split_first() {
+            None => self.collapsed,
+            Some((head, tail)) => self.children.get(head)?.is_collapsed_at_edges(tail),
         }
     }
 }

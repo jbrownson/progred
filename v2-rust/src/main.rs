@@ -5,7 +5,8 @@ mod ui;
 
 use document::{Document, Editor};
 use eframe::egui;
-use graph::{Id, MutGid, Path, RootSlot, Selection};
+use graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget};
+use ui::placeholder::PlaceholderResult;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -64,19 +65,14 @@ impl ProgredApp {
     }
 
     fn window_title(&self) -> String {
-        match &self.editor.file_path {
-            Some(path) => {
-                let name = path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("Untitled");
-                format!("{} - Progred", name)
-            }
-            None => "Progred".to_string(),
-        }
+        self.editor.file_path.as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .map_or_else(|| "Progred".to_string(), |name| format!("{} - Progred", name))
     }
 
     fn open(&mut self) {
-        let result = rfd::FileDialog::new()
+        if let Some((path, gid, root_ids)) = rfd::FileDialog::new()
             .add_filter("Progred", &["progred"])
             .pick_file()
             .and_then(|path| {
@@ -86,11 +82,13 @@ impl ProgredApp {
                 let gid = MutGid::from_json(graph_data).ok()?;
                 let root_ids: Vec<Id> = serde_json::from_value(json_doc.get("roots")?.clone()).ok()?;
                 Some((path, gid, root_ids))
-            });
-
-        if let Some((path, gid, root_ids)) = result {
-            let roots = root_ids.into_iter().map(RootSlot::new).collect();
-            self.editor = Editor { doc: Document { gid, roots }, file_path: Some(path), ..Editor::new() };
+            })
+        {
+            self.editor = Editor {
+                doc: Document { gid, roots: root_ids.into_iter().map(RootSlot::new).collect() },
+                file_path: Some(path),
+                ..Editor::new()
+            };
         }
     }
 
@@ -124,45 +122,28 @@ impl ProgredApp {
         self.editor = Editor { doc: Document { gid, roots }, ..Editor::new() };
     }
 
-    fn delete_path(&mut self, path: &Path) {
-        match path.pop() {
-            None => {
-                if let Some(idx) = self.editor.doc.roots.iter().position(|r| r == &path.root) {
-                    self.editor.doc.roots.remove(idx);
-                }
-            }
-            Some((parent_path, label)) => {
-                if let Some(parent_node) = parent_path.node(&self.editor.doc.gid).cloned() {
-                    if let Id::Uuid(_) = parent_node {
-                        self.editor.doc.gid.delete(&parent_node, &label);
-                    }
-                }
-            }
-        }
-    }
-
     fn delete_selection(&mut self) {
-        if let Some(Selection::Edge(ref path)) = self.editor.selection.clone() {
-            self.delete_path(&path);
+        if let Some(path) = self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
+            self.editor.doc.delete_path(path);
             self.editor.selection = None;
         }
     }
 
     fn insert_new_node(&mut self) {
-        match &self.editor.selection {
-            Some(Selection::InsertRoot(index)) => {
-                let new_id = Id::new_uuid();
+        let sel = match &self.editor.selection {
+            Some(s) => s,
+            None => return,
+        };
+        match &sel.target {
+            SelectionTarget::InsertRoot(index) => {
                 let index = (*index).min(self.editor.doc.roots.len());
-                self.editor.doc.roots.insert(index, RootSlot::new(new_id));
-                self.editor.selection = None;
+                self.editor.doc.roots.insert(index, RootSlot::new(Id::new_uuid()));
             }
-            Some(Selection::Edge(path)) => {
-                let new_id = Id::new_uuid();
-                self.editor.doc.set_edge(&path.clone(), new_id);
-                self.editor.selection = None;
+            SelectionTarget::Edge(path) => {
+                self.editor.doc.set_edge(path, Id::new_uuid());
             }
-            None => {}
         }
+        self.editor.selection = None;
     }
 }
 
@@ -170,21 +151,31 @@ impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
+        let placeholder_active = self.editor.selection.as_ref()
+            .map_or(false, |s| s.placeholder.is_some());
         ctx.input(|i| {
-            if i.key_pressed(egui::Key::Escape) {
-                self.editor.selection = None;
-            } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
-                self.delete_selection();
-            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
-                if self.editor.selection.is_some() { self.insert_new_node(); }
-            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
-                self.save_as();
-            } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
-                self.new_document();
-            } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
-                self.open();
-            } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
-                self.save();
+            if placeholder_active {
+                if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
+                    self.save_as();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
+                    self.save();
+                }
+            } else {
+                if i.key_pressed(egui::Key::Escape) {
+                    self.editor.selection = None;
+                } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
+                    self.delete_selection();
+                } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
+                    if self.editor.selection.is_some() { self.insert_new_node(); }
+                } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
+                    self.save_as();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
+                    self.new_document();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
+                    self.open();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
+                    self.save();
+                }
             }
         });
 
@@ -214,14 +205,17 @@ impl eframe::App for ProgredApp {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
-                    let can_insert = self.editor.selection.is_some();
-                    let can_delete = matches!(self.editor.selection, Some(Selection::Edge(_)));
-
-                    if ui.add_enabled(can_insert, egui::Button::new("New Node").shortcut_text("Shift+Cmd+N")).clicked() {
+                    if ui.add_enabled(
+                        self.editor.selection.is_some(),
+                        egui::Button::new("New Node").shortcut_text("Shift+Cmd+N"),
+                    ).clicked() {
                         self.insert_new_node();
                         ui.close_menu();
                     }
-                    if ui.add_enabled(can_delete, egui::Button::new("Delete").shortcut_text("Backspace")).clicked() {
+                    if ui.add_enabled(
+                        self.editor.selection.as_ref().and_then(|s| s.edge_path()).is_some(),
+                        egui::Button::new("Delete").shortcut_text("Backspace"),
+                    ).clicked() {
                         self.delete_selection();
                         ui.close_menu();
                     }
@@ -238,13 +232,13 @@ impl eframe::App for ProgredApp {
 
             let modifiers = ctx.input(|i| i.modifiers);
             let mode = if modifiers.command {
-                match &self.editor.selection {
-                    Some(Selection::Edge(path)) => ui::InteractionMode::Cmd(path.clone()),
+                match self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
+                    Some(path) => ui::InteractionMode::Cmd(path.clone()),
                     _ => ui::InteractionMode::Normal,
                 }
             } else if modifiers.shift {
-                match &self.editor.selection {
-                    Some(Selection::Edge(path)) if matches!(path.node(&self.editor.doc.gid), Some(Id::Uuid(_))) => {
+                match self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
+                    Some(path) if matches!(path.node(&self.editor.doc.gid), Some(Id::Uuid(_))) => {
                         ui::InteractionMode::Shift(path.clone())
                     }
                     _ => ui::InteractionMode::Normal,
@@ -253,25 +247,42 @@ impl eframe::App for ProgredApp {
                 ui::InteractionMode::Normal
             };
 
-            let root_slots: Vec<_> = self.editor.doc.roots.iter().cloned().collect();
+            let root_slots = self.editor.doc.roots.to_vec();
 
             if root_slots.is_empty() {
-                if ui.button("Add root node").clicked() {
-                    self.editor.selection = Some(Selection::InsertRoot(0));
-                    self.insert_new_node();
+                if matches!(&self.editor.selection,
+                    Some(Selection { target: SelectionTarget::InsertRoot(0), placeholder: Some(_), .. }))
+                {
+                    let ps = self.editor.selection.as_mut().unwrap()
+                        .placeholder.get_or_insert_default();
+                    match ui::placeholder::render(ui, ps) {
+                        PlaceholderResult::Commit(id) => {
+                            self.editor.doc.roots.insert(0, RootSlot::new(id));
+                            self.editor.selection = None;
+                        }
+                        PlaceholderResult::Dismiss => self.editor.selection = None,
+                        PlaceholderResult::Active => {}
+                    }
+                } else if ui::insertion_point(ui, false).clicked() {
+                    self.editor.selection = Some(Selection {
+                        target: SelectionTarget::InsertRoot(0),
+                        placeholder: Some(PlaceholderState::default()),
+                    });
                 }
             } else {
                 for (i, root_slot) in root_slots.iter().enumerate() {
-                    let selected = matches!(self.editor.selection, Some(Selection::InsertRoot(idx)) if idx == i);
+                    let selected = matches!(&self.editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == i);
                     if ui::insertion_point(ui, selected).clicked() {
-                        self.editor.selection = Some(Selection::InsertRoot(i));
+                        self.editor.selection = Some(Selection::insert_root(i));
                     }
-                    let path = Path::new(root_slot.clone());
-                    ui::project(ui, &mut self.editor, &path, &mode);
+                    ui.push_id(root_slot, |ui| {
+                        ui::project(ui, &mut self.editor, &Path::new(root_slot.clone()), &mode);
+                    });
                 }
-                let selected = matches!(self.editor.selection, Some(Selection::InsertRoot(idx)) if idx == root_slots.len());
+                let last = root_slots.len();
+                let selected = matches!(&self.editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == last);
                 if ui::insertion_point(ui, selected).clicked() {
-                    self.editor.selection = Some(Selection::InsertRoot(root_slots.len()));
+                    self.editor.selection = Some(Selection::insert_root(last));
                 }
             }
 
