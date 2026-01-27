@@ -1,10 +1,11 @@
+mod document;
 mod graph;
 mod ts_runtime;
 mod ui;
 
+use document::{Document, Editor};
 use eframe::egui;
-use graph::{Id, MutGid, Path, RootSlot, Selection, SpanningTree};
-use std::path::PathBuf;
+use graph::{Id, MutGid, Path, RootSlot, Selection};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -22,34 +23,20 @@ fn main() -> eframe::Result {
 }
 
 struct ProgredApp {
-    gid: MutGid,
-    roots: Vec<RootSlot>,
-    tree: SpanningTree,
-    selection: Option<Selection>,
-    file_path: Option<PathBuf>,
+    editor: Editor,
 }
 
 impl ProgredApp {
     fn new() -> Self {
-        Self {
-            gid: MutGid::new(),
-            roots: Vec::new(),
-            tree: SpanningTree::empty(),
-            selection: None,
-            file_path: None,
-        }
+        Self { editor: Editor::new() }
     }
 
     fn new_document(&mut self) {
-        self.gid = MutGid::new();
-        self.roots = Vec::new();
-        self.tree = SpanningTree::empty();
-        self.selection = None;
-        self.file_path = None;
+        self.editor = Editor::new();
     }
 
     fn save(&mut self) {
-        if self.file_path.is_some() {
+        if self.editor.file_path.is_some() {
             self.save_to_path();
         } else {
             self.save_as();
@@ -58,27 +45,26 @@ impl ProgredApp {
 
     fn save_as(&mut self) {
         if let Some(path) = rfd::FileDialog::new().add_filter("Progred", &["progred"]).save_file() {
-            self.file_path = Some(path);
+            self.editor.file_path = Some(path);
             self.save_to_path();
         }
     }
 
     fn save_to_path(&self) {
-        if let Some(ref path) = self.file_path {
-            let root_ids: Vec<_> = self.roots.iter().map(|r| r.node().clone()).collect();
-            let doc = serde_json::json!({
-                "graph": self.gid.to_json(),
+        if let Some(ref path) = self.editor.file_path {
+            let root_ids: Vec<_> = self.editor.doc.roots.iter().map(|r| r.node().clone()).collect();
+            let json_doc = serde_json::json!({
+                "graph": self.editor.doc.gid.to_json(),
                 "roots": root_ids,
             });
-            if let Ok(json) = serde_json::to_string_pretty(&doc) {
-                // TODO: show error to user if write fails
+            if let Ok(json) = serde_json::to_string_pretty(&json_doc) {
                 let _ = std::fs::write(path, json);
             }
         }
     }
 
     fn window_title(&self) -> String {
-        match &self.file_path {
+        match &self.editor.file_path {
             Some(path) => {
                 let name = path.file_name()
                     .and_then(|n| n.to_str())
@@ -95,19 +81,16 @@ impl ProgredApp {
             .pick_file()
             .and_then(|path| {
                 let contents = std::fs::read_to_string(&path).ok()?;
-                let doc: serde_json::Value = serde_json::from_str(&contents).ok()?;
-                let graph_data = serde_json::from_value(doc.get("graph")?.clone()).ok()?;
+                let json_doc: serde_json::Value = serde_json::from_str(&contents).ok()?;
+                let graph_data = serde_json::from_value(json_doc.get("graph")?.clone()).ok()?;
                 let gid = MutGid::from_json(graph_data).ok()?;
-                let root_ids: Vec<Id> = serde_json::from_value(doc.get("roots")?.clone()).ok()?;
+                let root_ids: Vec<Id> = serde_json::from_value(json_doc.get("roots")?.clone()).ok()?;
                 Some((path, gid, root_ids))
             });
 
         if let Some((path, gid, root_ids)) = result {
-            self.gid = gid;
-            self.roots = root_ids.into_iter().map(RootSlot::new).collect();
-            self.tree = SpanningTree::empty();
-            self.selection = None;
-            self.file_path = Some(path);
+            let roots = root_ids.into_iter().map(RootSlot::new).collect();
+            self.editor = Editor { doc: Document { gid, roots }, file_path: Some(path), ..Editor::new() };
         }
     }
 
@@ -138,24 +121,20 @@ impl ProgredApp {
 
     fn load_test_data(&mut self) {
         let (gid, roots) = Self::create_test_data();
-        self.gid = gid;
-        self.roots = roots;
-        self.tree = SpanningTree::empty();
-        self.selection = None;
-        self.file_path = None;
+        self.editor = Editor { doc: Document { gid, roots }, ..Editor::new() };
     }
 
     fn delete_path(&mut self, path: &Path) {
         match path.pop() {
             None => {
-                if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
-                    self.roots.remove(idx);
+                if let Some(idx) = self.editor.doc.roots.iter().position(|r| r == &path.root) {
+                    self.editor.doc.roots.remove(idx);
                 }
             }
             Some((parent_path, label)) => {
-                if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
+                if let Some(parent_node) = parent_path.node(&self.editor.doc.gid).cloned() {
                     if let Id::Uuid(_) = parent_node {
-                        self.gid.delete(&parent_node, &label);
+                        self.editor.doc.gid.delete(&parent_node, &label);
                     }
                 }
             }
@@ -163,37 +142,24 @@ impl ProgredApp {
     }
 
     fn delete_selection(&mut self) {
-        if let Some(Selection::Edge(ref path)) = self.selection.clone() {
+        if let Some(Selection::Edge(ref path)) = self.editor.selection.clone() {
             self.delete_path(&path);
-            self.selection = None;
+            self.editor.selection = None;
         }
     }
 
     fn insert_new_node(&mut self) {
-        match &self.selection {
+        match &self.editor.selection {
             Some(Selection::InsertRoot(index)) => {
                 let new_id = Id::new_uuid();
-                let index = (*index).min(self.roots.len());
-                self.roots.insert(index, RootSlot::new(new_id));
-                self.selection = None;
+                let index = (*index).min(self.editor.doc.roots.len());
+                self.editor.doc.roots.insert(index, RootSlot::new(new_id));
+                self.editor.selection = None;
             }
             Some(Selection::Edge(path)) => {
                 let new_id = Id::new_uuid();
-                match path.pop() {
-                    Some((parent_path, label)) => {
-                        if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
-                            if let Id::Uuid(_) = parent_node {
-                                self.gid.set(parent_node, label, new_id);
-                            }
-                        }
-                    }
-                    None => {
-                        if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
-                            self.roots[idx] = RootSlot::new(new_id);
-                        }
-                    }
-                }
-                self.selection = None;
+                self.editor.doc.set_edge(&path.clone(), new_id);
+                self.editor.selection = None;
             }
             None => {}
         }
@@ -206,11 +172,11 @@ impl eframe::App for ProgredApp {
 
         ctx.input(|i| {
             if i.key_pressed(egui::Key::Escape) {
-                self.selection = None;
+                self.editor.selection = None;
             } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
                 self.delete_selection();
             } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
-                if self.selection.is_some() { self.insert_new_node(); }
+                if self.editor.selection.is_some() { self.insert_new_node(); }
             } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
                 self.save_as();
             } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
@@ -248,8 +214,8 @@ impl eframe::App for ProgredApp {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
-                    let can_insert = self.selection.is_some();
-                    let can_delete = matches!(self.selection, Some(Selection::Edge(_)));
+                    let can_insert = self.editor.selection.is_some();
+                    let can_delete = matches!(self.editor.selection, Some(Selection::Edge(_)));
 
                     if ui.add_enabled(can_insert, egui::Button::new("New Node").shortcut_text("Shift+Cmd+N")).clicked() {
                         self.insert_new_node();
@@ -271,61 +237,46 @@ impl eframe::App for ProgredApp {
             );
 
             let modifiers = ctx.input(|i| i.modifiers);
-            let cmd_target = match (modifiers.command, &self.selection) {
-                (true, Some(Selection::Edge(path))) => Some(path.clone()),
-                _ => None,
-            };
-            let shift_source = if cmd_target.is_some() { None } else {
-                match (modifiers.shift, &self.selection) {
-                    (true, Some(Selection::Edge(path))) if matches!(path.node(&self.gid), Some(Id::Uuid(_))) => Some(path.clone()),
-                    _ => None,
+            let mode = if modifiers.command {
+                match &self.editor.selection {
+                    Some(Selection::Edge(path)) => ui::InteractionMode::Cmd(path.clone()),
+                    _ => ui::InteractionMode::Normal,
                 }
+            } else if modifiers.shift {
+                match &self.editor.selection {
+                    Some(Selection::Edge(path)) if matches!(path.node(&self.editor.doc.gid), Some(Id::Uuid(_))) => {
+                        ui::InteractionMode::Shift(path.clone())
+                    }
+                    _ => ui::InteractionMode::Normal,
+                }
+            } else {
+                ui::InteractionMode::Normal
             };
 
-            let root_slots: Vec<_> = self.roots.iter().cloned().collect();
-            let mut cmd_clicked_node: Option<Id> = None;
+            let root_slots: Vec<_> = self.editor.doc.roots.iter().cloned().collect();
 
             if root_slots.is_empty() {
                 if ui.button("Add root node").clicked() {
-                    self.selection = Some(Selection::InsertRoot(0));
+                    self.editor.selection = Some(Selection::InsertRoot(0));
                     self.insert_new_node();
                 }
             } else {
                 for (i, root_slot) in root_slots.iter().enumerate() {
-                    let selected = matches!(self.selection, Some(Selection::InsertRoot(idx)) if idx == i);
+                    let selected = matches!(self.editor.selection, Some(Selection::InsertRoot(idx)) if idx == i);
                     if ui::insertion_point(ui, selected).clicked() {
-                        self.selection = Some(Selection::InsertRoot(i));
+                        self.editor.selection = Some(Selection::InsertRoot(i));
                     }
                     let path = Path::new(root_slot.clone());
-                    ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path, shift_source.as_ref(),
-                        cmd_target.as_ref().map(|t| (t, &mut cmd_clicked_node)));
+                    ui::project(ui, &mut self.editor, &path, &mode);
                 }
-                let selected = matches!(self.selection, Some(Selection::InsertRoot(idx)) if idx == root_slots.len());
+                let selected = matches!(self.editor.selection, Some(Selection::InsertRoot(idx)) if idx == root_slots.len());
                 if ui::insertion_point(ui, selected).clicked() {
-                    self.selection = Some(Selection::InsertRoot(root_slots.len()));
+                    self.editor.selection = Some(Selection::InsertRoot(root_slots.len()));
                 }
-            }
-
-            if let (Some(target), Some(node_id)) = (&cmd_target, cmd_clicked_node) {
-                match target.pop() {
-                    Some((parent_path, label)) => {
-                        if let Some(parent_node) = parent_path.node(&self.gid).cloned() {
-                            if let Id::Uuid(_) = &parent_node {
-                                self.gid.set(parent_node, label, node_id);
-                            }
-                        }
-                    }
-                    None => {
-                        if let Some(idx) = self.roots.iter().position(|r| r == &target.root) {
-                            self.roots[idx] = RootSlot::new(node_id);
-                        }
-                    }
-                }
-                self.selection = None;
             }
 
             if bg_response.clicked() {
-                self.selection = None;
+                self.editor.selection = None;
             }
         });
     }

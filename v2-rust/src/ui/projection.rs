@@ -1,8 +1,15 @@
-use crate::graph::{Gid, Id, Path, Selection, SpanningTree};
+use crate::document::Editor;
+use crate::graph::{Gid, Id, Path, Selection};
 use eframe::egui::{pos2, Color32, Response, Rounding, Sense, Ui, Vec2};
 use im::HashSet;
 
 use super::identicon;
+
+pub enum InteractionMode {
+    Normal,
+    Shift(Path),
+    Cmd(Path),
+}
 
 fn selectable_widget(
     ui: &mut Ui,
@@ -144,82 +151,80 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
     response
 }
 
-pub fn project(
-    ui: &mut Ui,
-    gid: &impl Gid,
-    tree: &mut SpanningTree,
-    selection: &mut Option<Selection>,
-    path: &Path,
-    shift_source: Option<&Path>,
-    cmd: Option<(&Path, &mut Option<Id>)>,
-) {
-    project_inner(ui, gid, tree, selection, path, HashSet::new(), shift_source, cmd)
+pub fn project(ui: &mut Ui, editor: &mut Editor, path: &Path, mode: &InteractionMode) {
+    project_inner(ui, editor, path, HashSet::new(), mode)
 }
 
 fn project_inner(
     ui: &mut Ui,
-    gid: &impl Gid,
-    tree: &mut SpanningTree,
-    selection: &mut Option<Selection>,
+    editor: &mut Editor,
     path: &Path,
     ancestors: HashSet<Id>,
-    shift_source: Option<&Path>,
-    cmd: Option<(&Path, &mut Option<Id>)>,
+    mode: &InteractionMode,
 ) {
-    match path.node(gid) {
-        Some(id) => project_id(ui, gid, tree, selection, path, id, ancestors, shift_source, cmd),
-        None => project_placeholder(ui, selection, path),
+    match path.node(&editor.doc.gid).cloned() {
+        Some(id) => project_id(ui, editor, path, &id, ancestors, mode),
+        None => project_placeholder(ui, editor, path),
     }
 }
 
-fn project_placeholder(ui: &mut Ui, selection: &mut Option<Selection>, path: &Path) {
-    let selected = matches!(selection, Some(Selection::Edge(p)) if p == path);
+fn project_placeholder(ui: &mut Ui, editor: &mut Editor, path: &Path) {
+    let selected = matches!(&editor.selection, Some(Selection::Edge(p)) if p == path);
     let response = selectable_widget(ui, selected, false, false, |ui| ui.label("(empty)"));
     if response.clicked() {
-        *selection = Some(Selection::Edge(path.clone()));
+        editor.selection = Some(Selection::Edge(path.clone()));
     }
 }
 
 fn project_id(
     ui: &mut Ui,
-    gid: &impl Gid,
-    tree: &mut SpanningTree,
-    selection: &mut Option<Selection>,
+    editor: &mut Editor,
     path: &Path,
     id: &Id,
     ancestors: HashSet<Id>,
-    shift_source: Option<&Path>,
-    cmd: Option<(&Path, &mut Option<Id>)>,
+    mode: &InteractionMode,
 ) {
     match id {
-        Id::Uuid(uuid) => project_uuid(ui, gid, tree, selection, path, uuid, ancestors, shift_source, cmd),
-        Id::String(s) => project_leaf(ui, selection, path, format!("\"{}\"", s)),
-        Id::Number(n) => project_leaf(ui, selection, path, n.to_string()),
+        Id::Uuid(uuid) => project_uuid(ui, editor, path, uuid, ancestors, mode),
+        Id::String(s) => project_leaf(ui, editor, path, format!("\"{}\"", s)),
+        Id::Number(n) => project_leaf(ui, editor, path, n.to_string()),
     }
 }
 
-fn project_leaf(ui: &mut Ui, selection: &mut Option<Selection>, path: &Path, text: String) {
-    let selected = matches!(selection, Some(Selection::Edge(p)) if p == path);
+fn project_leaf(ui: &mut Ui, editor: &mut Editor, path: &Path, text: String) {
+    let selected = matches!(&editor.selection, Some(Selection::Edge(p)) if p == path);
     let response = selectable_widget(ui, selected, false, false, |ui| ui.label(text));
     if response.clicked() {
-        *selection = Some(Selection::Edge(path.clone()));
+        editor.selection = Some(Selection::Edge(path.clone()));
+    }
+}
+
+fn handle_pick(editor: &mut Editor, mode: &InteractionMode, value: Id, path: &Path) {
+    match mode {
+        InteractionMode::Cmd(target) => {
+            editor.doc.set_edge(target, value);
+            editor.selection = None;
+        }
+        InteractionMode::Shift(source) => {
+            editor.selection = Some(Selection::Edge(source.child(value)));
+        }
+        InteractionMode::Normal => {
+            editor.selection = Some(Selection::Edge(path.clone()));
+        }
     }
 }
 
 fn project_uuid(
     ui: &mut Ui,
-    gid: &impl Gid,
-    tree: &mut SpanningTree,
-    selection: &mut Option<Selection>,
+    editor: &mut Editor,
     path: &Path,
     uuid: &uuid::Uuid,
     ancestors: HashSet<Id>,
-    shift_source: Option<&Path>,
-    mut cmd: Option<(&Path, &mut Option<Id>)>,
+    mode: &InteractionMode,
 ) {
     let id = Id::Uuid(*uuid);
-    let edges = gid.edges(&id);
-    let new_edge_label = match selection {
+    let edges = editor.doc.gid.edges(&id);
+    let new_edge_label = match &editor.selection {
         Some(Selection::Edge(sel)) => sel.pop()
             .filter(|(parent, _)| parent == path)
             .map(|(_, label)| label)
@@ -229,23 +234,21 @@ fn project_uuid(
     let all_labels: Vec<Id> = new_edge_label.into_iter()
         .chain(edges.into_iter().flat_map(|e| e.keys().cloned()))
         .collect();
-    let is_collapsed = tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
-    let selected = matches!(selection, Some(Selection::Edge(p)) if p == path);
+    let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
+    let selected = matches!(&editor.selection, Some(Selection::Edge(p)) if p == path);
+    let shift_active = matches!(mode, InteractionMode::Shift(_));
+    let cmd_active = matches!(mode, InteractionMode::Cmd(_));
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
-            let response = selectable_widget(ui, selected, shift_source.is_some(), cmd.is_some(), |ui| identicon(ui, 18.0, uuid));
+            let response = selectable_widget(ui, selected, shift_active, cmd_active, |ui| identicon(ui, 18.0, uuid));
 
             if response.clicked() {
-                if let Some((_, ref mut clicked)) = cmd {
-                    **clicked = Some(Id::Uuid(*uuid));
-                } else {
-                    *selection = Some(Selection::Edge(shift_source.map(|s| s.child(id.clone())).unwrap_or_else(|| path.clone())));
-                }
+                handle_pick(editor, mode, Id::Uuid(*uuid), path);
             }
 
             if !all_labels.is_empty() && collapse_toggle(ui, is_collapsed).clicked() {
-                *tree = tree.set_collapsed_at_path(path, !is_collapsed);
+                editor.tree = editor.tree.set_collapsed_at_path(path, !is_collapsed);
             }
         });
 
@@ -257,19 +260,14 @@ fn project_uuid(
                     let child_path = path.child(label.clone());
 
                     ui.horizontal(|ui| {
-                        let label_response = render_label(ui, label, shift_source.is_some(), cmd.is_some());
+                        let label_response = render_label(ui, label, shift_active, cmd_active);
 
-                        if label_response.clicked() {
-                            if let Some((_, ref mut clicked)) = cmd {
-                                **clicked = Some(label.clone());
-                            } else if let Some(source) = shift_source {
-                                *selection = Some(Selection::Edge(source.child(label.clone())));
-                            }
+                        if label_response.clicked() && !matches!(mode, InteractionMode::Normal) {
+                            handle_pick(editor, mode, label.clone(), path);
                         }
 
                         label_arrow(ui);
-                        project_inner(ui, gid, tree, selection, &child_path, child_ancestors.clone(), shift_source,
-                            cmd.as_mut().map(|(p, c)| (*p, &mut **c)));
+                        project_inner(ui, editor, &child_path, child_ancestors.clone(), mode);
                     });
                     ui.add_space(2.0);
                 }
