@@ -250,7 +250,7 @@ impl eframe::App for ProgredApp {
                 ui.menu_button("Edit", |ui| {
                     let can_insert = self.selection.is_some();
                     let can_delete = matches!(self.selection, Some(Selection::Edge(_)));
-                    
+
                     if ui.add_enabled(can_insert, egui::Button::new("New Node").shortcut_text("Shift+Cmd+N")).clicked() {
                         self.insert_new_node();
                         ui.close_menu();
@@ -270,8 +270,13 @@ impl eframe::App for ProgredApp {
                 egui::Sense::click(),
             );
 
+            let shift_source = match (ctx.input(|i| i.modifiers.shift), &self.selection) {
+                (true, Some(Selection::Edge(path))) if matches!(path.node(&self.gid), Some(Id::Uuid(_))) => Some(path.clone()),
+                _ => None,
+            };
+
             let root_slots: Vec<_> = self.roots.iter().cloned().collect();
-            
+
             if root_slots.is_empty() {
                 if ui.button("Add root node").clicked() {
                     self.selection = Some(Selection::InsertRoot(0));
@@ -279,11 +284,17 @@ impl eframe::App for ProgredApp {
                 }
             } else {
                 for (i, root_slot) in root_slots.iter().enumerate() {
-                    ui::insertion_point(ui, &mut self.selection, i);
+                    let selected = matches!(self.selection, Some(Selection::InsertRoot(idx)) if idx == i);
+                    if ui::insertion_point(ui, selected).clicked() {
+                        self.selection = Some(Selection::InsertRoot(i));
+                    }
                     let path = Path::new(root_slot.clone());
-                    ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path);
+                    ui::project(ui, &self.gid, &mut self.tree, &mut self.selection, &path, shift_source.as_ref());
                 }
-                ui::insertion_point(ui, &mut self.selection, root_slots.len());
+                let selected = matches!(self.selection, Some(Selection::InsertRoot(idx)) if idx == root_slots.len());
+                if ui::insertion_point(ui, selected).clicked() {
+                    self.selection = Some(Selection::InsertRoot(root_slots.len()));
+                }
             }
 
             if bg_response.clicked() {

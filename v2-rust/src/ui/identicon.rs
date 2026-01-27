@@ -1,4 +1,4 @@
-use eframe::egui::{Color32, Pos2, Response, Rect, Rounding, Sense, Ui, Vec2};
+use eframe::egui::{Color32, Pos2, Response, Rect, Rounding, Ui, Vec2};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{BuildHasher, BuildHasherDefault};
 use uuid::Uuid;
@@ -6,7 +6,7 @@ use uuid::Uuid;
 const GRID_SIZE: usize = 5;
 
 pub fn identicon(ui: &mut Ui, size: f32, uuid: &Uuid) -> Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), eframe::egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         let hash = BuildHasherDefault::<DefaultHasher>::default().hash_one(uuid);
         let (pattern, color) = extract_pattern_and_color(hash);
