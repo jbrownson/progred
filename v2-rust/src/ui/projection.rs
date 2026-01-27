@@ -1,4 +1,4 @@
-use crate::document::Editor;
+use crate::document::{Editor, EditorWriter};
 use crate::graph::{Gid, Id, Path, Selection};
 use eframe::egui::{pos2, Color32, Response, Rounding, Sense, Ui, Vec2};
 use im::HashSet;
@@ -149,56 +149,58 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
     response
 }
 
-pub fn project(ui: &mut Ui, editor: &mut Editor, path: &Path, mode: &InteractionMode) {
+pub fn project(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, mode: &InteractionMode) {
     if let Some(id) = path.node(&editor.doc.gid).cloned() {
-        project_id(ui, editor, path, &id, HashSet::new(), mode);
+        project_id(ui, editor, w, path, &id, HashSet::new(), mode);
     }
 }
 
 fn project_id(
     ui: &mut Ui,
-    editor: &mut Editor,
+    editor: &Editor,
+    w: &mut EditorWriter,
     path: &Path,
     id: &Id,
     ancestors: HashSet<Id>,
     mode: &InteractionMode,
 ) {
     match id {
-        Id::Uuid(uuid) => project_uuid(ui, editor, path, uuid, ancestors, mode),
-        Id::String(s) => project_leaf(ui, editor, path, format!("\"{}\"", s)),
-        Id::Number(n) => project_leaf(ui, editor, path, n.to_string()),
+        Id::Uuid(uuid) => project_uuid(ui, editor, w, path, uuid, ancestors, mode),
+        Id::String(s) => project_leaf(ui, editor, w, path, format!("\"{}\"", s)),
+        Id::Number(n) => project_leaf(ui, editor, w, path, n.to_string()),
     }
 }
 
-fn project_leaf(ui: &mut Ui, editor: &mut Editor, path: &Path, text: String) {
+fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, text: String) {
     if selectable_widget(
         ui,
         editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path),
         false, false,
         |ui| ui.label(text),
     ).clicked() {
-        editor.selection = Some(Selection::edge(path.clone()));
+        w.select(Some(Selection::edge(path.clone())));
     }
 }
 
-fn handle_pick(editor: &mut Editor, mode: &InteractionMode, value: Id, path: &Path) {
+fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {
     match mode {
         InteractionMode::Cmd(target) => {
-            editor.doc.set_edge(target, value);
-            editor.selection = None;
+            w.set_edge(target, value);
+            w.select(None);
         }
         InteractionMode::Shift(source) => {
-            editor.selection = Some(Selection::edge(source.child(value)));
+            w.select(Some(Selection::edge(source.child(value))));
         }
         InteractionMode::Normal => {
-            editor.selection = Some(Selection::edge(path.clone()));
+            w.select(Some(Selection::edge(path.clone())));
         }
     }
 }
 
 fn project_uuid(
     ui: &mut Ui,
-    editor: &mut Editor,
+    editor: &Editor,
+    w: &mut EditorWriter,
     path: &Path,
     uuid: &uuid::Uuid,
     ancestors: HashSet<Id>,
@@ -228,11 +230,11 @@ fn project_uuid(
                 shift_active, cmd_active,
                 |ui| identicon(ui, 18.0, uuid),
             ).clicked() {
-                handle_pick(editor, mode, Id::Uuid(*uuid), path);
+                handle_pick(w, mode, Id::Uuid(*uuid), path);
             }
 
             if has_content && collapse_toggle(ui, is_collapsed).clicked() {
-                editor.tree = editor.tree.set_collapsed_at_path(path, !is_collapsed);
+                w.set_collapsed(path, !is_collapsed);
             }
         });
 
@@ -245,11 +247,11 @@ fn project_uuid(
                         if render_label(ui, label, shift_active, cmd_active).clicked()
                             && !matches!(mode, InteractionMode::Normal)
                         {
-                            handle_pick(editor, mode, label.clone(), path);
+                            handle_pick(w, mode, label.clone(), path);
                         }
 
                         label_arrow(ui);
-                        project_id(ui, editor, &path.child(label.clone()), value, child_ancestors.clone(), mode);
+                        project_id(ui, editor, w, &path.child(label.clone()), value, child_ancestors.clone(), mode);
                     });
                     ui.add_space(2.0);
                 }
@@ -257,15 +259,15 @@ fn project_uuid(
                     ui.horizontal(|ui| {
                         render_label(ui, new_label, false, false);
                         label_arrow(ui);
-                        let ps = editor.selection.as_mut().unwrap()
-                            .placeholder.get_or_insert_default();
-                        match super::placeholder::render(ui, ps) {
-                            PlaceholderResult::Commit(value) => {
-                                editor.doc.set_edge(&path.child(new_label.clone()), value);
-                                editor.selection = None;
+                        if let Some(ps) = w.placeholder_state() {
+                            match super::placeholder::render(ui, ps) {
+                                PlaceholderResult::Commit(value) => {
+                                    w.set_edge(&path.child(new_label.clone()), value);
+                                    w.select(None);
+                                }
+                                PlaceholderResult::Dismiss => w.select(None),
+                                PlaceholderResult::Active => {}
                             }
-                            PlaceholderResult::Dismiss => editor.selection = None,
-                            PlaceholderResult::Active => {}
                         }
                     });
                     ui.add_space(2.0);

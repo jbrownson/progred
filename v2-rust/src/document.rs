@@ -1,6 +1,7 @@
-use crate::graph::{Id, MutGid, Path, RootSlot, Selection, SpanningTree};
+use crate::graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
 use std::path::PathBuf;
 
+#[derive(Clone)]
 pub struct Document {
     pub gid: MutGid,
     pub roots: Vec<RootSlot>,
@@ -45,6 +46,7 @@ impl Document {
     }
 }
 
+#[derive(Clone)]
 pub struct Editor {
     pub doc: Document,
     pub tree: SpanningTree,
@@ -60,5 +62,36 @@ impl Editor {
             selection: None,
             file_path: None,
         }
+    }
+}
+
+pub struct EditorWriter<'a> {
+    editor: &'a mut Editor,
+}
+
+impl<'a> EditorWriter<'a> {
+    pub fn new(editor: &'a mut Editor) -> Self {
+        Self { editor }
+    }
+
+    pub fn select(&mut self, selection: Option<Selection>) {
+        self.editor.selection = selection;
+    }
+
+    pub fn set_edge(&mut self, path: &Path, value: Id) {
+        self.editor.doc.set_edge(path, value);
+    }
+
+    pub fn set_collapsed(&mut self, path: &Path, collapsed: bool) {
+        self.editor.tree = self.editor.tree.set_collapsed_at_path(path, collapsed);
+    }
+
+    pub fn insert_root(&mut self, index: usize, root: RootSlot) {
+        self.editor.doc.roots.insert(index, root);
+    }
+
+    pub fn placeholder_state(&mut self) -> Option<&mut PlaceholderState> {
+        self.editor.selection.as_mut()
+            .map(|s| s.placeholder.get_or_insert_default())
     }
 }

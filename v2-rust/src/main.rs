@@ -3,7 +3,7 @@ mod graph;
 mod ts_runtime;
 mod ui;
 
-use document::{Document, Editor};
+use document::{Document, Editor, EditorWriter};
 use eframe::egui;
 use graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget};
 use ui::placeholder::PlaceholderResult;
@@ -224,71 +224,75 @@ impl eframe::App for ProgredApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let bg_response = ui.interact(
-                ui.max_rect(),
-                ui.id().with("background"),
-                egui::Sense::click(),
-            );
-
-            let modifiers = ctx.input(|i| i.modifiers);
-            let mode = if modifiers.command {
-                match self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
-                    Some(path) => ui::InteractionMode::Cmd(path.clone()),
-                    _ => ui::InteractionMode::Normal,
-                }
-            } else if modifiers.shift {
-                match self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
-                    Some(path) if matches!(path.node(&self.editor.doc.gid), Some(Id::Uuid(_))) => {
-                        ui::InteractionMode::Shift(path.clone())
-                    }
-                    _ => ui::InteractionMode::Normal,
-                }
-            } else {
-                ui::InteractionMode::Normal
-            };
-
-            let root_slots = self.editor.doc.roots.to_vec();
-
-            if root_slots.is_empty() {
-                if matches!(&self.editor.selection,
-                    Some(Selection { target: SelectionTarget::InsertRoot(0), placeholder: Some(_), .. }))
-                {
-                    let ps = self.editor.selection.as_mut().unwrap()
-                        .placeholder.get_or_insert_default();
-                    match ui::placeholder::render(ui, ps) {
-                        PlaceholderResult::Commit(id) => {
-                            self.editor.doc.roots.insert(0, RootSlot::new(id));
-                            self.editor.selection = None;
-                        }
-                        PlaceholderResult::Dismiss => self.editor.selection = None,
-                        PlaceholderResult::Active => {}
-                    }
-                } else if ui::insertion_point(ui, false).clicked() {
-                    self.editor.selection = Some(Selection {
-                        target: SelectionTarget::InsertRoot(0),
-                        placeholder: Some(PlaceholderState::default()),
-                    });
-                }
-            } else {
-                for (i, root_slot) in root_slots.iter().enumerate() {
-                    let selected = matches!(&self.editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == i);
-                    if ui::insertion_point(ui, selected).clicked() {
-                        self.editor.selection = Some(Selection::insert_root(i));
-                    }
-                    ui.push_id(root_slot, |ui| {
-                        ui::project(ui, &mut self.editor, &Path::new(root_slot.clone()), &mode);
-                    });
-                }
-                let last = root_slots.len();
-                let selected = matches!(&self.editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == last);
-                if ui::insertion_point(ui, selected).clicked() {
-                    self.editor.selection = Some(Selection::insert_root(last));
-                }
-            }
-
-            if bg_response.clicked() {
-                self.editor.selection = None;
-            }
+            let snapshot = self.editor.clone();
+            let mut w = EditorWriter::new(&mut self.editor);
+            render_graph(ui, ctx, &snapshot, &mut w);
         });
+    }
+}
+
+fn render_graph(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
+    let bg_response = ui.interact(
+        ui.max_rect(),
+        ui.id().with("background"),
+        egui::Sense::click(),
+    );
+
+    let modifiers = ctx.input(|i| i.modifiers);
+    let mode = if modifiers.command {
+        match editor.selection.as_ref().and_then(|s| s.edge_path()) {
+            Some(path) => ui::InteractionMode::Cmd(path.clone()),
+            _ => ui::InteractionMode::Normal,
+        }
+    } else if modifiers.shift {
+        match editor.selection.as_ref().and_then(|s| s.edge_path()) {
+            Some(path) if matches!(path.node(&editor.doc.gid), Some(Id::Uuid(_))) => {
+                ui::InteractionMode::Shift(path.clone())
+            }
+            _ => ui::InteractionMode::Normal,
+        }
+    } else {
+        ui::InteractionMode::Normal
+    };
+
+    if editor.doc.roots.is_empty() {
+        if matches!(&editor.selection,
+            Some(Selection { target: SelectionTarget::InsertRoot(0), placeholder: Some(_), .. }))
+        {
+            if let Some(ps) = w.placeholder_state() {
+                match ui::placeholder::render(ui, ps) {
+                    PlaceholderResult::Commit(id) => {
+                        w.insert_root(0, RootSlot::new(id));
+                        w.select(None);
+                    }
+                    PlaceholderResult::Dismiss => w.select(None),
+                    PlaceholderResult::Active => {}
+                }
+            }
+        } else if ui::insertion_point(ui, false).clicked() {
+            w.select(Some(Selection {
+                target: SelectionTarget::InsertRoot(0),
+                placeholder: Some(PlaceholderState::default()),
+            }));
+        }
+    } else {
+        for (i, root_slot) in editor.doc.roots.iter().enumerate() {
+            let selected = matches!(&editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == i);
+            if ui::insertion_point(ui, selected).clicked() {
+                w.select(Some(Selection::insert_root(i)));
+            }
+            ui.push_id(root_slot, |ui| {
+                ui::project(ui, editor, w, &Path::new(root_slot.clone()), &mode);
+            });
+        }
+        let last = editor.doc.roots.len();
+        let selected = matches!(&editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == last);
+        if ui::insertion_point(ui, selected).clicked() {
+            w.select(Some(Selection::insert_root(last)));
+        }
+    }
+
+    if bg_response.clicked() {
+        w.select(None);
     }
 }
