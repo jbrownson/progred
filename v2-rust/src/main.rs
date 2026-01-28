@@ -13,6 +13,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
             .with_title("Progred"),
+        vsync: false,
         ..Default::default()
     };
 
