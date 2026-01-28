@@ -239,15 +239,15 @@ fn render_graph(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut
     );
 
     let modifiers = ctx.input(|i| i.modifiers);
-    let mode = if modifiers.command {
+    let mode = if modifiers.alt {
         match editor.selection.as_ref().and_then(|s| s.edge_path()) {
-            Some(path) => ui::InteractionMode::Cmd(path.clone()),
+            Some(path) => ui::InteractionMode::Assign(path.clone()),
             _ => ui::InteractionMode::Normal,
         }
-    } else if modifiers.shift {
+    } else if modifiers.ctrl {
         match editor.selection.as_ref().and_then(|s| s.edge_path()) {
             Some(path) if matches!(path.node(&editor.doc.gid), Some(Id::Uuid(_))) => {
-                ui::InteractionMode::Shift(path.clone())
+                ui::InteractionMode::SelectUnder(path.clone())
             }
             _ => ui::InteractionMode::Normal,
         }

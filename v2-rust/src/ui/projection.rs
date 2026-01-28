@@ -8,15 +8,15 @@ use super::placeholder::PlaceholderResult;
 
 pub enum InteractionMode {
     Normal,
-    Shift(Path),
-    Cmd(Path),
+    SelectUnder(Path),
+    Assign(Path),
 }
 
 fn selectable_widget(
     ui: &mut Ui,
     selected: bool,
-    shift_target: bool,
-    cmd_target: bool,
+    select_under: bool,
+    assign: bool,
     add_contents: impl FnOnce(&mut Ui) -> Response,
 ) -> Response {
     let id = ui.next_auto_id();
@@ -32,11 +32,11 @@ fn selectable_widget(
     let (bg, border) = if selected {
         let color = Color32::from_rgb(59, 130, 246);
         (Some(color.gamma_multiply(0.3)), Some(eframe::epaint::Stroke::new(1.5, color)))
-    } else if cmd_target {
+    } else if assign {
         let color = Color32::from_rgb(234, 179, 8);
         let intensity = if response.hovered() { 0.4 } else { 0.2 };
         (Some(color.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, color.gamma_multiply(0.6))))
-    } else if shift_target {
+    } else if select_under {
         let color = Color32::from_rgb(34, 197, 94);
         let intensity = if response.hovered() { 0.4 } else { 0.2 };
         (Some(color.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, color.gamma_multiply(0.6))))
@@ -89,9 +89,9 @@ pub fn insertion_point(ui: &mut Ui, selected: bool) -> Response {
     response
 }
 
-fn render_label(ui: &mut Ui, id: &Id, shift_target: bool, cmd_target: bool) -> Response {
+fn render_label(ui: &mut Ui, id: &Id, select_under: bool, assign: bool) -> Response {
     let label_color = Color32::from_gray(120);
-    selectable_widget(ui, false, shift_target, cmd_target, |ui| match id {
+    selectable_widget(ui, false, select_under, assign, |ui| match id {
         Id::Uuid(uuid) => identicon(ui, 12.0, uuid),
         Id::String(s) => ui.label(eframe::egui::RichText::new(s.to_string()).color(label_color).italics()),
         Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(label_color).italics()),
@@ -184,11 +184,11 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
 
 fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {
     match mode {
-        InteractionMode::Cmd(target) => {
+        InteractionMode::Assign(target) => {
             w.set_edge(target, value);
             w.select(None);
         }
-        InteractionMode::Shift(source) => {
+        InteractionMode::SelectUnder(source) => {
             w.select(Some(Selection::edge(source.child(value))));
         }
         InteractionMode::Normal => {
@@ -219,15 +219,15 @@ fn project_uuid(
         .collect();
     let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
-    let shift_active = matches!(mode, InteractionMode::Shift(_));
-    let cmd_active = matches!(mode, InteractionMode::Cmd(_));
+    let select_under = matches!(mode, InteractionMode::SelectUnder(_));
+    let assign = matches!(mode, InteractionMode::Assign(_));
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
             if selectable_widget(
                 ui,
                 editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path),
-                shift_active, cmd_active,
+                select_under, assign,
                 |ui| identicon(ui, 18.0, uuid),
             ).clicked() {
                 handle_pick(w, mode, Id::Uuid(*uuid), path);
@@ -244,7 +244,7 @@ fn project_uuid(
             ui.indent("edges", |ui| {
                 for (label, value) in &all_edges {
                     ui.horizontal(|ui| {
-                        if render_label(ui, label, shift_active, cmd_active).clicked()
+                        if render_label(ui, label, select_under, assign).clicked()
                             && !matches!(mode, InteractionMode::Normal)
                         {
                             handle_pick(w, mode, label.clone(), path);
