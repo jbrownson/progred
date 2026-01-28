@@ -1,6 +1,6 @@
 use crate::document::{Editor, EditorWriter};
 use crate::graph::{Gid, Id, Path, Selection};
-use eframe::egui::{pos2, Color32, Response, Rounding, Sense, Ui, Vec2};
+use eframe::egui::{pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use im::HashSet;
 
 use super::identicon;
@@ -27,7 +27,7 @@ fn selectable_widget(
     let rect = add_contents(ui).rect.expand(2.0);
     let response = ui.interact(rect, id, Sense::click());
 
-    let rounding = Rounding::same(3.0);
+    let rounding = CornerRadius::same(3);
 
     let (bg, border) = if selected {
         let color = Color32::from_rgb(59, 130, 246);
@@ -50,7 +50,7 @@ fn selectable_widget(
         ui.painter().set(where_to_put_background, eframe::epaint::Shape::rect_filled(rect, rounding, bg));
     }
     if let Some(border) = border {
-        ui.painter().set(where_to_put_border, eframe::epaint::Shape::rect_stroke(rect, rounding, border));
+        ui.painter().set(where_to_put_border, eframe::epaint::Shape::rect_stroke(rect, rounding, border, eframe::epaint::StrokeKind::Middle));
     }
 
     response
@@ -118,7 +118,7 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
         let color = if response.hovered() { Color32::from_gray(80) } else { Color32::from_gray(150) };
 
         if response.hovered() {
-            ui.painter().rect_filled(rect.expand(1.0), Rounding::same(2.0), Color32::from_gray(220));
+            ui.painter().rect_filled(rect.expand(1.0), CornerRadius::same(2), Color32::from_gray(220));
         }
         let center = rect.center();
         let half = size * 0.3;

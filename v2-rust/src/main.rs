@@ -171,28 +171,28 @@ impl eframe::App for ProgredApp {
         });
 
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.add(egui::Button::new("New").shortcut_text("Cmd+N")).clicked() {
                         self.new_document();
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.add(egui::Button::new("Open...").shortcut_text("Cmd+O")).clicked() {
                         self.open();
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.add(egui::Button::new("Save").shortcut_text("Cmd+S")).clicked() {
                         self.save();
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.add(egui::Button::new("Save As...").shortcut_text("Shift+Cmd+S")).clicked() {
                         self.save_as();
-                        ui.close_menu();
+                        ui.close();
                     }
                     ui.separator();
                     if ui.add(egui::Button::new("Load Test Data")).clicked() {
                         self.load_test_data();
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
                 ui.menu_button("Edit", |ui| {
@@ -201,14 +201,14 @@ impl eframe::App for ProgredApp {
                         egui::Button::new("New Node").shortcut_text("Shift+Cmd+N"),
                     ).clicked() {
                         self.insert_new_node();
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui.add_enabled(
                         self.editor.selection.as_ref().and_then(|s| s.edge_path()).is_some(),
                         egui::Button::new("Delete").shortcut_text("Backspace"),
                     ).clicked() {
                         self.delete_selection();
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             });

@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-eframe = "0.30"
-egui = "0.30"
+eframe = "0.33"
+egui = "0.33"
 im = "15"
 rand = "0.8"
 uuid = { version = "1", features = ["v4", "serde"] }

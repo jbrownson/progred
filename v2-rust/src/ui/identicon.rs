@@ -1,4 +1,4 @@
-use eframe::egui::{Color32, Pos2, Response, Rect, Rounding, Ui, Vec2};
+use eframe::egui::{Color32, CornerRadius, Pos2, Response, Rect, Ui, Vec2};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{BuildHasher, BuildHasherDefault};
 use uuid::Uuid;
@@ -37,11 +37,11 @@ fn draw_identicon(
 ) {
     let background = Color32::from_gray(250);
     let border = Color32::from_gray(180);
-    let rounding = Rounding::same(2.0);
-    
+    let rounding = CornerRadius::same(2);
+
     // Draw background with border
     painter.rect_filled(rect, rounding, background);
-    painter.rect_stroke(rect, rounding, eframe::epaint::Stroke::new(1.0, border));
+    painter.rect_stroke(rect, rounding, eframe::epaint::Stroke::new(1.0, border), eframe::epaint::StrokeKind::Middle);
 
     // Inset slightly for the pattern
     let inset = 1.0;
@@ -62,7 +62,7 @@ fn draw_identicon(
                     ),
                     cell_size,
                 );
-                painter.rect_filled(cell_rect, Rounding::ZERO, foreground);
+                painter.rect_filled(cell_rect, CornerRadius::ZERO, foreground);
             }
         }
     }

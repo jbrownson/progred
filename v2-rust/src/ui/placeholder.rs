@@ -44,16 +44,19 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
 
     let mut commit: Option<Id> = None;
 
-    ui.vertical(|ui| {
-        let _response = ui.add(
-            egui::TextEdit::singleline(&mut text)
-                .id(text_id)
-                .desired_width(150.0)
-                .hint_text("search...")
-        );
-        ui.memory_mut(|mem| mem.request_focus(text_id));
+    let text_response = ui.add(
+        egui::TextEdit::singleline(&mut text)
+            .id(text_id)
+            .desired_width(150.0)
+            .hint_text("search...")
+    );
+    ui.memory_mut(|mem| mem.request_focus(text_id));
 
-        egui::Frame::popup(ui.style()).show(ui, |ui| {
+    egui::Popup::from_response(&text_response)
+        .id(ui.id().with("placeholder_popup"))
+        .open(true)
+        .width(text_response.rect.width())
+        .show(|ui| {
             egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                 for (i, entry) in entries.iter().enumerate() {
                     if ui.selectable_label(i == selected_index, &entry.display).clicked() {
@@ -65,7 +68,6 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
                 }
             });
         });
-    });
 
     if ps.text != text {
         ps.text = text;
