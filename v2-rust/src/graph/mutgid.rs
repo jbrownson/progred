@@ -15,6 +15,10 @@ impl MutGid {
             data: HashMap::new(),
         }
     }
+
+    pub fn entities(&self) -> impl Iterator<Item = &Id> {
+        self.data.keys()
+    }
 }
 
 impl Gid for MutGid {

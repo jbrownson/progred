@@ -8,6 +8,12 @@ use eframe::egui;
 use graph::{Id, MutGid, Path, RootSlot, Selection, SelectionTarget};
 use ui::placeholder::PlaceholderResult;
 
+#[derive(PartialEq, Eq)]
+enum ViewMode {
+    Tree,
+    Graph,
+}
+
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -26,11 +32,17 @@ fn main() -> eframe::Result {
 
 struct ProgredApp {
     editor: Editor,
+    view_mode: ViewMode,
+    graph_view: ui::graph_view::GraphViewState,
 }
 
 impl ProgredApp {
     fn new() -> Self {
-        Self { editor: Editor::new() }
+        Self {
+            editor: Editor::new(),
+            view_mode: ViewMode::Tree,
+            graph_view: ui::graph_view::GraphViewState::new(),
+        }
     }
 
     fn new_document(&mut self) {
@@ -144,14 +156,15 @@ impl eframe::App for ProgredApp {
 
         let placeholder_active = self.editor.selection.as_ref()
             .map_or(false, |s| s.placeholder_visible(&self.editor.doc.gid));
+        let tree_mode = self.view_mode == ViewMode::Tree;
         ctx.input(|i| {
-            if placeholder_active {
+            if placeholder_active && tree_mode {
                 if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
                     self.save_as();
                 } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
                     self.save();
                 }
-            } else {
+            } else if tree_mode {
                 if i.key_pressed(egui::Key::Escape) {
                     self.editor.selection = None;
                 } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
@@ -159,6 +172,16 @@ impl eframe::App for ProgredApp {
                 } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
                     self.insert_new_node();
                 } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
+                    self.save_as();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
+                    self.new_document();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
+                    self.open();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
+                    self.save();
+                }
+            } else {
+                if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
                     self.save_as();
                 } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
                     self.new_document();
@@ -211,13 +234,23 @@ impl eframe::App for ProgredApp {
                         ui.close();
                     }
                 });
+                ui.separator();
+                ui.selectable_value(&mut self.view_mode, ViewMode::Tree, "Tree");
+                ui.selectable_value(&mut self.view_mode, ViewMode::Graph, "Graph");
             });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let snapshot = self.editor.clone();
-            let mut w = EditorWriter::new(&mut self.editor);
-            render_graph(ui, ctx, &snapshot, &mut w);
+            match self.view_mode {
+                ViewMode::Tree => {
+                    let snapshot = self.editor.clone();
+                    let mut w = EditorWriter::new(&mut self.editor);
+                    render_graph(ui, ctx, &snapshot, &mut w);
+                }
+                ViewMode::Graph => {
+                    ui::graph_view::render(ui, ctx, &self.editor.doc.gid, &self.editor.doc.roots, &mut self.graph_view);
+                }
+            }
         });
     }
 }

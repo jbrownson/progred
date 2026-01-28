@@ -1,4 +1,5 @@
 mod identicon;
+pub mod graph_view;
 pub mod placeholder;
 mod projection;
 

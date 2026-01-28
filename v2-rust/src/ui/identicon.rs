@@ -5,6 +5,12 @@ use uuid::Uuid;
 
 const GRID_SIZE: usize = 5;
 
+pub fn draw_at(painter: &eframe::egui::Painter, rect: Rect, uuid: &Uuid) {
+    let hash = BuildHasherDefault::<DefaultHasher>::default().hash_one(uuid);
+    let (pattern, color) = extract_pattern_and_color(hash);
+    draw_identicon(painter, rect, &pattern, color);
+}
+
 pub fn identicon(ui: &mut Ui, size: f32, uuid: &Uuid) -> Response {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), eframe::egui::Sense::hover());
     if ui.is_rect_visible(rect) {
