@@ -1,3 +1,4 @@
+use super::gid::Gid;
 use super::path::Path;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -15,16 +16,16 @@ pub enum SelectionTarget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
     pub target: SelectionTarget,
-    pub placeholder: Option<PlaceholderState>,
+    pub placeholder: PlaceholderState,
 }
 
 impl Selection {
     pub fn edge(path: Path) -> Self {
-        Self { target: SelectionTarget::Edge(path), placeholder: None }
+        Self { target: SelectionTarget::Edge(path), placeholder: PlaceholderState::default() }
     }
 
     pub fn insert_root(index: usize) -> Self {
-        Self { target: SelectionTarget::InsertRoot(index), placeholder: None }
+        Self { target: SelectionTarget::InsertRoot(index), placeholder: PlaceholderState::default() }
     }
 
     pub fn edge_path(&self) -> Option<&Path> {
@@ -34,4 +35,10 @@ impl Selection {
         }
     }
 
+    pub fn placeholder_visible(&self, gid: &impl Gid) -> bool {
+        match &self.target {
+            SelectionTarget::InsertRoot(_) => true,
+            SelectionTarget::Edge(path) => path.node(gid).is_none(),
+        }
+    }
 }

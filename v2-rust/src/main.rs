@@ -5,7 +5,7 @@ mod ui;
 
 use document::{Document, Editor, EditorWriter};
 use eframe::egui;
-use graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget};
+use graph::{Id, MutGid, Path, RootSlot, Selection, SelectionTarget};
 use ui::placeholder::PlaceholderResult;
 
 fn main() -> eframe::Result {
@@ -131,20 +131,10 @@ impl ProgredApp {
     }
 
     fn insert_new_node(&mut self) {
-        let sel = match &self.editor.selection {
-            Some(s) => s,
-            None => return,
-        };
-        match &sel.target {
-            SelectionTarget::InsertRoot(index) => {
-                let index = (*index).min(self.editor.doc.roots.len());
-                self.editor.doc.roots.insert(index, RootSlot::new(Id::new_uuid()));
-            }
-            SelectionTarget::Edge(path) => {
-                self.editor.doc.set_edge(path, Id::new_uuid());
-            }
+        if let Some(path) = self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
+            self.editor.doc.set_edge(path, Id::new_uuid());
+            self.editor.selection = None;
         }
-        self.editor.selection = None;
     }
 }
 
@@ -153,7 +143,7 @@ impl eframe::App for ProgredApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
         let placeholder_active = self.editor.selection.as_ref()
-            .map_or(false, |s| s.placeholder.is_some());
+            .map_or(false, |s| s.placeholder_visible(&self.editor.doc.gid));
         ctx.input(|i| {
             if placeholder_active {
                 if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
@@ -167,7 +157,7 @@ impl eframe::App for ProgredApp {
                 } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
                     self.delete_selection();
                 } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
-                    if self.editor.selection.is_some() { self.insert_new_node(); }
+                    self.insert_new_node();
                 } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
                     self.save_as();
                 } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
@@ -207,7 +197,7 @@ impl eframe::App for ProgredApp {
                 });
                 ui.menu_button("Edit", |ui| {
                     if ui.add_enabled(
-                        self.editor.selection.is_some(),
+                        self.editor.selection.as_ref().and_then(|s| s.edge_path()).is_some(),
                         egui::Button::new("New Node").shortcut_text("Shift+Cmd+N"),
                     ).clicked() {
                         self.insert_new_node();
@@ -229,6 +219,39 @@ impl eframe::App for ProgredApp {
             let mut w = EditorWriter::new(&mut self.editor);
             render_graph(ui, ctx, &snapshot, &mut w);
         });
+    }
+}
+
+fn render_root_insertion(ui: &mut egui::Ui, editor: &Editor, w: &mut EditorWriter, index: usize, empty_doc: bool) {
+    let active_placeholder = matches!(
+        &editor.selection,
+        Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == index
+    );
+
+    if active_placeholder {
+        if let Some(ps) = w.placeholder_state() {
+            match ui::placeholder::render(ui, ps) {
+                PlaceholderResult::Commit(id) => {
+                    w.insert_root(index, RootSlot::new(id));
+                    w.select(None);
+                }
+                PlaceholderResult::Dismiss => w.select(None),
+                PlaceholderResult::Active => {}
+            }
+        }
+    } else if empty_doc {
+        let response = ui.add(
+            egui::Label::new(
+                egui::RichText::new("(empty)")
+                    .color(egui::Color32::from_gray(120))
+                    .italics()
+            ).sense(egui::Sense::click())
+        );
+        if response.clicked() {
+            w.select(Some(Selection::insert_root(index)));
+        }
+    } else if ui::insertion_point(ui).clicked() {
+        w.select(Some(Selection::insert_root(index)));
     }
 }
 
@@ -257,40 +280,15 @@ fn render_graph(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut
     };
 
     if editor.doc.roots.is_empty() {
-        if matches!(&editor.selection,
-            Some(Selection { target: SelectionTarget::InsertRoot(0), placeholder: Some(_), .. }))
-        {
-            if let Some(ps) = w.placeholder_state() {
-                match ui::placeholder::render(ui, ps) {
-                    PlaceholderResult::Commit(id) => {
-                        w.insert_root(0, RootSlot::new(id));
-                        w.select(None);
-                    }
-                    PlaceholderResult::Dismiss => w.select(None),
-                    PlaceholderResult::Active => {}
-                }
-            }
-        } else if ui::insertion_point(ui, false).clicked() {
-            w.select(Some(Selection {
-                target: SelectionTarget::InsertRoot(0),
-                placeholder: Some(PlaceholderState::default()),
-            }));
-        }
+        render_root_insertion(ui, editor, w, 0, true);
     } else {
         for (i, root_slot) in editor.doc.roots.iter().enumerate() {
-            let selected = matches!(&editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == i);
-            if ui::insertion_point(ui, selected).clicked() {
-                w.select(Some(Selection::insert_root(i)));
-            }
+            render_root_insertion(ui, editor, w, i, false);
             ui.push_id(root_slot, |ui| {
                 ui::project(ui, editor, w, &Path::new(root_slot.clone()), &mode);
             });
         }
-        let last = editor.doc.roots.len();
-        let selected = matches!(&editor.selection, Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == last);
-        if ui::insertion_point(ui, selected).clicked() {
-            w.select(Some(Selection::insert_root(last)));
-        }
+        render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
     }
 
     if bg_response.clicked() {

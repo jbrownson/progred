@@ -56,7 +56,7 @@ fn selectable_widget(
     response
 }
 
-pub fn insertion_point(ui: &mut Ui, selected: bool) -> Response {
+pub fn insertion_point(ui: &mut Ui) -> Response {
     let width = ui.available_width().min(200.0);
 
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 0.0), Sense::hover());
@@ -64,13 +64,7 @@ pub fn insertion_point(ui: &mut Ui, selected: bool) -> Response {
     let hit_rect = eframe::egui::Rect::from_center_size(rect.center(), Vec2::new(width, 10.0));
     let response = ui.interact(hit_rect, ui.next_auto_id(), Sense::click());
 
-    if selected || response.hovered() {
-        let color = if selected {
-            Color32::from_rgb(59, 130, 246)
-        } else {
-            Color32::from_gray(150)
-        };
-
+    if response.hovered() {
         let caret_size = 10.0;
         let center_y = rect.center().y;
         let left_x = rect.min.x - 5.0;
@@ -81,7 +75,7 @@ pub fn insertion_point(ui: &mut Ui, selected: bool) -> Response {
                 pos2(left_x + caret_size * 0.6, center_y),
                 pos2(left_x, center_y + caret_size * 0.4),
             ],
-            color,
+            Color32::from_gray(150),
             eframe::epaint::Stroke::NONE,
         ));
     }

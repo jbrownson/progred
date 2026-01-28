@@ -46,18 +46,20 @@ impl MutGid {
     pub fn to_json(&self) -> StdHashMap<String, StdHashMap<String, serde_json::Value>> {
         self.data
             .iter()
-            .filter_map(|(entity, edges)| {
-                let Id::Uuid(entity_uuid) = entity else { return None };
-                let edge_obj = edges
-                    .iter()
-                    .filter_map(|(label, value)| {
-                        let Id::Uuid(label_uuid) = label else { return None };
-                        serde_json::to_value(value)
-                            .ok()
-                            .map(|json| (label_uuid.to_string(), json))
-                    })
-                    .collect();
-                Some((entity_uuid.to_string(), edge_obj))
+            .filter_map(|(entity, edges)| match entity {
+                Id::Uuid(entity_uuid) => {
+                    let edge_obj = edges
+                        .iter()
+                        .filter_map(|(label, value)| match label {
+                            Id::Uuid(label_uuid) => serde_json::to_value(value)
+                                .ok()
+                                .map(|json| (label_uuid.to_string(), json)),
+                            _ => None,
+                        })
+                        .collect();
+                    Some((entity_uuid.to_string(), edge_obj))
+                }
+                _ => None,
             })
             .collect()
     }

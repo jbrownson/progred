@@ -91,7 +91,6 @@ impl<'a> EditorWriter<'a> {
     }
 
     pub fn placeholder_state(&mut self) -> Option<&mut PlaceholderState> {
-        self.editor.selection.as_mut()
-            .map(|s| s.placeholder.get_or_insert_default())
+        self.editor.selection.as_mut().map(|s| &mut s.placeholder)
     }
 }
