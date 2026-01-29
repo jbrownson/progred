@@ -8,12 +8,6 @@ use eframe::egui;
 use graph::{Id, MutGid, Path, RootSlot, Selection, SelectionTarget};
 use ui::placeholder::PlaceholderResult;
 
-#[derive(PartialEq, Eq)]
-enum ViewMode {
-    Tree,
-    Graph,
-}
-
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -32,7 +26,8 @@ fn main() -> eframe::Result {
 
 struct ProgredApp {
     editor: Editor,
-    view_mode: ViewMode,
+    show_graph: bool,
+    graph_split: f32,
     graph_view: ui::graph_view::GraphViewState,
 }
 
@@ -40,7 +35,8 @@ impl ProgredApp {
     fn new() -> Self {
         Self {
             editor: Editor::new(),
-            view_mode: ViewMode::Tree,
+            show_graph: false,
+            graph_split: 0.5,
             graph_view: ui::graph_view::GraphViewState::new(),
         }
     }
@@ -156,40 +152,27 @@ impl eframe::App for ProgredApp {
 
         let placeholder_active = self.editor.selection.as_ref()
             .map_or(false, |s| s.placeholder_visible(&self.editor.doc.gid));
-        let tree_mode = self.view_mode == ViewMode::Tree;
         ctx.input(|i| {
-            if placeholder_active && tree_mode {
+            if placeholder_active {
                 if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
                     self.save_as();
                 } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
                     self.save();
                 }
-            } else if tree_mode {
-                if i.key_pressed(egui::Key::Escape) {
-                    self.editor.selection = None;
-                } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
-                    self.delete_selection();
-                } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
-                    self.insert_new_node();
-                } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
-                    self.save_as();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
-                    self.new_document();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
-                    self.open();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
-                    self.save();
-                }
-            } else {
-                if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
-                    self.save_as();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
-                    self.new_document();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
-                    self.open();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
-                    self.save();
-                }
+            } else if i.key_pressed(egui::Key::Escape) {
+                self.editor.selection = None;
+            } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
+                self.delete_selection();
+            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
+                self.insert_new_node();
+            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
+                self.save_as();
+            } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
+                self.new_document();
+            } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
+                self.open();
+            } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
+                self.save();
             }
         });
 
@@ -235,23 +218,70 @@ impl eframe::App for ProgredApp {
                     }
                 });
                 ui.separator();
-                ui.selectable_value(&mut self.view_mode, ViewMode::Tree, "Tree");
-                ui.selectable_value(&mut self.view_mode, ViewMode::Graph, "Graph");
+                ui.toggle_value(&mut self.show_graph, "Graph");
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            match self.view_mode {
-                ViewMode::Tree => {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(ctx.style().visuals.panel_fill))
+            .show(ctx, |ui| {
+                let full_rect = ui.max_rect();
+                let margin = 4.0;
+
+                let (tree_rect, tree_clip) = if self.show_graph {
+                    let (separator_width, separator_hit_width) = (1.0, 8.0);
+                    let left_width = (full_rect.width() - separator_width) * (1.0 - self.graph_split);
+                    let separator_x = full_rect.min.x + left_width;
+
+                    let left_rect = egui::Rect::from_min_max(
+                        full_rect.min,
+                        egui::pos2(separator_x, full_rect.max.y),
+                    );
+                    let right_rect = egui::Rect::from_min_max(
+                        egui::pos2(separator_x + separator_width, full_rect.min.y),
+                        full_rect.max,
+                    );
+
+                    let separator_response = ui.allocate_rect(
+                        egui::Rect::from_center_size(
+                            egui::pos2(separator_x, full_rect.center().y),
+                            egui::vec2(separator_hit_width, full_rect.height()),
+                        ),
+                        egui::Sense::drag(),
+                    );
+                    if separator_response.dragged() {
+                        let new_left = left_width + separator_response.drag_delta().x;
+                        self.graph_split = (1.0 - new_left / (full_rect.width() - separator_width)).clamp(0.1, 0.9);
+                    }
+                    if separator_response.hovered() || separator_response.dragged() {
+                        ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                    }
+
+                    ui.painter().vline(
+                        separator_x,
+                        full_rect.y_range(),
+                        egui::Stroke::new(separator_width, egui::Color32::from_gray(180)),
+                    );
+
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(right_rect), |ui| {
+                        ui.set_clip_rect(right_rect);
+                        ui::graph_view::render(ui, ctx, &self.editor.doc.gid, &self.editor.doc.roots, &mut self.graph_view);
+                    });
+
+                    (left_rect.shrink(margin), Some(left_rect))
+                } else {
+                    (full_rect.shrink(margin), None)
+                };
+
+                ui.scope_builder(egui::UiBuilder::new().max_rect(tree_rect), |ui| {
+                    if let Some(clip) = tree_clip {
+                        ui.set_clip_rect(clip);
+                    }
                     let snapshot = self.editor.clone();
                     let mut w = EditorWriter::new(&mut self.editor);
-                    render_graph(ui, ctx, &snapshot, &mut w);
-                }
-                ViewMode::Graph => {
-                    ui::graph_view::render(ui, ctx, &self.editor.doc.gid, &self.editor.doc.roots, &mut self.graph_view);
-                }
-            }
-        });
+                    render_tree(ui, ctx, &snapshot, &mut w);
+                });
+            });
     }
 }
 
@@ -288,7 +318,7 @@ fn render_root_insertion(ui: &mut egui::Ui, editor: &Editor, w: &mut EditorWrite
     }
 }
 
-fn render_graph(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
+fn render_tree(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
     let bg_response = ui.interact(
         ui.max_rect(),
         ui.id().with("background"),

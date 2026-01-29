@@ -36,9 +36,9 @@ impl GraphViewState {
 
 fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
     let hash = BuildHasherDefault::<DefaultHasher>::default().hash_one(id);
-    let x = ((hash & 0xFFFF) as f32 / 65535.0) * 400.0 + 100.0;
-    let y = (((hash >> 16) & 0xFFFF) as f32 / 65535.0) * 300.0 + 100.0;
-    Pos2::new(x + index as f32 * 10.0, y + index as f32 * 10.0)
+    let x = ((hash & 0xFFFF) as f32 / 65535.0 - 0.5) * 300.0;
+    let y = (((hash >> 16) & 0xFFFF) as f32 / 65535.0 - 0.5) * 200.0;
+    Pos2::new(x + index as f32 * 5.0, y + index as f32 * 5.0)
 }
 
 fn sync_positions(state: &mut GraphViewState, gid: &MutGid, roots: &[crate::graph::RootSlot]) {
@@ -187,22 +187,24 @@ fn draw_edge_label(painter: &egui::Painter, pos: Pos2, label: &Id) {
 }
 
 pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[crate::graph::RootSlot], state: &mut GraphViewState) {
+    let panel_rect = ui.max_rect();
+    let view_offset = panel_rect.center().to_vec2() + state.pan_offset;
+
     sync_positions(state, gid, roots);
     let edges = collect_edges(gid);
     simulate(state, &edges);
 
     let painter = ui.painter();
-    let panel_rect = ui.max_rect();
     let response = ui.interact(panel_rect, ui.id().with("graph_bg"), egui::Sense::click_and_drag());
 
     if response.drag_started() && state.dragging.is_none() {
         if let Some(pointer) = response.interact_pointer_pos() {
             let hit = state.positions.iter().find(|&(_, pos)| {
-                (pointer - (*pos + state.pan_offset)).length() <= NODE_RADIUS
+                (pointer - (*pos + view_offset)).length() <= NODE_RADIUS
             });
             if let Some((id, pos)) = hit {
                 state.dragging = Some(id.clone());
-                state.drag_offset = (*pos + state.pan_offset) - pointer;
+                state.drag_offset = (*pos + view_offset) - pointer;
             } else {
                 state.panning = true;
             }
@@ -212,7 +214,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
     if response.dragged() {
         if let Some(id) = state.dragging.clone() {
             if let Some(pointer) = response.interact_pointer_pos() {
-                state.positions.insert(id.clone(), pointer + state.drag_offset - state.pan_offset);
+                state.positions.insert(id.clone(), pointer + state.drag_offset - view_offset);
                 state.velocities.insert(id, Vec2::ZERO);
             }
         } else if state.panning {
@@ -225,7 +227,6 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
         state.panning = false;
     }
 
-    let pan = state.pan_offset;
     let half_sizes: HashMap<&Id, Vec2> = state.positions.keys().map(|id| (id, node_half_size(id))).collect();
 
     let mut pair_counts: HashMap<(Id, Id), usize> = HashMap::new();
@@ -239,8 +240,8 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
 
     for edge in &edges {
         if let (Some(&sp), Some(&tp)) = (state.positions.get(&edge.source), state.positions.get(&edge.target)) {
-            let src_pos = sp + pan;
-            let tgt_pos = tp + pan;
+            let src_pos = sp + view_offset;
+            let tgt_pos = tp + view_offset;
             let src_half = half_sizes.get(&edge.source).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
             let tgt_half = half_sizes.get(&edge.target).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
 
@@ -311,7 +312,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
     let text_font = egui::FontId::proportional(10.0);
 
     for (id, &pos) in &state.positions {
-        let screen_pos = pos + pan;
+        let screen_pos = pos + view_offset;
         match id {
             Id::Uuid(uuid) => {
                 let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4));
