@@ -1,4 +1,5 @@
-use crate::graph::{Gid, Id, MutGid};
+use crate::document::{Document, Editor, EditorWriter};
+use crate::graph::{Gid, Id, Selection};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ const MAX_FORCE: f32 = 10.0;
 const GRAVITY_K: f32 = 0.005;
 const MAX_LABEL_LEN: usize = 8;
 
+#[derive(Clone)]
 pub struct GraphViewState {
     positions: HashMap<Id, Pos2>,
     velocities: HashMap<Id, Vec2>,
@@ -42,11 +44,11 @@ fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
     Pos2::new(x + index as f32 * 5.0, y + index as f32 * 5.0)
 }
 
-fn sync_positions(state: &mut GraphViewState, gid: &MutGid, roots: &[crate::graph::RootSlot]) {
-    let all_ids: Vec<Id> = roots.iter().map(|r| r.node().clone())
-        .chain(gid.entities().flat_map(|id| {
+fn sync_positions(state: &mut GraphViewState, doc: &Document) {
+    let all_ids: Vec<Id> = doc.roots.iter().map(|r| r.node().clone())
+        .chain(doc.gid.entities().flat_map(|id| {
             std::iter::once(id.clone()).chain(
-                gid.edges(id).into_iter().flat_map(|edges| edges.iter().map(|(_, v)| v.clone()))
+                doc.gid.edges(id).into_iter().flat_map(|edges| edges.iter().map(|(_, v)| v.clone()))
             )
         }))
         .collect();
@@ -67,10 +69,10 @@ struct Edge {
     target: Id,
 }
 
-fn collect_edges(gid: &MutGid) -> Vec<Edge> {
-    gid.entities()
+fn collect_edges(doc: &Document) -> Vec<Edge> {
+    doc.gid.entities()
         .flat_map(|entity_id| {
-            gid.edges(entity_id).into_iter().flat_map(move |edges| {
+            doc.gid.edges(entity_id).into_iter().flat_map(move |edges| {
                 edges.iter().map(move |(label, value)| Edge {
                     source: entity_id.clone(),
                     label: label.clone(),
@@ -191,28 +193,32 @@ fn draw_edge_label(painter: &egui::Painter, pos: Pos2, label: &Id) {
     }
 }
 
-pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[crate::graph::RootSlot], state: &mut GraphViewState) {
+pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
+    let state = w.graph_view();
     let panel_rect = ui.max_rect();
     let view_offset = panel_rect.center().to_vec2() + state.pan_offset;
 
-    sync_positions(state, gid, roots);
-    let edges = collect_edges(gid);
+    sync_positions(state, &editor.doc);
+    let edges = collect_edges(&editor.doc);
     simulate(state, &edges);
+
+    let selected_node = editor.selection.as_ref()
+        .and_then(|s| s.selected_node_id(&editor.doc.gid));
 
     let painter = ui.painter();
     let response = ui.interact(panel_rect, ui.id().with("graph_bg"), egui::Sense::click_and_drag());
 
+    let pointer = response.interact_pointer_pos();
+    let hit = pointer.and_then(|p| state.positions.iter().find(|&(id, pos)| {
+        Rect::from_center_size(*pos + view_offset, node_half_size(id) * 2.0).contains(p)
+    }).map(|(id, pos)| (id.clone(), *pos)));
+
     if response.drag_started() && state.dragging.is_none() {
-        if let Some(pointer) = response.interact_pointer_pos() {
-            let hit = state.positions.iter().find(|&(_, pos)| {
-                (pointer - (*pos + view_offset)).length() <= NODE_RADIUS
-            });
-            if let Some((id, pos)) = hit {
-                state.dragging = Some(id.clone());
-                state.drag_offset = (*pos + view_offset) - pointer;
-            } else {
-                state.panning = true;
-            }
+        if let Some((ref id, pos)) = hit {
+            state.dragging = Some(id.clone());
+            state.drag_offset = (pos + view_offset) - pointer.unwrap();
+        } else if pointer.is_some() {
+            state.panning = true;
         }
     }
 
@@ -318,17 +324,20 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
 
     let node_fill = Color32::WHITE;
     let node_stroke = Stroke::new(1.5, Color32::from_gray(160));
+    let selected_stroke = Stroke::new(2.5, Color32::from_rgb(59, 130, 246));
     let text_font = egui::FontId::proportional(10.0);
 
     for (id, &pos) in &state.positions {
         let screen_pos = pos + view_offset;
+        let is_selected = selected_node == Some(id);
         match id {
             Id::Uuid(uuid) => {
                 let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4));
                 super::identicon::draw_at(painter, icon_rect, uuid);
+                let stroke = if is_selected { selected_stroke } else { Stroke::new(2.0, Color32::from_gray(100)) };
                 painter.rect_stroke(
                     icon_rect, CornerRadius::same(2),
-                    Stroke::new(2.0, Color32::from_gray(100)),
+                    stroke,
                     eframe::epaint::StrokeKind::Outside,
                 );
             }
@@ -337,7 +346,8 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
                 let rect = Rect::from_center_size(screen_pos, half * 2.0);
                 let rounding = CornerRadius::same(6);
                 painter.rect_filled(rect, rounding, node_fill);
-                painter.rect_stroke(rect, rounding, node_stroke, eframe::epaint::StrokeKind::Middle);
+                let stroke = if is_selected { selected_stroke } else { node_stroke };
+                painter.rect_stroke(rect, rounding, stroke, eframe::epaint::StrokeKind::Middle);
                 if let Some(text) = node_display_text(id) {
                     painter.text(screen_pos, egui::Align2::CENTER_CENTER, text, text_font.clone(), Color32::from_gray(60));
                 }
@@ -346,4 +356,8 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
     }
 
     ctx.request_repaint();
+
+    if response.clicked() {
+        w.select(hit.map(|(id, _)| Selection::graph_node(id)));
+    }
 }

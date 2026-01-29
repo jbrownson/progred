@@ -15,6 +15,7 @@ pub enum InteractionMode {
 fn selectable_widget(
     ui: &mut Ui,
     selected: bool,
+    secondary_selected: bool,
     select_under: bool,
     assign: bool,
     add_contents: impl FnOnce(&mut Ui) -> Response,
@@ -32,6 +33,9 @@ fn selectable_widget(
     let (bg, border) = if selected {
         let color = Color32::from_rgb(59, 130, 246);
         (Some(color.gamma_multiply(0.3)), Some(eframe::epaint::Stroke::new(1.5, color)))
+    } else if secondary_selected {
+        let color = Color32::from_rgb(59, 130, 246);
+        (Some(color.gamma_multiply(0.15)), Some(eframe::epaint::Stroke::new(1.0, color.gamma_multiply(0.4))))
     } else if assign {
         let color = Color32::from_rgb(234, 179, 8);
         let intensity = if response.hovered() { 0.4 } else { 0.2 };
@@ -83,9 +87,9 @@ pub fn insertion_point(ui: &mut Ui) -> Response {
     response
 }
 
-fn render_label(ui: &mut Ui, id: &Id, select_under: bool, assign: bool) -> Response {
+fn render_label(ui: &mut Ui, id: &Id, secondary_selected: bool, select_under: bool, assign: bool) -> Response {
     let label_color = Color32::from_gray(120);
-    selectable_widget(ui, false, select_under, assign, |ui| match id {
+    selectable_widget(ui, false, secondary_selected, select_under, assign, |ui| match id {
         Id::Uuid(uuid) => identicon(ui, 12.0, uuid),
         Id::String(s) => ui.label(eframe::egui::RichText::new(s.to_string()).color(label_color).italics()),
         Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(label_color).italics()),
@@ -160,18 +164,16 @@ fn project_id(
 ) {
     match id {
         Id::Uuid(uuid) => project_uuid(ui, editor, w, path, uuid, ancestors, mode),
-        Id::String(s) => project_leaf(ui, editor, w, path, format!("\"{}\"", s)),
-        Id::Number(n) => project_leaf(ui, editor, w, path, n.to_string()),
+        Id::String(s) => project_leaf(ui, editor, w, path, id, format!("\"{}\"", s)),
+        Id::Number(n) => project_leaf(ui, editor, w, path, id, n.to_string()),
     }
 }
 
-fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, text: String) {
-    if selectable_widget(
-        ui,
-        editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path),
-        false, false,
-        |ui| ui.label(text),
-    ).clicked() {
+fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, id: &Id, text: String) {
+    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
+    let secondary = !primary
+        && editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc.gid)) == Some(id);
+    if selectable_widget(ui, primary, secondary, false, false, |ui| ui.label(text)).clicked() {
         w.select(Some(Selection::edge(path.clone())));
     }
 }
@@ -215,12 +217,14 @@ fn project_uuid(
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
     let select_under = matches!(mode, InteractionMode::SelectUnder(_));
     let assign = matches!(mode, InteractionMode::Assign(_));
+    let selected_node = editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc.gid));
+    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
+    let secondary = !primary && selected_node == Some(&id);
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
             if selectable_widget(
-                ui,
-                editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path),
+                ui, primary, secondary,
                 select_under, assign,
                 |ui| identicon(ui, 18.0, uuid),
             ).clicked() {
@@ -237,8 +241,9 @@ fn project_uuid(
             ui.add_space(2.0);
             ui.indent("edges", |ui| {
                 for (label, value) in &all_edges {
+                    let label_secondary = selected_node == Some(label);
                     ui.horizontal(|ui| {
-                        if render_label(ui, label, select_under, assign).clicked()
+                        if render_label(ui, label, label_secondary, select_under, assign).clicked()
                             && !matches!(mode, InteractionMode::Normal)
                         {
                             handle_pick(w, mode, label.clone(), path);
@@ -251,7 +256,7 @@ fn project_uuid(
                 }
                 if let Some(ref new_label) = new_edge_label {
                     ui.horizontal(|ui| {
-                        render_label(ui, new_label, false, false);
+                        render_label(ui, new_label, false, false, false);
                         label_arrow(ui);
                         if let Some(ps) = w.placeholder_state() {
                             match super::placeholder::render(ui, ps) {

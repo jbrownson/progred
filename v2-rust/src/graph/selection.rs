@@ -1,4 +1,5 @@
 use super::gid::Gid;
+use super::id::Id;
 use super::path::Path;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -11,6 +12,7 @@ pub struct PlaceholderState {
 pub enum SelectionTarget {
     Edge(Path),
     InsertRoot(usize),
+    GraphNode(Id),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +30,10 @@ impl Selection {
         Self { target: SelectionTarget::InsertRoot(index), placeholder: PlaceholderState::default() }
     }
 
+    pub fn graph_node(id: Id) -> Self {
+        Self { target: SelectionTarget::GraphNode(id), placeholder: PlaceholderState::default() }
+    }
+
     pub fn edge_path(&self) -> Option<&Path> {
         match &self.target {
             SelectionTarget::Edge(p) => Some(p),
@@ -35,10 +41,19 @@ impl Selection {
         }
     }
 
+    pub fn selected_node_id<'a>(&'a self, gid: &'a impl Gid) -> Option<&'a Id> {
+        match &self.target {
+            SelectionTarget::Edge(path) => path.node(gid),
+            SelectionTarget::GraphNode(id) => Some(id),
+            SelectionTarget::InsertRoot(_) => None,
+        }
+    }
+
     pub fn placeholder_visible(&self, gid: &impl Gid) -> bool {
         match &self.target {
             SelectionTarget::InsertRoot(_) => true,
             SelectionTarget::Edge(path) => path.node(gid).is_none(),
+            SelectionTarget::GraphNode(_) => false,
         }
     }
 }

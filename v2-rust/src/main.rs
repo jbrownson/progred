@@ -28,7 +28,6 @@ struct ProgredApp {
     editor: Editor,
     show_graph: bool,
     graph_split: f32,
-    graph_view: ui::graph_view::GraphViewState,
 }
 
 impl ProgredApp {
@@ -37,7 +36,6 @@ impl ProgredApp {
             editor: Editor::new(),
             show_graph: false,
             graph_split: 0.5,
-            graph_view: ui::graph_view::GraphViewState::new(),
         }
     }
 
@@ -228,6 +226,9 @@ impl eframe::App for ProgredApp {
                 let full_rect = ui.max_rect();
                 let margin = 4.0;
 
+                let snapshot = self.editor.clone();
+                let mut w = EditorWriter::new(&mut self.editor);
+
                 let (tree_rect, tree_clip) = if self.show_graph {
                     let (separator_width, separator_hit_width) = (1.0, 8.0);
                     let left_width = (full_rect.width() - separator_width) * (1.0 - self.graph_split);
@@ -265,7 +266,7 @@ impl eframe::App for ProgredApp {
 
                     ui.scope_builder(egui::UiBuilder::new().max_rect(right_rect), |ui| {
                         ui.set_clip_rect(right_rect);
-                        ui::graph_view::render(ui, ctx, &self.editor.doc.gid, &self.editor.doc.roots, &mut self.graph_view);
+                        ui::graph_view::render(ui, ctx, &snapshot, &mut w);
                     });
 
                     (left_rect.shrink(margin), Some(left_rect))
@@ -277,8 +278,6 @@ impl eframe::App for ProgredApp {
                     if let Some(clip) = tree_clip {
                         ui.set_clip_rect(clip);
                     }
-                    let snapshot = self.editor.clone();
-                    let mut w = EditorWriter::new(&mut self.editor);
                     render_tree(ui, ctx, &snapshot, &mut w);
                 });
             });

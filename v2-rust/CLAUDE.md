@@ -27,4 +27,5 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 - Return references for non-trivial types (let caller decide to clone), but methods on small structs (like `Document`) enable disjoint borrow checking over methods on the parent (`ProgredApp`)
 - Avoid early returns — prefer `if let`, `match`, or expression-oriented alternatives over `let-else return` / `return` in closures
 - Dead code should be deleted, not commented out
+- UI rendering: prefer computing from an immutable snapshot and mutating via a writer (e.g., `EditorWriter`) over returning update structs — not a hard rule, deviate if there's reason
 - Push back if something seems wrong

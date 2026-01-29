@@ -1,4 +1,5 @@
 use crate::graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
+use crate::ui::graph_view::GraphViewState;
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -52,6 +53,7 @@ pub struct Editor {
     pub tree: SpanningTree,
     pub selection: Option<Selection>,
     pub file_path: Option<PathBuf>,
+    pub graph_view: GraphViewState,
 }
 
 impl Editor {
@@ -61,6 +63,7 @@ impl Editor {
             tree: SpanningTree::empty(),
             selection: None,
             file_path: None,
+            graph_view: GraphViewState::new(),
         }
     }
 }
@@ -92,5 +95,9 @@ impl<'a> EditorWriter<'a> {
 
     pub fn placeholder_state(&mut self) -> Option<&mut PlaceholderState> {
         self.editor.selection.as_mut().map(|s| &mut s.placeholder)
+    }
+
+    pub fn graph_view(&mut self) -> &mut GraphViewState {
+        &mut self.editor.graph_view
     }
 }
