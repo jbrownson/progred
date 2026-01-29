@@ -5,8 +5,7 @@ mod ui;
 
 use document::{Document, Editor, EditorWriter};
 use eframe::egui;
-use graph::{Id, MutGid, Path, RootSlot, Selection, SelectionTarget};
-use ui::placeholder::PlaceholderResult;
+use graph::{Id, MutGid, RootSlot};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -142,12 +141,8 @@ impl ProgredApp {
             self.editor.selection = None;
         }
     }
-}
 
-impl eframe::App for ProgredApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
-
+    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let placeholder_active = self.editor.selection.as_ref()
             .map_or(false, |s| s.placeholder_visible(&self.editor.doc.gid));
         ctx.input(|i| {
@@ -173,7 +168,9 @@ impl eframe::App for ProgredApp {
                 self.save();
             }
         });
+    }
 
+    fn render_menu_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -219,141 +216,29 @@ impl eframe::App for ProgredApp {
                 ui.toggle_value(&mut self.show_graph, "Graph");
             });
         });
+    }
+}
+
+impl eframe::App for ProgredApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
+        self.handle_shortcuts(ctx);
+        self.render_menu_bar(ctx);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(ctx.style().visuals.panel_fill))
             .show(ctx, |ui| {
-                let full_rect = ui.max_rect();
-                let margin = 4.0;
-
                 let snapshot = self.editor.clone();
                 let mut w = EditorWriter::new(&mut self.editor);
 
-                let (tree_rect, tree_clip) = if self.show_graph {
-                    let (separator_width, separator_hit_width) = (1.0, 8.0);
-                    let left_width = (full_rect.width() - separator_width) * (1.0 - self.graph_split);
-                    let separator_x = full_rect.min.x + left_width;
-
-                    let left_rect = egui::Rect::from_min_max(
-                        full_rect.min,
-                        egui::pos2(separator_x, full_rect.max.y),
-                    );
-                    let right_rect = egui::Rect::from_min_max(
-                        egui::pos2(separator_x + separator_width, full_rect.min.y),
-                        full_rect.max,
-                    );
-
-                    let separator_response = ui.allocate_rect(
-                        egui::Rect::from_center_size(
-                            egui::pos2(separator_x, full_rect.center().y),
-                            egui::vec2(separator_hit_width, full_rect.height()),
-                        ),
-                        egui::Sense::drag(),
-                    );
-                    if separator_response.dragged() {
-                        let new_left = left_width + separator_response.drag_delta().x;
-                        self.graph_split = (1.0 - new_left / (full_rect.width() - separator_width)).clamp(0.1, 0.9);
-                    }
-                    if separator_response.hovered() || separator_response.dragged() {
-                        ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-                    }
-
-                    ui.painter().vline(
-                        separator_x,
-                        full_rect.y_range(),
-                        egui::Stroke::new(separator_width, egui::Color32::from_gray(180)),
-                    );
-
-                    ui.scope_builder(egui::UiBuilder::new().max_rect(right_rect), |ui| {
-                        ui.set_clip_rect(right_rect);
-                        ui::graph_view::render(ui, ctx, &snapshot, &mut w);
-                    });
-
-                    (left_rect.shrink(margin), Some(left_rect))
+                if self.show_graph {
+                    let rects = ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split);
+                    ui::split_view::scoped_with_margin(ui, rects.left, 4.0, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
+                    ui::split_view::scoped(ui, rects.right, |ui| ui::graph_view::render(ui, ctx, &snapshot, &mut w));
                 } else {
-                    (full_rect.shrink(margin), None)
-                };
-
-                ui.scope_builder(egui::UiBuilder::new().max_rect(tree_rect), |ui| {
-                    if let Some(clip) = tree_clip {
-                        ui.set_clip_rect(clip);
-                    }
-                    render_tree(ui, ctx, &snapshot, &mut w);
-                });
-            });
-    }
-}
-
-fn render_root_insertion(ui: &mut egui::Ui, editor: &Editor, w: &mut EditorWriter, index: usize, empty_doc: bool) {
-    let active_placeholder = matches!(
-        &editor.selection,
-        Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == index
-    );
-
-    if active_placeholder {
-        if let Some(ps) = w.placeholder_state() {
-            match ui::placeholder::render(ui, ps) {
-                PlaceholderResult::Commit(id) => {
-                    w.insert_root(index, RootSlot::new(id));
-                    w.select(None);
+                    ui::split_view::scoped_with_margin(ui, ui.max_rect(), 4.0, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
                 }
-                PlaceholderResult::Dismiss => w.select(None),
-                PlaceholderResult::Active => {}
-            }
-        }
-    } else if empty_doc {
-        let response = ui.add(
-            egui::Label::new(
-                egui::RichText::new("(empty)")
-                    .color(egui::Color32::from_gray(120))
-                    .italics()
-            ).sense(egui::Sense::click())
-        );
-        if response.clicked() {
-            w.select(Some(Selection::insert_root(index)));
-        }
-    } else if ui::insertion_point(ui).clicked() {
-        w.select(Some(Selection::insert_root(index)));
-    }
-}
-
-fn render_tree(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
-    let bg_response = ui.interact(
-        ui.max_rect(),
-        ui.id().with("background"),
-        egui::Sense::click(),
-    );
-
-    let modifiers = ctx.input(|i| i.modifiers);
-    let mode = if modifiers.alt {
-        match editor.selection.as_ref().and_then(|s| s.edge_path()) {
-            Some(path) => ui::InteractionMode::Assign(path.clone()),
-            _ => ui::InteractionMode::Normal,
-        }
-    } else if modifiers.ctrl {
-        match editor.selection.as_ref().and_then(|s| s.edge_path()) {
-            Some(path) if matches!(path.node(&editor.doc.gid), Some(Id::Uuid(_))) => {
-                ui::InteractionMode::SelectUnder(path.clone())
-            }
-            _ => ui::InteractionMode::Normal,
-        }
-    } else {
-        ui::InteractionMode::Normal
-    };
-
-    if editor.doc.roots.is_empty() {
-        render_root_insertion(ui, editor, w, 0, true);
-    } else {
-        for (i, root_slot) in editor.doc.roots.iter().enumerate() {
-            render_root_insertion(ui, editor, w, i, false);
-            ui.push_id(root_slot, |ui| {
-                ui::project(ui, editor, w, &Path::new(root_slot.clone()), &mode);
             });
-        }
-        render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
-    }
-
-    if bg_response.clicked() {
-        w.select(None);
     }
 }
+
