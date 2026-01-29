@@ -45,7 +45,7 @@ fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
 }
 
 fn sync_positions(state: &mut GraphViewState, doc: &Document) {
-    let all_ids: Vec<Id> = doc.roots.iter().map(|r| r.node().clone())
+    let all_ids: std::collections::HashSet<Id> = doc.roots.iter().map(|r| r.node().clone())
         .chain(doc.gid.entities().flat_map(|id| {
             std::iter::once(id.clone()).chain(
                 doc.gid.edges(id).into_iter().flat_map(|edges| edges.iter().map(|(_, v)| v.clone()))
@@ -58,9 +58,8 @@ fn sync_positions(state: &mut GraphViewState, doc: &Document) {
         state.velocities.entry(id.clone()).or_insert(Vec2::ZERO);
     }
 
-    let id_set: std::collections::HashSet<&Id> = all_ids.iter().collect();
-    state.positions.retain(|id, _| id_set.contains(id));
-    state.velocities.retain(|id, _| id_set.contains(id));
+    state.positions.retain(|id, _| all_ids.contains(id));
+    state.velocities.retain(|id, _| all_ids.contains(id));
 }
 
 struct Edge {

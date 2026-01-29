@@ -45,7 +45,6 @@ fn draw_identicon(
     let border = Color32::from_gray(180);
     let rounding = CornerRadius::same(2);
 
-    // Draw background with border
     painter.rect_filled(rect, rounding, background);
     painter.rect_stroke(rect, rounding, eframe::epaint::Stroke::new(1.0, border), eframe::epaint::StrokeKind::Middle);
 

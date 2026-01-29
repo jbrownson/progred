@@ -1,3 +1,6 @@
+// TypeScript runtime for future use - validates that embedded TS compilation works
+// before committing to this tech stack. Currently unused.
+
 use deno_core::{extension, op2, JsRuntime, RuntimeOptions};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;

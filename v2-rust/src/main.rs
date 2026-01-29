@@ -146,26 +146,22 @@ impl ProgredApp {
         let placeholder_active = self.editor.selection.as_ref()
             .map_or(false, |s| s.placeholder_visible(&self.editor.doc.gid));
         ctx.input(|i| {
-            if placeholder_active {
-                if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
-                    self.save_as();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
-                    self.save();
-                }
-            } else if i.key_pressed(egui::Key::Escape) {
-                self.editor.selection = None;
-            } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
-                self.delete_selection();
-            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
-                self.insert_new_node();
-            } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
+            if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
                 self.save_as();
-            } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
-                self.new_document();
-            } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
-                self.open();
             } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
                 self.save();
+            } else if !placeholder_active {
+                if i.key_pressed(egui::Key::Escape) {
+                    self.editor.selection = None;
+                } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
+                    self.delete_selection();
+                } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
+                    self.insert_new_node();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
+                    self.new_document();
+                } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
+                    self.open();
+                }
             }
         });
     }

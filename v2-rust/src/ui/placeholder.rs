@@ -42,8 +42,6 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
     let mut text = ps.text.clone();
     let text_id = ui.id().with("placeholder_input");
 
-    let mut commit: Option<Id> = None;
-
     let text_response = ui.add(
         egui::TextEdit::singleline(&mut text)
             .id(text_id)
@@ -52,22 +50,26 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
     );
     ui.memory_mut(|mem| mem.request_focus(text_id));
 
-    egui::Popup::from_response(&text_response)
-        .id(ui.id().with("placeholder_popup"))
-        .open(true)
-        .width(text_response.rect.width())
-        .show(|ui| {
-            egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                for (i, entry) in entries.iter().enumerate() {
-                    if ui.selectable_label(i == selected_index, &entry.display).clicked() {
-                        commit = Some(entry.id.clone());
+    let popup_commit = {
+        let mut clicked = None;
+        egui::Popup::from_response(&text_response)
+            .id(ui.id().with("placeholder_popup"))
+            .open(true)
+            .width(text_response.rect.width())
+            .show(|ui| {
+                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                    for (i, entry) in entries.iter().enumerate() {
+                        if ui.selectable_label(i == selected_index, &entry.display).clicked() {
+                            clicked = Some(entry.id.clone());
+                        }
                     }
-                }
-                if ui.selectable_label(entries.len() == selected_index, "New node").clicked() {
-                    commit = Some(Id::new_uuid());
-                }
+                    if ui.selectable_label(entries.len() == selected_index, "New node").clicked() {
+                        clicked = Some(Id::new_uuid());
+                    }
+                });
             });
-        });
+        clicked
+    };
 
     if ps.text != text {
         ps.text = text;
@@ -86,13 +88,13 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
         ps.selected_index -= 1;
     }
 
-    if enter && commit.is_none() {
-        commit = Some(
+    let commit = popup_commit.or_else(|| {
+        enter.then(|| {
             entries.get(selected_index)
                 .map(|e| e.id.clone())
                 .unwrap_or_else(Id::new_uuid)
-        );
-    }
+        })
+    });
 
     match commit {
         Some(id) => PlaceholderResult::Commit(id),
