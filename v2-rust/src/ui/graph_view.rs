@@ -10,6 +10,7 @@ const ATTRACTION_K: f32 = 0.02;
 const REST_LENGTH: f32 = 120.0;
 const DAMPING: f32 = 0.85;
 const MAX_FORCE: f32 = 10.0;
+const GRAVITY_K: f32 = 0.005;
 const MAX_LABEL_LEN: usize = 8;
 
 pub struct GraphViewState {
@@ -102,6 +103,10 @@ fn simulate(state: &mut GraphViewState, edges: &[Edge]) {
             *forces.get_mut(&edge.source).unwrap() += force;
             *forces.get_mut(&edge.target).unwrap() -= force;
         }
+    }
+
+    for id in &ids {
+        *forces.get_mut(id).unwrap() += -state.positions[id].to_vec2() * GRAVITY_K;
     }
 
     for id in ids.iter().filter(|id| state.dragging.as_ref() != Some(*id)) {
@@ -273,7 +278,11 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, gid: &MutGid, roots: &[cra
                     .collect();
                 painter.add(egui::Shape::line(points, arrow_stroke));
                 draw_arrowhead(painter, end, (end - cp2).normalized(), arrow_stroke);
-                draw_edge_label(painter, cp1 + (cp2 - cp1) * 0.5 - Vec2::new(0.0, 6.0), &edge.label);
+                let label_pos = Pos2::new(
+                    0.125 * start.x + 0.375 * cp1.x + 0.375 * cp2.x + 0.125 * end.x,
+                    0.125 * start.y + 0.375 * cp1.y + 0.375 * cp2.y + 0.125 * end.y,
+                );
+                draw_edge_label(painter, label_pos, &edge.label);
             } else {
                 let mid = src_pos + (tgt_pos - src_pos) * 0.5;
                 let canonical_dir = if edge.source <= edge.target {
