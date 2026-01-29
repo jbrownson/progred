@@ -3,6 +3,7 @@ use crate::graph::{Gid, Id, Path, Selection};
 use eframe::egui::{pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use im::HashSet;
 
+use super::colors;
 use super::identicon;
 use super::placeholder::PlaceholderResult;
 
@@ -31,19 +32,15 @@ fn selectable_widget(
     let rounding = CornerRadius::same(3);
 
     let (bg, border) = if selected {
-        let color = Color32::from_rgb(59, 130, 246);
-        (Some(color.gamma_multiply(0.3)), Some(eframe::epaint::Stroke::new(1.5, color)))
+        (Some(colors::SELECTION.gamma_multiply(0.3)), Some(eframe::epaint::Stroke::new(1.5, colors::SELECTION)))
     } else if secondary_selected {
-        let color = Color32::from_rgb(59, 130, 246);
-        (Some(color.gamma_multiply(0.15)), Some(eframe::epaint::Stroke::new(1.0, color.gamma_multiply(0.4))))
+        (Some(colors::SELECTION.gamma_multiply(0.15)), Some(eframe::epaint::Stroke::new(1.0, colors::SELECTION.gamma_multiply(0.4))))
     } else if assign {
-        let color = Color32::from_rgb(234, 179, 8);
         let intensity = if response.hovered() { 0.4 } else { 0.2 };
-        (Some(color.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, color.gamma_multiply(0.6))))
+        (Some(colors::ASSIGN.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, colors::ASSIGN.gamma_multiply(0.6))))
     } else if select_under {
-        let color = Color32::from_rgb(34, 197, 94);
         let intensity = if response.hovered() { 0.4 } else { 0.2 };
-        (Some(color.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, color.gamma_multiply(0.6))))
+        (Some(colors::SELECT_UNDER.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, colors::SELECT_UNDER.gamma_multiply(0.6))))
     } else if response.hovered() {
         (Some(Color32::from_gray(200).gamma_multiply(0.5)), None)
     } else {

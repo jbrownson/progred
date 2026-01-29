@@ -1,6 +1,7 @@
 use crate::document::{Document, Editor, EditorWriter};
 use crate::graph::{Gid, Id, Selection};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
+use super::colors;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault};
@@ -323,7 +324,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
 
     let node_fill = Color32::WHITE;
     let node_stroke = Stroke::new(1.5, Color32::from_gray(160));
-    let selected_stroke = Stroke::new(2.5, Color32::from_rgb(59, 130, 246));
+    let selected_stroke = Stroke::new(2.5, colors::SELECTION);
     let text_font = egui::FontId::proportional(10.0);
 
     for (id, &pos) in &state.positions {

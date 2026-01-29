@@ -1,5 +1,6 @@
 mod document;
 mod graph;
+mod shortcuts;
 mod ts_runtime;
 mod ui;
 
@@ -145,21 +146,21 @@ impl ProgredApp {
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let placeholder_active = self.editor.selection.as_ref()
             .map_or(false, |s| s.placeholder_visible(&self.editor.doc.gid));
-        ctx.input(|i| {
-            if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::S) {
+        ctx.input_mut(|i| {
+            if i.consume_shortcut(&shortcuts::SAVE_AS) {
                 self.save_as();
-            } else if i.modifiers.command && i.key_pressed(egui::Key::S) {
+            } else if i.consume_shortcut(&shortcuts::SAVE) {
                 self.save();
             } else if !placeholder_active {
                 if i.key_pressed(egui::Key::Escape) {
                     self.editor.selection = None;
-                } else if i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace) {
+                } else if i.key_pressed(egui::Key::Delete) || i.consume_shortcut(&shortcuts::DELETE) {
                     self.delete_selection();
-                } else if i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::N) {
+                } else if i.consume_shortcut(&shortcuts::INSERT_NODE) {
                     self.insert_new_node();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::N) {
+                } else if i.consume_shortcut(&shortcuts::NEW) {
                     self.new_document();
-                } else if i.modifiers.command && i.key_pressed(egui::Key::O) {
+                } else if i.consume_shortcut(&shortcuts::OPEN) {
                     self.open();
                 }
             }
@@ -170,19 +171,19 @@ impl ProgredApp {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.add(egui::Button::new("New").shortcut_text("Cmd+N")).clicked() {
+                    if ui.add(egui::Button::new("New").shortcut_text(shortcuts::format(&shortcuts::NEW))).clicked() {
                         self.new_document();
                         ui.close();
                     }
-                    if ui.add(egui::Button::new("Open...").shortcut_text("Cmd+O")).clicked() {
+                    if ui.add(egui::Button::new("Open...").shortcut_text(shortcuts::format(&shortcuts::OPEN))).clicked() {
                         self.open();
                         ui.close();
                     }
-                    if ui.add(egui::Button::new("Save").shortcut_text("Cmd+S")).clicked() {
+                    if ui.add(egui::Button::new("Save").shortcut_text(shortcuts::format(&shortcuts::SAVE))).clicked() {
                         self.save();
                         ui.close();
                     }
-                    if ui.add(egui::Button::new("Save As...").shortcut_text("Shift+Cmd+S")).clicked() {
+                    if ui.add(egui::Button::new("Save As...").shortcut_text(shortcuts::format(&shortcuts::SAVE_AS))).clicked() {
                         self.save_as();
                         ui.close();
                     }
@@ -195,14 +196,14 @@ impl ProgredApp {
                 ui.menu_button("Edit", |ui| {
                     if ui.add_enabled(
                         self.editor.selection.as_ref().and_then(|s| s.edge_path()).is_some(),
-                        egui::Button::new("New Node").shortcut_text("Shift+Cmd+N"),
+                        egui::Button::new("New Node").shortcut_text(shortcuts::format(&shortcuts::INSERT_NODE)),
                     ).clicked() {
                         self.insert_new_node();
                         ui.close();
                     }
                     if ui.add_enabled(
                         self.editor.selection.as_ref().and_then(|s| s.edge_path()).is_some(),
-                        egui::Button::new("Delete").shortcut_text("Backspace"),
+                        egui::Button::new("Delete").shortcut_text(shortcuts::format(&shortcuts::DELETE)),
                     ).clicked() {
                         self.delete_selection();
                         ui.close();
