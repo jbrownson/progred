@@ -13,6 +13,7 @@ pub enum SelectionTarget {
     Edge(Path),
     InsertRoot(usize),
     GraphEdge { entity: Id, label: Id },
+    GraphRoot(Id),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +35,10 @@ impl Selection {
         Self { target: SelectionTarget::GraphEdge { entity, label }, placeholder: PlaceholderState::default() }
     }
 
+    pub fn graph_root(id: Id) -> Self {
+        Self { target: SelectionTarget::GraphRoot(id), placeholder: PlaceholderState::default() }
+    }
+
     pub fn edge_path(&self) -> Option<&Path> {
         match &self.target {
             SelectionTarget::Edge(p) => Some(p),
@@ -45,6 +50,7 @@ impl Selection {
         match &self.target {
             SelectionTarget::Edge(path) => path.node(gid),
             SelectionTarget::GraphEdge { entity, label } => gid.edges(entity).and_then(|e| e.get(label)),
+            SelectionTarget::GraphRoot(id) => Some(id),
             SelectionTarget::InsertRoot(_) => None,
         }
     }
@@ -53,7 +59,7 @@ impl Selection {
         match &self.target {
             SelectionTarget::InsertRoot(_) => true,
             SelectionTarget::Edge(path) => path.node(gid).is_none(),
-            SelectionTarget::GraphEdge { .. } => false,
+            SelectionTarget::GraphEdge { .. } | SelectionTarget::GraphRoot(_) => false,
         }
     }
 }

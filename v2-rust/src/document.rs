@@ -20,6 +20,7 @@ impl Document {
         match target {
             SelectionTarget::Edge(path) => self.delete_path(path),
             SelectionTarget::GraphEdge { entity, label } => self.gid.delete(entity, label),
+            SelectionTarget::GraphRoot(id) => self.roots.retain(|r| r.node() != id),
             SelectionTarget::InsertRoot(_) => {}
         }
     }

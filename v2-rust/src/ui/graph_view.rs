@@ -340,21 +340,32 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
 
     let node_fill = Color32::WHITE;
     let text_font = egui::FontId::proportional(10.0);
+    let root_ids: std::collections::HashSet<&Id> = editor.doc.roots.iter().map(|r| r.node()).collect();
+    let root_stroke = Stroke::new(2.0, colors::SELECTION.gamma_multiply(0.6));
+    let selected_root = editor.selection.as_ref().and_then(|s| match &s.target {
+        SelectionTarget::GraphRoot(id) => Some(id),
+        _ => None,
+    });
+    let selected_root_stroke = Stroke::new(2.5, colors::SELECTION);
 
     for (id, &pos) in &state.positions {
         let screen_pos = pos + view_offset;
+        let is_root = root_ids.contains(id);
+        let is_selected_root = selected_root == Some(id);
         match id {
             Id::Uuid(uuid) => {
                 let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4));
                 super::identicon::draw_at(painter, icon_rect, uuid);
-                painter.rect_stroke(icon_rect, CornerRadius::same(2), Stroke::new(2.0, Color32::from_gray(100)), eframe::epaint::StrokeKind::Outside);
+                let stroke = if is_selected_root { selected_root_stroke } else if is_root { root_stroke } else { Stroke::new(2.0, Color32::from_gray(100)) };
+                painter.rect_stroke(icon_rect, CornerRadius::same(2), stroke, eframe::epaint::StrokeKind::Outside);
             }
             _ => {
                 let half = half_sizes.get(id).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
                 let rect = Rect::from_center_size(screen_pos, half * 2.0);
                 let rounding = CornerRadius::same(6);
                 painter.rect_filled(rect, rounding, node_fill);
-                painter.rect_stroke(rect, rounding, Stroke::new(1.5, Color32::from_gray(160)), eframe::epaint::StrokeKind::Middle);
+                let stroke = if is_selected_root { selected_root_stroke } else if is_root { root_stroke } else { Stroke::new(1.5, Color32::from_gray(160)) };
+                painter.rect_stroke(rect, rounding, stroke, eframe::epaint::StrokeKind::Middle);
                 if let Some(text) = node_display_text(id) {
                     painter.text(screen_pos, egui::Align2::CENTER_CENTER, text, text_font.clone(), Color32::from_gray(60));
                 }
@@ -368,8 +379,14 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         let edge_hit = pointer.and_then(|p| {
             edge_hit_zones.iter()
                 .find(|(rect, _, _)| rect.contains(p))
-                .map(|(_, entity, label)| (entity.clone(), label.clone()))
+                .map(|(_, entity, label)| Selection::graph_edge(entity.clone(), label.clone()))
         });
-        w.select(edge_hit.map(|(entity, label)| Selection::graph_edge(entity, label)));
+        let root_hit = pointer.and_then(|p| {
+            state.positions.iter()
+                .filter(|(id, _)| root_ids.contains(id))
+                .find(|(id, pos)| Rect::from_center_size(**pos + view_offset, node_half_size(id) * 2.0).contains(p))
+                .map(|(id, _)| Selection::graph_root(id.clone()))
+        });
+        w.select(edge_hit.or(root_hit));
     }
 }
