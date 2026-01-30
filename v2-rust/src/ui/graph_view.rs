@@ -23,6 +23,7 @@ pub struct GraphViewState {
     drag_offset: Vec2,
     pan_offset: Vec2,
     panning: bool,
+    pending_drag: Option<(Id, Pos2)>,
 }
 
 impl GraphViewState {
@@ -34,6 +35,7 @@ impl GraphViewState {
             drag_offset: Vec2::ZERO,
             pan_offset: Vec2::ZERO,
             panning: false,
+            pending_drag: None,
         }
     }
 }
@@ -216,11 +218,15 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         Rect::from_center_size(*pos + view_offset, node_half_size(id) * 2.0).contains(p)
     }).map(|(id, pos)| (id.clone(), *pos)));
 
+    if ui.input(|i| i.pointer.primary_pressed()) && state.dragging.is_none() {
+        state.pending_drag = hit.clone();
+    }
+
     if response.drag_started() && state.dragging.is_none() {
-        if let Some((ref id, pos)) = hit {
+        if let Some((ref id, pos)) = state.pending_drag.take() {
             state.dragging = Some(id.clone());
             state.drag_offset = (pos + view_offset) - pointer.unwrap();
-        } else if pointer.is_some() {
+        } else {
             state.panning = true;
         }
     }
@@ -239,6 +245,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     if response.drag_stopped() {
         state.dragging = None;
         state.panning = false;
+        state.pending_drag = None;
     }
 
     let half_sizes: HashMap<&Id, Vec2> = state.positions.keys().map(|id| (id, node_half_size(id))).collect();
