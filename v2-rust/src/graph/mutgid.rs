@@ -19,6 +19,16 @@ impl MutGid {
     pub fn entities(&self) -> impl Iterator<Item = &Id> {
         self.data.keys()
     }
+
+    pub fn all_nodes(&self) -> impl Iterator<Item = &Id> {
+        self.entities().chain(
+            self.entities().flat_map(|e| {
+                self.edges(e).into_iter().flat_map(|edges| {
+                    edges.iter().flat_map(|(k, v)| [k, v])
+                })
+            })
+        )
+    }
 }
 
 impl Gid for MutGid {

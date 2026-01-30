@@ -41,6 +41,20 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
         render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
     }
 
+    let orphan_roots = editor.doc.orphan_roots();
+    if !orphan_roots.is_empty() {
+        ui.add_space(8.0);
+        ui.label(egui::RichText::new("orphans").color(Color32::from_gray(100)).italics().size(11.0));
+        ui.add_space(4.0);
+        for orphan_id in orphan_roots {
+            ui.push_id(&orphan_id, |ui| {
+                let orphan_slot = crate::graph::RootSlot::new(orphan_id.clone());
+                project(ui, editor, w, &Path::new(orphan_slot), &mode);
+            });
+            ui.add_space(2.0);
+        }
+    }
+
     if bg_response.clicked() {
         w.select(None);
     }

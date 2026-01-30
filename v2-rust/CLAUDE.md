@@ -19,6 +19,10 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 - Very limited comments — code should be self-documenting
 - Expression-oriented where possible
 - Prefer long expressions broken across multiple lines over multiple statements with intermediate names — naming is hard, avoid unnecessary names
+- Exception: extract helper functions when intermediate steps represent distinct semantic concepts — top-level function becomes a readable composition of named transformations (functional decomposition)
+- Prefer free functions with explicit parameters over methods when `self` isn't needed — makes inputs/outputs clear, easier to unit test, enables composition in a single method that has access to `self` (Haskell-style)
+- Look for generic abstractions — extract patterns in how computations combine and data flows (the way `fold`/`map`/monads abstract over structure, not specific operations)
+- Apply Haskell-style thinking (explicit data flow, pure function composition) but idiomatic Rust syntax — don't fight the language
 - Factor out common assignments: `x = if cond { a } else { b }` not `if cond { x = a } else { x = b }`
 - Functional style: iterator chains, `try_fold`, `filter_map`, `std::array::from_fn` over mutable accumulators and loops where it doesn't make things worse
 - Avoid `let mut` when a functional alternative is equally clear

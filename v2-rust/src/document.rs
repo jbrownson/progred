@@ -1,5 +1,6 @@
-use crate::graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
+use crate::graph::{Gid, Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -55,6 +56,54 @@ impl Document {
         }
     }
 
+    pub fn orphan_roots(&self) -> Vec<Id> {
+        let all_nodes: HashSet<Id> = self.gid.all_nodes().cloned().collect();
+        let orphans = all_nodes.difference(
+            &reachable_from(&self.gid, self.roots.iter().map(|r| r.node().clone()), &all_nodes)
+        ).cloned().collect();
+        let sources = sources_within(&self.gid, &orphans);
+        let cycle_rep = cycle_representative(&self.gid, &orphans, &sources);
+
+        let mut result: Vec<Id> = sources.into_iter().chain(cycle_rep).collect();
+        result.sort();
+        result
+    }
+}
+
+fn reachable_from(gid: &impl Gid, starts: impl Iterator<Item = Id>, within: &HashSet<Id>) -> HashSet<Id> {
+    let mut reachable = HashSet::new();
+    let mut queue: VecDeque<Id> = starts.collect();
+    while let Some(id) = queue.pop_front() {
+        if within.contains(&id) && reachable.insert(id.clone()) {
+            if let Some(edges) = gid.edges(&id) {
+                for (label, value) in edges.iter() {
+                    queue.push_back(label.clone());
+                    queue.push_back(value.clone());
+                }
+            }
+        }
+    }
+    reachable
+}
+
+fn sources_within(gid: &impl Gid, set: &HashSet<Id>) -> Vec<Id> {
+    let has_incoming: HashSet<Id> = set.iter()
+        .filter(|n| matches!(n, Id::Uuid(_)))
+        .flat_map(|n| {
+            gid.edges(n).into_iter().flat_map(|edges| {
+                edges.iter().filter_map(|(_, v)| set.contains(v).then(|| v.clone()))
+            })
+        })
+        .collect();
+
+    set.iter().filter(|n| !has_incoming.contains(n)).cloned().collect()
+}
+
+fn cycle_representative(gid: &impl Gid, orphans: &HashSet<Id>, sources: &[Id]) -> Option<Id> {
+    orphans.difference(&reachable_from(gid, sources.iter().cloned(), orphans))
+        .filter(|n| matches!(n, Id::Uuid(_)))
+        .min()
+        .cloned()
 }
 
 #[derive(Clone)]
@@ -109,5 +158,136 @@ impl<'a> EditorWriter<'a> {
 
     pub fn graph_view(&mut self) -> &mut GraphViewState {
         &mut self.editor.graph_view
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn uuid(n: u128) -> Id {
+        Id::Uuid(uuid::Uuid::from_u128(n))
+    }
+
+    fn make_gid(edges: &[(u128, u128, u128)]) -> MutGid {
+        let mut gid = MutGid::new();
+        for &(entity, label, value) in edges {
+            gid.set(uuid(entity), uuid(label), uuid(value));
+        }
+        gid
+    }
+
+    #[test]
+    fn reachable_from_empty() {
+        let gid = MutGid::new();
+        let within = HashSet::new();
+        let result = reachable_from(&gid, std::iter::empty(), &within);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn reachable_from_chain() {
+        // A -[L]-> B -[L]-> C
+        let gid = make_gid(&[(1, 100, 2), (2, 100, 3)]);
+        let within: HashSet<Id> = [1, 2, 3, 100].into_iter().map(uuid).collect();
+        let result = reachable_from(&gid, std::iter::once(uuid(1)), &within);
+        assert!(result.contains(&uuid(1)));
+        assert!(result.contains(&uuid(2)));
+        assert!(result.contains(&uuid(3)));
+        assert!(result.contains(&uuid(100))); // labels are also reachable
+    }
+
+    #[test]
+    fn reachable_from_respects_within() {
+        // A -[L]-> B, but B not in within
+        let gid = make_gid(&[(1, 100, 2)]);
+        let within: HashSet<Id> = [1, 100].into_iter().map(uuid).collect();
+        let result = reachable_from(&gid, std::iter::once(uuid(1)), &within);
+        assert!(result.contains(&uuid(1)));
+        assert!(!result.contains(&uuid(2))); // not in within
+    }
+
+    #[test]
+    fn sources_within_single_node() {
+        let gid = MutGid::new();
+        let set: HashSet<Id> = [1].into_iter().map(uuid).collect();
+        let sources = sources_within(&gid, &set);
+        assert_eq!(sources, vec![uuid(1)]);
+    }
+
+    #[test]
+    fn sources_within_chain() {
+        // A -[L]-> B: A is source, B has incoming
+        let gid = make_gid(&[(1, 100, 2)]);
+        let set: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
+        let sources = sources_within(&gid, &set);
+        assert!(sources.contains(&uuid(1)));
+        assert!(!sources.contains(&uuid(2)));
+    }
+
+    #[test]
+    fn sources_within_cycle_no_sources() {
+        // A -[L]-> B -[L]-> A: pure cycle, no sources
+        let gid = make_gid(&[(1, 100, 2), (2, 100, 1)]);
+        let set: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
+        let sources = sources_within(&gid, &set);
+        assert!(sources.is_empty());
+    }
+
+    #[test]
+    fn cycle_representative_no_cycle() {
+        // A -[L]-> B: no cycle, A is source
+        let gid = make_gid(&[(1, 100, 2)]);
+        let orphans: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
+        let sources = vec![uuid(1)];
+        let rep = cycle_representative(&gid, &orphans, &sources);
+        assert!(rep.is_none());
+    }
+
+    #[test]
+    fn cycle_representative_picks_min() {
+        // Pure cycle A <-> B, no sources, should pick min UUID
+        let gid = make_gid(&[(1, 100, 2), (2, 100, 1)]);
+        let orphans: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
+        let sources: Vec<Id> = vec![];
+        let rep = cycle_representative(&gid, &orphans, &sources);
+        assert_eq!(rep, Some(uuid(1)));
+    }
+
+    #[test]
+    fn orphan_roots_no_orphans() {
+        let gid = make_gid(&[(1, 100, 2)]);
+        let doc = Document {
+            gid,
+            roots: vec![RootSlot::new(uuid(1))],
+        };
+        assert!(doc.orphan_roots().is_empty());
+    }
+
+    #[test]
+    fn orphan_roots_single_orphan() {
+        let mut gid = make_gid(&[(1, 100, 2)]);
+        gid.set(uuid(3), uuid(100), uuid(4)); // orphan island
+        let doc = Document {
+            gid,
+            roots: vec![RootSlot::new(uuid(1))],
+        };
+        let orphans = doc.orphan_roots();
+        assert!(orphans.contains(&uuid(3)));
+    }
+
+    #[test]
+    fn orphan_roots_cycle() {
+        // Root: 1. Orphan cycle: 2 <-> 3
+        let mut gid = make_gid(&[(2, 100, 3), (3, 100, 2)]);
+        gid.set(uuid(1), uuid(100), uuid(1)); // self-loop so 1 is an entity
+        let doc = Document {
+            gid,
+            roots: vec![RootSlot::new(uuid(1))],
+        };
+        let orphans = doc.orphan_roots();
+        // Should pick min UUID from cycle as representative
+        assert_eq!(orphans.len(), 1);
+        assert!(orphans.contains(&uuid(2)));
     }
 }
