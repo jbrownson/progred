@@ -79,12 +79,12 @@ fn render_root_insertion(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, ind
         }
     } else if empty_doc {
         let response = ui.add(
-            egui::Label::new(
+            egui::Button::new(
                 egui::RichText::new("(empty)")
                     .color(Color32::from_gray(120))
                     .italics()
-            ).sense(Sense::click())
-        );
+            ).frame(false)
+        ).on_hover_cursor(egui::CursorIcon::Default);
         if response.clicked() {
             w.select(Some(Selection::insert_root(index)));
         }
