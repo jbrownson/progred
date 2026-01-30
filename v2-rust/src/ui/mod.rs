@@ -6,6 +6,7 @@ pub mod split_view;
 pub mod tree_view;
 
 pub use identicon::identicon;
+pub use projection::layout;
 pub use projection::{insertion_point, project, InteractionMode};
 
 use eframe::egui::Color32;

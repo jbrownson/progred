@@ -230,10 +230,10 @@ impl eframe::App for ProgredApp {
 
                 if self.show_graph {
                     let rects = ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split);
-                    ui::split_view::scoped_with_margin(ui, rects.left, 4.0, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
+                    ui::split_view::scoped_with_margin(ui, rects.left, ui::layout::TREE_MARGIN, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
                     ui::split_view::scoped(ui, rects.right, |ui| ui::graph_view::render(ui, ctx, &snapshot, &mut w));
                 } else {
-                    ui::split_view::scoped_with_margin(ui, ui.max_rect(), 4.0, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
+                    ui::split_view::scoped_with_margin(ui, ui.max_rect(), ui::layout::TREE_MARGIN, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
                 }
             });
     }

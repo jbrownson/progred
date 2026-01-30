@@ -7,6 +7,22 @@ use super::colors;
 use super::identicon;
 use super::placeholder::PlaceholderResult;
 
+pub mod layout {
+    pub const SELECTION_PADDING: f32 = 2.0;
+
+    const CARET_SIZE: f32 = 10.0;
+    pub const CARET_WIDTH: f32 = CARET_SIZE * 0.6;
+    pub const CARET_HALF_HEIGHT: f32 = CARET_SIZE * 0.4;
+    const CARET_OVERLAP: f32 = 1.0;
+    pub const CARET_INSET: f32 = CARET_WIDTH - CARET_OVERLAP;
+
+    const fn max_f32(a: f32, b: f32) -> f32 {
+        if a > b { a } else { b }
+    }
+
+    pub const TREE_MARGIN: f32 = max_f32(CARET_INSET, SELECTION_PADDING) + 2.0;
+}
+
 pub enum InteractionMode {
     Normal,
     SelectUnder(Path),
@@ -26,7 +42,7 @@ fn selectable_widget(
     let where_to_put_background = ui.painter().add(eframe::epaint::Shape::Noop);
     let where_to_put_border = ui.painter().add(eframe::epaint::Shape::Noop);
 
-    let rect = add_contents(ui).rect.expand(2.0);
+    let rect = add_contents(ui).rect.expand(layout::SELECTION_PADDING);
     let response = ui.interact(rect, id, Sense::click());
 
     let rounding = CornerRadius::same(3);
@@ -66,15 +82,14 @@ pub fn insertion_point(ui: &mut Ui) -> Response {
     let response = ui.interact(hit_rect, ui.next_auto_id(), Sense::click());
 
     if response.hovered() {
-        let caret_size = 10.0;
         let center_y = rect.center().y;
-        let left_x = rect.min.x - 5.0;
+        let left_x = rect.min.x - layout::CARET_INSET;
 
         ui.painter().add(eframe::epaint::Shape::convex_polygon(
             vec![
-                pos2(left_x, center_y - caret_size * 0.4),
-                pos2(left_x + caret_size * 0.6, center_y),
-                pos2(left_x, center_y + caret_size * 0.4),
+                pos2(left_x, center_y - layout::CARET_HALF_HEIGHT),
+                pos2(left_x + layout::CARET_WIDTH, center_y),
+                pos2(left_x, center_y + layout::CARET_HALF_HEIGHT),
             ],
             Color32::from_gray(150),
             eframe::epaint::Stroke::NONE,
