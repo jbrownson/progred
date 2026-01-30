@@ -12,7 +12,7 @@ pub struct PlaceholderState {
 pub enum SelectionTarget {
     Edge(Path),
     InsertRoot(usize),
-    GraphNode(Id),
+    GraphEdge { entity: Id, label: Id },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,8 +30,8 @@ impl Selection {
         Self { target: SelectionTarget::InsertRoot(index), placeholder: PlaceholderState::default() }
     }
 
-    pub fn graph_node(id: Id) -> Self {
-        Self { target: SelectionTarget::GraphNode(id), placeholder: PlaceholderState::default() }
+    pub fn graph_edge(entity: Id, label: Id) -> Self {
+        Self { target: SelectionTarget::GraphEdge { entity, label }, placeholder: PlaceholderState::default() }
     }
 
     pub fn edge_path(&self) -> Option<&Path> {
@@ -44,7 +44,7 @@ impl Selection {
     pub fn selected_node_id<'a>(&'a self, gid: &'a impl Gid) -> Option<&'a Id> {
         match &self.target {
             SelectionTarget::Edge(path) => path.node(gid),
-            SelectionTarget::GraphNode(id) => Some(id),
+            SelectionTarget::GraphEdge { entity, label } => gid.edges(entity).and_then(|e| e.get(label)),
             SelectionTarget::InsertRoot(_) => None,
         }
     }
@@ -53,7 +53,7 @@ impl Selection {
         match &self.target {
             SelectionTarget::InsertRoot(_) => true,
             SelectionTarget::Edge(path) => path.node(gid).is_none(),
-            SelectionTarget::GraphNode(_) => false,
+            SelectionTarget::GraphEdge { .. } => false,
         }
     }
 }

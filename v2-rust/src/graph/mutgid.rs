@@ -47,20 +47,6 @@ impl MutGid {
         }
     }
 
-    pub fn delete_node(&mut self, id: &Id) {
-        self.data = self.data.without(id);
-        self.data = self.data.iter()
-            .map(|(entity, edges)| {
-                let filtered = edges.iter()
-                    .filter(|(_, value)| *value != id)
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect();
-                (entity.clone(), filtered)
-            })
-            .filter(|(_, edges): &(Id, HashMap<Id, Id>)| !edges.is_empty())
-            .collect();
-    }
-
     pub fn to_json(&self) -> StdHashMap<String, StdHashMap<String, serde_json::Value>> {
         self.data
             .iter()

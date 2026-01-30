@@ -19,7 +19,7 @@ impl Document {
     pub fn delete(&mut self, target: &SelectionTarget) {
         match target {
             SelectionTarget::Edge(path) => self.delete_path(path),
-            SelectionTarget::GraphNode(id) => self.delete_node(id),
+            SelectionTarget::GraphEdge { entity, label } => self.gid.delete(entity, label),
             SelectionTarget::InsertRoot(_) => {}
         }
     }
@@ -54,10 +54,6 @@ impl Document {
         }
     }
 
-    fn delete_node(&mut self, id: &Id) {
-        self.roots.retain(|r| r.node() != id);
-        self.gid.delete_node(id);
-    }
 }
 
 #[derive(Clone)]

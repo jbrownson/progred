@@ -202,11 +202,9 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     let edges = collect_edges(&editor.doc);
     simulate(state, &edges);
 
-    let selected_node = editor.selection.as_ref()
-        .and_then(|s| s.selected_node_id(&editor.doc.gid));
-    let graph_selected_node = editor.selection.as_ref()
+    let graph_selected_edge = editor.selection.as_ref()
         .and_then(|s| match &s.target {
-            SelectionTarget::GraphNode(id) => Some(id),
+            SelectionTarget::GraphEdge { entity, label } => Some((entity, label)),
             _ => None,
         });
 
@@ -252,9 +250,13 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     let mut pair_indices: HashMap<(Id, Id), usize> = HashMap::new();
 
     let arrow_stroke = Stroke::new(1.5, Color32::from_gray(120));
+    let selected_stroke = Stroke::new(2.5, colors::SELECTION);
     let curve_spacing = 25.0;
+    let mut edge_hit_zones: Vec<(Rect, Id, Id)> = Vec::new();
 
     for edge in &edges {
+        let is_selected = graph_selected_edge == Some((&edge.source, &edge.label));
+        let stroke = if is_selected { selected_stroke } else { arrow_stroke };
         if let (Some(&sp), Some(&tp)) = (state.positions.get(&edge.source), state.positions.get(&edge.target)) {
             let src_pos = sp + view_offset;
             let tgt_pos = tp + view_offset;
@@ -287,12 +289,13 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
                         )
                     })
                     .collect();
-                painter.add(egui::Shape::line(points, arrow_stroke));
-                draw_arrowhead(painter, end, (end - cp2).normalized(), arrow_stroke);
+                painter.add(egui::Shape::line(points, stroke));
+                draw_arrowhead(painter, end, (end - cp2).normalized(), stroke);
                 let label_pos = Pos2::new(
                     0.125 * start.x + 0.375 * cp1.x + 0.375 * cp2.x + 0.125 * end.x,
                     0.125 * start.y + 0.375 * cp1.y + 0.375 * cp2.y + 0.125 * end.y,
                 );
+                edge_hit_zones.push((Rect::from_center_size(label_pos, Vec2::splat(24.0)), edge.source.clone(), edge.label.clone()));
                 draw_edge_label(painter, label_pos, &edge.label);
             } else {
                 let mid = src_pos + (tgt_pos - src_pos) * 0.5;
@@ -315,41 +318,36 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
                         )
                     })
                     .collect();
-                painter.add(egui::Shape::line(points, arrow_stroke));
-                draw_arrowhead(painter, end, ((end - control) * 2.0).normalized(), arrow_stroke);
+                painter.add(egui::Shape::line(points, stroke));
+                draw_arrowhead(painter, end, ((end - control) * 2.0).normalized(), stroke);
 
                 let label_pos = Pos2::new(
                     0.25 * src_pos.x + 0.5 * control.x + 0.25 * end.x,
                     0.25 * src_pos.y + 0.5 * control.y + 0.25 * end.y,
                 );
+                edge_hit_zones.push((Rect::from_center_size(label_pos, Vec2::splat(24.0)), edge.source.clone(), edge.label.clone()));
                 draw_edge_label(painter, label_pos, &edge.label);
             }
         }
     }
 
     let node_fill = Color32::WHITE;
-    let primary_stroke = Stroke::new(2.5, colors::SELECTION);
-    let secondary_stroke = Stroke::new(1.5, colors::SELECTION.gamma_multiply(0.5));
     let text_font = egui::FontId::proportional(10.0);
 
     for (id, &pos) in &state.positions {
         let screen_pos = pos + view_offset;
-        let primary = graph_selected_node == Some(id);
-        let secondary = !primary && selected_node == Some(id);
         match id {
             Id::Uuid(uuid) => {
                 let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4));
                 super::identicon::draw_at(painter, icon_rect, uuid);
-                let stroke = if primary { primary_stroke } else if secondary { secondary_stroke } else { Stroke::new(2.0, Color32::from_gray(100)) };
-                painter.rect_stroke(icon_rect, CornerRadius::same(2), stroke, eframe::epaint::StrokeKind::Outside);
+                painter.rect_stroke(icon_rect, CornerRadius::same(2), Stroke::new(2.0, Color32::from_gray(100)), eframe::epaint::StrokeKind::Outside);
             }
             _ => {
                 let half = half_sizes.get(id).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
                 let rect = Rect::from_center_size(screen_pos, half * 2.0);
                 let rounding = CornerRadius::same(6);
                 painter.rect_filled(rect, rounding, node_fill);
-                let stroke = if primary { primary_stroke } else if secondary { secondary_stroke } else { Stroke::new(1.5, Color32::from_gray(160)) };
-                painter.rect_stroke(rect, rounding, stroke, eframe::epaint::StrokeKind::Middle);
+                painter.rect_stroke(rect, rounding, Stroke::new(1.5, Color32::from_gray(160)), eframe::epaint::StrokeKind::Middle);
                 if let Some(text) = node_display_text(id) {
                     painter.text(screen_pos, egui::Align2::CENTER_CENTER, text, text_font.clone(), Color32::from_gray(60));
                 }
@@ -360,6 +358,11 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     ctx.request_repaint();
 
     if response.clicked() {
-        w.select(hit.map(|(id, _)| Selection::graph_node(id)));
+        let edge_hit = pointer.and_then(|p| {
+            edge_hit_zones.iter()
+                .find(|(rect, _, _)| rect.contains(p))
+                .map(|(_, entity, label)| (entity.clone(), label.clone()))
+        });
+        w.select(edge_hit.map(|(entity, label)| Selection::graph_edge(entity, label)));
     }
 }
