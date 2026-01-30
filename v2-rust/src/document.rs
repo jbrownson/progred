@@ -1,4 +1,4 @@
-use crate::graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
+use crate::graph::{Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
 use std::path::PathBuf;
 
@@ -16,7 +16,15 @@ impl Document {
         }
     }
 
-    pub fn delete_path(&mut self, path: &Path) {
+    pub fn delete(&mut self, target: &SelectionTarget) {
+        match target {
+            SelectionTarget::Edge(path) => self.delete_path(path),
+            SelectionTarget::GraphNode(id) => self.delete_node(id),
+            SelectionTarget::InsertRoot(_) => {}
+        }
+    }
+
+    fn delete_path(&mut self, path: &Path) {
         match path.pop() {
             None => {
                 if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
@@ -44,6 +52,11 @@ impl Document {
                 }
             }
         }
+    }
+
+    fn delete_node(&mut self, id: &Id) {
+        self.roots.retain(|r| r.node() != id);
+        self.gid.delete_node(id);
     }
 }
 

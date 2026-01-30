@@ -130,9 +130,8 @@ impl ProgredApp {
     }
 
     fn delete_selection(&mut self) {
-        if let Some(path) = self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
-            self.editor.doc.delete_path(path);
-            self.editor.selection = None;
+        if let Some(selection) = self.editor.selection.take() {
+            self.editor.doc.delete(&selection.target);
         }
     }
 
