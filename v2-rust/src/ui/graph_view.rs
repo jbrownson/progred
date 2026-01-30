@@ -85,13 +85,14 @@ fn collect_edges(doc: &Document) -> Vec<Edge> {
         .collect()
 }
 
-fn simulate(state: &mut GraphViewState, edges: &[Edge]) {
-    let ids: Vec<Id> = state.positions.keys().cloned().collect();
+fn compute_forces(positions: &HashMap<Id, Pos2>, edges: &[Edge]) -> HashMap<Id, Vec2> {
+    let ids: Vec<Id> = positions.keys().cloned().collect();
     let mut forces: HashMap<Id, Vec2> = ids.iter().map(|id| (id.clone(), Vec2::ZERO)).collect();
 
+    // Repulsion: each node pair pushes apart
     for i in 0..ids.len() {
         for j in (i + 1)..ids.len() {
-            let delta = state.positions[&ids[i]] - state.positions[&ids[j]];
+            let delta = positions[&ids[i]] - positions[&ids[j]];
             let dist_sq = delta.length_sq().max(1.0);
             let force = delta.normalized() * (REPULSION_K / dist_sq).min(MAX_FORCE);
             *forces.get_mut(&ids[i]).unwrap() += force;
@@ -99,8 +100,9 @@ fn simulate(state: &mut GraphViewState, edges: &[Edge]) {
         }
     }
 
+    // Attraction: connected nodes pull together
     for edge in edges {
-        if let (Some(&pa), Some(&pb)) = (state.positions.get(&edge.source), state.positions.get(&edge.target)) {
+        if let (Some(&pa), Some(&pb)) = (positions.get(&edge.source), positions.get(&edge.target)) {
             let delta = pb - pa;
             let dist = delta.length().max(0.1);
             let force = delta.normalized() * (ATTRACTION_K * (dist - REST_LENGTH)).clamp(-MAX_FORCE, MAX_FORCE);
@@ -109,16 +111,28 @@ fn simulate(state: &mut GraphViewState, edges: &[Edge]) {
         }
     }
 
+    // Gravity: pull toward center
     for id in &ids {
-        *forces.get_mut(id).unwrap() += -state.positions[id].to_vec2() * GRAVITY_K;
+        *forces.get_mut(id).unwrap() += -positions[id].to_vec2() * GRAVITY_K;
     }
 
-    for id in ids.iter().filter(|id| state.dragging.as_ref() != Some(*id)) {
-        let vel = state.velocities.get_mut(id).unwrap();
-        *vel = (*vel + forces[id]) * DAMPING;
-        let pos = state.positions.get_mut(id).unwrap();
-        *pos += *vel;
+    forces
+}
+
+fn apply_forces(state: &mut GraphViewState, forces: &HashMap<Id, Vec2>) {
+    for (id, force) in forces {
+        if state.dragging.as_ref() != Some(id) {
+            let vel = state.velocities.get_mut(id).unwrap();
+            *vel = (*vel + *force) * DAMPING;
+            let pos = state.positions.get_mut(id).unwrap();
+            *pos += *vel;
+        }
     }
+}
+
+fn simulate(state: &mut GraphViewState, edges: &[Edge]) {
+    let forces = compute_forces(&state.positions, edges);
+    apply_forces(state, &forces);
 }
 
 fn node_half_size(id: &Id) -> Vec2 {

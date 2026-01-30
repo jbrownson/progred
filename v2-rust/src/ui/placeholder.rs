@@ -14,23 +14,16 @@ struct PlaceholderEntry {
 }
 
 fn build_entries(filter: &str) -> Vec<PlaceholderEntry> {
-    let mut entries = Vec::new();
-
-    let s = filter.trim_start_matches('"').trim_end_matches('"');
-    if !s.is_empty() {
-        entries.push(PlaceholderEntry {
-            id: Id::String(s.to_string()),
-            display: format!("\"{}\"", s),
-        });
-    }
-    if let Ok(n) = filter.parse::<f64>() {
-        entries.push(PlaceholderEntry {
-            id: Id::Number(OrderedFloat(n)),
-            display: filter.to_string(),
-        });
-    }
-
-    entries
+    let trimmed = filter.trim_start_matches('"').trim_end_matches('"');
+    let string_entry = (!trimmed.is_empty()).then(|| PlaceholderEntry {
+        id: Id::String(trimmed.to_string()),
+        display: format!("\"{}\"", trimmed),
+    });
+    let number_entry = filter.parse::<f64>().ok().map(|n| PlaceholderEntry {
+        id: Id::Number(OrderedFloat(n)),
+        display: filter.to_string(),
+    });
+    string_entry.into_iter().chain(number_entry).collect()
 }
 
 pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {

@@ -60,12 +60,7 @@ impl ProgredApp {
 
     fn save_to_path(&self) {
         if let Some(ref path) = self.editor.file_path {
-            let root_ids: Vec<_> = self.editor.doc.roots.iter().map(|r| r.node().clone()).collect();
-            let json_doc = serde_json::json!({
-                "graph": self.editor.doc.gid.to_json(),
-                "roots": root_ids,
-            });
-            if let Ok(json) = serde_json::to_string_pretty(&json_doc) {
+            if let Ok(json) = serde_json::to_string_pretty(&self.editor.doc.to_json()) {
                 let _ = std::fs::write(path, json);
             }
         }
@@ -79,23 +74,15 @@ impl ProgredApp {
     }
 
     fn open(&mut self) {
-        if let Some((path, gid, root_ids)) = rfd::FileDialog::new()
+        if let Some((path, doc)) = rfd::FileDialog::new()
             .add_filter("Progred", &["progred"])
             .pick_file()
             .and_then(|path| {
                 let contents = std::fs::read_to_string(&path).ok()?;
-                let json_doc: serde_json::Value = serde_json::from_str(&contents).ok()?;
-                let graph_data = serde_json::from_value(json_doc.get("graph")?.clone()).ok()?;
-                let gid = MutGid::from_json(graph_data).ok()?;
-                let root_ids: Vec<Id> = serde_json::from_value(json_doc.get("roots")?.clone()).ok()?;
-                Some((path, gid, root_ids))
+                Some((path, Document::from_json(&contents)?))
             })
         {
-            self.editor = Editor {
-                doc: Document { gid, roots: root_ids.into_iter().map(RootSlot::new).collect() },
-                file_path: Some(path),
-                ..Editor::new()
-            };
+            self.editor = Editor { doc, file_path: Some(path), ..Editor::new() };
         }
     }
 

@@ -46,6 +46,13 @@ impl TreeNode {
         }
     }
 
+    fn get_at_path(&self, path: &[Id]) -> Option<&TreeNode> {
+        match path.split_first() {
+            None => Some(self),
+            Some((head, tail)) => self.children.get(head)?.get_at_path(tail),
+        }
+    }
+
     fn set_collapsed_at_edges(&self, edges: &[Id], collapsed: bool) -> Self {
         match edges.split_first() {
             None => Self {
@@ -66,10 +73,7 @@ impl TreeNode {
     }
 
     fn is_collapsed_at_edges(&self, edges: &[Id]) -> Option<bool> {
-        match edges.split_first() {
-            None => self.collapsed,
-            Some((head, tail)) => self.children.get(head)?.is_collapsed_at_edges(tail),
-        }
+        self.get_at_path(edges)?.collapsed
     }
 }
 

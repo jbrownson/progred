@@ -68,6 +68,22 @@ impl Document {
         result.sort();
         result
     }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        let root_ids: Vec<_> = self.roots.iter().map(|r| r.node().clone()).collect();
+        serde_json::json!({
+            "graph": self.gid.to_json(),
+            "roots": root_ids,
+        })
+    }
+
+    pub fn from_json(contents: &str) -> Option<Self> {
+        let json_doc: serde_json::Value = serde_json::from_str(contents).ok()?;
+        let graph_data = serde_json::from_value(json_doc.get("graph")?.clone()).ok()?;
+        let gid = MutGid::from_json(graph_data).ok()?;
+        let root_ids: Vec<Id> = serde_json::from_value(json_doc.get("roots")?.clone()).ok()?;
+        Some(Self { gid, roots: root_ids.into_iter().map(RootSlot::new).collect() })
+    }
 }
 
 fn reachable_from(gid: &impl Gid, starts: impl Iterator<Item = Id>, within: &HashSet<Id>) -> HashSet<Id> {
