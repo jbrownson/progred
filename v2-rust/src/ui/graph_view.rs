@@ -48,7 +48,7 @@ fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
 }
 
 fn sync_positions(state: &mut GraphViewState, doc: &Document) {
-    let all_ids: std::collections::HashSet<Id> = doc.roots.iter().map(|r| r.node().clone())
+    let all_ids: std::collections::HashSet<Id> = doc.roots.iter().map(|r| r.value.clone())
         .chain(doc.gid.entities().flat_map(|id| {
             std::iter::once(id.clone()).chain(
                 doc.gid.edges(id).into_iter().flat_map(|edges| edges.iter().map(|(_, v)| v.clone()))
@@ -354,7 +354,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
 
     let node_fill = Color32::WHITE;
     let text_font = egui::FontId::proportional(10.0);
-    let root_ids: std::collections::HashSet<&Id> = editor.doc.roots.iter().map(|r| r.node()).collect();
+    let root_ids: std::collections::HashSet<Id> = editor.doc.roots.iter().map(|r| r.value.clone()).collect();
     let root_stroke = Stroke::new(2.0, colors::SELECTION.gamma_multiply(0.6));
     let selected_root = editor.selection.as_ref().and_then(|s| match &s.target {
         SelectionTarget::GraphRoot(id) => Some(id),

@@ -17,11 +17,15 @@ impl Document {
         }
     }
 
+    pub fn node(&self, path: &Path) -> Option<Id> {
+        path.node(&self.gid, &self.roots)
+    }
+
     pub fn delete(&mut self, target: &SelectionTarget) {
         match target {
             SelectionTarget::Edge(path) => self.delete_path(path),
             SelectionTarget::GraphEdge { entity, label } => self.gid.delete(entity, label),
-            SelectionTarget::GraphRoot(id) => self.roots.retain(|r| r.node() != id),
+            SelectionTarget::GraphRoot(id) => self.roots.retain(|r| &r.value != id),
             SelectionTarget::InsertRoot(_) => {}
         }
     }
@@ -29,12 +33,12 @@ impl Document {
     fn delete_path(&mut self, path: &Path) {
         match path.pop() {
             None => {
-                if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
+                if let Some(idx) = self.roots.iter().position(|r| *r == path.root) {
                     self.roots.remove(idx);
                 }
             }
             Some((parent_path, label)) => {
-                if let Some(parent_node @ Id::Uuid(_)) = parent_path.node(&self.gid).cloned() {
+                if let Some(parent_node @ Id::Uuid(_)) = self.node(&parent_path) {
                     self.gid.delete(&parent_node, &label);
                 }
             }
@@ -44,13 +48,13 @@ impl Document {
     pub fn set_edge(&mut self, path: &Path, value: Id) {
         match path.pop() {
             Some((parent_path, label)) => {
-                if let Some(parent_node @ Id::Uuid(_)) = parent_path.node(&self.gid).cloned() {
+                if let Some(parent_node @ Id::Uuid(_)) = self.node(&parent_path) {
                     self.gid.set(parent_node, label, value);
                 }
             }
             None => {
-                if let Some(idx) = self.roots.iter().position(|r| r == &path.root) {
-                    self.roots[idx] = RootSlot::new(value);
+                if let Some(root) = self.roots.iter_mut().find(|r| **r == path.root) {
+                    root.value = value;
                 }
             }
         }
@@ -59,7 +63,7 @@ impl Document {
     pub fn orphan_roots(&self) -> Vec<Id> {
         let all_nodes: HashSet<Id> = self.gid.all_nodes().cloned().collect();
         let orphans = all_nodes.difference(
-            &reachable_from(&self.gid, self.roots.iter().map(|r| r.node().clone()), &all_nodes)
+            &reachable_from(&self.gid, self.roots.iter().map(|r| r.value.clone()), &all_nodes)
         ).cloned().collect();
         let sources = sources_within(&self.gid, &orphans);
         let cycle_rep = cycle_representative(&self.gid, &orphans, &sources);
@@ -70,7 +74,7 @@ impl Document {
     }
 
     pub fn to_json(&self) -> serde_json::Value {
-        let root_ids: Vec<_> = self.roots.iter().map(|r| r.node().clone()).collect();
+        let root_ids: Vec<_> = self.roots.iter().map(|r| &r.value).collect();
         serde_json::json!({
             "graph": self.gid.to_json(),
             "roots": root_ids,
@@ -129,6 +133,7 @@ pub struct Editor {
     pub selection: Option<Selection>,
     pub file_path: Option<PathBuf>,
     pub graph_view: GraphViewState,
+    pub editing_leaf: bool,
 }
 
 impl Editor {
@@ -139,6 +144,7 @@ impl Editor {
             selection: None,
             file_path: None,
             graph_view: GraphViewState::new(),
+            editing_leaf: false,
         }
     }
 }
@@ -164,16 +170,20 @@ impl<'a> EditorWriter<'a> {
         self.editor.tree = self.editor.tree.set_collapsed_at_path(path, collapsed);
     }
 
-    pub fn insert_root(&mut self, index: usize, root: RootSlot) {
-        self.editor.doc.roots.insert(index, root);
+    pub fn insert_root(&mut self, index: usize, value: Id) {
+        self.editor.doc.roots.insert(index, RootSlot::new(value));
     }
 
-    pub fn placeholder_state(&mut self) -> Option<&mut PlaceholderState> {
+    pub fn placeholder_state(&mut self) -> Option<&mut PlaceholderState> { // TODO why is this readable, should be write only.
         self.editor.selection.as_mut().map(|s| &mut s.placeholder)
     }
 
-    pub fn graph_view(&mut self) -> &mut GraphViewState {
+    pub fn graph_view(&mut self) -> &mut GraphViewState { // TODO why is this readable, should be write only.
         &mut self.editor.graph_view
+    }
+
+    pub fn set_editing_leaf(&mut self, editing: bool) {
+        self.editor.editing_leaf = editing;
     }
 }
 
@@ -273,10 +283,7 @@ mod tests {
     #[test]
     fn orphan_roots_no_orphans() {
         let gid = make_gid(&[(1, 100, 2)]);
-        let doc = Document {
-            gid,
-            roots: vec![RootSlot::new(uuid(1))],
-        };
+        let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
         assert!(doc.orphan_roots().is_empty());
     }
 
@@ -284,10 +291,7 @@ mod tests {
     fn orphan_roots_single_orphan() {
         let mut gid = make_gid(&[(1, 100, 2)]);
         gid.set(uuid(3), uuid(100), uuid(4)); // orphan island
-        let doc = Document {
-            gid,
-            roots: vec![RootSlot::new(uuid(1))],
-        };
+        let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
         let orphans = doc.orphan_roots();
         assert!(orphans.contains(&uuid(3)));
     }
@@ -297,10 +301,7 @@ mod tests {
         // Root: 1. Orphan cycle: 2 <-> 3
         let mut gid = make_gid(&[(2, 100, 3), (3, 100, 2)]);
         gid.set(uuid(1), uuid(100), uuid(1)); // self-loop so 1 is an entity
-        let doc = Document {
-            gid,
-            roots: vec![RootSlot::new(uuid(1))],
-        };
+        let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
         let orphans = doc.orphan_roots();
         // Should pick min UUID from cycle as representative
         assert_eq!(orphans.len(), 1);

@@ -1,24 +1,28 @@
 use super::gid::Gid;
 use super::id::Id;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 
 #[derive(Debug, Clone)]
-pub struct RootSlot(Rc<Id>);
+pub struct RootSlot {
+    id: uuid::Uuid,
+    pub value: Id,
+}
 
 impl RootSlot {
-    pub fn new(node: Id) -> Self {
-        RootSlot(Rc::new(node))
-    }
-
-    pub fn node(&self) -> &Id {
-        &self.0
+    pub fn new(value: Id) -> Self {
+        Self { id: uuid::Uuid::new_v4(), value }
     }
 }
 
 impl PartialEq for RootSlot {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+        self.id == other.id
+    }
+}
+
+impl PartialEq<RootId> for RootSlot {
+    fn eq(&self, other: &RootId) -> bool {
+        self.id == other.0
     }
 }
 
@@ -26,27 +30,36 @@ impl Eq for RootSlot {}
 
 impl Hash for RootSlot {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        Rc::as_ptr(&self.0).hash(state);
+        self.id.hash(state);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RootId(uuid::Uuid);
+
+impl From<&RootSlot> for RootId {
+    fn from(slot: &RootSlot) -> Self {
+        RootId(slot.id)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {
-    pub root: RootSlot,
+    pub root: RootId,
     pub edges: Vec<Id>,
 }
 
 impl Path {
-    pub fn new(root: RootSlot) -> Self {
+    pub fn new(root: &RootSlot) -> Self { // TODO review uses of this
         Self {
-            root,
+            root: RootId::from(root),
             edges: Vec::new(),
         }
     }
 
     pub fn child(&self, label: Id) -> Self {
         Self {
-            root: self.root.clone(),
+            root: self.root,
             edges: self.edges.iter().cloned().chain([label]).collect(),
         }
     }
@@ -54,15 +67,16 @@ impl Path {
     pub fn pop(&self) -> Option<(Path, Id)> {
         let (label, parent_edges) = self.edges.split_last()?;
         Some((
-            Path { root: self.root.clone(), edges: parent_edges.to_vec() },
+            Path { root: self.root, edges: parent_edges.to_vec() },
             label.clone(),
         ))
     }
 
-    pub fn node<'a>(&'a self, gid: &'a impl Gid) -> Option<&'a Id> {
-        self.edges.iter().try_fold(self.root.node(), |current, label| {
-            match current {
-                Id::Uuid(_) => gid.get(current, label),
+    pub fn node(&self, gid: &impl Gid, roots: &[RootSlot]) -> Option<Id> {
+        let start = roots.iter().find(|r| RootId::from(*r) == self.root)?.value.clone();
+        self.edges.iter().try_fold(start, |current, label| {
+            match &current {
+                Id::Uuid(_) => gid.get(&current, label).cloned(),
                 _ => None,
             }
         })

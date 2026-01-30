@@ -131,13 +131,14 @@ impl ProgredApp {
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let placeholder_active = self.editor.selection.as_ref()
-            .map_or(false, |s| s.placeholder_visible(&self.editor.doc.gid));
+            .map_or(false, |s| s.placeholder_visible(&self.editor.doc));
+        let editing = placeholder_active || self.editor.editing_leaf;
         ctx.input_mut(|i| {
             if i.consume_shortcut(&shortcuts::SAVE_AS) {
                 self.save_as();
             } else if i.consume_shortcut(&shortcuts::SAVE) {
                 self.save();
-            } else if !placeholder_active {
+            } else if !editing {
                 if i.key_pressed(egui::Key::Escape) {
                     self.editor.selection = None;
                 } else if i.key_pressed(egui::Key::Delete) || i.consume_shortcut(&shortcuts::DELETE) {

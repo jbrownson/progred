@@ -48,7 +48,6 @@ fn draw_identicon(
     painter.rect_filled(rect, rounding, background);
     painter.rect_stroke(rect, rounding, eframe::epaint::Stroke::new(1.0, border), eframe::epaint::StrokeKind::Middle);
 
-    // Inset slightly for the pattern
     let inset = 1.0;
     let inner_rect = rect.shrink(inset);
     

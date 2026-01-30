@@ -1,6 +1,7 @@
 use super::gid::Gid;
 use super::id::Id;
 use super::path::Path;
+use crate::document::Document;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PlaceholderState {
@@ -46,19 +47,19 @@ impl Selection {
         }
     }
 
-    pub fn selected_node_id<'a>(&'a self, gid: &'a impl Gid) -> Option<&'a Id> {
+    pub fn selected_node_id(&self, doc: &Document) -> Option<Id> {
         match &self.target {
-            SelectionTarget::Edge(path) => path.node(gid),
-            SelectionTarget::GraphEdge { entity, label } => gid.edges(entity).and_then(|e| e.get(label)),
-            SelectionTarget::GraphRoot(id) => Some(id),
+            SelectionTarget::Edge(path) => doc.node(path),
+            SelectionTarget::GraphEdge { entity, label } => doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
+            SelectionTarget::GraphRoot(id) => Some(id.clone()),
             SelectionTarget::InsertRoot(_) => None,
         }
     }
 
-    pub fn placeholder_visible(&self, gid: &impl Gid) -> bool {
+    pub fn placeholder_visible(&self, doc: &Document) -> bool {
         match &self.target {
             SelectionTarget::InsertRoot(_) => true,
-            SelectionTarget::Edge(path) => path.node(gid).is_none(),
+            SelectionTarget::Edge(path) => doc.node(path).is_none(),
             SelectionTarget::GraphEdge { .. } | SelectionTarget::GraphRoot(_) => false,
         }
     }

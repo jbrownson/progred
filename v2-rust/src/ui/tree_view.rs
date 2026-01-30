@@ -20,7 +20,7 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
         }
     } else if modifiers.ctrl {
         match editor.selection.as_ref().and_then(|s| s.edge_path()) {
-            Some(path) if matches!(path.node(&editor.doc.gid), Some(Id::Uuid(_))) => {
+            Some(path) if matches!(editor.doc.node(path), Some(Id::Uuid(_))) => {
                 InteractionMode::SelectUnder(path.clone())
             }
             _ => InteractionMode::Normal,
@@ -35,7 +35,7 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
         for (i, root_slot) in editor.doc.roots.iter().enumerate() {
             render_root_insertion(ui, editor, w, i, false);
             ui.push_id(root_slot, |ui| {
-                project(ui, editor, w, &Path::new(root_slot.clone()), &mode);
+                project(ui, editor, w, &Path::new(root_slot), &mode);
             });
         }
         render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
@@ -49,7 +49,7 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
         for orphan_id in orphan_roots {
             ui.push_id(&orphan_id, |ui| {
                 let orphan_slot = crate::graph::RootSlot::new(orphan_id.clone());
-                project(ui, editor, w, &Path::new(orphan_slot), &mode);
+                project(ui, editor, w, &Path::new(&orphan_slot), &mode);
             });
             ui.add_space(2.0);
         }
@@ -70,7 +70,7 @@ fn render_root_insertion(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, ind
         if let Some(ps) = w.placeholder_state() {
             match super::placeholder::render(ui, ps) {
                 PlaceholderResult::Commit(id) => {
-                    w.insert_root(index, crate::graph::RootSlot::new(id));
+                    w.insert_root(index, id);
                     w.select(None);
                 }
                 PlaceholderResult::Dismiss => w.select(None),

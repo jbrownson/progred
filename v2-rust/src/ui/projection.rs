@@ -1,7 +1,8 @@
 use crate::document::{Editor, EditorWriter};
 use crate::graph::{Gid, Id, Path, Selection};
-use eframe::egui::{pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
+use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use im::HashSet;
+use ordered_float::OrderedFloat;
 
 use super::colors;
 use super::identicon;
@@ -29,48 +30,83 @@ pub enum InteractionMode {
     Assign(Path),
 }
 
-fn selectable_widget(
-    ui: &mut Ui,
-    selected: bool,
-    secondary_selected: bool,
-    select_under: bool,
-    assign: bool,
-    add_contents: impl FnOnce(&mut Ui) -> Response,
-) -> Response {
-    let id = ui.next_auto_id();
+type HighlightStyle = (Option<Color32>, Option<eframe::epaint::Stroke>);
 
-    let where_to_put_background = ui.painter().add(eframe::epaint::Shape::Noop);
-    let where_to_put_border = ui.painter().add(eframe::epaint::Shape::Noop);
-
-    let rect = add_contents(ui).rect.expand(layout::SELECTION_PADDING);
-    let response = ui.interact(rect, id, Sense::click());
-
+fn paint_highlight(
+    ui: &Ui,
+    rect: eframe::egui::Rect,
+    bg_idx: eframe::egui::layers::ShapeIdx,
+    border_idx: eframe::egui::layers::ShapeIdx,
+    style: HighlightStyle,
+) {
+    let (bg, border) = style;
     let rounding = CornerRadius::same(3);
-
-    let (bg, border) = if selected {
-        (Some(colors::SELECTION.gamma_multiply(0.3)), Some(eframe::epaint::Stroke::new(1.5, colors::SELECTION)))
-    } else if secondary_selected {
-        (Some(colors::SELECTION.gamma_multiply(0.15)), Some(eframe::epaint::Stroke::new(1.0, colors::SELECTION.gamma_multiply(0.4))))
-    } else if assign {
-        let intensity = if response.hovered() { 0.4 } else { 0.2 };
-        (Some(colors::ASSIGN.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, colors::ASSIGN.gamma_multiply(0.6))))
-    } else if select_under {
-        let intensity = if response.hovered() { 0.4 } else { 0.2 };
-        (Some(colors::SELECT_UNDER.gamma_multiply(intensity)), Some(eframe::epaint::Stroke::new(1.0, colors::SELECT_UNDER.gamma_multiply(0.6))))
-    } else if response.hovered() {
-        (Some(Color32::from_gray(200).gamma_multiply(0.5)), None)
-    } else {
-        (None, None)
-    };
-
     if let Some(bg) = bg {
-        ui.painter().set(where_to_put_background, eframe::epaint::Shape::rect_filled(rect, rounding, bg));
+        ui.painter().set(bg_idx, eframe::epaint::Shape::rect_filled(rect, rounding, bg));
     }
     if let Some(border) = border {
-        ui.painter().set(where_to_put_border, eframe::epaint::Shape::rect_stroke(rect, rounding, border, eframe::epaint::StrokeKind::Middle));
+        ui.painter().set(border_idx, eframe::epaint::Shape::rect_stroke(rect, rounding, border, eframe::epaint::StrokeKind::Middle));
     }
+}
 
+fn clickable(
+    ui: &mut Ui,
+    add_contents: impl FnOnce(&mut Ui) -> Response,
+    style: HighlightStyle,
+    hovered_style: HighlightStyle,
+) -> Response {
+    let id = ui.next_auto_id();
+    let bg_idx = ui.painter().add(eframe::epaint::Shape::Noop);
+    let border_idx = ui.painter().add(eframe::epaint::Shape::Noop);
+
+    let inner = add_contents(ui);
+    let rect = inner.rect.expand(layout::SELECTION_PADDING);
+    let response = ui.interact(rect, id, Sense::click());
+
+    paint_highlight(ui, rect, bg_idx, border_idx, if response.hovered() { hovered_style } else { style });
     response
+}
+
+fn highlighted(
+    ui: &mut Ui,
+    add_contents: impl FnOnce(&mut Ui) -> Response,
+    style: HighlightStyle,
+) -> Response {
+    let bg_idx = ui.painter().add(eframe::epaint::Shape::Noop);
+    let border_idx = ui.painter().add(eframe::epaint::Shape::Noop);
+
+    let response = add_contents(ui);
+    let rect = response.rect.expand(layout::SELECTION_PADDING);
+
+    paint_highlight(ui, rect, bg_idx, border_idx, style);
+    response
+}
+
+fn selection_style(selected: bool, secondary: bool) -> HighlightStyle {
+    if selected {
+        (Some(colors::SELECTION.gamma_multiply(0.3)), Some(eframe::epaint::Stroke::new(1.5, colors::SELECTION)))
+    } else if secondary {
+        (Some(colors::SELECTION.gamma_multiply(0.15)), Some(eframe::epaint::Stroke::new(1.0, colors::SELECTION.gamma_multiply(0.4))))
+    } else {
+        (None, None)
+    }
+}
+
+fn mode_style(mode: &InteractionMode) -> (HighlightStyle, HighlightStyle) {
+    match mode {
+        InteractionMode::Assign(_) => (
+            (Some(colors::ASSIGN.gamma_multiply(0.2)), Some(eframe::epaint::Stroke::new(1.0, colors::ASSIGN.gamma_multiply(0.6)))),
+            (Some(colors::ASSIGN.gamma_multiply(0.4)), Some(eframe::epaint::Stroke::new(1.0, colors::ASSIGN.gamma_multiply(0.6)))),
+        ),
+        InteractionMode::SelectUnder(_) => (
+            (Some(colors::SELECT_UNDER.gamma_multiply(0.2)), Some(eframe::epaint::Stroke::new(1.0, colors::SELECT_UNDER.gamma_multiply(0.6)))),
+            (Some(colors::SELECT_UNDER.gamma_multiply(0.4)), Some(eframe::epaint::Stroke::new(1.0, colors::SELECT_UNDER.gamma_multiply(0.6)))),
+        ),
+        InteractionMode::Normal => (
+            (None, None),
+            (Some(Color32::from_gray(200).gamma_multiply(0.5)), None),
+        ),
+    }
 }
 
 pub fn insertion_point(ui: &mut Ui) -> Response {
@@ -99,13 +135,21 @@ pub fn insertion_point(ui: &mut Ui) -> Response {
     response
 }
 
-fn render_label(ui: &mut Ui, id: &Id, secondary_selected: bool, select_under: bool, assign: bool) -> Response {
+fn render_label(ui: &mut Ui, id: &Id, secondary: bool, mode: &InteractionMode) -> Response {
     let label_color = Color32::from_gray(120);
-    selectable_widget(ui, false, secondary_selected, select_under, assign, |ui| match id {
+    let (style, hovered) = if secondary {
+        let s = selection_style(false, true);
+        (s, s)
+    } else if matches!(mode, InteractionMode::Normal) {
+        ((None, None), (None, None))
+    } else {
+        mode_style(mode)
+    };
+    clickable(ui, |ui| match id {
         Id::Uuid(uuid) => identicon(ui, 12.0, uuid),
         Id::String(s) => ui.label(eframe::egui::RichText::new(s.to_string()).color(label_color).italics()),
         Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(label_color).italics()),
-    })
+    }, style, hovered)
 }
 
 fn label_arrow(ui: &mut Ui) {
@@ -160,7 +204,7 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
 }
 
 pub fn project(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, mode: &InteractionMode) {
-    if let Some(id) = path.node(&editor.doc.gid).cloned() {
+    if let Some(id) = editor.doc.node(path) {
         project_id(ui, editor, w, path, &id, HashSet::new(), mode);
     }
 }
@@ -176,17 +220,52 @@ fn project_id(
 ) {
     match id {
         Id::Uuid(uuid) => project_uuid(ui, editor, w, path, uuid, ancestors, mode),
-        Id::String(s) => project_leaf(ui, editor, w, path, id, format!("\"{}\"", s)),
-        Id::Number(n) => project_leaf(ui, editor, w, path, id, n.to_string()),
+        Id::String(_) | Id::Number(_) => project_leaf(ui, editor, w, path, id),
     }
 }
 
-fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, id: &Id, text: String) {
+fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, id: &Id) {
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary
-        && editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc.gid)) == Some(id);
-    if selectable_widget(ui, primary, secondary, false, false, |ui| ui.label(text)).clicked() {
+        && editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc)).as_ref() == Some(id);
+
+    let edit_text = match id {
+        Id::String(s) => s.clone(),
+        Id::Number(n) => n.to_string(),
+        Id::Uuid(_) => unreachable!(),
+    };
+
+    let mut text = edit_text.clone();
+
+    let font_id = egui::TextStyle::Body.resolve(ui.style());
+    let galley = ui.painter().layout_no_wrap(text.clone(), font_id, Color32::BLACK);
+    let text_width = galley.rect.width();
+    let desired_width = text_width.max(20.0);
+
+    let stable_id = ui.id().with("leaf_editor");
+    let response = highlighted(ui, |ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut text)
+                .id(stable_id)
+                .desired_width(desired_width)
+                .frame(false)
+        )
+    }, selection_style(primary, secondary));
+
+    if response.gained_focus() {
         w.select(Some(Selection::edge(path.clone())));
+        w.set_editing_leaf(true);
+    }
+
+    if response.lost_focus() {
+        w.set_editing_leaf(false);
+    }
+
+    if text != edit_text {
+        let new_id = text.parse::<f64>()
+            .map(|n| Id::Number(OrderedFloat(n)))
+            .unwrap_or_else(|_| Id::String(text));
+        w.set_edge(path, new_id);
     }
 }
 
@@ -227,19 +306,19 @@ fn project_uuid(
         .collect();
     let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
-    let select_under = matches!(mode, InteractionMode::SelectUnder(_));
-    let assign = matches!(mode, InteractionMode::Assign(_));
-    let selected_node = editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc.gid));
+    let selected_node = editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc));
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
-    let secondary = !primary && selected_node == Some(&id);
+    let secondary = !primary && selected_node.as_ref() == Some(&id);
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
-            if selectable_widget(
-                ui, primary, secondary,
-                select_under, assign,
-                |ui| identicon(ui, 18.0, uuid),
-            ).clicked() {
+            let (style, hovered) = if primary || secondary {
+                let s = selection_style(primary, secondary);
+                (s, s)
+            } else {
+                mode_style(mode)
+            };
+            if clickable(ui, |ui| identicon(ui, 18.0, uuid), style, hovered).clicked() {
                 handle_pick(w, mode, Id::Uuid(*uuid), path);
             }
 
@@ -253,9 +332,9 @@ fn project_uuid(
             ui.add_space(2.0);
             ui.indent("edges", |ui| {
                 for (label, value) in &all_edges {
-                    let label_secondary = selected_node == Some(label);
+                    let label_secondary = selected_node.as_ref() == Some(label);
                     ui.horizontal(|ui| {
-                        if render_label(ui, label, label_secondary, select_under, assign).clicked()
+                        if render_label(ui, label, label_secondary, mode).clicked()
                             && !matches!(mode, InteractionMode::Normal)
                         {
                             handle_pick(w, mode, label.clone(), path);
@@ -268,7 +347,7 @@ fn project_uuid(
                 }
                 if let Some(ref new_label) = new_edge_label {
                     ui.horizontal(|ui| {
-                        render_label(ui, new_label, false, false, false);
+                        render_label(ui, new_label, false, &InteractionMode::Normal);
                         label_arrow(ui);
                         if let Some(ps) = w.placeholder_state() {
                             match super::placeholder::render(ui, ps) {

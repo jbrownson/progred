@@ -1,10 +1,10 @@
 use super::id::Id;
-use super::path::{Path, RootSlot};
+use super::path::{Path, RootId};
 use im::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct SpanningTree {
-    pub roots: HashMap<RootSlot, TreeNode>,
+    pub roots: HashMap<RootId, TreeNode>,
 }
 
 #[derive(Debug, Clone)]
