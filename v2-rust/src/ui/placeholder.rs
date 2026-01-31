@@ -21,7 +21,7 @@ fn build_entries(filter: &str) -> Vec<PlaceholderEntry> {
     });
     let number_entry = filter.parse::<f64>().ok().map(|n| PlaceholderEntry {
         id: Id::Number(OrderedFloat(n)),
-        display: filter.to_string(),
+        display: n.to_string(),
     });
     string_entry.into_iter().chain(number_entry).collect()
 }

@@ -229,13 +229,19 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
     let secondary = !primary
         && editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc)).as_ref() == Some(id);
 
-    let edit_text = match id {
+    let model_text = match id {
         Id::String(s) => s.clone(),
         Id::Number(n) => n.to_string(),
         Id::Uuid(_) => unreachable!(),
     };
 
-    let mut text = edit_text.clone();
+    let leaf_edit_text = editor.selection.as_ref().and_then(|s| s.leaf_edit_text.as_ref());
+    let is_editing = primary && editor.editing_leaf;
+    let mut text = if is_editing {
+        leaf_edit_text.cloned().unwrap_or_else(|| model_text.clone())
+    } else {
+        model_text.clone()
+    };
 
     let font_id = egui::TextStyle::Body.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(text.clone(), font_id, Color32::BLACK);
@@ -255,17 +261,30 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
     if response.gained_focus() {
         w.select(Some(Selection::edge(path.clone())));
         w.set_editing_leaf(true);
+        if let Some(edit_text) = w.leaf_edit_text() {
+            *edit_text = Some(model_text.clone());
+        }
     }
 
     if response.lost_focus() {
+        let new_id = leaf_edit_text.and_then(|edit_text| match id {
+            Id::String(_) => Some(Id::String(edit_text.clone())),
+            Id::Number(_) => edit_text.parse::<f64>().ok().map(|n| Id::Number(OrderedFloat(n))),
+            Id::Uuid(_) => unreachable!(),
+        });
+        if let Some(new_id) = new_id {
+            w.set_edge(path, new_id);
+        }
         w.set_editing_leaf(false);
     }
 
-    if text != edit_text {
-        let new_id = text.parse::<f64>()
-            .map(|n| Id::Number(OrderedFloat(n)))
-            .unwrap_or_else(|_| Id::String(text));
-        w.set_edge(path, new_id);
+    if is_editing && Some(&text) != leaf_edit_text {
+        if let Some(edit_text) = w.leaf_edit_text() {
+            *edit_text = Some(text.clone());
+        }
+        if matches!(id, Id::String(_)) {
+            w.set_edge(path, Id::String(text));
+        }
     }
 }
 

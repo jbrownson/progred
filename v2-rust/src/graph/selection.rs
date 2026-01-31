@@ -21,23 +21,24 @@ pub enum SelectionTarget {
 pub struct Selection {
     pub target: SelectionTarget,
     pub placeholder: PlaceholderState,
+    pub leaf_edit_text: Option<String>,
 }
 
 impl Selection {
     pub fn edge(path: Path) -> Self {
-        Self { target: SelectionTarget::Edge(path), placeholder: PlaceholderState::default() }
+        Self { target: SelectionTarget::Edge(path), placeholder: PlaceholderState::default(), leaf_edit_text: None }
     }
 
     pub fn insert_root(index: usize) -> Self {
-        Self { target: SelectionTarget::InsertRoot(index), placeholder: PlaceholderState::default() }
+        Self { target: SelectionTarget::InsertRoot(index), placeholder: PlaceholderState::default(), leaf_edit_text: None }
     }
 
     pub fn graph_edge(entity: Id, label: Id) -> Self {
-        Self { target: SelectionTarget::GraphEdge { entity, label }, placeholder: PlaceholderState::default() }
+        Self { target: SelectionTarget::GraphEdge { entity, label }, placeholder: PlaceholderState::default(), leaf_edit_text: None }
     }
 
     pub fn graph_root(id: Id) -> Self {
-        Self { target: SelectionTarget::GraphRoot(id), placeholder: PlaceholderState::default() }
+        Self { target: SelectionTarget::GraphRoot(id), placeholder: PlaceholderState::default(), leaf_edit_text: None }
     }
 
     pub fn edge_path(&self) -> Option<&Path> {

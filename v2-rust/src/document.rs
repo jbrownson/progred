@@ -184,6 +184,15 @@ impl<'a> EditorWriter<'a> {
 
     pub fn set_editing_leaf(&mut self, editing: bool) {
         self.editor.editing_leaf = editing;
+        if !editing {
+            if let Some(ref mut sel) = self.editor.selection {
+                sel.leaf_edit_text = None;
+            }
+        }
+    }
+
+    pub fn leaf_edit_text(&mut self) -> Option<&mut Option<String>> {
+        self.editor.selection.as_mut().map(|s| &mut s.leaf_edit_text)
     }
 }
 
