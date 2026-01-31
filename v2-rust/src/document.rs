@@ -3,6 +3,12 @@ use crate::ui::graph_view::GraphViewState;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 
+#[derive(Clone, Default)]
+pub struct Semantics {
+    pub name_field: Option<Id>,
+    pub isa_field: Option<Id>,
+}
+
 #[derive(Clone)]
 pub struct Document {
     pub gid: MutGid,
@@ -134,6 +140,7 @@ pub struct Editor {
     pub file_path: Option<PathBuf>,
     pub graph_view: GraphViewState,
     pub editing_leaf: bool,
+    pub semantics: Semantics,
 }
 
 impl Editor {
@@ -145,6 +152,29 @@ impl Editor {
             file_path: None,
             graph_view: GraphViewState::new(),
             editing_leaf: false,
+            semantics: Semantics::default(),
+        }
+    }
+
+    pub fn name_of(&self, id: &Id) -> Option<String> {
+        self.semantics.name_field.as_ref()
+            .and_then(|name_field| self.doc.gid.get(id, name_field))
+            .and_then(|value| match value {
+                Id::String(s) => Some(s.clone()),
+                _ => None,
+            })
+    }
+
+    pub fn display_label(&self, id: &Id) -> Option<String> {
+        let isa_name = self.semantics.isa_field.as_ref()
+            .and_then(|isa_field| self.doc.gid.get(id, isa_field))
+            .and_then(|isa_id| self.name_of(isa_id));
+
+        match (isa_name, self.name_of(id)) {
+            (Some(isa), Some(n)) => Some(format!("{isa} \"{n}\"")),
+            (Some(isa), None) => Some(isa),
+            (None, Some(n)) => Some(format!("\"{n}\"")),
+            (None, None) => None,
         }
     }
 }
@@ -197,6 +227,14 @@ impl<'a> EditorWriter<'a> {
         if let Some(ref mut sel) = self.editor.selection {
             sel.leaf_edit_text = text;
         }
+    }
+
+    pub fn set_name_field(&mut self, field: Option<Id>) {
+        self.editor.semantics.name_field = field;
+    }
+
+    pub fn set_isa_field(&mut self, field: Option<Id>) {
+        self.editor.semantics.isa_field = field;
     }
 }
 

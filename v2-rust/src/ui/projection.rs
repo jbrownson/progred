@@ -135,7 +135,7 @@ pub fn insertion_point(ui: &mut Ui) -> Response {
     response
 }
 
-fn render_label(ui: &mut Ui, id: &Id, secondary: bool, mode: &InteractionMode) -> Response {
+fn render_label(ui: &mut Ui, editor: &Editor, id: &Id, secondary: bool, mode: &InteractionMode) -> Response {
     let label_color = Color32::from_gray(120);
     let (style, hovered) = if secondary {
         let s = selection_style(false, true);
@@ -146,7 +146,10 @@ fn render_label(ui: &mut Ui, id: &Id, secondary: bool, mode: &InteractionMode) -
         mode_style(mode)
     };
     clickable(ui, |ui| match id {
-        Id::Uuid(uuid) => identicon(ui, 12.0, uuid),
+        Id::Uuid(uuid) => match editor.name_of(id) {
+            Some(name) => ui.label(eframe::egui::RichText::new(name).color(label_color).italics()),
+            None => identicon(ui, 12.0, uuid),
+        },
         Id::String(s) => ui.label(eframe::egui::RichText::new(s.to_string()).color(label_color).italics()),
         Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(label_color).italics()),
     }, style, hovered)
@@ -310,6 +313,7 @@ fn project_uuid(
 ) {
     let id = Id::Uuid(*uuid);
     let edges = editor.doc.gid.edges(&id);
+    let display_label = editor.display_label(&id);
     let new_edge_label = editor.selection.as_ref()
         .and_then(|s| s.edge_path())
         .and_then(|sel| sel.pop())
@@ -333,7 +337,12 @@ fn project_uuid(
             } else {
                 mode_style(mode)
             };
-            if clickable(ui, |ui| identicon(ui, 18.0, uuid), style, hovered).clicked() {
+            if clickable(ui, |ui| {
+                match display_label {
+                    Some(ref label) => ui.label(eframe::egui::RichText::new(label).color(Color32::from_gray(60))),
+                    None => identicon(ui, 18.0, uuid),
+                }
+            }, style, hovered).clicked() {
                 handle_pick(w, mode, Id::Uuid(*uuid), path);
             }
 
@@ -349,7 +358,7 @@ fn project_uuid(
                 for (label, value) in &all_edges {
                     let label_secondary = selected_node.as_ref() == Some(label);
                     ui.horizontal(|ui| {
-                        if render_label(ui, label, label_secondary, mode).clicked()
+                        if render_label(ui, editor, label, label_secondary, mode).clicked()
                             && !matches!(mode, InteractionMode::Normal)
                         {
                             handle_pick(w, mode, label.clone(), path);
@@ -362,7 +371,7 @@ fn project_uuid(
                 }
                 if let Some(ref new_label) = new_edge_label {
                     ui.horizontal(|ui| {
-                        render_label(ui, new_label, false, &InteractionMode::Normal);
+                        render_label(ui, editor, new_label, false, &InteractionMode::Normal);
                         label_arrow(ui);
                         if let Some(ref sel) = editor.selection {
                             let mut ps = sel.placeholder.clone();

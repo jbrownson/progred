@@ -89,11 +89,15 @@ impl ProgredApp {
     fn create_test_data() -> (MutGid, Vec<RootSlot>) {
         let mut gid = MutGid::new();
 
+        let def = Id::new_uuid();
         let field = Id::new_uuid();
         let name = Id::new_uuid();
         let isa = Id::new_uuid();
 
-        gid.set(field.clone(), isa.clone(), field.clone());
+        gid.set(def.clone(), isa.clone(), def.clone());
+        gid.set(def.clone(), name.clone(), Id::String("def".into()));
+
+        gid.set(field.clone(), isa.clone(), def.clone());
         gid.set(field.clone(), name.clone(), Id::String("field".into()));
 
         gid.set(name.clone(), isa.clone(), field.clone());
@@ -103,6 +107,7 @@ impl ProgredApp {
         gid.set(isa.clone(), name.clone(), Id::String("isa".into()));
 
         let roots = vec![
+            RootSlot::new(def),
             RootSlot::new(field),
             RootSlot::new(name),
             RootSlot::new(isa),
@@ -217,10 +222,10 @@ impl eframe::App for ProgredApp {
 
                 if self.show_graph {
                     let rects = ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split);
-                    ui::split_view::scoped_with_margin(ui, rects.left, ui::layout::TREE_MARGIN, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
+                    ui::split_view::scoped(ui, rects.left, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
                     ui::split_view::scoped(ui, rects.right, |ui| ui::graph_view::render(ui, ctx, &snapshot, &mut w));
                 } else {
-                    ui::split_view::scoped_with_margin(ui, ui.max_rect(), ui::layout::TREE_MARGIN, |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
+                    ui::split_view::scoped(ui, ui.max_rect(), |ui| ui::tree_view::render(ui, ctx, &snapshot, &mut w));
                 }
             });
     }

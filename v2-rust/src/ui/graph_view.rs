@@ -14,6 +14,8 @@ const DAMPING: f32 = 0.85;
 const MAX_FORCE: f32 = 10.0;
 const GRAVITY_K: f32 = 0.005;
 const MAX_LABEL_LEN: usize = 8;
+const TEXT_FONT_SIZE: f32 = 10.0;
+const TEXT_PADDING: f32 = 8.0;
 
 #[derive(Clone)]
 pub struct GraphViewState {
@@ -186,14 +188,29 @@ fn simulate(state: &mut GraphViewState, edges: &[Edge]) {
     apply_forces(state, &forces);
 }
 
-fn node_half_size(id: &Id) -> Vec2 {
-    match id {
-        Id::Uuid(_) => Vec2::splat(NODE_RADIUS * 0.7 + 2.0),
-        _ => {
-            let text = node_display_text(id).unwrap_or_default();
-            Vec2::new((text.len() as f32 * 3.2 + 8.0).max(14.0), 12.0)
-        }
-    }
+fn node_half_size(half_sizes: &HashMap<Id, Vec2>, id: &Id) -> Vec2 {
+    half_sizes.get(id).copied().unwrap_or(Vec2::splat(IDENTICON_HALF_SIZE))
+}
+
+fn compute_half_sizes(painter: &egui::Painter, editor: &Editor, ids: impl Iterator<Item = Id>) -> HashMap<Id, Vec2> {
+    let font = egui::FontId::proportional(TEXT_FONT_SIZE);
+    ids.map(|id| {
+        let size = match &id {
+            Id::Uuid(_) => match editor.display_label(&id) {
+                Some(label) => {
+                    let galley = painter.layout_no_wrap(label, font.clone(), Color32::BLACK);
+                    (galley.rect.size() + Vec2::splat(TEXT_PADDING)) / 2.0
+                }
+                None => Vec2::splat(IDENTICON_HALF_SIZE),
+            },
+            _ => {
+                let text = node_display_text(&id).unwrap_or_default();
+                let galley = painter.layout_no_wrap(text, font.clone(), Color32::BLACK);
+                (galley.rect.size() + Vec2::splat(TEXT_PADDING)) / 2.0
+            }
+        };
+        (id, size)
+    }).collect()
 }
 
 fn clip_to_rect(center: Pos2, half: Vec2, target: Pos2) -> Pos2 {
@@ -244,17 +261,38 @@ fn canonical_pair(a: &Id, b: &Id) -> (Id, Id) {
     if a <= b { (a.clone(), b.clone()) } else { (b.clone(), a.clone()) }
 }
 
-fn draw_edge_label(painter: &egui::Painter, pos: Pos2, label: &Id) {
+const EDGE_LABEL_IDENTICON_SIZE: f32 = 18.0;
+const EDGE_LABEL_PADDING: f32 = 4.0;
+const IDENTICON_HALF_SIZE: f32 = NODE_RADIUS * 0.7 + 2.0;
+
+fn edge_label_text(editor: &Editor, label: &Id) -> Option<String> {
     match label {
-        Id::Uuid(uuid) => {
-            super::identicon::draw_at(painter, Rect::from_center_size(pos, Vec2::splat(18.0)), uuid);
+        Id::Uuid(_) => editor.name_of(label),
+        _ => node_display_text(label),
+    }
+}
+
+fn edge_label_size(painter: &egui::Painter, editor: &Editor, label: &Id) -> Vec2 {
+    match edge_label_text(editor, label) {
+        Some(text) => {
+            let galley = painter.layout_no_wrap(text, egui::FontId::proportional(TEXT_FONT_SIZE), Color32::BLACK);
+            galley.rect.size() + Vec2::splat(EDGE_LABEL_PADDING)
         }
-        _ => {
-            if let Some(text) = node_display_text(label) {
-                painter.text(
-                    pos, egui::Align2::CENTER_CENTER, text,
-                    egui::FontId::proportional(10.0), Color32::from_gray(100),
-                );
+        None => Vec2::splat(EDGE_LABEL_IDENTICON_SIZE + EDGE_LABEL_PADDING),
+    }
+}
+
+fn draw_edge_label(painter: &egui::Painter, editor: &Editor, pos: Pos2, label: &Id, bg_color: Color32) {
+    match edge_label_text(editor, label) {
+        Some(text) => {
+            let galley = painter.layout_no_wrap(text, egui::FontId::proportional(TEXT_FONT_SIZE), Color32::from_gray(80));
+            let bg_rect = Rect::from_center_size(pos, galley.rect.size() + Vec2::splat(EDGE_LABEL_PADDING));
+            painter.rect_filled(bg_rect, CornerRadius::ZERO, bg_color);
+            painter.galley(bg_rect.min + Vec2::splat(EDGE_LABEL_PADDING / 2.0), galley, Color32::from_gray(80));
+        }
+        None => {
+            if let Id::Uuid(uuid) = label {
+                super::identicon::draw_at(painter, Rect::from_center_size(pos, Vec2::splat(EDGE_LABEL_IDENTICON_SIZE)), uuid);
             }
         }
     }
@@ -276,11 +314,13 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         });
 
     let painter = ui.painter();
+    let bg_color = ui.visuals().panel_fill;
+    let half_sizes = compute_half_sizes(painter, editor, state.positions.keys().cloned());
     let response = ui.interact(panel_rect, ui.id().with("graph_bg"), egui::Sense::click_and_drag());
 
     let pointer = response.interact_pointer_pos();
     let hit = pointer.and_then(|p| state.positions.iter().find(|&(id, pos)| {
-        Rect::from_center_size(*pos + view_offset, node_half_size(id) * 2.0).contains(p)
+        Rect::from_center_size(*pos + view_offset, node_half_size(&half_sizes, id) * 2.0).contains(p)
     }).map(|(id, pos)| (id.clone(), *pos)));
 
     if ui.input(|i| i.pointer.primary_pressed()) && state.dragging.is_none() {
@@ -312,8 +352,6 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         state.panning = false;
         state.pending_drag = None;
     }
-
-    let half_sizes: HashMap<&Id, Vec2> = state.positions.keys().map(|id| (id, node_half_size(id))).collect();
 
     let mut pair_counts: HashMap<(Id, Id), usize> = HashMap::new();
     for edge in &edges {
@@ -367,8 +405,9 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
                     0.125 * start.x + 0.375 * cp1.x + 0.375 * cp2.x + 0.125 * end.x,
                     0.125 * start.y + 0.375 * cp1.y + 0.375 * cp2.y + 0.125 * end.y,
                 );
-                edge_hit_zones.push((Rect::from_center_size(label_pos, Vec2::splat(24.0)), edge.source.clone(), edge.label.clone()));
-                draw_edge_label(painter, label_pos, &edge.label);
+                let label_size = edge_label_size(painter, editor, &edge.label);
+                edge_hit_zones.push((Rect::from_center_size(label_pos, label_size), edge.source.clone(), edge.label.clone()));
+                draw_edge_label(painter, editor, label_pos, &edge.label, bg_color);
             } else {
                 let mid = src_pos + (tgt_pos - src_pos) * 0.5;
                 let canonical_dir = if edge.source <= edge.target {
@@ -397,14 +436,15 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
                     0.25 * src_pos.x + 0.5 * control.x + 0.25 * end.x,
                     0.25 * src_pos.y + 0.5 * control.y + 0.25 * end.y,
                 );
-                edge_hit_zones.push((Rect::from_center_size(label_pos, Vec2::splat(24.0)), edge.source.clone(), edge.label.clone()));
-                draw_edge_label(painter, label_pos, &edge.label);
+                let label_size = edge_label_size(painter, editor, &edge.label);
+                edge_hit_zones.push((Rect::from_center_size(label_pos, label_size), edge.source.clone(), edge.label.clone()));
+                draw_edge_label(painter, editor, label_pos, &edge.label, bg_color);
             }
         }
     }
 
     let node_fill = Color32::WHITE;
-    let text_font = egui::FontId::proportional(10.0);
+    let text_font = egui::FontId::proportional(TEXT_FONT_SIZE);
     let root_ids: std::collections::HashSet<Id> = editor.doc.roots.iter().map(|r| r.value.clone()).collect();
     let root_stroke = Stroke::new(2.0, colors::SELECTION.gamma_multiply(0.6));
     let selected_root = editor.selection.as_ref().and_then(|s| match &s.target {
@@ -419,10 +459,21 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         let is_selected_root = selected_root == Some(id);
         match id {
             Id::Uuid(uuid) => {
-                let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4));
-                super::identicon::draw_at(painter, icon_rect, uuid);
                 let stroke = if is_selected_root { selected_root_stroke } else if is_root { root_stroke } else { Stroke::new(2.0, Color32::from_gray(100)) };
-                painter.rect_stroke(icon_rect, CornerRadius::same(2), stroke, eframe::epaint::StrokeKind::Outside);
+                match editor.display_label(id) {
+                    Some(label) => {
+                        let galley = painter.layout_no_wrap(label.clone(), text_font.clone(), Color32::from_gray(60));
+                        let text_rect = Rect::from_center_size(screen_pos, galley.rect.size() + Vec2::splat(TEXT_PADDING));
+                        painter.rect_filled(text_rect, CornerRadius::same(4), Color32::WHITE);
+                        painter.rect_stroke(text_rect, CornerRadius::same(4), stroke, eframe::epaint::StrokeKind::Outside);
+                        painter.galley(text_rect.min + Vec2::splat(TEXT_PADDING / 2.0), galley, Color32::from_gray(60));
+                    }
+                    None => {
+                        let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4));
+                        super::identicon::draw_at(painter, icon_rect, uuid);
+                        painter.rect_stroke(icon_rect, CornerRadius::same(2), stroke, eframe::epaint::StrokeKind::Outside);
+                    }
+                }
             }
             _ => {
                 let half = half_sizes.get(id).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
@@ -449,7 +500,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         let root_hit = pointer.and_then(|p| {
             state.positions.iter()
                 .filter(|(id, _)| root_ids.contains(id))
-                .find(|(id, pos)| Rect::from_center_size(**pos + view_offset, node_half_size(id) * 2.0).contains(p))
+                .find(|(id, pos)| Rect::from_center_size(**pos + view_offset, node_half_size(&half_sizes, id) * 2.0).contains(p))
                 .map(|(id, _)| Selection::graph_root(id.clone()))
         });
         w.select(edge_hit.or(root_hit));

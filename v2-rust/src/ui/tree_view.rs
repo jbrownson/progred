@@ -1,17 +1,12 @@
 use crate::document::{Editor, EditorWriter};
 use crate::graph::{Id, Path, Selection, SelectionTarget};
-use eframe::egui::{self, Color32, Context, Sense, Ui};
+use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
 
+use super::layout::TREE_MARGIN;
 use super::placeholder::PlaceholderResult;
 use super::{insertion_point, project, InteractionMode};
 
 pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter) {
-    let bg_response = ui.interact(
-        ui.max_rect(),
-        ui.id().with("background"),
-        Sense::click(),
-    );
-
     let modifiers = ctx.input(|i| i.modifiers);
     let mode = if modifiers.alt {
         match editor.selection.as_ref().and_then(|s| s.edge_path()) {
@@ -29,35 +24,95 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
         InteractionMode::Normal
     };
 
-    if editor.doc.roots.is_empty() {
-        render_root_insertion(ui, editor, w, 0, true);
-    } else {
-        for (i, root_slot) in editor.doc.roots.iter().enumerate() {
-            render_root_insertion(ui, editor, w, i, false);
-            ui.push_id(root_slot, |ui| {
-                project(ui, editor, w, &Path::new(root_slot), &mode);
-            });
-        }
-        render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
-    }
+    let margin = egui::Margin::same(TREE_MARGIN as i8);
+    egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+        egui::Frame::NONE.inner_margin(margin).show(ui, |ui| {
+        let bg_response = ui.interact(
+            ui.max_rect(),
+            ui.id().with("background"),
+            Sense::click(),
+        );
 
-    let orphan_roots = editor.doc.orphan_roots();
-    if !orphan_roots.is_empty() {
+        ui.push_id("roots", |ui| {
+            if editor.doc.roots.is_empty() {
+                render_root_insertion(ui, editor, w, 0, true);
+            } else {
+                for (i, root_slot) in editor.doc.roots.iter().enumerate() {
+                    render_root_insertion(ui, editor, w, i, false);
+                    ui.push_id(root_slot, |ui| {
+                        project(ui, editor, w, &Path::new(root_slot), &mode);
+                    });
+                }
+                render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
+            }
+        });
+
+        let orphan_roots = editor.doc.orphan_roots();
+        if !orphan_roots.is_empty() {
+            ui.add_space(8.0);
+            ui.label(RichText::new("orphans").color(Color32::from_gray(100)).italics().size(11.0));
+            ui.add_space(4.0);
+            for orphan_id in orphan_roots {
+                ui.push_id(&orphan_id, |ui| {
+                    let orphan_slot = crate::graph::RootSlot::new(orphan_id.clone());
+                    project(ui, editor, w, &Path::new(&orphan_slot), &mode);
+                });
+                ui.add_space(2.0);
+            }
+        }
+
         ui.add_space(8.0);
-        ui.label(egui::RichText::new("orphans").color(Color32::from_gray(100)).italics().size(11.0));
+        ui.label(RichText::new("semantics").color(Color32::from_gray(100)).italics().size(11.0));
         ui.add_space(4.0);
-        for orphan_id in orphan_roots {
-            ui.push_id(&orphan_id, |ui| {
-                let orphan_slot = crate::graph::RootSlot::new(orphan_id.clone());
-                project(ui, editor, w, &Path::new(&orphan_slot), &mode);
-            });
-            ui.add_space(2.0);
-        }
-    }
 
-    if bg_response.clicked() {
-        w.select(None);
-    }
+        let selected_uuid = editor.selection.as_ref()
+            .and_then(|s| s.selected_node_id(&editor.doc))
+            .and_then(|id| match id {
+                Id::Uuid(uuid) => Some(uuid),
+                _ => None,
+            });
+
+        render_semantic_field(ui, w, "name", &editor.semantics.name_field, selected_uuid, |w, field| w.set_name_field(field));
+        render_semantic_field(ui, w, "isa", &editor.semantics.isa_field, selected_uuid, |w, field| w.set_isa_field(field));
+
+        if bg_response.clicked() {
+            w.select(None);
+        }
+        });
+    });
+}
+
+fn render_semantic_field(
+    ui: &mut Ui,
+    w: &mut EditorWriter,
+    label: &str,
+    current: &Option<Id>,
+    selected_uuid: Option<uuid::Uuid>,
+    set_field: impl FnOnce(&mut EditorWriter, Option<Id>),
+) {
+    ui.push_id(label, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(format!("{label}:")).color(Color32::from_gray(120)).size(11.0));
+            match current {
+                Some(Id::Uuid(uuid)) => {
+                    super::identicon::identicon(ui, 14.0, uuid);
+                }
+                Some(other) => {
+                    ui.label(RichText::new(other.to_string()).color(Color32::from_gray(80)).size(11.0));
+                }
+                None => {
+                    ui.label(RichText::new("(none)").color(Color32::from_gray(150)).italics().size(11.0));
+                }
+            }
+            if let Some(uuid) = selected_uuid {
+                let is_current = current.as_ref() == Some(&Id::Uuid(uuid));
+                let button_text = if is_current { "clear" } else { "set" };
+                if ui.add(egui::Button::new(RichText::new(button_text).size(10.0))).clicked() {
+                    set_field(w, if is_current { None } else { Some(Id::Uuid(uuid)) });
+                }
+            }
+        });
+    });
 }
 
 fn render_root_insertion(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, index: usize, empty_doc: bool) {

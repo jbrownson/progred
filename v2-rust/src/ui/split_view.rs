@@ -50,10 +50,3 @@ pub fn scoped(ui: &mut Ui, rect: Rect, f: impl FnOnce(&mut Ui)) {
         f(ui);
     });
 }
-
-pub fn scoped_with_margin(ui: &mut Ui, rect: Rect, margin: f32, f: impl FnOnce(&mut Ui)) {
-    ui.scope_builder(egui::UiBuilder::new().max_rect(rect.shrink(margin)), |ui| {
-        ui.set_clip_rect(rect);
-        f(ui);
-    });
-}
