@@ -67,14 +67,15 @@ fn render_root_insertion(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, ind
     );
 
     if active_placeholder {
-        if let Some(ps) = w.placeholder_state() {
-            match super::placeholder::render(ui, ps) {
+        if let Some(ref sel) = editor.selection {
+            let mut ps = sel.placeholder.clone();
+            match super::placeholder::render(ui, &mut ps) {
                 PlaceholderResult::Commit(id) => {
                     w.insert_root(index, id);
                     w.select(None);
                 }
                 PlaceholderResult::Dismiss => w.select(None),
-                PlaceholderResult::Active => {}
+                PlaceholderResult::Active => w.set_placeholder_state(ps),
             }
         }
     } else if empty_doc {

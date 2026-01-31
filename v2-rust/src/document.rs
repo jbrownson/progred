@@ -174,12 +174,14 @@ impl<'a> EditorWriter<'a> {
         self.editor.doc.roots.insert(index, RootSlot::new(value));
     }
 
-    pub fn placeholder_state(&mut self) -> Option<&mut PlaceholderState> { // TODO why is this readable, should be write only.
-        self.editor.selection.as_mut().map(|s| &mut s.placeholder)
+    pub fn set_placeholder_state(&mut self, state: PlaceholderState) {
+        if let Some(ref mut sel) = self.editor.selection {
+            sel.placeholder = state;
+        }
     }
 
-    pub fn graph_view(&mut self) -> &mut GraphViewState { // TODO why is this readable, should be write only.
-        &mut self.editor.graph_view
+    pub fn set_graph_view(&mut self, state: GraphViewState) {
+        self.editor.graph_view = state;
     }
 
     pub fn set_editing_leaf(&mut self, editing: bool) {
@@ -191,8 +193,10 @@ impl<'a> EditorWriter<'a> {
         }
     }
 
-    pub fn leaf_edit_text(&mut self) -> Option<&mut Option<String>> {
-        self.editor.selection.as_mut().map(|s| &mut s.leaf_edit_text)
+    pub fn set_leaf_edit_text(&mut self, text: Option<String>) {
+        if let Some(ref mut sel) = self.editor.selection {
+            sel.leaf_edit_text = text;
+        }
     }
 }
 

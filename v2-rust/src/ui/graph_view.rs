@@ -261,13 +261,13 @@ fn draw_edge_label(painter: &egui::Painter, pos: Pos2, label: &Id) {
 }
 
 pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
-    let state = w.graph_view();
+    let mut state = editor.graph_view.clone();
     let panel_rect = ui.max_rect();
     let view_offset = panel_rect.center().to_vec2() + state.pan_offset;
 
-    sync_positions(state, &editor.doc);
+    sync_positions(&mut state, &editor.doc);
     let edges = collect_edges(&editor.doc);
-    simulate(state, &edges);
+    simulate(&mut state, &edges);
 
     let graph_selected_edge = editor.selection.as_ref()
         .and_then(|s| match &s.target {
@@ -454,4 +454,6 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         });
         w.select(edge_hit.or(root_hit));
     }
+
+    w.set_graph_view(state);
 }

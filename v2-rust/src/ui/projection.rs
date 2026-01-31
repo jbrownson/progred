@@ -261,9 +261,7 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
     if response.gained_focus() {
         w.select(Some(Selection::edge(path.clone())));
         w.set_editing_leaf(true);
-        if let Some(edit_text) = w.leaf_edit_text() {
-            *edit_text = Some(model_text.clone());
-        }
+        w.set_leaf_edit_text(Some(model_text.clone()));
     }
 
     if response.lost_focus() {
@@ -279,9 +277,7 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
     }
 
     if is_editing && Some(&text) != leaf_edit_text {
-        if let Some(edit_text) = w.leaf_edit_text() {
-            *edit_text = Some(text.clone());
-        }
+        w.set_leaf_edit_text(Some(text.clone()));
         if matches!(id, Id::String(_)) {
             w.set_edge(path, Id::String(text));
         }
@@ -368,14 +364,15 @@ fn project_uuid(
                     ui.horizontal(|ui| {
                         render_label(ui, new_label, false, &InteractionMode::Normal);
                         label_arrow(ui);
-                        if let Some(ps) = w.placeholder_state() {
-                            match super::placeholder::render(ui, ps) {
+                        if let Some(ref sel) = editor.selection {
+                            let mut ps = sel.placeholder.clone();
+                            match super::placeholder::render(ui, &mut ps) {
                                 PlaceholderResult::Commit(value) => {
                                     w.set_edge(&path.child(new_label.clone()), value);
                                     w.select(None);
                                 }
                                 PlaceholderResult::Dismiss => w.select(None),
-                                PlaceholderResult::Active => {}
+                                PlaceholderResult::Active => w.set_placeholder_state(ps),
                             }
                         }
                     });
