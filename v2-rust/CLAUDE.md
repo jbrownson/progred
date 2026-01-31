@@ -10,6 +10,10 @@ When running cargo commands, unset these:
 unset CARGO_HOME RUSTUP_HOME && cargo build
 ```
 
+## Key Design Rules
+
+- **Don't persist semantics in documents** — Documents are pure graph structure. Semantics (name field, isa field) live in the Editor, loaded separately. See README for rationale.
+
 ## Future Considerations
 
 - `muda` crate for native OS menus (instead of egui menus)
