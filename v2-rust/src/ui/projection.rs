@@ -251,7 +251,7 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
     let text_width = galley.rect.width();
     let desired_width = text_width.max(20.0);
 
-    let stable_id = ui.id().with("leaf_editor");
+    let stable_id = egui::Id::new(path);
     let response = highlighted(ui, |ui| {
         ui.add(
             egui::TextEdit::singleline(&mut text)
@@ -322,6 +322,10 @@ fn project_uuid(
         .filter(|label| !edges.map(|e| e.contains_key(label)).unwrap_or(false));
     let all_edges: Vec<(Id, Id)> = edges.into_iter()
         .flat_map(|e| e.iter().map(|(k, v)| (k.clone(), v.clone())))
+        .filter(|(label, _)| {
+            editor.semantics.name_field.as_ref() != Some(label)
+                && editor.semantics.isa_field.as_ref() != Some(label)
+        })
         .collect();
     let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
@@ -357,17 +361,19 @@ fn project_uuid(
             ui.indent("edges", |ui| {
                 for (label, value) in &all_edges {
                     let label_secondary = selected_node.as_ref() == Some(label);
-                    ui.horizontal(|ui| {
-                        if render_label(ui, editor, label, label_secondary, mode).clicked()
-                            && !matches!(mode, InteractionMode::Normal)
-                        {
-                            handle_pick(w, mode, label.clone(), path);
-                        }
+                    ui.push_id(label, |ui| {
+                        ui.horizontal(|ui| {
+                            if render_label(ui, editor, label, label_secondary, mode).clicked()
+                                && !matches!(mode, InteractionMode::Normal)
+                            {
+                                handle_pick(w, mode, label.clone(), path);
+                            }
 
-                        label_arrow(ui);
-                        project_id(ui, editor, w, &path.child(label.clone()), value, child_ancestors.clone(), mode);
+                            label_arrow(ui);
+                            project_id(ui, editor, w, &path.child(label.clone()), value, child_ancestors.clone(), mode);
+                        });
+                        ui.add_space(2.0);
                     });
-                    ui.add_space(2.0);
                 }
                 if let Some(ref new_label) = new_edge_label {
                     ui.horizontal(|ui| {

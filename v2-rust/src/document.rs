@@ -141,6 +141,7 @@ pub struct Editor {
     pub graph_view: GraphViewState,
     pub editing_leaf: bool,
     pub semantics: Semantics,
+    pub(crate) cached_orphans: Option<(MutGid, Vec<RootSlot>, Vec<Id>)>,
 }
 
 impl Editor {
@@ -153,6 +154,7 @@ impl Editor {
             graph_view: GraphViewState::new(),
             editing_leaf: false,
             semantics: Semantics::default(),
+            cached_orphans: None,
         }
     }
 
@@ -175,6 +177,21 @@ impl Editor {
             (Some(isa), None) => Some(isa),
             (None, Some(n)) => Some(format!("\"{n}\"")),
             (None, None) => None,
+        }
+    }
+
+    pub fn orphan_roots(&self) -> &[Id] {
+        match &self.cached_orphans {
+            Some((gid, roots, orphans)) if self.doc.gid.ptr_eq(gid) && &self.doc.roots == roots => orphans,
+            _ => &[],
+        }
+    }
+
+    pub fn refresh_orphan_cache(&mut self) {
+        if !self.cached_orphans.as_ref()
+            .is_some_and(|(gid, roots, _)| self.doc.gid.ptr_eq(gid) && &self.doc.roots == roots)
+        {
+            self.cached_orphans = Some((self.doc.gid.clone(), self.doc.roots.clone(), self.doc.orphan_roots()));
         }
     }
 }

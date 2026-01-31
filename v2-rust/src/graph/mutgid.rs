@@ -29,6 +29,10 @@ impl MutGid {
             })
         )
     }
+
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        self.data.ptr_eq(&other.data)
+    }
 }
 
 impl Gid for MutGid {

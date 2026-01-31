@@ -6,7 +6,7 @@ mod ui;
 
 use document::{Document, Editor, EditorWriter};
 use eframe::egui;
-use graph::{Id, MutGid, RootSlot};
+use graph::{Gid, Id, MutGid, RootSlot};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -86,39 +86,122 @@ impl ProgredApp {
         }
     }
 
-    fn create_test_data() -> (MutGid, Vec<RootSlot>) {
+    fn create_standard_semantics() -> (Document, document::Semantics) {
         let mut gid = MutGid::new();
 
-        let def = Id::new_uuid();
-        let field = Id::new_uuid();
+        // === Semantic fields (editor-recognized) ===
         let name = Id::new_uuid();
         let isa = Id::new_uuid();
 
-        gid.set(def.clone(), isa.clone(), def.clone());
-        gid.set(def.clone(), name.clone(), Id::String("def".into()));
+        // === Type system fields ===
+        let fields_f = Id::new_uuid();
+        let variants_f = Id::new_uuid();
+        let type_f = Id::new_uuid();
+        let head_f = Id::new_uuid();
+        let tail_f = Id::new_uuid();
 
-        gid.set(field.clone(), isa.clone(), def.clone());
-        gid.set(field.clone(), name.clone(), Id::String("field".into()));
+        // === Enums (type definitions) ===
+        let enum_e = Id::new_uuid();
+        let variant_e = Id::new_uuid();
+        let field_e = Id::new_uuid();
+        let list_e = Id::new_uuid();
 
-        gid.set(name.clone(), isa.clone(), field.clone());
-        gid.set(name.clone(), name.clone(), Id::String("name".into()));
+        // === List variants ===
+        let empty_v = Id::new_uuid();
+        let cons_v = Id::new_uuid();
 
-        gid.set(isa.clone(), isa.clone(), field.clone());
-        gid.set(isa.clone(), name.clone(), Id::String("isa".into()));
+        // === Set names ===
+        for (id, n) in [
+            (&name, "name"),
+            (&isa, "isa"),
+            (&fields_f, "fields"),
+            (&variants_f, "variants"),
+            (&type_f, "type"),
+            (&head_f, "head"),
+            (&tail_f, "tail"),
+            (&enum_e, "enum"),
+            (&variant_e, "variant"),
+            (&field_e, "field"),
+            (&list_e, "list"),
+            (&empty_v, "empty"),
+            (&cons_v, "cons"),
+        ] {
+            gid.set(id.clone(), name.clone(), Id::String(n.into()));
+        }
+
+        // === Set types (isa) ===
+        // All fields are fields
+        for id in [&name, &isa, &fields_f, &variants_f, &type_f, &head_f, &tail_f] {
+            gid.set(id.clone(), isa.clone(), field_e.clone());
+        }
+        // All enums are enums
+        for id in [&enum_e, &variant_e, &field_e, &list_e] {
+            gid.set(id.clone(), isa.clone(), enum_e.clone());
+        }
+        // List variants are variants
+        for id in [&empty_v, &cons_v] {
+            gid.set(id.clone(), isa.clone(), variant_e.clone());
+        }
+
+        // === Self-description: what fields each type has ===
+        // Helper to create a list
+        let make_list = |gid: &mut MutGid, elements: &[&Id]| -> Id {
+            elements.iter().rev().fold(Id::new_uuid(), |tail_node, &element| {
+                if matches!(tail_node, Id::Uuid(_)) && gid.edges(&tail_node).is_none() {
+                    // First iteration: tail_node is fresh, make it empty
+                    gid.set(tail_node.clone(), isa.clone(), empty_v.clone());
+                }
+                let node = Id::new_uuid();
+                gid.set(node.clone(), isa.clone(), cons_v.clone());
+                gid.set(node.clone(), head_f.clone(), element.clone());
+                gid.set(node.clone(), tail_f.clone(), tail_node);
+                node
+            })
+        };
+
+        // enum has fields: [name, variants]
+        let enum_fields = make_list(&mut gid, &[&name, &variants_f]);
+        gid.set(enum_e.clone(), fields_f.clone(), enum_fields);
+
+        // variant has fields: [name, fields]
+        let variant_fields = make_list(&mut gid, &[&name, &fields_f]);
+        gid.set(variant_e.clone(), fields_f.clone(), variant_fields);
+
+        // field has fields: [name, type]
+        let field_fields = make_list(&mut gid, &[&name, &type_f]);
+        gid.set(field_e.clone(), fields_f.clone(), field_fields);
+
+        // list has variants: [empty, cons]
+        let list_variants = make_list(&mut gid, &[&empty_v, &cons_v]);
+        gid.set(list_e.clone(), variants_f.clone(), list_variants);
+
+        // cons has fields: [head, tail]
+        let cons_fields = make_list(&mut gid, &[&head_f, &tail_f]);
+        gid.set(cons_v.clone(), fields_f.clone(), cons_fields);
+
+        // empty has no fields (empty list)
+        let empty_fields = Id::new_uuid();
+        gid.set(empty_fields.clone(), isa.clone(), empty_v.clone());
+        gid.set(empty_v.clone(), fields_f.clone(), empty_fields);
 
         let roots = vec![
-            RootSlot::new(def),
-            RootSlot::new(field),
-            RootSlot::new(name),
-            RootSlot::new(isa),
+            RootSlot::new(enum_e),
+            RootSlot::new(variant_e),
+            RootSlot::new(field_e),
+            RootSlot::new(list_e),
         ];
 
-        (gid, roots)
+        let semantics = document::Semantics {
+            name_field: Some(name),
+            isa_field: Some(isa),
+        };
+
+        (Document { gid, roots }, semantics)
     }
 
-    fn load_test_data(&mut self) {
-        let (gid, roots) = Self::create_test_data();
-        self.editor = Editor { doc: Document { gid, roots }, ..Editor::new() };
+    fn load_standard_semantics(&mut self) {
+        let (doc, semantics) = Self::create_standard_semantics();
+        self.editor = Editor { doc, semantics, ..Editor::new() };
     }
 
     fn delete_selection(&mut self) {
@@ -180,8 +263,8 @@ impl ProgredApp {
                         ui.close();
                     }
                     ui.separator();
-                    if ui.add(egui::Button::new("Load Test Data")).clicked() {
-                        self.load_test_data();
+                    if ui.add(egui::Button::new("Load Standard Semantics")).clicked() {
+                        self.load_standard_semantics();
                         ui.close();
                     }
                 });
@@ -217,6 +300,7 @@ impl eframe::App for ProgredApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(ctx.style().visuals.panel_fill))
             .show(ctx, |ui| {
+                self.editor.refresh_orphan_cache();
                 let snapshot = self.editor.clone();
                 let mut w = EditorWriter::new(&mut self.editor);
 

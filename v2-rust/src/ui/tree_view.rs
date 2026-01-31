@@ -47,7 +47,7 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
             }
         });
 
-        let orphan_roots = editor.doc.orphan_roots();
+        let orphan_roots = editor.orphan_roots();
         if !orphan_roots.is_empty() {
             ui.add_space(8.0);
             ui.label(RichText::new("orphans").color(Color32::from_gray(100)).italics().size(11.0));
