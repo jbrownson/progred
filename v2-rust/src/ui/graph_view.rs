@@ -24,6 +24,7 @@ pub struct GraphViewState {
     pan_offset: Vec2,
     panning: bool,
     pending_drag: Option<(Id, Pos2)>,
+    prev_edge_targets: HashMap<(Id, Id), Id>,
 }
 
 impl GraphViewState {
@@ -36,6 +37,7 @@ impl GraphViewState {
             pan_offset: Vec2::ZERO,
             panning: false,
             pending_drag: None,
+            prev_edge_targets: HashMap::new(),
         }
     }
 }
@@ -47,14 +49,62 @@ fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
     Pos2::new(x + index as f32 * 5.0, y + index as f32 * 5.0)
 }
 
-fn sync_positions(state: &mut GraphViewState, doc: &Document) {
-    let all_ids: std::collections::HashSet<Id> = doc.roots.iter().map(|r| r.value.clone())
+fn collect_all_ids(doc: &Document) -> std::collections::HashSet<Id> {
+    doc.roots.iter().map(|r| r.value.clone())
         .chain(doc.gid.entities().flat_map(|id| {
             std::iter::once(id.clone()).chain(
                 doc.gid.edges(id).into_iter().flat_map(|edges| edges.iter().map(|(_, v)| v.clone()))
             )
         }))
+        .collect()
+}
+
+fn build_edge_targets(doc: &Document) -> HashMap<(Id, Id), Id> {
+    doc.gid.entities()
+        .flat_map(|entity| {
+            doc.gid.edges(entity).into_iter().flat_map(move |edges| {
+                edges.iter().map(move |(label, target)| ((entity.clone(), label.clone()), target.clone()))
+            })
+        })
+        .collect()
+}
+
+fn compute_physics_transfers<'a>(
+    current: &'a HashMap<(Id, Id), Id>,
+    prev: &'a HashMap<(Id, Id), Id>,
+    positions: &'a HashMap<Id, Pos2>,
+    stale: &'a std::collections::HashSet<&Id>,
+) -> HashMap<Id, Id> {
+    current.iter()
+        .filter(|(_, new_target)| !positions.contains_key(new_target))
+        .filter_map(|(key, new_target)| {
+            prev.get(key)
+                .filter(|old_target| stale.contains(old_target))
+                .map(|old_target| (new_target.clone(), old_target.clone()))
+        })
+        .collect()
+}
+
+fn sync_positions(state: &mut GraphViewState, doc: &Document) {
+    let all_ids = collect_all_ids(doc);
+    let current_edge_targets = build_edge_targets(doc);
+
+    let stale_ids: std::collections::HashSet<&Id> = state.positions.keys()
+        .filter(|id| !all_ids.contains(*id))
         .collect();
+
+    let transfers = compute_physics_transfers(
+        &current_edge_targets, &state.prev_edge_targets, &state.positions, &stale_ids
+    );
+
+    for (new_id, old_id) in &transfers {
+        if let Some(&pos) = state.positions.get(old_id) {
+            state.positions.insert(new_id.clone(), pos);
+        }
+        if let Some(&vel) = state.velocities.get(old_id) {
+            state.velocities.insert(new_id.clone(), vel);
+        }
+    }
 
     for (i, id) in all_ids.iter().enumerate() {
         state.positions.entry(id.clone()).or_insert_with(|| deterministic_pos(id, i));
@@ -63,6 +113,7 @@ fn sync_positions(state: &mut GraphViewState, doc: &Document) {
 
     state.positions.retain(|id, _| all_ids.contains(id));
     state.velocities.retain(|id, _| all_ids.contains(id));
+    state.prev_edge_targets = current_edge_targets;
 }
 
 struct Edge {
