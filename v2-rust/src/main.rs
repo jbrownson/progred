@@ -87,6 +87,139 @@ impl ProgredApp {
         }
     }
 
+    fn create_type_system_semantics() -> (Document, document::Semantics) {
+        let mut gid = MutGid::new();
+
+        // === Semantic fields ===
+        let name = Id::new_uuid();
+        let isa = Id::new_uuid();
+
+        // === Fields for type constructs ===
+        let body_f = Id::new_uuid();     // type, forall: the type being named/parameterized
+        let params_f = Id::new_uuid();   // forall: list of type params
+        let base_f = Id::new_uuid();     // apply: the parameterized type
+        let args_f = Id::new_uuid();     // apply: list of type arguments
+        let variants_f = Id::new_uuid(); // sum: list of variant types
+        let fields_f = Id::new_uuid();   // product: list of field definitions
+        let type_f = Id::new_uuid();     // field def: the field's type
+
+        // === List fields (for bootstrapping) ===
+        let head_f = Id::new_uuid();
+        let tail_f = Id::new_uuid();
+
+        // === Type constructs ===
+        let type_t = Id::new_uuid();     // names a type
+        let forall_t = Id::new_uuid();   // introduces type params
+        let apply_t = Id::new_uuid();    // instantiates type params
+        let sum_t = Id::new_uuid();      // union / or
+        let product_t = Id::new_uuid();  // record / and
+        let field_t = Id::new_uuid();    // field definition (name + type)
+
+        // === Primitives ===
+        let string_t = Id::new_uuid();
+        let number_t = Id::new_uuid();
+
+        // === List (bootstrapped) ===
+        let cons_t = Id::new_uuid();
+        let empty_t = Id::new_uuid();
+
+        // === Set names ===
+        for (id, n) in [
+            (&name, "name"), (&isa, "isa"),
+            (&body_f, "body"), (&params_f, "params"), (&base_f, "base"),
+            (&args_f, "args"), (&variants_f, "variants"), (&fields_f, "fields"),
+            (&type_f, "type"), (&head_f, "head"), (&tail_f, "tail"),
+            (&type_t, "type"), (&forall_t, "forall"), (&apply_t, "apply"),
+            (&sum_t, "sum"), (&product_t, "product"), (&field_t, "field"),
+            (&string_t, "string"), (&number_t, "number"),
+            (&cons_t, "cons"), (&empty_t, "empty"),
+        ] {
+            gid.set(id.clone(), name.clone(), Id::String(n.into()));
+        }
+
+        // === Set isa: type constructs are products ===
+        for id in [&type_t, &forall_t, &apply_t, &sum_t, &product_t, &field_t, &cons_t, &empty_t] {
+            gid.set(id.clone(), isa.clone(), product_t.clone());
+        }
+        // Fields are fields
+        for id in [&name, &isa, &body_f, &params_f, &base_f, &args_f, &variants_f, &fields_f, &type_f, &head_f, &tail_f] {
+            gid.set(id.clone(), isa.clone(), field_t.clone());
+        }
+        // Primitives are types (named types with no body needed)
+        for id in [&string_t, &number_t] {
+            gid.set(id.clone(), isa.clone(), type_t.clone());
+        }
+
+        // === Helper to make lists ===
+        let make_list = |gid: &mut MutGid, elements: &[&Id]| -> Id {
+            elements.iter().rev().fold(Id::new_uuid(), |tail_node, &element| {
+                if matches!(tail_node, Id::Uuid(_)) && gid.edges(&tail_node).is_none() {
+                    gid.set(tail_node.clone(), isa.clone(), empty_t.clone());
+                }
+                let node = Id::new_uuid();
+                gid.set(node.clone(), isa.clone(), cons_t.clone());
+                gid.set(node.clone(), head_f.clone(), element.clone());
+                gid.set(node.clone(), tail_f.clone(), tail_node);
+                node
+            })
+        };
+
+        // === Define fields for each construct ===
+        // type has: name, body
+        let type_fields = make_list(&mut gid, &[&name, &body_f]);
+        gid.set(type_t.clone(), fields_f.clone(), type_fields);
+
+        // forall has: params, body
+        let forall_fields = make_list(&mut gid, &[&params_f, &body_f]);
+        gid.set(forall_t.clone(), fields_f.clone(), forall_fields);
+
+        // apply has: base, args
+        let apply_fields = make_list(&mut gid, &[&base_f, &args_f]);
+        gid.set(apply_t.clone(), fields_f.clone(), apply_fields);
+
+        // sum has: variants
+        let sum_fields = make_list(&mut gid, &[&variants_f]);
+        gid.set(sum_t.clone(), fields_f.clone(), sum_fields);
+
+        // product has: fields
+        let product_fields = make_list(&mut gid, &[&fields_f]);
+        gid.set(product_t.clone(), fields_f.clone(), product_fields);
+
+        // field has: name, type
+        let field_fields = make_list(&mut gid, &[&name, &type_f]);
+        gid.set(field_t.clone(), fields_f.clone(), field_fields);
+
+        // cons has: head, tail
+        let cons_fields = make_list(&mut gid, &[&head_f, &tail_f]);
+        gid.set(cons_t.clone(), fields_f.clone(), cons_fields);
+
+        // empty has no fields
+        let empty_fields = make_list(&mut gid, &[]);
+        gid.set(empty_t.clone(), fields_f.clone(), empty_fields);
+
+        let roots = vec![
+            RootSlot::new(type_t),
+            RootSlot::new(forall_t),
+            RootSlot::new(apply_t),
+            RootSlot::new(sum_t),
+            RootSlot::new(product_t),
+            RootSlot::new(field_t),
+            RootSlot::new(string_t),
+            RootSlot::new(number_t),
+        ];
+
+        let semantics = document::Semantics {
+            name_field: Some(name),
+            isa_field: Some(isa),
+            cons_variant: Some(cons_t),
+            empty_variant: Some(empty_t),
+            head_field: Some(head_f),
+            tail_field: Some(tail_f),
+        };
+
+        (Document { gid, roots }, semantics)
+    }
+
     fn create_standard_semantics() -> (Document, document::Semantics) {
         let mut gid = MutGid::new();
 
@@ -209,6 +342,11 @@ impl ProgredApp {
         self.editor = Editor { doc, semantics, ..Editor::new() };
     }
 
+    fn load_type_system_semantics(&mut self) {
+        let (doc, semantics) = Self::create_type_system_semantics();
+        self.editor = Editor { doc, semantics, ..Editor::new() };
+    }
+
     fn delete_selection(&mut self) {
         if let Some(selection) = self.editor.selection.take() {
             self.editor.doc.delete(&selection.target);
@@ -270,6 +408,10 @@ impl ProgredApp {
                     ui.separator();
                     if ui.add(egui::Button::new("Load Standard Semantics")).clicked() {
                         self.load_standard_semantics();
+                        ui.close();
+                    }
+                    if ui.add(egui::Button::new("Load Type System")).clicked() {
+                        self.load_type_system_semantics();
                         ui.close();
                     }
                 });
