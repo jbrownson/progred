@@ -24,6 +24,7 @@ pub struct GraphViewState {
     dragging: Option<Id>,
     drag_offset: Vec2,
     pan_offset: Vec2,
+    zoom: f32,
     panning: bool,
     pending_drag: Option<(Id, Pos2)>,
     prev_edge_targets: HashMap<(Id, Id), Id>,
@@ -37,6 +38,7 @@ impl GraphViewState {
             dragging: None,
             drag_offset: Vec2::ZERO,
             pan_offset: Vec2::ZERO,
+            zoom: 1.0,
             panning: false,
             pending_drag: None,
             prev_edge_targets: HashMap::new(),
@@ -233,10 +235,12 @@ fn clip_to_rect_toward(center: Pos2, half: Vec2, control: Pos2, fallback: Pos2) 
     }
 }
 
-fn draw_arrowhead(painter: &egui::Painter, tip: Pos2, dir: Vec2, stroke: Stroke) {
+fn draw_arrowhead(painter: &egui::Painter, tip: Pos2, dir: Vec2, stroke: Stroke, zoom: f32) {
     let perp = Vec2::new(-dir.y, dir.x);
+    let size = 6.0 * zoom;
+    let width = 3.0 * zoom;
     painter.add(egui::Shape::line(
-        vec![tip - dir * 6.0 + perp * 3.0, tip, tip - dir * 6.0 - perp * 3.0],
+        vec![tip - dir * size + perp * width, tip, tip - dir * size - perp * width],
         stroke,
     ));
 }
@@ -272,36 +276,64 @@ fn edge_label_text(editor: &Editor, label: &Id) -> Option<String> {
     }
 }
 
-fn edge_label_size(painter: &egui::Painter, editor: &Editor, label: &Id) -> Vec2 {
+fn edge_label_size(painter: &egui::Painter, editor: &Editor, label: &Id, zoom: f32) -> Vec2 {
     match edge_label_text(editor, label) {
         Some(text) => {
-            let galley = painter.layout_no_wrap(text, egui::FontId::proportional(TEXT_FONT_SIZE), Color32::BLACK);
-            galley.rect.size() + Vec2::splat(EDGE_LABEL_PADDING)
+            let galley = painter.layout_no_wrap(text, egui::FontId::proportional(TEXT_FONT_SIZE * zoom), Color32::BLACK);
+            galley.rect.size() + Vec2::splat(EDGE_LABEL_PADDING * zoom)
         }
-        None => Vec2::splat(EDGE_LABEL_IDENTICON_SIZE + EDGE_LABEL_PADDING),
+        None => Vec2::splat((EDGE_LABEL_IDENTICON_SIZE + EDGE_LABEL_PADDING) * zoom),
     }
 }
 
-fn draw_edge_label(painter: &egui::Painter, editor: &Editor, pos: Pos2, label: &Id, bg_color: Color32) {
+fn draw_edge_label(painter: &egui::Painter, editor: &Editor, pos: Pos2, label: &Id, bg_color: Color32, zoom: f32) {
     match edge_label_text(editor, label) {
         Some(text) => {
-            let galley = painter.layout_no_wrap(text, egui::FontId::proportional(TEXT_FONT_SIZE), Color32::from_gray(80));
-            let bg_rect = Rect::from_center_size(pos, galley.rect.size() + Vec2::splat(EDGE_LABEL_PADDING));
+            let galley = painter.layout_no_wrap(text, egui::FontId::proportional(TEXT_FONT_SIZE * zoom), Color32::from_gray(80));
+            let bg_rect = Rect::from_center_size(pos, galley.rect.size() + Vec2::splat(EDGE_LABEL_PADDING * zoom));
             painter.rect_filled(bg_rect, CornerRadius::ZERO, bg_color);
-            painter.galley(bg_rect.min + Vec2::splat(EDGE_LABEL_PADDING / 2.0), galley, Color32::from_gray(80));
+            painter.galley(bg_rect.min + Vec2::splat(EDGE_LABEL_PADDING * zoom / 2.0), galley, Color32::from_gray(80));
         }
         None => {
             if let Id::Uuid(uuid) = label {
-                super::identicon::draw_at(painter, Rect::from_center_size(pos, Vec2::splat(EDGE_LABEL_IDENTICON_SIZE)), uuid);
+                super::identicon::draw_at(painter, Rect::from_center_size(pos, Vec2::splat(EDGE_LABEL_IDENTICON_SIZE * zoom)), uuid);
             }
         }
     }
 }
 
+fn graph_to_screen(pos: Pos2, panel_center: Vec2, pan_offset: Vec2, zoom: f32) -> Pos2 {
+    (pos.to_vec2() * zoom).to_pos2() + panel_center + pan_offset
+}
+
+fn screen_to_graph(pos: Pos2, panel_center: Vec2, pan_offset: Vec2, zoom: f32) -> Pos2 {
+    ((pos.to_vec2() - panel_center - pan_offset) / zoom).to_pos2()
+}
+
 pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
     let mut state = editor.graph_view.clone();
     let panel_rect = ui.max_rect();
-    let view_offset = panel_rect.center().to_vec2() + state.pan_offset;
+    let panel_center = panel_rect.center().to_vec2();
+
+    let pointer_in_panel = ui.input(|i| i.pointer.hover_pos()).map_or(false, |p| panel_rect.contains(p));
+    let scroll = ui.input(|i| i.smooth_scroll_delta);
+    let zoom = ui.input(|i| i.zoom_delta());
+
+    if pointer_in_panel && zoom != 1.0 {
+        let new_zoom = (state.zoom * zoom).clamp(0.1, 5.0);
+        if let Some(cursor) = ui.input(|i| i.pointer.hover_pos()) {
+            let graph_pos = screen_to_graph(cursor, panel_center, state.pan_offset, state.zoom);
+            state.zoom = new_zoom;
+            let new_screen = graph_to_screen(graph_pos, panel_center, state.pan_offset, state.zoom);
+            state.pan_offset += cursor - new_screen;
+        } else {
+            state.zoom = new_zoom;
+        }
+    }
+
+    if pointer_in_panel && scroll != Vec2::ZERO {
+        state.pan_offset += scroll;
+    }
 
     sync_positions(&mut state, &editor.doc);
     let edges = collect_edges(&editor.doc);
@@ -320,7 +352,8 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
 
     let pointer = response.interact_pointer_pos();
     let hit = pointer.and_then(|p| state.positions.iter().find(|&(id, pos)| {
-        Rect::from_center_size(*pos + view_offset, node_half_size(&half_sizes, id) * 2.0).contains(p)
+        let screen = graph_to_screen(*pos, panel_center, state.pan_offset, state.zoom);
+        Rect::from_center_size(screen, node_half_size(&half_sizes, id) * 2.0 * state.zoom).contains(p)
     }).map(|(id, pos)| (id.clone(), *pos)));
 
     if ui.input(|i| i.pointer.primary_pressed()) && state.dragging.is_none() {
@@ -330,7 +363,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     if response.drag_started() && state.dragging.is_none() {
         if let Some((ref id, pos)) = state.pending_drag.take() {
             state.dragging = Some(id.clone());
-            state.drag_offset = (pos + view_offset) - pointer.unwrap();
+            state.drag_offset = graph_to_screen(pos, panel_center, state.pan_offset, state.zoom) - pointer.unwrap();
         } else {
             state.panning = true;
         }
@@ -339,7 +372,8 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     if response.dragged() {
         if let Some(id) = state.dragging.clone() {
             if let Some(pointer) = response.interact_pointer_pos() {
-                state.positions.insert(id.clone(), pointer + state.drag_offset - view_offset);
+                let new_pos = screen_to_graph(pointer + state.drag_offset, panel_center, state.pan_offset, state.zoom);
+                state.positions.insert(id.clone(), new_pos);
                 state.velocities.insert(id, Vec2::ZERO);
             }
         } else if state.panning {
@@ -353,14 +387,16 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         state.pending_drag = None;
     }
 
+    let to_screen = |pos: Pos2| graph_to_screen(pos, panel_center, state.pan_offset, state.zoom);
+
     let mut pair_counts: HashMap<(Id, Id), usize> = HashMap::new();
     for edge in &edges {
         *pair_counts.entry(canonical_pair(&edge.source, &edge.target)).or_default() += 1;
     }
     let mut pair_indices: HashMap<(Id, Id), usize> = HashMap::new();
 
-    let arrow_stroke = Stroke::new(1.5, Color32::from_gray(120));
-    let selected_stroke = Stroke::new(2.5, colors::SELECTION);
+    let arrow_stroke = Stroke::new(1.5 * state.zoom, Color32::from_gray(120));
+    let selected_stroke = Stroke::new(2.5 * state.zoom, colors::SELECTION);
     let curve_spacing = 25.0;
     let mut edge_hit_zones: Vec<(Rect, Id, Id)> = Vec::new();
 
@@ -368,21 +404,21 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         let is_selected = graph_selected_edge == Some((&edge.source, &edge.label));
         let stroke = if is_selected { selected_stroke } else { arrow_stroke };
         if let (Some(&sp), Some(&tp)) = (state.positions.get(&edge.source), state.positions.get(&edge.target)) {
-            let src_pos = sp + view_offset;
-            let tgt_pos = tp + view_offset;
-            let src_half = half_sizes.get(&edge.source).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
-            let tgt_half = half_sizes.get(&edge.target).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
+            let src_pos = to_screen(sp);
+            let tgt_pos = to_screen(tp);
+            let src_half = half_sizes.get(&edge.source).copied().unwrap_or(Vec2::splat(NODE_RADIUS)) * state.zoom;
+            let tgt_half = half_sizes.get(&edge.target).copied().unwrap_or(Vec2::splat(NODE_RADIUS)) * state.zoom;
 
             let pair_key = canonical_pair(&edge.source, &edge.target);
             let total = pair_counts[&pair_key];
             let idx = pair_indices.entry(pair_key).or_default();
             let edge_idx = *idx;
             *idx += 1;
-            let curve_offset = (edge_idx as f32 - (total - 1) as f32 / 2.0) * curve_spacing;
+            let curve_offset = (edge_idx as f32 - (total - 1) as f32 / 2.0) * curve_spacing * state.zoom;
 
             if edge.source == edge.target {
-                let loop_height = NODE_RADIUS * 2.5 + edge_idx as f32 * 20.0;
-                let loop_width = NODE_RADIUS * 1.5 + edge_idx as f32 * 8.0;
+                let loop_height = (NODE_RADIUS * 2.5 + edge_idx as f32 * 20.0) * state.zoom;
+                let loop_width = (NODE_RADIUS * 1.5 + edge_idx as f32 * 8.0) * state.zoom;
                 let cp1 = src_pos + Vec2::new(-loop_width, -loop_height);
                 let cp2 = src_pos + Vec2::new(loop_width, -loop_height);
                 let start = clip_to_rect(src_pos, src_half, cp1);
@@ -400,14 +436,14 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
                     })
                     .collect();
                 painter.add(egui::Shape::line(points, stroke));
-                draw_arrowhead(painter, end, (end - cp2).normalized(), stroke);
+                draw_arrowhead(painter, end, (end - cp2).normalized(), stroke, state.zoom);
                 let label_pos = Pos2::new(
                     0.125 * start.x + 0.375 * cp1.x + 0.375 * cp2.x + 0.125 * end.x,
                     0.125 * start.y + 0.375 * cp1.y + 0.375 * cp2.y + 0.125 * end.y,
                 );
-                let label_size = edge_label_size(painter, editor, &edge.label);
+                let label_size = edge_label_size(painter, editor, &edge.label, state.zoom);
                 edge_hit_zones.push((Rect::from_center_size(label_pos, label_size), edge.source.clone(), edge.label.clone()));
-                draw_edge_label(painter, editor, label_pos, &edge.label, bg_color);
+                draw_edge_label(painter, editor, label_pos, &edge.label, bg_color, state.zoom);
             } else {
                 let mid = src_pos + (tgt_pos - src_pos) * 0.5;
                 let canonical_dir = if edge.source <= edge.target {
@@ -430,57 +466,54 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
                     })
                     .collect();
                 painter.add(egui::Shape::line(points, stroke));
-                draw_arrowhead(painter, end, ((end - control) * 2.0).normalized(), stroke);
+                draw_arrowhead(painter, end, ((end - control) * 2.0).normalized(), stroke, state.zoom);
 
                 let label_pos = Pos2::new(
                     0.25 * src_pos.x + 0.5 * control.x + 0.25 * end.x,
                     0.25 * src_pos.y + 0.5 * control.y + 0.25 * end.y,
                 );
-                let label_size = edge_label_size(painter, editor, &edge.label);
+                let label_size = edge_label_size(painter, editor, &edge.label, state.zoom);
                 edge_hit_zones.push((Rect::from_center_size(label_pos, label_size), edge.source.clone(), edge.label.clone()));
-                draw_edge_label(painter, editor, label_pos, &edge.label, bg_color);
+                draw_edge_label(painter, editor, label_pos, &edge.label, bg_color, state.zoom);
             }
         }
     }
 
     let node_fill = Color32::WHITE;
-    let text_font = egui::FontId::proportional(TEXT_FONT_SIZE);
+    let text_font = egui::FontId::proportional(TEXT_FONT_SIZE * state.zoom);
     let root_ids: std::collections::HashSet<Id> = editor.doc.roots.iter().map(|r| r.value.clone()).collect();
-    let root_stroke = Stroke::new(2.0, colors::SELECTION.gamma_multiply(0.6));
-    let selected_root = editor.selection.as_ref().and_then(|s| match &s.target {
-        SelectionTarget::GraphRoot(id) => Some(id),
-        _ => None,
-    });
-    let selected_root_stroke = Stroke::new(2.5, colors::SELECTION);
+    let root_stroke = Stroke::new(2.0 * state.zoom, Color32::from_gray(60));
+    let selected_node = editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc));
 
     for (id, &pos) in &state.positions {
-        let screen_pos = pos + view_offset;
+        let screen_pos = to_screen(pos);
         let is_root = root_ids.contains(id);
-        let is_selected_root = selected_root == Some(id);
+        let is_selected = selected_node.as_ref() == Some(id);
         match id {
             Id::Uuid(uuid) => {
-                let stroke = if is_selected_root { selected_root_stroke } else if is_root { root_stroke } else { Stroke::new(2.0, Color32::from_gray(100)) };
+                let stroke = if is_selected { selected_stroke } else if is_root { root_stroke } else { Stroke::new(2.0 * state.zoom, Color32::from_gray(100)) };
                 match editor.display_label(id) {
                     Some(label) => {
                         let galley = painter.layout_no_wrap(label.clone(), text_font.clone(), Color32::from_gray(60));
-                        let text_rect = Rect::from_center_size(screen_pos, galley.rect.size() + Vec2::splat(TEXT_PADDING));
-                        painter.rect_filled(text_rect, CornerRadius::same(4), Color32::WHITE);
-                        painter.rect_stroke(text_rect, CornerRadius::same(4), stroke, eframe::epaint::StrokeKind::Outside);
-                        painter.galley(text_rect.min + Vec2::splat(TEXT_PADDING / 2.0), galley, Color32::from_gray(60));
+                        let text_rect = Rect::from_center_size(screen_pos, galley.rect.size() + Vec2::splat(TEXT_PADDING * state.zoom));
+                        let rounding = CornerRadius::same((4.0 * state.zoom) as u8);
+                        painter.rect_filled(text_rect, rounding, Color32::WHITE);
+                        painter.rect_stroke(text_rect, rounding, stroke, eframe::epaint::StrokeKind::Outside);
+                        painter.galley(text_rect.min + Vec2::splat(TEXT_PADDING * state.zoom / 2.0), galley, Color32::from_gray(60));
                     }
                     None => {
-                        let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4));
+                        let icon_rect = Rect::from_center_size(screen_pos, Vec2::splat(NODE_RADIUS * 1.4 * state.zoom));
                         super::identicon::draw_at(painter, icon_rect, uuid);
-                        painter.rect_stroke(icon_rect, CornerRadius::same(2), stroke, eframe::epaint::StrokeKind::Outside);
+                        painter.rect_stroke(icon_rect, CornerRadius::same((2.0 * state.zoom) as u8), stroke, eframe::epaint::StrokeKind::Outside);
                     }
                 }
             }
             _ => {
                 let half = half_sizes.get(id).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
-                let rect = Rect::from_center_size(screen_pos, half * 2.0);
-                let rounding = CornerRadius::same(6);
+                let rect = Rect::from_center_size(screen_pos, half * 2.0 * state.zoom);
+                let rounding = CornerRadius::same((6.0 * state.zoom) as u8);
                 painter.rect_filled(rect, rounding, node_fill);
-                let stroke = if is_selected_root { selected_root_stroke } else if is_root { root_stroke } else { Stroke::new(1.5, Color32::from_gray(160)) };
+                let stroke = if is_selected { selected_stroke } else if is_root { root_stroke } else { Stroke::new(1.5 * state.zoom, Color32::from_gray(160)) };
                 painter.rect_stroke(rect, rounding, stroke, eframe::epaint::StrokeKind::Middle);
                 if let Some(text) = node_display_text(id) {
                     painter.text(screen_pos, egui::Align2::CENTER_CENTER, text, text_font.clone(), Color32::from_gray(60));
@@ -500,7 +533,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         let root_hit = pointer.and_then(|p| {
             state.positions.iter()
                 .filter(|(id, _)| root_ids.contains(id))
-                .find(|(id, pos)| Rect::from_center_size(**pos + view_offset, node_half_size(&half_sizes, id) * 2.0).contains(p))
+                .find(|(id, pos)| Rect::from_center_size(to_screen(**pos), node_half_size(&half_sizes, id) * 2.0 * state.zoom).contains(p))
                 .map(|(id, _)| Selection::graph_root(id.clone()))
         });
         w.select(edge_hit.or(root_hit));
