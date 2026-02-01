@@ -222,6 +222,7 @@ fn project_id(
     mode: &InteractionMode,
 ) {
     match id {
+        Id::Uuid(_) if editor.is_list(id) => project_list(ui, editor, w, path, id, ancestors, mode),
         Id::Uuid(uuid) => project_uuid(ui, editor, w, path, uuid, ancestors, mode),
         Id::String(_) | Id::Number(_) => project_leaf(ui, editor, w, path, id),
     }
@@ -285,6 +286,202 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
             w.set_edge(path, Id::String(text));
         }
     }
+}
+
+struct ListElement {
+    tail_path: Path,
+    head_path: Path,
+    head_value: Option<Id>,
+}
+
+fn flatten_list(editor: &Editor, path: &Path, id: &Id) -> Option<(Vec<ListElement>, Path)> {
+    let head_field = editor.semantics.head_field.as_ref()?;
+    let tail_field = editor.semantics.tail_field.as_ref()?;
+
+    let mut elements = Vec::new();
+    let mut current_path = path.clone();
+    let mut current_id = id;
+    let mut seen = HashSet::new();
+
+    while editor.is_cons(current_id) {
+        if seen.contains(current_id) {
+            return None;
+        }
+        seen.insert(current_id.clone());
+
+        let head_value = editor.doc.gid.get(current_id, head_field).cloned();
+        let head_path = current_path.child(head_field.clone());
+        let tail_path = current_path.child(tail_field.clone());
+        elements.push(ListElement {
+            tail_path: tail_path.clone(),
+            head_path,
+            head_value,
+        });
+
+        let tail_value = editor.doc.gid.get(current_id, tail_field)?;
+        current_path = tail_path;
+        current_id = tail_value;
+    }
+
+    if editor.is_empty(current_id) {
+        Some((elements, current_path))
+    } else {
+        None
+    }
+}
+
+fn is_list_insertion_selected(editor: &Editor, path: &Path, elements: &[ListElement]) -> Option<usize> {
+    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path())?;
+
+    if selected_path == path && !elements.is_empty() {
+        Some(0)
+    } else {
+        elements.iter()
+            .position(|elem| selected_path == &elem.tail_path)
+            .map(|i| i + 1)
+    }
+}
+
+fn list_punct(ui: &mut Ui, w: &mut EditorWriter, text: &str, path: &Path, color: Color32) {
+    if ui.add(egui::Button::new(
+        eframe::egui::RichText::new(text).color(color)
+    ).frame(false).sense(Sense::click())).clicked() {
+        w.select(Some(Selection::edge(path.clone())));
+    }
+}
+
+fn render_value_inline(ui: &mut Ui, editor: &Editor, id: &Id) -> Response {
+    let color = Color32::from_gray(60);
+    match id {
+        Id::Uuid(uuid) => match editor.display_label(id) {
+            Some(label) => ui.label(eframe::egui::RichText::new(label).color(color)),
+            None => identicon(ui, 14.0, uuid),
+        },
+        Id::String(s) => ui.label(eframe::egui::RichText::new(format!("\"{}\"", s)).color(color)),
+        Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(color)),
+    }
+}
+
+fn clickable_value(
+    ui: &mut Ui,
+    editor: &Editor,
+    w: &mut EditorWriter,
+    id: &Id,
+    path: &Path,
+    is_selected: bool,
+    mode: &InteractionMode,
+) {
+    let (style, hovered) = if is_selected {
+        let s = selection_style(true, false);
+        (s, s)
+    } else {
+        mode_style(mode)
+    };
+
+    if clickable(ui, |ui| render_value_inline(ui, editor, id), style, hovered).clicked() {
+        handle_pick(w, mode, id.clone(), path);
+    }
+}
+
+fn render_list_item(
+    ui: &mut Ui,
+    editor: &Editor,
+    w: &mut EditorWriter,
+    elem: &ListElement,
+    is_selected: bool,
+    mode: &InteractionMode,
+) {
+    match &elem.head_value {
+        Some(head) => clickable_value(ui, editor, w, head, &elem.head_path, is_selected, mode),
+        None if is_selected => render_list_placeholder(ui, editor, w, &elem.head_path),
+        None => list_punct(ui, w, "_", &elem.head_path, Color32::from_gray(150)),
+    }
+}
+
+fn project_list(
+    ui: &mut Ui,
+    editor: &Editor,
+    w: &mut EditorWriter,
+    path: &Path,
+    id: &Id,
+    ancestors: HashSet<Id>,
+    mode: &InteractionMode,
+) {
+    let Some((elements, _empty_path)) = flatten_list(editor, path, id) else {
+        if let Id::Uuid(uuid) = id {
+            project_uuid(ui, editor, w, path, uuid, ancestors, mode);
+        }
+        return;
+    };
+
+    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path());
+    let insertion_idx = is_list_insertion_selected(editor, path, &elements);
+    let punct_color = Color32::from_gray(120);
+
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+
+        list_punct(ui, w, "[", path, punct_color);
+
+        if elements.is_empty() {
+            if insertion_idx == Some(0) {
+                render_list_placeholder(ui, editor, w, path);
+            }
+        } else {
+            for (i, elem) in elements.iter().enumerate() {
+                if insertion_idx == Some(i) {
+                    let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
+                    render_list_placeholder(ui, editor, w, insert_path);
+                    ui.label(eframe::egui::RichText::new(", ").color(punct_color));
+                } else if i > 0 {
+                    list_punct(ui, w, ", ", &elements[i - 1].tail_path, punct_color);
+                }
+
+                let item_selected = selected_path == Some(&elem.head_path);
+                render_list_item(ui, editor, w, elem, item_selected, mode);
+            }
+
+            if let Some(last) = elements.last() {
+                if insertion_idx == Some(elements.len()) {
+                    ui.label(eframe::egui::RichText::new(", ").color(punct_color));
+                    render_list_placeholder(ui, editor, w, &last.tail_path);
+                }
+            }
+        }
+
+        let close_path = elements.last().map(|e| &e.tail_path).unwrap_or(path);
+        list_punct(ui, w, "]", close_path, punct_color);
+    });
+}
+
+fn render_list_placeholder(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, insert_path: &Path) {
+    if let Some(ref sel) = editor.selection {
+        let mut ps = sel.placeholder.clone();
+        match super::placeholder::render(ui, &mut ps) {
+            PlaceholderResult::Commit(value) => {
+                do_list_insert(w, editor, insert_path, value);
+                w.select(None);
+            }
+            PlaceholderResult::Dismiss => w.select(None),
+            PlaceholderResult::Active => w.set_placeholder_state(ps),
+        }
+    }
+}
+
+fn do_list_insert(w: &mut EditorWriter, editor: &Editor, insert_path: &Path, head_value: Id) {
+    let Some(cons_variant) = editor.semantics.cons_variant.clone() else { return };
+    let Some(isa_field) = editor.semantics.isa_field.clone() else { return };
+    let Some(head_field) = editor.semantics.head_field.clone() else { return };
+    let Some(tail_field) = editor.semantics.tail_field.clone() else { return };
+
+    let current_value = editor.doc.node(insert_path);
+    let Some(current_value) = current_value else { return };
+
+    let new_cons = Id::new_uuid();
+    w.set_edge(insert_path, new_cons.clone());
+    w.set_edge(&insert_path.child(isa_field), cons_variant);
+    w.set_edge(&insert_path.child(head_field), head_value);
+    w.set_edge(&insert_path.child(tail_field), current_value);
 }
 
 fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {

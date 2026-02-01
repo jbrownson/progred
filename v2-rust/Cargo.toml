@@ -1,9 +1,13 @@
+[workspace]
+members = [".", "progred_macros"]
+
 [package]
 name = "progred"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+progred_macros = { path = "progred_macros" }
 eframe = "0.33"
 egui = "0.33"
 im = "15"

@@ -7,6 +7,10 @@ use std::path::PathBuf;
 pub struct Semantics {
     pub name_field: Option<Id>,
     pub isa_field: Option<Id>,
+    pub cons_variant: Option<Id>,
+    pub empty_variant: Option<Id>,
+    pub head_field: Option<Id>,
+    pub tail_field: Option<Id>,
 }
 
 #[derive(Clone)]
@@ -178,6 +182,25 @@ impl Editor {
             (None, Some(n)) => Some(format!("\"{n}\"")),
             (None, None) => None,
         }
+    }
+
+    pub fn isa_of(&self, id: &Id) -> Option<&Id> {
+        self.semantics.isa_field.as_ref()
+            .and_then(|isa_field| self.doc.gid.get(id, isa_field))
+    }
+
+    pub fn is_cons(&self, id: &Id) -> bool {
+        self.semantics.cons_variant.as_ref()
+            .map_or(false, |cons| self.isa_of(id) == Some(cons))
+    }
+
+    pub fn is_empty(&self, id: &Id) -> bool {
+        self.semantics.empty_variant.as_ref()
+            .map_or(false, |empty| self.isa_of(id) == Some(empty))
+    }
+
+    pub fn is_list(&self, id: &Id) -> bool {
+        self.is_cons(id) || self.is_empty(id)
     }
 
     pub fn orphan_roots(&self) -> &[Id] {

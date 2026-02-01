@@ -1,4 +1,5 @@
 mod document;
+pub mod generated;
 mod graph;
 mod shortcuts;
 mod ts_runtime;
@@ -194,6 +195,10 @@ impl ProgredApp {
         let semantics = document::Semantics {
             name_field: Some(name),
             isa_field: Some(isa),
+            cons_variant: Some(cons_v),
+            empty_variant: Some(empty_v),
+            head_field: Some(head_f),
+            tail_field: Some(tail_f),
         };
 
         (Document { gid, roots }, semantics)
