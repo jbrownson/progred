@@ -8,13 +8,14 @@ use super::{insertion_point, project, InteractionMode};
 
 pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter) {
     let modifiers = ctx.input(|i| i.modifiers);
+    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path());
     let mode = if modifiers.alt {
-        match editor.selection.as_ref().and_then(|s| s.edge_path()) {
+        match selected_path {
             Some(path) => InteractionMode::Assign(path.clone()),
             _ => InteractionMode::Normal,
         }
     } else if modifiers.ctrl {
-        match editor.selection.as_ref().and_then(|s| s.edge_path()) {
+        match selected_path {
             Some(path) if matches!(editor.doc.node(path), Some(Id::Uuid(_))) => {
                 InteractionMode::SelectUnder(path.clone())
             }

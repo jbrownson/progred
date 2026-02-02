@@ -1,3 +1,7 @@
+// TODO: List accessors currently return Vec<T> and eagerly collect. Should return
+// lazy iterators instead - add a ListIter struct to graph module that walks cons/empty
+// lists on demand, then generate `fn fields(&self, gid) -> impl Iterator<Item = Field>`.
+
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};

@@ -1,3 +1,8 @@
+// TODO: Domain projections should receive a `descend` callback instead of rendering
+// children directly. Currently bypasses path tracking, cycle detection, selection state,
+// and editing. See prototype's R.ts descend() pattern. The unused parameters (_w, _path,
+// _ancestors, _mode) should all be used once this is properly integrated.
+
 use crate::document::{Editor, EditorWriter};
 use crate::generated::semantics::*;
 use crate::graph::{Gid, Id, Path};
