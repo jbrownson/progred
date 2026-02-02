@@ -219,11 +219,6 @@ fn generate_accessor(field_id: &str, field_name: &str, field_type: &ResolvedType
             }
         },
         ResolvedType::List(element_type) => {
-            let head_field_str = HEAD_FIELD;
-            let tail_field_str = TAIL_FIELD;
-            let cons_t_str = CONS_T;
-            let isa_field_str = ISA_FIELD;
-
             let (return_type, element_conversion) = match element_type.as_ref() {
                 ResolvedType::String => (
                     quote! { impl Iterator<Item = std::string::String> + 'a },
@@ -258,13 +253,9 @@ fn generate_accessor(field_id: &str, field_name: &str, field_type: &ResolvedType
 
             quote! {
                 pub fn #method_name<'a>(&self, gid: &'a impl crate::graph::Gid) -> #return_type {
-                    crate::graph::ListIter::new(
+                    crate::list_iter::ListIter::new(
                         gid,
                         gid.get(&self.0, &crate::graph::Id::Uuid(uuid::Uuid::parse_str(#field_uuid_str).unwrap())),
-                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#isa_field_str).unwrap()),
-                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#cons_t_str).unwrap()),
-                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#head_field_str).unwrap()),
-                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#tail_field_str).unwrap()),
                     )#element_conversion
                 }
             }

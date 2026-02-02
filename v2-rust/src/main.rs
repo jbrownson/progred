@@ -1,6 +1,7 @@
 mod document;
 pub mod generated;
 mod graph;
+pub mod list_iter;
 mod shortcuts;
 mod ts_runtime;
 mod ui;
