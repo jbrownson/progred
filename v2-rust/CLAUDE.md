@@ -17,11 +17,20 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 
 ## Key Design Rules
 
-- **Don't persist semantics in documents** — Documents are pure graph structure. Semantics (name field, isa field) live in the Editor, loaded separately. See README for rationale.
+- **Documents are pure graph structure** — No semantic interpretation baked in. Use generated constants (`Field::NAME`, `Field::ISA`, etc.) for semantic access.
 
 ## Future Considerations
 
 - `muda` crate for native OS menus (instead of egui menus)
+
+## TODOs
+
+- **Domain-specific projections**: Make them more editable (currently mostly read-only)
+- **Wrapper usage audit**: Find places that should use generated typed wrappers instead of raw graph access
+- **Autocomplete integration**: Hook up name lookups to the placeholder autocomplete dialog, port architecture from original prototype
+- **Descend API**: Design API for custom projections to descend into children (existing TODO in code)
+- **Red squiggles**: Real-time type system errors displayed inline
+- **Default projection improvements**: Show placeholders for missing fields, order fields per record definition, show extra fields at bottom
 
 ## Code Style
 
