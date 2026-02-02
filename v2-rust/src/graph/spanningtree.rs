@@ -28,7 +28,7 @@ impl SpanningTree {
             .unwrap_or_else(TreeNode::empty);
         let new_root_tree = root_tree.set_collapsed_at_edges(&path.edges, collapsed);
         Self {
-            roots: self.roots.update(path.root.clone(), new_root_tree),
+            roots: self.roots.update(path.root, new_root_tree),
         }
     }
 

@@ -56,9 +56,9 @@ fn draw_identicon(
         inner_rect.height() / GRID_SIZE as f32,
     );
 
-    for row in 0..GRID_SIZE {
-        for col in 0..GRID_SIZE {
-            if pattern[row][col] {
+    for (row, pattern_row) in pattern.iter().enumerate() {
+        for (col, &cell) in pattern_row.iter().enumerate() {
+            if cell {
                 let cell_rect = Rect::from_min_size(
                     Pos2::new(
                         inner_rect.min.x + col as f32 * cell_size.x,

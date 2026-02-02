@@ -359,61 +359,63 @@ fn project_list(
     ancestors: HashSet<Id>,
     mode: &InteractionMode,
 ) {
-    let Some((elements, _empty_path)) = flatten_list(editor, path, id) else {
-        if let Id::Uuid(uuid) = id {
-            project_uuid(ui, editor, w, path, uuid, ancestors, mode);
-        }
-        return;
-    };
+    match flatten_list(editor, path, id) {
+        Some((elements, _empty_path)) => {
+            let insertion_idx = is_list_insertion_selected(editor, path, &elements);
 
-    let insertion_idx = is_list_insertion_selected(editor, path, &elements);
+            ui.vertical(|ui| {
+                if elements.is_empty() {
+                    let punct_color = Color32::from_gray(120);
+                    ui.horizontal(|ui| {
+                        list_punct(ui, w, "[]", path, punct_color);
+                        if insertion_idx == Some(0) {
+                            render_list_placeholder(ui, editor, w, path);
+                        }
+                    });
+                } else {
+                    for (i, elem) in elements.iter().enumerate() {
+                        if insertion_idx == Some(i) {
+                            let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
+                            ui.horizontal(|ui| {
+                                render_list_placeholder(ui, editor, w, insert_path);
+                            });
+                        }
 
-    ui.vertical(|ui| {
-        if elements.is_empty() {
-            let punct_color = Color32::from_gray(120);
-            ui.horizontal(|ui| {
-                list_punct(ui, w, "[]", path, punct_color);
-                if insertion_idx == Some(0) {
-                    render_list_placeholder(ui, editor, w, path);
+                        ui.horizontal(|ui| {
+                            ui.label(eframe::egui::RichText::new("•").color(Color32::from_gray(150)));
+                            match &elem.head_value {
+                                Some(head) => {
+                                    project_id(ui, editor, w, &elem.head_path, head, ancestors.clone(), mode);
+                                }
+                                None => {
+                                    let selected = editor.selection.as_ref()
+                                        .and_then(|s| s.edge_path()) == Some(&elem.head_path);
+                                    if selected {
+                                        render_list_placeholder(ui, editor, w, &elem.head_path);
+                                    } else {
+                                        list_punct(ui, w, "_", &elem.head_path, Color32::from_gray(150));
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    if let Some(last) = elements.last()
+                        && insertion_idx == Some(elements.len())
+                    {
+                        ui.horizontal(|ui| {
+                            render_list_placeholder(ui, editor, w, &last.tail_path);
+                        });
+                    }
                 }
             });
-        } else {
-            for (i, elem) in elements.iter().enumerate() {
-                if insertion_idx == Some(i) {
-                    let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
-                    ui.horizontal(|ui| {
-                        render_list_placeholder(ui, editor, w, insert_path);
-                    });
-                }
-
-                ui.horizontal(|ui| {
-                    ui.label(eframe::egui::RichText::new("•").color(Color32::from_gray(150)));
-                    match &elem.head_value {
-                        Some(head) => {
-                            project_id(ui, editor, w, &elem.head_path, head, ancestors.clone(), mode);
-                        }
-                        None => {
-                            let selected = editor.selection.as_ref()
-                                .and_then(|s| s.edge_path()) == Some(&elem.head_path);
-                            if selected {
-                                render_list_placeholder(ui, editor, w, &elem.head_path);
-                            } else {
-                                list_punct(ui, w, "_", &elem.head_path, Color32::from_gray(150));
-                            }
-                        }
-                    }
-                });
-            }
-
-            if let Some(last) = elements.last() {
-                if insertion_idx == Some(elements.len()) {
-                    ui.horizontal(|ui| {
-                        render_list_placeholder(ui, editor, w, &last.tail_path);
-                    });
-                }
+        }
+        None => {
+            if let Id::Uuid(uuid) = id {
+                project_uuid(ui, editor, w, path, uuid, ancestors, mode);
             }
         }
-    });
+    }
 }
 
 fn render_list_placeholder(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, insert_path: &Path) {
@@ -431,19 +433,19 @@ fn render_list_placeholder(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, i
 }
 
 fn do_list_insert(w: &mut EditorWriter, editor: &Editor, insert_path: &Path, head_value: Id) {
-    let Some(cons_variant) = editor.semantics.cons_variant.clone() else { return };
-    let Some(isa_field) = editor.semantics.isa_field.clone() else { return };
-    let Some(head_field) = editor.semantics.head_field.clone() else { return };
-    let Some(tail_field) = editor.semantics.tail_field.clone() else { return };
-
-    let current_value = editor.doc.node(insert_path);
-    let Some(current_value) = current_value else { return };
-
-    let new_cons = Id::new_uuid();
-    w.set_edge(insert_path, new_cons.clone());
-    w.set_edge(&insert_path.child(isa_field), cons_variant);
-    w.set_edge(&insert_path.child(head_field), head_value);
-    w.set_edge(&insert_path.child(tail_field), current_value);
+    if let (Some(cons_variant), Some(isa_field), Some(head_field), Some(tail_field)) = (
+        editor.semantics.cons_variant.clone(),
+        editor.semantics.isa_field.clone(),
+        editor.semantics.head_field.clone(),
+        editor.semantics.tail_field.clone(),
+    ) && let Some(current_value) = editor.doc.node(insert_path)
+    {
+        let new_cons = Id::new_uuid();
+        w.set_edge(insert_path, new_cons.clone());
+        w.set_edge(&insert_path.child(isa_field), cons_variant);
+        w.set_edge(&insert_path.child(head_field), head_value);
+        w.set_edge(&insert_path.child(tail_field), current_value);
+    }
 }
 
 fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {

@@ -315,7 +315,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     let panel_rect = ui.max_rect();
     let panel_center = panel_rect.center().to_vec2();
 
-    let pointer_in_panel = ui.input(|i| i.pointer.hover_pos()).map_or(false, |p| panel_rect.contains(p));
+    let pointer_in_panel = ui.input(|i| i.pointer.hover_pos()).is_some_and(|p| panel_rect.contains(p));
     let scroll = ui.input(|i| i.smooth_scroll_delta);
     let zoom = ui.input(|i| i.zoom_delta());
 

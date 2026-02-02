@@ -53,7 +53,7 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
             ui.label(RichText::new("orphans").color(Color32::from_gray(100)).italics().size(11.0));
             ui.add_space(4.0);
             for orphan_id in orphan_roots {
-                ui.push_id(&orphan_id, |ui| {
+                ui.push_id(orphan_id, |ui| {
                     let orphan_slot = crate::graph::RootSlot::new(orphan_id.clone());
                     project(ui, editor, w, &Path::new(&orphan_slot), &mode);
                 });

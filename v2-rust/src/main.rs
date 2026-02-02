@@ -60,10 +60,10 @@ impl ProgredApp {
     }
 
     fn save_to_path(&self) {
-        if let Some(ref path) = self.editor.file_path {
-            if let Ok(json) = serde_json::to_string_pretty(&self.editor.doc.to_json()) {
-                let _ = std::fs::write(path, json);
-            }
+        if let Some(ref path) = self.editor.file_path
+            && let Ok(json) = serde_json::to_string_pretty(&self.editor.doc.to_json())
+        {
+            let _ = std::fs::write(path, json);
         }
     }
 
@@ -352,7 +352,7 @@ impl ProgredApp {
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let placeholder_active = self.editor.selection.as_ref()
-            .map_or(false, |s| s.placeholder_visible(&self.editor.doc));
+            .is_some_and(|s| s.placeholder_visible(&self.editor.doc));
         let editing = placeholder_active || self.editor.editing_leaf;
         ctx.input_mut(|i| {
             if i.consume_shortcut(&shortcuts::SAVE_AS) {

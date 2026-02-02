@@ -1,5 +1,6 @@
 // TypeScript runtime for future use - validates that embedded TS compilation works
 // before committing to this tech stack. Currently unused.
+#![allow(dead_code)]
 
 use deno_core::{extension, op2, JsRuntime, RuntimeOptions};
 use serde::{Deserialize, Serialize};
@@ -48,7 +49,7 @@ pub struct PropertyInfo {
 
 // Shared state for passing values from JS back to Rust
 thread_local! {
-    static RETURN_VALUE: RefCell<Option<String>> = RefCell::new(None);
+    static RETURN_VALUE: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 // Define the extension with our ops
@@ -390,7 +391,7 @@ impl TypeScriptRuntime {
             return Ok(None);
         }
 
-        Ok(serde_json::from_str(&result_json).map_err(|e| format!("Parse error: {}", e))?)
+        serde_json::from_str(&result_json).map_err(|e| format!("Parse error: {}", e))
     }
 
     /// Get structured type information at a specific position
@@ -420,7 +421,7 @@ impl TypeScriptRuntime {
             return Ok(None);
         }
 
-        Ok(serde_json::from_str(&result_json).map_err(|e| format!("Parse error: {}", e))?)
+        serde_json::from_str(&result_json).map_err(|e| format!("Parse error: {}", e))
     }
 
     /// Execute JavaScript and get the result by wrapping in a function

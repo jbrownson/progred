@@ -22,7 +22,6 @@ const TAIL_FIELD: &str = "cffc46b8-2388-4197-ad87-7e7ef446accb";
 const TYPE_T: &str = "b7185815-d553-4fbf-9025-d88643a7ba6a";
 const FORALL_T: &str = "2e3784a7-0542-44be-90de-9ca8f8a606a4";
 const APPLY_T: &str = "d6ad0273-886d-4e83-9ed7-e4fe5fe2f4e8";
-const SUM_T: &str = "6847449f-a122-40f5-8880-1692d968d127";
 const RECORD_T: &str = "4ae8a1de-f7f5-4733-b6ca-0e01862635e6";
 
 // Primitive type IDs
@@ -102,12 +101,8 @@ fn capitalize(s: &str) -> String {
 enum ResolvedType {
     String,
     Number,
-    Record(String, String),  // (id, name)
-    List(Box<ResolvedType>),  // List<T> - element type
-    Apply { base: Box<ResolvedType>, args: Vec<ResolvedType> },
-    Forall { params: Vec<String>, body: Box<ResolvedType> },
-    Sum(Vec<ResolvedType>),
-    TypeRef(String),
+    Record(String),  // name
+    List(Box<ResolvedType>),
     Untyped,
 }
 
@@ -122,85 +117,52 @@ fn resolve_type(graph: &Graph, type_id: &str) -> ResolvedType {
     match get_isa(graph, type_id) {
         Some(isa) if isa == RECORD_T => {
             let name = get_name(graph, type_id).unwrap_or_default();
-            ResolvedType::Record(type_id.to_string(), name)
+            ResolvedType::Record(name)
         }
         Some(isa) if isa == TYPE_T => {
             let name = get_name(graph, type_id).unwrap_or_default();
-            // Check for primitives first
             match name.as_str() {
-                "string" => return ResolvedType::String,
-                "number" => return ResolvedType::Number,
-                _ => {}
-            }
-            // For other types, check the body
-            if let Some(body_id) = get_edge(graph, type_id, BODY_FIELD).and_then(get_uuid) {
-                let body_isa = get_isa(graph, body_id);
-                if body_isa == Some(RECORD_T) {
-                    // Return a Record with the type's name, not the body's
-                    ResolvedType::Record(type_id.to_string(), name)
-                } else {
-                    // For non-record bodies (forall, sum, apply), recurse
-                    resolve_type(graph, body_id)
+                "string" => ResolvedType::String,
+                "number" => ResolvedType::Number,
+                _ => {
+                    if let Some(body_id) = get_edge(graph, type_id, BODY_FIELD).and_then(get_uuid) {
+                        let body_isa = get_isa(graph, body_id);
+                        if body_isa == Some(RECORD_T) {
+                            ResolvedType::Record(name)
+                        } else {
+                            resolve_type(graph, body_id)
+                        }
+                    } else {
+                        ResolvedType::Untyped
+                    }
                 }
-            } else {
-                ResolvedType::Untyped
             }
-        }
-        Some(isa) if isa == FORALL_T => {
-            let params = get_edge(graph, type_id, PARAMS_FIELD)
-                .and_then(get_uuid)
-                .map(|list_id| {
-                    flatten_list(graph, list_id)
-                        .into_iter()
-                        .filter_map(|p| get_name(graph, &p))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let body = get_edge(graph, type_id, BODY_FIELD)
-                .and_then(get_uuid)
-                .map(|b| resolve_type(graph, b))
-                .unwrap_or(ResolvedType::Untyped);
-
-            ResolvedType::Forall { params, body: Box::new(body) }
         }
         Some(isa) if isa == APPLY_T => {
             let base_id = get_edge(graph, type_id, BASE_FIELD).and_then(get_uuid);
             let base_name = base_id.and_then(|id| get_name(graph, id));
             let base_isa = base_id.and_then(|id| get_isa(graph, id));
 
-            let args: Vec<ResolvedType> = get_edge(graph, type_id, ARGS_FIELD)
-                .and_then(get_uuid)
-                .map(|list_id| {
-                    flatten_list(graph, list_id)
-                        .into_iter()
-                        .map(|a| resolve_type(graph, &a))
-                        .collect()
-                })
-                .unwrap_or_default();
+            // Only handle List<T>, other applies are untyped for now
+            if base_isa == Some(FORALL_T) && base_name.as_deref() == Some("list") {
+                let args: Vec<ResolvedType> = get_edge(graph, type_id, ARGS_FIELD)
+                    .and_then(get_uuid)
+                    .map(|list_id| {
+                        flatten_list(graph, list_id)
+                            .into_iter()
+                            .map(|a| resolve_type(graph, &a))
+                            .collect()
+                    })
+                    .unwrap_or_default();
 
-            // Check if this is List<T>
-            if base_isa == Some(FORALL_T) && base_name.as_deref() == Some("list") && args.len() == 1 {
-                ResolvedType::List(Box::new(args.into_iter().next().unwrap()))
+                if args.len() == 1 {
+                    ResolvedType::List(Box::new(args.into_iter().next().unwrap()))
+                } else {
+                    ResolvedType::Untyped
+                }
             } else {
-                let base = base_id
-                    .map(|b| resolve_type(graph, b))
-                    .unwrap_or(ResolvedType::Untyped);
-                ResolvedType::Apply { base: Box::new(base), args }
+                ResolvedType::Untyped
             }
-        }
-        Some(isa) if isa == SUM_T => {
-            let variants = get_edge(graph, type_id, VARIANTS_FIELD)
-                .and_then(get_uuid)
-                .map(|list_id| {
-                    flatten_list(graph, list_id)
-                        .into_iter()
-                        .map(|v| resolve_type(graph, &v))
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            ResolvedType::Sum(variants)
         }
         _ => ResolvedType::Untyped,
     }
@@ -249,7 +211,7 @@ fn generate_accessor(field_id: &str, field_name: &str, field_type: &ResolvedType
                 }
             }
         },
-        ResolvedType::Record(_, name) => {
+        ResolvedType::Record(name) => {
             let wrapper_name = format_ident!("{}", capitalize(name));
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper_name> {
@@ -281,7 +243,7 @@ fn generate_accessor(field_id: &str, field_name: &str, field_type: &ResolvedType
                         }
                     }
                 ),
-                ResolvedType::Record(_, elem_name) => {
+                ResolvedType::Record(elem_name) => {
                     let wrapper = format_ident!("{}", capitalize(elem_name));
                     (
                         quote! { std::vec::Vec<#wrapper> },

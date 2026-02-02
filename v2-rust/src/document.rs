@@ -127,12 +127,12 @@ fn reachable_from(gid: &impl Gid, starts: impl Iterator<Item = Id>, within: &Has
     let mut reachable = HashSet::new();
     let mut queue: VecDeque<Id> = starts.collect();
     while let Some(id) = queue.pop_front() {
-        if within.contains(&id) && reachable.insert(id.clone()) {
-            if let Some(edges) = gid.edges(&id) {
-                for (label, value) in edges.iter() {
-                    queue.push_back(label.clone());
-                    queue.push_back(value.clone());
-                }
+        if within.contains(&id) && reachable.insert(id.clone())
+            && let Some(edges) = gid.edges(&id)
+        {
+            for (label, value) in edges.iter() {
+                queue.push_back(label.clone());
+                queue.push_back(value.clone());
             }
         }
     }
@@ -144,7 +144,7 @@ fn sources_within(gid: &impl Gid, set: &HashSet<Id>) -> Vec<Id> {
         .filter(|n| matches!(n, Id::Uuid(_)))
         .flat_map(|n| {
             gid.edges(n).into_iter().flat_map(|edges| {
-                edges.iter().filter_map(|(_, v)| set.contains(v).then(|| v.clone()))
+                edges.iter().filter(|(_, v)| set.contains(v)).map(|(_, v)| v.clone())
             })
         })
         .collect();
@@ -214,12 +214,12 @@ impl Editor {
 
     pub fn is_cons(&self, id: &Id) -> bool {
         self.semantics.cons_variant.as_ref()
-            .map_or(false, |cons| self.isa_of(id) == Some(cons))
+            .is_some_and(|cons| self.isa_of(id) == Some(cons))
     }
 
     pub fn is_empty(&self, id: &Id) -> bool {
         self.semantics.empty_variant.as_ref()
-            .map_or(false, |empty| self.isa_of(id) == Some(empty))
+            .is_some_and(|empty| self.isa_of(id) == Some(empty))
     }
 
     pub fn is_list(&self, id: &Id) -> bool {
@@ -279,10 +279,8 @@ impl<'a> EditorWriter<'a> {
 
     pub fn set_editing_leaf(&mut self, editing: bool) {
         self.editor.editing_leaf = editing;
-        if !editing {
-            if let Some(ref mut sel) = self.editor.selection {
-                sel.leaf_edit_text = None;
-            }
+        if !editing && let Some(ref mut sel) = self.editor.selection {
+            sel.leaf_edit_text = None;
         }
     }
 
