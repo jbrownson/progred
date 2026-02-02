@@ -350,54 +350,6 @@ fn list_punct(ui: &mut Ui, w: &mut EditorWriter, text: &str, path: &Path, color:
     }
 }
 
-fn render_value_inline(ui: &mut Ui, editor: &Editor, id: &Id) -> Response {
-    let color = Color32::from_gray(60);
-    match id {
-        Id::Uuid(uuid) => match editor.display_label(id) {
-            Some(label) => ui.label(eframe::egui::RichText::new(label).color(color)),
-            None => identicon(ui, 14.0, uuid),
-        },
-        Id::String(s) => ui.label(eframe::egui::RichText::new(format!("\"{}\"", s)).color(color)),
-        Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(color)),
-    }
-}
-
-fn clickable_value(
-    ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
-    id: &Id,
-    path: &Path,
-    is_selected: bool,
-    mode: &InteractionMode,
-) {
-    let (style, hovered) = if is_selected {
-        let s = selection_style(true, false);
-        (s, s)
-    } else {
-        mode_style(mode)
-    };
-
-    if clickable(ui, |ui| render_value_inline(ui, editor, id), style, hovered).clicked() {
-        handle_pick(w, mode, id.clone(), path);
-    }
-}
-
-fn render_list_item(
-    ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
-    elem: &ListElement,
-    is_selected: bool,
-    mode: &InteractionMode,
-) {
-    match &elem.head_value {
-        Some(head) => clickable_value(ui, editor, w, head, &elem.head_path, is_selected, mode),
-        None if is_selected => render_list_placeholder(ui, editor, w, &elem.head_path),
-        None => list_punct(ui, w, "_", &elem.head_path, Color32::from_gray(150)),
-    }
-}
-
 fn project_list(
     ui: &mut Ui,
     editor: &Editor,
@@ -414,43 +366,53 @@ fn project_list(
         return;
     };
 
-    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path());
     let insertion_idx = is_list_insertion_selected(editor, path, &elements);
-    let punct_color = Color32::from_gray(120);
 
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 0.0;
-
-        list_punct(ui, w, "[", path, punct_color);
-
+    ui.vertical(|ui| {
         if elements.is_empty() {
-            if insertion_idx == Some(0) {
-                render_list_placeholder(ui, editor, w, path);
-            }
+            let punct_color = Color32::from_gray(120);
+            ui.horizontal(|ui| {
+                list_punct(ui, w, "[]", path, punct_color);
+                if insertion_idx == Some(0) {
+                    render_list_placeholder(ui, editor, w, path);
+                }
+            });
         } else {
             for (i, elem) in elements.iter().enumerate() {
                 if insertion_idx == Some(i) {
                     let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
-                    render_list_placeholder(ui, editor, w, insert_path);
-                    ui.label(eframe::egui::RichText::new(", ").color(punct_color));
-                } else if i > 0 {
-                    list_punct(ui, w, ", ", &elements[i - 1].tail_path, punct_color);
+                    ui.horizontal(|ui| {
+                        render_list_placeholder(ui, editor, w, insert_path);
+                    });
                 }
 
-                let item_selected = selected_path == Some(&elem.head_path);
-                render_list_item(ui, editor, w, elem, item_selected, mode);
+                ui.horizontal(|ui| {
+                    ui.label(eframe::egui::RichText::new("•").color(Color32::from_gray(150)));
+                    match &elem.head_value {
+                        Some(head) => {
+                            project_id(ui, editor, w, &elem.head_path, head, ancestors.clone(), mode);
+                        }
+                        None => {
+                            let selected = editor.selection.as_ref()
+                                .and_then(|s| s.edge_path()) == Some(&elem.head_path);
+                            if selected {
+                                render_list_placeholder(ui, editor, w, &elem.head_path);
+                            } else {
+                                list_punct(ui, w, "_", &elem.head_path, Color32::from_gray(150));
+                            }
+                        }
+                    }
+                });
             }
 
             if let Some(last) = elements.last() {
                 if insertion_idx == Some(elements.len()) {
-                    ui.label(eframe::egui::RichText::new(", ").color(punct_color));
-                    render_list_placeholder(ui, editor, w, &last.tail_path);
+                    ui.horizontal(|ui| {
+                        render_list_placeholder(ui, editor, w, &last.tail_path);
+                    });
                 }
             }
         }
-
-        let close_path = elements.last().map(|e| &e.tail_path).unwrap_or(path);
-        list_punct(ui, w, "]", close_path, punct_color);
     });
 }
 
@@ -509,6 +471,11 @@ fn project_uuid(
     mode: &InteractionMode,
 ) {
     let id = Id::Uuid(*uuid);
+
+    // Try domain-specific projections first
+    if super::domain_projections::try_domain_projection(ui, editor, w, path, &id, ancestors.clone(), mode) {
+        return;
+    }
     let edges = editor.doc.gid.edges(&id);
     let display_label = editor.display_label(&id);
     let new_edge_label = editor.selection.as_ref()

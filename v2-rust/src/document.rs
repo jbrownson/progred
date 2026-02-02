@@ -3,6 +3,10 @@ use crate::ui::graph_view::GraphViewState;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 
+fn id_from_str(s: &str) -> Id {
+    Id::Uuid(uuid::Uuid::parse_str(s).unwrap())
+}
+
 #[derive(Clone, Default)]
 pub struct Semantics {
     pub name_field: Option<Id>,
@@ -11,6 +15,25 @@ pub struct Semantics {
     pub empty_variant: Option<Id>,
     pub head_field: Option<Id>,
     pub tail_field: Option<Id>,
+}
+
+impl Semantics {
+    pub fn detect(doc: &Document) -> Self {
+        use crate::generated::semantics::{Field, CONS_TYPE, EMPTY_TYPE};
+        let name_field = id_from_str(Field::NAME);
+        if doc.gid.edges(&name_field).is_some() {
+            Self {
+                name_field: Some(name_field),
+                isa_field: Some(id_from_str(Field::ISA)),
+                cons_variant: Some(id_from_str(CONS_TYPE)),
+                empty_variant: Some(id_from_str(EMPTY_TYPE)),
+                head_field: Some(id_from_str(Field::HEAD)),
+                tail_field: Some(id_from_str(Field::TAIL)),
+            }
+        } else {
+            Self::default()
+        }
+    }
 }
 
 #[derive(Clone)]

@@ -1,7 +1,8 @@
 mod identicon;
+mod domain_projections;
 pub mod graph_view;
 pub mod placeholder;
-mod projection;
+pub mod projection;
 pub mod split_view;
 pub mod tree_view;
 

@@ -7,7 +7,7 @@ mod ui;
 
 use document::{Document, Editor, EditorWriter};
 use eframe::egui;
-use graph::{Gid, Id, MutGid, RootSlot};
+use graph::{Id, MutGid, RootSlot};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -83,79 +83,59 @@ impl ProgredApp {
                 Some((path, Document::from_json(&contents)?))
             })
         {
-            self.editor = Editor { doc, file_path: Some(path), ..Editor::new() };
+            let semantics = document::Semantics::detect(&doc);
+            self.editor = Editor { doc, file_path: Some(path), semantics, ..Editor::new() };
         }
     }
 
     fn create_type_system_semantics() -> (Document, document::Semantics) {
+        use crate::generated::semantics::*;
+
+        fn id(s: &str) -> Id {
+            Id::Uuid(uuid::Uuid::parse_str(s).unwrap())
+        }
+
         let mut gid = MutGid::new();
 
-        // === Semantic fields ===
-        let name = Id::new_uuid();
-        let isa = Id::new_uuid();
+        // === Semantic fields (from saved schema) ===
+        let name = id(Field::NAME);
+        let isa = id(Field::ISA);
 
         // === Fields for type constructs ===
-        let body_f = Id::new_uuid();     // type, forall: the type being named/parameterized
-        let params_f = Id::new_uuid();   // forall: list of type params
-        let base_f = Id::new_uuid();     // apply: the parameterized type
-        let args_f = Id::new_uuid();     // apply: list of type arguments
-        let variants_f = Id::new_uuid(); // sum: list of variant types
-        let fields_f = Id::new_uuid();   // product: list of field definitions
-        let type_f = Id::new_uuid();     // field def: the field's type
+        let body_f = id(Field::BODY);
+        let params_f = id(Field::PARAMS);
+        let base_f = id(Field::BASE);
+        let args_f = id(Field::ARGS);
+        let variants_f = id(Field::VARIANTS);
+        let fields_f = id(Field::FIELDS);
+        let type_f = id(Field::TYPE_);
+        let head_f = id(Field::HEAD);
+        let tail_f = id(Field::TAIL);
 
-        // === List fields (for bootstrapping) ===
-        let head_f = Id::new_uuid();
-        let tail_f = Id::new_uuid();
-
-        // === Type constructs ===
-        let type_t = Id::new_uuid();     // names a type
-        let forall_t = Id::new_uuid();   // introduces type params
-        let apply_t = Id::new_uuid();    // instantiates type params
-        let sum_t = Id::new_uuid();      // union / or
-        let product_t = Id::new_uuid();  // record / and
-        let field_t = Id::new_uuid();    // field definition (name + type)
+        // === Type constructs (from saved schema) ===
+        let type_t = id(Type::TYPE_ID);
+        let forall_t = id(Forall::TYPE_ID);
+        let apply_t = id(Apply::TYPE_ID);
+        let sum_t = id(Sum::TYPE_ID);
+        let record_t = id(Record::TYPE_ID);
+        let field_t = id(Field::TYPE_ID);
 
         // === Primitives ===
-        let string_t = Id::new_uuid();
-        let number_t = Id::new_uuid();
+        let string_t = id(STRING_TYPE);
+        let number_t = id(NUMBER_TYPE);
 
         // === List (bootstrapped) ===
-        let cons_t = Id::new_uuid();
-        let empty_t = Id::new_uuid();
-
-        // === Set names ===
-        for (id, n) in [
-            (&name, "name"), (&isa, "isa"),
-            (&body_f, "body"), (&params_f, "params"), (&base_f, "base"),
-            (&args_f, "args"), (&variants_f, "variants"), (&fields_f, "fields"),
-            (&type_f, "type"), (&head_f, "head"), (&tail_f, "tail"),
-            (&type_t, "type"), (&forall_t, "forall"), (&apply_t, "apply"),
-            (&sum_t, "sum"), (&product_t, "product"), (&field_t, "field"),
-            (&string_t, "string"), (&number_t, "number"),
-            (&cons_t, "cons"), (&empty_t, "empty"),
-        ] {
-            gid.set(id.clone(), name.clone(), Id::String(n.into()));
-        }
-
-        // === Set isa: type constructs are products ===
-        for id in [&type_t, &forall_t, &apply_t, &sum_t, &product_t, &field_t, &cons_t, &empty_t] {
-            gid.set(id.clone(), isa.clone(), product_t.clone());
-        }
-        // Fields are fields
-        for id in [&name, &isa, &body_f, &params_f, &base_f, &args_f, &variants_f, &fields_f, &type_f, &head_f, &tail_f] {
-            gid.set(id.clone(), isa.clone(), field_t.clone());
-        }
-        // Primitives are types (named types with no body needed)
-        for id in [&string_t, &number_t] {
-            gid.set(id.clone(), isa.clone(), type_t.clone());
-        }
+        let cons_t = id(CONS_TYPE);
+        let empty_t = id(EMPTY_TYPE);
+        let list_t = id(LIST_TYPE);
+        let list_param_t = Id::new_uuid(); // The T type parameter (internal to list definition)
 
         // === Helper to make lists ===
+        // Note: uses cons_t/empty_t before fully defined, just needs IDs
         let make_list = |gid: &mut MutGid, elements: &[&Id]| -> Id {
-            elements.iter().rev().fold(Id::new_uuid(), |tail_node, &element| {
-                if matches!(tail_node, Id::Uuid(_)) && gid.edges(&tail_node).is_none() {
-                    gid.set(tail_node.clone(), isa.clone(), empty_t.clone());
-                }
+            let empty_node = Id::new_uuid();
+            gid.set(empty_node.clone(), isa.clone(), empty_t.clone());
+            elements.iter().rev().fold(empty_node, |tail_node, &element| {
                 let node = Id::new_uuid();
                 gid.set(node.clone(), isa.clone(), cons_t.clone());
                 gid.set(node.clone(), head_f.clone(), element.clone());
@@ -164,48 +144,180 @@ impl ProgredApp {
             })
         };
 
-        // === Define fields for each construct ===
-        // type has: name, body
+        // === All type constructs are: type "name" { body: record/sum/forall/apply { ... } } ===
+        // The stable IDs (type_t, forall_t, etc.) are the type wrappers.
+        // Each has isa=type_t (type_t is self-referential) and a body.
+
+        // --- type "type" { body: record { fields: [name, body] } } ---
+        gid.set(type_t.clone(), isa.clone(), type_t.clone()); // self-referential
+        gid.set(type_t.clone(), name.clone(), Id::String("type".into()));
+        let type_body = Id::new_uuid();
+        gid.set(type_body.clone(), isa.clone(), record_t.clone());
         let type_fields = make_list(&mut gid, &[&name, &body_f]);
-        gid.set(type_t.clone(), fields_f.clone(), type_fields);
+        gid.set(type_body.clone(), fields_f.clone(), type_fields);
+        gid.set(type_t.clone(), body_f.clone(), type_body);
 
-        // forall has: params, body
-        let forall_fields = make_list(&mut gid, &[&params_f, &body_f]);
-        gid.set(forall_t.clone(), fields_f.clone(), forall_fields);
+        // --- type "record" { body: record { fields: [fields] } } ---
+        gid.set(record_t.clone(), isa.clone(), type_t.clone());
+        gid.set(record_t.clone(), name.clone(), Id::String("record".into()));
+        let record_body = Id::new_uuid();
+        gid.set(record_body.clone(), isa.clone(), record_t.clone());
+        let record_fields = make_list(&mut gid, &[&fields_f]);
+        gid.set(record_body.clone(), fields_f.clone(), record_fields);
+        gid.set(record_t.clone(), body_f.clone(), record_body);
 
-        // apply has: base, args
-        let apply_fields = make_list(&mut gid, &[&base_f, &args_f]);
-        gid.set(apply_t.clone(), fields_f.clone(), apply_fields);
-
-        // sum has: variants
+        // --- type "sum" { body: record { fields: [variants] } } ---
+        gid.set(sum_t.clone(), isa.clone(), type_t.clone());
+        gid.set(sum_t.clone(), name.clone(), Id::String("sum".into()));
+        let sum_body = Id::new_uuid();
+        gid.set(sum_body.clone(), isa.clone(), record_t.clone());
         let sum_fields = make_list(&mut gid, &[&variants_f]);
-        gid.set(sum_t.clone(), fields_f.clone(), sum_fields);
+        gid.set(sum_body.clone(), fields_f.clone(), sum_fields);
+        gid.set(sum_t.clone(), body_f.clone(), sum_body);
 
-        // product has: fields
-        let product_fields = make_list(&mut gid, &[&fields_f]);
-        gid.set(product_t.clone(), fields_f.clone(), product_fields);
+        // --- type "forall" { body: record { fields: [params, body] } } ---
+        gid.set(forall_t.clone(), isa.clone(), type_t.clone());
+        gid.set(forall_t.clone(), name.clone(), Id::String("forall".into()));
+        let forall_body = Id::new_uuid();
+        gid.set(forall_body.clone(), isa.clone(), record_t.clone());
+        let forall_fields = make_list(&mut gid, &[&params_f, &body_f]);
+        gid.set(forall_body.clone(), fields_f.clone(), forall_fields);
+        gid.set(forall_t.clone(), body_f.clone(), forall_body);
 
-        // field has: name, type
+        // --- type "apply" { body: record { fields: [base, args] } } ---
+        gid.set(apply_t.clone(), isa.clone(), type_t.clone());
+        gid.set(apply_t.clone(), name.clone(), Id::String("apply".into()));
+        let apply_body = Id::new_uuid();
+        gid.set(apply_body.clone(), isa.clone(), record_t.clone());
+        let apply_fields = make_list(&mut gid, &[&base_f, &args_f]);
+        gid.set(apply_body.clone(), fields_f.clone(), apply_fields);
+        gid.set(apply_t.clone(), body_f.clone(), apply_body);
+
+        // --- type "field" { body: record { fields: [name, type] } } ---
+        gid.set(field_t.clone(), isa.clone(), type_t.clone());
+        gid.set(field_t.clone(), name.clone(), Id::String("field".into()));
+        let field_body = Id::new_uuid();
+        gid.set(field_body.clone(), isa.clone(), record_t.clone());
         let field_fields = make_list(&mut gid, &[&name, &type_f]);
-        gid.set(field_t.clone(), fields_f.clone(), field_fields);
+        gid.set(field_body.clone(), fields_f.clone(), field_fields);
+        gid.set(field_t.clone(), body_f.clone(), field_body);
 
-        // cons has: head, tail
+        // --- type "cons" { body: record { fields: [head, tail] } } ---
+        gid.set(cons_t.clone(), isa.clone(), type_t.clone());
+        gid.set(cons_t.clone(), name.clone(), Id::String("cons".into()));
+        let cons_body = Id::new_uuid();
+        gid.set(cons_body.clone(), isa.clone(), record_t.clone());
         let cons_fields = make_list(&mut gid, &[&head_f, &tail_f]);
-        gid.set(cons_t.clone(), fields_f.clone(), cons_fields);
+        gid.set(cons_body.clone(), fields_f.clone(), cons_fields);
+        gid.set(cons_t.clone(), body_f.clone(), cons_body);
 
-        // empty has no fields
+        // --- type "empty" { body: record { fields: [] } } ---
+        gid.set(empty_t.clone(), isa.clone(), type_t.clone());
+        gid.set(empty_t.clone(), name.clone(), Id::String("empty".into()));
+        let empty_body = Id::new_uuid();
+        gid.set(empty_body.clone(), isa.clone(), record_t.clone());
         let empty_fields = make_list(&mut gid, &[]);
-        gid.set(empty_t.clone(), fields_f.clone(), empty_fields);
+        gid.set(empty_body.clone(), fields_f.clone(), empty_fields);
+        gid.set(empty_t.clone(), body_f.clone(), empty_body);
+
+        // --- type "string" { body: record { fields: [] } } ---
+        gid.set(string_t.clone(), isa.clone(), type_t.clone());
+        gid.set(string_t.clone(), name.clone(), Id::String("string".into()));
+        let string_body = Id::new_uuid();
+        gid.set(string_body.clone(), isa.clone(), record_t.clone());
+        let string_fields = make_list(&mut gid, &[]);
+        gid.set(string_body.clone(), fields_f.clone(), string_fields);
+        gid.set(string_t.clone(), body_f.clone(), string_body);
+
+        // --- type "number" { body: record { fields: [] } } ---
+        gid.set(number_t.clone(), isa.clone(), type_t.clone());
+        gid.set(number_t.clone(), name.clone(), Id::String("number".into()));
+        let number_body = Id::new_uuid();
+        gid.set(number_body.clone(), isa.clone(), record_t.clone());
+        let number_fields = make_list(&mut gid, &[]);
+        gid.set(number_body.clone(), fields_f.clone(), number_fields);
+        gid.set(number_t.clone(), body_f.clone(), number_body);
+
+        // --- type "list" { body: forall { params: [T], body: sum { variants: [empty, cons] } } } ---
+        gid.set(list_t.clone(), isa.clone(), type_t.clone());
+        gid.set(list_t.clone(), name.clone(), Id::String("list".into()));
+        let list_forall = Id::new_uuid();
+        gid.set(list_forall.clone(), isa.clone(), forall_t.clone());
+        let list_params = make_list(&mut gid, &[&list_param_t]);
+        gid.set(list_forall.clone(), params_f.clone(), list_params);
+        let list_sum = Id::new_uuid();
+        gid.set(list_sum.clone(), isa.clone(), sum_t.clone());
+        let list_variants = make_list(&mut gid, &[&empty_t, &cons_t]);
+        gid.set(list_sum.clone(), variants_f.clone(), list_variants);
+        gid.set(list_forall.clone(), body_f.clone(), list_sum);
+        gid.set(list_t.clone(), body_f.clone(), list_forall);
+
+        // === Fields: type "name" { body: field structure } ===
+        // Fields are instances of field_t (which is a type), so isa=field_t
+        for (f, n) in [
+            (&name, "name"), (&isa, "isa"), (&body_f, "body"), (&params_f, "params"),
+            (&base_f, "base"), (&args_f, "args"), (&variants_f, "variants"),
+            (&fields_f, "fields"), (&type_f, "type"), (&head_f, "head"), (&tail_f, "tail"),
+        ] {
+            gid.set(f.clone(), isa.clone(), field_t.clone());
+            gid.set(f.clone(), name.clone(), Id::String(n.into()));
+        }
+
+        // T type parameter for list
+        gid.set(list_param_t.clone(), name.clone(), Id::String("T".into()));
+
+        // --- type "type expression" { body: sum { variants: [...] } } ---
+        let type_expr = id(TYPE_EXPR);
+        gid.set(type_expr.clone(), isa.clone(), type_t.clone());
+        gid.set(type_expr.clone(), name.clone(), Id::String("type expression".into()));
+        let te_sum = Id::new_uuid();
+        gid.set(te_sum.clone(), isa.clone(), sum_t.clone());
+        let te_variants = make_list(&mut gid, &[&type_t, &forall_t, &apply_t, &sum_t, &record_t, &string_t, &number_t]);
+        gid.set(te_sum.clone(), variants_f.clone(), te_variants);
+        gid.set(type_expr.clone(), body_f.clone(), te_sum);
+
+        // === Helper to create inline apply(list, [arg]) ===
+        let make_list_of = |gid: &mut MutGid, arg: &Id| -> Id {
+            let apply_node = Id::new_uuid();
+            gid.set(apply_node.clone(), isa.clone(), apply_t.clone());
+            gid.set(apply_node.clone(), base_f.clone(), list_t.clone());
+            let args = make_list(gid, &[arg]);
+            gid.set(apply_node.clone(), args_f.clone(), args);
+            apply_node
+        };
+
+        // === Set field types ===
+        gid.set(name.clone(), type_f.clone(), string_t.clone());
+        gid.set(isa.clone(), type_f.clone(), type_t.clone());
+        gid.set(body_f.clone(), type_f.clone(), type_expr.clone());
+        let params_type = make_list_of(&mut gid, &type_expr);
+        gid.set(params_f.clone(), type_f.clone(), params_type);
+        gid.set(base_f.clone(), type_f.clone(), type_t.clone());
+        let args_type = make_list_of(&mut gid, &type_expr);
+        gid.set(args_f.clone(), type_f.clone(), args_type);
+        let fields_type = make_list_of(&mut gid, &field_t);
+        gid.set(fields_f.clone(), type_f.clone(), fields_type);
+        let variants_type = make_list_of(&mut gid, &record_t);
+        gid.set(variants_f.clone(), type_f.clone(), variants_type);
+        gid.set(type_f.clone(), type_f.clone(), type_expr.clone());
+        gid.set(head_f.clone(), type_f.clone(), type_expr.clone());
+        gid.set(tail_f.clone(), type_f.clone(), type_expr.clone()); // generic (list<T>)
 
         let roots = vec![
+            // Primitives
+            RootSlot::new(string_t),
+            RootSlot::new(number_t),
+            // Structure
+            RootSlot::new(record_t),
+            RootSlot::new(field_t),
+            RootSlot::new(sum_t),
+            // Abstraction
             RootSlot::new(type_t),
             RootSlot::new(forall_t),
             RootSlot::new(apply_t),
-            RootSlot::new(sum_t),
-            RootSlot::new(product_t),
-            RootSlot::new(field_t),
-            RootSlot::new(string_t),
-            RootSlot::new(number_t),
+            // Utilities
+            RootSlot::new(list_t),
+            RootSlot::new(type_expr),
         ];
 
         let semantics = document::Semantics {
@@ -218,128 +330,6 @@ impl ProgredApp {
         };
 
         (Document { gid, roots }, semantics)
-    }
-
-    fn create_standard_semantics() -> (Document, document::Semantics) {
-        let mut gid = MutGid::new();
-
-        // === Semantic fields (editor-recognized) ===
-        let name = Id::new_uuid();
-        let isa = Id::new_uuid();
-
-        // === Type system fields ===
-        let fields_f = Id::new_uuid();
-        let variants_f = Id::new_uuid();
-        let type_f = Id::new_uuid();
-        let head_f = Id::new_uuid();
-        let tail_f = Id::new_uuid();
-
-        // === Enums (type definitions) ===
-        let enum_e = Id::new_uuid();
-        let variant_e = Id::new_uuid();
-        let field_e = Id::new_uuid();
-        let list_e = Id::new_uuid();
-
-        // === List variants ===
-        let empty_v = Id::new_uuid();
-        let cons_v = Id::new_uuid();
-
-        // === Set names ===
-        for (id, n) in [
-            (&name, "name"),
-            (&isa, "isa"),
-            (&fields_f, "fields"),
-            (&variants_f, "variants"),
-            (&type_f, "type"),
-            (&head_f, "head"),
-            (&tail_f, "tail"),
-            (&enum_e, "enum"),
-            (&variant_e, "variant"),
-            (&field_e, "field"),
-            (&list_e, "list"),
-            (&empty_v, "empty"),
-            (&cons_v, "cons"),
-        ] {
-            gid.set(id.clone(), name.clone(), Id::String(n.into()));
-        }
-
-        // === Set types (isa) ===
-        // All fields are fields
-        for id in [&name, &isa, &fields_f, &variants_f, &type_f, &head_f, &tail_f] {
-            gid.set(id.clone(), isa.clone(), field_e.clone());
-        }
-        // All enums are enums
-        for id in [&enum_e, &variant_e, &field_e, &list_e] {
-            gid.set(id.clone(), isa.clone(), enum_e.clone());
-        }
-        // List variants are variants
-        for id in [&empty_v, &cons_v] {
-            gid.set(id.clone(), isa.clone(), variant_e.clone());
-        }
-
-        // === Self-description: what fields each type has ===
-        // Helper to create a list
-        let make_list = |gid: &mut MutGid, elements: &[&Id]| -> Id {
-            elements.iter().rev().fold(Id::new_uuid(), |tail_node, &element| {
-                if matches!(tail_node, Id::Uuid(_)) && gid.edges(&tail_node).is_none() {
-                    // First iteration: tail_node is fresh, make it empty
-                    gid.set(tail_node.clone(), isa.clone(), empty_v.clone());
-                }
-                let node = Id::new_uuid();
-                gid.set(node.clone(), isa.clone(), cons_v.clone());
-                gid.set(node.clone(), head_f.clone(), element.clone());
-                gid.set(node.clone(), tail_f.clone(), tail_node);
-                node
-            })
-        };
-
-        // enum has fields: [name, variants]
-        let enum_fields = make_list(&mut gid, &[&name, &variants_f]);
-        gid.set(enum_e.clone(), fields_f.clone(), enum_fields);
-
-        // variant has fields: [name, fields]
-        let variant_fields = make_list(&mut gid, &[&name, &fields_f]);
-        gid.set(variant_e.clone(), fields_f.clone(), variant_fields);
-
-        // field has fields: [name, type]
-        let field_fields = make_list(&mut gid, &[&name, &type_f]);
-        gid.set(field_e.clone(), fields_f.clone(), field_fields);
-
-        // list has variants: [empty, cons]
-        let list_variants = make_list(&mut gid, &[&empty_v, &cons_v]);
-        gid.set(list_e.clone(), variants_f.clone(), list_variants);
-
-        // cons has fields: [head, tail]
-        let cons_fields = make_list(&mut gid, &[&head_f, &tail_f]);
-        gid.set(cons_v.clone(), fields_f.clone(), cons_fields);
-
-        // empty has no fields (empty list)
-        let empty_fields = Id::new_uuid();
-        gid.set(empty_fields.clone(), isa.clone(), empty_v.clone());
-        gid.set(empty_v.clone(), fields_f.clone(), empty_fields);
-
-        let roots = vec![
-            RootSlot::new(enum_e),
-            RootSlot::new(variant_e),
-            RootSlot::new(field_e),
-            RootSlot::new(list_e),
-        ];
-
-        let semantics = document::Semantics {
-            name_field: Some(name),
-            isa_field: Some(isa),
-            cons_variant: Some(cons_v),
-            empty_variant: Some(empty_v),
-            head_field: Some(head_f),
-            tail_field: Some(tail_f),
-        };
-
-        (Document { gid, roots }, semantics)
-    }
-
-    fn load_standard_semantics(&mut self) {
-        let (doc, semantics) = Self::create_standard_semantics();
-        self.editor = Editor { doc, semantics, ..Editor::new() };
     }
 
     fn load_type_system_semantics(&mut self) {
@@ -406,10 +396,6 @@ impl ProgredApp {
                         ui.close();
                     }
                     ui.separator();
-                    if ui.add(egui::Button::new("Load Standard Semantics")).clicked() {
-                        self.load_standard_semantics();
-                        ui.close();
-                    }
                     if ui.add(egui::Button::new("Load Type System")).clicked() {
                         self.load_type_system_semantics();
                         ui.close();
