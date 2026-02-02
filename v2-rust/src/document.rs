@@ -1,39 +1,11 @@
+use crate::generated::semantics::{Field, CONS_TYPE, EMPTY_TYPE};
 use crate::graph::{Gid, Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 
-fn id_from_str(s: &str) -> Id {
+fn id(s: &str) -> Id {
     Id::Uuid(uuid::Uuid::parse_str(s).unwrap())
-}
-
-#[derive(Clone, Default)]
-pub struct Semantics {
-    pub name_field: Option<Id>,
-    pub isa_field: Option<Id>,
-    pub cons_variant: Option<Id>,
-    pub empty_variant: Option<Id>,
-    pub head_field: Option<Id>,
-    pub tail_field: Option<Id>,
-}
-
-impl Semantics {
-    pub fn detect(doc: &Document) -> Self {
-        use crate::generated::semantics::{Field, CONS_TYPE, EMPTY_TYPE};
-        let name_field = id_from_str(Field::NAME);
-        if doc.gid.edges(&name_field).is_some() {
-            Self {
-                name_field: Some(name_field),
-                isa_field: Some(id_from_str(Field::ISA)),
-                cons_variant: Some(id_from_str(CONS_TYPE)),
-                empty_variant: Some(id_from_str(EMPTY_TYPE)),
-                head_field: Some(id_from_str(Field::HEAD)),
-                tail_field: Some(id_from_str(Field::TAIL)),
-            }
-        } else {
-            Self::default()
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -167,7 +139,6 @@ pub struct Editor {
     pub file_path: Option<PathBuf>,
     pub graph_view: GraphViewState,
     pub editing_leaf: bool,
-    pub semantics: Semantics,
     pub(crate) cached_orphans: Option<(MutGid, Vec<RootSlot>, Vec<Id>)>,
 }
 
@@ -180,26 +151,22 @@ impl Editor {
             file_path: None,
             graph_view: GraphViewState::new(),
             editing_leaf: false,
-            semantics: Semantics::default(),
             cached_orphans: None,
         }
     }
 
-    pub fn name_of(&self, id: &Id) -> Option<String> {
-        self.semantics.name_field.as_ref()
-            .and_then(|name_field| self.doc.gid.get(id, name_field))
-            .and_then(|value| match value {
-                Id::String(s) => Some(s.clone()),
-                _ => None,
-            })
+    pub fn name_of(&self, node: &Id) -> Option<String> {
+        match self.doc.gid.get(node, &id(Field::NAME))? {
+            Id::String(s) => Some(s.clone()),
+            _ => None,
+        }
     }
 
-    pub fn display_label(&self, id: &Id) -> Option<String> {
-        let isa_name = self.semantics.isa_field.as_ref()
-            .and_then(|isa_field| self.doc.gid.get(id, isa_field))
+    pub fn display_label(&self, node: &Id) -> Option<String> {
+        let isa_name = self.doc.gid.get(node, &id(Field::ISA))
             .and_then(|isa_id| self.name_of(isa_id));
 
-        match (isa_name, self.name_of(id)) {
+        match (isa_name, self.name_of(node)) {
             (Some(isa), Some(n)) => Some(format!("{isa} \"{n}\"")),
             (Some(isa), None) => Some(isa),
             (None, Some(n)) => Some(format!("\"{n}\"")),
@@ -207,23 +174,20 @@ impl Editor {
         }
     }
 
-    pub fn isa_of(&self, id: &Id) -> Option<&Id> {
-        self.semantics.isa_field.as_ref()
-            .and_then(|isa_field| self.doc.gid.get(id, isa_field))
+    pub fn isa_of(&self, node: &Id) -> Option<&Id> {
+        self.doc.gid.get(node, &id(Field::ISA))
     }
 
-    pub fn is_cons(&self, id: &Id) -> bool {
-        self.semantics.cons_variant.as_ref()
-            .is_some_and(|cons| self.isa_of(id) == Some(cons))
+    pub fn is_cons(&self, node: &Id) -> bool {
+        self.isa_of(node) == Some(&id(CONS_TYPE))
     }
 
-    pub fn is_empty(&self, id: &Id) -> bool {
-        self.semantics.empty_variant.as_ref()
-            .is_some_and(|empty| self.isa_of(id) == Some(empty))
+    pub fn is_empty(&self, node: &Id) -> bool {
+        self.isa_of(node) == Some(&id(EMPTY_TYPE))
     }
 
-    pub fn is_list(&self, id: &Id) -> bool {
-        self.is_cons(id) || self.is_empty(id)
+    pub fn is_list(&self, node: &Id) -> bool {
+        self.is_cons(node) || self.is_empty(node)
     }
 
     pub fn orphan_roots(&self) -> &[Id] {
@@ -288,14 +252,6 @@ impl<'a> EditorWriter<'a> {
         if let Some(ref mut sel) = self.editor.selection {
             sel.leaf_edit_text = text;
         }
-    }
-
-    pub fn set_name_field(&mut self, field: Option<Id>) {
-        self.editor.semantics.name_field = field;
-    }
-
-    pub fn set_isa_field(&mut self, field: Option<Id>) {
-        self.editor.semantics.isa_field = field;
     }
 }
 

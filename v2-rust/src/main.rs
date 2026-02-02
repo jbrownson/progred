@@ -84,12 +84,11 @@ impl ProgredApp {
                 Some((path, Document::from_json(&contents)?))
             })
         {
-            let semantics = document::Semantics::detect(&doc);
-            self.editor = Editor { doc, file_path: Some(path), semantics, ..Editor::new() };
+            self.editor = Editor { doc, file_path: Some(path), ..Editor::new() };
         }
     }
 
-    fn create_type_system_semantics() -> (Document, document::Semantics) {
+    fn create_type_system_document() -> Document {
         use crate::generated::semantics::*;
 
         fn id(s: &str) -> Id {
@@ -321,21 +320,11 @@ impl ProgredApp {
             RootSlot::new(type_expr),
         ];
 
-        let semantics = document::Semantics {
-            name_field: Some(name),
-            isa_field: Some(isa),
-            cons_variant: Some(cons_t),
-            empty_variant: Some(empty_t),
-            head_field: Some(head_f),
-            tail_field: Some(tail_f),
-        };
-
-        (Document { gid, roots }, semantics)
+        Document { gid, roots }
     }
 
-    fn load_type_system_semantics(&mut self) {
-        let (doc, semantics) = Self::create_type_system_semantics();
-        self.editor = Editor { doc, semantics, ..Editor::new() };
+    fn load_type_system(&mut self) {
+        self.editor = Editor { doc: Self::create_type_system_document(), ..Editor::new() };
     }
 
     fn delete_selection(&mut self) {
@@ -398,7 +387,7 @@ impl ProgredApp {
                     }
                     ui.separator();
                     if ui.add(egui::Button::new("Load Type System")).clicked() {
-                        self.load_type_system_semantics();
+                        self.load_type_system();
                         ui.close();
                     }
                 });

@@ -1,4 +1,5 @@
 use crate::document::{Editor, EditorWriter};
+use crate::generated::semantics::{Field, CONS_TYPE};
 use crate::graph::{Gid, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use im::HashSet;
@@ -7,6 +8,10 @@ use ordered_float::OrderedFloat;
 use super::colors;
 use super::identicon;
 use super::placeholder::PlaceholderResult;
+
+fn field_id(s: &str) -> Id {
+    Id::Uuid(uuid::Uuid::parse_str(s).unwrap())
+}
 
 pub mod layout {
     pub const SELECTION_PADDING: f32 = 2.0;
@@ -294,13 +299,13 @@ struct ListElement {
     head_value: Option<Id>,
 }
 
-fn flatten_list(editor: &Editor, path: &Path, id: &Id) -> Option<(Vec<ListElement>, Path)> {
-    let head_field = editor.semantics.head_field.as_ref()?;
-    let tail_field = editor.semantics.tail_field.as_ref()?;
+fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElement>, Path)> {
+    let head_field = field_id(Field::HEAD);
+    let tail_field = field_id(Field::TAIL);
 
     let mut elements = Vec::new();
     let mut current_path = path.clone();
-    let mut current_id = id;
+    let mut current_id = node;
     let mut seen = HashSet::new();
 
     while editor.is_cons(current_id) {
@@ -309,7 +314,7 @@ fn flatten_list(editor: &Editor, path: &Path, id: &Id) -> Option<(Vec<ListElemen
         }
         seen.insert(current_id.clone());
 
-        let head_value = editor.doc.gid.get(current_id, head_field).cloned();
+        let head_value = editor.doc.gid.get(current_id, &head_field).cloned();
         let head_path = current_path.child(head_field.clone());
         let tail_path = current_path.child(tail_field.clone());
         elements.push(ListElement {
@@ -318,7 +323,7 @@ fn flatten_list(editor: &Editor, path: &Path, id: &Id) -> Option<(Vec<ListElemen
             head_value,
         });
 
-        let tail_value = editor.doc.gid.get(current_id, tail_field)?;
+        let tail_value = editor.doc.gid.get(current_id, &tail_field)?;
         current_path = tail_path;
         current_id = tail_value;
     }
@@ -433,18 +438,12 @@ fn render_list_placeholder(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, i
 }
 
 fn do_list_insert(w: &mut EditorWriter, editor: &Editor, insert_path: &Path, head_value: Id) {
-    if let (Some(cons_variant), Some(isa_field), Some(head_field), Some(tail_field)) = (
-        editor.semantics.cons_variant.clone(),
-        editor.semantics.isa_field.clone(),
-        editor.semantics.head_field.clone(),
-        editor.semantics.tail_field.clone(),
-    ) && let Some(current_value) = editor.doc.node(insert_path)
-    {
+    if let Some(current_value) = editor.doc.node(insert_path) {
         let new_cons = Id::new_uuid();
         w.set_edge(insert_path, new_cons.clone());
-        w.set_edge(&insert_path.child(isa_field), cons_variant);
-        w.set_edge(&insert_path.child(head_field), head_value);
-        w.set_edge(&insert_path.child(tail_field), current_value);
+        w.set_edge(&insert_path.child(field_id(Field::ISA)), field_id(CONS_TYPE));
+        w.set_edge(&insert_path.child(field_id(Field::HEAD)), head_value);
+        w.set_edge(&insert_path.child(field_id(Field::TAIL)), current_value);
     }
 }
 
@@ -486,12 +485,11 @@ fn project_uuid(
         .filter(|(parent, _)| parent == path)
         .map(|(_, label)| label)
         .filter(|label| !edges.map(|e| e.contains_key(label)).unwrap_or(false));
+    let name_field = field_id(Field::NAME);
+    let isa_field = field_id(Field::ISA);
     let all_edges: Vec<(Id, Id)> = edges.into_iter()
         .flat_map(|e| e.iter().map(|(k, v)| (k.clone(), v.clone())))
-        .filter(|(label, _)| {
-            editor.semantics.name_field.as_ref() != Some(label)
-                && editor.semantics.isa_field.as_ref() != Some(label)
-        })
+        .filter(|(label, _)| label != &name_field && label != &isa_field)
         .collect();
     let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
