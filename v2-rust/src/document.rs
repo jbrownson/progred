@@ -1,5 +1,5 @@
 use crate::generated::semantics::{Field, CONS_TYPE, EMPTY_TYPE};
-use crate::graph::{Gid, Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
+use crate::graph::{Gid, Id, MutGid, Path, PathRoot, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
@@ -38,7 +38,9 @@ impl Document {
     fn delete_path(&mut self, path: &Path) {
         match path.pop() {
             None => {
-                if let Some(idx) = self.roots.iter().position(|r| *r == path.root) {
+                if let PathRoot::Slot(root_id) = &path.root
+                    && let Some(idx) = self.roots.iter().position(|r| *r == *root_id)
+                {
                     self.roots.remove(idx);
                 }
             }
@@ -58,7 +60,9 @@ impl Document {
                 }
             }
             None => {
-                if let Some(root) = self.roots.iter_mut().find(|r| **r == path.root) {
+                if let PathRoot::Slot(root_id) = &path.root
+                    && let Some(root) = self.roots.iter_mut().find(|r| **r == *root_id)
+                {
                     root.value = value;
                 }
             }
@@ -188,6 +192,23 @@ impl Editor {
 
     pub fn is_list(&self, node: &Id) -> bool {
         self.is_cons(node) || self.is_empty(node)
+    }
+
+    pub fn selected_node_id(&self) -> Option<Id> {
+        match &self.selection.as_ref()?.target {
+            SelectionTarget::Edge(path) => self.doc.node(path),
+            SelectionTarget::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
+            SelectionTarget::GraphRoot(id) => Some(id.clone()),
+            SelectionTarget::InsertRoot(_) => None,
+        }
+    }
+
+    pub fn placeholder_visible(&self) -> bool {
+        match self.selection.as_ref().map(|s| &s.target) {
+            Some(SelectionTarget::InsertRoot(_)) => true,
+            Some(SelectionTarget::Edge(path)) => self.doc.node(path).is_none(),
+            _ => false,
+        }
     }
 
     pub fn orphan_roots(&self) -> &[Id] {

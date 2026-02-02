@@ -236,7 +236,7 @@ fn project_id(
 fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, id: &Id) {
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary
-        && editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc)).as_ref() == Some(id);
+        && editor.selected_node_id().as_ref() == Some(id);
 
     let model_text = match id {
         Id::String(s) => s.clone(),
@@ -493,7 +493,7 @@ fn project_uuid(
         .collect();
     let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
-    let selected_node = editor.selection.as_ref().and_then(|s| s.selected_node_id(&editor.doc));
+    let selected_node = editor.selected_node_id();
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary && selected_node.as_ref() == Some(&id);
 

@@ -44,22 +44,35 @@ impl From<&RootSlot> for RootId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PathRoot {
+    Slot(RootId),
+    Orphan(Id),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path {
-    pub root: RootId,
+    pub root: PathRoot,
     pub edges: Vec<Id>,
 }
 
 impl Path {
-    pub fn new(root: &RootSlot) -> Self { // TODO review uses of this
+    pub fn new(root: &RootSlot) -> Self {
         Self {
-            root: RootId::from(root),
+            root: PathRoot::Slot(RootId::from(root)),
+            edges: Vec::new(),
+        }
+    }
+
+    pub fn orphan(id: Id) -> Self {
+        Self {
+            root: PathRoot::Orphan(id),
             edges: Vec::new(),
         }
     }
 
     pub fn child(&self, label: Id) -> Self {
         Self {
-            root: self.root,
+            root: self.root.clone(),
             edges: self.edges.iter().cloned().chain([label]).collect(),
         }
     }
@@ -67,13 +80,16 @@ impl Path {
     pub fn pop(&self) -> Option<(Path, Id)> {
         let (label, parent_edges) = self.edges.split_last()?;
         Some((
-            Path { root: self.root, edges: parent_edges.to_vec() },
+            Path { root: self.root.clone(), edges: parent_edges.to_vec() },
             label.clone(),
         ))
     }
 
     pub fn node(&self, gid: &impl Gid, roots: &[RootSlot]) -> Option<Id> {
-        let start = roots.iter().find(|r| RootId::from(*r) == self.root)?.value.clone();
+        let start = match &self.root {
+            PathRoot::Slot(root_id) => roots.iter().find(|r| **r == *root_id)?.value.clone(),
+            PathRoot::Orphan(id) => id.clone(),
+        };
         self.edges.iter().try_fold(start, |current, label| {
             match &current {
                 Id::Uuid(_) => gid.get(&current, label).cloned(),
