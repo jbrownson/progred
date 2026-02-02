@@ -1,6 +1,3 @@
-// TODO: List accessors currently return Vec<T> and eagerly collect. Should return
-// lazy iterators instead - add a ListIter struct to graph module that walks cons/empty
-// lists on demand, then generate `fn fields(&self, gid) -> impl Iterator<Item = Field>`.
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -24,7 +21,6 @@ const TAIL_FIELD: &str = "cffc46b8-2388-4197-ad87-7e7ef446accb";
 
 // Type construct IDs
 const TYPE_T: &str = "b7185815-d553-4fbf-9025-d88643a7ba6a";
-const FORALL_T: &str = "2e3784a7-0542-44be-90de-9ca8f8a606a4";
 const APPLY_T: &str = "d6ad0273-886d-4e83-9ed7-e4fe5fe2f4e8";
 const RECORD_T: &str = "4ae8a1de-f7f5-4733-b6ca-0e01862635e6";
 
@@ -144,11 +140,9 @@ fn resolve_type(graph: &Graph, type_id: &str) -> ResolvedType {
         }
         Some(isa) if isa == APPLY_T => {
             let base_id = get_edge(graph, type_id, BASE_FIELD).and_then(get_uuid);
-            let base_name = base_id.and_then(|id| get_name(graph, id));
-            let base_isa = base_id.and_then(|id| get_isa(graph, id));
 
             // Only handle List<T>, other applies are untyped for now
-            if base_isa == Some(FORALL_T) && base_name.as_deref() == Some("list") {
+            if base_id == Some(LIST_T) {
                 let args: Vec<ResolvedType> = get_edge(graph, type_id, ARGS_FIELD)
                     .and_then(get_uuid)
                     .map(|list_id| {
@@ -232,60 +226,46 @@ fn generate_accessor(field_id: &str, field_name: &str, field_type: &ResolvedType
 
             let (return_type, element_conversion) = match element_type.as_ref() {
                 ResolvedType::String => (
-                    quote! { std::vec::Vec<std::string::String> },
+                    quote! { impl Iterator<Item = std::string::String> + 'a },
                     quote! {
-                        if let crate::graph::Id::String(s) = head {
-                            result.push(s.clone());
-                        }
+                        .filter_map(|id| match id {
+                            crate::graph::Id::String(s) => Some(s.clone()),
+                            _ => None,
+                        })
                     }
                 ),
                 ResolvedType::Number => (
-                    quote! { std::vec::Vec<f64> },
+                    quote! { impl Iterator<Item = f64> + 'a },
                     quote! {
-                        if let crate::graph::Id::Number(n) = head {
-                            result.push(n.0);
-                        }
+                        .filter_map(|id| match id {
+                            crate::graph::Id::Number(n) => Some(n.0),
+                            _ => None,
+                        })
                     }
                 ),
                 ResolvedType::Record(elem_name) => {
                     let wrapper = format_ident!("{}", capitalize(elem_name));
                     (
-                        quote! { std::vec::Vec<#wrapper> },
-                        quote! { result.push(#wrapper::wrap(head.clone())); }
+                        quote! { impl Iterator<Item = #wrapper> + 'a },
+                        quote! { .map(|id| #wrapper::wrap(id.clone())) }
                     )
                 },
                 _ => (
-                    quote! { std::vec::Vec<crate::graph::Id> },
-                    quote! { result.push(head.clone()); }
+                    quote! { impl Iterator<Item = crate::graph::Id> + 'a },
+                    quote! { .cloned() }
                 ),
             };
 
             quote! {
-                pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> #return_type {
-                    let head_field = crate::graph::Id::Uuid(uuid::Uuid::parse_str(#head_field_str).unwrap());
-                    let tail_field = crate::graph::Id::Uuid(uuid::Uuid::parse_str(#tail_field_str).unwrap());
-                    let cons_t = crate::graph::Id::Uuid(uuid::Uuid::parse_str(#cons_t_str).unwrap());
-                    let isa_field = crate::graph::Id::Uuid(uuid::Uuid::parse_str(#isa_field_str).unwrap());
-
-                    let mut result = std::vec::Vec::new();
-                    let Some(mut current) = gid.get(&self.0, &crate::graph::Id::Uuid(uuid::Uuid::parse_str(#field_uuid_str).unwrap())) else {
-                        return result;
-                    };
-
-                    let mut seen = std::collections::HashSet::new();
-                    while gid.get(current, &isa_field) == Some(&cons_t) {
-                        if !seen.insert(current.clone()) {
-                            break;
-                        }
-                        if let Some(head) = gid.get(current, &head_field) {
-                            #element_conversion
-                        }
-                        match gid.get(current, &tail_field) {
-                            Some(tail) => current = tail,
-                            None => break,
-                        }
-                    }
-                    result
+                pub fn #method_name<'a>(&self, gid: &'a impl crate::graph::Gid) -> #return_type {
+                    crate::graph::ListIter::new(
+                        gid,
+                        gid.get(&self.0, &crate::graph::Id::Uuid(uuid::Uuid::parse_str(#field_uuid_str).unwrap())),
+                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#isa_field_str).unwrap()),
+                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#cons_t_str).unwrap()),
+                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#head_field_str).unwrap()),
+                        crate::graph::Id::Uuid(uuid::Uuid::parse_str(#tail_field_str).unwrap()),
+                    )#element_conversion
                 }
             }
         },
