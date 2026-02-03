@@ -367,6 +367,7 @@ fn project_list(
     match flatten_list(editor, path, id) {
         Some((elements, _empty_path)) => {
             let insertion_idx = is_list_insertion_selected(editor, path, &elements);
+            let list_ancestors = ancestors.update(id.clone());
 
             ui.vertical(|ui| {
                 if elements.is_empty() {
@@ -390,7 +391,7 @@ fn project_list(
                             ui.label(eframe::egui::RichText::new("•").color(Color32::from_gray(150)));
                             match &elem.head_value {
                                 Some(head) => {
-                                    project_id(ui, editor, w, &elem.head_path, head, ancestors.clone(), mode);
+                                    project_id(ui, editor, w, &elem.head_path, head, list_ancestors.clone(), mode);
                                 }
                                 None => {
                                     let selected = editor.selection.as_ref()
