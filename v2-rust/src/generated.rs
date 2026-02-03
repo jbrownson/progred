@@ -1,4 +1,4 @@
-progred_macros::generate_semantics!();
+progred_macros::generate_semantics!("semantics.progred");
 
 #[cfg(test)]
 mod tests {
@@ -71,7 +71,7 @@ mod tests {
     fn name_returns_string() {
         let mut gid = MutGid::new();
         let id = Id::new_uuid();
-        let name_field = Id::Uuid(uuid::Uuid::parse_str(Field::NAME).unwrap());
+        let name_field = Id::Uuid(uuid::Uuid::parse_str(NAME).unwrap());
         gid.set(id.clone(), name_field, Id::String("test_type".to_string()));
 
         let t = Type::wrap(id);
@@ -99,10 +99,10 @@ mod tests {
 
         // Build a record with a list of fields
         let record_id = Id::new_uuid();
-        let isa_field = Id::Uuid(uuid::Uuid::parse_str(Field::ISA).unwrap());
-        let fields_field = Id::Uuid(uuid::Uuid::parse_str(Field::FIELDS).unwrap());
-        let head_field = Id::Uuid(uuid::Uuid::parse_str(Field::HEAD).unwrap());
-        let tail_field = Id::Uuid(uuid::Uuid::parse_str(Field::TAIL).unwrap());
+        let isa_field = Id::Uuid(uuid::Uuid::parse_str(ISA).unwrap());
+        let fields_field = Id::Uuid(uuid::Uuid::parse_str(FIELDS).unwrap());
+        let head_field = Id::Uuid(uuid::Uuid::parse_str(HEAD).unwrap());
+        let tail_field = Id::Uuid(uuid::Uuid::parse_str(TAIL).unwrap());
         let cons_id = Id::Uuid(uuid::Uuid::parse_str(CONS_TYPE).unwrap());
         let empty_id = Id::Uuid(uuid::Uuid::parse_str(EMPTY_TYPE).unwrap());
         let record_type_id = Id::Uuid(uuid::Uuid::parse_str(Record::TYPE_ID).unwrap());

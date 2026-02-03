@@ -49,7 +49,7 @@ fn project_field_compact(ui: &mut Ui, editor: &Editor, node: &Id) {
         ui.label(egui::RichText::new("field").color(Color32::from_rgb(150, 100, 150)).italics());
         ui.label(egui::RichText::new(format!("\"{}\"", name)).color(Color32::from_gray(60)));
 
-        if let Some(type_id) = get_edge(editor, node, Field::TYPE_) {
+        if let Some(type_id) = get_edge(editor, node, TYPE_) {
             ui.label(egui::RichText::new(":").color(Color32::from_gray(120)));
             render_type_ref(ui, editor, type_id);
         }
@@ -60,14 +60,14 @@ fn project_field_compact(ui: &mut Ui, editor: &Editor, node: &Id) {
 fn render_type_ref(ui: &mut Ui, editor: &Editor, type_id: &Id) {
     if isa_is(editor, type_id, Apply::TYPE_ID) {
         // Show as base<args>
-        let base_name = get_edge(editor, type_id, Field::BASE)
+        let base_name = get_edge(editor, type_id, BASE)
             .and_then(|b| editor.name_of(b))
             .unwrap_or_else(|| "?".into());
 
         ui.label(egui::RichText::new(&base_name).color(Color32::from_gray(80)).italics());
         ui.label(egui::RichText::new("<").color(Color32::from_gray(120)));
 
-        if let Some(args_list) = get_edge(editor, type_id, Field::ARGS) {
+        if let Some(args_list) = get_edge(editor, type_id, ARGS) {
             let args = flatten_list(editor, args_list);
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
@@ -93,10 +93,10 @@ fn flatten_list(editor: &Editor, list_node: &Id) -> Vec<Id> {
     let mut seen = std::collections::HashSet::new();
 
     while editor.is_cons(&current) && seen.insert(current.clone()) {
-        if let Some(head) = get_edge(editor, &current, Field::HEAD) {
+        if let Some(head) = get_edge(editor, &current, HEAD) {
             result.push(head.clone());
         }
-        match get_edge(editor, &current, Field::TAIL) {
+        match get_edge(editor, &current, TAIL) {
             Some(tail) => current = tail.clone(),
             None => break,
         }

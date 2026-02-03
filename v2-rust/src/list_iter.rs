@@ -1,4 +1,4 @@
-use crate::generated::semantics::{Field, CONS_TYPE};
+use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
 use crate::graph::{Gid, Id};
 use std::collections::HashSet;
 
@@ -26,10 +26,10 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
     type Item = &'a Id;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let isa_field = id(Field::ISA);
+        let isa_field = id(ISA);
         let cons_id = id(CONS_TYPE);
-        let head_field = id(Field::HEAD);
-        let tail_field = id(Field::TAIL);
+        let head_field = id(HEAD);
+        let tail_field = id(TAIL);
 
         loop {
             let current = self.current?;
@@ -60,9 +60,9 @@ mod tests {
     use crate::graph::MutGid;
 
     fn make_list(gid: &mut MutGid, elements: &[Id]) -> Id {
-        let isa = id(Field::ISA);
-        let head = id(Field::HEAD);
-        let tail = id(Field::TAIL);
+        let isa = id(ISA);
+        let head = id(HEAD);
+        let tail = id(TAIL);
         let cons = id(CONS_TYPE);
         let empty = id(crate::generated::semantics::EMPTY_TYPE);
 
@@ -114,9 +114,9 @@ mod tests {
     #[test]
     fn cycle_detection() {
         let mut gid = MutGid::new();
-        let isa = id(Field::ISA);
-        let head_f = id(Field::HEAD);
-        let tail_f = id(Field::TAIL);
+        let isa = id(ISA);
+        let head_f = id(HEAD);
+        let tail_f = id(TAIL);
         let cons = id(CONS_TYPE);
 
         let cons1 = Id::new_uuid();

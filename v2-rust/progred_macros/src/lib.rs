@@ -10,10 +10,8 @@ use uuid::Uuid;
 const NAME_FIELD: &str = "21ab3439-ef04-4783-9022-3d0400de4bbb";
 const ISA_FIELD: &str = "1d75e23d-7147-466a-a33d-384286fa518d";
 const BODY_FIELD: &str = "26956a6c-e425-4b1d-bcd7-fc2dba14b277";
-const PARAMS_FIELD: &str = "10650b24-4876-4726-bd57-b06ce8fcf874";
 const BASE_FIELD: &str = "4c81a576-7858-46ed-8246-12158e0c4a7a";
 const ARGS_FIELD: &str = "1d43868e-5873-45dc-a3b1-5f8cef0b410e";
-const VARIANTS_FIELD: &str = "de15c5ce-f65c-4e32-a15e-94f37dbb7541";
 const FIELDS_FIELD: &str = "f355ead0-6bfb-450e-a729-1735c3950a0e";
 const TYPE_FIELD: &str = "7f328ac9-de07-45a5-86b3-021b2711747a";
 const HEAD_FIELD: &str = "83f724d9-1008-43e3-807c-f66adc7d774f";
@@ -23,6 +21,7 @@ const TAIL_FIELD: &str = "cffc46b8-2388-4197-ad87-7e7ef446accb";
 const TYPE_T: &str = "b7185815-d553-4fbf-9025-d88643a7ba6a";
 const APPLY_T: &str = "d6ad0273-886d-4e83-9ed7-e4fe5fe2f4e8";
 const RECORD_T: &str = "4ae8a1de-f7f5-4733-b6ca-0e01862635e6";
+const FIELD_T: &str = "c9bdef1a-c9b0-4927-a881-5cf7fa54bb9b";
 
 // Primitive type IDs
 const STRING_T: &str = "355e01b2-4cbd-413a-a89d-e05fba7c577d";
@@ -34,7 +33,6 @@ const EMPTY_T: &str = "1dff7f8a-1d83-41fd-af2d-087b753ed008";
 
 // Auxiliary type IDs
 const LIST_T: &str = "c80d8e16-dbf4-4a83-80fd-38b2de25688f";
-const TYPE_EXPR_T: &str = "8cafe8ce-d202-4d43-9c96-b2d30f4e5bb1";
 
 type Graph = HashMap<String, HashMap<String, Value>>;
 
@@ -268,7 +266,7 @@ fn generate_accessor(field_id: &str, field_name: &str, field_type: &ResolvedType
     }
 }
 
-fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str, extra_constants: &[(String, String)]) -> TokenStream2 {
+fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str) -> TokenStream2 {
     let fields = get_record_fields(graph, body_id);
     if type_name.is_empty() {
         panic!("Empty type_name for type_id={}, body_id={}", type_id, body_id);
@@ -284,21 +282,12 @@ fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str
         })
         .collect();
 
-    let extra_consts: Vec<TokenStream2> = extra_constants
-        .iter()
-        .map(|(name, uuid)| {
-            let const_name = format_ident!("{}", name.to_uppercase());
-            quote! { pub const #const_name: &'static str = #uuid; }
-        })
-        .collect();
-
     quote! {
         #[derive(Clone, Debug)]
         pub struct #struct_name(pub crate::graph::Id);
 
         impl #struct_name {
             pub const TYPE_ID: &'static str = #type_uuid_str;
-            #(#extra_consts)*
 
             pub fn wrap(id: crate::graph::Id) -> Self {
                 Self(id)
@@ -315,26 +304,21 @@ fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str
 
 #[proc_macro]
 pub fn generate_semantics(input: TokenStream) -> TokenStream {
+    let lit: syn::LitStr = syn::parse(input).expect("expected path string");
+    let rel_path = lit.value();
+
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
         .expect("CARGO_MANIFEST_DIR not set");
-
-    let path = if input.is_empty() {
-        format!("{}/semantics.progred", manifest_dir)
+    let path = if rel_path.starts_with('/') {
+        rel_path
     } else {
-        let lit: syn::LitStr = syn::parse(input).expect("expected string literal path");
-        let rel_path = lit.value();
-        if rel_path.starts_with('/') {
-            rel_path
-        } else {
-            format!("{}/{}", manifest_dir, rel_path)
-        }
+        format!("{}/{}", manifest_dir, rel_path)
     };
 
     let contents = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", path, e));
-
     let json: Value = serde_json::from_str(&contents)
-        .expect("failed to parse semantics file as JSON");
+        .expect("failed to parse semantics JSON");
 
     let graph: Graph = serde_json::from_value(json.get("graph").expect("missing graph field").clone())
         .expect("failed to parse graph");
@@ -342,59 +326,62 @@ pub fn generate_semantics(input: TokenStream) -> TokenStream {
     let roots: Vec<Value> = serde_json::from_value(json.get("roots").expect("missing roots field").clone())
         .expect("failed to parse roots");
 
-    let field_constants: Vec<(String, String)> = vec![
-        ("name".to_string(), NAME_FIELD.to_string()),
-        ("isa".to_string(), ISA_FIELD.to_string()),
-        ("body".to_string(), BODY_FIELD.to_string()),
-        ("params".to_string(), PARAMS_FIELD.to_string()),
-        ("base".to_string(), BASE_FIELD.to_string()),
-        ("args".to_string(), ARGS_FIELD.to_string()),
-        ("variants".to_string(), VARIANTS_FIELD.to_string()),
-        ("fields".to_string(), FIELDS_FIELD.to_string()),
-        ("type_".to_string(), TYPE_FIELD.to_string()),
-        ("head".to_string(), HEAD_FIELD.to_string()),
-        ("tail".to_string(), TAIL_FIELD.to_string()),
-    ];
-
     let wrappers: Vec<TokenStream2> = roots
         .iter()
         .filter_map(|root| {
             let id = get_uuid(root)?;
             let isa = get_isa(&graph, id)?;
             let name = get_name(&graph, id)?;
-            let extra = if name == "field" { &field_constants } else { &vec![] };
 
             // Type wrappers: type { body: record { fields } }
             if isa == TYPE_T {
                 let body_id = get_edge(&graph, id, BODY_FIELD).and_then(get_uuid)?;
                 if get_isa(&graph, body_id) == Some(RECORD_T) {
-                    return Some(generate_wrapper(&graph, id, body_id, &name, extra));
+                    return Some(generate_wrapper(&graph, id, body_id, &name));
                 }
             }
             // Direct records (legacy)
             if isa == RECORD_T {
-                return Some(generate_wrapper(&graph, id, id, &name, extra));
+                return Some(generate_wrapper(&graph, id, id, &name));
             }
             None
         })
         .collect();
 
-    let string_t_str = STRING_T;
-    let number_t_str = NUMBER_T;
-    let list_t_str = LIST_T;
-    let type_expr_t_str = TYPE_EXPR_T;
-    let cons_t_str = CONS_T;
-    let empty_t_str = EMPTY_T;
+    // Discover field instances (nodes with isa = field type)
+    let field_constants: Vec<TokenStream2> = graph
+        .keys()
+        .filter_map(|id| {
+            if get_isa(&graph, id) == Some(FIELD_T) {
+                let name = get_name(&graph, id)?;
+                let const_name = format_ident!("{}", sanitize_ident(&name).to_uppercase());
+                let uuid_str = id.to_string();
+                Some(quote! { pub const #const_name: &str = #uuid_str; })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Discover named types (nodes with isa = type)
+    let type_constants: Vec<TokenStream2> = graph
+        .keys()
+        .filter_map(|id| {
+            if get_isa(&graph, id) == Some(TYPE_T) {
+                let name = get_name(&graph, id)?;
+                let const_name = format_ident!("{}_TYPE", sanitize_ident(&name).to_uppercase());
+                let uuid_str = id.to_string();
+                Some(quote! { pub const #const_name: &str = #uuid_str; })
+            } else {
+                None
+            }
+        })
+        .collect();
 
     let output = quote! {
         pub mod semantics {
-            pub const STRING_TYPE: &str = #string_t_str;
-            pub const NUMBER_TYPE: &str = #number_t_str;
-            pub const LIST_TYPE: &str = #list_t_str;
-            pub const TYPE_EXPR: &str = #type_expr_t_str;
-            pub const CONS_TYPE: &str = #cons_t_str;
-            pub const EMPTY_TYPE: &str = #empty_t_str;
-
+            #(#type_constants)*
+            #(#field_constants)*
             #(#wrappers)*
         }
     };

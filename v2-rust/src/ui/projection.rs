@@ -1,5 +1,5 @@
 use crate::document::{Editor, EditorWriter};
-use crate::generated::semantics::{Field, CONS_TYPE};
+use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, NAME, TAIL};
 use crate::graph::{Gid, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use im::HashSet;
@@ -300,8 +300,8 @@ struct ListElement {
 }
 
 fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElement>, Path)> {
-    let head_field = field_id(Field::HEAD);
-    let tail_field = field_id(Field::TAIL);
+    let head_field = field_id(HEAD);
+    let tail_field = field_id(TAIL);
 
     let mut elements = Vec::new();
     let mut current_path = path.clone();
@@ -442,9 +442,9 @@ fn do_list_insert(w: &mut EditorWriter, editor: &Editor, insert_path: &Path, hea
     if let Some(current_value) = editor.doc.node(insert_path) {
         let new_cons = Id::new_uuid();
         w.set_edge(insert_path, new_cons.clone());
-        w.set_edge(&insert_path.child(field_id(Field::ISA)), field_id(CONS_TYPE));
-        w.set_edge(&insert_path.child(field_id(Field::HEAD)), head_value);
-        w.set_edge(&insert_path.child(field_id(Field::TAIL)), current_value);
+        w.set_edge(&insert_path.child(field_id(ISA)), field_id(CONS_TYPE));
+        w.set_edge(&insert_path.child(field_id(HEAD)), head_value);
+        w.set_edge(&insert_path.child(field_id(TAIL)), current_value);
     }
 }
 
@@ -486,8 +486,8 @@ fn project_uuid(
         .filter(|(parent, _)| parent == path)
         .map(|(_, label)| label)
         .filter(|label| !edges.map(|e| e.contains_key(label)).unwrap_or(false));
-    let name_field = field_id(Field::NAME);
-    let isa_field = field_id(Field::ISA);
+    let name_field = field_id(NAME);
+    let isa_field = field_id(ISA);
     let all_edges: Vec<(Id, Id)> = edges.into_iter()
         .flat_map(|e| e.iter().map(|(k, v)| (k.clone(), v.clone())))
         .filter(|(label, _)| label != &name_field && label != &isa_field)

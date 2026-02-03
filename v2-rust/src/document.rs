@@ -1,4 +1,4 @@
-use crate::generated::semantics::{Field, CONS_TYPE, EMPTY_TYPE};
+use crate::generated::semantics::{CONS_TYPE, EMPTY_TYPE, ISA, NAME};
 use crate::graph::{Gid, Id, MutGid, Path, PathRoot, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
 use std::collections::{HashSet, VecDeque};
@@ -160,14 +160,14 @@ impl Editor {
     }
 
     pub fn name_of(&self, node: &Id) -> Option<String> {
-        match self.doc.gid.get(node, &id(Field::NAME))? {
+        match self.doc.gid.get(node, &id(NAME))? {
             Id::String(s) => Some(s.clone()),
             _ => None,
         }
     }
 
     pub fn display_label(&self, node: &Id) -> Option<String> {
-        let isa_name = self.doc.gid.get(node, &id(Field::ISA))
+        let isa_name = self.doc.gid.get(node, &id(ISA))
             .and_then(|isa_id| self.name_of(isa_id));
 
         match (isa_name, self.name_of(node)) {
@@ -179,7 +179,7 @@ impl Editor {
     }
 
     pub fn isa_of(&self, node: &Id) -> Option<&Id> {
-        self.doc.gid.get(node, &id(Field::ISA))
+        self.doc.gid.get(node, &id(ISA))
     }
 
     pub fn is_cons(&self, node: &Id) -> bool {

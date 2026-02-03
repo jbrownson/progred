@@ -98,19 +98,19 @@ impl ProgredApp {
         let mut gid = MutGid::new();
 
         // === Semantic fields (from saved schema) ===
-        let name = id(Field::NAME);
-        let isa = id(Field::ISA);
+        let name = id(NAME);
+        let isa = id(ISA);
 
         // === Fields for type constructs ===
-        let body_f = id(Field::BODY);
-        let params_f = id(Field::PARAMS);
-        let base_f = id(Field::BASE);
-        let args_f = id(Field::ARGS);
-        let variants_f = id(Field::VARIANTS);
-        let fields_f = id(Field::FIELDS);
-        let type_f = id(Field::TYPE_);
-        let head_f = id(Field::HEAD);
-        let tail_f = id(Field::TAIL);
+        let body_f = id(BODY);
+        let params_f = id(PARAMS);
+        let base_f = id(BASE);
+        let args_f = id(ARGS);
+        let variants_f = id(VARIANTS);
+        let fields_f = id(FIELDS);
+        let type_f = id(TYPE_);
+        let head_f = id(HEAD);
+        let tail_f = id(TAIL);
 
         // === Type constructs (from saved schema) ===
         let type_t = id(Type::TYPE_ID);
@@ -267,7 +267,7 @@ impl ProgredApp {
         gid.set(list_param_t.clone(), name.clone(), Id::String("T".into()));
 
         // --- type "type expression" { body: sum { variants: [...] } } ---
-        let type_expr = id(TYPE_EXPR);
+        let type_expr = id(TYPE_EXPRESSION_TYPE);
         gid.set(type_expr.clone(), isa.clone(), type_t.clone());
         gid.set(type_expr.clone(), name.clone(), Id::String("type expression".into()));
         let te_sum = Id::new_uuid();
