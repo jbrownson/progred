@@ -10,7 +10,7 @@ impl<T> semantics::List<T> {
 #[cfg(test)]
 mod tests {
     use super::semantics::*;
-    use crate::graph::{Id, MutGid};
+    use crate::graph::{Id, MutGid, Gid};
 
     #[test]
     fn generated_types_exist() {
@@ -260,5 +260,144 @@ mod tests {
         // Both should work
         assert_eq!(list1.iter(&gid).count(), 0);
         assert_eq!(list2.iter(&gid).count(), 0);
+    }
+
+    #[test]
+    fn constructor_sets_isa() {
+        let mut gid = MutGid::new();
+        let t = Type::new(&mut gid);
+
+        // Check that isa is set to Type's TYPE_ID
+        let isa_field = Id::Uuid(uuid::Uuid::parse_str(ISA).unwrap());
+        let type_id = Id::Uuid(uuid::Uuid::parse_str(Type::TYPE_ID).unwrap());
+        let isa = gid.get(t.id(), &isa_field);
+        assert_eq!(isa, Some(&type_id));
+    }
+
+    #[test]
+    fn setter_for_reference_field() {
+        let mut gid = MutGid::new();
+
+        // Create a Record and wrap as TypeExpression body
+        let record = Record::new(&mut gid);
+        let t = Type::new(&mut gid);
+
+        // Use raw set to put the record id in the body field
+        let body_field = Id::Uuid(uuid::Uuid::parse_str(BODY).unwrap());
+        gid.set(t.id().clone(), body_field, record.id().clone());
+
+        // Read it back - verify the id matches
+        let body = t.body(&gid);
+        assert!(body.is_some());
+        assert_eq!(body.unwrap().id(), record.id());
+    }
+
+    #[test]
+    fn build_record_with_fields() {
+        let mut gid = MutGid::new();
+
+        // Create fields
+        let name_field = Field::new(&mut gid);
+        name_field.set_name(&mut gid, "name");
+
+        let age_field = Field::new(&mut gid);
+        age_field.set_name(&mut gid, "age");
+
+        // Create field list
+        let conv = field_converter();
+        let empty = List::new_empty(&mut gid, conv.clone());
+        let list1 = List::new_cons(&mut gid, age_field.id(), &empty, conv.clone());
+        let fields = List::new_cons(&mut gid, name_field.id(), &list1, conv);
+
+        // Create record with fields
+        let record = Record::new(&mut gid);
+        record.set_fields(&mut gid, &fields);
+
+        // Verify
+        let field_list = record.fields(&gid).unwrap();
+        let field_vec: Vec<Field> = field_list.iter(&gid).collect();
+        assert_eq!(field_vec.len(), 2);
+        assert_eq!(field_vec[0].name(&gid), Some("name".to_string()));
+        assert_eq!(field_vec[1].name(&gid), Some("age".to_string()));
+    }
+
+    #[test]
+    fn field_type_reference() {
+        let mut gid = MutGid::new();
+
+        // Create a Type to reference (Type is a valid TypeExpression variant)
+        let ref_type = Type::new(&mut gid);
+        ref_type.set_name(&mut gid, "String");
+
+        // Create a field and set its type using raw graph access
+        let field = Field::new(&mut gid);
+        field.set_name(&mut gid, "title");
+        let type_field = Id::Uuid(uuid::Uuid::parse_str(TYPE_).unwrap());
+        gid.set(field.id().clone(), type_field, ref_type.id().clone());
+
+        // Read it back - verify id matches
+        assert_eq!(field.name(&gid), Some("title".to_string()));
+        let field_type = field.type_(&gid).unwrap();
+        assert_eq!(field_type.id(), ref_type.id());
+    }
+
+    #[test]
+    fn list_constructors_match() {
+        let mut gid = MutGid::new();
+        let conv = string_converter();
+
+        // Build with constructors
+        let empty = List::new_empty(&mut gid, conv.clone());
+        let list = List::new_cons(&mut gid, &Id::String("hello".into()), &empty, conv);
+
+        // Verify via match_
+        let is_cons = list.match_(
+            &gid,
+            || false,
+            |head, _tail| head == "hello",
+        );
+        assert_eq!(is_cons, Some(true));
+    }
+
+    #[test]
+    fn empty_list_match() {
+        let mut gid = MutGid::new();
+        let empty: List<std::string::String> = List::new_empty(&mut gid, string_converter());
+
+        let is_empty = empty.match_(
+            &gid,
+            || true,
+            |_, _| false,
+        );
+        assert_eq!(is_empty, Some(true));
+    }
+
+    fn type_expr_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeExpression>> {
+        std::rc::Rc::new(|id| Some(TypeExpression::wrap(id.clone())))
+    }
+
+    #[test]
+    fn forall_with_params() {
+        let mut gid = MutGid::new();
+
+        // Create a Type as a parameter (Type is a TypeExpression variant)
+        let param = Type::new(&mut gid);
+        param.set_name(&mut gid, "T");
+
+        // Create param list using raw graph (since we need List<TypeExpression>)
+        let conv = type_expr_converter();
+        let empty = List::new_empty(&mut gid, conv.clone());
+        let params = List::new_cons(&mut gid, param.id(), &empty, conv);
+
+        // Create forall and set params via raw graph
+        let forall = Forall::new(&mut gid);
+        let params_field = Id::Uuid(uuid::Uuid::parse_str(PARAMS).unwrap());
+        gid.set(forall.id().clone(), params_field, params.id().clone());
+
+        // Verify
+        let param_list = forall.params(&gid).unwrap();
+        let params_vec: Vec<TypeExpression> = param_list.iter(&gid).collect();
+        assert_eq!(params_vec.len(), 1);
+        assert_eq!(params_vec[0].id(), param.id());
     }
 }
