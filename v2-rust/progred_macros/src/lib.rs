@@ -22,7 +22,9 @@ const APPLY_T: &str = "d6ad0273-886d-4e83-9ed7-e4fe5fe2f4e8";
 const RECORD_T: &str = "4ae8a1de-f7f5-4733-b6ca-0e01862635e6";
 const FIELD_T: &str = "c9bdef1a-c9b0-4927-a881-5cf7fa54bb9b";
 const FORALL_T: &str = "2e3784a7-0542-44be-90de-9ca8f8a606a4";
+const SUM_T: &str = "6847449f-a122-40f5-8880-1692d968d127";
 const PARAMS_FIELD: &str = "10650b24-4876-4726-bd57-b06ce8fcf874";
+const VARIANTS_FIELD: &str = "de15c5ce-f65c-4e32-a15e-94f37dbb7541";
 
 // Primitive type IDs
 const STRING_T: &str = "355e01b2-4cbd-413a-a89d-e05fba7c577d";
@@ -32,8 +34,6 @@ const NUMBER_T: &str = "d4325076-d33e-4fc8-b3f6-5ba85385a352";
 const CONS_T: &str = "264e80b0-a8e1-4fc2-a3bd-6c10ff177261";
 const EMPTY_T: &str = "1dff7f8a-1d83-41fd-af2d-087b753ed008";
 
-// Auxiliary type IDs
-const LIST_T: &str = "c80d8e16-dbf4-4a83-80fd-38b2de25688f";
 
 type Graph = HashMap<String, HashMap<String, Value>>;
 type Result<T> = std::result::Result<T, String>;
@@ -90,41 +90,46 @@ const RESERVED: &[&str] = &[
     "super", "in", "as", "unsafe", "extern",
 ];
 
-fn validate_ident(result: String, original: &str) -> Result<String> {
-    if result.is_empty() {
-        return Err(format!("Name {:?} produces empty identifier", original));
+fn validate_ident(s: String) -> Result<String> {
+    if s.is_empty() {
+        return Err("Empty identifier".to_string());
     }
-    if result.chars().next().unwrap().is_ascii_digit() {
-        return Err(format!("Name {:?} produces identifier starting with digit: {}", original, result));
+    if s.chars().next().unwrap().is_ascii_digit() {
+        return Err(format!("Identifier {:?} starts with digit", s));
     }
-    if let Some(bad) = result.chars().find(|c| !c.is_ascii_alphanumeric() && *c != '_') {
-        return Err(format!("Name {:?} produces {:?} with invalid character {:?}", original, result, bad));
+    if let Some(bad) = s.chars().find(|c| !c.is_ascii_alphanumeric() && *c != '_') {
+        return Err(format!("Identifier {:?} contains invalid character {:?}", s, bad));
     }
-    Ok(result)
+    Ok(s)
 }
 
 fn escape_reserved(s: String) -> String {
     if RESERVED.contains(&s.as_str()) { format!("{}_", s) } else { s }
 }
 
+fn to_snake_case(s: &str) -> String {
+    s.replace(['-', ' '], "_")
+}
+
 fn capitalize(s: &str) -> String {
     let mut chars = s.chars();
-    match chars.next() {
-        Some(c) => c.to_uppercase().chain(chars).collect(),
-        None => String::new(),
-    }
+    chars.next().map_or(String::new(), |c| c.to_uppercase().chain(chars).collect())
+}
+
+fn to_pascal_case(s: &str) -> String {
+    s.split(['-', ' ', '_']).map(capitalize).collect()
 }
 
 fn rust_method_name(name: &str) -> Result<String> {
-    validate_ident(escape_reserved(name.replace(['-', ' '], "_")), name)
+    validate_ident(escape_reserved(to_snake_case(name)))
 }
 
 fn rust_type_name(name: &str) -> Result<String> {
-    validate_ident(escape_reserved(name.split(['-', ' ', '_']).map(capitalize).collect()), name)
+    validate_ident(escape_reserved(to_pascal_case(name)))
 }
 
 fn rust_const_name(name: &str) -> Result<String> {
-    validate_ident(escape_reserved(name.replace(['-', ' '], "_")).to_uppercase(), name)
+    validate_ident(escape_reserved(to_snake_case(name)).to_uppercase())
 }
 
 #[derive(Debug, Clone)]
@@ -132,8 +137,8 @@ enum ResolvedType {
     String,
     Number,
     Record { rust_name: String },
-    List(Box<ResolvedType>),
-    Untyped,
+    Generic { rust_name: String, args: Vec<ResolvedType> },
+    TypeParam { rust_name: String, converter_name: String },
 }
 
 fn get_forall_params(graph: &Graph, type_id: &str) -> Option<Vec<String>> {
@@ -155,17 +160,21 @@ fn resolve_type(graph: &Graph, type_id: &str, subs: &Substitutions) -> Result<Re
         STRING_T => Ok(ResolvedType::String),
         NUMBER_T => Ok(ResolvedType::Number),
         _ => match get_isa(graph, type_id) {
-            Some(RECORD_T) => get_name(graph, type_id)
-                .ok_or_else(|| format!("Record {} has no name", type_id))
-                .and_then(|name| rust_type_name(&name).map(|rust_name| ResolvedType::Record { rust_name })),
+            Some(RECORD_T) => Err(format!("Bare record {} not wrapped in named type", type_id)),
+            Some(SUM_T) => Err(format!("Bare sum {} not wrapped in named type", type_id)),
             Some(TYPE_T) => {
                 match get_edge(graph, type_id, BODY_FIELD).and_then(get_uuid) {
-                    Some(body_id) if get_isa(graph, body_id) == Some(RECORD_T) =>
-                        get_name(graph, type_id)
-                            .ok_or_else(|| format!("Type {} has no name", type_id))
-                            .and_then(|name| rust_type_name(&name).map(|rust_name| ResolvedType::Record { rust_name })),
-                    Some(body_id) => resolve_type(graph, body_id, subs),
-                    None => Ok(ResolvedType::Untyped),
+                    Some(body_id) => {
+                        let body_isa = get_isa(graph, body_id);
+                        if body_isa == Some(RECORD_T) || body_isa == Some(SUM_T) {
+                            get_name(graph, type_id)
+                                .ok_or_else(|| format!("Type {} has no name", type_id))
+                                .and_then(|name| rust_type_name(&name).map(|rust_name| ResolvedType::Record { rust_name }))
+                        } else {
+                            resolve_type(graph, body_id, subs)
+                        }
+                    }
+                    None => Err(format!("Type {} has no body", type_id)),
                 }
             }
             Some(APPLY_T) => {
@@ -175,33 +184,22 @@ fn resolve_type(graph: &Graph, type_id: &str, subs: &Substitutions) -> Result<Re
                 let args_list_id = get_edge(graph, type_id, ARGS_FIELD)
                     .and_then(get_uuid)
                     .ok_or_else(|| format!("Apply {} has no args", type_id))?;
-                let args = flatten_list(graph, args_list_id);
+                let arg_ids = flatten_list(graph, args_list_id);
 
-                if base_id == LIST_T {
-                    let resolved_args: Vec<ResolvedType> = args
+                if get_forall_params(graph, base_id).is_some() {
+                    let rust_name = get_name(graph, base_id)
+                        .ok_or_else(|| format!("Generic type {} has no name", base_id))
+                        .and_then(|name| rust_type_name(&name))?;
+                    let args = arg_ids
                         .iter()
                         .map(|a| resolve_type(graph, a, subs))
                         .collect::<Result<_>>()?;
-                    match resolved_args.as_slice() {
-                        [single] => Ok(ResolvedType::List(Box::new(single.clone()))),
-                        _ => Err(format!("List type {} has {} args, expected 1", type_id, resolved_args.len())),
-                    }
-                } else if let Some(params) = get_forall_params(graph, base_id) {
-                    let mut new_subs = subs.clone();
-                    for (param, arg) in params.iter().zip(args.iter()) {
-                        new_subs.insert(param.clone(), resolve_type(graph, arg, subs)?);
-                    }
-                    let forall_body_id = get_edge(graph, base_id, BODY_FIELD)
-                        .and_then(get_uuid)
-                        .and_then(|forall_id| get_edge(graph, forall_id, BODY_FIELD))
-                        .and_then(get_uuid)
-                        .ok_or_else(|| format!("Could not find forall body for {}", base_id))?;
-                    resolve_type(graph, forall_body_id, &new_subs)
+                    Ok(ResolvedType::Generic { rust_name, args })
                 } else {
-                    Ok(ResolvedType::Untyped)
+                    Err(format!("Apply {} to non-generic type {}", type_id, base_id))
                 }
             }
-            _ => Ok(ResolvedType::Untyped),
+            _ => Err(format!("Unknown type structure: {}", type_id)),
         }
     }
 }
@@ -214,16 +212,16 @@ fn get_record_field_ids(graph: &Graph, record_id: &str) -> Result<Vec<String>> {
 }
 
 fn uuid_expr(uuid_str: &str) -> TokenStream2 {
-    let bytes = uuid_str.parse::<Uuid>().expect("invalid uuid").as_bytes().clone();
+    let bytes = *uuid_str.parse::<Uuid>().expect("invalid uuid").as_bytes();
     quote! { uuid::Uuid::from_bytes([#(#bytes),*]) }
 }
 
-fn generate_accessor(graph: &Graph, field_id: &str, subs: &Substitutions) -> Result<TokenStream2> {
+fn generate_accessor(graph: &Graph, field_id: &str, subs: &Substitutions, id_expr: &TokenStream2) -> Result<TokenStream2> {
     let field_name = get_name(graph, field_id)
         .ok_or_else(|| format!("Field {} has no name", field_id))?;
     let field_type = match get_edge(graph, field_id, TYPE_FIELD).and_then(get_uuid) {
         Some(t) => resolve_type(graph, t, subs)?,
-        None => ResolvedType::Untyped,
+        None => return Err(format!("Field {} has no type", field_id)),
     };
     let method_name = format_ident!("{}", rust_method_name(&field_name)?);
     let field_uuid = uuid_expr(field_id);
@@ -231,7 +229,7 @@ fn generate_accessor(graph: &Graph, field_id: &str, subs: &Substitutions) -> Res
     Ok(match field_type {
         ResolvedType::String => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<std::string::String> {
-                match gid.get(&self.0, &crate::graph::Id::Uuid(#field_uuid))? {
+                match gid.get(&#id_expr, &crate::graph::Id::Uuid(#field_uuid))? {
                     crate::graph::Id::String(s) => Some(s.clone()),
                     _ => None,
                 }
@@ -239,7 +237,7 @@ fn generate_accessor(graph: &Graph, field_id: &str, subs: &Substitutions) -> Res
         },
         ResolvedType::Number => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<f64> {
-                match gid.get(&self.0, &crate::graph::Id::Uuid(#field_uuid))? {
+                match gid.get(&#id_expr, &crate::graph::Id::Uuid(#field_uuid))? {
                     crate::graph::Id::Number(n) => Some(n.0),
                     _ => None,
                 }
@@ -249,103 +247,452 @@ fn generate_accessor(graph: &Graph, field_id: &str, subs: &Substitutions) -> Res
             let wrapper_name = format_ident!("{}", rust_name);
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper_name> {
-                    let id = gid.get(&self.0, &crate::graph::Id::Uuid(#field_uuid))?;
+                    let id = gid.get(&#id_expr, &crate::graph::Id::Uuid(#field_uuid))?;
                     Some(#wrapper_name::wrap(id.clone()))
                 }
             }
         },
-        ResolvedType::List(element_type) => {
-            let (return_type, element_conversion) = match element_type.as_ref() {
-                ResolvedType::String => (
-                    quote! { impl Iterator<Item = std::string::String> + 'a },
-                    quote! {
-                        .filter_map(|id| match id {
-                            crate::graph::Id::String(s) => Some(s.clone()),
-                            _ => None,
-                        })
+        ResolvedType::Generic { rust_name, args } => {
+            let wrapper = format_ident!("{}", rust_name);
+            let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
+            let converters: Vec<_> = args.iter().map(|arg| {
+                match arg {
+                    ResolvedType::TypeParam { converter_name, .. } => {
+                        let conv = format_ident!("{}", converter_name);
+                        quote! { self.#conv.clone() }
                     }
-                ),
-                ResolvedType::Number => (
-                    quote! { impl Iterator<Item = f64> + 'a },
-                    quote! {
-                        .filter_map(|id| match id {
-                            crate::graph::Id::Number(n) => Some(n.0),
-                            _ => None,
-                        })
+                    _ => {
+                        let (_, converter) = resolved_type_to_rust(arg);
+                        let conversion = converter(quote! { id });
+                        quote! { std::rc::Rc::new(|id| Some(#conversion)) }
                     }
-                ),
-                ResolvedType::Record { rust_name } => {
-                    let wrapper = format_ident!("{}", rust_name);
-                    (
-                        quote! { impl Iterator<Item = #wrapper> + 'a },
-                        quote! { .map(|id| #wrapper::wrap(id.clone())) }
-                    )
-                },
-                _ => (
-                    quote! { impl Iterator<Item = crate::graph::Id> + 'a },
-                    quote! { .cloned() }
-                ),
-            };
-
+                }
+            }).collect();
             quote! {
-                pub fn #method_name<'a>(&self, gid: &'a impl crate::graph::Gid) -> #return_type {
-                    crate::list_iter::ListIter::new(
-                        gid,
-                        gid.get(&self.0, &crate::graph::Id::Uuid(#field_uuid)),
-                    )#element_conversion
+                pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper<#(#arg_types),*>> {
+                    let id = gid.get(&#id_expr, &crate::graph::Id::Uuid(#field_uuid))?;
+                    Some(#wrapper::wrap(id.clone(), #(#converters),*))
                 }
             }
         },
-        ResolvedType::Untyped => quote! {
-            pub fn #method_name<'a>(&self, gid: &'a impl crate::graph::Gid) -> Option<&'a crate::graph::Id> {
-                gid.get(&self.0, &crate::graph::Id::Uuid(#field_uuid))
+        ResolvedType::TypeParam { rust_name, converter_name } => {
+            let type_ident = format_ident!("{}", rust_name);
+            let conv = format_ident!("{}", converter_name);
+            quote! {
+                pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#type_ident> {
+                    let raw = gid.get(&#id_expr, &crate::graph::Id::Uuid(#field_uuid))?;
+                    (self.#conv)(raw)
+                }
             }
         },
     })
 }
 
-fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str, subs: &Substitutions) -> Result<TokenStream2> {
+fn get_sum_variant_ids(graph: &Graph, sum_id: &str) -> Result<Vec<String>> {
+    let variants_list_id = get_edge(graph, sum_id, VARIANTS_FIELD)
+        .and_then(get_uuid)
+        .ok_or_else(|| format!("Sum {} has no variants list", sum_id))?;
+    Ok(flatten_list(graph, variants_list_id))
+}
+
+struct TypeParam {
+    id: String,
+    rust_name: syn::Ident,
+    converter_name: syn::Ident,
+}
+
+fn get_type_params(graph: &Graph, forall_id: &str) -> Result<Vec<TypeParam>> {
+    let params_list_id = get_edge(graph, forall_id, PARAMS_FIELD)
+        .and_then(get_uuid)
+        .ok_or_else(|| format!("Forall {} has no params", forall_id))?;
+
+    flatten_list(graph, params_list_id)
+        .into_iter()
+        .map(|param_id| {
+            let name = get_name(graph, &param_id)
+                .ok_or_else(|| format!("Type param {} has no name", param_id))?;
+            let rust_name = format_ident!("{}", rust_type_name(&name)?);
+            let converter_name = format_ident!("into_{}", rust_method_name(&name)?);
+            Ok(TypeParam { id: param_id, rust_name, converter_name })
+        })
+        .collect()
+}
+
+fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(TokenStream2) -> TokenStream2>) {
+    match resolved {
+        ResolvedType::String => (
+            quote! { std::string::String },
+            Box::new(|id_expr| quote! {
+                match #id_expr { crate::graph::Id::String(s) => s.clone(), _ => return None }
+            })
+        ),
+        ResolvedType::Number => (
+            quote! { f64 },
+            Box::new(|id_expr| quote! {
+                match #id_expr { crate::graph::Id::Number(n) => n.0, _ => return None }
+            })
+        ),
+        ResolvedType::Record { rust_name } => {
+            let wrapper = format_ident!("{}", rust_name);
+            let name_clone = rust_name.clone();
+            (
+                quote! { #wrapper },
+                Box::new(move |id_expr| {
+                    let w = format_ident!("{}", name_clone);
+                    quote! { #w::wrap(#id_expr.clone()) }
+                })
+            )
+        },
+        ResolvedType::Generic { rust_name, args } => {
+            let wrapper = format_ident!("{}", rust_name);
+            let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
+            let converters: Vec<_> = args.iter().map(|arg| {
+                match arg {
+                    ResolvedType::TypeParam { converter_name, .. } => {
+                        let conv = format_ident!("{}", converter_name);
+                        quote! { self.#conv.clone() }
+                    }
+                    _ => {
+                        let (_, converter) = resolved_type_to_rust(arg);
+                        let conversion = converter(quote! { id });
+                        quote! { std::rc::Rc::new(|id| Some(#conversion)) }
+                    }
+                }
+            }).collect();
+            let wrapper_clone = rust_name.clone();
+            (
+                quote! { #wrapper<#(#arg_types),*> },
+                Box::new(move |id_expr| {
+                    let w = format_ident!("{}", wrapper_clone);
+                    quote! { #w::wrap(#id_expr.clone(), #(#converters),*) }
+                })
+            )
+        },
+        ResolvedType::TypeParam { rust_name, converter_name } => {
+            let type_ident = format_ident!("{}", rust_name);
+            let conv_name = converter_name.clone();
+            (
+                quote! { #type_ident },
+                Box::new(move |id_expr| {
+                    let conv = format_ident!("{}", conv_name);
+                    quote! { (self.#conv)(#id_expr)? }
+                })
+            )
+        },
+    }
+}
+
+fn generate_sum_wrapper(graph: &Graph, type_id: &str, sum_id: &str, type_name: &str, type_params: &[TypeParam], subs: &Substitutions) -> Result<TokenStream2> {
+    let full_subs: Substitutions = subs.iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .chain(type_params.iter().map(|tp| (tp.id.clone(), ResolvedType::TypeParam {
+            rust_name: tp.rust_name.to_string(),
+            converter_name: tp.converter_name.to_string(),
+        })))
+        .collect();
+
+    let variant_ids = get_sum_variant_ids(graph, sum_id)?;
+    let struct_name = format_ident!("{}", rust_type_name(type_name)?);
+    let type_uuid: Uuid = type_id.parse()
+        .map_err(|e| format!("Invalid uuid {}: {}", type_id, e))?;
+    let type_uuid_str = type_uuid.to_string();
+    let isa_uuid = uuid_expr(ISA_FIELD);
+
+    struct VariantInfo {
+        closure_name: syn::Ident,
+        variant_uuid: TokenStream2,
+        field_types: Vec<TokenStream2>,
+        field_names: Vec<syn::Ident>,
+        field_uuids: Vec<TokenStream2>,
+        conversions: Vec<TokenStream2>,
+    }
+
+    let variants: Vec<VariantInfo> = variant_ids.iter().map(|variant_id| {
+        let variant_name = get_name(graph, variant_id)
+            .ok_or_else(|| format!("Variant {} has no name", variant_id))?;
+        let closure_name = format_ident!("on_{}", rust_method_name(&variant_name)?);
+        let variant_uuid = uuid_expr(variant_id);
+
+        let body_id = get_edge(graph, variant_id, BODY_FIELD)
+            .and_then(get_uuid)
+            .ok_or_else(|| format!("Variant {} has no body", variant_id))?;
+
+        if get_isa(graph, body_id) != Some(RECORD_T) {
+            return Err(format!("Variant {} body is not a record", variant_id));
+        }
+
+        let field_ids = get_record_field_ids(graph, body_id)?;
+        let (field_types, field_names, field_uuids, conversions) = field_ids.iter()
+            .enumerate()
+            .map(|(i, field_id)| {
+                let field_name = format_ident!("f{}", i);
+                let field_uuid = uuid_expr(field_id);
+                let raw_id = format_ident!("raw_{}", i);
+
+                let resolved = match get_edge(graph, field_id, TYPE_FIELD).and_then(get_uuid) {
+                    Some(tid) => resolve_type(graph, tid, &full_subs)?,
+                    None => return Err(format!("Field {} has no type", field_id)),
+                };
+
+                let (rust_type, converter) = resolved_type_to_rust(&resolved);
+                let conversion = converter(quote! { #raw_id });
+
+                Ok((rust_type, field_name, field_uuid, conversion))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(
+                (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+                |(mut types, mut names, mut uuids, mut convs), (t, n, u, c)| {
+                    types.push(t); names.push(n); uuids.push(u); convs.push(c);
+                    (types, names, uuids, convs)
+                }
+            );
+
+        Ok(VariantInfo { closure_name, variant_uuid, field_types, field_names, field_uuids, conversions })
+    }).collect::<Result<_>>()?;
+
+    let id_accessor = if type_params.is_empty() {
+        quote! { self.0 }
+    } else {
+        quote! { self.id }
+    };
+
+    let closure_params: Vec<_> = variants.iter().map(|v| {
+        let closure_name = &v.closure_name;
+        if v.field_types.is_empty() {
+            quote! { #closure_name: impl FnOnce() -> __R }
+        } else {
+            let field_types = &v.field_types;
+            quote! { #closure_name: impl FnOnce(#(#field_types),*) -> __R }
+        }
+    }).collect();
+
+    let match_arms: Vec<_> = variants.iter().map(|v| {
+        let closure_name = &v.closure_name;
+        let variant_uuid = &v.variant_uuid;
+        if v.field_types.is_empty() {
+            quote! {
+                id if id == &crate::graph::Id::Uuid(#variant_uuid) => Some(#closure_name())
+            }
+        } else {
+            let field_bindings: Vec<_> = v.field_names.iter().enumerate().map(|(i, field_name)| {
+                let raw_id = format_ident!("raw_{}", i);
+                let field_uuid = &v.field_uuids[i];
+                let conversion = &v.conversions[i];
+                quote! {
+                    let #raw_id = gid.get(&#id_accessor, &crate::graph::Id::Uuid(#field_uuid))?;
+                    let #field_name = #conversion
+                }
+            }).collect();
+            let field_names = &v.field_names;
+            quote! {
+                id if id == &crate::graph::Id::Uuid(#variant_uuid) => {
+                    #(#field_bindings;)*
+                    Some(#closure_name(#(#field_names),*))
+                }
+            }
+        }
+    }).collect();
+
+    if type_params.is_empty() {
+        Ok(quote! {
+            #[derive(Clone, Debug)]
+            pub struct #struct_name(pub crate::graph::Id);
+
+            impl #struct_name {
+                pub const TYPE_ID: &'static str = #type_uuid_str;
+
+                pub fn wrap(id: crate::graph::Id) -> Self {
+                    Self(id)
+                }
+
+                pub fn id(&self) -> &crate::graph::Id {
+                    &self.0
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn match_<__R>(
+                    &self,
+                    gid: &impl crate::graph::Gid,
+                    #(#closure_params),*
+                ) -> Option<__R> {
+                    let isa = gid.get(&self.0, &crate::graph::Id::Uuid(#isa_uuid))?;
+                    match isa {
+                        #(#match_arms,)*
+                        _ => None,
+                    }
+                }
+            }
+        })
+    } else {
+        let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
+        let converter_fields: Vec<_> = type_params.iter().map(|p| {
+            let name = &p.converter_name;
+            let ty = &p.rust_name;
+            quote! { #name: std::rc::Rc<dyn Fn(&crate::graph::Id) -> Option<#ty>> }
+        }).collect();
+        let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
+
+        Ok(quote! {
+            pub struct #struct_name<#(#generic_params),*> {
+                pub id: crate::graph::Id,
+                #(pub #converter_fields,)*
+            }
+
+            impl<#(#generic_params),*> Clone for #struct_name<#(#generic_params),*> {
+                fn clone(&self) -> Self {
+                    Self {
+                        id: self.id.clone(),
+                        #(#converter_field_names: self.#converter_field_names.clone(),)*
+                    }
+                }
+            }
+
+            impl<#(#generic_params),*> std::fmt::Debug for #struct_name<#(#generic_params),*> {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.debug_struct(stringify!(#struct_name))
+                        .field("id", &self.id)
+                        .finish()
+                }
+            }
+
+            impl<#(#generic_params),*> #struct_name<#(#generic_params),*> {
+                pub const TYPE_ID: &'static str = #type_uuid_str;
+
+                pub fn wrap(id: crate::graph::Id, #(#converter_fields),*) -> Self {
+                    Self { id, #(#converter_field_names,)* }
+                }
+
+                pub fn id(&self) -> &crate::graph::Id {
+                    &self.id
+                }
+
+                #[allow(clippy::too_many_arguments)]
+                pub fn match_<__R>(
+                    &self,
+                    gid: &impl crate::graph::Gid,
+                    #(#closure_params),*
+                ) -> Option<__R> {
+                    let isa = gid.get(&self.id, &crate::graph::Id::Uuid(#isa_uuid))?;
+                    match isa {
+                        #(#match_arms,)*
+                        _ => None,
+                    }
+                }
+            }
+        })
+    }
+}
+
+fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str, type_params: &[TypeParam], subs: &Substitutions) -> Result<TokenStream2> {
+    let full_subs: Substitutions = subs.iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .chain(type_params.iter().map(|tp| (tp.id.clone(), ResolvedType::TypeParam {
+            rust_name: tp.rust_name.to_string(),
+            converter_name: tp.converter_name.to_string(),
+        })))
+        .collect();
+
     let field_ids = get_record_field_ids(graph, body_id)?;
     let struct_name = format_ident!("{}", rust_type_name(type_name)?);
     let type_uuid: Uuid = type_id.parse()
         .map_err(|e| format!("Invalid uuid {}: {}", type_id, e))?;
     let type_uuid_str = type_uuid.to_string();
 
+    let id_expr = if type_params.is_empty() {
+        quote! { self.0 }
+    } else {
+        quote! { self.id }
+    };
+
     let field_methods: Vec<TokenStream2> = field_ids
         .iter()
-        .map(|field_id| generate_accessor(graph, field_id, subs))
+        .map(|field_id| generate_accessor(graph, field_id, &full_subs, &id_expr))
         .collect::<Result<_>>()?;
 
-    Ok(quote! {
-        #[derive(Clone, Debug)]
-        pub struct #struct_name(pub crate::graph::Id);
+    if type_params.is_empty() {
+        Ok(quote! {
+            #[derive(Clone, Debug)]
+            pub struct #struct_name(pub crate::graph::Id);
 
-        impl #struct_name {
-            pub const TYPE_ID: &'static str = #type_uuid_str;
+            impl #struct_name {
+                pub const TYPE_ID: &'static str = #type_uuid_str;
 
-            pub fn wrap(id: crate::graph::Id) -> Self {
-                Self(id)
+                pub fn wrap(id: crate::graph::Id) -> Self {
+                    Self(id)
+                }
+
+                pub fn id(&self) -> &crate::graph::Id {
+                    &self.0
+                }
+
+                #(#field_methods)*
+            }
+        })
+    } else {
+        let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
+        let converter_fields: Vec<_> = type_params.iter().map(|p| {
+            let name = &p.converter_name;
+            let ty = &p.rust_name;
+            quote! { #name: std::rc::Rc<dyn Fn(&crate::graph::Id) -> Option<#ty>> }
+        }).collect();
+        let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
+
+        Ok(quote! {
+            pub struct #struct_name<#(#generic_params),*> {
+                pub id: crate::graph::Id,
+                #(pub #converter_fields,)*
             }
 
-            pub fn id(&self) -> &crate::graph::Id {
-                &self.0
+            impl<#(#generic_params),*> Clone for #struct_name<#(#generic_params),*> {
+                fn clone(&self) -> Self {
+                    Self {
+                        id: self.id.clone(),
+                        #(#converter_field_names: self.#converter_field_names.clone(),)*
+                    }
+                }
             }
 
-            #(#field_methods)*
-        }
-    })
+            impl<#(#generic_params),*> std::fmt::Debug for #struct_name<#(#generic_params),*> {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.debug_struct(stringify!(#struct_name))
+                        .field("id", &self.id)
+                        .finish()
+                }
+            }
+
+            impl<#(#generic_params),*> #struct_name<#(#generic_params),*> {
+                pub const TYPE_ID: &'static str = #type_uuid_str;
+
+                pub fn wrap(id: crate::graph::Id, #(#converter_fields),*) -> Self {
+                    Self { id, #(#converter_field_names,)* }
+                }
+
+                pub fn id(&self) -> &crate::graph::Id {
+                    &self.id
+                }
+
+                #(#field_methods)*
+            }
+        })
+    }
 }
 
-fn load_semantics(input: TokenStream) -> Result<(Graph, Vec<Value>)> {
-    let path = format!("{}/{}",
+fn load_semantics(input: TokenStream) -> Result<(String, Graph, Vec<Value>)> {
+    let relative_path = syn::parse::<syn::LitStr>(input)
+        .map_err(|e| format!("expected path string: {}", e))?
+        .value();
+    let full_path = format!("{}/{}",
         std::env::var("CARGO_MANIFEST_DIR").map_err(|_| "CARGO_MANIFEST_DIR not set")?,
-        syn::parse::<syn::LitStr>(input).map_err(|e| format!("expected path string: {}", e))?.value());
+        relative_path);
 
-    let json: Value = std::fs::read_to_string(&path)
-        .map_err(|e| format!("failed to read {}: {}", path, e))
+    let json: Value = std::fs::read_to_string(&full_path)
+        .map_err(|e| format!("failed to read {}: {}", full_path, e))
         .and_then(|s| serde_json::from_str(&s).map_err(|e| format!("failed to parse JSON: {}", e)))?;
 
     Ok((
+        relative_path,
         serde_json::from_value(json.get("graph").ok_or("missing graph field")?.clone())
             .map_err(|e| format!("failed to parse graph: {}", e))?,
         serde_json::from_value(json.get("roots").ok_or("missing roots field")?.clone())
@@ -354,7 +701,7 @@ fn load_semantics(input: TokenStream) -> Result<(Graph, Vec<Value>)> {
 }
 
 fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
-    let (graph, roots) = load_semantics(input)?;
+    let (path, graph, roots) = load_semantics(input)?;
     let empty_subs = Substitutions::new();
 
     let wrappers: Vec<TokenStream2> = roots.iter()
@@ -362,13 +709,27 @@ fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
             let id = get_uuid(root)?;
             let isa = get_isa(&graph, id)?;
             let name = get_name(&graph, id)?;
+            if name == "String" || name == "Number" {
+                return None;
+            }
             match isa {
                 TYPE_T => {
                     let body_id = get_edge(&graph, id, BODY_FIELD).and_then(get_uuid)?;
-                    (get_isa(&graph, body_id) == Some(RECORD_T))
-                        .then(|| generate_wrapper(&graph, id, body_id, &name, &empty_subs))
+                    match get_isa(&graph, body_id) {
+                        Some(RECORD_T) => Some(generate_wrapper(&graph, id, body_id, &name, &[], &empty_subs)),
+                        Some(SUM_T) => Some(generate_sum_wrapper(&graph, id, body_id, &name, &[], &empty_subs)),
+                        Some(FORALL_T) => {
+                            let type_params = get_type_params(&graph, body_id).ok()?;
+                            let forall_body_id = get_edge(&graph, body_id, BODY_FIELD).and_then(get_uuid)?;
+                            match get_isa(&graph, forall_body_id) {
+                                Some(RECORD_T) => Some(generate_wrapper(&graph, id, forall_body_id, &name, &type_params, &empty_subs)),
+                                Some(SUM_T) => Some(generate_sum_wrapper(&graph, id, forall_body_id, &name, &type_params, &empty_subs)),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    }
                 }
-                RECORD_T => Some(generate_wrapper(&graph, id, id, &name, &empty_subs)),
                 _ => None,
             }
         })
@@ -394,7 +755,9 @@ fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
         })
         .collect::<Result<_>>()?;
 
+    let include_path = format!("/{}", path);
     Ok(quote! {
+        const _: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), #include_path));
         pub mod semantics {
             #(#type_constants)*
             #(#field_constants)*
