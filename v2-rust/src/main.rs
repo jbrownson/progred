@@ -300,8 +300,9 @@ impl ProgredApp {
         let variants_type = make_list_of(&mut gid, &record_t);
         gid.set(variants_f.clone(), type_f.clone(), variants_type);
         gid.set(type_f.clone(), type_f.clone(), type_expr.clone());
-        gid.set(head_f.clone(), type_f.clone(), type_expr.clone());
-        gid.set(tail_f.clone(), type_f.clone(), type_expr.clone()); // generic (list<T>)
+        gid.set(head_f.clone(), type_f.clone(), list_param_t.clone());
+        let tail_type = make_list_of(&mut gid, &list_param_t);
+        gid.set(tail_f.clone(), type_f.clone(), tail_type);
 
         let roots = vec![
             // Primitives
