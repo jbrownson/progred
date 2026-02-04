@@ -3,12 +3,6 @@
 #![allow(dead_code)]
 
 use deno_core::{extension, op2, JsRuntime, RuntimeOptions};
-
-#[cfg(not(rust_analyzer))]
-const TYPESCRIPT_COMPILER: &str = include_str!("../assets/typescript-compiler.js");
-
-#[cfg(rust_analyzer)]
-const TYPESCRIPT_COMPILER: &str = "";
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 
@@ -151,7 +145,7 @@ impl TypeScriptRuntime {
         println!("Loading TypeScript compiler...");
 
         // Load the real TypeScript compiler (8.6MB)
-        self.execute(TYPESCRIPT_COMPILER)?;
+        self.execute(include_str!("../assets/typescript-compiler.js"))?;
 
         // Set up the compile function that uses TSC with full type checking
         self.execute(

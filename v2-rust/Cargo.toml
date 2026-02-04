@@ -19,6 +19,3 @@ rfd = "0.17"
 deno_core = "0.382.0"
 deno_ast = { version = "=0.52.0", features = ["transpiling"] }
 serde_v8 = "0.291.0"
-
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(rust_analyzer)'] }
