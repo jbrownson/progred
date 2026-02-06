@@ -27,7 +27,6 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 
 - **Domain-specific projections**: Make them more editable (currently mostly read-only)
 - **Autocomplete integration**: Hook up name lookups to the placeholder autocomplete dialog, port architecture from original prototype
-- **Descend API**: Design API for custom projections to descend into children (existing TODO in code)
 - **Red squiggles**: Real-time type system errors displayed inline
 - **Default projection improvements**: Show placeholders for missing fields, order fields per record definition, show extra fields at bottom
 

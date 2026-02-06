@@ -468,7 +468,14 @@ fn project_uuid(
     let id = Id::Uuid(*uuid);
 
     // Try domain-specific projections first
-    if super::domain_projections::try_domain_projection(ui, editor, w, path, &id, ancestors.clone(), mode) {
+    let child_ancestors = ancestors.update(id.clone());
+    let mut descend = |ui: &mut Ui, w: &mut EditorWriter, label: &Id| {
+        let child_path = path.child(label.clone());
+        if let Some(value) = editor.doc.node(&child_path) {
+            project_id(ui, editor, w, &child_path, &value, child_ancestors.clone(), mode);
+        }
+    };
+    if super::domain_projections::try_domain_projection(ui, editor, w, &id, &mut descend) {
         return;
     }
     let edges = editor.doc.gid.edges(&id);
