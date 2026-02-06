@@ -279,7 +279,7 @@ mod tests {
         let record = Record::new(&mut gid);
         let t = Type::new(&mut gid);
 
-        gid.set(t.id().clone(), BODY.clone(), record.id().clone());
+        t.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
 
         // Read it back - verify the id matches
         let body = t.body(&gid);
@@ -326,7 +326,7 @@ mod tests {
 
         let field = Field::new(&mut gid);
         field.set_name(&mut gid, "title");
-        gid.set(field.id().clone(), TYPE_.clone(), ref_type.id().clone());
+        field.set_type_(&mut gid, &TypeExpression::wrap(ref_type.id().clone()));
 
         // Read it back - verify id matches
         assert_eq!(field.name(&gid), Some("title".to_string()));
@@ -383,7 +383,7 @@ mod tests {
         let params = List::new_cons(&mut gid, param.id(), &empty, conv);
 
         let forall = Forall::new(&mut gid);
-        gid.set(forall.id().clone(), PARAMS.clone(), params.id().clone());
+        forall.set_params(&mut gid, &params);
 
         // Verify
         let param_list = forall.params(&gid).unwrap();

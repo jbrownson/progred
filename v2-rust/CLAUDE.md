@@ -26,7 +26,6 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 ## TODOs
 
 - **Domain-specific projections**: Make them more editable (currently mostly read-only)
-- **Wrapper usage audit**: Find places that should use generated typed wrappers instead of raw graph access
 - **Autocomplete integration**: Hook up name lookups to the placeholder autocomplete dialog, port architecture from original prototype
 - **Descend API**: Design API for custom projections to descend into children (existing TODO in code)
 - **Red squiggles**: Real-time type system errors displayed inline
