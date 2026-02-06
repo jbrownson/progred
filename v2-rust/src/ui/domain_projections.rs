@@ -11,11 +11,6 @@ use im::HashSet;
 
 use super::projection::InteractionMode;
 
-fn type_id(s: &str) -> Id {
-    Id::Uuid(uuid::Uuid::parse_str(s).unwrap())
-}
-
-/// Try domain-specific projection - only handles field type annotations specially
 pub fn try_domain_projection(
     ui: &mut Ui,
     editor: &Editor,
@@ -25,7 +20,7 @@ pub fn try_domain_projection(
     _ancestors: HashSet<Id>,
     _mode: &InteractionMode,
 ) -> bool {
-    if editor.isa_of(id) == Some(&type_id(Field::TYPE_ID)) {
+    if Field::try_wrap(&editor.doc.gid, id).is_some() {
         project_field_compact(ui, editor, id);
         true
     } else {
@@ -49,11 +44,8 @@ fn project_field_compact(ui: &mut Ui, editor: &Editor, node: &Id) {
     });
 }
 
-/// Render a type as a reference (just the name, or base<args> for apply types)
 fn render_type_ref(ui: &mut Ui, editor: &Editor, node: &Id) {
-    if editor.isa_of(node) == Some(&type_id(Apply::TYPE_ID)) {
-        let apply = Apply::wrap(node.clone());
-
+    if let Some(apply) = Apply::try_wrap(&editor.doc.gid, node) {
         let base_name = apply.base(&editor.doc.gid)
             .and_then(|b| editor.name_of(b.id()))
             .unwrap_or_else(|| "?".into());

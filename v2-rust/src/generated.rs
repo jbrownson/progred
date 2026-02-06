@@ -267,11 +267,8 @@ mod tests {
         let mut gid = MutGid::new();
         let t = Type::new(&mut gid);
 
-        // Check that isa is set to Type's TYPE_ID
-        let isa_field = Id::Uuid(uuid::Uuid::parse_str(ISA).unwrap());
-        let type_id = Id::Uuid(uuid::Uuid::parse_str(Type::TYPE_ID).unwrap());
-        let isa = gid.get(t.id(), &isa_field);
-        assert_eq!(isa, Some(&type_id));
+        let isa = gid.get(t.id(), &ISA);
+        assert_eq!(isa, Some(&Type::TYPE_ID));
     }
 
     #[test]
@@ -282,9 +279,7 @@ mod tests {
         let record = Record::new(&mut gid);
         let t = Type::new(&mut gid);
 
-        // Use raw set to put the record id in the body field
-        let body_field = Id::Uuid(uuid::Uuid::parse_str(BODY).unwrap());
-        gid.set(t.id().clone(), body_field, record.id().clone());
+        gid.set(t.id().clone(), BODY.clone(), record.id().clone());
 
         // Read it back - verify the id matches
         let body = t.body(&gid);
@@ -329,11 +324,9 @@ mod tests {
         let ref_type = Type::new(&mut gid);
         ref_type.set_name(&mut gid, "String");
 
-        // Create a field and set its type using raw graph access
         let field = Field::new(&mut gid);
         field.set_name(&mut gid, "title");
-        let type_field = Id::Uuid(uuid::Uuid::parse_str(TYPE_).unwrap());
-        gid.set(field.id().clone(), type_field, ref_type.id().clone());
+        gid.set(field.id().clone(), TYPE_.clone(), ref_type.id().clone());
 
         // Read it back - verify id matches
         assert_eq!(field.name(&gid), Some("title".to_string()));
@@ -389,10 +382,8 @@ mod tests {
         let empty = List::new_empty(&mut gid, conv.clone());
         let params = List::new_cons(&mut gid, param.id(), &empty, conv);
 
-        // Create forall and set params via raw graph
         let forall = Forall::new(&mut gid);
-        let params_field = Id::Uuid(uuid::Uuid::parse_str(PARAMS).unwrap());
-        gid.set(forall.id().clone(), params_field, params.id().clone());
+        gid.set(forall.id().clone(), PARAMS.clone(), params.id().clone());
 
         // Verify
         let param_list = forall.params(&gid).unwrap();

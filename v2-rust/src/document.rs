@@ -4,10 +4,6 @@ use crate::ui::graph_view::GraphViewState;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 
-fn id(s: &str) -> Id {
-    Id::Uuid(uuid::Uuid::parse_str(s).unwrap())
-}
-
 #[derive(Clone)]
 pub struct Document {
     pub gid: MutGid,
@@ -160,14 +156,14 @@ impl Editor {
     }
 
     pub fn name_of(&self, node: &Id) -> Option<String> {
-        match self.doc.gid.get(node, &id(NAME))? {
+        match self.doc.gid.get(node, &NAME)? {
             Id::String(s) => Some(s.clone()),
             _ => None,
         }
     }
 
     pub fn display_label(&self, node: &Id) -> Option<String> {
-        let isa_name = self.doc.gid.get(node, &id(ISA))
+        let isa_name = self.doc.gid.get(node, &ISA)
             .and_then(|isa_id| self.name_of(isa_id));
 
         match (isa_name, self.name_of(node)) {
@@ -179,15 +175,15 @@ impl Editor {
     }
 
     pub fn isa_of(&self, node: &Id) -> Option<&Id> {
-        self.doc.gid.get(node, &id(ISA))
+        self.doc.gid.get(node, &ISA)
     }
 
     pub fn is_cons(&self, node: &Id) -> bool {
-        self.isa_of(node) == Some(&id(CONS_TYPE))
+        self.isa_of(node) == Some(&CONS_TYPE)
     }
 
     pub fn is_empty(&self, node: &Id) -> bool {
-        self.isa_of(node) == Some(&id(EMPTY_TYPE))
+        self.isa_of(node) == Some(&EMPTY_TYPE)
     }
 
     pub fn is_list(&self, node: &Id) -> bool {

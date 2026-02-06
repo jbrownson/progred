@@ -9,10 +9,6 @@ use super::colors;
 use super::identicon;
 use super::placeholder::PlaceholderResult;
 
-fn field_id(s: &str) -> Id {
-    Id::Uuid(uuid::Uuid::parse_str(s).unwrap())
-}
-
 pub mod layout {
     pub const SELECTION_PADDING: f32 = 2.0;
 
@@ -300,9 +296,6 @@ struct ListElement {
 }
 
 fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElement>, Path)> {
-    let head_field = field_id(HEAD);
-    let tail_field = field_id(TAIL);
-
     let mut elements = Vec::new();
     let mut current_path = path.clone();
     let mut current_id = node;
@@ -314,16 +307,16 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
         }
         seen.insert(current_id.clone());
 
-        let head_value = editor.doc.gid.get(current_id, &head_field).cloned();
-        let head_path = current_path.child(head_field.clone());
-        let tail_path = current_path.child(tail_field.clone());
+        let head_value = editor.doc.gid.get(current_id, &HEAD).cloned();
+        let head_path = current_path.child(HEAD.clone());
+        let tail_path = current_path.child(TAIL.clone());
         elements.push(ListElement {
             tail_path: tail_path.clone(),
             head_path,
             head_value,
         });
 
-        let tail_value = editor.doc.gid.get(current_id, &tail_field)?;
+        let tail_value = editor.doc.gid.get(current_id, &TAIL)?;
         current_path = tail_path;
         current_id = tail_value;
     }
@@ -442,9 +435,9 @@ fn do_list_insert(w: &mut EditorWriter, editor: &Editor, insert_path: &Path, hea
     if let Some(current_value) = editor.doc.node(insert_path) {
         let new_cons = Id::new_uuid();
         w.set_edge(insert_path, new_cons.clone());
-        w.set_edge(&insert_path.child(field_id(ISA)), field_id(CONS_TYPE));
-        w.set_edge(&insert_path.child(field_id(HEAD)), head_value);
-        w.set_edge(&insert_path.child(field_id(TAIL)), current_value);
+        w.set_edge(&insert_path.child(ISA.clone()), CONS_TYPE.clone());
+        w.set_edge(&insert_path.child(HEAD.clone()), head_value);
+        w.set_edge(&insert_path.child(TAIL.clone()), current_value);
     }
 }
 
@@ -486,11 +479,9 @@ fn project_uuid(
         .filter(|(parent, _)| parent == path)
         .map(|(_, label)| label)
         .filter(|label| !edges.map(|e| e.contains_key(label)).unwrap_or(false));
-    let name_field = field_id(NAME);
-    let isa_field = field_id(ISA);
     let all_edges: Vec<(Id, Id)> = edges.into_iter()
         .flat_map(|e| e.iter().map(|(k, v)| (k.clone(), v.clone())))
-        .filter(|(label, _)| label != &name_field && label != &isa_field)
+        .filter(|(label, _)| label != &NAME && label != &ISA)
         .collect();
     let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
