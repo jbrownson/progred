@@ -88,15 +88,6 @@ impl ProgredApp {
         }
     }
 
-    fn load_type_system(&mut self) {
-        if let Some(doc) = std::fs::read_to_string("semantics.progred")
-            .ok()
-            .and_then(|contents| Document::from_json(&contents))
-        {
-            self.editor = Editor { doc, file_path: Some("semantics.progred".into()), ..Editor::new() };
-        }
-    }
-
     fn delete_selection(&mut self) {
         if let Some(selection) = self.editor.selection.take() {
             self.editor.doc.delete(&selection.target);
@@ -152,11 +143,6 @@ impl ProgredApp {
                     }
                     if ui.add(egui::Button::new("Save As...").shortcut_text(shortcuts::format(&shortcuts::SAVE_AS))).clicked() {
                         self.save_as();
-                        ui.close();
-                    }
-                    ui.separator();
-                    if ui.add(egui::Button::new("Load Type System")).clicked() {
-                        self.load_type_system();
                         ui.close();
                     }
                 });
