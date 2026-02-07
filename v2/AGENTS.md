@@ -14,6 +14,7 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 
 - Don't run the app — the user prefers to run and test it themselves
 - Don't fight the system — avoid hacks/workarounds that go against how frameworks or platforms are designed; push back early when something seems like it's not meant to work that way
+- Keep unrelated changes in separate commits whenever possible; avoid bundling housekeeping with feature work
 
 ## Key Design Rules
 

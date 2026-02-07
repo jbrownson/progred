@@ -58,7 +58,7 @@ ID → label → ID
 
 Where `ID` can be:
 - **GUID**: Random string for mutable nodes
-- **SID**: String literal (e.g., `"sid:hello"`)—the string IS its own identity
+- **SID**: String literal (e.g., `"hello"`)—the string IS its own identity
 - **NID**: Number literal—the number IS its own identity
 
 The graph knows nothing about programming, types, functions, or scope. It's a dumb substrate that can represent anything—just like text is characters that can represent anything.
@@ -82,9 +82,7 @@ The "standard" semantic island (with `name`, `isa`, `fields`, type definitions, 
 
 ## Bootstrapping
 
-V1 had a bootstrap problem: the type system was hardcoded in TypeScript because the editor couldn't create foundational types from scratch.
-
-V2 should support two modes:
+The editor should support two modes:
 
 **With pre-loaded semantics**: Editor starts with standard identities (`name`, `isa`, etc.) already registered. Familiar starting point, can build immediately.
 
@@ -116,55 +114,46 @@ With custom renderers:
 
 You can always request a "raw" view—the default spanning-tree render—to see what's actually there.
 
-## Architecture (v2)
+## Architecture
+
+### Document vs Semantics
+
+Documents are pure graph structure—the bare substrate that can be interpreted through different lenses. Semantics (which field means "name", which means "isa") live outside the document, loaded by the editor.
+
+This separation enables:
+- Viewing/editing raw graph structure without any interpretation
+- Loading standard semantics that work with all documents
+- Potentially multiple semantic interpretations loaded simultaneously
+- Documents optionally specifying which semantics to use (future)
 
 ### Tech Stack
-- **Frontend**: TypeScript with Immutable.js, custom reactivity
-- **Desktop**: Tauri 2.0 (Rust)
-- **Build**: Vite
-- **Serialization**: JSON for now, binary formats later when tooling supports it
+- **UI**: egui (immediate mode GUI)
+- **Data structures**: Persistent immutable data structures (`im` crate)
+- **Projection runtime**: Rust (via rustc_interface + wasmtime) and/or TypeScript (via Deno)
+- **Build**: Cargo
+- **Serialization**: JSON
 
-Most logic lives in TypeScript. We use Immutable.js for proper hashCode/equals semantics on ID-keyed maps, and a lightweight custom reactivity model tailored to the graph's update patterns—no framework magic needed. Tauri's Rust backend is there if we hit performance walls, but crossing the FFI boundary isn't worth it until then.
+The core graph operations and UI live in Rust. We use the `im` crate for persistent immutable data structures—structural sharing means efficient cloning for undo/redo and snapshots.
 
 ### Core Data Model
 
-```typescript
-type GUID = string        // Random identity for mutable nodes
-type SID = string         // "sid:..." - string literal as identity
-type NID = number         // Number literal as identity
-type ID = GUID | SID | NID
+```rust
+// Identity types
+enum Id {
+    Uuid(Uuid),      // Random identity for mutable nodes
+    String(String),  // String literal as identity
+    Number(f64),     // Number literal as identity
+}
 
-// The entire data model
-type Graph = Map<GUID, Map<ID, ID>>  // parent → label → child
+// The entire graph: entity → label → value (all positions can be any Id)
+type Graph = HashMap<Id, HashMap<Id, Id>>
 ```
 
-### Minimal Kernel
-
-The editor needs only:
-1. **Raw graph ops**: create node, create edge, delete node, delete edge
-2. **Navigation**: cursor model for tracking position in the graph
-3. **Identicon rendering**: visualize any GUID without semantics
-4. **Configurable special identities**: register which GUIDs mean `name`, `isa`, etc.
-5. **Conditional rendering**: use recognized conventions when present, fall back to raw
-
-Everything else—type system, custom renderers, libraries—builds on top.
-
-## Development
-
-```bash
-# Install dependencies
-npm install
-
-# Run development server
-npm run tauri dev
-
-# Build for production
-npm run tauri build
-```
+Implementation in `src/graph/id.rs` and `src/graph/mutgid.rs`.
 
 ## Target Use Cases
 
-gid can represent any structure, but we're starting with two:
+gid can represent any structure, but we're starting with two domains:
 
 **Code**: The obvious one. Programming benefits from structural editing—no syntax errors, semantic refactoring, flexible projections of the same logic.
 
@@ -172,20 +161,80 @@ gid can represent any structure, but we're starting with two:
 
 Both domains benefit from gid's core properties: strong identity, projectional flexibility, semantic-free substrate.
 
+## Editor Use Cases
+
+Different users need different things from the editor:
+
+**1. Get work done**: Load a domain (CAD structures, code), use its projections, edit. Don't care about underlying graph machinery. Standard semantics, domain-specific projections. This is the end goal.
+
+   **1a. Define a new domain**: A meta form of "getting work done" — use existing semantics to define new structure types and projections. Uses the standard tooling to create new tooling.
+
+**2. Demo/explore the system**: Show someone how it works. See the underlying structure—maybe with name/isa interpretation, maybe raw identicons only. Tree view + graph view. The current prototype primarily serves this use case.
+
+**3. Build new semantics**: Replace or supplement standard semantics. Define your own "name" field, hook in custom projection code. Advanced, not a priority.
+
 ## Pragmatic Choices
 
 Some components are necessary but not where the innovation lies:
 
-**Type system**: Continuing with a simplified Haskell-inspired ADT system. Proven approach, no fresh ideas needed here.
+**Type system**: A simplified Haskell-inspired ADT system. Proven approach, no fresh ideas needed here.
 
-**Rendering language**: A minimal HTML-like structure for projections. Will evolve as needed, drawing on existing work rather than inventing something new.
+**Programming language**: Use existing languages rather than inventing new ones. This avoids a classic projectional editor mistake—inventing a language doubles your impossible problems. The innovation space is in *projections* of existing languages, not in the language itself.
 
-**Programming language**: Using TypeScript rather than inventing a new language. This avoids a classic projectional editor mistake—inventing a language doubles your impossible problems. TypeScript's compiler API lets us feed it an AST directly from the graph, bypassing text entirely. We get type checking, red squiggles, and IDE features for free. The innovation space is in *projections* of TypeScript (or other languages), not in the language itself.
+## Projection Runtime
 
-## Relationship to v1
+Projections (custom renderers, domain-specific editors) need a programming language. We plan to support both **Rust** and **TypeScript**, likely starting with Rust.
 
-V1 (in parent directory) is a working proof-of-concept using older tech (React, Electron, TypeScript 2.x). The core ideas are sound; v2 is a fresh implementation with:
-- Modern tooling (Tauri, TypeScript 5.x, Vite)
-- True bootstrap capability (create semantics from within)
-- Cleaner separation of core vs conventions
-- Lessons learned from v1's architecture
+### Rust Path (preferred)
+
+```
+gid graph (Rust code as structure)
+        │
+        ├─► rust-analyzer (IDE features)
+        │   └─► Build rowan syntax trees directly from gid
+        │
+        └─► rustc_interface (compilation)
+            ├─► Build rustc_ast directly from gid + synthetic spans
+            ├─► Cranelift backend (fast compilation)
+            ├─► Target: WASM (sandboxed)
+            ├─► In-memory I/O (file_loader + OutFileName::Stdout)
+            └─► Execute via wasmtime
+```
+
+**Key components:**
+- **rust-analyzer**: IDE features (completions, type errors). Built on `rowan` library which supports direct syntax tree construction.
+- **rustc_interface**: Programmatic access to rustc. Supports in-memory input (`Input::Str`, custom `file_loader`) and output (`OutFileName::Stdout`).
+- **rustc_codegen_cranelift**: Fast compilation backend, trades some optimization for speed. Good for iteration.
+- **wasmtime**: Execute WASM in a sandbox. Projection code can't crash the editor or access arbitrary resources.
+
+**Why not LLVM?** Cranelift compiles faster. For projection code that's frequently edited, compilation speed matters more than runtime optimization.
+
+**Why WASM?** Sandboxing. User/community projection code runs in isolation.
+
+**Direct AST construction**: Rather than unparsing gid to text and re-parsing, we build AST nodes directly. Synthetic spans map errors back to gid node IDs. Text unparsing available as fallback.
+
+### TypeScript Path (alternative)
+
+```
+gid graph (TypeScript code as structure)
+        │
+        └─► Deno (embedded V8)
+            ├─► TypeScript compiler API for type checking
+            └─► Direct execution
+```
+
+Simpler, faster iteration (no compile step), but less type safety and no sandboxing without additional work. May support both languages eventually.
+
+## Current Status
+
+Working prototype with:
+- Core data structures (ID types, MutGid graph, spanning tree traversal)
+- Tree view with collapsible nodes, selection, inline editing
+- Graph view (bubbles and arrows) with pan, synchronized selection
+- Identicon rendering for GUIDs
+- Semantic field designation (name, isa) with display labels
+- Save/load documents as JSON
+- Basic editing: create nodes, delete, assign references
+- TypeScript/Deno runtime integration (prototype, validates the approach)
+
+The editor currently serves use case #2 (demo/explore). Next steps involve the projection runtime (see above) for domain-specific editing (use case #1).
