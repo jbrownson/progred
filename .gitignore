@@ -1,6 +1,3 @@
-node_modules
-npm-debug.log
+/target
 .DS_Store
-/dist
-/build
 /.claude
