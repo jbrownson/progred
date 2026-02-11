@@ -1,5 +1,5 @@
 use crate::document::{Document, Editor, EditorWriter};
-use crate::graph::{Gid, Id, Selection, SelectionTarget};
+use crate::graph::{Gid, Id, MutGid, Selection, SelectionTarget};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use super::colors;
 use std::collections::hash_map::DefaultHasher;
@@ -27,7 +27,7 @@ pub struct GraphViewState {
     zoom: f32,
     panning: bool,
     pending_drag: Option<(Id, Pos2)>,
-    prev_edge_targets: HashMap<(Id, Id), Id>,
+    prev_gid: MutGid,
 }
 
 impl GraphViewState {
@@ -41,7 +41,7 @@ impl GraphViewState {
             zoom: 1.0,
             panning: false,
             pending_drag: None,
-            prev_edge_targets: HashMap::new(),
+            prev_gid: MutGid::new(),
         }
     }
 }
@@ -59,49 +59,38 @@ fn collect_all_ids(doc: &Document) -> std::collections::HashSet<Id> {
         .collect()
 }
 
-fn build_edge_targets(doc: &Document) -> HashMap<(Id, Id), Id> {
-    doc.gid.entities()
-        .flat_map(|&uuid| {
-            let entity = Id::Uuid(uuid);
-            doc.gid.edges(&entity).into_iter().flat_map({
-                let entity = entity.clone();
-                move |edges| {
-                    edges.iter().map({
-                        let entity = entity.clone();
-                        move |(label, target)| ((entity.clone(), label.clone()), target.clone())
-                    })
-                }
-            })
-        })
-        .collect()
-}
-
-fn compute_physics_transfers<'a>(
-    current: &'a HashMap<(Id, Id), Id>,
-    prev: &'a HashMap<(Id, Id), Id>,
-    positions: &'a HashMap<Id, Pos2>,
-    stale: &'a std::collections::HashSet<&Id>,
+fn compute_physics_transfers(
+    current: &MutGid,
+    prev: &MutGid,
+    positions: &HashMap<Id, Pos2>,
+    stale: &std::collections::HashSet<&Id>,
 ) -> HashMap<Id, Id> {
-    current.iter()
-        .filter(|(_, new_target)| !positions.contains_key(new_target))
-        .filter_map(|(key, new_target)| {
-            prev.get(key)
-                .filter(|old_target| stale.contains(old_target))
-                .map(|old_target| (new_target.clone(), old_target.clone()))
-        })
-        .collect()
+    let mut transfers = HashMap::new();
+    for &uuid in current.entities() {
+        let entity = Id::Uuid(uuid);
+        if let Some(edges) = current.edges(&entity) {
+            for (label, new_target) in edges.iter() {
+                if !positions.contains_key(new_target) {
+                    if let Some(old_target) = prev.get(&entity, label) {
+                        if stale.contains(old_target) {
+                            transfers.insert(new_target.clone(), old_target.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    transfers
 }
 
 fn sync_positions(state: &mut GraphViewState, doc: &Document) {
     let all_ids = collect_all_ids(doc);
-    let current_edge_targets = build_edge_targets(doc);
-
     let stale_ids: std::collections::HashSet<&Id> = state.positions.keys()
         .filter(|id| !all_ids.contains(*id))
         .collect();
 
     let transfers = compute_physics_transfers(
-        &current_edge_targets, &state.prev_edge_targets, &state.positions, &stale_ids
+        &doc.gid, &state.prev_gid, &state.positions, &stale_ids
     );
 
     for (new_id, old_id) in &transfers {
@@ -120,7 +109,7 @@ fn sync_positions(state: &mut GraphViewState, doc: &Document) {
 
     state.positions.retain(|id, _| all_ids.contains(id));
     state.velocities.retain(|id, _| all_ids.contains(id));
-    state.prev_edge_targets = current_edge_targets;
+    state.prev_gid = doc.gid.clone();
 }
 
 struct Edge {
