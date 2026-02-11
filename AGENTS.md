@@ -15,6 +15,20 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 - Don't run the app — the user prefers to run and test it themselves
 - Don't fight the system — avoid hacks/workarounds that go against how frameworks or platforms are designed; push back early when something seems like it's not meant to work that way
 - Keep unrelated changes in separate commits whenever possible; avoid bundling housekeeping with feature work
+- Only commit when explicitly asked
+
+## Git Commits
+
+zsh heredocs fail in the sandbox because zsh writes temp files to `$TMPPREFIX` (defaults to `/tmp/zsh`), which is outside the sandbox allowlist. Fix by exporting it before the commit:
+
+```bash
+export TMPPREFIX=/tmp/claude/zsh && git commit -m "$(cat <<'EOF'
+Commit message here
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
 
 ## Key Design Rules
 
