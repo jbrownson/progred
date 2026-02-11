@@ -4,25 +4,25 @@ use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone)]
 pub struct RootSlot {
-    id: uuid::Uuid,
+    pub root_id: RootId,
     pub value: Id,
 }
 
 impl RootSlot {
     pub fn new(value: Id) -> Self {
-        Self { id: uuid::Uuid::new_v4(), value }
+        Self { root_id: RootId(uuid::Uuid::new_v4()), value }
     }
 }
 
 impl PartialEq for RootSlot {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
+        self.root_id == other.root_id
     }
 }
 
 impl PartialEq<RootId> for RootSlot {
     fn eq(&self, other: &RootId) -> bool {
-        self.id == other.0
+        self.root_id == *other
     }
 }
 
@@ -30,18 +30,12 @@ impl Eq for RootSlot {}
 
 impl Hash for RootSlot {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
+        self.root_id.hash(state);
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RootId(uuid::Uuid);
-
-impl From<&RootSlot> for RootId {
-    fn from(slot: &RootSlot) -> Self {
-        RootId(slot.id)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PathRoot {
@@ -58,7 +52,7 @@ pub struct Path {
 impl Path {
     pub fn new(root: &RootSlot) -> Self {
         Self {
-            root: PathRoot::Slot(RootId::from(root)),
+            root: PathRoot::Slot(root.root_id),
             edges: Vec::new(),
         }
     }
