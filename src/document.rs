@@ -25,7 +25,10 @@ impl Document {
     pub fn delete(&mut self, target: &SelectionTarget) {
         match target {
             SelectionTarget::Edge(path) => self.delete_path(path),
-            SelectionTarget::GraphEdge { entity, label } => self.gid.delete(entity, label),
+            SelectionTarget::GraphEdge { entity: Id::Uuid(uuid), label } => {
+                self.gid.delete(uuid, label);
+            }
+            SelectionTarget::GraphEdge { .. } => {}
             SelectionTarget::GraphRoot(id) => self.roots.retain(|r| &r.value != id),
             SelectionTarget::InsertRoot(_) => {}
         }
@@ -41,8 +44,8 @@ impl Document {
                 }
             }
             Some((parent_path, label)) => {
-                if let Some(parent_node @ Id::Uuid(_)) = self.node(&parent_path) {
-                    self.gid.delete(&parent_node, &label);
+                if let Some(Id::Uuid(parent_uuid)) = self.node(&parent_path) {
+                    self.gid.delete(&parent_uuid, &label);
                 }
             }
         }
@@ -51,8 +54,8 @@ impl Document {
     pub fn set_edge(&mut self, path: &Path, value: Id) {
         match path.pop() {
             Some((parent_path, label)) => {
-                if let Some(parent_node @ Id::Uuid(_)) = self.node(&parent_path) {
-                    self.gid.set(parent_node, label, value);
+                if let Some(Id::Uuid(parent_uuid)) = self.node(&parent_path) {
+                    self.gid.set(parent_uuid, label, value);
                 }
             }
             None => {
@@ -66,7 +69,7 @@ impl Document {
     }
 
     pub fn orphan_roots(&self) -> Vec<Id> {
-        let all_nodes: HashSet<Id> = self.gid.all_nodes().cloned().collect();
+        let all_nodes: HashSet<Id> = self.gid.entities().map(|u| Id::Uuid(*u)).collect();
         let orphans = all_nodes.difference(
             &reachable_from(&self.gid, self.roots.iter().map(|r| r.value.clone()), &all_nodes)
         ).cloned().collect();
@@ -283,7 +286,11 @@ mod tests {
     fn make_gid(edges: &[(u128, u128, u128)]) -> MutGid {
         let mut gid = MutGid::new();
         for &(entity, label, value) in edges {
-            gid.set(uuid(entity), uuid(label), uuid(value));
+            gid.merge(im::hashmap! {
+                uuid::Uuid::from_u128(entity) => im::hashmap! {
+                    uuid(label) => uuid(value),
+                }
+            });
         }
         gid
     }
@@ -375,7 +382,7 @@ mod tests {
     #[test]
     fn orphan_roots_single_orphan() {
         let mut gid = make_gid(&[(1, 100, 2)]);
-        gid.set(uuid(3), uuid(100), uuid(4)); // orphan island
+        gid.merge(im::hashmap! { uuid::Uuid::from_u128(3) => im::hashmap! { uuid(100) => uuid(4) } }); // orphan island
         let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
         let orphans = doc.orphan_roots();
         assert!(orphans.contains(&uuid(3)));
@@ -385,7 +392,7 @@ mod tests {
     fn orphan_roots_cycle() {
         // Root: 1. Orphan cycle: 2 <-> 3
         let mut gid = make_gid(&[(2, 100, 3), (3, 100, 2)]);
-        gid.set(uuid(1), uuid(100), uuid(1)); // self-loop so 1 is an entity
+        gid.merge(im::hashmap! { uuid::Uuid::from_u128(1) => im::hashmap! { uuid(100) => uuid(1) } }); // self-loop so 1 is an entity
         let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
         let orphans = doc.orphan_roots();
         // Should pick min UUID from cycle as representative

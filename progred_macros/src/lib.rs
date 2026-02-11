@@ -211,9 +211,14 @@ fn get_record_field_ids(graph: &Graph, record_id: &str) -> Result<Vec<String>> {
     Ok(flatten_list(graph, fields_list_id))
 }
 
-fn id_expr(uuid_str: &str) -> TokenStream2 {
+fn uuid_expr(uuid_str: &str) -> TokenStream2 {
     let bytes = *uuid_str.parse::<Uuid>().expect("invalid uuid").as_bytes();
-    quote! { crate::graph::Id::Uuid(uuid::Uuid::from_bytes([#(#bytes),*])) }
+    quote! { uuid::Uuid::from_bytes([#(#bytes),*]) }
+}
+
+fn id_expr(uuid_str: &str) -> TokenStream2 {
+    let uuid = uuid_expr(uuid_str);
+    quote! { crate::graph::Id::Uuid(#uuid) }
 }
 
 fn generate_setter(graph: &Graph, field_id: &str, subs: &Substitutions, self_id: &TokenStream2) -> Result<TokenStream2> {
@@ -225,23 +230,24 @@ fn generate_setter(graph: &Graph, field_id: &str, subs: &Substitutions, self_id:
     };
     let method_name = format_ident!("set_{}", rust_method_name(&field_name)?);
     let field_id = id_expr(field_id);
+    let entity = quote! { match &#self_id { crate::graph::Id::Uuid(u) => *u, _ => unreachable!() } };
 
     Ok(match field_type {
         ResolvedType::String => quote! {
             pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: impl Into<std::string::String>) {
-                gid.set(#self_id.clone(), #field_id, crate::graph::Id::String(value.into()));
+                gid.set(#entity, #field_id, crate::graph::Id::String(value.into()));
             }
         },
         ResolvedType::Number => quote! {
             pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: f64) {
-                gid.set(#self_id.clone(), #field_id, crate::graph::Id::Number(ordered_float::OrderedFloat(value)));
+                gid.set(#entity, #field_id, crate::graph::Id::Number(ordered_float::OrderedFloat(value)));
             }
         },
         ResolvedType::Record { rust_name } => {
             let wrapper_name = format_ident!("{}", rust_name);
             quote! {
                 pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &#wrapper_name) {
-                    gid.set(#self_id.clone(), #field_id, value.id().clone());
+                    gid.set(#entity, #field_id, value.id().clone());
                 }
             }
         },
@@ -250,14 +256,14 @@ fn generate_setter(graph: &Graph, field_id: &str, subs: &Substitutions, self_id:
             let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
             quote! {
                 pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &#wrapper<#(#arg_types),*>) {
-                    gid.set(#self_id.clone(), #field_id, value.id().clone());
+                    gid.set(#entity, #field_id, value.id().clone());
                 }
             }
         },
         ResolvedType::TypeParam { .. } => {
             quote! {
                 pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &crate::graph::Id) {
-                    gid.set(#self_id.clone(), #field_id, value.clone());
+                    gid.set(#entity, #field_id, value.clone());
                 }
             }
         },
@@ -491,17 +497,17 @@ fn generate_sum_wrapper(graph: &Graph, type_id: &str, sum_id: &str, type_name: &
                 let (constructor_field_type, field_setter) = match &resolved {
                     ResolvedType::String => (
                         quote! { impl Into<std::string::String> },
-                        quote! { gid.set(id.clone(), #field_id, crate::graph::Id::String(#field_name.into())); }
+                        quote! { gid.set(uuid, #field_id, crate::graph::Id::String(#field_name.into())); }
                     ),
                     ResolvedType::Number => (
                         quote! { f64 },
-                        quote! { gid.set(id.clone(), #field_id, crate::graph::Id::Number(ordered_float::OrderedFloat(#field_name))); }
+                        quote! { gid.set(uuid, #field_id, crate::graph::Id::Number(ordered_float::OrderedFloat(#field_name))); }
                     ),
                     ResolvedType::Record { rust_name } => {
                         let wrapper = format_ident!("{}", rust_name);
                         (
                             quote! { &#wrapper },
-                            quote! { gid.set(id.clone(), #field_id, #field_name.id().clone()); }
+                            quote! { gid.set(uuid, #field_id, #field_name.id().clone()); }
                         )
                     },
                     ResolvedType::Generic { rust_name, args } => {
@@ -509,12 +515,12 @@ fn generate_sum_wrapper(graph: &Graph, type_id: &str, sum_id: &str, type_name: &
                         let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
                         (
                             quote! { &#wrapper<#(#arg_types),*> },
-                            quote! { gid.set(id.clone(), #field_id, #field_name.id().clone()); }
+                            quote! { gid.set(uuid, #field_id, #field_name.id().clone()); }
                         )
                     },
                     ResolvedType::TypeParam { .. } => (
                         quote! { &crate::graph::Id },
-                        quote! { gid.set(id.clone(), #field_id, #field_name.clone()); }
+                        quote! { gid.set(uuid, #field_id, #field_name.clone()); }
                     ),
                 };
 
@@ -586,16 +592,18 @@ fn generate_sum_wrapper(graph: &Graph, type_id: &str, sum_id: &str, type_name: &
             if constructor_field_types.is_empty() {
                 quote! {
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid) -> Self {
-                        let id = crate::graph::Id::new_uuid();
-                        gid.set(id.clone(), #isa_uuid, #variant_id);
+                        let uuid = uuid::Uuid::new_v4();
+                        let id = crate::graph::Id::Uuid(uuid);
+                        gid.set(uuid, #isa_uuid, #variant_id);
                         Self(id)
                     }
                 }
             } else {
                 quote! {
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#field_names: #constructor_field_types),*) -> Self {
-                        let id = crate::graph::Id::new_uuid();
-                        gid.set(id.clone(), #isa_uuid, #variant_id);
+                        let uuid = uuid::Uuid::new_v4();
+                        let id = crate::graph::Id::Uuid(uuid);
+                        gid.set(uuid, #isa_uuid, #variant_id);
                         #(#field_setters)*
                         Self(id)
                     }
@@ -663,8 +671,9 @@ fn generate_sum_wrapper(graph: &Graph, type_id: &str, sum_id: &str, type_name: &
             if constructor_field_types.is_empty() {
                 quote! {
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#converter_fields),*) -> Self {
-                        let id = crate::graph::Id::new_uuid();
-                        gid.set(id.clone(), #isa_uuid, #variant_id);
+                        let uuid = uuid::Uuid::new_v4();
+                        let id = crate::graph::Id::Uuid(uuid);
+                        gid.set(uuid, #isa_uuid, #variant_id);
                         Self { id, #(#converter_field_names,)* }
                     }
                 }
@@ -672,8 +681,9 @@ fn generate_sum_wrapper(graph: &Graph, type_id: &str, sum_id: &str, type_name: &
                 quote! {
                     #[allow(clippy::too_many_arguments)]
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#field_names: #constructor_field_types,)* #(#converter_fields),*) -> Self {
-                        let id = crate::graph::Id::new_uuid();
-                        gid.set(id.clone(), #isa_uuid, #variant_id);
+                        let uuid = uuid::Uuid::new_v4();
+                        let id = crate::graph::Id::Uuid(uuid);
+                        gid.set(uuid, #isa_uuid, #variant_id);
                         #(#field_setters)*
                         Self { id, #(#converter_field_names,)* }
                     }
@@ -773,8 +783,9 @@ fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str
                 pub const TYPE_ID: crate::graph::Id = #type_uuid;
 
                 pub fn new(gid: &mut crate::graph::MutGid) -> Self {
-                    let id = crate::graph::Id::new_uuid();
-                    gid.set(id.clone(), #isa_uuid, #type_uuid);
+                    let uuid = uuid::Uuid::new_v4();
+                    let id = crate::graph::Id::Uuid(uuid);
+                    gid.set(uuid, #isa_uuid, #type_uuid);
                     Self(id)
                 }
 
@@ -835,8 +846,9 @@ fn generate_wrapper(graph: &Graph, type_id: &str, body_id: &str, type_name: &str
                 pub const TYPE_ID: crate::graph::Id = #type_uuid;
 
                 pub fn new(gid: &mut crate::graph::MutGid, #(#converter_fields),*) -> Self {
-                    let id = crate::graph::Id::new_uuid();
-                    gid.set(id.clone(), #isa_uuid, #type_uuid);
+                    let uuid = uuid::Uuid::new_v4();
+                    let id = crate::graph::Id::Uuid(uuid);
+                    gid.set(uuid, #isa_uuid, #type_uuid);
                     Self { id, #(#converter_field_names,)* }
                 }
 

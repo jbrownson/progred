@@ -51,15 +51,23 @@ mod tests {
     use crate::graph::MutGid;
 
     fn make_list(gid: &mut MutGid, elements: &[Id]) -> Id {
-        let empty_node = Id::new_uuid();
-        gid.set(empty_node.clone(), ISA.clone(), crate::generated::semantics::EMPTY_TYPE.clone());
+        let empty_uuid = uuid::Uuid::new_v4();
+        gid.merge(im::hashmap! {
+            empty_uuid => im::hashmap! {
+                ISA.clone() => crate::generated::semantics::EMPTY_TYPE.clone(),
+            }
+        });
 
-        elements.iter().rev().fold(empty_node, |tail_node, elem| {
-            let cons_node = Id::new_uuid();
-            gid.set(cons_node.clone(), ISA.clone(), CONS_TYPE.clone());
-            gid.set(cons_node.clone(), HEAD.clone(), elem.clone());
-            gid.set(cons_node.clone(), TAIL.clone(), tail_node);
-            cons_node
+        elements.iter().rev().fold(Id::Uuid(empty_uuid), |tail_node, elem| {
+            let cons_uuid = uuid::Uuid::new_v4();
+            gid.merge(im::hashmap! {
+                cons_uuid => im::hashmap! {
+                    ISA.clone() => CONS_TYPE.clone(),
+                    HEAD.clone() => elem.clone(),
+                    TAIL.clone() => tail_node,
+                }
+            });
+            Id::Uuid(cons_uuid)
         })
     }
 
@@ -100,14 +108,22 @@ mod tests {
     fn cycle_detection() {
         let mut gid = MutGid::new();
 
-        let cons1 = Id::new_uuid();
-        let cons2 = Id::new_uuid();
-        gid.set(cons1.clone(), ISA.clone(), CONS_TYPE.clone());
-        gid.set(cons1.clone(), HEAD.clone(), Id::String("a".into()));
-        gid.set(cons1.clone(), TAIL.clone(), cons2.clone());
-        gid.set(cons2.clone(), ISA.clone(), CONS_TYPE.clone());
-        gid.set(cons2.clone(), HEAD.clone(), Id::String("b".into()));
-        gid.set(cons2.clone(), TAIL.clone(), cons1.clone()); // cycle back
+        let uuid1 = uuid::Uuid::new_v4();
+        let uuid2 = uuid::Uuid::new_v4();
+        let cons1 = Id::Uuid(uuid1);
+        let cons2 = Id::Uuid(uuid2);
+        gid.merge(im::hashmap! {
+            uuid1 => im::hashmap! {
+                ISA.clone() => CONS_TYPE.clone(),
+                HEAD.clone() => Id::String("a".into()),
+                TAIL.clone() => cons2.clone(),
+            },
+            uuid2 => im::hashmap! {
+                ISA.clone() => CONS_TYPE.clone(),
+                HEAD.clone() => Id::String("b".into()),
+                TAIL.clone() => cons1.clone(), // cycle back
+            },
+        });
 
         let result: Vec<_> = ListIter::new(&gid, Some(&cons1)).cloned().collect();
         assert_eq!(result, vec![Id::String("a".into()), Id::String("b".into())]);

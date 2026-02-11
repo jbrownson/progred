@@ -55,19 +55,22 @@ fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
 
 fn collect_all_ids(doc: &Document) -> std::collections::HashSet<Id> {
     doc.roots.iter().map(|r| r.value.clone())
-        .chain(doc.gid.entities().flat_map(|id| {
-            std::iter::once(id.clone()).chain(
-                doc.gid.edges(id).into_iter().flat_map(|edges| edges.iter().map(|(_, v)| v.clone()))
-            )
-        }))
+        .chain(doc.gid.entities().map(|u| Id::Uuid(*u)))
         .collect()
 }
 
 fn build_edge_targets(doc: &Document) -> HashMap<(Id, Id), Id> {
     doc.gid.entities()
-        .flat_map(|entity| {
-            doc.gid.edges(entity).into_iter().flat_map(move |edges| {
-                edges.iter().map(move |(label, target)| ((entity.clone(), label.clone()), target.clone()))
+        .flat_map(|&uuid| {
+            let entity = Id::Uuid(uuid);
+            doc.gid.edges(&entity).into_iter().flat_map({
+                let entity = entity.clone();
+                move |edges| {
+                    edges.iter().map({
+                        let entity = entity.clone();
+                        move |(label, target)| ((entity.clone(), label.clone()), target.clone())
+                    })
+                }
             })
         })
         .collect()
@@ -128,13 +131,20 @@ struct Edge {
 
 fn collect_edges(doc: &Document) -> Vec<Edge> {
     doc.gid.entities()
-        .flat_map(|entity_id| {
-            doc.gid.edges(entity_id).into_iter().flat_map(move |edges| {
-                edges.iter().map(move |(label, value)| Edge {
-                    source: entity_id.clone(),
-                    label: label.clone(),
-                    target: value.clone(),
-                })
+        .flat_map(|&uuid| {
+            let entity = Id::Uuid(uuid);
+            doc.gid.edges(&entity).into_iter().flat_map({
+                let entity = entity.clone();
+                move |edges| {
+                    edges.iter().map({
+                        let entity = entity.clone();
+                        move |(label, value)| Edge {
+                            source: entity.clone(),
+                            label: label.clone(),
+                            target: value.clone(),
+                        }
+                    })
+                }
             })
         })
         .collect()
