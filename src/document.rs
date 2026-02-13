@@ -249,7 +249,7 @@ impl<'a> EditorWriter<'a> {
     }
 
     pub fn set_collapsed(&mut self, path: &Path, collapsed: bool) {
-        self.editor.tree = self.editor.tree.set_collapsed_at_path(path, collapsed);
+        self.editor.tree.set_collapsed(path, collapsed);
     }
 
     pub fn insert_root(&mut self, index: usize, value: Id) {
