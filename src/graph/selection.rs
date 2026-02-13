@@ -30,14 +30,6 @@ impl Selection {
         Self::InsertRoot(index, PlaceholderState::default())
     }
 
-    pub fn graph_edge(entity: Id, label: Id) -> Self {
-        Self::GraphEdge { entity, label }
-    }
-
-    pub fn graph_node(id: Id) -> Self {
-        Self::GraphNode(id)
-    }
-
     pub fn edge_path(&self) -> Option<&Path> {
         match self {
             Self::Edge(p, _) => Some(p),

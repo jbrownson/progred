@@ -527,12 +527,12 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         let edge_hit = pointer.and_then(|p| {
             edge_hit_zones.iter()
                 .find(|(rect, _, _)| rect.contains(p))
-                .map(|(_, entity, label)| Selection::graph_edge(entity.clone(), label.clone()))
+                .map(|(_, entity, label)| Selection::GraphEdge { entity: entity.clone(), label: label.clone() })
         });
         let node_hit = pointer.and_then(|p| {
             state.positions.iter()
                 .find(|(id, pos)| Rect::from_center_size(to_screen(**pos), node_half_size(&half_sizes, id) * 2.0 * state.zoom).contains(p))
-                .map(|(id, _)| Selection::graph_node(id.clone()))
+                .map(|(id, _)| Selection::GraphNode(id.clone()))
         });
         w.select(edge_hit.or(node_hit));
     }
