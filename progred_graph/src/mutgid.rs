@@ -1,5 +1,5 @@
-use super::gid::Gid;
-use super::id::Id;
+use crate::gid::Gid;
+use crate::id::Id;
 use im::HashMap;
 use std::collections::HashMap as StdHashMap;
 use uuid::Uuid;

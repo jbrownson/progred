@@ -1,5 +1,5 @@
-use super::gid::Gid;
-use super::id::Id;
+use crate::gid::Gid;
+use crate::id::Id;
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone)]

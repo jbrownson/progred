@@ -1,4 +1,4 @@
-use super::path::Path;
+use crate::path::Path;
 use im::HashMap;
 
 #[derive(Debug, Clone, Default)]

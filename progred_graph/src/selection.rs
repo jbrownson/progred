@@ -1,5 +1,5 @@
-use super::id::Id;
-use super::path::Path;
+use crate::id::Id;
+use crate::path::Path;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PlaceholderState {

@@ -12,3 +12,4 @@ quote = "1"
 syn = "2"
 serde_json = "1.0"
 uuid = { version = "1", features = ["serde"] }
+progred_graph = { path = "../progred_graph" }

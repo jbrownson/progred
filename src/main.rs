@@ -1,7 +1,7 @@
 pub mod d;
 mod document;
 pub mod generated;
-mod graph;
+pub use progred_graph as graph;
 pub mod list_iter;
 pub mod render;
 mod shortcuts;

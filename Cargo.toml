@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "progred_macros"]
+members = [".", "progred_macros", "progred_graph"]
 
 [package]
 name = "progred"
@@ -8,6 +8,7 @@ edition = "2024"
 
 [dependencies]
 progred_macros = { path = "progred_macros" }
+progred_graph = { path = "progred_graph" }
 eframe = "0.33"
 egui = "0.33"
 im = "15"

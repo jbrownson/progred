@@ -1,4 +1,4 @@
-use super::id::Id;
+use crate::id::Id;
 use im::HashMap;
 
 pub trait Gid {
