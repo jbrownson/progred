@@ -1,6 +1,6 @@
 use crate::document::{Editor, EditorWriter};
 use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, NAME, TAIL};
-use crate::graph::{Gid, Id, Path, Selection};
+use crate::graph::{EdgeState, Gid, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use im::HashSet;
 use ordered_float::OrderedFloat;
@@ -240,8 +240,11 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
         Id::Uuid(_) => unreachable!(),
     };
 
-    let leaf_edit_text = editor.selection.as_ref().and_then(|s| s.leaf_edit_text.as_ref());
-    let is_editing = primary && editor.editing_leaf;
+    let leaf_edit_text = match &editor.selection {
+        Some(Selection::Edge(_, EdgeState::EditingLeaf(t))) if primary => Some(t),
+        _ => None,
+    };
+    let is_editing = leaf_edit_text.is_some();
     let mut text = if is_editing {
         leaf_edit_text.cloned().unwrap_or_else(|| model_text.clone())
     } else {
@@ -265,27 +268,27 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
 
     if response.gained_focus() {
         w.select(Some(Selection::edge(path.clone())));
-        w.set_editing_leaf(true);
-        w.set_leaf_edit_text(Some(model_text.clone()));
+        w.start_leaf_edit(model_text.clone());
     }
 
     if response.lost_focus() {
-        let new_id = leaf_edit_text.and_then(|edit_text| match id {
-            Id::String(_) => Some(Id::String(edit_text.clone())),
-            Id::Number(_) => edit_text.parse::<f64>().ok().map(|n| Id::Number(OrderedFloat(n))),
-            Id::Uuid(_) => unreachable!(),
-        });
-        if let Some(new_id) = new_id {
-            w.set_edge(path, new_id);
+        if let Some(final_text) = w.stop_leaf_edit() {
+            let new_id = match id {
+                Id::String(_) => Some(Id::String(final_text)),
+                Id::Number(_) => final_text.parse::<f64>().ok().map(|n| Id::Number(OrderedFloat(n))),
+                Id::Uuid(_) => unreachable!(),
+            };
+            if let Some(new_id) = new_id {
+                w.set_edge(path, new_id);
+            }
         }
-        w.set_editing_leaf(false);
     }
 
-    if is_editing && Some(&text) != leaf_edit_text {
-        w.set_leaf_edit_text(Some(text.clone()));
+    if is_editing && leaf_edit_text.is_some_and(|t| t != &text) {
         if matches!(id, Id::String(_)) {
-            w.set_edge(path, Id::String(text));
+            w.set_edge(path, Id::String(text.clone()));
         }
+        w.update_leaf_edit_text(text);
     }
 }
 
@@ -418,16 +421,18 @@ fn project_list(
 }
 
 fn render_list_placeholder(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, insert_path: &Path) {
-    if let Some(ref sel) = editor.selection {
-        let mut ps = sel.placeholder.clone();
-        match super::placeholder::render(ui, &mut ps) {
-            PlaceholderResult::Commit(value) => {
-                do_list_insert(w, editor, insert_path, value);
-                w.select(None);
-            }
-            PlaceholderResult::Dismiss => w.select(None),
-            PlaceholderResult::Active => w.set_placeholder_state(ps),
+    let ps = match &editor.selection {
+        Some(Selection::Edge(_, EdgeState::Cursor(ps))) => ps.clone(),
+        _ => return,
+    };
+    let mut ps = ps;
+    match super::placeholder::render(ui, &mut ps) {
+        PlaceholderResult::Commit(value) => {
+            do_list_insert(w, editor, insert_path, value);
+            w.select(None);
         }
+        PlaceholderResult::Dismiss => w.select(None),
+        PlaceholderResult::Active => w.set_placeholder_state(ps),
     }
 }
 
@@ -542,8 +547,8 @@ fn project_uuid(
                     ui.horizontal(|ui| {
                         render_label(ui, editor, new_label, false, &InteractionMode::Normal);
                         label_arrow(ui);
-                        if let Some(ref sel) = editor.selection {
-                            let mut ps = sel.placeholder.clone();
+                        if let Some(Selection::Edge(_, EdgeState::Cursor(ps))) = &editor.selection {
+                            let mut ps = ps.clone();
                             match super::placeholder::render(ui, &mut ps) {
                                 PlaceholderResult::Commit(value) => {
                                     w.set_edge(&path.child(new_label.clone()), value);

@@ -1,5 +1,5 @@
 use crate::generated::semantics::{CONS_TYPE, EMPTY_TYPE, ISA, NAME};
-use crate::graph::{Gid, Id, MutGid, Path, PathRoot, PlaceholderState, RootSlot, Selection, SelectionTarget, SpanningTree};
+use crate::graph::{EdgeState, Gid, Id, MutGid, Path, PathRoot, PlaceholderState, RootSlot, Selection, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
@@ -22,18 +22,18 @@ impl Document {
         path.node(&self.gid, &self.roots)
     }
 
-    pub fn delete(&mut self, target: &SelectionTarget) {
-        match target {
-            SelectionTarget::Edge(path) => self.delete_path(path),
-            SelectionTarget::GraphEdge { entity: Id::Uuid(uuid), label } => {
+    pub fn delete(&mut self, selection: &Selection) {
+        match selection {
+            Selection::Edge(path, _) => self.delete_path(path),
+            Selection::GraphEdge { entity: Id::Uuid(uuid), label } => {
                 self.gid.delete(uuid, label);
             }
-            SelectionTarget::GraphEdge { .. } => {}
-            SelectionTarget::GraphNode(id) => {
+            Selection::GraphEdge { .. } => {}
+            Selection::GraphNode(id) => {
                 self.roots.retain(|r| &r.value != id);
                 self.gid.purge(id);
             }
-            SelectionTarget::InsertRoot(_) => {}
+            Selection::InsertRoot(..) => {}
         }
     }
 
@@ -144,7 +144,6 @@ pub struct Editor {
     pub selection: Option<Selection>,
     pub file_path: Option<PathBuf>,
     pub graph_view: GraphViewState,
-    pub editing_leaf: bool,
     pub(crate) cached_orphans: Option<(MutGid, Vec<RootSlot>, Vec<Id>)>,
 }
 
@@ -156,7 +155,6 @@ impl Editor {
             selection: None,
             file_path: None,
             graph_view: GraphViewState::new(),
-            editing_leaf: false,
             cached_orphans: None,
         }
     }
@@ -197,20 +195,24 @@ impl Editor {
     }
 
     pub fn selected_node_id(&self) -> Option<Id> {
-        match &self.selection.as_ref()?.target {
-            SelectionTarget::Edge(path) => self.doc.node(path),
-            SelectionTarget::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
-            SelectionTarget::GraphNode(id) => Some(id.clone()),
-            SelectionTarget::InsertRoot(_) => None,
+        match self.selection.as_ref()? {
+            Selection::Edge(path, _) => self.doc.node(path),
+            Selection::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
+            Selection::GraphNode(id) => Some(id.clone()),
+            Selection::InsertRoot(..) => None,
         }
     }
 
     pub fn placeholder_visible(&self) -> bool {
-        match self.selection.as_ref().map(|s| &s.target) {
-            Some(SelectionTarget::InsertRoot(_)) => true,
-            Some(SelectionTarget::Edge(path)) => self.doc.node(path).is_none(),
+        match self.selection.as_ref() {
+            Some(Selection::InsertRoot(..)) => true,
+            Some(Selection::Edge(path, EdgeState::Cursor(_))) => self.doc.node(path).is_none(),
             _ => false,
         }
+    }
+
+    pub fn is_editing_leaf(&self) -> bool {
+        matches!(self.selection, Some(Selection::Edge(_, EdgeState::EditingLeaf(_))))
     }
 
     pub fn orphan_roots(&self) -> &[Id] {
@@ -255,8 +257,10 @@ impl<'a> EditorWriter<'a> {
     }
 
     pub fn set_placeholder_state(&mut self, state: PlaceholderState) {
-        if let Some(ref mut sel) = self.editor.selection {
-            sel.placeholder = state;
+        match self.editor.selection {
+            Some(Selection::Edge(_, EdgeState::Cursor(ref mut ps))) => *ps = state,
+            Some(Selection::InsertRoot(_, ref mut ps)) => *ps = state,
+            _ => {}
         }
     }
 
@@ -264,16 +268,26 @@ impl<'a> EditorWriter<'a> {
         self.editor.graph_view = state;
     }
 
-    pub fn set_editing_leaf(&mut self, editing: bool) {
-        self.editor.editing_leaf = editing;
-        if !editing && let Some(ref mut sel) = self.editor.selection {
-            sel.leaf_edit_text = None;
+    pub fn start_leaf_edit(&mut self, text: String) {
+        if let Some(Selection::Edge(_, ref mut edge_state)) = self.editor.selection {
+            *edge_state = EdgeState::EditingLeaf(text);
         }
     }
 
-    pub fn set_leaf_edit_text(&mut self, text: Option<String>) {
-        if let Some(ref mut sel) = self.editor.selection {
-            sel.leaf_edit_text = text;
+    pub fn stop_leaf_edit(&mut self) -> Option<String> {
+        if let Some(Selection::Edge(_, ref mut edge_state)) = self.editor.selection {
+            if let EdgeState::EditingLeaf(text) = edge_state {
+                let final_text = text.clone();
+                *edge_state = EdgeState::Cursor(PlaceholderState::default());
+                return Some(final_text);
+            }
+        }
+        None
+    }
+
+    pub fn update_leaf_edit_text(&mut self, text: String) {
+        if let Some(Selection::Edge(_, EdgeState::EditingLeaf(ref mut current))) = self.editor.selection {
+            *current = text;
         }
     }
 }

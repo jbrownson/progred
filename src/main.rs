@@ -90,7 +90,7 @@ impl ProgredApp {
 
     fn delete_selection(&mut self) {
         if let Some(selection) = self.editor.selection.take() {
-            self.editor.doc.delete(&selection.target);
+            self.editor.doc.delete(&selection);
         }
     }
 
@@ -102,8 +102,7 @@ impl ProgredApp {
     }
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        let placeholder_active = self.editor.placeholder_visible();
-        let editing = placeholder_active || self.editor.editing_leaf;
+        let editing = self.editor.placeholder_visible() || self.editor.is_editing_leaf();
         ctx.input_mut(|i| {
             if i.consume_shortcut(&shortcuts::SAVE_AS) {
                 self.save_as();

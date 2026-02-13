@@ -1,5 +1,5 @@
 use crate::document::{Document, Editor, EditorWriter};
-use crate::graph::{Gid, Id, MutGid, Selection, SelectionTarget};
+use crate::graph::{Gid, Id, MutGid, Selection};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use super::colors;
 use std::collections::hash_map::DefaultHasher;
@@ -339,8 +339,8 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
     simulate(&mut state, &edges);
 
     let graph_selected_edge = editor.selection.as_ref()
-        .and_then(|s| match &s.target {
-            SelectionTarget::GraphEdge { entity, label } => Some((entity, label)),
+        .and_then(|s| match s {
+            Selection::GraphEdge { entity, label } => Some((entity, label)),
             _ => None,
         });
 
