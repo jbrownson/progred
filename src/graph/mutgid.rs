@@ -64,6 +64,22 @@ impl MutGid {
         }
     }
 
+    pub fn purge(&mut self, id: &Id) {
+        if let Id::Uuid(uuid) = id {
+            self.data = self.data.without(uuid);
+        }
+        self.data = self.data.iter()
+            .map(|(&entity, edges)| {
+                let filtered = edges.iter()
+                    .filter(|(_, v)| *v != id)
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                (entity, filtered)
+            })
+            .filter(|(_, edges): &(_, im::HashMap<Id, Id>)| !edges.is_empty())
+            .collect();
+    }
+
     pub fn to_json(&self) -> StdHashMap<String, StdHashMap<String, serde_json::Value>> {
         self.data
             .iter()

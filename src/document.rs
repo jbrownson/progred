@@ -29,7 +29,10 @@ impl Document {
                 self.gid.delete(uuid, label);
             }
             SelectionTarget::GraphEdge { .. } => {}
-            SelectionTarget::GraphRoot(id) => self.roots.retain(|r| &r.value != id),
+            SelectionTarget::GraphNode(id) => {
+                self.roots.retain(|r| &r.value != id);
+                self.gid.purge(id);
+            }
             SelectionTarget::InsertRoot(_) => {}
         }
     }
@@ -197,7 +200,7 @@ impl Editor {
         match &self.selection.as_ref()?.target {
             SelectionTarget::Edge(path) => self.doc.node(path),
             SelectionTarget::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
-            SelectionTarget::GraphRoot(id) => Some(id.clone()),
+            SelectionTarget::GraphNode(id) => Some(id.clone()),
             SelectionTarget::InsertRoot(_) => None,
         }
     }
