@@ -1,8 +1,9 @@
+pub mod d;
 mod identicon;
-mod domain_projections;
 pub mod graph_view;
 pub mod placeholder;
 pub mod projection;
+pub mod render;
 pub mod split_view;
 pub mod tree_view;
 

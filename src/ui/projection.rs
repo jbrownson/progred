@@ -1,11 +1,10 @@
 use crate::document::{Editor, EditorWriter};
-use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, NAME, TAIL};
-use crate::graph::{EdgeState, Gid, Id, Path, Selection};
+use crate::graph::{EdgeState, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
-use im::HashSet;
 use ordered_float::OrderedFloat;
 
 use super::colors;
+use super::d::{D, NodeDisplay, TextStyle};
 use super::identicon;
 use super::placeholder::PlaceholderResult;
 
@@ -136,24 +135,19 @@ pub fn insertion_point(ui: &mut Ui) -> Response {
     response
 }
 
-fn render_label(ui: &mut Ui, editor: &Editor, id: &Id, secondary: bool, mode: &InteractionMode) -> Response {
-    let label_color = Color32::from_gray(120);
-    let (style, hovered) = if secondary {
-        let s = selection_style(false, true);
-        (s, s)
-    } else if matches!(mode, InteractionMode::Normal) {
-        ((None, None), (None, None))
-    } else {
-        mode_style(mode)
-    };
-    clickable(ui, |ui| match id {
-        Id::Uuid(uuid) => match editor.name_of(id) {
-            Some(name) => ui.label(eframe::egui::RichText::new(name).color(label_color).italics()),
-            None => identicon(ui, 12.0, uuid),
-        },
-        Id::String(s) => ui.label(eframe::egui::RichText::new(s.to_string()).color(label_color).italics()),
-        Id::Number(n) => ui.label(eframe::egui::RichText::new(n.to_string()).color(label_color).italics()),
-    }, style, hovered)
+fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {
+    match mode {
+        InteractionMode::Assign(target) => {
+            w.set_edge(target, value);
+            w.select(None);
+        }
+        InteractionMode::SelectUnder(source) => {
+            w.select(Some(Selection::edge(source.child(value))));
+        }
+        InteractionMode::Normal => {
+            w.select(Some(Selection::edge(path.clone())));
+        }
+    }
 }
 
 fn label_arrow(ui: &mut Ui) {
@@ -207,39 +201,223 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
     response
 }
 
-pub fn project(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, mode: &InteractionMode) {
-    if let Some(id) = editor.doc.node(path) {
-        project_id(ui, editor, w, path, &id, HashSet::new(), mode);
+fn text_color(style: &TextStyle) -> Color32 {
+    match style {
+        TextStyle::Default => Color32::from_gray(60),
+        TextStyle::Keyword => Color32::from_rgb(150, 100, 150),
+        TextStyle::TypeRef => Color32::from_rgb(80, 130, 180),
+        TextStyle::Punctuation => Color32::from_gray(120),
+        TextStyle::Literal => Color32::from_gray(60),
     }
 }
 
-fn project_id(
+fn text_rich(s: &str, style: &TextStyle) -> egui::RichText {
+    let rt = egui::RichText::new(s).color(text_color(style));
+    match style {
+        TextStyle::Keyword => rt.italics(),
+        _ => rt,
+    }
+}
+
+pub fn project(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, mode: &InteractionMode) {
+    if let Some(id) = editor.doc.node(path) {
+        let d = super::render::render(editor, path, &id);
+        render_d(ui, editor, w, &d, mode);
+    }
+}
+
+fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode: &InteractionMode) {
+    match d {
+        D::Block(children) => {
+            ui.vertical(|ui| {
+                for child in children {
+                    render_d(ui, editor, w, child, mode);
+                }
+            });
+        }
+        D::Line(children) => {
+            ui.horizontal(|ui| {
+                for child in children {
+                    render_d(ui, editor, w, child, mode);
+                }
+            });
+        }
+        D::Indent(child) => {
+            ui.indent("edges", |ui| {
+                render_d(ui, editor, w, child, mode);
+            });
+        }
+        D::Spacing(n) => {
+            ui.add_space(*n);
+        }
+        D::Text(s, style) => {
+            ui.label(text_rich(s, style));
+        }
+        D::LabelArrow => {
+            label_arrow(ui);
+        }
+        D::NodeHeader { path, id, display } => {
+            render_node_header(ui, editor, w, path, id, display, mode);
+        }
+        D::FieldLabel { entity_path, label_id } => {
+            render_field_label(ui, editor, w, entity_path, label_id, mode);
+        }
+        D::CollapseToggle { path, collapsed } => {
+            if collapse_toggle(ui, *collapsed).clicked() {
+                w.set_collapsed(path, !collapsed);
+            }
+        }
+        D::StringEditor { path, value } => {
+            render_string_editor(ui, editor, w, path, value);
+        }
+        D::NumberEditor { path, value, editing } => {
+            render_number_editor(ui, editor, w, path, *value, editing.as_deref());
+        }
+        D::Placeholder { active } => {
+            render_placeholder(ui, w, active);
+        }
+        D::List { opening, closing, separator, items } => {
+            ui.label(text_rich(opening, &TextStyle::Punctuation));
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    ui.label(text_rich(separator, &TextStyle::Punctuation));
+                }
+                render_d(ui, editor, w, item, mode);
+            }
+            ui.label(text_rich(closing, &TextStyle::Punctuation));
+        }
+    }
+}
+
+fn render_node_header(
     ui: &mut Ui,
     editor: &Editor,
     w: &mut EditorWriter,
     path: &Path,
     id: &Id,
-    ancestors: HashSet<Id>,
+    display: &NodeDisplay,
     mode: &InteractionMode,
 ) {
-    match id {
-        Id::Uuid(_) if editor.is_list(id) => project_list(ui, editor, w, path, id, ancestors, mode),
-        Id::Uuid(uuid) => project_uuid(ui, editor, w, path, uuid, ancestors, mode),
-        Id::String(_) | Id::Number(_) => project_leaf(ui, editor, w, path, id),
+    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
+    let secondary = !primary && editor.selected_node_id().as_ref() == Some(id);
+
+    let (style, hovered) = if primary || secondary {
+        let s = selection_style(primary, secondary);
+        (s, s)
+    } else {
+        mode_style(mode)
+    };
+    if clickable(ui, |ui| {
+        match display {
+            NodeDisplay::Named(label) => ui.label(egui::RichText::new(label).color(Color32::from_gray(60))),
+            NodeDisplay::Identicon(uuid) => identicon(ui, 18.0, uuid),
+        }
+    }, style, hovered).clicked() {
+        handle_pick(w, mode, id.clone(), path);
     }
 }
 
-fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, id: &Id) {
-    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
-    let secondary = !primary
-        && editor.selected_node_id().as_ref() == Some(id);
+fn render_field_label(
+    ui: &mut Ui,
+    editor: &Editor,
+    w: &mut EditorWriter,
+    entity_path: &Path,
+    label_id: &Id,
+    mode: &InteractionMode,
+) {
+    let label_color = Color32::from_gray(120);
+    let secondary = editor.selected_node_id().as_ref() == Some(label_id);
+    let (style, hovered) = if secondary {
+        let s = selection_style(false, true);
+        (s, s)
+    } else if matches!(mode, InteractionMode::Normal) {
+        ((None, None), (None, None))
+    } else {
+        mode_style(mode)
+    };
+    ui.push_id(label_id, |ui| {
+        if clickable(ui, |ui| match label_id {
+            Id::Uuid(uuid) => match editor.name_of(label_id) {
+                Some(name) => ui.label(egui::RichText::new(name).color(label_color).italics()),
+                None => identicon(ui, 12.0, uuid),
+            },
+            Id::String(s) => ui.label(egui::RichText::new(s.to_string()).color(label_color).italics()),
+            Id::Number(n) => ui.label(egui::RichText::new(n.to_string()).color(label_color).italics()),
+        }, style, hovered).clicked()
+            && !matches!(mode, InteractionMode::Normal)
+        {
+            handle_pick(w, mode, label_id.clone(), entity_path);
+        }
+    });
+}
 
-    let model_text = match id {
-        Id::String(s) => s.clone(),
-        Id::Number(n) => n.to_string(),
-        Id::Uuid(_) => unreachable!(),
+fn render_string_editor(
+    ui: &mut Ui,
+    editor: &Editor,
+    w: &mut EditorWriter,
+    path: &Path,
+    value: &str,
+) {
+    let id = Id::String(value.to_string());
+    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
+    let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
+
+    let leaf_edit_text = match &editor.selection {
+        Some(Selection::Edge(_, EdgeState::EditingLeaf(t))) if primary => Some(t),
+        _ => None,
+    };
+    let is_editing = leaf_edit_text.is_some();
+    let mut text = if is_editing {
+        leaf_edit_text.cloned().unwrap_or_else(|| value.to_string())
+    } else {
+        value.to_string()
     };
 
+    let font_id = egui::TextStyle::Body.resolve(ui.style());
+    let galley = ui.painter().layout_no_wrap(text.clone(), font_id, Color32::BLACK);
+    let text_width = galley.rect.width();
+    let desired_width = text_width.max(20.0);
+
+    let stable_id = egui::Id::new(path);
+    let response = highlighted(ui, |ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut text)
+                .id(stable_id)
+                .desired_width(desired_width)
+                .frame(false)
+        )
+    }, selection_style(primary, secondary));
+
+    if response.gained_focus() {
+        w.select(Some(Selection::edge(path.clone())));
+        w.start_leaf_edit(value.to_string());
+    }
+
+    if response.lost_focus() {
+        if let Some(final_text) = w.stop_leaf_edit() {
+            w.set_edge(path, Id::String(final_text));
+        }
+    }
+
+    if is_editing && leaf_edit_text.is_some_and(|t| t != &text) {
+        w.set_edge(path, Id::String(text.clone()));
+        w.update_leaf_edit_text(text);
+    }
+}
+
+fn render_number_editor(
+    ui: &mut Ui,
+    editor: &Editor,
+    w: &mut EditorWriter,
+    path: &Path,
+    value: f64,
+    _editing: Option<&str>,
+) {
+    let id = Id::Number(OrderedFloat(value));
+    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
+    let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
+
+    let model_text = value.to_string();
     let leaf_edit_text = match &editor.selection {
         Some(Selection::Edge(_, EdgeState::EditingLeaf(t))) if primary => Some(t),
         _ => None,
@@ -273,295 +451,31 @@ fn project_leaf(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path,
 
     if response.lost_focus() {
         if let Some(final_text) = w.stop_leaf_edit() {
-            let new_id = match id {
-                Id::String(_) => Some(Id::String(final_text)),
-                Id::Number(_) => final_text.parse::<f64>().ok().map(|n| Id::Number(OrderedFloat(n))),
-                Id::Uuid(_) => unreachable!(),
-            };
-            if let Some(new_id) = new_id {
-                w.set_edge(path, new_id);
+            if let Ok(n) = final_text.parse::<f64>() {
+                w.set_edge(path, Id::Number(OrderedFloat(n)));
             }
         }
     }
 
     if is_editing && leaf_edit_text.is_some_and(|t| t != &text) {
-        if matches!(id, Id::String(_)) {
-            w.set_edge(path, Id::String(text.clone()));
-        }
         w.update_leaf_edit_text(text);
     }
 }
 
-struct ListElement {
-    tail_path: Path,
-    head_path: Path,
-    head_value: Option<Id>,
-}
-
-fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElement>, Path)> {
-    let mut elements = Vec::new();
-    let mut current_path = path.clone();
-    let mut current_id = node;
-    let mut seen = HashSet::new();
-
-    while editor.is_cons(current_id) {
-        if seen.contains(current_id) {
-            return None;
-        }
-        seen.insert(current_id.clone());
-
-        let head_value = editor.doc.gid.get(current_id, &HEAD).cloned();
-        let head_path = current_path.child(HEAD.clone());
-        let tail_path = current_path.child(TAIL.clone());
-        elements.push(ListElement {
-            tail_path: tail_path.clone(),
-            head_path,
-            head_value,
-        });
-
-        let tail_value = editor.doc.gid.get(current_id, &TAIL)?;
-        current_path = tail_path;
-        current_id = tail_value;
-    }
-
-    if editor.is_empty(current_id) {
-        Some((elements, current_path))
-    } else {
-        None
-    }
-}
-
-fn is_list_insertion_selected(editor: &Editor, path: &Path, elements: &[ListElement]) -> Option<usize> {
-    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path())?;
-
-    if selected_path == path && !elements.is_empty() {
-        Some(0)
-    } else {
-        elements.iter()
-            .position(|elem| selected_path == &elem.tail_path)
-            .map(|i| i + 1)
-    }
-}
-
-fn list_punct(ui: &mut Ui, w: &mut EditorWriter, text: &str, path: &Path, color: Color32) {
-    if ui.add(egui::Button::new(
-        eframe::egui::RichText::new(text).color(color)
-    ).frame(false).sense(Sense::click())).clicked() {
-        w.select(Some(Selection::edge(path.clone())));
-    }
-}
-
-fn project_list(
+fn render_placeholder(
     ui: &mut Ui,
-    editor: &Editor,
     w: &mut EditorWriter,
-    path: &Path,
-    id: &Id,
-    ancestors: HashSet<Id>,
-    mode: &InteractionMode,
+    active: &Option<super::d::ActivePlaceholder>,
 ) {
-    match flatten_list(editor, path, id) {
-        Some((elements, _empty_path)) => {
-            let insertion_idx = is_list_insertion_selected(editor, path, &elements);
-            let list_ancestors = ancestors.update(id.clone());
-
-            ui.vertical(|ui| {
-                if elements.is_empty() {
-                    let punct_color = Color32::from_gray(120);
-                    ui.horizontal(|ui| {
-                        list_punct(ui, w, "[]", path, punct_color);
-                        if insertion_idx == Some(0) {
-                            render_list_placeholder(ui, editor, w, path);
-                        }
-                    });
-                } else {
-                    for (i, elem) in elements.iter().enumerate() {
-                        if insertion_idx == Some(i) {
-                            let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
-                            ui.horizontal(|ui| {
-                                render_list_placeholder(ui, editor, w, insert_path);
-                            });
-                        }
-
-                        ui.horizontal(|ui| {
-                            ui.label(eframe::egui::RichText::new("•").color(Color32::from_gray(150)));
-                            match &elem.head_value {
-                                Some(head) => {
-                                    project_id(ui, editor, w, &elem.head_path, head, list_ancestors.clone(), mode);
-                                }
-                                None => {
-                                    let selected = editor.selection.as_ref()
-                                        .and_then(|s| s.edge_path()) == Some(&elem.head_path);
-                                    if selected {
-                                        render_list_placeholder(ui, editor, w, &elem.head_path);
-                                    } else {
-                                        list_punct(ui, w, "_", &elem.head_path, Color32::from_gray(150));
-                                    }
-                                }
-                            }
-                        });
-                    }
-
-                    if let Some(last) = elements.last()
-                        && insertion_idx == Some(elements.len())
-                    {
-                        ui.horizontal(|ui| {
-                            render_list_placeholder(ui, editor, w, &last.tail_path);
-                        });
-                    }
-                }
-            });
-        }
-        None => {
-            if let Id::Uuid(uuid) = id {
-                project_uuid(ui, editor, w, path, uuid, ancestors, mode);
+    if let Some(active) = active {
+        let mut ps = active.state.clone();
+        match super::placeholder::render(ui, &mut ps) {
+            PlaceholderResult::Commit(value) => {
+                (active.on_commit)(w, value);
+                w.select(None);
             }
+            PlaceholderResult::Dismiss => w.select(None),
+            PlaceholderResult::Active => w.set_placeholder_state(ps),
         }
     }
-}
-
-fn render_list_placeholder(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, insert_path: &Path) {
-    let ps = match &editor.selection {
-        Some(Selection::Edge(_, EdgeState::Cursor(ps))) => ps.clone(),
-        _ => return,
-    };
-    let mut ps = ps;
-    match super::placeholder::render(ui, &mut ps) {
-        PlaceholderResult::Commit(value) => {
-            do_list_insert(w, editor, insert_path, value);
-            w.select(None);
-        }
-        PlaceholderResult::Dismiss => w.select(None),
-        PlaceholderResult::Active => w.set_placeholder_state(ps),
-    }
-}
-
-fn do_list_insert(w: &mut EditorWriter, editor: &Editor, insert_path: &Path, head_value: Id) {
-    if let Some(current_value) = editor.doc.node(insert_path) {
-        let new_cons = Id::new_uuid();
-        w.set_edge(insert_path, new_cons.clone());
-        w.set_edge(&insert_path.child(ISA.clone()), CONS_TYPE.clone());
-        w.set_edge(&insert_path.child(HEAD.clone()), head_value);
-        w.set_edge(&insert_path.child(TAIL.clone()), current_value);
-    }
-}
-
-fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {
-    match mode {
-        InteractionMode::Assign(target) => {
-            w.set_edge(target, value);
-            w.select(None);
-        }
-        InteractionMode::SelectUnder(source) => {
-            w.select(Some(Selection::edge(source.child(value))));
-        }
-        InteractionMode::Normal => {
-            w.select(Some(Selection::edge(path.clone())));
-        }
-    }
-}
-
-fn project_uuid(
-    ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
-    path: &Path,
-    uuid: &uuid::Uuid,
-    ancestors: HashSet<Id>,
-    mode: &InteractionMode,
-) {
-    let id = Id::Uuid(*uuid);
-
-    // Try domain-specific projections first
-    let child_ancestors = ancestors.update(id.clone());
-    let mut descend = |ui: &mut Ui, w: &mut EditorWriter, label: &Id| {
-        let child_path = path.child(label.clone());
-        if let Some(value) = editor.doc.node(&child_path) {
-            project_id(ui, editor, w, &child_path, &value, child_ancestors.clone(), mode);
-        }
-    };
-    if super::domain_projections::try_domain_projection(ui, editor, w, &id, &mut descend) {
-        return;
-    }
-    let edges = editor.doc.gid.edges(&id);
-    let display_label = editor.display_label(&id);
-    let new_edge_label = editor.selection.as_ref()
-        .and_then(|s| s.edge_path())
-        .and_then(|sel| sel.pop())
-        .filter(|(parent, _)| parent == path)
-        .map(|(_, label)| label)
-        .filter(|label| !edges.map(|e| e.contains_key(label)).unwrap_or(false));
-    let all_edges: Vec<(Id, Id)> = edges.into_iter()
-        .flat_map(|e| e.iter().map(|(k, v)| (k.clone(), v.clone())))
-        .filter(|(label, _)| label != &NAME && label != &ISA)
-        .collect();
-    let has_content = !all_edges.is_empty() || new_edge_label.is_some();
-    let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
-    let selected_node = editor.selected_node_id();
-    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
-    let secondary = !primary && selected_node.as_ref() == Some(&id);
-
-    ui.vertical(|ui| {
-        ui.horizontal(|ui| {
-            let (style, hovered) = if primary || secondary {
-                let s = selection_style(primary, secondary);
-                (s, s)
-            } else {
-                mode_style(mode)
-            };
-            if clickable(ui, |ui| {
-                match display_label {
-                    Some(ref label) => ui.label(eframe::egui::RichText::new(label).color(Color32::from_gray(60))),
-                    None => identicon(ui, 18.0, uuid),
-                }
-            }, style, hovered).clicked() {
-                handle_pick(w, mode, Id::Uuid(*uuid), path);
-            }
-
-            if has_content && collapse_toggle(ui, is_collapsed).clicked() {
-                w.set_collapsed(path, !is_collapsed);
-            }
-        });
-
-        if !is_collapsed && has_content {
-            let child_ancestors = ancestors.update(id.clone());
-            ui.add_space(2.0);
-            ui.indent("edges", |ui| {
-                for (label, value) in &all_edges {
-                    let label_secondary = selected_node.as_ref() == Some(label);
-                    ui.push_id(label, |ui| {
-                        ui.horizontal(|ui| {
-                            if render_label(ui, editor, label, label_secondary, mode).clicked()
-                                && !matches!(mode, InteractionMode::Normal)
-                            {
-                                handle_pick(w, mode, label.clone(), path);
-                            }
-
-                            label_arrow(ui);
-                            project_id(ui, editor, w, &path.child(label.clone()), value, child_ancestors.clone(), mode);
-                        });
-                        ui.add_space(2.0);
-                    });
-                }
-                if let Some(ref new_label) = new_edge_label {
-                    ui.horizontal(|ui| {
-                        render_label(ui, editor, new_label, false, &InteractionMode::Normal);
-                        label_arrow(ui);
-                        if let Some(Selection::Edge(_, EdgeState::Cursor(ps))) = &editor.selection {
-                            let mut ps = ps.clone();
-                            match super::placeholder::render(ui, &mut ps) {
-                                PlaceholderResult::Commit(value) => {
-                                    w.set_edge(&path.child(new_label.clone()), value);
-                                    w.select(None);
-                                }
-                                PlaceholderResult::Dismiss => w.select(None),
-                                PlaceholderResult::Active => w.set_placeholder_state(ps),
-                            }
-                        }
-                    });
-                    ui.add_space(2.0);
-                }
-            });
-        }
-    });
 }
