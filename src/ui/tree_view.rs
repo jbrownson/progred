@@ -1,5 +1,5 @@
 use crate::document::{Editor, EditorWriter};
-use crate::graph::{Id, Path, Selection, SelectionTarget};
+use crate::graph::{Id, Path, Selection};
 use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
 
 use super::layout::TREE_MARGIN;
@@ -30,7 +30,7 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
     egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(margin).show(ui, |ui| {
         let bg_response = ui.interact(
-            ui.max_rect(),
+            ui.clip_rect(),
             ui.id().with("background"),
             Sense::click(),
         );
@@ -72,12 +72,12 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
 fn render_root_insertion(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, index: usize, empty_doc: bool) {
     let active_placeholder = matches!(
         &editor.selection,
-        Some(Selection { target: SelectionTarget::InsertRoot(idx), .. }) if *idx == index
+        Some(Selection::InsertRoot(idx, _)) if *idx == index
     );
 
     if active_placeholder {
-        if let Some(ref sel) = editor.selection {
-            let mut ps = sel.placeholder.clone();
+        if let Some(Selection::InsertRoot(_, ps)) = &editor.selection {
+            let mut ps = ps.clone();
             match super::placeholder::render(ui, &mut ps) {
                 PlaceholderResult::Commit(id) => {
                     w.insert_root(index, id);
