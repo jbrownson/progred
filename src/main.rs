@@ -1,7 +1,9 @@
+pub mod d;
 mod document;
 pub mod generated;
 mod graph;
 pub mod list_iter;
+pub mod render;
 mod shortcuts;
 mod ts_runtime;
 mod ui;

@@ -3,8 +3,9 @@ use crate::graph::{EdgeState, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use ordered_float::OrderedFloat;
 
+use crate::d::{D, NodeDisplay, TextStyle};
+
 use super::colors;
-use super::d::{D, NodeDisplay, TextStyle};
 use super::identicon;
 use super::placeholder::PlaceholderResult;
 
@@ -221,7 +222,7 @@ fn text_rich(s: &str, style: &TextStyle) -> egui::RichText {
 
 pub fn project(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, mode: &InteractionMode) {
     if let Some(id) = editor.doc.node(path) {
-        let d = super::render::render(editor, path, &id);
+        let d = crate::render::render(editor, path, &id);
         render_d(ui, editor, w, &d, mode);
     }
 }
@@ -465,7 +466,7 @@ fn render_number_editor(
 fn render_placeholder(
     ui: &mut Ui,
     w: &mut EditorWriter,
-    active: &Option<super::d::ActivePlaceholder>,
+    active: &Option<crate::d::ActivePlaceholder>,
 ) {
     if let Some(active) = active {
         let mut ps = active.state.clone();

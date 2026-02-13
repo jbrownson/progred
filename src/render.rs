@@ -3,7 +3,7 @@ use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, HEAD, ISA, NAME
 use crate::graph::{EdgeState, Gid, Id, Path, Selection};
 use crate::list_iter::ListIter;
 
-use super::d::{ActivePlaceholder, D, NodeDisplay, TextStyle};
+use crate::d::{ActivePlaceholder, D, NodeDisplay, TextStyle};
 
 pub fn render(editor: &Editor, path: &Path, id: &Id) -> D {
     render_id(editor, path, id, im::HashSet::new())
