@@ -13,6 +13,7 @@ struct PlaceholderEntry {
     display: String,
 }
 
+// TODO: look into existing fuzzy finder work (fzf, nucleo, etc.) for filtering entries
 fn build_entries(filter: &str) -> Vec<PlaceholderEntry> {
     let trimmed = filter.trim_start_matches('"').trim_end_matches('"');
     let string_entry = (!trimmed.is_empty()).then(|| PlaceholderEntry {
