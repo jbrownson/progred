@@ -8,8 +8,22 @@ pub enum PlaceholderResult {
     Dismiss,
 }
 
+enum PlaceholderValue {
+    Id(Id),
+    NewUuid,
+}
+
+impl PlaceholderValue {
+    fn commit(self) -> Id {
+        match self {
+            PlaceholderValue::Id(id) => id,
+            PlaceholderValue::NewUuid => Id::new_uuid(),
+        }
+    }
+}
+
 struct PlaceholderEntry {
-    id: Id,
+    value: PlaceholderValue,
     display: String,
 }
 
@@ -17,20 +31,25 @@ struct PlaceholderEntry {
 fn build_entries(filter: &str) -> Vec<PlaceholderEntry> {
     let trimmed = filter.trim_start_matches('"').trim_end_matches('"');
     let string_entry = (!trimmed.is_empty()).then(|| PlaceholderEntry {
-        id: Id::String(trimmed.to_string()),
+        value: PlaceholderValue::Id(Id::String(trimmed.to_string())),
         display: format!("\"{}\"", trimmed),
     });
     let number_entry = filter.parse::<f64>().ok().map(|n| PlaceholderEntry {
-        id: Id::Number(OrderedFloat(n)),
+        value: PlaceholderValue::Id(Id::Number(OrderedFloat(n))),
         display: n.to_string(),
     });
-    string_entry.into_iter().chain(number_entry).collect()
+    string_entry.into_iter()
+        .chain(number_entry)
+        .chain(std::iter::once(PlaceholderEntry {
+            value: PlaceholderValue::NewUuid,
+            display: "New node".to_string(),
+        }))
+        .collect()
 }
 
 pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
     let entries = build_entries(&ps.text);
-    let total = entries.len() + 1; // +1 for "New node"
-    ps.selected_index = ps.selected_index.min(total - 1);
+    ps.selected_index = ps.selected_index.min(entries.len() - 1);
     let selected_index = ps.selected_index;
 
     let mut text = ps.text.clone();
@@ -42,7 +61,7 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
             .desired_width(150.0)
             .hint_text("search...")
     );
-    ui.memory_mut(|mem| mem.request_focus(text_id));
+    text_response.request_focus();
 
     let popup_commit = {
         let mut clicked = None;
@@ -54,11 +73,8 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
                 egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                     for (i, entry) in entries.iter().enumerate() {
                         if ui.selectable_label(i == selected_index, &entry.display).clicked() {
-                            clicked = Some(entry.id.clone());
+                            clicked = Some(i);
                         }
-                    }
-                    if ui.selectable_label(entries.len() == selected_index, "New node").clicked() {
-                        clicked = Some(Id::new_uuid());
                     }
                 });
             });
@@ -76,23 +92,19 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
     let arrow_up = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp));
 
     if arrow_down {
-        ps.selected_index = (ps.selected_index + 1).min(total - 1);
+        ps.selected_index = (ps.selected_index + 1).min(entries.len() - 1);
     }
     if arrow_up && ps.selected_index > 0 {
         ps.selected_index -= 1;
     }
 
-    let commit = popup_commit.or_else(|| {
-        enter.then(|| {
-            entries.get(selected_index)
-                .map(|e| e.id.clone())
-                .unwrap_or_else(Id::new_uuid)
-        })
+    let commit_index = popup_commit.or_else(|| {
+        enter.then_some(selected_index)
     });
 
-    match commit {
-        Some(id) => PlaceholderResult::Commit(id),
-        None if escape => PlaceholderResult::Dismiss,
+    match commit_index {
+        Some(i) => PlaceholderResult::Commit(entries.into_iter().nth(i).unwrap().value.commit()),
+        None if escape || text_response.lost_focus() => PlaceholderResult::Dismiss,
         None => PlaceholderResult::Active,
     }
 }
