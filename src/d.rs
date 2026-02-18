@@ -20,6 +20,7 @@ pub enum D {
 
     NodeHeader { child: Box<D> },
     FieldLabel { label_id: Id },
+    // TODO: consider whether collapse belongs in D or should be a UI-layer concern
     CollapseToggle { collapsed: bool },
     StringEditor { value: String },
     NumberEditor { value: f64, editing: Option<String> },
