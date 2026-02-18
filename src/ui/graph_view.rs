@@ -1,4 +1,5 @@
-use crate::document::{Document, Editor, EditorWriter};
+use crate::document::Document;
+use crate::editor::{Editor, EditorWriter};
 use crate::graph::{Gid, Id, MutGid, Selection};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use super::colors;

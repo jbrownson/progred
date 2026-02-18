@@ -1,4 +1,4 @@
-use crate::document::{Editor, EditorWriter};
+use crate::editor::{Editor, EditorWriter};
 use crate::graph::{Id, Path, Selection};
 use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
 
@@ -60,7 +60,9 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
             ui.add_space(8.0);
             ui.label(RichText::new("orphans").color(Color32::from_gray(100)).italics().size(11.0));
             ui.add_space(4.0);
-            for orphan_id in orphan_ids {
+            let mut sorted_orphans: Vec<_> = orphan_ids.iter().collect();
+            sorted_orphans.sort();
+            for orphan_id in sorted_orphans {
                 ui.push_id(orphan_id, |ui| {
                     let path = Path::orphan(orphan_id.clone());
                     if let Some(id) = editor.doc.node(&path) {

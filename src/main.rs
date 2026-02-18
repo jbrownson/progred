@@ -1,5 +1,6 @@
 pub mod d;
-mod document;
+pub mod document;
+mod editor;
 pub mod generated;
 pub use progred_graph as graph;
 pub mod list_iter;
@@ -8,7 +9,8 @@ mod shortcuts;
 mod ts_runtime;
 mod ui;
 
-use document::{Document, Editor, EditorWriter};
+use document::Document;
+use editor::{Editor, EditorWriter};
 use eframe::egui;
 use graph::Id;
 

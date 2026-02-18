@@ -1,4 +1,4 @@
-use crate::document::EditorWriter;
+use crate::editor::EditorWriter;
 use crate::graph::{Id, Path};
 
 pub enum TextStyle {

@@ -1,4 +1,4 @@
-use crate::document::Editor;
+use crate::editor::Editor;
 use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, HEAD, ISA, NAME, TAIL, TYPE_};
 use crate::graph::{EdgeState, Gid, Id, Path, Selection};
 use crate::list_iter::ListIter;

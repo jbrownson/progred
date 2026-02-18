@@ -1,4 +1,4 @@
-use crate::document::{Editor, EditorWriter};
+use crate::editor::{Editor, EditorWriter};
 use crate::graph::{EdgeState, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use ordered_float::OrderedFloat;
