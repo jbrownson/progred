@@ -82,8 +82,8 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         D::NumberEditor { value, editing } => {
             render_number_editor(ui, editor, w, &ctx.path, *value, editing.as_deref());
         }
-        D::Placeholder { active } => {
-            render_placeholder(ui, w, active);
+        D::Placeholder { on_commit } => {
+            render_placeholder(ui, editor, w, &ctx.path, on_commit);
         }
         D::List { opening, closing, separator, items, vertical } => {
             if *vertical && !items.is_empty() {
@@ -455,18 +455,22 @@ fn render_number_editor(
 
 fn render_placeholder(
     ui: &mut Ui,
+    editor: &Editor,
     w: &mut EditorWriter,
-    active: &Option<crate::d::ActivePlaceholder>,
+    path: &Path,
+    on_commit: &dyn Fn(&mut EditorWriter, Id),
 ) {
-    if let Some(active) = active {
-        let mut ps = active.state.clone();
-        match super::placeholder::render(ui, &mut ps) {
-            PlaceholderResult::Commit(value) => {
-                (active.on_commit)(w, value);
-                w.select(None);
-            }
-            PlaceholderResult::Dismiss => w.select(None),
-            PlaceholderResult::Active => w.set_placeholder_state(ps),
+    let ps = match &editor.selection {
+        Some(Selection::Edge(sel_path, EdgeState::Cursor(ps))) if sel_path == path => ps,
+        _ => return,
+    };
+    let mut ps = ps.clone();
+    match super::placeholder::render(ui, &mut ps) {
+        PlaceholderResult::Commit(value) => {
+            on_commit(w, value);
+            w.select(None);
         }
+        PlaceholderResult::Dismiss => w.select(None),
+        PlaceholderResult::Active => w.set_placeholder_state(ps),
     }
 }

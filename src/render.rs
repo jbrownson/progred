@@ -3,7 +3,7 @@ use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, HEAD, ISA, NAME
 use crate::graph::{EdgeState, Gid, Id, Path, Selection};
 use crate::list_iter::ListIter;
 
-use crate::d::{ActivePlaceholder, D, TextStyle};
+use crate::d::{D, TextStyle};
 
 pub fn render(editor: &Editor, path: &Path, id: &Id) -> D {
     render_id(editor, path, id, im::HashSet::new())
@@ -50,7 +50,7 @@ impl<'a> RenderCtx<'a> {
             None => {
                 let commit_path = child_path.clone();
                 D::Placeholder {
-                    active: placeholder_active(self.editor, &child_path, move |w, value| {
+                    on_commit: Box::new(move |w, value| {
                         w.set_edge(&commit_path, value);
                     }),
                 }
@@ -115,7 +115,7 @@ fn render_uuid(
                 D::FieldLabel { label_id: new_label.clone() },
                 D::Text(":".into(), TextStyle::Punctuation),
                 D::Placeholder {
-                    active: placeholder_active(editor, &placeholder_path, move |w, value| {
+                    on_commit: Box::new(move |w, value| {
                         w.set_edge(&closure_path, value);
                     }),
                 },
@@ -249,7 +249,7 @@ fn list_placeholder(editor: &Editor, insert_path: &Path) -> D {
     let current_value = editor.doc.node(insert_path);
     let commit_path = insert_path.clone();
     D::Placeholder {
-        active: placeholder_active(editor, insert_path, move |w, head_value| {
+        on_commit: Box::new(move |w, head_value| {
             if let Some(ref current_value) = current_value {
                 let new_cons = Id::new_uuid();
                 w.set_edge(&commit_path, new_cons.clone());
@@ -356,18 +356,3 @@ fn editing_state(editor: &Editor, path: &Path) -> Option<String> {
     }
 }
 
-fn placeholder_active(
-    editor: &Editor,
-    path: &Path,
-    on_commit: impl Fn(&mut crate::document::EditorWriter, Id) + 'static,
-) -> Option<ActivePlaceholder> {
-    match &editor.selection {
-        Some(Selection::Edge(sel_path, EdgeState::Cursor(ps))) if sel_path == path => {
-            Some(ActivePlaceholder {
-                state: ps.clone(),
-                on_commit: Box::new(on_commit),
-            })
-        }
-        _ => None,
-    }
-}

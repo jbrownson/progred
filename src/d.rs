@@ -1,5 +1,5 @@
 use crate::document::EditorWriter;
-use crate::graph::{Id, Path, PlaceholderState};
+use crate::graph::{Id, Path};
 
 pub enum TextStyle {
     Keyword,
@@ -26,7 +26,7 @@ pub enum D {
     NumberEditor { value: f64, editing: Option<String> },
 
     Placeholder {
-        active: Option<ActivePlaceholder>,
+        on_commit: Box<dyn Fn(&mut EditorWriter, Id)>,
     },
 
     List {
@@ -38,7 +38,3 @@ pub enum D {
     },
 }
 
-pub struct ActivePlaceholder {
-    pub state: PlaceholderState,
-    pub on_commit: Box<dyn Fn(&mut EditorWriter, Id)>,
-}
