@@ -4,7 +4,7 @@ use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
 
 use super::layout::TREE_MARGIN;
 use super::placeholder::PlaceholderResult;
-use super::{insertion_point, render_d, InteractionMode};
+use super::{insertion_point, render_d, DContext, InteractionMode};
 
 // TODO: separate D generation from egui chrome (scroll area, margin, background click).
 // Once roots become a single list node, this simplifies to: generate D, render in scroll area.
@@ -46,7 +46,8 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
                         let path = Path::new(root_slot);
                         if let Some(id) = editor.doc.node(&path) {
                             let d = crate::render::render(editor, &path, &id);
-                            render_d(ui, editor, w, &d, &mode);
+                            let ctx = DContext { path: path.clone(), id: id.clone() };
+                            render_d(ui, editor, w, &d, &mode, &ctx);
                         }
                     });
                 }
@@ -64,7 +65,8 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
                     let path = Path::orphan(orphan_id.clone());
                     if let Some(id) = editor.doc.node(&path) {
                         let d = crate::render::render(editor, &path, &id);
-                        render_d(ui, editor, w, &d, &mode);
+                        let ctx = DContext { path: path.clone(), id: id.clone() };
+                        render_d(ui, editor, w, &d, &mode, &ctx);
                     }
                 });
                 ui.add_space(2.0);

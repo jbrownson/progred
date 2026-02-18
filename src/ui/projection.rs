@@ -26,7 +26,12 @@ pub enum InteractionMode {
     Assign(Path),
 }
 
-pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode: &InteractionMode) {
+pub struct DContext {
+    pub path: Path,
+    pub id: Id,
+}
+
+pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode: &InteractionMode, ctx: &DContext) {
     match d {
         D::Block(children) => {
             ui.vertical(|ui| {
@@ -34,20 +39,20 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
                     if i > 0 {
                         ui.add_space(2.0);
                     }
-                    render_d(ui, editor, w, child, mode);
+                    render_d(ui, editor, w, child, mode, ctx);
                 }
             });
         }
         D::Line(children) => {
             ui.horizontal(|ui| {
                 for child in children {
-                    render_d(ui, editor, w, child, mode);
+                    render_d(ui, editor, w, child, mode, ctx);
                 }
             });
         }
         D::Indent(child) => {
             ui.indent("edges", |ui| {
-                render_d(ui, editor, w, child, mode);
+                render_d(ui, editor, w, child, mode, ctx);
             });
         }
         D::Text(s, style) => {
@@ -56,22 +61,26 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         D::Identicon(uuid) => {
             identicon(ui, 18.0, uuid);
         }
-        D::NodeHeader { path, id, child } => {
-            render_node_header(ui, editor, w, path, id, child, mode);
+        D::Descend { path, id, child } => {
+            let child_ctx = DContext { path: path.clone(), id: id.clone() };
+            render_d(ui, editor, w, child, mode, &child_ctx);
         }
-        D::FieldLabel { entity_path, label_id } => {
-            render_field_label(ui, editor, w, entity_path, label_id, mode);
+        D::NodeHeader { child } => {
+            render_node_header(ui, editor, w, &ctx.path, &ctx.id, child, mode, ctx);
         }
-        D::CollapseToggle { path, collapsed } => {
+        D::FieldLabel { label_id } => {
+            render_field_label(ui, editor, w, &ctx.path, label_id, mode);
+        }
+        D::CollapseToggle { collapsed } => {
             if collapse_toggle(ui, *collapsed).clicked() {
-                w.set_collapsed(path, !collapsed);
+                w.set_collapsed(&ctx.path, !collapsed);
             }
         }
-        D::StringEditor { path, value } => {
-            render_string_editor(ui, editor, w, path, value);
+        D::StringEditor { value } => {
+            render_string_editor(ui, editor, w, &ctx.path, value);
         }
-        D::NumberEditor { path, value, editing } => {
-            render_number_editor(ui, editor, w, path, *value, editing.as_deref());
+        D::NumberEditor { value, editing } => {
+            render_number_editor(ui, editor, w, &ctx.path, *value, editing.as_deref());
         }
         D::Placeholder { active } => {
             render_placeholder(ui, w, active);
@@ -82,7 +91,7 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
                     for item in items {
                         ui.horizontal(|ui| {
                             ui.label(text_rich("\u{2022}", &TextStyle::Punctuation));
-                            render_d(ui, editor, w, item, mode);
+                            render_d(ui, editor, w, item, mode, ctx);
                         });
                     }
                 });
@@ -92,7 +101,7 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
                     if i > 0 {
                         ui.label(text_rich(separator, &TextStyle::Punctuation));
                     }
-                    render_d(ui, editor, w, item, mode);
+                    render_d(ui, editor, w, item, mode, ctx);
                 }
                 ui.label(text_rich(closing, &TextStyle::Punctuation));
             }
@@ -280,6 +289,7 @@ fn render_node_header(
     id: &Id,
     child: &D,
     mode: &InteractionMode,
+    ctx: &DContext,
 ) {
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary && editor.selected_node_id().as_ref() == Some(id);
@@ -291,7 +301,7 @@ fn render_node_header(
         mode_style(mode)
     };
     if clickable(ui, |ui| {
-        render_d(ui, editor, w, child, mode);
+        render_d(ui, editor, w, child, mode, ctx);
         ui.interact(ui.min_rect(), ui.id(), Sense::hover())
     }, style, hovered).clicked() {
         handle_pick(w, mode, id.clone(), path);

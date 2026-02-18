@@ -10,43 +10,50 @@ pub fn render(editor: &Editor, path: &Path, id: &Id) -> D {
 }
 
 fn render_id(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
+    let child = render_id_inner(editor, path, id, ancestors);
+    D::Descend { path: path.clone(), id: id.clone(), child: Box::new(child) }
+}
+
+fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
     match id {
         Id::Uuid(_) if editor.is_list(id) => render_list(editor, path, id, ancestors),
         Id::Uuid(uuid) => {
-            try_domain_render(editor, path, id, &ancestors)
+            let ctx = RenderCtx { editor, path, id, ancestors: &ancestors };
+            try_domain_render(&ctx)
                 .unwrap_or_else(|| render_uuid(editor, path, uuid, ancestors))
         }
         Id::String(s) => D::StringEditor {
-            path: path.clone(),
             value: s.clone(),
         },
         Id::Number(n) => D::NumberEditor {
-            path: path.clone(),
             value: n.0,
             editing: editing_state(editor, path),
         },
     }
 }
 
-fn descend(
-    editor: &Editor,
-    parent_path: &Path,
-    parent_id: &Id,
-    label: &Id,
-    ancestors: &im::HashSet<Id>,
-) -> D {
-    let child_path = parent_path.child(label.clone());
+struct RenderCtx<'a> {
+    editor: &'a Editor,
+    path: &'a Path,
+    id: &'a Id,
+    ancestors: &'a im::HashSet<Id>,
+}
 
-    match editor.doc.gid.get(parent_id, label) {
-        Some(child_id) => {
-            render_id(editor, &child_path, child_id, ancestors.clone())
-        }
-        None => {
-            let commit_path = child_path.clone();
-            D::Placeholder {
-                active: placeholder_active(editor, &child_path, move |w, value| {
-                    w.set_edge(&commit_path, value);
-                }),
+impl<'a> RenderCtx<'a> {
+    fn descend(&self, label: &Id) -> D {
+        let child_path = self.path.child(label.clone());
+
+        match self.editor.doc.gid.get(self.id, label) {
+            Some(child_id) => {
+                render_id(self.editor, &child_path, child_id, self.ancestors.clone())
+            }
+            None => {
+                let commit_path = child_path.clone();
+                D::Placeholder {
+                    active: placeholder_active(self.editor, &child_path, move |w, value| {
+                        w.set_edge(&commit_path, value);
+                    }),
+                }
             }
         }
     }
@@ -80,23 +87,24 @@ fn render_uuid(
     };
 
     let mut header_items: Vec<D> = vec![
-        D::NodeHeader { path: path.clone(), id: id.clone(), child: Box::new(child) },
+        D::NodeHeader { child: Box::new(child) },
     ];
     if has_content {
-        header_items.push(D::CollapseToggle { path: path.clone(), collapsed: is_collapsed });
+        header_items.push(D::CollapseToggle { collapsed: is_collapsed });
     }
 
     let mut block_items = vec![D::Line(header_items)];
 
     if !is_collapsed && has_content {
         let child_ancestors = ancestors.update(id.clone());
+        let ctx = RenderCtx { editor, path, id: &id, ancestors: &child_ancestors };
 
         let mut field_items: Vec<D> = Vec::new();
         for (label, _value) in &all_edges {
             field_items.push(D::Line(vec![
-                D::FieldLabel { entity_path: path.clone(), label_id: label.clone() },
+                D::FieldLabel { label_id: label.clone() },
                 D::Text(":".into(), TextStyle::Punctuation),
-                descend(editor, path, &id, label, &child_ancestors),
+                ctx.descend(label),
             ]));
         }
 
@@ -104,7 +112,7 @@ fn render_uuid(
             let placeholder_path = path.child(new_label.clone());
             let closure_path = placeholder_path.clone();
             field_items.push(D::Line(vec![
-                D::FieldLabel { entity_path: path.clone(), label_id: new_label.clone() },
+                D::FieldLabel { label_id: new_label.clone() },
                 D::Text(":".into(), TextStyle::Punctuation),
                 D::Placeholder {
                     active: placeholder_active(editor, &placeholder_path, move |w, value| {
@@ -255,18 +263,18 @@ fn list_placeholder(editor: &Editor, insert_path: &Path) -> D {
 
 // Domain projections
 
-type Projection = fn(&Editor, &Path, &Id, &im::HashSet<Id>) -> Option<D>;
+type Projection = fn(&RenderCtx) -> Option<D>;
 
 const PROJECTIONS: &[Projection] = &[render_field, render_apply];
 
-fn try_domain_render(editor: &Editor, path: &Path, id: &Id, ancestors: &im::HashSet<Id>) -> Option<D> {
-    PROJECTIONS.iter().find_map(|p| p(editor, path, id, ancestors))
+fn try_domain_render(ctx: &RenderCtx) -> Option<D> {
+    PROJECTIONS.iter().find_map(|p| p(ctx))
 }
 
-fn render_field(editor: &Editor, path: &Path, node: &Id, ancestors: &im::HashSet<Id>) -> Option<D> {
-    let gid = &editor.doc.gid;
-    Field::try_wrap(gid, node)?;
-    let field = Field::wrap(node.clone());
+fn render_field(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.doc.gid;
+    Field::try_wrap(gid, ctx.id)?;
+    let field = Field::wrap(ctx.id.clone());
     let name = field.name(gid).unwrap_or_else(|| "?".into());
 
     let mut items = vec![
@@ -276,25 +284,25 @@ fn render_field(editor: &Editor, path: &Path, node: &Id, ancestors: &im::HashSet
 
     if field.type_(gid).is_some() {
         items.push(D::Text(":".into(), TextStyle::Punctuation));
-        items.push(descend(editor, path, node, &TYPE_, ancestors));
+        items.push(ctx.descend(&TYPE_));
     }
 
     Some(D::Line(items))
 }
 
-fn render_apply(editor: &Editor, _path: &Path, node: &Id, _ancestors: &im::HashSet<Id>) -> Option<D> {
-    let gid = &editor.doc.gid;
-    let apply = Apply::try_wrap(gid, node)?;
+fn render_apply(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.doc.gid;
+    let apply = Apply::try_wrap(gid, ctx.id)?;
 
     let base_name = apply.base(gid)
-        .and_then(|b| editor.name_of(b.id()))
+        .and_then(|b| ctx.editor.name_of(b.id()))
         .unwrap_or_else(|| "?".into());
 
     let mut items = vec![D::Text(base_name, TextStyle::TypeRef)];
 
-    if let Some(args_id) = gid.get(node, &ARGS) {
+    if let Some(args_id) = gid.get(ctx.id, &ARGS) {
         let arg_items: Vec<D> = ListIter::new(gid, Some(args_id))
-            .map(|arg_id| render_type_inline(editor, arg_id))
+            .map(|arg_id| render_type_inline(ctx.editor, arg_id))
             .collect();
         items.push(D::List {
             opening: "<".into(),

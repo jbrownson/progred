@@ -7,7 +7,7 @@ pub mod tree_view;
 
 pub use identicon::identicon;
 pub use projection::layout;
-pub use projection::{insertion_point, render_d, InteractionMode};
+pub use projection::{insertion_point, render_d, DContext, InteractionMode};
 
 use eframe::egui::Color32;
 

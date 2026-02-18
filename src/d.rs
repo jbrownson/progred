@@ -16,32 +16,13 @@ pub enum D {
     Text(String, TextStyle),
     Identicon(uuid::Uuid),
 
-    NodeHeader {
-        path: Path,
-        id: Id,
-        child: Box<D>,
-    },
+    Descend { path: Path, id: Id, child: Box<D> },
 
-    FieldLabel {
-        entity_path: Path,
-        label_id: Id,
-    },
-
-    CollapseToggle {
-        path: Path,
-        collapsed: bool,
-    },
-
-    StringEditor {
-        path: Path,
-        value: String,
-    },
-
-    NumberEditor {
-        path: Path,
-        value: f64,
-        editing: Option<String>,
-    },
+    NodeHeader { child: Box<D> },
+    FieldLabel { label_id: Id },
+    CollapseToggle { collapsed: bool },
+    StringEditor { value: String },
+    NumberEditor { value: f64, editing: Option<String> },
 
     Placeholder {
         active: Option<ActivePlaceholder>,
