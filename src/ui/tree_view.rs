@@ -2,6 +2,7 @@ use crate::d::D;
 use crate::editor::{Editor, EditorWriter};
 use crate::graph::{Id, Path, Selection};
 use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
+use std::collections::HashSet;
 
 use super::identicon;
 use super::layout::TREE_MARGIN;
@@ -18,7 +19,7 @@ pub fn generate(editor: &Editor) -> Vec<Option<D>> {
         .collect()
 }
 
-pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter, d_trees: &[Option<D>]) {
+pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter, d_trees: &[Option<D>], orphan_ids: &HashSet<Id>) {
     let modifiers = ctx.input(|i| i.modifiers);
     let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path());
     let mode = if modifiers.alt {
@@ -64,7 +65,6 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter,
             }
         });
 
-        let orphan_ids = editor.orphan_roots();
         if !orphan_ids.is_empty() {
             ui.add_space(8.0);
             ui.label(RichText::new("orphans").color(Color32::from_gray(100)).italics().size(11.0));

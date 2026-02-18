@@ -1,7 +1,6 @@
 use crate::document::Document;
-use crate::graph::{EdgeState, Gid, Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
+use crate::graph::{EdgeState, Gid, Id, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
-use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Clone)]
@@ -11,7 +10,6 @@ pub struct Editor {
     pub selection: Option<Selection>,
     pub file_path: Option<PathBuf>,
     pub graph_view: GraphViewState,
-    pub(crate) cached_orphans: Option<(MutGid, Vec<RootSlot>, HashSet<Id>)>,
 }
 
 impl Editor {
@@ -22,7 +20,6 @@ impl Editor {
             selection: None,
             file_path: None,
             graph_view: GraphViewState::new(),
-            cached_orphans: None,
         }
     }
 
@@ -35,22 +32,6 @@ impl Editor {
         }
     }
 
-    // TODO: revisit orphan cache — does this belong on Editor, or should orphan detection live elsewhere?
-    pub fn orphan_roots(&self) -> &HashSet<Id> {
-        static EMPTY: std::sync::LazyLock<HashSet<Id>> = std::sync::LazyLock::new(HashSet::new);
-        match &self.cached_orphans {
-            Some((gid, roots, orphans)) if self.doc.gid.ptr_eq(gid) && &self.doc.roots == roots => orphans,
-            _ => &EMPTY,
-        }
-    }
-
-    pub fn refresh_orphan_cache(&mut self) {
-        if !self.cached_orphans.as_ref()
-            .is_some_and(|(gid, roots, _)| self.doc.gid.ptr_eq(gid) && &self.doc.roots == roots)
-        {
-            self.cached_orphans = Some((self.doc.gid.clone(), self.doc.roots.clone(), self.doc.orphan_roots()));
-        }
-    }
 }
 
 pub struct EditorWriter<'a> {

@@ -209,8 +209,8 @@ impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
-        self.editor.refresh_orphan_cache();
         let d_trees = ui::tree_view::generate(&self.editor);
+        let orphan_ids = self.editor.doc.orphan_roots();
         self.handle_keys(ctx, &d_trees);
 
         self.render_menu_bar(ctx);
@@ -223,11 +223,11 @@ impl eframe::App for ProgredApp {
 
                 if self.show_graph {
                     ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split, |left, right| {
-                        ui::tree_view::render(left, ctx, &snapshot, &mut w, &d_trees);
+                        ui::tree_view::render(left, ctx, &snapshot, &mut w, &d_trees, &orphan_ids);
                         ui::graph_view::render(right, ctx, &snapshot, &mut w);
                     });
                 } else {
-                    ui::tree_view::render(ui, ctx, &snapshot, &mut w, &d_trees);
+                    ui::tree_view::render(ui, ctx, &snapshot, &mut w, &d_trees, &orphan_ids);
                 }
             });
     }
