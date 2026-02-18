@@ -4,7 +4,7 @@ use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
 
 use super::layout::TREE_MARGIN;
 use super::placeholder::PlaceholderResult;
-use super::{insertion_point, project, InteractionMode};
+use super::{insertion_point, render_d, InteractionMode};
 
 
 pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter) {
@@ -42,7 +42,11 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
                 for (i, root_slot) in editor.doc.roots.iter().enumerate() {
                     render_root_insertion(ui, editor, w, i, false);
                     ui.push_id(root_slot, |ui| {
-                        project(ui, editor, w, &Path::new(root_slot), &mode);
+                        let path = Path::new(root_slot);
+                        if let Some(id) = editor.doc.node(&path) {
+                            let d = crate::render::render(editor, &path, &id);
+                            render_d(ui, editor, w, &d, &mode);
+                        }
                     });
                 }
                 render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
@@ -56,7 +60,11 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
             ui.add_space(4.0);
             for orphan_id in orphan_ids {
                 ui.push_id(orphan_id, |ui| {
-                    project(ui, editor, w, &Path::orphan(orphan_id.clone()), &mode);
+                    let path = Path::orphan(orphan_id.clone());
+                    if let Some(id) = editor.doc.node(&path) {
+                        let d = crate::render::render(editor, &path, &id);
+                        render_d(ui, editor, w, &d, &mode);
+                    }
                 });
                 ui.add_space(2.0);
             }

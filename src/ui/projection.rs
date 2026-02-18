@@ -11,17 +11,12 @@ use super::placeholder::PlaceholderResult;
 
 pub mod layout {
     pub const SELECTION_PADDING: f32 = 2.0;
-
     const CARET_SIZE: f32 = 10.0;
     pub const CARET_WIDTH: f32 = CARET_SIZE * 0.6;
     pub const CARET_HALF_HEIGHT: f32 = CARET_SIZE * 0.4;
     const CARET_OVERLAP: f32 = 1.0;
     pub const CARET_INSET: f32 = CARET_WIDTH - CARET_OVERLAP;
-
-    const fn max_f32(a: f32, b: f32) -> f32 {
-        if a > b { a } else { b }
-    }
-
+    const fn max_f32(a: f32, b: f32) -> f32 { if a > b { a } else { b } }
     pub const TREE_MARGIN: f32 = max_f32(CARET_INSET, SELECTION_PADDING) + 2.0;
 }
 
@@ -30,6 +25,97 @@ pub enum InteractionMode {
     SelectUnder(Path),
     Assign(Path),
 }
+
+pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode: &InteractionMode) {
+    match d {
+        D::Block(children) => {
+            ui.vertical(|ui| {
+                for child in children {
+                    render_d(ui, editor, w, child, mode);
+                }
+            });
+        }
+        D::Line(children) => {
+            ui.horizontal(|ui| {
+                for child in children {
+                    render_d(ui, editor, w, child, mode);
+                }
+            });
+        }
+        D::Indent(child) => {
+            ui.indent("edges", |ui| {
+                render_d(ui, editor, w, child, mode);
+            });
+        }
+        D::Spacing(n) => {
+            ui.add_space(*n);
+        }
+        D::Text(s, style) => {
+            ui.label(text_rich(s, style));
+        }
+        D::LabelArrow => {
+            label_arrow(ui);
+        }
+        D::NodeHeader { path, id, display } => {
+            render_node_header(ui, editor, w, path, id, display, mode);
+        }
+        D::FieldLabel { entity_path, label_id } => {
+            render_field_label(ui, editor, w, entity_path, label_id, mode);
+        }
+        D::CollapseToggle { path, collapsed } => {
+            if collapse_toggle(ui, *collapsed).clicked() {
+                w.set_collapsed(path, !collapsed);
+            }
+        }
+        D::StringEditor { path, value } => {
+            render_string_editor(ui, editor, w, path, value);
+        }
+        D::NumberEditor { path, value, editing } => {
+            render_number_editor(ui, editor, w, path, *value, editing.as_deref());
+        }
+        D::Placeholder { active } => {
+            render_placeholder(ui, w, active);
+        }
+        D::List { opening, closing, separator, items } => {
+            ui.label(text_rich(opening, &TextStyle::Punctuation));
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    ui.label(text_rich(separator, &TextStyle::Punctuation));
+                }
+                render_d(ui, editor, w, item, mode);
+            }
+            ui.label(text_rich(closing, &TextStyle::Punctuation));
+        }
+    }
+}
+
+pub fn insertion_point(ui: &mut Ui) -> Response {
+    let width = ui.available_width().min(200.0);
+
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 0.0), Sense::hover());
+
+    let hit_rect = eframe::egui::Rect::from_center_size(rect.center(), Vec2::new(width, 10.0));
+    let response = ui.interact(hit_rect, ui.next_auto_id(), Sense::click());
+
+    if response.hovered() {
+        let center_y = rect.center().y;
+        let left_x = rect.min.x - layout::CARET_INSET;
+
+        ui.painter().add(eframe::epaint::Shape::convex_polygon(
+            vec![
+                pos2(left_x, center_y - layout::CARET_HALF_HEIGHT),
+                pos2(left_x + layout::CARET_WIDTH, center_y),
+                pos2(left_x, center_y + layout::CARET_HALF_HEIGHT),
+            ],
+            Color32::from_gray(150),
+            eframe::epaint::Stroke::NONE,
+        ));
+    }
+
+    response
+}
+
+// --- Private helpers ---
 
 type HighlightStyle = (Option<Color32>, Option<eframe::epaint::Stroke>);
 
@@ -108,32 +194,6 @@ fn mode_style(mode: &InteractionMode) -> (HighlightStyle, HighlightStyle) {
             (Some(Color32::from_gray(200).gamma_multiply(0.5)), None),
         ),
     }
-}
-
-pub fn insertion_point(ui: &mut Ui) -> Response {
-    let width = ui.available_width().min(200.0);
-
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 0.0), Sense::hover());
-
-    let hit_rect = eframe::egui::Rect::from_center_size(rect.center(), Vec2::new(width, 10.0));
-    let response = ui.interact(hit_rect, ui.next_auto_id(), Sense::click());
-
-    if response.hovered() {
-        let center_y = rect.center().y;
-        let left_x = rect.min.x - layout::CARET_INSET;
-
-        ui.painter().add(eframe::epaint::Shape::convex_polygon(
-            vec![
-                pos2(left_x, center_y - layout::CARET_HALF_HEIGHT),
-                pos2(left_x + layout::CARET_WIDTH, center_y),
-                pos2(left_x, center_y + layout::CARET_HALF_HEIGHT),
-            ],
-            Color32::from_gray(150),
-            eframe::epaint::Stroke::NONE,
-        ));
-    }
-
-    response
 }
 
 fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {
@@ -217,76 +277,6 @@ fn text_rich(s: &str, style: &TextStyle) -> egui::RichText {
     match style {
         TextStyle::Keyword => rt.italics(),
         _ => rt,
-    }
-}
-
-pub fn project(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, path: &Path, mode: &InteractionMode) {
-    if let Some(id) = editor.doc.node(path) {
-        let d = crate::render::render(editor, path, &id);
-        render_d(ui, editor, w, &d, mode);
-    }
-}
-
-fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode: &InteractionMode) {
-    match d {
-        D::Block(children) => {
-            ui.vertical(|ui| {
-                for child in children {
-                    render_d(ui, editor, w, child, mode);
-                }
-            });
-        }
-        D::Line(children) => {
-            ui.horizontal(|ui| {
-                for child in children {
-                    render_d(ui, editor, w, child, mode);
-                }
-            });
-        }
-        D::Indent(child) => {
-            ui.indent("edges", |ui| {
-                render_d(ui, editor, w, child, mode);
-            });
-        }
-        D::Spacing(n) => {
-            ui.add_space(*n);
-        }
-        D::Text(s, style) => {
-            ui.label(text_rich(s, style));
-        }
-        D::LabelArrow => {
-            label_arrow(ui);
-        }
-        D::NodeHeader { path, id, display } => {
-            render_node_header(ui, editor, w, path, id, display, mode);
-        }
-        D::FieldLabel { entity_path, label_id } => {
-            render_field_label(ui, editor, w, entity_path, label_id, mode);
-        }
-        D::CollapseToggle { path, collapsed } => {
-            if collapse_toggle(ui, *collapsed).clicked() {
-                w.set_collapsed(path, !collapsed);
-            }
-        }
-        D::StringEditor { path, value } => {
-            render_string_editor(ui, editor, w, path, value);
-        }
-        D::NumberEditor { path, value, editing } => {
-            render_number_editor(ui, editor, w, path, *value, editing.as_deref());
-        }
-        D::Placeholder { active } => {
-            render_placeholder(ui, w, active);
-        }
-        D::List { opening, closing, separator, items } => {
-            ui.label(text_rich(opening, &TextStyle::Punctuation));
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    ui.label(text_rich(separator, &TextStyle::Punctuation));
-                }
-                render_d(ui, editor, w, item, mode);
-            }
-            ui.label(text_rich(closing, &TextStyle::Punctuation));
-        }
     }
 }
 
