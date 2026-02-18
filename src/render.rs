@@ -3,7 +3,7 @@ use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, HEAD, ISA, NAME
 use crate::graph::{EdgeState, Gid, Id, Path, Selection};
 use crate::list_iter::ListIter;
 
-use crate::d::{ActivePlaceholder, D, NodeDisplay, TextStyle};
+use crate::d::{ActivePlaceholder, D, TextStyle};
 
 pub fn render(editor: &Editor, path: &Path, id: &Id) -> D {
     render_id(editor, path, id, im::HashSet::new())
@@ -74,13 +74,13 @@ fn render_uuid(
     let has_content = !all_edges.is_empty() || new_edge_label.is_some();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
 
-    let display = match display_label {
-        Some(label) => NodeDisplay::Named(label),
-        None => NodeDisplay::Identicon(*uuid),
+    let child = match display_label {
+        Some(label) => D::Text(label, TextStyle::Literal),
+        None => D::Identicon(*uuid),
     };
 
     let mut header_items: Vec<D> = vec![
-        D::NodeHeader { path: path.clone(), id: id.clone(), display },
+        D::NodeHeader { path: path.clone(), id: id.clone(), child: Box::new(child) },
     ];
     if has_content {
         header_items.push(D::CollapseToggle { path: path.clone(), collapsed: is_collapsed });

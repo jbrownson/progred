@@ -3,7 +3,7 @@ use crate::graph::{EdgeState, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use ordered_float::OrderedFloat;
 
-use crate::d::{D, NodeDisplay, TextStyle};
+use crate::d::{D, TextStyle};
 
 use super::colors;
 use super::identicon;
@@ -56,8 +56,11 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         D::LabelArrow => {
             label_arrow(ui);
         }
-        D::NodeHeader { path, id, display } => {
-            render_node_header(ui, editor, w, path, id, display, mode);
+        D::Identicon(uuid) => {
+            identicon(ui, 18.0, uuid);
+        }
+        D::NodeHeader { path, id, child } => {
+            render_node_header(ui, editor, w, path, id, child, mode);
         }
         D::FieldLabel { entity_path, label_id } => {
             render_field_label(ui, editor, w, entity_path, label_id, mode);
@@ -285,7 +288,7 @@ fn render_node_header(
     w: &mut EditorWriter,
     path: &Path,
     id: &Id,
-    display: &NodeDisplay,
+    child: &D,
     mode: &InteractionMode,
 ) {
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
@@ -298,10 +301,8 @@ fn render_node_header(
         mode_style(mode)
     };
     if clickable(ui, |ui| {
-        match display {
-            NodeDisplay::Named(label) => ui.label(egui::RichText::new(label).color(Color32::from_gray(60))),
-            NodeDisplay::Identicon(uuid) => identicon(ui, 18.0, uuid),
-        }
+        render_d(ui, editor, w, child, mode);
+        ui.interact(ui.min_rect(), ui.id(), Sense::hover())
     }, style, hovered).clicked() {
         handle_pick(w, mode, id.clone(), path);
     }

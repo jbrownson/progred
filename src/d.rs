@@ -8,11 +8,6 @@ pub enum TextStyle {
     Literal,
 }
 
-pub enum NodeDisplay {
-    Named(String),
-    Identicon(uuid::Uuid),
-}
-
 pub enum D {
     Block(Vec<D>),
     Line(Vec<D>),
@@ -20,12 +15,13 @@ pub enum D {
     Spacing(f32),
 
     Text(String, TextStyle),
+    Identicon(uuid::Uuid),
     LabelArrow,
 
     NodeHeader {
         path: Path,
         id: Id,
-        display: NodeDisplay,
+        child: Box<D>,
     },
 
     FieldLabel {
