@@ -235,7 +235,7 @@ fn render_list(
             if let Id::Uuid(uuid) = id {
                 render_uuid(editor, path, uuid, ancestors)
             } else {
-                D::Text("?".into(), TextStyle::Default)
+                D::Text("?".into(), TextStyle::Literal)
             }
         }
     }

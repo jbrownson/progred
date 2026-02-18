@@ -264,7 +264,6 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
 
 fn text_color(style: &TextStyle) -> Color32 {
     match style {
-        TextStyle::Default => Color32::from_gray(60),
         TextStyle::Keyword => Color32::from_rgb(150, 100, 150),
         TextStyle::TypeRef => Color32::from_rgb(80, 130, 180),
         TextStyle::Punctuation => Color32::from_gray(120),

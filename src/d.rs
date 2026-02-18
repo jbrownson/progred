@@ -2,7 +2,6 @@ use crate::document::EditorWriter;
 use crate::graph::{Id, Path, PlaceholderState};
 
 pub enum TextStyle {
-    Default,
     Keyword,
     TypeRef,
     Punctuation,
