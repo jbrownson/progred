@@ -6,7 +6,8 @@ use super::layout::TREE_MARGIN;
 use super::placeholder::PlaceholderResult;
 use super::{insertion_point, render_d, InteractionMode};
 
-
+// TODO: separate D generation from egui chrome (scroll area, margin, background click).
+// Once roots become a single list node, this simplifies to: generate D, render in scroll area.
 pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter) {
     let modifiers = ctx.input(|i| i.modifiers);
     let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path());
