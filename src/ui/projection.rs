@@ -30,7 +30,10 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
     match d {
         D::Block(children) => {
             ui.vertical(|ui| {
-                for child in children {
+                for (i, child) in children.iter().enumerate() {
+                    if i > 0 {
+                        ui.add_space(2.0);
+                    }
                     render_d(ui, editor, w, child, mode);
                 }
             });
@@ -46,9 +49,6 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
             ui.indent("edges", |ui| {
                 render_d(ui, editor, w, child, mode);
             });
-        }
-        D::Spacing(n) => {
-            ui.add_space(*n);
         }
         D::Text(s, style) => {
             ui.label(text_rich(s, style));
@@ -79,15 +79,26 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         D::Placeholder { active } => {
             render_placeholder(ui, w, active);
         }
-        D::List { opening, closing, separator, items } => {
-            ui.label(text_rich(opening, &TextStyle::Punctuation));
-            for (i, item) in items.iter().enumerate() {
-                if i > 0 {
-                    ui.label(text_rich(separator, &TextStyle::Punctuation));
+        D::List { opening, closing, separator, items, vertical } => {
+            if *vertical && !items.is_empty() {
+                ui.vertical(|ui| {
+                    for item in items {
+                        ui.horizontal(|ui| {
+                            ui.label(text_rich("\u{2022}", &TextStyle::Punctuation));
+                            render_d(ui, editor, w, item, mode);
+                        });
+                    }
+                });
+            } else {
+                ui.label(text_rich(opening, &TextStyle::Punctuation));
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        ui.label(text_rich(separator, &TextStyle::Punctuation));
+                    }
+                    render_d(ui, editor, w, item, mode);
                 }
-                render_d(ui, editor, w, item, mode);
+                ui.label(text_rich(closing, &TextStyle::Punctuation));
             }
-            ui.label(text_rich(closing, &TextStyle::Punctuation));
         }
     }
 }

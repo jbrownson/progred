@@ -12,7 +12,6 @@ pub enum D {
     Block(Vec<D>),
     Line(Vec<D>),
     Indent(Box<D>),
-    Spacing(f32),
 
     Text(String, TextStyle),
     Identicon(uuid::Uuid),
@@ -54,6 +53,7 @@ pub enum D {
         closing: String,
         separator: String,
         items: Vec<D>,
+        vertical: bool,
     },
 }
 

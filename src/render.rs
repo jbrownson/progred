@@ -98,7 +98,6 @@ fn render_uuid(
                 D::LabelArrow,
                 descend(editor, path, &id, label, &child_ancestors),
             ]));
-            field_items.push(D::Spacing(2.0));
         }
 
         if let Some(ref new_label) = new_edge_label {
@@ -113,10 +112,8 @@ fn render_uuid(
                     }),
                 },
             ]));
-            field_items.push(D::Spacing(2.0));
         }
 
-        block_items.push(D::Spacing(2.0));
         block_items.push(D::Indent(Box::new(D::Block(field_items))));
     }
 
@@ -185,51 +182,50 @@ fn render_list(
             let insertion_idx = is_list_insertion_selected(editor, path, &elements);
             let list_ancestors = ancestors.update(id.clone());
 
-            let mut block_items: Vec<D> = Vec::new();
+            let mut items: Vec<D> = Vec::new();
 
-            if elements.is_empty() {
-                let mut line_items = vec![
-                    D::Text("[]".into(), TextStyle::Punctuation),
-                ];
-                if insertion_idx == Some(0) {
-                    line_items.push(list_placeholder(editor, path));
-                }
-                block_items.push(D::Line(line_items));
-            } else {
-                for (i, elem) in elements.iter().enumerate() {
-                    if insertion_idx == Some(i) {
-                        let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
-                        block_items.push(D::Line(vec![list_placeholder(editor, insert_path)]));
-                    }
-
-                    let head_d = match &elem.head_value {
-                        Some(head) => {
-                            render_id(editor, &elem.head_path, head, list_ancestors.clone())
-                        }
-                        None => {
-                            let selected = editor.selection.as_ref()
-                                .and_then(|s| s.edge_path()) == Some(&elem.head_path);
-                            if selected {
-                                list_placeholder(editor, &elem.head_path)
-                            } else {
-                                D::Text("_".into(), TextStyle::Punctuation)
-                            }
-                        }
-                    };
-                    block_items.push(D::Line(vec![
-                        D::Text("\u{2022}".into(), TextStyle::Punctuation),
-                        head_d,
-                    ]));
+            for (i, elem) in elements.iter().enumerate() {
+                if insertion_idx == Some(i) {
+                    let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
+                    items.push(list_placeholder(editor, insert_path));
                 }
 
-                if let Some(last) = elements.last() {
-                    if insertion_idx == Some(elements.len()) {
-                        block_items.push(D::Line(vec![list_placeholder(editor, &last.tail_path)]));
+                let head_d = match &elem.head_value {
+                    Some(head) => {
+                        render_id(editor, &elem.head_path, head, list_ancestors.clone())
                     }
+                    None => {
+                        let selected = editor.selection.as_ref()
+                            .and_then(|s| s.edge_path()) == Some(&elem.head_path);
+                        if selected {
+                            list_placeholder(editor, &elem.head_path)
+                        } else {
+                            D::Text("_".into(), TextStyle::Punctuation)
+                        }
+                    }
+                };
+                items.push(head_d);
+            }
+
+            if let Some(last) = elements.last() {
+                if insertion_idx == Some(elements.len()) {
+                    items.push(list_placeholder(editor, &last.tail_path));
                 }
             }
 
-            D::Block(block_items)
+            if items.is_empty() {
+                if insertion_idx == Some(0) {
+                    items.push(list_placeholder(editor, path));
+                }
+            }
+
+            D::List {
+                opening: "[".into(),
+                closing: "]".into(),
+                separator: "".into(),
+                items,
+                vertical: true,
+            }
         }
         None => {
             if let Id::Uuid(uuid) = id {
@@ -305,6 +301,7 @@ fn render_apply(editor: &Editor, _path: &Path, node: &Id, _ancestors: &im::HashS
             closing: ">".into(),
             separator: ", ".into(),
             items: arg_items,
+            vertical: false,
         });
     }
 
@@ -329,6 +326,7 @@ fn render_type_inline(editor: &Editor, node: &Id) -> D {
                 closing: ">".into(),
                 separator: ", ".into(),
                 items: arg_items,
+                vertical: false,
             });
         }
 
