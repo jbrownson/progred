@@ -1,11 +1,11 @@
 use eframe::egui::{self, Color32, Context, Rect, Sense, Stroke, Ui};
 
-pub struct SplitRects {
-    pub left: Rect,
-    pub right: Rect,
-}
-
-pub fn horizontal_split(ui: &mut Ui, ctx: &Context, split: &mut f32) -> SplitRects {
+pub fn horizontal_split(
+    ui: &mut Ui,
+    ctx: &Context,
+    split: &mut f32,
+    contents: impl FnOnce(&mut Ui, &mut Ui),
+) {
     let full_rect = ui.max_rect();
     let (separator_width, separator_hit_width) = (1.0, 8.0);
     let left_width = (full_rect.width() - separator_width) * (1.0 - *split);
@@ -41,12 +41,9 @@ pub fn horizontal_split(ui: &mut Ui, ctx: &Context, split: &mut f32) -> SplitRec
         Stroke::new(separator_width, Color32::from_gray(180)),
     );
 
-    SplitRects { left: left_rect, right: right_rect }
-}
-
-pub fn scoped(ui: &mut Ui, rect: Rect, f: impl FnOnce(&mut Ui)) {
-    ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-        ui.set_clip_rect(rect);
-        f(ui);
-    });
+    let mut left_ui = ui.new_child(egui::UiBuilder::new().max_rect(left_rect));
+    left_ui.set_clip_rect(left_rect);
+    let mut right_ui = ui.new_child(egui::UiBuilder::new().max_rect(right_rect));
+    right_ui.set_clip_rect(right_rect);
+    contents(&mut left_ui, &mut right_ui);
 }
