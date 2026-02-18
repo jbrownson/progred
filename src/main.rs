@@ -64,7 +64,7 @@ impl ProgredApp {
 
     fn save_to_path(&self) {
         if let Some(ref path) = self.editor.file_path
-            && let Ok(json) = serde_json::to_string_pretty(&self.editor.doc.to_json())
+            && let Ok(json) = serde_json::to_string_pretty(&self.editor.doc)
         {
             let _ = std::fs::write(path, json);
         }
@@ -83,7 +83,8 @@ impl ProgredApp {
             .pick_file()
             .and_then(|path| {
                 let contents = std::fs::read_to_string(&path).ok()?;
-                Some((path, Document::from_json(&contents)?))
+                let doc: Document = serde_json::from_str(&contents).ok()?;
+                Some((path, doc))
             })
         {
             self.editor = Editor { doc, file_path: Some(path), ..Editor::new() };

@@ -1,11 +1,13 @@
 use crate::generated::semantics::{CONS_TYPE, EMPTY_TYPE, ISA, NAME};
 use crate::graph::{EdgeState, Gid, Id, MutGid, Path, PathRoot, PlaceholderState, RootSlot, Selection, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Document {
+    #[serde(rename = "graph")]
     pub gid: MutGid,
     pub roots: Vec<RootSlot>,
 }
@@ -24,7 +26,7 @@ impl Document {
 
     pub fn delete(&mut self, selection: &Selection) {
         match selection {
-            Selection::Edge(path, _) => self.delete_path(path),
+            Selection::Edge(path, _) => self.delete_edge(path),
             Selection::GraphEdge { entity: Id::Uuid(uuid), label } => {
                 self.gid.delete(uuid, label);
             }
@@ -37,7 +39,7 @@ impl Document {
         }
     }
 
-    fn delete_path(&mut self, path: &Path) {
+    fn delete_edge(&mut self, path: &Path) {
         match path.pop() {
             None => {
                 if let PathRoot::Slot(root_id) = &path.root
@@ -82,22 +84,6 @@ impl Document {
         let mut result: Vec<Id> = sources.into_iter().chain(cycle_rep).collect();
         result.sort();
         result
-    }
-
-    pub fn to_json(&self) -> serde_json::Value {
-        let root_ids: Vec<_> = self.roots.iter().map(|r| &r.value).collect();
-        serde_json::json!({
-            "graph": self.gid.to_json(),
-            "roots": root_ids,
-        })
-    }
-
-    pub fn from_json(contents: &str) -> Option<Self> {
-        let json_doc: serde_json::Value = serde_json::from_str(contents).ok()?;
-        let graph_data = serde_json::from_value(json_doc.get("graph")?.clone()).ok()?;
-        let gid = MutGid::from_json(graph_data).ok()?;
-        let root_ids: Vec<Id> = serde_json::from_value(json_doc.get("roots")?.clone()).ok()?;
-        Some(Self { gid, roots: root_ids.into_iter().map(RootSlot::new).collect() })
     }
 }
 

@@ -1,7 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
 use progred_graph::{Id, Gid, MutGid};
@@ -872,15 +871,12 @@ fn load_semantics(input: TokenStream) -> Result<(String, MutGid, Vec<Id>)> {
         std::env::var("CARGO_MANIFEST_DIR").map_err(|_| "CARGO_MANIFEST_DIR not set")?,
         relative_path);
 
-    let json: Value = std::fs::read_to_string(&full_path)
+    let json: serde_json::Value = std::fs::read_to_string(&full_path)
         .map_err(|e| format!("failed to read {}: {}", full_path, e))
         .and_then(|s| serde_json::from_str(&s).map_err(|e| format!("failed to parse JSON: {}", e)))?;
 
-    let graph_json: HashMap<String, HashMap<String, Value>> =
-        serde_json::from_value(json.get("graph").ok_or("missing graph field")?.clone())
-            .map_err(|e| format!("failed to parse graph: {}", e))?;
-    let gid = MutGid::from_json(graph_json)
-        .map_err(|e| format!("failed to load graph: {}", e))?;
+    let gid: MutGid = serde_json::from_value(json.get("graph").ok_or("missing graph field")?.clone())
+        .map_err(|e| format!("failed to parse graph: {}", e))?;
 
     let roots: Vec<Id> = serde_json::from_value(json.get("roots").ok_or("missing roots field")?.clone())
         .map_err(|e| format!("failed to parse roots: {}", e))?;

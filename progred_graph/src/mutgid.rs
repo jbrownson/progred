@@ -1,7 +1,7 @@
 use crate::gid::Gid;
 use crate::id::Id;
 use im::HashMap;
-use std::collections::HashMap as StdHashMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -79,43 +79,35 @@ impl MutGid {
             .filter(|(_, edges): &(_, im::HashMap<Id, Id>)| !edges.is_empty())
             .collect();
     }
-
-    pub fn to_json(&self) -> StdHashMap<String, StdHashMap<String, serde_json::Value>> {
-        self.data
-            .iter()
-            .map(|(entity_uuid, edges)| {
-                let edge_obj = edges
-                    .iter()
-                    .filter_map(|(label, value)| match label {
-                        Id::Uuid(label_uuid) => serde_json::to_value(value)
-                            .ok()
-                            .map(|json| (label_uuid.to_string(), json)),
-                        _ => None,
-                    })
-                    .collect();
-                (entity_uuid.to_string(), edge_obj)
-            })
-            .collect()
-    }
-
-    pub fn from_json(
-        json: StdHashMap<String, StdHashMap<String, serde_json::Value>>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut gid = MutGid::new();
-        for (entity_str, edges) in json {
-            let entity = Uuid::parse_str(&entity_str)?;
-            for (label_str, value_json) in edges {
-                let label = Id::Uuid(Uuid::parse_str(&label_str)?);
-                let id: Id = serde_json::from_value(value_json)?;
-                gid.set(entity, label, id);
-            }
-        }
-        Ok(gid)
-    }
 }
 
 impl Default for MutGid {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Serialize for MutGid {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let proxy: std::collections::BTreeMap<Uuid, Vec<(Id, Id)>> = self.data
+            .iter()
+            .map(|(uuid, edges)| {
+                let mut pairs: Vec<_> = edges.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                pairs.sort();
+                (*uuid, pairs)
+            })
+            .collect();
+        proxy.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for MutGid {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let proxy: std::collections::HashMap<Uuid, Vec<(Id, Id)>> =
+            std::collections::HashMap::deserialize(deserializer)?;
+        let data = proxy.into_iter()
+            .map(|(uuid, edges)| (uuid, edges.into_iter().collect()))
+            .collect();
+        Ok(MutGid { data })
     }
 }

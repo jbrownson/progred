@@ -1,8 +1,10 @@
 use crate::gid::Gid;
 use crate::id::Id;
+use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "Id", into = "Id")]
 pub struct RootSlot {
     pub root_id: RootId,
     pub value: Id,
@@ -11,6 +13,18 @@ pub struct RootSlot {
 impl RootSlot {
     pub fn new(value: Id) -> Self {
         Self { root_id: RootId(uuid::Uuid::new_v4()), value }
+    }
+}
+
+impl From<Id> for RootSlot {
+    fn from(id: Id) -> Self {
+        RootSlot::new(id)
+    }
+}
+
+impl From<RootSlot> for Id {
+    fn from(slot: RootSlot) -> Self {
+        slot.value
     }
 }
 
