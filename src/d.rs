@@ -16,7 +16,7 @@ pub enum D {
     Text(String, TextStyle),
     Identicon(uuid::Uuid),
 
-    Descend { path: Path, id: Id, child: Box<D> },
+    Descend { path: Path, child: Box<D> },
 
     NodeHeader { child: Box<D> },
     FieldLabel { label_id: Id },

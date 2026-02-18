@@ -35,18 +35,7 @@ impl Editor {
         }
     }
 
-    pub fn placeholder_visible(&self) -> bool {
-        match self.selection.as_ref() {
-            Some(Selection::InsertRoot(..)) => true,
-            Some(Selection::Edge(path, EdgeState::Cursor(_))) => self.doc.node(path).is_none(),
-            _ => false,
-        }
-    }
-
-    pub fn is_editing_leaf(&self) -> bool {
-        matches!(self.selection, Some(Selection::Edge(_, EdgeState::EditingLeaf(_))))
-    }
-
+    // TODO: revisit orphan cache — does this belong on Editor, or should orphan detection live elsewhere?
     pub fn orphan_roots(&self) -> &HashSet<Id> {
         static EMPTY: std::sync::LazyLock<HashSet<Id>> = std::sync::LazyLock::new(HashSet::new);
         match &self.cached_orphans {

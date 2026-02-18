@@ -1,4 +1,4 @@
-use crate::editor::Editor;
+use crate::editor::{Editor, EditorWriter};
 use crate::generated::{display_label, name_of};
 use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, EMPTY_TYPE, HEAD, ISA, NAME, TAIL, TYPE_};
 use crate::graph::{EdgeState, Gid, Id, Path, Selection};
@@ -12,7 +12,7 @@ pub fn render(editor: &Editor, path: &Path, id: &Id) -> D {
 
 fn render_id(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
     let child = render_id_inner(editor, path, id, ancestors);
-    D::Descend { path: path.clone(), id: id.clone(), child: Box::new(child) }
+    D::Descend { path: path.clone(), child: Box::new(child) }
 }
 
 fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
@@ -52,9 +52,12 @@ impl<'a> RenderCtx<'a> {
             }
             None => {
                 let commit_path = child_path.clone();
-                D::Placeholder {
-                    on_commit: Box::new(move |w, value| {
-                        w.set_edge(&commit_path, value);
+                D::Descend {
+                    path: child_path,
+                    child: Box::new(D::Placeholder {
+                        on_commit: Box::new(move |w: &mut EditorWriter, value| {
+                            w.set_edge(&commit_path, value);
+                        }),
                     }),
                 }
             }
@@ -117,9 +120,12 @@ fn render_uuid(
             field_items.push(D::Line(vec![
                 D::FieldLabel { label_id: new_label.clone() },
                 D::Text(":".into(), TextStyle::Punctuation),
-                D::Placeholder {
-                    on_commit: Box::new(move |w, value| {
-                        w.set_edge(&closure_path, value);
+                D::Descend {
+                    path: placeholder_path,
+                    child: Box::new(D::Placeholder {
+                        on_commit: Box::new(move |w: &mut EditorWriter, value| {
+                            w.set_edge(&closure_path, value);
+                        }),
                     }),
                 },
             ]));
@@ -251,15 +257,18 @@ fn render_list(
 fn list_placeholder(editor: &Editor, insert_path: &Path) -> D {
     let current_value = editor.doc.node(insert_path);
     let commit_path = insert_path.clone();
-    D::Placeholder {
-        on_commit: Box::new(move |w, head_value| {
-            if let Some(ref current_value) = current_value {
-                let new_cons = Id::new_uuid();
-                w.set_edge(&commit_path, new_cons.clone());
-                w.set_edge(&commit_path.child(ISA.clone()), CONS_TYPE.clone());
-                w.set_edge(&commit_path.child(HEAD.clone()), head_value);
-                w.set_edge(&commit_path.child(TAIL.clone()), current_value.clone());
-            }
+    D::Descend {
+        path: insert_path.clone(),
+        child: Box::new(D::Placeholder {
+            on_commit: Box::new(move |w: &mut EditorWriter, head_value| {
+                if let Some(ref current_value) = current_value {
+                    let new_cons = Id::new_uuid();
+                    w.set_edge(&commit_path, new_cons.clone());
+                    w.set_edge(&commit_path.child(ISA.clone()), CONS_TYPE.clone());
+                    w.set_edge(&commit_path.child(HEAD.clone()), head_value);
+                    w.set_edge(&commit_path.child(TAIL.clone()), current_value.clone());
+                }
+            }),
         }),
     }
 }

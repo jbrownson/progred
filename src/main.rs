@@ -9,10 +9,11 @@ mod shortcuts;
 mod ts_runtime;
 mod ui;
 
+use d::D;
 use document::Document;
 use editor::{Editor, EditorWriter};
 use eframe::egui;
-use graph::Id;
+use graph::{EdgeState, Id, Selection};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -106,27 +107,58 @@ impl ProgredApp {
         }
     }
 
-    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
-        let editing = self.editor.placeholder_visible() || self.editor.is_editing_leaf();
+    fn handle_keys(&mut self, ctx: &egui::Context, _d_trees: &[Option<D>]) {
         ctx.input_mut(|i| {
             if i.consume_shortcut(&shortcuts::SAVE_AS) {
                 self.save_as();
             } else if i.consume_shortcut(&shortcuts::SAVE) {
                 self.save();
-            } else if !editing {
-                if i.key_pressed(egui::Key::Escape) {
-                    self.editor.selection = None;
-                } else if i.key_pressed(egui::Key::Delete) || i.consume_shortcut(&shortcuts::DELETE) {
-                    self.delete_selection();
-                } else if i.consume_shortcut(&shortcuts::INSERT_NODE) {
-                    self.insert_new_node();
-                } else if i.consume_shortcut(&shortcuts::NEW) {
-                    self.new_document();
-                } else if i.consume_shortcut(&shortcuts::OPEN) {
-                    self.open();
-                }
             }
         });
+        let handlers: &[fn(&mut ProgredApp, &egui::Context) -> bool] = &[
+            Self::placeholder_handler,
+            Self::leaf_edit_handler,
+            Self::global_handler,
+        ];
+        for h in handlers {
+            if h(self, ctx) { break; }
+        }
+    }
+
+    fn placeholder_handler(&mut self, ctx: &egui::Context) -> bool {
+        let active = match &self.editor.selection {
+            Some(Selection::InsertRoot(..)) => true,
+            Some(Selection::Edge(path, EdgeState::Cursor(_))) => self.editor.doc.node(path).is_none(),
+            _ => false,
+        };
+        if !active { return false; }
+        ctx.input_mut(|i| {
+            if i.key_pressed(egui::Key::Escape) {
+                self.editor.selection = None;
+            }
+        });
+        true
+    }
+
+    fn leaf_edit_handler(&mut self, _ctx: &egui::Context) -> bool {
+        matches!(self.editor.selection, Some(Selection::Edge(_, EdgeState::EditingLeaf(_))))
+    }
+
+    fn global_handler(&mut self, ctx: &egui::Context) -> bool {
+        ctx.input_mut(|i| {
+            if i.key_pressed(egui::Key::Escape) {
+                self.editor.selection = None;
+            } else if i.key_pressed(egui::Key::Delete) || i.consume_shortcut(&shortcuts::DELETE) {
+                self.delete_selection();
+            } else if i.consume_shortcut(&shortcuts::INSERT_NODE) {
+                self.insert_new_node();
+            } else if i.consume_shortcut(&shortcuts::NEW) {
+                self.new_document();
+            } else if i.consume_shortcut(&shortcuts::OPEN) {
+                self.open();
+            }
+        });
+        false
     }
 
     fn render_menu_bar(&mut self, ctx: &egui::Context) {
@@ -176,25 +208,27 @@ impl ProgredApp {
 impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
-        self.handle_shortcuts(ctx);
+
+        self.editor.refresh_orphan_cache();
+        let d_trees = ui::tree_view::generate(&self.editor);
+        self.handle_keys(ctx, &d_trees);
+
         self.render_menu_bar(ctx);
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(ctx.style().visuals.panel_fill))
             .show(ctx, |ui| {
-                self.editor.refresh_orphan_cache();
                 let snapshot = self.editor.clone();
                 let mut w = EditorWriter::new(&mut self.editor);
 
                 if self.show_graph {
                     ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split, |left, right| {
-                        ui::tree_view::render(left, ctx, &snapshot, &mut w);
+                        ui::tree_view::render(left, ctx, &snapshot, &mut w, &d_trees);
                         ui::graph_view::render(right, ctx, &snapshot, &mut w);
                     });
                 } else {
-                    ui::tree_view::render(ui, ctx, &snapshot, &mut w);
+                    ui::tree_view::render(ui, ctx, &snapshot, &mut w, &d_trees);
                 }
             });
     }
 }
-

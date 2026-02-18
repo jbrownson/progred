@@ -29,7 +29,6 @@ pub enum InteractionMode {
 
 pub struct DContext {
     pub path: Path,
-    pub id: Id,
 }
 
 pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode: &InteractionMode, ctx: &DContext) {
@@ -62,12 +61,12 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         D::Identicon(uuid) => {
             identicon(ui, 18.0, uuid);
         }
-        D::Descend { path, id, child } => {
-            let child_ctx = DContext { path: path.clone(), id: id.clone() };
+        D::Descend { path, child } => {
+            let child_ctx = DContext { path: path.clone() };
             render_d(ui, editor, w, child, mode, &child_ctx);
         }
         D::NodeHeader { child } => {
-            render_node_header(ui, editor, w, &ctx.path, &ctx.id, child, mode, ctx);
+            render_node_header(ui, editor, w, child, mode, ctx);
         }
         D::FieldLabel { label_id } => {
             render_field_label(ui, editor, w, &ctx.path, label_id, mode);
@@ -286,14 +285,13 @@ fn render_node_header(
     ui: &mut Ui,
     editor: &Editor,
     w: &mut EditorWriter,
-    path: &Path,
-    id: &Id,
     child: &D,
     mode: &InteractionMode,
     ctx: &DContext,
 ) {
-    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
-    let secondary = !primary && editor.selected_node_id().as_ref() == Some(id);
+    let id = editor.doc.node(&ctx.path);
+    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(&ctx.path);
+    let secondary = !primary && id.is_some() && editor.selected_node_id().as_ref() == id.as_ref();
 
     let (style, hovered) = if primary || secondary {
         let s = selection_style(primary, secondary);
@@ -305,7 +303,9 @@ fn render_node_header(
         render_d(ui, editor, w, child, mode, ctx);
         ui.interact(ui.min_rect(), ui.id(), Sense::hover())
     }, style, hovered).clicked() {
-        handle_pick(w, mode, id.clone(), path);
+        if let Some(id) = id {
+            handle_pick(w, mode, id, &ctx.path);
+        }
     }
 }
 

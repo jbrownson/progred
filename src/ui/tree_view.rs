@@ -1,14 +1,24 @@
+use crate::d::D;
 use crate::editor::{Editor, EditorWriter};
 use crate::graph::{Id, Path, Selection};
 use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
 
+use super::identicon;
 use super::layout::TREE_MARGIN;
 use super::placeholder::PlaceholderResult;
 use super::{insertion_point, render_d, DContext, InteractionMode};
 
-// TODO: separate D generation from egui chrome (scroll area, margin, background click).
-// Once roots become a single list node, this simplifies to: generate D, render in scroll area.
-pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter) {
+pub fn generate(editor: &Editor) -> Vec<Option<D>> {
+    editor.doc.roots.iter()
+        .map(|root_slot| {
+            let path = Path::new(root_slot);
+            let id = editor.doc.node(&path)?;
+            Some(crate::render::render(editor, &path, &id))
+        })
+        .collect()
+}
+
+pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter, d_trees: &[Option<D>]) {
     let modifiers = ctx.input(|i| i.modifiers);
     let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path());
     let mode = if modifiers.alt {
@@ -40,16 +50,15 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
             if editor.doc.roots.is_empty() {
                 render_root_insertion(ui, editor, w, 0, true);
             } else {
-                for (i, root_slot) in editor.doc.roots.iter().enumerate() {
+                for (i, (root_slot, d)) in editor.doc.roots.iter().zip(d_trees.iter()).enumerate() {
                     render_root_insertion(ui, editor, w, i, false);
-                    ui.push_id(root_slot, |ui| {
-                        let path = Path::new(root_slot);
-                        if let Some(id) = editor.doc.node(&path) {
-                            let d = crate::render::render(editor, &path, &id);
-                            let ctx = DContext { path: path.clone(), id: id.clone() };
-                            render_d(ui, editor, w, &d, &mode, &ctx);
-                        }
-                    });
+                    if let Some(d) = d {
+                        ui.push_id(root_slot, |ui| {
+                            let path = Path::new(root_slot);
+                            let ctx = DContext { path };
+                            render_d(ui, editor, w, d, &mode, &ctx);
+                        });
+                    }
                 }
                 render_root_insertion(ui, editor, w, editor.doc.roots.len(), false);
             }
@@ -63,14 +72,9 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &Editor, w: &mut EditorWriter)
             let mut sorted_orphans: Vec<_> = orphan_ids.iter().collect();
             sorted_orphans.sort();
             for orphan_id in sorted_orphans {
-                ui.push_id(orphan_id, |ui| {
-                    let path = Path::orphan(orphan_id.clone());
-                    if let Some(id) = editor.doc.node(&path) {
-                        let d = crate::render::render(editor, &path, &id);
-                        let ctx = DContext { path: path.clone(), id: id.clone() };
-                        render_d(ui, editor, w, &d, &mode, &ctx);
-                    }
-                });
+                if let Id::Uuid(uuid) = orphan_id {
+                    identicon(ui, 18.0, uuid);
+                }
                 ui.add_space(2.0);
             }
         }
