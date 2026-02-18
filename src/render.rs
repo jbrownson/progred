@@ -95,7 +95,7 @@ fn render_uuid(
         for (label, _value) in &all_edges {
             field_items.push(D::Line(vec![
                 D::FieldLabel { entity_path: path.clone(), label_id: label.clone() },
-                D::LabelArrow,
+                D::Text(":".into(), TextStyle::Punctuation),
                 descend(editor, path, &id, label, &child_ancestors),
             ]));
         }
@@ -105,7 +105,7 @@ fn render_uuid(
             let closure_path = placeholder_path.clone();
             field_items.push(D::Line(vec![
                 D::FieldLabel { entity_path: path.clone(), label_id: new_label.clone() },
-                D::LabelArrow,
+                D::Text(":".into(), TextStyle::Punctuation),
                 D::Placeholder {
                     active: placeholder_active(editor, &placeholder_path, move |w, value| {
                         w.set_edge(&closure_path, value);

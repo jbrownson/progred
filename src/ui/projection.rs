@@ -53,9 +53,6 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         D::Text(s, style) => {
             ui.label(text_rich(s, style));
         }
-        D::LabelArrow => {
-            label_arrow(ui);
-        }
         D::Identicon(uuid) => {
             identicon(ui, 18.0, uuid);
         }
@@ -222,24 +219,6 @@ fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &P
         InteractionMode::Normal => {
             w.select(Some(Selection::edge(path.clone())));
         }
-    }
-}
-
-fn label_arrow(ui: &mut Ui) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(12.0, 10.0), Sense::hover());
-
-    if ui.is_rect_visible(rect) {
-        let color = Color32::from_gray(160);
-        let stroke = eframe::epaint::Stroke::new(1.0, color);
-        let center_y = rect.center().y;
-        let left = rect.min.x + 1.0;
-        let right = rect.max.x - 2.0;
-
-        ui.painter().line_segment([pos2(left, center_y), pos2(right, center_y)], stroke);
-
-        let arrow_size = 3.0;
-        ui.painter().line_segment([pos2(right - arrow_size, center_y - arrow_size), pos2(right, center_y)], stroke);
-        ui.painter().line_segment([pos2(right - arrow_size, center_y + arrow_size), pos2(right, center_y)], stroke);
     }
 }
 

@@ -15,7 +15,6 @@ pub enum D {
 
     Text(String, TextStyle),
     Identicon(uuid::Uuid),
-    LabelArrow,
 
     NodeHeader {
         path: Path,
