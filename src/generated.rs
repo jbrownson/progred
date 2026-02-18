@@ -1,5 +1,27 @@
 progred_macros::generate_semantics!("semantics.progred");
 
+use crate::graph::{Gid, Id};
+use semantics::{ISA, NAME};
+
+pub fn name_of(gid: &impl Gid, node: &Id) -> Option<String> {
+    match gid.get(node, &NAME)? {
+        Id::String(s) => Some(s.clone()),
+        _ => None,
+    }
+}
+
+pub fn display_label(gid: &impl Gid, node: &Id) -> Option<String> {
+    let isa_name = gid.get(node, &ISA)
+        .and_then(|isa_id| name_of(gid, isa_id));
+
+    match (isa_name, name_of(gid, node)) {
+        (Some(isa), Some(n)) => Some(format!("{isa} \"{n}\"")),
+        (Some(isa), None) => Some(isa),
+        (None, Some(n)) => Some(format!("\"{n}\"")),
+        (None, None) => None,
+    }
+}
+
 impl<T> semantics::List<T> {
     pub fn iter<'a>(&'a self, gid: &'a impl crate::graph::Gid) -> impl Iterator<Item = T> + 'a {
         let conv = self.into_T.clone();

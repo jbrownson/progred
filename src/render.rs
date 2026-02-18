@@ -1,5 +1,6 @@
 use crate::editor::Editor;
-use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, HEAD, ISA, NAME, TAIL, TYPE_};
+use crate::generated::{display_label, name_of};
+use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, EMPTY_TYPE, HEAD, ISA, NAME, TAIL, TYPE_};
 use crate::graph::{EdgeState, Gid, Id, Path, Selection};
 use crate::list_iter::ListIter;
 
@@ -16,7 +17,9 @@ fn render_id(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) 
 
 fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
     match id {
-        Id::Uuid(_) if editor.is_list(id) => render_list(editor, path, id, ancestors),
+        Id::Uuid(_) if editor.doc.gid.get(id, &ISA).is_some_and(|t| t == &CONS_TYPE || t == &EMPTY_TYPE) => {
+            render_list(editor, path, id, ancestors)
+        }
         Id::Uuid(uuid) => {
             let ctx = RenderCtx { editor, path, id, ancestors: &ancestors };
             try_domain_render(&ctx)
@@ -67,7 +70,7 @@ fn render_uuid(
 ) -> D {
     let id = Id::Uuid(*uuid);
     let edges = editor.doc.gid.edges(&id);
-    let display_label = editor.display_label(&id);
+    let display_label = display_label(&editor.doc.gid, &id);
     let new_edge_label = editor.selection.as_ref()
         .and_then(|s| s.edge_path())
         .and_then(|sel| sel.pop())
@@ -140,7 +143,7 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
     let mut current_id = node;
     let mut seen = im::HashSet::new();
 
-    while editor.is_cons(current_id) {
+    while editor.doc.gid.get(current_id, &ISA) == Some(&CONS_TYPE) {
         if seen.contains(current_id) {
             return None;
         }
@@ -160,7 +163,7 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
         current_id = tail_value;
     }
 
-    if editor.is_empty(current_id) {
+    if editor.doc.gid.get(current_id, &ISA) == Some(&EMPTY_TYPE) {
         Some((elements, current_path))
     } else {
         None
@@ -295,7 +298,7 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
     let apply = Apply::try_wrap(gid, ctx.id)?;
 
     let base_name = apply.base(gid)
-        .and_then(|b| ctx.editor.name_of(b.id()))
+        .and_then(|b| name_of(gid, b.id()))
         .unwrap_or_else(|| "?".into());
 
     let mut items = vec![D::Text(base_name, TextStyle::TypeRef)];
@@ -320,7 +323,7 @@ fn render_type_inline(editor: &Editor, node: &Id) -> D {
     let gid = &editor.doc.gid;
     if let Some(apply) = Apply::try_wrap(gid, node) {
         let base_name = apply.base(gid)
-            .and_then(|b| editor.name_of(b.id()))
+            .and_then(|b| name_of(gid, b.id()))
             .unwrap_or_else(|| "?".into());
 
         let mut items = vec![D::Text(base_name, TextStyle::TypeRef)];
@@ -340,7 +343,7 @@ fn render_type_inline(editor: &Editor, node: &Id) -> D {
 
         D::Line(items)
     } else {
-        let name = editor.name_of(node).unwrap_or_else(|| "?".into());
+        let name = name_of(gid, node).unwrap_or_else(|| "?".into());
         D::Text(name, TextStyle::TypeRef)
     }
 }

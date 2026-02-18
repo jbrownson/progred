@@ -1,4 +1,5 @@
 use crate::editor::{Editor, EditorWriter};
+use crate::generated::name_of;
 use crate::graph::{EdgeState, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use ordered_float::OrderedFloat;
@@ -328,7 +329,7 @@ fn render_field_label(
     };
     ui.push_id(label_id, |ui| {
         if clickable(ui, |ui| match label_id {
-            Id::Uuid(uuid) => match editor.name_of(label_id) {
+            Id::Uuid(uuid) => match name_of(&editor.doc.gid, label_id) {
                 Some(name) => ui.label(egui::RichText::new(name).color(label_color).italics()),
                 None => identicon(ui, 12.0, uuid),
             },

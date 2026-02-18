@@ -1,5 +1,4 @@
 use crate::document::Document;
-use crate::generated::semantics::{CONS_TYPE, EMPTY_TYPE, ISA, NAME};
 use crate::graph::{EdgeState, Gid, Id, MutGid, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
 use std::collections::HashSet;
@@ -25,41 +24,6 @@ impl Editor {
             graph_view: GraphViewState::new(),
             cached_orphans: None,
         }
-    }
-
-    pub fn name_of(&self, node: &Id) -> Option<String> {
-        match self.doc.gid.get(node, &NAME)? {
-            Id::String(s) => Some(s.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn display_label(&self, node: &Id) -> Option<String> {
-        let isa_name = self.doc.gid.get(node, &ISA)
-            .and_then(|isa_id| self.name_of(isa_id));
-
-        match (isa_name, self.name_of(node)) {
-            (Some(isa), Some(n)) => Some(format!("{isa} \"{n}\"")),
-            (Some(isa), None) => Some(isa),
-            (None, Some(n)) => Some(format!("\"{n}\"")),
-            (None, None) => None,
-        }
-    }
-
-    pub fn isa_of(&self, node: &Id) -> Option<&Id> {
-        self.doc.gid.get(node, &ISA)
-    }
-
-    pub fn is_cons(&self, node: &Id) -> bool {
-        self.isa_of(node) == Some(&CONS_TYPE)
-    }
-
-    pub fn is_empty(&self, node: &Id) -> bool {
-        self.isa_of(node) == Some(&EMPTY_TYPE)
-    }
-
-    pub fn is_list(&self, node: &Id) -> bool {
-        self.is_cons(node) || self.is_empty(node)
     }
 
     pub fn selected_node_id(&self) -> Option<Id> {

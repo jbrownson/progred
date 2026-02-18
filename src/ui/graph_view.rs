@@ -1,5 +1,6 @@
 use crate::document::Document;
 use crate::editor::{Editor, EditorWriter};
+use crate::generated::{display_label, name_of};
 use crate::graph::{Gid, Id, MutGid, Selection};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
 use super::colors;
@@ -198,7 +199,7 @@ fn compute_half_sizes(painter: &egui::Painter, editor: &Editor, ids: impl Iterat
     let font = egui::FontId::proportional(TEXT_FONT_SIZE);
     ids.map(|id| {
         let size = match &id {
-            Id::Uuid(_) => match editor.display_label(&id) {
+            Id::Uuid(_) => match display_label(&editor.doc.gid, &id) {
                 Some(label) => {
                     let galley = painter.layout_no_wrap(label, font.clone(), Color32::BLACK);
                     (galley.rect.size() + Vec2::splat(TEXT_PADDING)) / 2.0
@@ -271,7 +272,7 @@ const IDENTICON_HALF_SIZE: f32 = NODE_RADIUS * 0.7 + 2.0;
 
 fn edge_label_text(editor: &Editor, label: &Id) -> Option<String> {
     match label {
-        Id::Uuid(_) => editor.name_of(label),
+        Id::Uuid(_) => name_of(&editor.doc.gid, label),
         _ => node_display_text(label),
     }
 }
@@ -492,7 +493,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
         match id {
             Id::Uuid(uuid) => {
                 let stroke = if is_selected { selected_stroke } else if is_root { root_stroke } else { Stroke::new(2.0 * state.zoom, Color32::from_gray(100)) };
-                match editor.display_label(id) {
+                match display_label(&editor.doc.gid, id) {
                     Some(label) => {
                         let galley = painter.layout_no_wrap(label.clone(), text_font.clone(), Color32::from_gray(60));
                         let text_rect = Rect::from_center_size(screen_pos, galley.rect.size() + Vec2::splat(TEXT_PADDING * state.zoom));
