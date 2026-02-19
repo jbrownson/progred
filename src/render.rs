@@ -1,7 +1,7 @@
 use crate::editor::{Editor, EditorWriter};
 use crate::generated::{display_label, name_of};
 use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, EMPTY_TYPE, HEAD, ISA, NAME, TAIL, TYPE_};
-use crate::graph::{EdgeState, Gid, Id, Path, Selection};
+use crate::graph::{Gid, Id, Path, Selection};
 use crate::list_iter::ListIter;
 
 use crate::d::{D, TextStyle};
@@ -30,7 +30,7 @@ fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet
         },
         Id::Number(n) => D::NumberEditor {
             value: n.0,
-            editing: editing_state(editor, path),
+            number_text: number_text(editor, path),
         },
     }
 }
@@ -357,13 +357,9 @@ fn render_type_inline(editor: &Editor, node: &Id) -> D {
     }
 }
 
-// Helpers
-
-fn editing_state(editor: &Editor, path: &Path) -> Option<String> {
+fn number_text(editor: &Editor, path: &Path) -> Option<String> {
     match &editor.selection {
-        Some(Selection::Edge(sel_path, EdgeState::EditingLeaf(text))) if sel_path == path => {
-            Some(text.clone())
-        }
+        Some(Selection::Edge(sel_path, es)) if sel_path == path => es.number_text.clone(),
         _ => None,
     }
 }

@@ -23,7 +23,7 @@ pub enum D {
     // TODO: consider whether collapse belongs in D or should be a UI-layer concern
     CollapseToggle { collapsed: bool },
     StringEditor { value: String },
-    NumberEditor { value: f64, editing: Option<String> },
+    NumberEditor { value: f64, number_text: Option<String> },
 
     Placeholder {
         on_commit: Box<dyn Fn(&mut EditorWriter, Id)>,

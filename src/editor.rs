@@ -1,5 +1,5 @@
 use crate::document::Document;
-use crate::graph::{EdgeState, Gid, Id, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
+use crate::graph::{Gid, Id, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
 use crate::ui::graph_view::GraphViewState;
 use std::path::PathBuf;
 
@@ -47,6 +47,12 @@ impl<'a> EditorWriter<'a> {
         self.editor.selection = selection;
     }
 
+    pub fn set_number_text(&mut self, text: Option<String>) {
+        if let Some(Selection::Edge(_, ref mut es)) = self.editor.selection {
+            es.number_text = text;
+        }
+    }
+
     pub fn set_edge(&mut self, path: &Path, value: Id) {
         self.editor.doc.set_edge(path, value);
     }
@@ -61,7 +67,7 @@ impl<'a> EditorWriter<'a> {
 
     pub fn set_placeholder_state(&mut self, state: PlaceholderState) {
         match self.editor.selection {
-            Some(Selection::Edge(_, EdgeState::Cursor(ref mut ps))) => *ps = state,
+            Some(Selection::Edge(_, ref mut es)) => es.placeholder = state,
             Some(Selection::InsertRoot(_, ref mut ps)) => *ps = state,
             _ => {}
         }
@@ -71,26 +77,4 @@ impl<'a> EditorWriter<'a> {
         self.editor.graph_view = state;
     }
 
-    pub fn start_leaf_edit(&mut self, text: String) {
-        if let Some(Selection::Edge(_, ref mut edge_state)) = self.editor.selection {
-            *edge_state = EdgeState::EditingLeaf(text);
-        }
-    }
-
-    pub fn stop_leaf_edit(&mut self) -> Option<String> {
-        if let Some(Selection::Edge(_, ref mut edge_state)) = self.editor.selection {
-            if let EdgeState::EditingLeaf(text) = edge_state {
-                let final_text = text.clone();
-                *edge_state = EdgeState::Cursor(PlaceholderState::default());
-                return Some(final_text);
-            }
-        }
-        None
-    }
-
-    pub fn update_leaf_edit_text(&mut self, text: String) {
-        if let Some(Selection::Edge(_, EdgeState::EditingLeaf(ref mut current))) = self.editor.selection {
-            *current = text;
-        }
-    }
 }

@@ -1,6 +1,6 @@
 use crate::editor::{Editor, EditorWriter};
 use crate::generated::name_of;
-use crate::graph::{EdgeState, Id, Path, Selection};
+use crate::graph::{Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use ordered_float::OrderedFloat;
 
@@ -79,8 +79,8 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         D::StringEditor { value } => {
             render_string_editor(ui, editor, w, &ctx.path, value);
         }
-        D::NumberEditor { value, editing } => {
-            render_number_editor(ui, editor, w, &ctx.path, *value, editing.as_deref());
+        D::NumberEditor { value, number_text } => {
+            render_number_editor(ui, editor, w, &ctx.path, *value, number_text.as_deref());
         }
         D::Placeholder { on_commit } => {
             render_placeholder(ui, editor, w, &ctx.path, on_commit);
@@ -354,16 +354,7 @@ fn render_string_editor(
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
 
-    let leaf_edit_text = match &editor.selection {
-        Some(Selection::Edge(_, EdgeState::EditingLeaf(t))) if primary => Some(t),
-        _ => None,
-    };
-    let is_editing = leaf_edit_text.is_some();
-    let mut text = if is_editing {
-        leaf_edit_text.cloned().unwrap_or_else(|| value.to_string())
-    } else {
-        value.to_string()
-    };
+    let mut text = value.to_string();
 
     let font_id = egui::TextStyle::Body.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(text.clone(), font_id, Color32::BLACK);
@@ -382,18 +373,10 @@ fn render_string_editor(
 
     if response.gained_focus() {
         w.select(Some(Selection::edge(path.clone())));
-        w.start_leaf_edit(value.to_string());
     }
 
-    if response.lost_focus() {
-        if let Some(final_text) = w.stop_leaf_edit() {
-            w.set_edge(path, Id::String(final_text));
-        }
-    }
-
-    if is_editing && leaf_edit_text.is_some_and(|t| t != &text) {
-        w.set_edge(path, Id::String(text.clone()));
-        w.update_leaf_edit_text(text);
+    if text != value {
+        w.set_edge(path, Id::String(text));
     }
 }
 
@@ -403,23 +386,15 @@ fn render_number_editor(
     w: &mut EditorWriter,
     path: &Path,
     value: f64,
-    _editing: Option<&str>,
+    number_text: Option<&str>,
 ) {
     let id = Id::Number(OrderedFloat(value));
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
 
-    let model_text = value.to_string();
-    let leaf_edit_text = match &editor.selection {
-        Some(Selection::Edge(_, EdgeState::EditingLeaf(t))) if primary => Some(t),
-        _ => None,
-    };
-    let is_editing = leaf_edit_text.is_some();
-    let mut text = if is_editing {
-        leaf_edit_text.cloned().unwrap_or_else(|| model_text.clone())
-    } else {
-        model_text.clone()
-    };
+    let is_editing = number_text.is_some();
+    let display_text = number_text.map_or_else(|| value.to_string(), |t| t.to_string());
+    let mut text = display_text.clone();
 
     let font_id = egui::TextStyle::Body.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(text.clone(), font_id, Color32::BLACK);
@@ -438,19 +413,20 @@ fn render_number_editor(
 
     if response.gained_focus() {
         w.select(Some(Selection::edge(path.clone())));
-        w.start_leaf_edit(model_text.clone());
+        w.set_number_text(Some(value.to_string()));
     }
 
     if response.lost_focus() {
-        if let Some(final_text) = w.stop_leaf_edit() {
-            if let Ok(n) = final_text.parse::<f64>() {
+        if let Some(text) = number_text {
+            if let Ok(n) = text.parse::<f64>() {
                 w.set_edge(path, Id::Number(OrderedFloat(n)));
             }
+            w.set_number_text(None);
         }
     }
 
-    if is_editing && leaf_edit_text.is_some_and(|t| t != &text) {
-        w.update_leaf_edit_text(text);
+    if is_editing && text != display_text {
+        w.set_number_text(Some(text));
     }
 }
 
@@ -462,7 +438,7 @@ fn render_placeholder(
     on_commit: &dyn Fn(&mut EditorWriter, Id),
 ) {
     let ps = match &editor.selection {
-        Some(Selection::Edge(sel_path, EdgeState::Cursor(ps))) if sel_path == path => ps,
+        Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
         _ => return,
     };
     let mut ps = ps.clone();

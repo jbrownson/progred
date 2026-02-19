@@ -13,7 +13,7 @@ use d::D;
 use document::Document;
 use editor::{Editor, EditorWriter};
 use eframe::egui;
-use graph::{EdgeState, Id, Selection};
+use graph::{Id, Selection};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -128,7 +128,7 @@ impl ProgredApp {
     fn placeholder_handler(&mut self, ctx: &egui::Context) -> bool {
         let active = match &self.editor.selection {
             Some(Selection::InsertRoot(..)) => true,
-            Some(Selection::Edge(path, EdgeState::Cursor(_))) => self.editor.doc.node(path).is_none(),
+            Some(Selection::Edge(path, _)) => self.editor.doc.node(path).is_none(),
             _ => false,
         };
         if !active { return false; }
@@ -141,7 +141,12 @@ impl ProgredApp {
     }
 
     fn leaf_edit_handler(&mut self, _ctx: &egui::Context) -> bool {
-        matches!(self.editor.selection, Some(Selection::Edge(_, EdgeState::EditingLeaf(_))))
+        match &self.editor.selection {
+            Some(Selection::Edge(path, _)) => {
+                matches!(self.editor.doc.node(path), Some(Id::String(_) | Id::Number(_)))
+            }
+            _ => false,
+        }
     }
 
     fn global_handler(&mut self, ctx: &egui::Context) -> bool {

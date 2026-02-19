@@ -7,10 +7,10 @@ pub struct PlaceholderState {
     pub selected_index: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EdgeState {
-    Cursor(PlaceholderState),
-    EditingLeaf(String),
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EdgeState {
+    pub placeholder: PlaceholderState,
+    pub number_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,7 +23,7 @@ pub enum Selection {
 
 impl Selection {
     pub fn edge(path: Path) -> Self {
-        Self::Edge(path, EdgeState::Cursor(PlaceholderState::default()))
+        Self::Edge(path, EdgeState::default())
     }
 
     pub fn insert_root(index: usize) -> Self {
