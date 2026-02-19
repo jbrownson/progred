@@ -16,6 +16,7 @@ unset CARGO_HOME RUSTUP_HOME && cargo build
 - Don't fight the system — avoid hacks/workarounds that go against how frameworks or platforms are designed; push back early when something seems like it's not meant to work that way
 - Keep unrelated changes in separate commits whenever possible; avoid bundling housekeeping with feature work
 - Only commit when explicitly asked
+- When a design pattern or lesson emerges during work, propose additions to this document so future sessions start with that knowledge
 
 ## Git Commits
 
