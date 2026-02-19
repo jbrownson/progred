@@ -11,7 +11,7 @@ mod ui;
 
 use d::D;
 use document::Document;
-use editor::{Editor, EditorWriter};
+use editor::Editor;
 use eframe::egui;
 use graph::{Id, Selection};
 
@@ -223,16 +223,13 @@ impl eframe::App for ProgredApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(ctx.style().visuals.panel_fill))
             .show(ctx, |ui| {
-                let snapshot = self.editor.clone();
-                let mut w = EditorWriter::new(&mut self.editor);
-
                 if self.show_graph {
                     ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split, |left, right| {
-                        ui::tree_view::render(left, ctx, &snapshot, &mut w, &d_trees, &orphan_ids);
-                        ui::graph_view::render(right, ctx, &snapshot, &mut w);
+                        ui::tree_view::render(left, ctx, &mut self.editor, &d_trees, &orphan_ids);
+                        ui::graph_view::render(right, ctx, &mut self.editor);
                     });
                 } else {
-                    ui::tree_view::render(ui, ctx, &snapshot, &mut w, &d_trees, &orphan_ids);
+                    ui::tree_view::render(ui, ctx, &mut self.editor, &d_trees, &orphan_ids);
                 }
             });
     }

@@ -1,4 +1,4 @@
-use crate::editor::{Editor, EditorWriter};
+use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
 use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, EMPTY_TYPE, HEAD, ISA, NAME, TAIL, TYPE_};
 use crate::graph::{Gid, Id, Path, Selection};
@@ -55,8 +55,8 @@ impl<'a> RenderCtx<'a> {
                 D::Descend {
                     path: child_path,
                     child: Box::new(D::Placeholder {
-                        on_commit: Box::new(move |w: &mut EditorWriter, value| {
-                            w.set_edge(&commit_path, value);
+                        on_commit: Box::new(move |w: &mut Editor, value| {
+                            w.doc.set_edge(&commit_path, value);
                         }),
                     }),
                 }
@@ -123,8 +123,8 @@ fn render_uuid(
                 D::Descend {
                     path: placeholder_path,
                     child: Box::new(D::Placeholder {
-                        on_commit: Box::new(move |w: &mut EditorWriter, value| {
-                            w.set_edge(&closure_path, value);
+                        on_commit: Box::new(move |w: &mut Editor, value| {
+                            w.doc.set_edge(&closure_path, value);
                         }),
                     }),
                 },
@@ -260,13 +260,13 @@ fn list_placeholder(editor: &Editor, insert_path: &Path) -> D {
     D::Descend {
         path: insert_path.clone(),
         child: Box::new(D::Placeholder {
-            on_commit: Box::new(move |w: &mut EditorWriter, head_value| {
+            on_commit: Box::new(move |w: &mut Editor, head_value| {
                 if let Some(ref current_value) = current_value {
                     let new_cons = Id::new_uuid();
-                    w.set_edge(&commit_path, new_cons.clone());
-                    w.set_edge(&commit_path.child(ISA.clone()), CONS_TYPE.clone());
-                    w.set_edge(&commit_path.child(HEAD.clone()), head_value);
-                    w.set_edge(&commit_path.child(TAIL.clone()), current_value.clone());
+                    w.doc.set_edge(&commit_path, new_cons.clone());
+                    w.doc.set_edge(&commit_path.child(ISA.clone()), CONS_TYPE.clone());
+                    w.doc.set_edge(&commit_path.child(HEAD.clone()), head_value);
+                    w.doc.set_edge(&commit_path.child(TAIL.clone()), current_value.clone());
                 }
             }),
         }),

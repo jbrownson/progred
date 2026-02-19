@@ -1,5 +1,5 @@
 use crate::document::Document;
-use crate::editor::{Editor, EditorWriter};
+use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
 use crate::graph::{Gid, Id, MutGid, Selection};
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
@@ -311,7 +311,7 @@ fn screen_to_graph(pos: Pos2, panel_center: Vec2, pan_offset: Vec2, zoom: f32) -
     ((pos.to_vec2() - panel_center - pan_offset) / zoom).to_pos2()
 }
 
-pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut EditorWriter) {
+pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &mut Editor) {
     let mut state = editor.graph_view.clone();
     let panel_rect = ui.max_rect();
     let panel_center = panel_rect.center().to_vec2();
@@ -536,8 +536,8 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, w: &mut E
                 .find(|(id, pos)| Rect::from_center_size(to_screen(**pos), node_half_size(&half_sizes, id) * 2.0 * state.zoom).contains(p))
                 .map(|(id, _)| Selection::GraphNode(id.clone()))
         });
-        w.select(edge_hit.or(node_hit));
+        editor.selection = edge_hit.or(node_hit);
     }
 
-    w.set_graph_view(state);
+    editor.graph_view = state;
 }

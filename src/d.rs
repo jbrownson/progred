@@ -1,4 +1,4 @@
-use crate::editor::EditorWriter;
+use crate::editor::Editor;
 use crate::graph::{Id, Path};
 
 pub enum TextStyle {
@@ -26,7 +26,7 @@ pub enum D {
     NumberEditor { value: f64, number_text: Option<String> },
 
     Placeholder {
-        on_commit: Box<dyn Fn(&mut EditorWriter, Id)>,
+        on_commit: Box<dyn Fn(&mut Editor, Id)>,
     },
 
     List {

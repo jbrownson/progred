@@ -1,6 +1,6 @@
-use crate::editor::{Editor, EditorWriter};
+use crate::editor::Editor;
 use crate::generated::name_of;
-use crate::graph::{Id, Path, Selection};
+use crate::graph::{EdgeState, Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 use ordered_float::OrderedFloat;
 
@@ -31,7 +31,7 @@ pub struct DContext {
     pub path: Path,
 }
 
-pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode: &InteractionMode, ctx: &DContext) {
+pub fn render_d(ui: &mut Ui, editor: &mut Editor, d: &D, mode: &InteractionMode, ctx: &DContext) {
     match d {
         D::Block(children) => {
             ui.vertical(|ui| {
@@ -39,20 +39,20 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
                     if i > 0 {
                         ui.add_space(2.0);
                     }
-                    render_d(ui, editor, w, child, mode, ctx);
+                    render_d(ui, editor, child, mode, ctx);
                 }
             });
         }
         D::Line(children) => {
             ui.horizontal(|ui| {
                 for child in children {
-                    render_d(ui, editor, w, child, mode, ctx);
+                    render_d(ui, editor, child, mode, ctx);
                 }
             });
         }
         D::Indent(child) => {
             ui.indent("edges", |ui| {
-                render_d(ui, editor, w, child, mode, ctx);
+                render_d(ui, editor, child, mode, ctx);
             });
         }
         D::Text(s, style) => {
@@ -63,27 +63,27 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
         }
         D::Descend { path, child } => {
             let child_ctx = DContext { path: path.clone() };
-            render_d(ui, editor, w, child, mode, &child_ctx);
+            render_d(ui, editor, child, mode, &child_ctx);
         }
         D::NodeHeader { child } => {
-            render_node_header(ui, editor, w, child, mode, ctx);
+            render_node_header(ui, editor, child, mode, ctx);
         }
         D::FieldLabel { label_id } => {
-            render_field_label(ui, editor, w, &ctx.path, label_id, mode);
+            render_field_label(ui, editor, &ctx.path, label_id, mode);
         }
         D::CollapseToggle { collapsed } => {
             if collapse_toggle(ui, *collapsed).clicked() {
-                w.set_collapsed(&ctx.path, !collapsed);
+                editor.tree.set_collapsed(&ctx.path, !collapsed);
             }
         }
         D::StringEditor { value } => {
-            render_string_editor(ui, editor, w, &ctx.path, value);
+            render_string_editor(ui, editor, &ctx.path, value);
         }
         D::NumberEditor { value, number_text } => {
-            render_number_editor(ui, editor, w, &ctx.path, *value, number_text.as_deref());
+            render_number_editor(ui, editor, &ctx.path, *value, number_text.as_deref());
         }
         D::Placeholder { on_commit } => {
-            render_placeholder(ui, editor, w, &ctx.path, on_commit);
+            render_placeholder(ui, editor, &ctx.path, on_commit);
         }
         D::List { opening, closing, separator, items, vertical } => {
             if *vertical && !items.is_empty() {
@@ -91,7 +91,7 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
                     for item in items {
                         ui.horizontal(|ui| {
                             ui.label(text_rich("\u{2022}", &TextStyle::Punctuation));
-                            render_d(ui, editor, w, item, mode, ctx);
+                            render_d(ui, editor, item, mode, ctx);
                         });
                     }
                 });
@@ -101,7 +101,7 @@ pub fn render_d(ui: &mut Ui, editor: &Editor, w: &mut EditorWriter, d: &D, mode:
                     if i > 0 {
                         ui.label(text_rich(separator, &TextStyle::Punctuation));
                     }
-                    render_d(ui, editor, w, item, mode, ctx);
+                    render_d(ui, editor, item, mode, ctx);
                 }
                 ui.label(text_rich(closing, &TextStyle::Punctuation));
             }
@@ -216,17 +216,17 @@ fn mode_style(mode: &InteractionMode) -> (HighlightStyle, HighlightStyle) {
     }
 }
 
-fn handle_pick(w: &mut EditorWriter, mode: &InteractionMode, value: Id, path: &Path) {
+fn handle_pick(editor: &mut Editor, mode: &InteractionMode, value: Id, path: &Path) {
     match mode {
         InteractionMode::Assign(target) => {
-            w.set_edge(target, value);
-            w.select(None);
+            editor.doc.set_edge(target, value);
+            editor.selection = None;
         }
         InteractionMode::SelectUnder(source) => {
-            w.select(Some(Selection::edge(source.child(value))));
+            editor.selection = Some(Selection::edge(source.child(value)));
         }
         InteractionMode::Normal => {
-            w.select(Some(Selection::edge(path.clone())));
+            editor.selection = Some(Selection::edge(path.clone()));
         }
     }
 }
@@ -283,8 +283,7 @@ fn text_rich(s: &str, style: &TextStyle) -> egui::RichText {
 
 fn render_node_header(
     ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
+    editor: &mut Editor,
     child: &D,
     mode: &InteractionMode,
     ctx: &DContext,
@@ -300,19 +299,18 @@ fn render_node_header(
         mode_style(mode)
     };
     if clickable(ui, |ui| {
-        render_d(ui, editor, w, child, mode, ctx);
+        render_d(ui, editor, child, mode, ctx);
         ui.interact(ui.min_rect(), ui.id(), Sense::hover())
     }, style, hovered).clicked() {
         if let Some(id) = id {
-            handle_pick(w, mode, id, &ctx.path);
+            handle_pick(editor, mode, id, &ctx.path);
         }
     }
 }
 
 fn render_field_label(
     ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
+    editor: &mut Editor,
     entity_path: &Path,
     label_id: &Id,
     mode: &InteractionMode,
@@ -338,15 +336,14 @@ fn render_field_label(
         }, style, hovered).clicked()
             && !matches!(mode, InteractionMode::Normal)
         {
-            handle_pick(w, mode, label_id.clone(), entity_path);
+            handle_pick(editor, mode, label_id.clone(), entity_path);
         }
     });
 }
 
 fn render_string_editor(
     ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
+    editor: &mut Editor,
     path: &Path,
     value: &str,
 ) {
@@ -372,18 +369,17 @@ fn render_string_editor(
     }, selection_style(primary, secondary));
 
     if response.gained_focus() {
-        w.select(Some(Selection::edge(path.clone())));
+        editor.selection = Some(Selection::edge(path.clone()));
     }
 
     if text != value {
-        w.set_edge(path, Id::String(text));
+        editor.doc.set_edge(path, Id::String(text));
     }
 }
 
 fn render_number_editor(
     ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
+    editor: &mut Editor,
     path: &Path,
     value: f64,
     number_text: Option<&str>,
@@ -412,42 +408,50 @@ fn render_number_editor(
     }, selection_style(primary, secondary));
 
     if response.gained_focus() {
-        w.select(Some(Selection::edge(path.clone())));
-        w.set_number_text(Some(value.to_string()));
+        let mut es = EdgeState::default();
+        es.number_text = Some(value.to_string());
+        editor.selection = Some(Selection::Edge(path.clone(), es));
     }
 
     if response.lost_focus() {
         if let Some(text) = number_text {
             if let Ok(n) = text.parse::<f64>() {
-                w.set_edge(path, Id::Number(OrderedFloat(n)));
+                editor.doc.set_edge(path, Id::Number(OrderedFloat(n)));
             }
-            w.set_number_text(None);
+            if let Some(Selection::Edge(_, ref mut es)) = editor.selection {
+                es.number_text = None;
+            }
         }
     }
 
     if is_editing && text != display_text {
-        w.set_number_text(Some(text));
+        if let Some(Selection::Edge(_, ref mut es)) = editor.selection {
+            es.number_text = Some(text);
+        }
     }
 }
 
 fn render_placeholder(
     ui: &mut Ui,
-    editor: &Editor,
-    w: &mut EditorWriter,
+    editor: &mut Editor,
     path: &Path,
-    on_commit: &dyn Fn(&mut EditorWriter, Id),
+    on_commit: &dyn Fn(&mut Editor, Id),
 ) {
     let ps = match &editor.selection {
-        Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
+        Some(Selection::Edge(sel_path, es)) if sel_path == path => es.placeholder.clone(),
         _ => return,
     };
-    let mut ps = ps.clone();
+    let mut ps = ps;
     match super::placeholder::render(ui, &mut ps) {
         PlaceholderResult::Commit(value) => {
-            on_commit(w, value);
-            w.select(None);
+            on_commit(editor, value);
+            editor.selection = None;
         }
-        PlaceholderResult::Dismiss => w.select(None),
-        PlaceholderResult::Active => w.set_placeholder_state(ps),
+        PlaceholderResult::Dismiss => editor.selection = None,
+        PlaceholderResult::Active => {
+            if let Some(Selection::Edge(_, ref mut es)) = editor.selection {
+                es.placeholder = ps;
+            }
+        }
     }
 }
