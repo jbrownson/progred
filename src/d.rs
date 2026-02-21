@@ -52,7 +52,6 @@ pub enum DEvent<'a> {
     StringEditorStringChanged { path: Path, text: String },
     NumberEditorTextChanged { path: Path, text: String },
 
-    // TODO: on_commit takes &mut Editor — ideally returns pure data
     PlaceholderCommitted { on_commit: &'a dyn Fn(&mut Editor, Id), value: Id },
     PlaceholderDismissed,
     PlaceholderUpdated(PlaceholderState),
