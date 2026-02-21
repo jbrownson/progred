@@ -1,7 +1,7 @@
-use crate::d::D;
+use crate::d::{D, DEvent};
 use crate::editor::Editor;
-use crate::graph::{Id, Path, RootSlot, Selection};
-use eframe::egui::{self, Color32, Context, RichText, Sense, Ui};
+use crate::graph::{Id, Path, Selection};
+use eframe::egui::{self, Color32, RichText, Sense, Ui};
 use std::collections::HashSet;
 
 use super::identicon;
@@ -19,25 +19,7 @@ pub fn generate(editor: &Editor) -> Vec<Option<D>> {
         .collect()
 }
 
-pub fn render(ui: &mut Ui, ctx: &Context, editor: &mut Editor, d_trees: &[Option<D>], orphan_ids: &HashSet<Id>) {
-    let modifiers = ctx.input(|i| i.modifiers);
-    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path()).cloned();
-    let mode = if modifiers.alt {
-        match selected_path {
-            Some(path) => InteractionMode::Assign(path),
-            _ => InteractionMode::Normal,
-        }
-    } else if modifiers.ctrl {
-        match selected_path {
-            Some(ref path) if matches!(editor.doc.node(path), Some(Id::Uuid(_))) => {
-                InteractionMode::SelectUnder(path.clone())
-            }
-            _ => InteractionMode::Normal,
-        }
-    } else {
-        InteractionMode::Normal
-    };
-
+pub fn render<'a>(ui: &mut Ui, editor: &Editor, d_trees: &'a [Option<D>], orphan_ids: &HashSet<Id>, mode: &InteractionMode, events: &mut Vec<DEvent<'a>>) {
     let margin = egui::Margin::same(TREE_MARGIN as i8);
     egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(margin).show(ui, |ui| {
@@ -49,21 +31,21 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &mut Editor, d_trees: &[Option
 
         ui.push_id("roots", |ui| {
             if editor.doc.roots.is_empty() {
-                render_root_insertion(ui, editor, 0, true);
+                render_root_insertion(ui, editor, 0, true, events);
             } else {
                 let root_count = editor.doc.roots.len();
                 for i in 0..root_count {
-                    render_root_insertion(ui, editor, i, false);
+                    render_root_insertion(ui, editor, i, false, events);
                     if let Some(Some(d)) = d_trees.get(i) {
                         let path = Path::new(&editor.doc.roots[i]);
                         let push_id = egui::Id::new(&editor.doc.roots[i]);
                         ui.push_id(push_id, |ui| {
                             let ctx = DContext { path: path.clone() };
-                            render_d(ui, editor, d, &mode, &ctx);
+                            render_d(ui, editor, d, mode, &ctx, events);
                         });
                     }
                 }
-                render_root_insertion(ui, editor, root_count, false);
+                render_root_insertion(ui, editor, root_count, false, events);
             }
         });
 
@@ -82,13 +64,13 @@ pub fn render(ui: &mut Ui, ctx: &Context, editor: &mut Editor, d_trees: &[Option
         }
 
         if bg_response.clicked() {
-            editor.selection = None;
+            events.push(DEvent::ClickedBackground);
         }
         });
     });
 }
 
-fn render_root_insertion(ui: &mut Ui, editor: &mut Editor, index: usize, empty_doc: bool) {
+fn render_root_insertion(ui: &mut Ui, editor: &Editor, index: usize, empty_doc: bool, events: &mut Vec<DEvent<'_>>) {
     let active_placeholder = matches!(
         &editor.selection,
         Some(Selection::InsertRoot(idx, _)) if *idx == index
@@ -99,14 +81,13 @@ fn render_root_insertion(ui: &mut Ui, editor: &mut Editor, index: usize, empty_d
             let mut ps = ps.clone();
             match super::placeholder::render(ui, &mut ps) {
                 PlaceholderResult::Commit(id) => {
-                    editor.doc.roots.insert(index, RootSlot::new(id));
-                    editor.selection = None;
+                    events.push(DEvent::RootPlaceholderCommitted { index, value: id });
                 }
-                PlaceholderResult::Dismiss => editor.selection = None,
+                PlaceholderResult::Dismiss => {
+                    events.push(DEvent::RootPlaceholderDismissed);
+                }
                 PlaceholderResult::Active => {
-                    if let Some(Selection::InsertRoot(_, ref mut wps)) = editor.selection {
-                        *wps = ps;
-                    }
+                    events.push(DEvent::RootPlaceholderUpdated(ps));
                 }
             }
         }
@@ -119,9 +100,9 @@ fn render_root_insertion(ui: &mut Ui, editor: &mut Editor, index: usize, empty_d
             ).frame(false)
         ).on_hover_cursor(egui::CursorIcon::Default);
         if response.clicked() {
-            editor.selection = Some(Selection::insert_root(index));
+            events.push(DEvent::ClickedRootInsertionPoint(index));
         }
     } else if insertion_point(ui).clicked() {
-        editor.selection = Some(Selection::insert_root(index));
+        events.push(DEvent::ClickedRootInsertionPoint(index));
     }
 }

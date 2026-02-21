@@ -34,6 +34,7 @@ EOF
 ## egui Pitfalls
 
 - **Don't use `lost_focus()`** — egui's `Response::lost_focus()` is unreliable when focus moves between TextEdit widgets. It only fires if the losing widget renders *after* the gaining widget (layout-order dependent). This is a [known bug](https://github.com/emilk/egui/issues/2142) unfixed since 2022. Design interactions so they don't depend on lost_focus — e.g. commit on every valid keystroke rather than on defocus.
+- **Render-pass mutations are order-dependent** — When the render pass mutates `&mut Editor` (e.g. setting selection, writing to the graph), the order depends on widget layout position. Two widgets reacting to the same click/event in one frame will see each other's mutations if one renders after the other. Design mutations to be idempotent or independent where possible, and avoid reading state that another widget may have already mutated this frame.
 
 ## Key Design Rules
 
@@ -49,6 +50,7 @@ EOF
 - **Autocomplete integration**: Hook up name lookups to the placeholder autocomplete dialog, port architecture from original prototype
 - **Red squiggles**: Real-time type system errors displayed inline
 - **Default projection improvements**: Show placeholders for missing fields, order fields per record definition, show extra fields at bottom
+- **Naming audit**: "Field" vs "edge label" conflation (Field is a defined semantic thing, edge labels may or may not be fields), and related inconsistencies across D, DEvent, and UI code
 
 ## Code Style
 

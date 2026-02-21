@@ -1,5 +1,6 @@
 use crate::editor::Editor;
-use crate::graph::{Id, Path};
+use crate::graph::{Id, Path, PlaceholderState, Selection};
+use crate::ui::graph_view::GraphViewState;
 
 pub enum TextStyle {
     Keyword,
@@ -38,3 +39,29 @@ pub enum D {
     },
 }
 
+pub enum DEvent<'a> {
+    ClickedNode { path: Path, id: Id },
+    ClickedFieldLabel { entity_path: Path, label_id: Id },
+    ClickedCollapseToggle(Path),
+    ClickedBackground,
+    ClickedRootInsertionPoint(usize),
+
+    ClickedStringEditor(Path),
+    ClickedNumberEditor(Path),
+
+    StringEditorStringChanged { path: Path, text: String },
+    NumberEditorTextChanged { path: Path, text: String },
+
+    // TODO: on_commit takes &mut Editor — ideally returns pure data
+    PlaceholderCommitted { on_commit: &'a dyn Fn(&mut Editor, Id), value: Id },
+    PlaceholderDismissed,
+    PlaceholderUpdated(PlaceholderState),
+
+    RootPlaceholderCommitted { index: usize, value: Id },
+    RootPlaceholderDismissed,
+    RootPlaceholderUpdated(PlaceholderState),
+
+    GraphClicked(Option<Selection>),
+    // TODO: replace with TimePassed — move physics simulation to handler so render is read-only
+    GraphViewStateChanged(GraphViewState),
+}

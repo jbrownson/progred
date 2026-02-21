@@ -1,10 +1,8 @@
+use crate::d::{D, DEvent, TextStyle};
 use crate::editor::Editor;
 use crate::generated::name_of;
-use crate::graph::{EdgeState, Id, Path, Selection};
+use crate::graph::{Id, Path};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
-use ordered_float::OrderedFloat;
-
-use crate::d::{D, TextStyle};
 
 use super::colors;
 use super::identicon;
@@ -27,11 +25,30 @@ pub enum InteractionMode {
     Assign(Path),
 }
 
+pub fn compute_interaction_mode(modifiers: egui::Modifiers, editor: &Editor) -> InteractionMode {
+    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path()).cloned();
+    if modifiers.alt {
+        match selected_path {
+            Some(path) => InteractionMode::Assign(path),
+            _ => InteractionMode::Normal,
+        }
+    } else if modifiers.ctrl {
+        match selected_path {
+            Some(ref path) if matches!(editor.doc.node(path), Some(Id::Uuid(_))) => {
+                InteractionMode::SelectUnder(path.clone())
+            }
+            _ => InteractionMode::Normal,
+        }
+    } else {
+        InteractionMode::Normal
+    }
+}
+
 pub struct DContext {
     pub path: Path,
 }
 
-pub fn render_d(ui: &mut Ui, editor: &mut Editor, d: &D, mode: &InteractionMode, ctx: &DContext) {
+pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMode, ctx: &DContext, events: &mut Vec<DEvent<'a>>) {
     match d {
         D::Block(children) => {
             ui.vertical(|ui| {
@@ -39,20 +56,20 @@ pub fn render_d(ui: &mut Ui, editor: &mut Editor, d: &D, mode: &InteractionMode,
                     if i > 0 {
                         ui.add_space(2.0);
                     }
-                    render_d(ui, editor, child, mode, ctx);
+                    render_d(ui, editor, child, mode, ctx, events);
                 }
             });
         }
         D::Line(children) => {
             ui.horizontal(|ui| {
                 for child in children {
-                    render_d(ui, editor, child, mode, ctx);
+                    render_d(ui, editor, child, mode, ctx, events);
                 }
             });
         }
         D::Indent(child) => {
             ui.indent("edges", |ui| {
-                render_d(ui, editor, child, mode, ctx);
+                render_d(ui, editor, child, mode, ctx, events);
             });
         }
         D::Text(s, style) => {
@@ -63,27 +80,27 @@ pub fn render_d(ui: &mut Ui, editor: &mut Editor, d: &D, mode: &InteractionMode,
         }
         D::Descend { path, child } => {
             let child_ctx = DContext { path: path.clone() };
-            render_d(ui, editor, child, mode, &child_ctx);
+            render_d(ui, editor, child, mode, &child_ctx, events);
         }
         D::NodeHeader { child } => {
-            render_node_header(ui, editor, child, mode, ctx);
+            render_node_header(ui, editor, child, mode, ctx, events);
         }
         D::FieldLabel { label_id } => {
-            render_field_label(ui, editor, &ctx.path, label_id, mode);
+            render_field_label(ui, editor, &ctx.path, label_id, mode, events);
         }
         D::CollapseToggle { collapsed } => {
             if collapse_toggle(ui, *collapsed).clicked() {
-                editor.tree.set_collapsed(&ctx.path, !collapsed);
+                events.push(DEvent::ClickedCollapseToggle(ctx.path.clone()));
             }
         }
         D::StringEditor { value } => {
-            render_string_editor(ui, editor, &ctx.path, value);
+            render_string_editor(ui, editor, &ctx.path, value, events);
         }
         D::NumberEditor { value, number_text } => {
-            render_number_editor(ui, editor, &ctx.path, *value, number_text.as_deref());
+            render_number_editor(ui, editor, &ctx.path, *value, number_text.as_deref(), events);
         }
         D::Placeholder { on_commit } => {
-            render_placeholder(ui, editor, &ctx.path, on_commit);
+            render_placeholder(ui, editor, &ctx.path, on_commit, events);
         }
         D::List { opening, closing, separator, items, vertical } => {
             if *vertical && !items.is_empty() {
@@ -91,7 +108,7 @@ pub fn render_d(ui: &mut Ui, editor: &mut Editor, d: &D, mode: &InteractionMode,
                     for item in items {
                         ui.horizontal(|ui| {
                             ui.label(text_rich("\u{2022}", &TextStyle::Punctuation));
-                            render_d(ui, editor, item, mode, ctx);
+                            render_d(ui, editor, item, mode, ctx, events);
                         });
                     }
                 });
@@ -101,7 +118,7 @@ pub fn render_d(ui: &mut Ui, editor: &mut Editor, d: &D, mode: &InteractionMode,
                     if i > 0 {
                         ui.label(text_rich(separator, &TextStyle::Punctuation));
                     }
-                    render_d(ui, editor, item, mode, ctx);
+                    render_d(ui, editor, item, mode, ctx, events);
                 }
                 ui.label(text_rich(closing, &TextStyle::Punctuation));
             }
@@ -216,21 +233,6 @@ fn mode_style(mode: &InteractionMode) -> (HighlightStyle, HighlightStyle) {
     }
 }
 
-fn handle_pick(editor: &mut Editor, mode: &InteractionMode, value: Id, path: &Path) {
-    match mode {
-        InteractionMode::Assign(target) => {
-            editor.doc.set_edge(target, value);
-            editor.selection = None;
-        }
-        InteractionMode::SelectUnder(source) => {
-            editor.selection = Some(Selection::edge(source.child(value)));
-        }
-        InteractionMode::Normal => {
-            editor.selection = Some(Selection::edge(path.clone()));
-        }
-    }
-}
-
 fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
     let size = 12.0;
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
@@ -281,12 +283,13 @@ fn text_rich(s: &str, style: &TextStyle) -> egui::RichText {
     }
 }
 
-fn render_node_header(
+fn render_node_header<'a>(
     ui: &mut Ui,
-    editor: &mut Editor,
-    child: &D,
+    editor: &Editor,
+    child: &'a D,
     mode: &InteractionMode,
     ctx: &DContext,
+    events: &mut Vec<DEvent<'a>>,
 ) {
     let id = editor.doc.node(&ctx.path);
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(&ctx.path);
@@ -299,21 +302,22 @@ fn render_node_header(
         mode_style(mode)
     };
     if clickable(ui, |ui| {
-        render_d(ui, editor, child, mode, ctx);
+        render_d(ui, editor, child, mode, ctx, events);
         ui.interact(ui.min_rect(), ui.id(), Sense::hover())
     }, style, hovered).clicked() {
         if let Some(id) = id {
-            handle_pick(editor, mode, id, &ctx.path);
+            events.push(DEvent::ClickedNode { path: ctx.path.clone(), id });
         }
     }
 }
 
 fn render_field_label(
     ui: &mut Ui,
-    editor: &mut Editor,
+    editor: &Editor,
     entity_path: &Path,
     label_id: &Id,
     mode: &InteractionMode,
+    events: &mut Vec<DEvent<'_>>,
 ) {
     let label_color = Color32::from_gray(120);
     let secondary = editor.selected_node_id().as_ref() == Some(label_id);
@@ -336,16 +340,17 @@ fn render_field_label(
         }, style, hovered).clicked()
             && !matches!(mode, InteractionMode::Normal)
         {
-            handle_pick(editor, mode, label_id.clone(), entity_path);
+            events.push(DEvent::ClickedFieldLabel { entity_path: entity_path.clone(), label_id: label_id.clone() });
         }
     });
 }
 
 fn render_string_editor(
     ui: &mut Ui,
-    editor: &mut Editor,
+    editor: &Editor,
     path: &Path,
     value: &str,
+    events: &mut Vec<DEvent<'_>>,
 ) {
     let id = Id::String(value.to_string());
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
@@ -369,22 +374,23 @@ fn render_string_editor(
     }, selection_style(primary, secondary));
 
     if response.gained_focus() {
-        editor.selection = Some(Selection::edge(path.clone()));
+        events.push(DEvent::ClickedStringEditor(path.clone()));
     }
 
     if text != value {
-        editor.doc.set_edge(path, Id::String(text));
+        events.push(DEvent::StringEditorStringChanged { path: path.clone(), text });
     }
 }
 
 fn render_number_editor(
     ui: &mut Ui,
-    editor: &mut Editor,
+    editor: &Editor,
     path: &Path,
     value: f64,
     number_text: Option<&str>,
+    events: &mut Vec<DEvent<'_>>,
 ) {
-    let id = Id::Number(OrderedFloat(value));
+    let id = Id::Number(ordered_float::OrderedFloat(value));
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
 
@@ -408,42 +414,35 @@ fn render_number_editor(
     }, selection_style(primary, secondary));
 
     if response.gained_focus() {
-        let mut es = EdgeState::default();
-        es.number_text = Some(value.to_string());
-        editor.selection = Some(Selection::Edge(path.clone(), es));
+        events.push(DEvent::ClickedNumberEditor(path.clone()));
     }
 
     if is_editing && text != display_text {
-        if let Some(Selection::Edge(_, ref mut es)) = editor.selection {
-            es.number_text = Some(text.clone());
-        }
-        if let Ok(n) = text.parse::<f64>() {
-            editor.doc.set_edge(path, Id::Number(OrderedFloat(n)));
-        }
+        events.push(DEvent::NumberEditorTextChanged { path: path.clone(), text });
     }
 }
 
-fn render_placeholder(
+fn render_placeholder<'a>(
     ui: &mut Ui,
-    editor: &mut Editor,
+    editor: &Editor,
     path: &Path,
-    on_commit: &dyn Fn(&mut Editor, Id),
+    on_commit: &'a dyn Fn(&mut Editor, Id),
+    events: &mut Vec<DEvent<'a>>,
 ) {
     let ps = match &editor.selection {
-        Some(Selection::Edge(sel_path, es)) if sel_path == path => es.placeholder.clone(),
+        Some(crate::graph::Selection::Edge(sel_path, es)) if sel_path == path => es.placeholder.clone(),
         _ => return,
     };
     let mut ps = ps;
     match super::placeholder::render(ui, &mut ps) {
         PlaceholderResult::Commit(value) => {
-            on_commit(editor, value);
-            editor.selection = None;
+            events.push(DEvent::PlaceholderCommitted { on_commit, value });
         }
-        PlaceholderResult::Dismiss => editor.selection = None,
+        PlaceholderResult::Dismiss => {
+            events.push(DEvent::PlaceholderDismissed);
+        }
         PlaceholderResult::Active => {
-            if let Some(Selection::Edge(_, ref mut es)) = editor.selection {
-                es.placeholder = ps;
-            }
+            events.push(DEvent::PlaceholderUpdated(ps));
         }
     }
 }
