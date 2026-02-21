@@ -34,7 +34,7 @@ EOF
 ## egui Pitfalls
 
 - **Don't use `lost_focus()`** — egui's `Response::lost_focus()` is unreliable when focus moves between TextEdit widgets. It only fires if the losing widget renders *after* the gaining widget (layout-order dependent). This is a [known bug](https://github.com/emilk/egui/issues/2142) unfixed since 2022. Design interactions so they don't depend on lost_focus — e.g. commit on every valid keystroke rather than on defocus.
-- **Render-pass mutations are order-dependent** — When the render pass mutates `&mut Editor` (e.g. setting selection, writing to the graph), the order depends on widget layout position. Two widgets reacting to the same click/event in one frame will see each other's mutations if one renders after the other. Design mutations to be idempotent or independent where possible, and avoid reading state that another widget may have already mutated this frame.
+- **Render pass is read-only** — The render pass takes `&Editor` and collects a `Vec<DEvent>`. All mutations happen in `handle_events` after rendering completes. This eliminates read-after-write bugs and order-dependent behavior within a frame.
 
 ## Key Design Rules
 
@@ -69,5 +69,5 @@ EOF
 - Return references for non-trivial types (let caller decide to clone), but methods on small structs (like `Document`) enable disjoint borrow checking over methods on the parent (`ProgredApp`)
 - Avoid early returns — prefer `if let`, `match`, or expression-oriented alternatives over `let-else return` / `return` in closures
 - Dead code should be deleted, not commented out
-- UI rendering: D trees are generated from the editor state before the render pass, then the render pass walks the D tree and mutates `&mut Editor` directly for interactions — no separate writer type, just be careful not to read mutated state when frame-consistent reads matter
+- UI rendering: D trees are generated from the editor state before the render pass, then the render pass walks the D tree with `&Editor` (read-only) and collects `Vec<DEvent>` — events describe what happened (user actions), not what to do about it; `handle_events` interprets them in one place after rendering
 - Push back if something seems wrong
