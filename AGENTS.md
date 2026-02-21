@@ -31,6 +31,10 @@ EOF
 )"
 ```
 
+## egui Pitfalls
+
+- **Don't use `lost_focus()`** — egui's `Response::lost_focus()` is unreliable when focus moves between TextEdit widgets. It only fires if the losing widget renders *after* the gaining widget (layout-order dependent). This is a [known bug](https://github.com/emilk/egui/issues/2142) unfixed since 2022. Design interactions so they don't depend on lost_focus — e.g. commit on every valid keystroke rather than on defocus.
+
 ## Key Design Rules
 
 - **Documents are pure graph structure** — No semantic interpretation baked in. Use generated constants (`Field::NAME`, `Field::ISA`, etc.) for semantic access.

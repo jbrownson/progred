@@ -413,20 +413,12 @@ fn render_number_editor(
         editor.selection = Some(Selection::Edge(path.clone(), es));
     }
 
-    if response.lost_focus() {
-        if let Some(text) = number_text {
-            if let Ok(n) = text.parse::<f64>() {
-                editor.doc.set_edge(path, Id::Number(OrderedFloat(n)));
-            }
-            if let Some(Selection::Edge(_, ref mut es)) = editor.selection {
-                es.number_text = None;
-            }
-        }
-    }
-
     if is_editing && text != display_text {
         if let Some(Selection::Edge(_, ref mut es)) = editor.selection {
-            es.number_text = Some(text);
+            es.number_text = Some(text.clone());
+        }
+        if let Ok(n) = text.parse::<f64>() {
+            editor.doc.set_edge(path, Id::Number(OrderedFloat(n)));
         }
     }
 }
