@@ -20,6 +20,13 @@ impl MutGid {
         self.data.keys()
     }
 
+    pub fn all_ids(&self) -> std::collections::HashSet<Id> {
+        self.data.keys()
+            .map(|u| Id::Uuid(*u))
+            .chain(self.data.values().flat_map(|edges| edges.values().cloned()))
+            .collect()
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.data.ptr_eq(&other.data)
     }

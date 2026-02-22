@@ -57,8 +57,8 @@ fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
 }
 
 fn collect_all_ids(doc: &Document) -> std::collections::HashSet<Id> {
-    doc.roots.iter().map(|r| r.value.clone())
-        .chain(doc.gid.entities().map(|u| Id::Uuid(*u)))
+    doc.gid.all_ids().into_iter()
+        .chain(doc.roots.iter().map(|r| r.value.clone()))
         .collect()
 }
 
@@ -190,6 +190,12 @@ fn apply_forces(state: &mut GraphViewState, forces: &HashMap<Id, Vec2>) {
 fn simulate(state: &mut GraphViewState, edges: &[Edge]) {
     let forces = compute_forces(&state.positions, edges);
     apply_forces(state, &forces);
+}
+
+pub fn step_physics(state: &mut GraphViewState, doc: &Document) {
+    sync_positions(state, doc);
+    let edges = collect_edges(doc);
+    simulate(state, &edges);
 }
 
 fn node_half_size(half_sizes: &HashMap<Id, Vec2>, id: &Id) -> Vec2 {
@@ -337,9 +343,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, events: &
         state.pan_offset += scroll;
     }
 
-    sync_positions(&mut state, &editor.doc);
     let edges = collect_edges(&editor.doc);
-    simulate(&mut state, &edges);
 
     let graph_selected_edge = editor.selection.as_ref()
         .and_then(|s| match s {
@@ -530,15 +534,21 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, events: &
         let edge_hit = pointer.and_then(|p| {
             edge_hit_zones.iter()
                 .find(|(rect, _, _)| rect.contains(p))
-                .map(|(_, entity, label)| Selection::GraphEdge { entity: entity.clone(), label: label.clone() })
+                .map(|(_, entity, label)| (entity.clone(), label.clone()))
         });
         let node_hit = pointer.and_then(|p| {
             state.positions.iter()
                 .find(|(id, pos)| Rect::from_center_size(to_screen(**pos), node_half_size(&half_sizes, id) * 2.0 * state.zoom).contains(p))
-                .map(|(id, _)| Selection::GraphNode(id.clone()))
+                .map(|(id, _)| id.clone())
         });
-        events.push(DEvent::GraphClicked(edge_hit.or(node_hit)));
+        match edge_hit {
+            Some((entity, label)) => events.push(DEvent::GraphEdgeClicked { entity, label }),
+            None => match node_hit {
+                Some(id) => events.push(DEvent::GraphNodeClicked(id)),
+                None => events.push(DEvent::GraphBackgroundClicked),
+            }
+        }
     }
 
-    events.push(DEvent::GraphViewStateChanged(state));
+    events.push(DEvent::GraphViewInteraction(state));
 }

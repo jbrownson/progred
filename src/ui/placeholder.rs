@@ -2,7 +2,13 @@ use crate::graph::{Id, PlaceholderState};
 use eframe::egui::{self, Ui};
 use ordered_float::OrderedFloat;
 
-pub enum PlaceholderResult {
+pub struct PlaceholderResult {
+    pub text_changed: Option<String>,
+    pub selection_moved: Option<usize>,
+    pub outcome: PlaceholderOutcome,
+}
+
+pub enum PlaceholderOutcome {
     Active,
     Commit(Id),
     Dismiss,
@@ -47,10 +53,9 @@ fn build_entries(filter: &str) -> Vec<PlaceholderEntry> {
         .collect()
 }
 
-pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
+pub fn render(ui: &mut Ui, ps: &PlaceholderState) -> PlaceholderResult {
     let entries = build_entries(&ps.text);
-    ps.selected_index = ps.selected_index.min(entries.len() - 1);
-    let selected_index = ps.selected_index;
+    let selected_index = ps.selected_index.min(entries.len() - 1);
 
     let mut text = ps.text.clone();
     let text_id = ui.id().with("placeholder_input");
@@ -81,30 +86,38 @@ pub fn render(ui: &mut Ui, ps: &mut PlaceholderState) -> PlaceholderResult {
         clicked
     };
 
-    if ps.text != text {
-        ps.text = text;
-        ps.selected_index = 0;
-    }
+    let text_changed = if ps.text != text {
+        Some(text)
+    } else {
+        None
+    };
 
     let escape = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
     let enter = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
     let arrow_down = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown));
     let arrow_up = ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp));
 
-    if arrow_down {
-        ps.selected_index = (ps.selected_index + 1).min(entries.len() - 1);
-    }
-    if arrow_up && ps.selected_index > 0 {
-        ps.selected_index -= 1;
-    }
+    let selection_moved = if arrow_down {
+        Some((selected_index + 1).min(entries.len() - 1))
+    } else if arrow_up && selected_index > 0 {
+        Some(selected_index - 1)
+    } else {
+        None
+    };
 
     let commit_index = popup_commit.or_else(|| {
         enter.then_some(selected_index)
     });
 
-    match commit_index {
-        Some(i) => PlaceholderResult::Commit(entries.into_iter().nth(i).unwrap().value.commit()),
-        None if escape || text_response.lost_focus() => PlaceholderResult::Dismiss,
-        None => PlaceholderResult::Active,
+    let outcome = match commit_index {
+        Some(i) => PlaceholderOutcome::Commit(entries.into_iter().nth(i).unwrap().value.commit()),
+        None if escape || text_response.lost_focus() => PlaceholderOutcome::Dismiss,
+        None => PlaceholderOutcome::Active,
+    };
+
+    PlaceholderResult {
+        text_changed,
+        selection_moved,
+        outcome,
     }
 }

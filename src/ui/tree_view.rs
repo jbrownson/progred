@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use super::identicon;
 use super::layout::TREE_MARGIN;
-use super::placeholder::PlaceholderResult;
+use super::placeholder::PlaceholderOutcome;
 use super::{insertion_point, render_d, DContext, InteractionMode};
 
 pub fn generate(editor: &Editor) -> Vec<Option<D>> {
@@ -78,16 +78,21 @@ fn render_root_insertion(ui: &mut Ui, editor: &Editor, index: usize, empty_doc: 
 
     if active_placeholder {
         if let Some(Selection::InsertRoot(_, ps)) = &editor.selection {
-            let mut ps = ps.clone();
-            match super::placeholder::render(ui, &mut ps) {
-                PlaceholderResult::Commit(id) => {
+            let result = super::placeholder::render(ui, ps);
+            match result.outcome {
+                PlaceholderOutcome::Commit(id) => {
                     events.push(DEvent::RootPlaceholderCommitted { index, value: id });
                 }
-                PlaceholderResult::Dismiss => {
+                PlaceholderOutcome::Dismiss => {
                     events.push(DEvent::RootPlaceholderDismissed);
                 }
-                PlaceholderResult::Active => {
-                    events.push(DEvent::RootPlaceholderUpdated(ps));
+                PlaceholderOutcome::Active => {
+                    if let Some(text) = result.text_changed {
+                        events.push(DEvent::RootPlaceholderTextChanged(text));
+                    }
+                    if let Some(idx) = result.selection_moved {
+                        events.push(DEvent::RootPlaceholderSelectionMoved(idx));
+                    }
                 }
             }
         }

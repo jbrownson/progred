@@ -6,7 +6,7 @@ use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2}
 
 use super::colors;
 use super::identicon;
-use super::placeholder::PlaceholderResult;
+use super::placeholder::PlaceholderOutcome;
 
 pub mod layout {
     pub const SELECTION_PADDING: f32 = 2.0;
@@ -430,19 +430,24 @@ fn render_placeholder<'a>(
     events: &mut Vec<DEvent<'a>>,
 ) {
     let ps = match &editor.selection {
-        Some(crate::graph::Selection::Edge(sel_path, es)) if sel_path == path => es.placeholder.clone(),
+        Some(crate::graph::Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
         _ => return,
     };
-    let mut ps = ps;
-    match super::placeholder::render(ui, &mut ps) {
-        PlaceholderResult::Commit(value) => {
+    let result = super::placeholder::render(ui, ps);
+    match result.outcome {
+        PlaceholderOutcome::Commit(value) => {
             events.push(DEvent::PlaceholderCommitted { on_commit, value });
         }
-        PlaceholderResult::Dismiss => {
+        PlaceholderOutcome::Dismiss => {
             events.push(DEvent::PlaceholderDismissed);
         }
-        PlaceholderResult::Active => {
-            events.push(DEvent::PlaceholderUpdated(ps));
+        PlaceholderOutcome::Active => {
+            if let Some(text) = result.text_changed {
+                events.push(DEvent::PlaceholderTextChanged(text));
+            }
+            if let Some(index) = result.selection_moved {
+                events.push(DEvent::PlaceholderSelectionMoved(index));
+            }
         }
     }
 }

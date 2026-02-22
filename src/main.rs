@@ -276,9 +276,15 @@ impl ProgredApp {
                 DEvent::PlaceholderDismissed => {
                     self.editor.selection = None;
                 }
-                DEvent::PlaceholderUpdated(ps) => {
+                DEvent::PlaceholderTextChanged(text) => {
                     if let Some(Selection::Edge(_, ref mut es)) = self.editor.selection {
-                        es.placeholder = ps;
+                        es.placeholder.text = text;
+                        es.placeholder.selected_index = 0;
+                    }
+                }
+                DEvent::PlaceholderSelectionMoved(index) => {
+                    if let Some(Selection::Edge(_, ref mut es)) = self.editor.selection {
+                        es.placeholder.selected_index = index;
                     }
                 }
                 DEvent::RootPlaceholderCommitted { index, value } => {
@@ -288,15 +294,27 @@ impl ProgredApp {
                 DEvent::RootPlaceholderDismissed => {
                     self.editor.selection = None;
                 }
-                DEvent::RootPlaceholderUpdated(ps) => {
-                    if let Some(Selection::InsertRoot(_, ref mut wps)) = self.editor.selection {
-                        *wps = ps;
+                DEvent::RootPlaceholderTextChanged(text) => {
+                    if let Some(Selection::InsertRoot(_, ref mut ps)) = self.editor.selection {
+                        ps.text = text;
+                        ps.selected_index = 0;
                     }
                 }
-                DEvent::GraphClicked(selection) => {
-                    self.editor.selection = selection;
+                DEvent::RootPlaceholderSelectionMoved(index) => {
+                    if let Some(Selection::InsertRoot(_, ref mut ps)) = self.editor.selection {
+                        ps.selected_index = index;
+                    }
                 }
-                DEvent::GraphViewStateChanged(state) => {
+                DEvent::GraphNodeClicked(id) => {
+                    self.editor.selection = Some(Selection::GraphNode(id));
+                }
+                DEvent::GraphEdgeClicked { entity, label } => {
+                    self.editor.selection = Some(Selection::GraphEdge { entity, label });
+                }
+                DEvent::GraphBackgroundClicked => {
+                    self.editor.selection = None;
+                }
+                DEvent::GraphViewInteraction(state) => {
                     self.editor.graph_view = state;
                 }
             }
@@ -313,6 +331,10 @@ impl eframe::App for ProgredApp {
         self.handle_keys(ctx, &d_trees);
 
         self.render_menu_bar(ctx);
+
+        if self.show_graph {
+            ui::graph_view::step_physics(&mut self.editor.graph_view, &self.editor.doc);
+        }
 
         let modifiers = ctx.input(|i| i.modifiers);
         let mode = ui::compute_interaction_mode(modifiers, &self.editor);
