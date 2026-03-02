@@ -7,6 +7,7 @@ use std::path::PathBuf;
 #[derive(Clone)]
 pub struct Editor {
     pub doc: Document,
+    pub semantics: Document,
     pub tree: SpanningTree,
     pub selection: Option<Selection>,
     pub file_path: Option<PathBuf>,
@@ -16,6 +17,7 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             doc: Document::new(),
+            semantics: progred_macros::load_document!("../semantics.progred"),
             tree: SpanningTree::empty(),
             selection: None,
             file_path: None,
@@ -141,4 +143,17 @@ pub enum InteractionMode {
     Normal,
     SelectUnder(Path),
     Assign(Path),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generated::name_of;
+    use crate::generated::semantics::Field;
+
+    #[test]
+    fn semantics_contains_field_type() {
+        let editor = Editor::new();
+        assert_eq!(name_of(&editor.semantics.gid, &Field::TYPE_ID), Some("field".to_string()));
+    }
 }
