@@ -5,7 +5,7 @@ mod path;
 mod selection;
 mod spanningtree;
 
-pub use gid::Gid;
+pub use gid::{Gid, StackedGid};
 pub use id::Id;
 pub use mutgid::MutGid;
 pub use path::{Path, PathRoot, RootSlot};

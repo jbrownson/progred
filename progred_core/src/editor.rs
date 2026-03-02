@@ -14,6 +14,10 @@ pub struct Editor {
 }
 
 impl Editor {
+    pub fn lib(&self) -> crate::graph::StackedGid<'_, crate::graph::MutGid, crate::graph::MutGid> {
+        crate::graph::StackedGid::new(&self.doc.gid, &self.semantics.gid)
+    }
+
     pub fn new() -> Self {
         Self {
             doc: Document::new(),
@@ -148,12 +152,34 @@ pub enum InteractionMode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generated::name_of;
+    use crate::generated::{display_label, name_of};
     use crate::generated::semantics::Field;
+    use crate::graph::Gid;
 
     #[test]
     fn semantics_contains_field_type() {
         let editor = Editor::new();
         assert_eq!(name_of(&editor.semantics.gid, &Field::TYPE_ID), Some("field".to_string()));
+    }
+
+    #[test]
+    fn lib_resolves_semantics() {
+        let editor = Editor::new();
+        assert_eq!(name_of(&editor.lib(), &Field::TYPE_ID), Some("field".to_string()));
+    }
+
+    #[test]
+    fn lib_resolves_doc_node_with_semantics_type() {
+        use crate::generated::semantics::{ISA, NAME};
+
+        let mut editor = Editor::new();
+        let uuid = uuid::Uuid::new_v4();
+        let node = Id::Uuid(uuid);
+        editor.doc.gid.set(uuid, ISA.clone(), Field::TYPE_ID.clone());
+        editor.doc.gid.set(uuid, NAME.clone(), Id::String("age".into()));
+
+        let lib = editor.lib();
+        assert_eq!(lib.get(&node, &ISA), Some(&Field::TYPE_ID));
+        assert_eq!(display_label(&lib, &node), Some("field \"age\"".to_string()));
     }
 }

@@ -17,7 +17,7 @@ fn render_id(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) 
 
 fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
     match id {
-        Id::Uuid(_) if editor.doc.gid.get(id, &ISA).is_some_and(|t| t == &CONS_TYPE || t == &EMPTY_TYPE) => {
+        Id::Uuid(_) if editor.lib().get(id, &ISA).is_some_and(|t| t == &CONS_TYPE || t == &EMPTY_TYPE) => {
             render_list(editor, path, id, ancestors)
         }
         Id::Uuid(uuid) => {
@@ -46,7 +46,7 @@ impl<'a> RenderCtx<'a> {
     fn descend(&self, label: &Id) -> D {
         let child_path = self.path.child(label.clone());
 
-        match self.editor.doc.gid.get(self.id, label) {
+        match self.editor.lib().get(self.id, label) {
             Some(child_id) => {
                 render_id(self.editor, &child_path, child_id, self.ancestors.clone())
             }
@@ -72,8 +72,9 @@ fn render_uuid(
     ancestors: im::HashSet<Id>,
 ) -> D {
     let id = Id::Uuid(*uuid);
-    let edges = editor.doc.gid.edges(&id);
-    let display_label = display_label(&editor.doc.gid, &id);
+    let lib = editor.lib();
+    let edges = lib.edges(&id);
+    let display_label = display_label(&lib, &id);
     let new_edge_label = editor.selection.as_ref()
         .and_then(|s| s.edge_path())
         .and_then(|sel| sel.pop())
@@ -144,18 +145,19 @@ struct ListElement {
 }
 
 fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElement>, Path)> {
+    let lib = editor.lib();
     let mut elements = Vec::new();
     let mut current_path = path.clone();
     let mut current_id = node;
     let mut seen = im::HashSet::new();
 
-    while editor.doc.gid.get(current_id, &ISA) == Some(&CONS_TYPE) {
+    while lib.get(current_id, &ISA) == Some(&CONS_TYPE) {
         if seen.contains(current_id) {
             return None;
         }
         seen = seen.update(current_id.clone());
 
-        let head_value = editor.doc.gid.get(current_id, &HEAD).cloned();
+        let head_value = lib.get(current_id, &HEAD).cloned();
         let head_path = current_path.child(HEAD.clone());
         let tail_path = current_path.child(TAIL.clone());
         elements.push(ListElement {
@@ -164,12 +166,12 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
             head_value,
         });
 
-        let tail_value = editor.doc.gid.get(current_id, &TAIL)?;
+        let tail_value = lib.get(current_id, &TAIL)?;
         current_path = tail_path;
         current_id = tail_value;
     }
 
-    if editor.doc.gid.get(current_id, &ISA) == Some(&EMPTY_TYPE) {
+    if lib.get(current_id, &ISA) == Some(&EMPTY_TYPE) {
         Some((elements, current_path))
     } else {
         None
@@ -282,7 +284,7 @@ fn try_domain_render(ctx: &RenderCtx) -> Option<D> {
 }
 
 fn render_field(ctx: &RenderCtx) -> Option<D> {
-    let gid = &ctx.editor.doc.gid;
+    let gid = &ctx.editor.lib();
     Field::try_wrap(gid, ctx.id)?;
     let field = Field::wrap(ctx.id.clone());
     let name = field.name(gid).unwrap_or_else(|| "?".into());
@@ -301,7 +303,7 @@ fn render_field(ctx: &RenderCtx) -> Option<D> {
 }
 
 fn render_apply(ctx: &RenderCtx) -> Option<D> {
-    let gid = &ctx.editor.doc.gid;
+    let gid = &ctx.editor.lib();
     let apply = Apply::try_wrap(gid, ctx.id)?;
 
     let base_name = apply.base(gid)
@@ -327,7 +329,7 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
 }
 
 fn render_type_inline(editor: &Editor, node: &Id) -> D {
-    let gid = &editor.doc.gid;
+    let gid = &editor.lib();
     if let Some(apply) = Apply::try_wrap(gid, node) {
         let base_name = apply.base(gid)
             .and_then(|b| name_of(gid, b.id()))
