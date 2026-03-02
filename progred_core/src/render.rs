@@ -273,8 +273,6 @@ fn list_placeholder(editor: &Editor, insert_path: &Path) -> D {
     }
 }
 
-// Domain projections
-
 type Projection = fn(&RenderCtx) -> Option<D>;
 
 const PROJECTIONS: &[Projection] = &[render_field, render_apply];
@@ -363,4 +361,3 @@ fn number_text(editor: &Editor, path: &Path) -> Option<String> {
         _ => None,
     }
 }
-

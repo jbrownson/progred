@@ -148,24 +148,22 @@ mod tests {
 
     #[test]
     fn reachable_from_chain() {
-        // A -[L]-> B -[L]-> C
         let gid = make_gid(&[(1, 100, 2), (2, 100, 3)]);
         let within: HashSet<Id> = [1, 2, 3, 100].into_iter().map(uuid).collect();
         let result = reachable_from(&gid, std::iter::once(uuid(1)), &within);
         assert!(result.contains(&uuid(1)));
         assert!(result.contains(&uuid(2)));
         assert!(result.contains(&uuid(3)));
-        assert!(result.contains(&uuid(100))); // labels are also reachable
+        assert!(result.contains(&uuid(100)));
     }
 
     #[test]
     fn reachable_from_respects_within() {
-        // A -[L]-> B, but B not in within
         let gid = make_gid(&[(1, 100, 2)]);
         let within: HashSet<Id> = [1, 100].into_iter().map(uuid).collect();
         let result = reachable_from(&gid, std::iter::once(uuid(1)), &within);
         assert!(result.contains(&uuid(1)));
-        assert!(!result.contains(&uuid(2))); // not in within
+        assert!(!result.contains(&uuid(2)));
     }
 
     #[test]
@@ -178,7 +176,6 @@ mod tests {
 
     #[test]
     fn sources_within_chain() {
-        // A -[L]-> B: A is source, B has incoming
         let gid = make_gid(&[(1, 100, 2)]);
         let set: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
         let sources = sources_within(&gid, &set);
@@ -188,7 +185,6 @@ mod tests {
 
     #[test]
     fn sources_within_cycle_no_sources() {
-        // A -[L]-> B -[L]-> A: pure cycle, no sources
         let gid = make_gid(&[(1, 100, 2), (2, 100, 1)]);
         let set: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
         let sources = sources_within(&gid, &set);
@@ -197,7 +193,6 @@ mod tests {
 
     #[test]
     fn cycle_representative_no_cycle() {
-        // A -[L]-> B: no cycle, A is source
         let gid = make_gid(&[(1, 100, 2)]);
         let orphans: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
         let sources = vec![uuid(1)];
@@ -207,7 +202,6 @@ mod tests {
 
     #[test]
     fn cycle_representative_picks_min() {
-        // Pure cycle A <-> B, no sources, should pick min UUID
         let gid = make_gid(&[(1, 100, 2), (2, 100, 1)]);
         let orphans: HashSet<Id> = [1, 2].into_iter().map(uuid).collect();
         let sources: Vec<Id> = vec![];
@@ -225,7 +219,7 @@ mod tests {
     #[test]
     fn orphan_roots_single_orphan() {
         let mut gid = make_gid(&[(1, 100, 2)]);
-        gid.merge(im::hashmap! { uuid::Uuid::from_u128(3) => im::hashmap! { uuid(100) => uuid(4) } }); // orphan island
+        gid.merge(im::hashmap! { uuid::Uuid::from_u128(3) => im::hashmap! { uuid(100) => uuid(4) } });
         let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
         let orphans = doc.orphan_roots();
         assert!(orphans.contains(&uuid(3)));
@@ -233,12 +227,10 @@ mod tests {
 
     #[test]
     fn orphan_roots_cycle() {
-        // Root: 1. Orphan cycle: 2 <-> 3
         let mut gid = make_gid(&[(2, 100, 3), (3, 100, 2)]);
-        gid.merge(im::hashmap! { uuid::Uuid::from_u128(1) => im::hashmap! { uuid(100) => uuid(1) } }); // self-loop so 1 is an entity
+        gid.merge(im::hashmap! { uuid::Uuid::from_u128(1) => im::hashmap! { uuid(100) => uuid(1) } });
         let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
         let orphans = doc.orphan_roots();
-        // Should pick min UUID from cycle as representative
         assert_eq!(orphans.len(), 1);
         assert!(orphans.contains(&uuid(2)));
     }

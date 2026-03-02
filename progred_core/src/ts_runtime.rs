@@ -30,14 +30,14 @@ pub struct QuickInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
-    pub kind: String,              // "string", "number", "function", "union", etc.
-    pub display_string: String,    // Human-readable type
+    pub kind: String,
+    pub display_string: String,
     pub is_primitive: bool,
     pub is_union: bool,
     pub is_intersection: bool,
-    pub union_types: Option<Vec<String>>,      // If it's a union
-    pub properties: Option<Vec<PropertyInfo>>,  // Object properties
-    pub call_signatures: Option<Vec<String>>,   // Function signatures
+    pub union_types: Option<Vec<String>>,
+    pub properties: Option<Vec<PropertyInfo>>,
+    pub call_signatures: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,18 +47,15 @@ pub struct PropertyInfo {
     pub optional: bool,
 }
 
-// Shared state for passing values from JS back to Rust
 thread_local! {
     static RETURN_VALUE: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
-// Define the extension with our ops
 extension!(
     ts_compiler,
     ops = [op_log_from_js, op_return_value],
 );
 
-/// Op that JS can call to log messages back to Rust
 #[op2]
 #[string]
 fn op_log_from_js(#[string] message: String) -> String {
@@ -66,7 +63,6 @@ fn op_log_from_js(#[string] message: String) -> String {
     format!("Logged: {}", message)
 }
 
-/// Op that JS calls to "return" a value to Rust
 #[op2(fast)]
 fn op_return_value(#[string] value: String) {
     RETURN_VALUE.with(|cell| {
@@ -87,7 +83,6 @@ impl TypeScriptRuntime {
             ..Default::default()
         });
 
-        // Set up console.log
         runtime
             .execute_script(
                 "setup_console",
@@ -102,9 +97,7 @@ impl TypeScriptRuntime {
         Ok(Self { runtime })
     }
 
-    /// Call a JS function and get the result back via op_return_value
     pub fn call_js_function(&mut self, fn_name: &str, arg: &str) -> Result<String, String> {
-        // Clear any previous return value
         RETURN_VALUE.with(|cell| *cell.borrow_mut() = None);
 
         let arg_json = serde_json::to_string(arg).unwrap();
@@ -123,7 +116,6 @@ impl TypeScriptRuntime {
             .execute_script("<call>", script)
             .map_err(|e| format!("JS call error: {:?}", e))?;
 
-        // Retrieve the returned value
         RETURN_VALUE.with(|cell| {
             cell.borrow()
                 .clone()
@@ -131,7 +123,6 @@ impl TypeScriptRuntime {
         })
     }
 
-    /// Execute JavaScript code
     pub fn execute(&mut self, js_code: &str) -> Result<(), String> {
         self.runtime
             .execute_script("<anon>", js_code.to_string())
@@ -140,19 +131,15 @@ impl TypeScriptRuntime {
         Ok(())
     }
 
-    /// Load the TypeScript compiler into the runtime
     pub fn load_typescript_compiler(&mut self) -> Result<(), String> {
         println!("Loading TypeScript compiler...");
 
-        // Load the real TypeScript compiler (8.6MB)
-        self.execute(include_str!("../assets/typescript-compiler.js"))?;
+        self.execute(include_str!("../../assets/typescript-compiler.js"))?;
 
-        // Set up the compile function that uses TSC with full type checking
         self.execute(
             r#"
             globalThis.compileTypeScript = function(source) {
                 try {
-                    // Create an in-memory source file
                     const fileName = "input.ts";
                     const sourceFile = ts.createSourceFile(
                         fileName,
@@ -161,7 +148,6 @@ impl TypeScriptRuntime {
                         true
                     );
 
-                    // Create a compiler host
                     const compilerHost = {
                         getSourceFile: (name) => name === fileName ? sourceFile : undefined,
                         writeFile: () => {},
@@ -175,7 +161,6 @@ impl TypeScriptRuntime {
                         getDefaultLibFileName: () => "lib.d.ts"
                     };
 
-                    // Create program for type checking
                     const program = ts.createProgram(
                         [fileName],
                         {
@@ -186,13 +171,11 @@ impl TypeScriptRuntime {
                         compilerHost
                     );
 
-                    // Get diagnostics (type errors)
                     const diagnostics = [
                         ...program.getSemanticDiagnostics(sourceFile),
                         ...program.getSyntacticDiagnostics(sourceFile)
                     ];
 
-                    // Transpile to JavaScript
                     const transpileResult = ts.transpileModule(source, {
                         compilerOptions: {
                             target: ts.ScriptTarget.ES2020,
@@ -226,13 +209,11 @@ impl TypeScriptRuntime {
             "#,
         )?;
 
-        // Set up the language service for IDE features (hover, completion, etc.)
         self.execute(
             r#"
             globalThis.createLanguageService = function(source) {
                 const fileName = "input.ts";
 
-                // Create a language service host
                 const servicesHost = {
                     getScriptFileNames: () => [fileName],
                     getScriptVersion: () => "1",
@@ -246,9 +227,9 @@ impl TypeScriptRuntime {
                     getCompilationSettings: () => ({
                         target: ts.ScriptTarget.ES2020,
                         module: ts.ModuleKind.ESNext,
-                        noLib: true,  // Don't require lib.d.ts
+                        noLib: true,
                     }),
-                    getDefaultLibFileName: () => "",  // No lib file
+                    getDefaultLibFileName: () => "",
                     fileExists: (name) => name === fileName,
                     readFile: (name) => name === fileName ? source : undefined,
                     directoryExists: () => true,
@@ -289,7 +270,6 @@ impl TypeScriptRuntime {
 
                 const checker = program.getTypeChecker();
 
-                // Find the node at position
                 function findNodeAtPosition(node, pos) {
                     if (pos >= node.pos && pos < node.end) {
                         let child = ts.forEachChild(node, n => findNodeAtPosition(n, pos));
@@ -303,7 +283,6 @@ impl TypeScriptRuntime {
                 const type = checker.getTypeAtLocation(node);
                 if (!type) return null;
 
-                // Extract structured type information
                 const typeFlags = type.flags;
                 const result = {
                     kind: checker.typeToString(type),
@@ -322,12 +301,10 @@ impl TypeScriptRuntime {
                     call_signatures: null
                 };
 
-                // If it's a union type, extract member types
                 if (result.is_union && type.types) {
                     result.union_types = type.types.map(t => checker.typeToString(t));
                 }
 
-                // If it's an object, extract properties
                 const properties = type.getProperties();
                 if (properties && properties.length > 0) {
                     result.properties = properties.map(prop => {
@@ -340,7 +317,6 @@ impl TypeScriptRuntime {
                     });
                 }
 
-                // If it's a function, extract call signatures
                 const callSignatures = type.getCallSignatures();
                 if (callSignatures && callSignatures.length > 0) {
                     result.call_signatures = callSignatures.map(sig =>
@@ -357,15 +333,12 @@ impl TypeScriptRuntime {
         Ok(())
     }
 
-    /// Compile TypeScript code to JavaScript
     pub fn compile_typescript(&mut self, ts_code: &str) -> Result<CompileResult, String> {
         let result_json = self.call_js_function("compileTypeScript", ts_code)?;
         serde_json::from_str(&result_json).map_err(|e| format!("Failed to parse result: {}", e))
     }
 
-    /// Get type information at a specific position (for hover tooltips)
     pub fn get_quick_info(&mut self, ts_code: &str, position: usize) -> Result<Option<QuickInfo>, String> {
-        // Store the source code temporarily
         let script = format!(
             r#"
             (function() {{
@@ -394,7 +367,6 @@ impl TypeScriptRuntime {
         serde_json::from_str(&result_json).map_err(|e| format!("Parse error: {}", e))
     }
 
-    /// Get structured type information at a specific position
     pub fn get_structured_type_info(&mut self, ts_code: &str, position: usize) -> Result<Option<TypeInfo>, String> {
         let script = format!(
             r#"
@@ -424,7 +396,6 @@ impl TypeScriptRuntime {
         serde_json::from_str(&result_json).map_err(|e| format!("Parse error: {}", e))
     }
 
-    /// Execute JavaScript and get the result by wrapping in a function
     pub fn execute_and_get_result(&mut self, js_code: &str) -> Result<String, String> {
         RETURN_VALUE.with(|cell| *cell.borrow_mut() = None);
 
@@ -512,11 +483,9 @@ mod tests {
         println!("Compiled JS:\n{}", result.javascript);
         println!("Diagnostics: {:?}", result.diagnostics);
 
-        // Should have compiled successfully
         assert!(result.diagnostics.is_empty());
         assert!(result.javascript.contains("42"));
         assert!(result.javascript.contains("58"));
-        // Type annotations should be stripped
         assert!(!result.javascript.contains(": number"));
     }
 
@@ -525,7 +494,6 @@ mod tests {
         let mut runtime = TypeScriptRuntime::new().unwrap();
         runtime.load_typescript_compiler().unwrap();
 
-        // Compile TypeScript function
         let ts_code = r#"
             function add(a: number, b: number): number {
                 return a + b;
@@ -535,10 +503,8 @@ mod tests {
         let result = runtime.compile_typescript(ts_code).unwrap();
         assert!(result.diagnostics.is_empty(), "Should have no errors");
 
-        // Load the compiled function into global scope
         runtime.execute(&result.javascript).unwrap();
 
-        // Now call the function
         let exec_result = runtime.execute_and_get_result("add(10, 32)").unwrap();
         assert_eq!(exec_result, "42");
     }
@@ -548,20 +514,17 @@ mod tests {
         let mut runtime = TypeScriptRuntime::new().unwrap();
         runtime.load_typescript_compiler().unwrap();
 
-        // Code with a type error
         let ts_code = r#"const x: number = "string";"#;
         let result = runtime.compile_typescript(ts_code).unwrap();
 
         println!("Diagnostics for type error: {:?}", result.diagnostics);
 
-        // Should detect the type error
         assert!(!result.diagnostics.is_empty());
         assert!(result.diagnostics[0]
             .message
             .to_lowercase()
             .contains("string"));
 
-        // Should have position information for squiggles
         assert!(result.diagnostics[0].start.is_some());
         assert!(result.diagnostics[0].length.is_some());
     }
@@ -573,7 +536,6 @@ mod tests {
 
         let ts_code = r#"const x: number = 42;"#;
 
-        // Get type info for variable 'x' (position 6 is on the 'x')
         let info = runtime.get_quick_info(ts_code, 6).unwrap();
 
         println!("Type info at position 6: {:?}", info);
@@ -581,7 +543,6 @@ mod tests {
         assert!(info.is_some());
         let info = info.unwrap();
 
-        // Should show it's a number
         assert!(info.display_string.contains("number") || info.display_string.contains("const"));
     }
 
@@ -597,7 +558,6 @@ mod tests {
             const result = add(1, 2);
         "#;
 
-        // Get type info for the function call 'add' (find position of 'add' in the call)
         let add_call_pos = ts_code.find("add(1").unwrap();
         let info = runtime.get_quick_info(ts_code, add_call_pos).unwrap();
 
@@ -606,7 +566,6 @@ mod tests {
         assert!(info.is_some());
         let info = info.unwrap();
 
-        // Should show the function signature
         assert!(info.display_string.contains("add") || info.display_string.contains("number"));
     }
 
@@ -617,7 +576,6 @@ mod tests {
 
         let ts_code = r#"const x: number = 42;"#;
 
-        // Get structured type info for 'x' at position 6
         let info = runtime.get_structured_type_info(ts_code, 6).unwrap();
 
         println!("Structured type info for number: {:?}", info);
@@ -638,7 +596,6 @@ mod tests {
 
         let ts_code = r#"const x: string | number = 42;"#;
 
-        // Get structured type info for 'x'
         let x_pos = ts_code.find("x:").unwrap();
         let info = runtime.get_structured_type_info(ts_code, x_pos).unwrap();
 
@@ -651,7 +608,6 @@ mod tests {
         assert!(info.union_types.is_some());
         let union_types = info.union_types.unwrap();
         assert_eq!(union_types.len(), 2);
-        // Union types should be string and number (order may vary)
         assert!(union_types.contains(&"string".to_string()) || union_types.contains(&"number".to_string()));
     }
 
@@ -668,7 +624,6 @@ mod tests {
             };
         "#;
 
-        // Get structured type info for 'person'
         let person_pos = ts_code.find("person").unwrap();
         let info = runtime.get_structured_type_info(ts_code, person_pos).unwrap();
 
@@ -681,7 +636,6 @@ mod tests {
         assert!(info.properties.is_some());
         let properties = info.properties.unwrap();
 
-        // Should have name, age, and email properties
         assert_eq!(properties.len(), 3);
 
         let prop_names: Vec<&str> = properties.iter().map(|p| p.name.as_str()).collect();
@@ -689,7 +643,6 @@ mod tests {
         assert!(prop_names.contains(&"age"));
         assert!(prop_names.contains(&"email"));
 
-        // Check types
         let name_prop = properties.iter().find(|p| p.name == "name").unwrap();
         assert!(name_prop.type_string.contains("string"));
 
@@ -708,7 +661,6 @@ mod tests {
             }
         "#;
 
-        // Get structured type info for 'add'
         let add_pos = ts_code.find("add").unwrap();
         let info = runtime.get_structured_type_info(ts_code, add_pos).unwrap();
 
@@ -721,7 +673,6 @@ mod tests {
         let signatures = info.call_signatures.unwrap();
         assert!(!signatures.is_empty());
 
-        // Signature should contain parameter and return type info
         let sig = &signatures[0];
         assert!(sig.contains("number"));
     }
@@ -739,7 +690,6 @@ mod tests {
             const user: User = { name: "Bob" };
         "#;
 
-        // Get structured type info for 'user'
         let user_pos = ts_code.find("user:").unwrap();
         let info = runtime.get_structured_type_info(ts_code, user_pos).unwrap();
 

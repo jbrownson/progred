@@ -1,21 +1,12 @@
-pub mod d;
-pub mod document;
-mod editor;
-pub mod generated;
-pub use progred_graph as graph;
-pub mod list_iter;
-pub mod render;
 mod shortcuts;
-mod ts_runtime;
 mod ui;
 
-use d::{D, DEvent};
-use document::Document;
-use editor::Editor;
+use progred_core::d::D;
+use progred_core::document::Document;
+use progred_core::editor::Editor;
+use progred_core::graph_view_state::GraphViewState;
 use eframe::egui;
-use graph::{EdgeState, Id, RootSlot, Selection};
-use ordered_float::OrderedFloat;
-use ui::InteractionMode;
+use progred_core::graph::{Id, Selection};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -37,6 +28,8 @@ struct ProgredApp {
     editor: Editor,
     show_graph: bool,
     graph_split: f32,
+    graph_layout: GraphViewState,
+    graph_camera: ui::graph_view::CameraState,
 }
 
 impl ProgredApp {
@@ -45,11 +38,14 @@ impl ProgredApp {
             editor: Editor::new(),
             show_graph: false,
             graph_split: 0.5,
+            graph_layout: GraphViewState::new(),
+            graph_camera: ui::graph_view::CameraState::new(),
         }
     }
 
     fn new_document(&mut self) {
         self.editor = Editor::new();
+        self.graph_layout = GraphViewState::new();
     }
 
     fn save(&mut self) {
@@ -93,6 +89,7 @@ impl ProgredApp {
             })
         {
             self.editor = Editor { doc, file_path: Some(path), ..Editor::new() };
+            self.graph_layout = GraphViewState::new();
         }
     }
 
@@ -212,116 +209,6 @@ impl ProgredApp {
     }
 }
 
-impl ProgredApp {
-    fn handle_events(&mut self, events: Vec<DEvent<'_>>, mode: &InteractionMode) {
-        for event in events {
-            match event {
-                DEvent::ClickedNode { path, id } => match mode {
-                    InteractionMode::Normal => {
-                        self.editor.selection = Some(Selection::edge(path));
-                    }
-                    InteractionMode::Assign(target) => {
-                        self.editor.doc.set_edge(target, id);
-                        self.editor.selection = None;
-                    }
-                    InteractionMode::SelectUnder(source) => {
-                        self.editor.selection = Some(Selection::edge(source.child(id)));
-                    }
-                },
-                DEvent::ClickedFieldLabel { entity_path: _, label_id } => match mode {
-                    InteractionMode::Normal => {}
-                    InteractionMode::Assign(target) => {
-                        self.editor.doc.set_edge(target, label_id);
-                        self.editor.selection = None;
-                    }
-                    InteractionMode::SelectUnder(source) => {
-                        self.editor.selection = Some(Selection::edge(source.child(label_id)));
-                    }
-                },
-                DEvent::ClickedCollapseToggle(path) => {
-                    let collapsed = self.editor.tree.is_collapsed(&path).unwrap_or(false);
-                    self.editor.tree.set_collapsed(&path, !collapsed);
-                }
-                DEvent::ClickedBackground => {
-                    self.editor.selection = None;
-                }
-                DEvent::ClickedRootInsertionPoint(index) => {
-                    self.editor.selection = Some(Selection::insert_root(index));
-                }
-                DEvent::ClickedStringEditor(path) => {
-                    self.editor.selection = Some(Selection::edge(path));
-                }
-                DEvent::ClickedNumberEditor(path) => {
-                    if let Some(Id::Number(n)) = self.editor.doc.node(&path) {
-                        let mut es = EdgeState::default();
-                        es.number_text = Some(n.to_string());
-                        self.editor.selection = Some(Selection::Edge(path, es));
-                    }
-                }
-                DEvent::StringEditorStringChanged { path, text } => {
-                    self.editor.doc.set_edge(&path, Id::String(text));
-                }
-                DEvent::NumberEditorTextChanged { path, text } => {
-                    if let Some(Selection::Edge(_, ref mut es)) = self.editor.selection {
-                        es.number_text = Some(text.clone());
-                    }
-                    if let Ok(n) = text.parse::<f64>() {
-                        self.editor.doc.set_edge(&path, Id::Number(OrderedFloat(n)));
-                    }
-                }
-                DEvent::PlaceholderCommitted { on_commit, value } => {
-                    on_commit(&mut self.editor, value);
-                    self.editor.selection = None;
-                }
-                DEvent::PlaceholderDismissed => {
-                    self.editor.selection = None;
-                }
-                DEvent::PlaceholderTextChanged(text) => {
-                    if let Some(Selection::Edge(_, ref mut es)) = self.editor.selection {
-                        es.placeholder.text = text;
-                        es.placeholder.selected_index = 0;
-                    }
-                }
-                DEvent::PlaceholderSelectionMoved(index) => {
-                    if let Some(Selection::Edge(_, ref mut es)) = self.editor.selection {
-                        es.placeholder.selected_index = index;
-                    }
-                }
-                DEvent::RootPlaceholderCommitted { index, value } => {
-                    self.editor.doc.roots.insert(index, RootSlot::new(value));
-                    self.editor.selection = None;
-                }
-                DEvent::RootPlaceholderDismissed => {
-                    self.editor.selection = None;
-                }
-                DEvent::RootPlaceholderTextChanged(text) => {
-                    if let Some(Selection::InsertRoot(_, ref mut ps)) = self.editor.selection {
-                        ps.text = text;
-                        ps.selected_index = 0;
-                    }
-                }
-                DEvent::RootPlaceholderSelectionMoved(index) => {
-                    if let Some(Selection::InsertRoot(_, ref mut ps)) = self.editor.selection {
-                        ps.selected_index = index;
-                    }
-                }
-                DEvent::GraphNodeClicked(id) => {
-                    self.editor.selection = Some(Selection::GraphNode(id));
-                }
-                DEvent::GraphEdgeClicked { entity, label } => {
-                    self.editor.selection = Some(Selection::GraphEdge { entity, label });
-                }
-                DEvent::GraphBackgroundClicked => {
-                    self.editor.selection = None;
-                }
-                DEvent::GraphViewInteraction(state) => {
-                    self.editor.graph_view = state;
-                }
-            }
-        }
-    }
-}
-
 impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
@@ -333,7 +220,7 @@ impl eframe::App for ProgredApp {
         self.render_menu_bar(ctx);
 
         if self.show_graph {
-            ui::graph_view::step_physics(&mut self.editor.graph_view, &self.editor.doc);
+            progred_core::graph_view_state::step_physics(&mut self.graph_layout, &self.editor.doc, self.graph_camera.dragging());
         }
 
         let modifiers = ctx.input(|i| i.modifiers);
@@ -346,13 +233,13 @@ impl eframe::App for ProgredApp {
                 if self.show_graph {
                     ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split, |left, right| {
                         ui::tree_view::render(left, &self.editor, &d_trees, &orphan_ids, &mode, &mut events);
-                        ui::graph_view::render(right, ctx, &self.editor, &mut events);
+                        ui::graph_view::render(right, ctx, &self.editor, &mut self.graph_layout, &mut self.graph_camera, &mut events);
                     });
                 } else {
                     ui::tree_view::render(ui, &self.editor, &d_trees, &orphan_ids, &mode, &mut events);
                 }
             });
 
-        self.handle_events(events, &mode);
+        self.editor.handle_events(events, &mode);
     }
 }

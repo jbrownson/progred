@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "progred_macros", "progred_graph"]
+members = [".", "progred_macros", "progred_graph", "progred_core"]
 
 [package]
 name = "progred"
@@ -7,16 +7,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-progred_macros = { path = "progred_macros" }
-progred_graph = { path = "progred_graph" }
+progred_core = { path = "progred_core" }
 eframe = "0.33"
 egui = "0.33"
-im = "15"
-uuid = { version = "1", features = ["v4", "serde"] }
-ordered-float = { version = "5", features = ["serde"] }
-serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rfd = "0.17"
-deno_core = "0.382.0"
-deno_ast = { version = "=0.52.0", features = ["transpiling"] }
-serde_v8 = "0.291.0"

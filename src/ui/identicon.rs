@@ -1,7 +1,7 @@
 use eframe::egui::{Color32, CornerRadius, Pos2, Response, Rect, Ui, Vec2};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{BuildHasher, BuildHasherDefault};
-use uuid::Uuid;
+use progred_core::uuid::Uuid;
 
 const GRID_SIZE: usize = 5;
 

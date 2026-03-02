@@ -49,12 +49,13 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
 mod tests {
     use super::*;
     use crate::graph::MutGid;
+    use crate::generated::semantics::EMPTY_TYPE;
 
     fn make_list(gid: &mut MutGid, elements: &[Id]) -> Id {
         let empty_uuid = uuid::Uuid::new_v4();
         gid.merge(im::hashmap! {
             empty_uuid => im::hashmap! {
-                ISA.clone() => crate::generated::semantics::EMPTY_TYPE.clone(),
+                ISA.clone() => EMPTY_TYPE.clone(),
             }
         });
 
@@ -121,7 +122,7 @@ mod tests {
             uuid2 => im::hashmap! {
                 ISA.clone() => CONS_TYPE.clone(),
                 HEAD.clone() => Id::String("b".into()),
-                TAIL.clone() => cons1.clone(), // cycle back
+                TAIL.clone() => cons1.clone(),
             },
         });
 

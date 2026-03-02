@@ -3207,15 +3207,23 @@ checksum = "3eb8486b569e12e2c32ad3e204dbaba5e4b5b216e9367044f25f1dba42341773"
 name = "progred"
 version = "0.1.0"
 dependencies = [
- "deno_ast",
- "deno_core",
  "eframe",
  "egui",
+ "progred_core",
+ "rfd",
+ "serde_json",
+]
+
+[[package]]
+name = "progred_core"
+version = "0.1.0"
+dependencies = [
+ "deno_ast",
+ "deno_core",
  "im",
  "ordered-float",
  "progred_graph",
  "progred_macros",
- "rfd",
  "serde",
  "serde_json",
  "serde_v8",

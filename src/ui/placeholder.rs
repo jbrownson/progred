@@ -1,6 +1,6 @@
-use crate::graph::{Id, PlaceholderState};
+use progred_core::graph::{Id, PlaceholderState};
 use eframe::egui::{self, Ui};
-use ordered_float::OrderedFloat;
+use progred_core::ordered_float::OrderedFloat;
 
 pub struct PlaceholderResult {
     pub text_changed: Option<String>,
@@ -33,7 +33,6 @@ struct PlaceholderEntry {
     display: String,
 }
 
-// TODO: look into existing fuzzy finder work (fzf, nucleo, etc.) for filtering entries
 fn build_entries(filter: &str) -> Vec<PlaceholderEntry> {
     let trimmed = filter.trim_start_matches('"').trim_end_matches('"');
     let string_entry = (!trimmed.is_empty()).then(|| PlaceholderEntry {

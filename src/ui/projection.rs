@@ -1,7 +1,7 @@
-use crate::d::{D, DEvent, TextStyle};
-use crate::editor::Editor;
-use crate::generated::name_of;
-use crate::graph::{Id, Path};
+use progred_core::d::{D, DEvent, TextStyle};
+use progred_core::editor::{Editor, InteractionMode};
+use progred_core::generated::name_of;
+use progred_core::graph::{Id, Path};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 
 use super::colors;
@@ -17,12 +17,6 @@ pub mod layout {
     pub const CARET_INSET: f32 = CARET_WIDTH - CARET_OVERLAP;
     const fn max_f32(a: f32, b: f32) -> f32 { if a > b { a } else { b } }
     pub const TREE_MARGIN: f32 = max_f32(CARET_INSET, SELECTION_PADDING) + 2.0;
-}
-
-pub enum InteractionMode {
-    Normal,
-    SelectUnder(Path),
-    Assign(Path),
 }
 
 pub fn compute_interaction_mode(modifiers: egui::Modifiers, editor: &Editor) -> InteractionMode {
@@ -151,8 +145,6 @@ pub fn insertion_point(ui: &mut Ui) -> Response {
 
     response
 }
-
-// --- Private helpers ---
 
 type HighlightStyle = (Option<Color32>, Option<eframe::epaint::Stroke>);
 
@@ -390,7 +382,7 @@ fn render_number_editor(
     number_text: Option<&str>,
     events: &mut Vec<DEvent<'_>>,
 ) {
-    let id = Id::Number(ordered_float::OrderedFloat(value));
+    let id = Id::Number(progred_core::ordered_float::OrderedFloat(value));
     let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
     let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
 
@@ -430,7 +422,7 @@ fn render_placeholder<'a>(
     events: &mut Vec<DEvent<'a>>,
 ) {
     let ps = match &editor.selection {
-        Some(crate::graph::Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
+        Some(progred_core::graph::Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
         _ => return,
     };
     let result = super::placeholder::render(ui, ps);

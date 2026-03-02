@@ -1,20 +1,20 @@
-use crate::d::{D, DEvent};
-use crate::editor::Editor;
-use crate::graph::{Id, Path, Selection};
+use progred_core::d::{D, DEvent};
+use progred_core::editor::{Editor, InteractionMode};
+use progred_core::graph::{Id, Path, Selection};
 use eframe::egui::{self, Color32, RichText, Sense, Ui};
 use std::collections::HashSet;
 
 use super::identicon;
 use super::layout::TREE_MARGIN;
 use super::placeholder::PlaceholderOutcome;
-use super::{insertion_point, render_d, DContext, InteractionMode};
+use super::{insertion_point, render_d, DContext};
 
 pub fn generate(editor: &Editor) -> Vec<Option<D>> {
     editor.doc.roots.iter()
         .map(|root_slot| {
             let path = Path::new(root_slot);
             let id = editor.doc.node(&path)?;
-            Some(crate::render::render(editor, &path, &id))
+            Some(progred_core::render::render(editor, &path, &id))
         })
         .collect()
 }

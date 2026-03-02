@@ -1,6 +1,5 @@
 use crate::editor::Editor;
 use crate::graph::{Id, Path};
-use crate::ui::graph_view::GraphViewState;
 
 pub enum TextStyle {
     Keyword,
@@ -21,7 +20,6 @@ pub enum D {
 
     NodeHeader { child: Box<D> },
     FieldLabel { label_id: Id },
-    // TODO: consider whether collapse belongs in D or should be a UI-layer concern
     CollapseToggle { collapsed: bool },
     StringEditor { value: String },
     NumberEditor { value: f64, number_text: Option<String> },
@@ -65,5 +63,4 @@ pub enum DEvent<'a> {
     GraphNodeClicked(Id),
     GraphEdgeClicked { entity: Id, label: Id },
     GraphBackgroundClicked,
-    GraphViewInteraction(GraphViewState),
 }
