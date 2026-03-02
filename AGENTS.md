@@ -1,5 +1,7 @@
 # Development Notes
 
+Read `README.md` for project philosophy, architecture, and current status.
+
 ## Cargo Build Cache
 
 Cursor's sandbox sets `CARGO_HOME` and `RUSTUP_HOME` to temporary directories. This causes cache invalidation when alternating between terminal and Cursor builds.
