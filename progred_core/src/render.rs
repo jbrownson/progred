@@ -55,6 +55,11 @@ const BRACKET_LIST: ListStyle = ListStyle { opening: "[", closing: "]", separato
 const ANGLE_LIST: ListStyle = ListStyle { opening: "<", closing: ">", separator: ", ", vertical: false };
 
 impl<'a> RenderCtx<'a> {
+    fn is_collapsed(&self) -> bool {
+        self.editor.tree.is_collapsed(self.path)
+            .unwrap_or(self.ancestors.contains(self.id))
+    }
+
     fn descend(&self, label: &Id) -> D {
         self.descend_with(label, None)
     }
@@ -375,30 +380,45 @@ fn render_type(ctx: &RenderCtx) -> Option<D> {
 fn render_record(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Record::try_wrap(gid, ctx.id)?;
-    Some(D::Block(vec![
+    let collapsed = ctx.is_collapsed();
+    let mut items = vec![D::Line(vec![
         D::NodeHeader { child: Box::new(D::Text("record".into(), TextStyle::Keyword)) },
-        D::Indent(Box::new(ctx.descend(&FIELDS))),
-    ]))
+        D::CollapseToggle { collapsed },
+    ])];
+    if !collapsed {
+        items.push(D::Indent(Box::new(ctx.descend(&FIELDS))));
+    }
+    Some(D::Block(items))
 }
 
 fn render_sum(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Sum::try_wrap(gid, ctx.id)?;
-    Some(D::Block(vec![
+    let collapsed = ctx.is_collapsed();
+    let mut items = vec![D::Line(vec![
         D::NodeHeader { child: Box::new(D::Text("sum".into(), TextStyle::Keyword)) },
-        D::Indent(Box::new(ctx.descend(&VARIANTS))),
-    ]))
+        D::CollapseToggle { collapsed },
+    ])];
+    if !collapsed {
+        items.push(D::Indent(Box::new(ctx.descend(&VARIANTS))));
+    }
+    Some(D::Block(items))
 }
 
 fn render_forall(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Forall::try_wrap(gid, ctx.id)?;
-    Some(D::Line(vec![
+    let collapsed = ctx.is_collapsed();
+    let mut items = vec![
         D::NodeHeader { child: Box::new(D::Text("forall".into(), TextStyle::Keyword)) },
         ctx.descend_list(&PARAMS, &ANGLE_LIST, Some(render_param)),
-        D::Text(".".into(), TextStyle::Punctuation),
-        ctx.descend(&BODY),
-    ]))
+        D::CollapseToggle { collapsed },
+    ];
+    if !collapsed {
+        items.push(D::Text(".".into(), TextStyle::Punctuation));
+        items.push(ctx.descend(&BODY));
+    }
+    Some(D::Line(items))
 }
 
 fn render_param(editor: &Editor, path: &Path, id: &Id) -> Option<D> {

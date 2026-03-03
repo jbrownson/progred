@@ -98,6 +98,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
         }
         D::List { opening, closing, separator, items, vertical } => {
             if *vertical && !items.is_empty() {
+                ui.label(text_rich(opening, &TextStyle::Punctuation));
                 ui.vertical(|ui| {
                     for item in items {
                         if let D::Descend { path, child } = item {
@@ -112,6 +113,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                         });
                     }
                 });
+                ui.label(text_rich(closing, &TextStyle::Punctuation));
             } else {
                 ui.scope(|ui| {
                     ui.spacing_mut().item_spacing.x = 1.0;
