@@ -2,7 +2,6 @@ use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
 use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, ARGS, BASE, BODY, CONS_TYPE, EMPTY_TYPE, FIELDS, HEAD, ISA, NAME, PARAMS, TAIL, TYPE_, VARIANTS};
 use crate::graph::{Gid, Id, Path, Selection};
-use crate::list_iter::ListIter;
 
 use crate::d::{D, TextStyle};
 
@@ -45,6 +44,16 @@ struct RenderCtx<'a> {
     ancestors: &'a im::HashSet<Id>,
 }
 
+struct ListStyle {
+    opening: &'static str,
+    closing: &'static str,
+    separator: &'static str,
+    vertical: bool,
+}
+
+const BRACKET_LIST: ListStyle = ListStyle { opening: "[", closing: "]", separator: "", vertical: true };
+const ANGLE_LIST: ListStyle = ListStyle { opening: "<", closing: ">", separator: ", ", vertical: false };
+
 impl<'a> RenderCtx<'a> {
     fn descend(&self, label: &Id) -> D {
         self.descend_with(label, None)
@@ -60,6 +69,29 @@ impl<'a> RenderCtx<'a> {
                         let child_ancestors = self.ancestors.update(self.id.clone());
                         render_id_inner(self.editor, &child_path, child_id, child_ancestors)
                     });
+                D::Descend { path: child_path, child: Box::new(child) }
+            }
+            None => {
+                let commit_path = child_path.clone();
+                D::Descend {
+                    path: child_path,
+                    child: Box::new(D::Placeholder {
+                        on_commit: Box::new(move |w: &mut Editor, value| {
+                            w.doc.set_edge(&commit_path, value);
+                        }),
+                    }),
+                }
+            }
+        }
+    }
+
+    fn descend_list(&self, label: &Id, style: &ListStyle, item_render: Option<fn(&Editor, &Id) -> Option<D>>) -> D {
+        let child_path = self.path.child(label.clone());
+
+        match self.editor.lib().get(self.id, label) {
+            Some(child_id) => {
+                let child_ancestors = self.ancestors.update(self.id.clone());
+                let child = render_list_styled(self.editor, &child_path, child_id, child_ancestors, style, item_render);
                 D::Descend { path: child_path, child: Box::new(child) }
             }
             None => {
@@ -208,6 +240,17 @@ fn render_list(
     id: &Id,
     ancestors: im::HashSet<Id>,
 ) -> D {
+    render_list_styled(editor, path, id, ancestors, &BRACKET_LIST, None)
+}
+
+fn render_list_styled(
+    editor: &Editor,
+    path: &Path,
+    id: &Id,
+    ancestors: im::HashSet<Id>,
+    style: &ListStyle,
+    item_render: Option<fn(&Editor, &Id) -> Option<D>>,
+) -> D {
     match flatten_list(editor, path, id) {
         Some((elements, _empty_path)) => {
             let insertion_idx = is_list_insertion_selected(editor, path, &elements);
@@ -223,7 +266,9 @@ fn render_list(
 
                 let head_d = match &elem.head_value {
                     Some(head) => {
-                        render_id(editor, &elem.head_path, head, list_ancestors.clone())
+                        let child = item_render.and_then(|f| f(editor, head))
+                            .unwrap_or_else(|| render_id_inner(editor, &elem.head_path, head, list_ancestors.clone()));
+                        D::Descend { path: elem.head_path.clone(), child: Box::new(child) }
                     }
                     None => {
                         let selected = editor.selection.as_ref()
@@ -249,11 +294,11 @@ fn render_list(
             }
 
             D::List {
-                opening: "[".into(),
-                closing: "]".into(),
-                separator: "".into(),
+                opening: style.opening.into(),
+                closing: style.closing.into(),
+                separator: style.separator.into(),
                 items,
-                vertical: true,
+                vertical: style.vertical,
             }
         }
         None => {
@@ -331,22 +376,20 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Apply::try_wrap(gid, ctx.id)?;
 
-    let mut items = vec![ctx.descend_with(&BASE, Some(render_ref))];
+    let base_display = gid.get(ctx.id, &BASE)
+        .map(|b| match name_of(gid, b) {
+            Some(name) => D::Text(name, TextStyle::TypeRef),
+            None => match b {
+                Id::Uuid(u) => D::Identicon(*u),
+                _ => D::Text("?".into(), TextStyle::Literal),
+            },
+        })
+        .unwrap_or(D::Text("?".into(), TextStyle::Literal));
 
-    if let Some(args_id) = gid.get(ctx.id, &ARGS) {
-        let arg_items: Vec<D> = ListIter::new(gid, Some(args_id))
-            .map(|arg_id| render_type_inline(ctx.editor, arg_id))
-            .collect();
-        items.push(D::List {
-            opening: "<".into(),
-            closing: ">".into(),
-            separator: ", ".into(),
-            items: arg_items,
-            vertical: false,
-        });
-    }
-
-    Some(D::Line(items))
+    Some(D::Line(vec![
+        D::NodeHeader { child: Box::new(base_display) },
+        ctx.descend_list(&ARGS, &ANGLE_LIST, Some(render_shallow_except_apply)),
+    ]))
 }
 
 fn render_type(ctx: &RenderCtx) -> Option<D> {
@@ -387,35 +430,6 @@ fn render_forall(ctx: &RenderCtx) -> Option<D> {
         D::Text(".".into(), TextStyle::Punctuation),
         ctx.descend(&BODY),
     ]))
-}
-
-fn render_type_inline(editor: &Editor, node: &Id) -> D {
-    let gid = &editor.lib();
-    if let Some(apply) = Apply::try_wrap(gid, node) {
-        let base_name = apply.base(gid)
-            .and_then(|b| name_of(gid, b.id()))
-            .unwrap_or_else(|| "?".into());
-
-        let mut items = vec![D::Text(base_name, TextStyle::TypeRef)];
-
-        if let Some(args_id) = gid.get(node, &ARGS) {
-            let arg_items: Vec<D> = ListIter::new(gid, Some(args_id))
-                .map(|arg_id| render_type_inline(editor, arg_id))
-                .collect();
-            items.push(D::List {
-                opening: "<".into(),
-                closing: ">".into(),
-                separator: ", ".into(),
-                items: arg_items,
-                vertical: false,
-            });
-        }
-
-        D::Line(items)
-    } else {
-        let name = name_of(gid, node).unwrap_or_else(|| "?".into());
-        D::Text(name, TextStyle::TypeRef)
-    }
 }
 
 fn number_text(editor: &Editor, path: &Path) -> Option<String> {
