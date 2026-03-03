@@ -59,12 +59,12 @@ impl<'a> RenderCtx<'a> {
         self.descend_with(label, None)
     }
 
-    fn descend_with(&self, label: &Id, render: Option<fn(&Editor, &Id) -> Option<D>>) -> D {
+    fn descend_with(&self, label: &Id, render: Option<fn(&Editor, &Path, &Id) -> Option<D>>) -> D {
         let child_path = self.path.child(label.clone());
 
         match self.editor.lib().get(self.id, label) {
             Some(child_id) => {
-                let child = render.and_then(|f| f(self.editor, child_id))
+                let child = render.and_then(|f| f(self.editor, &child_path, child_id))
                     .unwrap_or_else(|| {
                         let child_ancestors = self.ancestors.update(self.id.clone());
                         render_id_inner(self.editor, &child_path, child_id, child_ancestors)
@@ -85,7 +85,7 @@ impl<'a> RenderCtx<'a> {
         }
     }
 
-    fn descend_list(&self, label: &Id, style: &ListStyle, item_render: Option<fn(&Editor, &Id) -> Option<D>>) -> D {
+    fn descend_list(&self, label: &Id, style: &ListStyle, item_render: Option<fn(&Editor, &Path, &Id) -> Option<D>>) -> D {
         let child_path = self.path.child(label.clone());
 
         match self.editor.lib().get(self.id, label) {
@@ -222,17 +222,6 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
     }
 }
 
-fn is_list_insertion_selected(editor: &Editor, path: &Path, elements: &[ListElement]) -> Option<usize> {
-    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path())?;
-
-    if selected_path == path {
-        Some(0)
-    } else {
-        elements.iter()
-            .position(|elem| selected_path == &elem.tail_path)
-            .map(|i| i + 1)
-    }
-}
 
 fn render_list(
     editor: &Editor,
@@ -249,24 +238,21 @@ fn render_list_styled(
     id: &Id,
     ancestors: im::HashSet<Id>,
     style: &ListStyle,
-    item_render: Option<fn(&Editor, &Id) -> Option<D>>,
+    item_render: Option<fn(&Editor, &Path, &Id) -> Option<D>>,
 ) -> D {
     match flatten_list(editor, path, id) {
         Some((elements, _empty_path)) => {
-            let insertion_idx = is_list_insertion_selected(editor, path, &elements);
             let list_ancestors = ancestors.update(id.clone());
 
             let mut items: Vec<D> = Vec::new();
 
-            for (i, elem) in elements.iter().enumerate() {
-                if insertion_idx == Some(i) {
-                    let insert_path = if i == 0 { path } else { &elements[i-1].tail_path };
-                    items.push(list_placeholder(editor, insert_path));
-                }
+            // Insertion slot before first element
+            items.push(list_placeholder(editor, path));
 
+            for elem in &elements {
                 let head_d = match &elem.head_value {
                     Some(head) => {
-                        let child = item_render.and_then(|f| f(editor, head))
+                        let child = item_render.and_then(|f| f(editor, &elem.head_path, head))
                             .unwrap_or_else(|| render_id_inner(editor, &elem.head_path, head, list_ancestors.clone()));
                         D::Descend { path: elem.head_path.clone(), child: Box::new(child) }
                     }
@@ -281,16 +267,9 @@ fn render_list_styled(
                     }
                 };
                 items.push(head_d);
-            }
 
-            if let Some(last) = elements.last() {
-                if insertion_idx == Some(elements.len()) {
-                    items.push(list_placeholder(editor, &last.tail_path));
-                }
-            }
-
-            if items.is_empty() && insertion_idx == Some(0) {
-                items.push(list_placeholder(editor, path));
+                // Insertion slot after this element
+                items.push(list_placeholder(editor, &elem.tail_path));
             }
 
             D::List {
@@ -338,7 +317,7 @@ fn try_domain_render(ctx: &RenderCtx) -> Option<D> {
     PROJECTIONS.iter().find_map(|p| p(ctx))
 }
 
-fn render_ref(editor: &Editor, id: &Id) -> Option<D> {
+fn render_ref(editor: &Editor, _path: &Path, id: &Id) -> Option<D> {
     Some(match id {
         Id::Uuid(uuid) => {
             let inner = match name_of(&editor.lib(), id) {
@@ -352,12 +331,12 @@ fn render_ref(editor: &Editor, id: &Id) -> Option<D> {
     })
 }
 
-fn render_shallow_except_apply(editor: &Editor, id: &Id) -> Option<D> {
+fn render_shallow_except_apply(editor: &Editor, path: &Path, id: &Id) -> Option<D> {
     let gid = &editor.lib();
     if Apply::try_wrap(gid, id).is_some() {
         None // fall through to default (render_apply projection)
     } else {
-        render_ref(editor, id)
+        render_ref(editor, path, id)
     }
 }
 
@@ -426,10 +405,32 @@ fn render_forall(ctx: &RenderCtx) -> Option<D> {
     Forall::try_wrap(gid, ctx.id)?;
     Some(D::Line(vec![
         D::NodeHeader { child: Box::new(D::Text("forall".into(), TextStyle::Keyword)) },
-        ctx.descend(&PARAMS),
+        ctx.descend_list(&PARAMS, &ANGLE_LIST, Some(render_param)),
         D::Text(".".into(), TextStyle::Punctuation),
         ctx.descend(&BODY),
     ]))
+}
+
+fn render_param(editor: &Editor, path: &Path, id: &Id) -> Option<D> {
+    let name_path = path.child(NAME.clone());
+    let name_d = match editor.lib().get(id, &NAME) {
+        Some(name_id) => {
+            let child = render_id_inner(editor, &name_path, name_id, im::HashSet::new());
+            D::Descend { path: name_path, child: Box::new(child) }
+        }
+        None => {
+            let commit_path = name_path.clone();
+            D::Descend {
+                path: name_path,
+                child: Box::new(D::Placeholder {
+                    on_commit: Box::new(move |w: &mut Editor, value| {
+                        w.doc.set_edge(&commit_path, value);
+                    }),
+                }),
+            }
+        }
+    };
+    Some(name_d)
 }
 
 fn number_text(editor: &Editor, path: &Path) -> Option<String> {

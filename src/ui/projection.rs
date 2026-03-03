@@ -100,6 +100,12 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
             if *vertical && !items.is_empty() {
                 ui.vertical(|ui| {
                     for item in items {
+                        if let D::Descend { path, child } = item {
+                            if matches!(child.as_ref(), D::Placeholder { .. }) {
+                                render_list_insertion_slot(ui, editor, path, child, true, mode, events);
+                                continue;
+                            }
+                        }
                         ui.horizontal(|ui| {
                             ui.label(text_rich("\u{2022}", &TextStyle::Punctuation));
                             render_d(ui, editor, item, mode, ctx, events);
@@ -108,24 +114,55 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                 });
             } else {
                 ui.label(text_rich(opening, &TextStyle::Punctuation));
-                if items.is_empty() {
-                    ui.push_id(&ctx.path, |ui| {
-                        if insertion_point(ui).clicked() {
-                            if let Some(id) = editor.doc.node(&ctx.path) {
-                                events.push(DEvent::ClickedNode { path: ctx.path.clone(), id });
-                            }
+                let mut need_separator = false;
+                for item in items {
+                    if let D::Descend { path, child } = item {
+                        if matches!(child.as_ref(), D::Placeholder { .. }) {
+                            render_list_insertion_slot(ui, editor, path, child, false, mode, events);
+                            continue;
                         }
-                    });
-                }
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
+                    }
+                    if need_separator {
                         ui.label(text_rich(separator, &TextStyle::Punctuation));
                     }
                     render_d(ui, editor, item, mode, ctx, events);
+                    need_separator = true;
                 }
                 ui.label(text_rich(closing, &TextStyle::Punctuation));
             }
         }
+    }
+}
+
+fn render_list_insertion_slot<'a>(
+    ui: &mut Ui,
+    editor: &Editor,
+    path: &Path,
+    child: &'a D,
+    vertical: bool,
+    mode: &InteractionMode,
+    events: &mut Vec<DEvent<'a>>,
+) {
+    let is_active = matches!(
+        &editor.selection,
+        Some(progred_core::graph::Selection::Edge(sel_path, _)) if sel_path == path
+    );
+    if is_active {
+        let child_ctx = DContext { path: path.clone() };
+        render_d(ui, editor, child, mode, &child_ctx, events);
+    } else {
+        ui.push_id(path, |ui| {
+            let clicked = if vertical {
+                insertion_point(ui).clicked()
+            } else {
+                vertical_insertion_point(ui).clicked()
+            };
+            if clicked {
+                if let Some(id) = editor.doc.node(path) {
+                    events.push(DEvent::ClickedNode { path: path.clone(), id });
+                }
+            }
+        });
     }
 }
 
@@ -146,6 +183,32 @@ pub fn insertion_point(ui: &mut Ui) -> Response {
                 pos2(left_x, center_y - layout::CARET_HALF_HEIGHT),
                 pos2(left_x + layout::CARET_WIDTH, center_y),
                 pos2(left_x, center_y + layout::CARET_HALF_HEIGHT),
+            ],
+            Color32::from_gray(150),
+            eframe::epaint::Stroke::NONE,
+        ));
+    }
+
+    response
+}
+
+fn vertical_insertion_point(ui: &mut Ui) -> Response {
+    let height = ui.text_style_height(&egui::TextStyle::Body);
+
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(0.0, height), Sense::hover());
+
+    let hit_rect = eframe::egui::Rect::from_center_size(rect.center(), Vec2::new(10.0, height));
+    let response = ui.interact(hit_rect, ui.next_auto_id(), Sense::click());
+
+    if response.hovered() {
+        let center_x = rect.center().x;
+        let bottom_y = rect.max.y;
+
+        ui.painter().add(eframe::epaint::Shape::convex_polygon(
+            vec![
+                pos2(center_x, bottom_y - layout::CARET_WIDTH),
+                pos2(center_x + layout::CARET_HALF_HEIGHT, bottom_y),
+                pos2(center_x - layout::CARET_HALF_HEIGHT, bottom_y),
             ],
             Color32::from_gray(150),
             eframe::epaint::Stroke::NONE,
@@ -303,8 +366,9 @@ fn render_node_header<'a>(
         mode_style(mode)
     };
     if clickable(ui, |ui| {
-        render_d(ui, editor, child, mode, ctx, events);
-        ui.interact(ui.min_rect(), ui.id(), Sense::hover())
+        ui.scope(|ui| {
+            render_d(ui, editor, child, mode, ctx, events);
+        }).response
     }, style, hovered).clicked() {
         if let Some(id) = id {
             events.push(DEvent::ClickedNode { path: ctx.path.clone(), id });
@@ -362,7 +426,7 @@ fn render_string_editor(
     let font_id = egui::TextStyle::Body.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(text.clone(), font_id, Color32::BLACK);
     let text_width = galley.rect.width();
-    let desired_width = text_width.max(20.0);
+    let desired_width = text_width.max(8.0);
 
     let stable_id = egui::Id::new(path);
     let response = highlighted(ui, |ui| {
@@ -402,7 +466,7 @@ fn render_number_editor(
     let font_id = egui::TextStyle::Body.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(text.clone(), font_id, Color32::BLACK);
     let text_width = galley.rect.width();
-    let desired_width = text_width.max(20.0);
+    let desired_width = text_width.max(8.0);
 
     let stable_id = egui::Id::new(path);
     let response = highlighted(ui, |ui| {
