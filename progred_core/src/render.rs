@@ -1,6 +1,6 @@
 use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
-use crate::generated::semantics::{Apply, Field, ARGS, CONS_TYPE, EMPTY_TYPE, HEAD, ISA, NAME, TAIL, TYPE_};
+use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, ARGS, BASE, BODY, CONS_TYPE, EMPTY_TYPE, FIELDS, HEAD, ISA, NAME, PARAMS, TAIL, TYPE_, VARIANTS};
 use crate::graph::{Gid, Id, Path, Selection};
 use crate::list_iter::ListIter;
 
@@ -20,10 +20,13 @@ fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet
         Id::Uuid(_) if editor.lib().get(id, &ISA).is_some_and(|t| t == &CONS_TYPE || t == &EMPTY_TYPE) => {
             render_list(editor, path, id, ancestors)
         }
-        Id::Uuid(uuid) => {
+        Id::Uuid(uuid) if !ancestors.contains(id) => {
             let ctx = RenderCtx { editor, path, id, ancestors: &ancestors };
             try_domain_render(&ctx)
                 .unwrap_or_else(|| render_uuid(editor, path, uuid, ancestors))
+        }
+        Id::Uuid(uuid) => {
+            render_uuid(editor, path, uuid, ancestors)
         }
         Id::String(s) => D::StringEditor {
             value: s.clone(),
@@ -44,11 +47,22 @@ struct RenderCtx<'a> {
 
 impl<'a> RenderCtx<'a> {
     fn descend(&self, label: &Id) -> D {
+        self.descend_with(label, None)
+    }
+
+    fn descend_with(&self, label: &Id, render: Option<fn(&Editor, &Id) -> D>) -> D {
         let child_path = self.path.child(label.clone());
 
         match self.editor.lib().get(self.id, label) {
             Some(child_id) => {
-                render_id(self.editor, &child_path, child_id, self.ancestors.clone())
+                let child = match render {
+                    Some(f) => f(self.editor, child_id),
+                    None => {
+                        let child_ancestors = self.ancestors.update(self.id.clone());
+                        render_id_inner(self.editor, &child_path, child_id, child_ancestors)
+                    }
+                };
+                D::Descend { path: child_path, child: Box::new(child) }
             }
             None => {
                 let commit_path = child_path.clone();
@@ -181,7 +195,7 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
 fn is_list_insertion_selected(editor: &Editor, path: &Path, elements: &[ListElement]) -> Option<usize> {
     let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path())?;
 
-    if selected_path == path && !elements.is_empty() {
+    if selected_path == path {
         Some(0)
     } else {
         elements.iter()
@@ -232,10 +246,8 @@ fn render_list(
                 }
             }
 
-            if items.is_empty() {
-                if insertion_idx == Some(0) {
-                    items.push(list_placeholder(editor, path));
-                }
+            if items.is_empty() && insertion_idx == Some(0) {
+                items.push(list_placeholder(editor, path));
             }
 
             D::List {
@@ -277,40 +289,42 @@ fn list_placeholder(editor: &Editor, insert_path: &Path) -> D {
 
 type Projection = fn(&RenderCtx) -> Option<D>;
 
-const PROJECTIONS: &[Projection] = &[render_field, render_apply];
+const PROJECTIONS: &[Projection] = &[render_field, render_apply, render_type, render_record, render_sum, render_forall];
 
 fn try_domain_render(ctx: &RenderCtx) -> Option<D> {
     PROJECTIONS.iter().find_map(|p| p(ctx))
 }
 
+fn render_ref(editor: &Editor, id: &Id) -> D {
+    match id {
+        Id::Uuid(uuid) => {
+            let inner = match name_of(&editor.lib(), id) {
+                Some(name) => D::Text(name, TextStyle::TypeRef),
+                None => D::Identicon(*uuid),
+            };
+            D::NodeHeader { child: Box::new(inner) }
+        }
+        Id::String(s) => D::StringEditor { value: s.clone() },
+        Id::Number(n) => D::NumberEditor { value: n.0, number_text: None },
+    }
+}
+
 fn render_field(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Field::try_wrap(gid, ctx.id)?;
-    let field = Field::wrap(ctx.id.clone());
-    let name = field.name(gid).unwrap_or_else(|| "?".into());
-
-    let mut items = vec![
-        D::Text("field".into(), TextStyle::Keyword),
-        D::Text(format!("\"{}\"", name), TextStyle::Literal),
-    ];
-
-    if field.type_(gid).is_some() {
-        items.push(D::Text(":".into(), TextStyle::Punctuation));
-        items.push(ctx.descend(&TYPE_));
-    }
-
-    Some(D::Line(items))
+    Some(D::Line(vec![
+        D::NodeHeader { child: Box::new(D::Text("field".into(), TextStyle::Keyword)) },
+        ctx.descend(&NAME),
+        D::Text(":".into(), TextStyle::Punctuation),
+        ctx.descend(&TYPE_),
+    ]))
 }
 
 fn render_apply(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
-    let apply = Apply::try_wrap(gid, ctx.id)?;
+    Apply::try_wrap(gid, ctx.id)?;
 
-    let base_name = apply.base(gid)
-        .and_then(|b| name_of(gid, b.id()))
-        .unwrap_or_else(|| "?".into());
-
-    let mut items = vec![D::Text(base_name, TextStyle::TypeRef)];
+    let mut items = vec![ctx.descend_with(&BASE, Some(render_ref))];
 
     if let Some(args_id) = gid.get(ctx.id, &ARGS) {
         let arg_items: Vec<D> = ListIter::new(gid, Some(args_id))
@@ -326,6 +340,46 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
     }
 
     Some(D::Line(items))
+}
+
+fn render_type(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.lib();
+    Type::try_wrap(gid, ctx.id)?;
+    Some(D::Line(vec![
+        D::NodeHeader { child: Box::new(D::Text("type".into(), TextStyle::Keyword)) },
+        ctx.descend(&NAME),
+        D::Text("=".into(), TextStyle::Punctuation),
+        ctx.descend(&BODY),
+    ]))
+}
+
+fn render_record(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.lib();
+    Record::try_wrap(gid, ctx.id)?;
+    Some(D::Block(vec![
+        D::NodeHeader { child: Box::new(D::Text("record".into(), TextStyle::Keyword)) },
+        D::Indent(Box::new(ctx.descend(&FIELDS))),
+    ]))
+}
+
+fn render_sum(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.lib();
+    Sum::try_wrap(gid, ctx.id)?;
+    Some(D::Block(vec![
+        D::NodeHeader { child: Box::new(D::Text("sum".into(), TextStyle::Keyword)) },
+        D::Indent(Box::new(ctx.descend(&VARIANTS))),
+    ]))
+}
+
+fn render_forall(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.lib();
+    Forall::try_wrap(gid, ctx.id)?;
+    Some(D::Line(vec![
+        D::NodeHeader { child: Box::new(D::Text("forall".into(), TextStyle::Keyword)) },
+        ctx.descend(&PARAMS),
+        D::Text(".".into(), TextStyle::Punctuation),
+        ctx.descend(&BODY),
+    ]))
 }
 
 fn render_type_inline(editor: &Editor, node: &Id) -> D {

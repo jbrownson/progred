@@ -108,6 +108,15 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                 });
             } else {
                 ui.label(text_rich(opening, &TextStyle::Punctuation));
+                if items.is_empty() {
+                    ui.push_id(&ctx.path, |ui| {
+                        if insertion_point(ui).clicked() {
+                            if let Some(id) = editor.doc.node(&ctx.path) {
+                                events.push(DEvent::ClickedNode { path: ctx.path.clone(), id });
+                            }
+                        }
+                    });
+                }
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
                         ui.label(text_rich(separator, &TextStyle::Punctuation));
