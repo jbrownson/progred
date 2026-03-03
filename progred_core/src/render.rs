@@ -50,18 +50,16 @@ impl<'a> RenderCtx<'a> {
         self.descend_with(label, None)
     }
 
-    fn descend_with(&self, label: &Id, render: Option<fn(&Editor, &Id) -> D>) -> D {
+    fn descend_with(&self, label: &Id, render: Option<fn(&Editor, &Id) -> Option<D>>) -> D {
         let child_path = self.path.child(label.clone());
 
         match self.editor.lib().get(self.id, label) {
             Some(child_id) => {
-                let child = match render {
-                    Some(f) => f(self.editor, child_id),
-                    None => {
+                let child = render.and_then(|f| f(self.editor, child_id))
+                    .unwrap_or_else(|| {
                         let child_ancestors = self.ancestors.update(self.id.clone());
                         render_id_inner(self.editor, &child_path, child_id, child_ancestors)
-                    }
-                };
+                    });
                 D::Descend { path: child_path, child: Box::new(child) }
             }
             None => {
@@ -295,8 +293,8 @@ fn try_domain_render(ctx: &RenderCtx) -> Option<D> {
     PROJECTIONS.iter().find_map(|p| p(ctx))
 }
 
-fn render_ref(editor: &Editor, id: &Id) -> D {
-    match id {
+fn render_ref(editor: &Editor, id: &Id) -> Option<D> {
+    Some(match id {
         Id::Uuid(uuid) => {
             let inner = match name_of(&editor.lib(), id) {
                 Some(name) => D::Text(name, TextStyle::TypeRef),
@@ -306,6 +304,15 @@ fn render_ref(editor: &Editor, id: &Id) -> D {
         }
         Id::String(s) => D::StringEditor { value: s.clone() },
         Id::Number(n) => D::NumberEditor { value: n.0, number_text: None },
+    })
+}
+
+fn render_shallow_except_apply(editor: &Editor, id: &Id) -> Option<D> {
+    let gid = &editor.lib();
+    if Apply::try_wrap(gid, id).is_some() {
+        None // fall through to default (render_apply projection)
+    } else {
+        render_ref(editor, id)
     }
 }
 
@@ -316,7 +323,7 @@ fn render_field(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("field".into(), TextStyle::Keyword)) },
         ctx.descend(&NAME),
         D::Text(":".into(), TextStyle::Punctuation),
-        ctx.descend(&TYPE_),
+        ctx.descend_with(&TYPE_, Some(render_shallow_except_apply)),
     ]))
 }
 
