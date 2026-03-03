@@ -1,4 +1,4 @@
-use crate::d::DEvent;
+use crate::d::{DEvent, PlaceholderCommit};
 use crate::document::Document;
 use crate::graph::{EdgeState, Gid, Id, Path, RootSlot, Selection, SpanningTree};
 use ordered_float::OrderedFloat;
@@ -25,6 +25,17 @@ impl Editor {
             tree: SpanningTree::empty(),
             selection: None,
             file_path: None,
+        }
+    }
+
+    fn realize_placeholder(&mut self, commit: PlaceholderCommit) -> Id {
+        match commit {
+            PlaceholderCommit::Existing(id) => id,
+            PlaceholderCommit::NewNode { isa } => {
+                let uuid = uuid::Uuid::new_v4();
+                self.doc.gid.set(uuid, crate::generated::semantics::ISA.clone(), isa);
+                Id::Uuid(uuid)
+            }
         }
     }
 
@@ -94,7 +105,8 @@ impl Editor {
                     }
                 }
                 DEvent::PlaceholderCommitted { on_commit, value } => {
-                    on_commit(self, value);
+                    let id = self.realize_placeholder(value);
+                    on_commit(self, id);
                     self.selection = None;
                 }
                 DEvent::PlaceholderDismissed => {
@@ -112,7 +124,8 @@ impl Editor {
                     }
                 }
                 DEvent::RootPlaceholderCommitted { index, value } => {
-                    self.doc.roots.insert(index, RootSlot::new(value));
+                    let id = self.realize_placeholder(value);
+                    self.doc.roots.insert(index, RootSlot::new(id));
                     self.selection = None;
                 }
                 DEvent::RootPlaceholderDismissed => {

@@ -425,7 +425,7 @@ fn render_placeholder<'a>(
         Some(progred_core::graph::Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
         _ => return,
     };
-    let result = super::placeholder::render(ui, ps);
+    let result = super::placeholder::render(ui, editor, ps);
     match result.outcome {
         PlaceholderOutcome::Commit(value) => {
             events.push(DEvent::PlaceholderCommitted { on_commit, value });

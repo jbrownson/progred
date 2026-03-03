@@ -78,10 +78,10 @@ fn render_root_insertion(ui: &mut Ui, editor: &Editor, index: usize, empty_doc: 
 
     if active_placeholder {
         if let Some(Selection::InsertRoot(_, ps)) = &editor.selection {
-            let result = super::placeholder::render(ui, ps);
+            let result = super::placeholder::render(ui, editor, ps);
             match result.outcome {
-                PlaceholderOutcome::Commit(id) => {
-                    events.push(DEvent::RootPlaceholderCommitted { index, value: id });
+                PlaceholderOutcome::Commit(value) => {
+                    events.push(DEvent::RootPlaceholderCommitted { index, value });
                 }
                 PlaceholderOutcome::Dismiss => {
                     events.push(DEvent::RootPlaceholderDismissed);

@@ -1,6 +1,11 @@
 use crate::editor::Editor;
 use crate::graph::{Id, Path};
 
+pub enum PlaceholderCommit {
+    Existing(Id),
+    NewNode { isa: Id },
+}
+
 pub enum TextStyle {
     Keyword,
     TypeRef,
@@ -50,12 +55,12 @@ pub enum DEvent<'a> {
     StringEditorStringChanged { path: Path, text: String },
     NumberEditorTextChanged { path: Path, text: String },
 
-    PlaceholderCommitted { on_commit: &'a dyn Fn(&mut Editor, Id), value: Id },
+    PlaceholderCommitted { on_commit: &'a dyn Fn(&mut Editor, Id), value: PlaceholderCommit },
     PlaceholderDismissed,
     PlaceholderTextChanged(String),
     PlaceholderSelectionMoved(usize),
 
-    RootPlaceholderCommitted { index: usize, value: Id },
+    RootPlaceholderCommitted { index: usize, value: PlaceholderCommit },
     RootPlaceholderDismissed,
     RootPlaceholderTextChanged(String),
     RootPlaceholderSelectionMoved(usize),
