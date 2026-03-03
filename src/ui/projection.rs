@@ -113,22 +113,25 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     }
                 });
             } else {
-                ui.label(text_rich(opening, &TextStyle::Punctuation));
-                let mut need_separator = false;
-                for item in items {
-                    if let D::Descend { path, child } = item {
-                        if matches!(child.as_ref(), D::Placeholder { .. }) {
-                            render_list_insertion_slot(ui, editor, path, child, false, mode, events);
-                            continue;
+                ui.scope(|ui| {
+                    ui.spacing_mut().item_spacing.x = 1.0;
+                    ui.label(text_rich(opening, &TextStyle::Punctuation));
+                    let mut need_separator = false;
+                    for item in items {
+                        if let D::Descend { path, child } = item {
+                            if matches!(child.as_ref(), D::Placeholder { .. }) {
+                                render_list_insertion_slot(ui, editor, path, child, false, mode, events);
+                                continue;
+                            }
                         }
+                        if need_separator {
+                            ui.label(text_rich(separator, &TextStyle::Punctuation));
+                        }
+                        render_d(ui, editor, item, mode, ctx, events);
+                        need_separator = true;
                     }
-                    if need_separator {
-                        ui.label(text_rich(separator, &TextStyle::Punctuation));
-                    }
-                    render_d(ui, editor, item, mode, ctx, events);
-                    need_separator = true;
-                }
-                ui.label(text_rich(closing, &TextStyle::Punctuation));
+                    ui.label(text_rich(closing, &TextStyle::Punctuation));
+                });
             }
         }
     }
