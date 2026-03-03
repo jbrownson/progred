@@ -33,12 +33,14 @@ pub enum D {
         on_commit: Box<dyn Fn(&mut Editor, Id)>,
     },
 
-    List {
+    VerticalList {
+        elements: Vec<D>,
+    },
+    HorizontalList {
         opening: String,
         closing: String,
         separator: String,
-        items: Vec<D>,
-        vertical: bool,
+        elements: Vec<D>,
     },
 }
 
@@ -64,6 +66,12 @@ pub enum DEvent<'a> {
     RootPlaceholderDismissed,
     RootPlaceholderTextChanged(String),
     RootPlaceholderSelectionMoved(usize),
+
+    ClickedListSlot(Path),
+    ListSlotCommitted { path: Path, value: PlaceholderCommit },
+    ListSlotDismissed,
+    ListSlotTextChanged(String),
+    ListSlotSelectionMoved(usize),
 
     GraphNodeClicked(Id),
     GraphEdgeClicked { entity: Id, label: Id },

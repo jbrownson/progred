@@ -17,6 +17,7 @@ pub struct EdgeState {
 pub enum Selection {
     Edge(Path, EdgeState),
     InsertRoot(usize, PlaceholderState),
+    InsertList(Path, PlaceholderState),
     GraphEdge { entity: Id, label: Id },
     GraphNode(Id),
 }

@@ -32,7 +32,7 @@ impl Document {
                 self.roots.retain(|r| &r.value != id);
                 self.gid.purge(id);
             }
-            Selection::InsertRoot(..) => {}
+            Selection::InsertRoot(..) | Selection::InsertList(..) => {}
         }
     }
 

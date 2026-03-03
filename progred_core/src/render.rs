@@ -188,7 +188,6 @@ fn render_uuid(
 }
 
 struct ListElement {
-    tail_path: Path,
     head_path: Path,
     head_value: Option<Id>,
 }
@@ -208,13 +207,12 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
 
         let head_value = lib.get(current_id, &HEAD).cloned();
         let head_path = current_path.child(HEAD.clone());
-        let tail_path = current_path.child(TAIL.clone());
         elements.push(ListElement {
-            tail_path: tail_path.clone(),
             head_path,
             head_value,
         });
 
+        let tail_path = current_path.child(TAIL.clone());
         let tail_value = lib.get(current_id, &TAIL)?;
         current_path = tail_path;
         current_id = tail_value;
@@ -249,40 +247,31 @@ fn render_list_styled(
         Some((elements, _empty_path)) => {
             let list_ancestors = ancestors.update(id.clone());
 
-            let mut items: Vec<D> = Vec::new();
-
-            // Insertion slot before first element
-            items.push(list_placeholder(editor, path));
-
-            for elem in &elements {
-                let head_d = match &elem.head_value {
+            let list_elements: Vec<D> = elements.iter().map(|elem| {
+                match &elem.head_value {
                     Some(head) => {
                         let child = item_render.and_then(|f| f(editor, &elem.head_path, head))
                             .unwrap_or_else(|| render_id_inner(editor, &elem.head_path, head, list_ancestors.clone()));
                         D::Descend { path: elem.head_path.clone(), child: Box::new(child) }
                     }
                     None => {
-                        let selected = editor.selection.as_ref()
-                            .and_then(|s| s.edge_path()) == Some(&elem.head_path);
-                        if selected {
-                            list_placeholder(editor, &elem.head_path)
-                        } else {
-                            D::Text("_".into(), TextStyle::Punctuation)
+                        D::Descend {
+                            path: elem.head_path.clone(),
+                            child: Box::new(D::Text("_".into(), TextStyle::Punctuation)),
                         }
                     }
-                };
-                items.push(head_d);
+                }
+            }).collect();
 
-                // Insertion slot after this element
-                items.push(list_placeholder(editor, &elem.tail_path));
-            }
-
-            D::List {
-                opening: style.opening.into(),
-                closing: style.closing.into(),
-                separator: style.separator.into(),
-                items,
-                vertical: style.vertical,
+            if style.vertical {
+                D::VerticalList { elements: list_elements }
+            } else {
+                D::HorizontalList {
+                    opening: style.opening.into(),
+                    closing: style.closing.into(),
+                    separator: style.separator.into(),
+                    elements: list_elements,
+                }
             }
         }
         None => {
@@ -292,25 +281,6 @@ fn render_list_styled(
                 D::Text("?".into(), TextStyle::Literal)
             }
         }
-    }
-}
-
-fn list_placeholder(editor: &Editor, insert_path: &Path) -> D {
-    let current_value = editor.doc.node(insert_path);
-    let commit_path = insert_path.clone();
-    D::Descend {
-        path: insert_path.clone(),
-        child: Box::new(D::Placeholder {
-            on_commit: Box::new(move |w: &mut Editor, head_value| {
-                if let Some(ref current_value) = current_value {
-                    let new_cons = Id::new_uuid();
-                    w.doc.set_edge(&commit_path, new_cons.clone());
-                    w.doc.set_edge(&commit_path.child(ISA.clone()), CONS_TYPE.clone());
-                    w.doc.set_edge(&commit_path.child(HEAD.clone()), head_value);
-                    w.doc.set_edge(&commit_path.child(TAIL.clone()), current_value.clone());
-                }
-            }),
-        }),
     }
 }
 

@@ -1,7 +1,8 @@
 use progred_core::d::{D, DEvent, TextStyle};
 use progred_core::editor::{Editor, InteractionMode};
 use progred_core::generated::name_of;
-use progred_core::graph::{Id, Path};
+use progred_core::generated::semantics::TAIL;
+use progred_core::graph::{Id, Path, Selection};
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 
 use super::colors;
@@ -96,65 +97,70 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
         D::Placeholder { on_commit } => {
             render_placeholder(ui, editor, &ctx.path, on_commit, events);
         }
-        D::List { opening, closing, separator, items, vertical } => {
-            if *vertical && !items.is_empty() {
+        D::VerticalList { elements } => {
+            ui.vertical(|ui| {
+                let mut insert_path = ctx.path.clone();
+                for element in elements {
+                    render_list_slot(ui, editor, &insert_path, true, events);
+                    render_d(ui, editor, element, mode, ctx, events);
+                    insert_path = insert_path.child(TAIL.clone());
+                }
+                render_list_slot(ui, editor, &insert_path, true, events);
+            });
+        }
+        D::HorizontalList { opening, closing, separator, elements } => {
+            ui.scope(|ui| {
+                ui.spacing_mut().item_spacing.x = 1.0;
                 ui.label(text_rich(opening, &TextStyle::Punctuation));
-                ui.vertical(|ui| {
-                    for item in items {
-                        if let D::Descend { path, child } = item {
-                            if matches!(child.as_ref(), D::Placeholder { .. }) {
-                                render_list_insertion_slot(ui, editor, path, child, true, mode, events);
-                                continue;
-                            }
-                        }
-                        ui.horizontal(|ui| {
-                            ui.label(text_rich("\u{2022}", &TextStyle::Punctuation));
-                            render_d(ui, editor, item, mode, ctx, events);
-                        });
+                let mut insert_path = ctx.path.clone();
+                let mut need_separator = false;
+                for element in elements {
+                    if need_separator {
+                        ui.label(text_rich(separator, &TextStyle::Punctuation));
                     }
-                });
+                    render_list_slot(ui, editor, &insert_path, false, events);
+                    render_d(ui, editor, element, mode, ctx, events);
+                    insert_path = insert_path.child(TAIL.clone());
+                    need_separator = true;
+                }
+                render_list_slot(ui, editor, &insert_path, false, events);
                 ui.label(text_rich(closing, &TextStyle::Punctuation));
-            } else {
-                ui.scope(|ui| {
-                    ui.spacing_mut().item_spacing.x = 1.0;
-                    ui.label(text_rich(opening, &TextStyle::Punctuation));
-                    let mut need_separator = false;
-                    for item in items {
-                        if let D::Descend { path, child } = item {
-                            if matches!(child.as_ref(), D::Placeholder { .. }) {
-                                render_list_insertion_slot(ui, editor, path, child, false, mode, events);
-                                continue;
-                            }
-                        }
-                        if need_separator {
-                            ui.label(text_rich(separator, &TextStyle::Punctuation));
-                        }
-                        render_d(ui, editor, item, mode, ctx, events);
-                        need_separator = true;
-                    }
-                    ui.label(text_rich(closing, &TextStyle::Punctuation));
-                });
-            }
+            });
         }
     }
 }
 
-fn render_list_insertion_slot<'a>(
+fn render_list_slot(
     ui: &mut Ui,
     editor: &Editor,
     path: &Path,
-    child: &'a D,
     vertical: bool,
-    mode: &InteractionMode,
-    events: &mut Vec<DEvent<'a>>,
+    events: &mut Vec<DEvent<'_>>,
 ) {
-    let is_active = matches!(
+    let active = matches!(
         &editor.selection,
-        Some(progred_core::graph::Selection::Edge(sel_path, _)) if sel_path == path
+        Some(Selection::InsertList(sel_path, _)) if sel_path == path
     );
-    if is_active {
-        let child_ctx = DContext { path: path.clone() };
-        render_d(ui, editor, child, mode, &child_ctx, events);
+    if active {
+        if let Some(Selection::InsertList(_, ps)) = &editor.selection {
+            let result = super::placeholder::render(ui, editor, ps);
+            match result.outcome {
+                PlaceholderOutcome::Commit(value) => {
+                    events.push(DEvent::ListSlotCommitted { path: path.clone(), value });
+                }
+                PlaceholderOutcome::Dismiss => {
+                    events.push(DEvent::ListSlotDismissed);
+                }
+                PlaceholderOutcome::Active => {
+                    if let Some(text) = result.text_changed {
+                        events.push(DEvent::ListSlotTextChanged(text));
+                    }
+                    if let Some(idx) = result.selection_moved {
+                        events.push(DEvent::ListSlotSelectionMoved(idx));
+                    }
+                }
+            }
+        }
     } else {
         ui.push_id(path, |ui| {
             let clicked = if vertical {
@@ -163,9 +169,7 @@ fn render_list_insertion_slot<'a>(
                 vertical_insertion_point(ui).clicked()
             };
             if clicked {
-                if let Some(id) = editor.doc.node(path) {
-                    events.push(DEvent::ClickedNode { path: path.clone(), id });
-                }
+                events.push(DEvent::ClickedListSlot(path.clone()));
             }
         });
     }

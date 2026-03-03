@@ -1,6 +1,7 @@
 use crate::d::{DEvent, PlaceholderCommit};
 use crate::document::Document;
-use crate::graph::{EdgeState, Gid, Id, Path, RootSlot, Selection, SpanningTree};
+use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
+use crate::graph::{EdgeState, Gid, Id, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
 use ordered_float::OrderedFloat;
 use std::path::PathBuf;
 
@@ -44,7 +45,7 @@ impl Editor {
             Selection::Edge(path, _) => self.doc.node(path),
             Selection::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
             Selection::GraphNode(id) => Some(id.clone()),
-            Selection::InsertRoot(..) => None,
+            Selection::InsertRoot(..) | Selection::InsertList(..) => None,
         }
     }
 
@@ -139,6 +140,34 @@ impl Editor {
                 }
                 DEvent::RootPlaceholderSelectionMoved(index) => {
                     if let Some(Selection::InsertRoot(_, ref mut ps)) = self.selection {
+                        ps.selected_index = index;
+                    }
+                }
+                DEvent::ClickedListSlot(path) => {
+                    self.selection = Some(Selection::InsertList(path, PlaceholderState::default()));
+                }
+                DEvent::ListSlotCommitted { path, value } => {
+                    let head_value = self.realize_placeholder(value);
+                    if let Some(current_value) = self.doc.node(&path) {
+                        let new_cons = Id::new_uuid();
+                        self.doc.set_edge(&path, new_cons.clone());
+                        self.doc.set_edge(&path.child(ISA.clone()), CONS_TYPE.clone());
+                        self.doc.set_edge(&path.child(HEAD.clone()), head_value);
+                        self.doc.set_edge(&path.child(TAIL.clone()), current_value);
+                    }
+                    self.selection = None;
+                }
+                DEvent::ListSlotDismissed => {
+                    self.selection = None;
+                }
+                DEvent::ListSlotTextChanged(text) => {
+                    if let Some(Selection::InsertList(_, ref mut ps)) = self.selection {
+                        ps.text = text;
+                        ps.selected_index = 0;
+                    }
+                }
+                DEvent::ListSlotSelectionMoved(index) => {
+                    if let Some(Selection::InsertList(_, ref mut ps)) = self.selection {
                         ps.selected_index = index;
                     }
                 }
