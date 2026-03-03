@@ -331,12 +331,12 @@ fn render_ref(editor: &Editor, _path: &Path, id: &Id) -> Option<D> {
     })
 }
 
-fn render_shallow_except_apply(editor: &Editor, path: &Path, id: &Id) -> Option<D> {
+fn render_type_expr(editor: &Editor, path: &Path, id: &Id) -> Option<D> {
     let gid = &editor.lib();
-    if Apply::try_wrap(gid, id).is_some() {
-        None // fall through to default (render_apply projection)
-    } else {
+    if Type::try_wrap(gid, id).is_some() {
         render_ref(editor, path, id)
+    } else {
+        None // fall through to default projection
     }
 }
 
@@ -347,7 +347,7 @@ fn render_field(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("field".into(), TextStyle::Keyword)) },
         ctx.descend(&NAME),
         D::Text(":".into(), TextStyle::Punctuation),
-        ctx.descend_with(&TYPE_, Some(render_shallow_except_apply)),
+        ctx.descend_with(&TYPE_, Some(render_type_expr)),
     ]))
 }
 
@@ -355,19 +355,9 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Apply::try_wrap(gid, ctx.id)?;
 
-    let base_display = gid.get(ctx.id, &BASE)
-        .map(|b| match name_of(gid, b) {
-            Some(name) => D::Text(name, TextStyle::TypeRef),
-            None => match b {
-                Id::Uuid(u) => D::Identicon(*u),
-                _ => D::Text("?".into(), TextStyle::Literal),
-            },
-        })
-        .unwrap_or(D::Text("?".into(), TextStyle::Literal));
-
     Some(D::Line(vec![
-        D::NodeHeader { child: Box::new(base_display) },
-        ctx.descend_list(&ARGS, &ANGLE_LIST, Some(render_shallow_except_apply)),
+        D::NodeHeader { child: Box::new(ctx.descend_with(&BASE, Some(render_ref))) },
+        ctx.descend_list(&ARGS, &ANGLE_LIST, Some(render_type_expr)),
     ]))
 }
 

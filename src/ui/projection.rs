@@ -399,7 +399,7 @@ fn render_field_label(
     };
     ui.push_id(label_id, |ui| {
         if clickable(ui, |ui| match label_id {
-            Id::Uuid(uuid) => match name_of(&editor.doc.gid, label_id) {
+            Id::Uuid(uuid) => match name_of(&editor.lib(), label_id) {
                 Some(name) => ui.label(egui::RichText::new(name).color(label_color).italics()),
                 None => identicon(ui, 12.0, uuid),
             },
