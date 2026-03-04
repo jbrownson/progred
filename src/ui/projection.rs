@@ -21,7 +21,7 @@ pub mod layout {
 }
 
 pub fn compute_interaction_mode(modifiers: egui::Modifiers, editor: &Editor) -> InteractionMode {
-    let selected_path = editor.selection.as_ref().and_then(|s| s.edge_path()).cloned();
+    let selected_path = editor.selection.as_ref().and_then(|s| s.path()).cloned();
     if modifiers.alt {
         match selected_path {
             Some(path) => InteractionMode::Assign(path),
@@ -41,6 +41,7 @@ pub fn compute_interaction_mode(modifiers: egui::Modifiers, editor: &Editor) -> 
 
 pub struct DContext {
     pub path: Path,
+    pub selection: Selection,
 }
 
 pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMode, ctx: &DContext, events: &mut Vec<DEvent<'a>>) {
@@ -73,8 +74,8 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
         D::Identicon(uuid) => {
             identicon(ui, 18.0, uuid);
         }
-        D::Descend { path, child } => {
-            let child_ctx = DContext { path: path.clone() };
+        D::Descend { path, selection, child } => {
+            let child_ctx = DContext { path: path.clone(), selection: selection.clone() };
             render_d(ui, editor, child, mode, &child_ctx, events);
         }
         D::NodeHeader { child } => {
@@ -365,7 +366,7 @@ fn render_node_header<'a>(
     events: &mut Vec<DEvent<'a>>,
 ) {
     let id = editor.doc.node(&ctx.path);
-    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(&ctx.path);
+    let primary = editor.selection.as_ref().and_then(|s| s.path()) == Some(&ctx.path);
     let secondary = !primary && id.is_some() && editor.selected_node_id().as_ref() == id.as_ref();
 
     let (style, hovered) = if primary || secondary {
@@ -380,7 +381,7 @@ fn render_node_header<'a>(
         }).response
     }, style, hovered).clicked() {
         if let Some(id) = id {
-            events.push(DEvent::ClickedNode { path: ctx.path.clone(), id });
+            events.push(DEvent::ClickedNode { id, selection: ctx.selection.clone() });
         }
     }
 }
@@ -427,7 +428,7 @@ fn render_string_editor(
     events: &mut Vec<DEvent<'_>>,
 ) {
     let id = Id::String(value.to_string());
-    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
+    let primary = editor.selection.as_ref().and_then(|s| s.path()) == Some(path);
     let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
 
     let mut text = value.to_string();
@@ -465,7 +466,7 @@ fn render_number_editor(
     events: &mut Vec<DEvent<'_>>,
 ) {
     let id = Id::Number(progred_core::ordered_float::OrderedFloat(value));
-    let primary = editor.selection.as_ref().and_then(|s| s.edge_path()) == Some(path);
+    let primary = editor.selection.as_ref().and_then(|s| s.path()) == Some(path);
     let secondary = !primary && editor.selected_node_id().as_ref() == Some(&id);
 
     let is_editing = number_text.is_some();
@@ -505,6 +506,7 @@ fn render_placeholder<'a>(
 ) {
     let ps = match &editor.selection {
         Some(progred_core::graph::Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
+        Some(progred_core::graph::Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
         _ => return,
     };
     let result = super::placeholder::render(ui, editor, ps);

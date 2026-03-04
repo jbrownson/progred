@@ -41,6 +41,7 @@ EOF
 ## Key Design Rules
 
 - **Documents are pure graph structure** — No semantic interpretation baked in. Use generated constants (`Field::NAME`, `Field::ISA`, etc.) for semantic access.
+- **Resilient to invalid graph states** — The graph could contain anything. Projections specify the happy path but must fall through gracefully. `descend` handles missing edges (placeholder) and unexpected values (default rendering) automatically. If someone puts a C++ program in a param's name, we project a C++ program. Never assume what's at an edge; make the good case easy but don't crash or hide data on the bad case. Item_render callbacks and projections should gate with `try_wrap` and return `None` to fall through to default rendering if the type doesn't match.
 
 ## Future Considerations
 

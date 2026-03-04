@@ -1,5 +1,5 @@
 use crate::editor::Editor;
-use crate::graph::{Id, Path};
+use crate::graph::{Id, Path, Selection};
 
 pub enum PlaceholderCommit {
     Existing(Id),
@@ -21,7 +21,7 @@ pub enum D {
     Text(String, TextStyle),
     Identicon(uuid::Uuid),
 
-    Descend { path: Path, child: Box<D> },
+    Descend { path: Path, selection: Selection, child: Box<D> },
 
     NodeHeader { child: Box<D> },
     FieldLabel { label_id: Id },
@@ -45,7 +45,7 @@ pub enum D {
 }
 
 pub enum DEvent<'a> {
-    ClickedNode { path: Path, id: Id },
+    ClickedNode { id: Id, selection: Selection },
     ClickedFieldLabel { entity_path: Path, label_id: Id },
     ClickedCollapseToggle(Path),
     ClickedBackground,

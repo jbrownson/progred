@@ -40,7 +40,7 @@ pub fn render<'a>(ui: &mut Ui, editor: &Editor, d_trees: &'a [Option<D>], orphan
                         let path = Path::new(&editor.doc.roots[i]);
                         let push_id = egui::Id::new(&editor.doc.roots[i]);
                         ui.push_id(push_id, |ui| {
-                            let ctx = DContext { path: path.clone() };
+                            let ctx = DContext { path: path.clone(), selection: Selection::edge(path) };
                             render_d(ui, editor, d, mode, &ctx, events);
                         });
                     }

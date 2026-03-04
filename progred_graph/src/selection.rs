@@ -16,6 +16,11 @@ pub struct EdgeState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Selection {
     Edge(Path, EdgeState),
+    ListElement {
+        path: Path,
+        cons_id: Id,
+        edge_state: EdgeState,
+    },
     InsertRoot(usize, PlaceholderState),
     InsertList(Path, PlaceholderState),
     GraphEdge { entity: Id, label: Id },
@@ -31,9 +36,18 @@ impl Selection {
         Self::InsertRoot(index, PlaceholderState::default())
     }
 
-    pub fn edge_path(&self) -> Option<&Path> {
+    pub fn path(&self) -> Option<&Path> {
         match self {
             Self::Edge(p, _) => Some(p),
+            Self::ListElement { path, .. } => Some(path),
+            _ => None,
+        }
+    }
+
+    pub fn edge_state_mut(&mut self) -> Option<&mut EdgeState> {
+        match self {
+            Self::Edge(_, es) => Some(es),
+            Self::ListElement { edge_state, .. } => Some(edge_state),
             _ => None,
         }
     }

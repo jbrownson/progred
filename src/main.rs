@@ -100,7 +100,7 @@ impl ProgredApp {
     }
 
     fn insert_new_node(&mut self) {
-        if let Some(path) = self.editor.selection.as_ref().and_then(|s| s.edge_path()) {
+        if let Some(path) = self.editor.selection.as_ref().and_then(|s| s.path()) {
             self.editor.doc.set_edge(path, Id::new_uuid());
             self.editor.selection = None;
         }
@@ -188,14 +188,14 @@ impl ProgredApp {
                 });
                 ui.menu_button("Edit", |ui| {
                     if ui.add_enabled(
-                        self.editor.selection.as_ref().and_then(|s| s.edge_path()).is_some(),
+                        self.editor.selection.as_ref().and_then(|s| s.path()).is_some(),
                         egui::Button::new("New Node").shortcut_text(shortcuts::format(&shortcuts::INSERT_NODE)),
                     ).clicked() {
                         self.insert_new_node();
                         ui.close();
                     }
                     if ui.add_enabled(
-                        self.editor.selection.as_ref().and_then(|s| s.edge_path()).is_some(),
+                        self.editor.selection.as_ref().and_then(|s| s.path()).is_some(),
                         egui::Button::new("Delete").shortcut_text(shortcuts::format(&shortcuts::DELETE)),
                     ).clicked() {
                         self.delete_selection();

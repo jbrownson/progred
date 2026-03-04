@@ -1,7 +1,7 @@
 use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
 use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, ARGS, BASE, BODY, CONS_TYPE, EMPTY_TYPE, FIELDS, HEAD, ISA, NAME, PARAMS, TAIL, TYPE_, VARIANTS};
-use crate::graph::{Gid, Id, Path, Selection};
+use crate::graph::{EdgeState, Gid, Id, Path, Selection};
 
 use crate::d::{D, TextStyle};
 
@@ -11,7 +11,7 @@ pub fn render(editor: &Editor, path: &Path, id: &Id) -> D {
 
 fn render_id(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
     let child = render_id_inner(editor, path, id, ancestors);
-    D::Descend { path: path.clone(), child: Box::new(child) }
+    D::Descend { path: path.clone(), selection: Selection::edge(path.clone()), child: Box::new(child) }
 }
 
 fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
@@ -64,22 +64,26 @@ impl<'a> RenderCtx<'a> {
         self.descend_with(label, None)
     }
 
-    fn descend_with(&self, label: &Id, render: Option<fn(&Editor, &Path, &Id) -> Option<D>>) -> D {
+    fn descend_with(&self, label: &Id, render: Option<fn(&RenderCtx) -> Option<D>>) -> D {
         let child_path = self.path.child(label.clone());
+        let selection = Selection::edge(child_path.clone());
 
         match self.editor.lib().get(self.id, label) {
             Some(child_id) => {
-                let child = render.and_then(|f| f(self.editor, &child_path, child_id))
-                    .unwrap_or_else(|| {
-                        let child_ancestors = self.ancestors.update(self.id.clone());
-                        render_id_inner(self.editor, &child_path, child_id, child_ancestors)
-                    });
-                D::Descend { path: child_path, child: Box::new(child) }
+                let child_ancestors = self.ancestors.update(self.id.clone());
+                let child = render.and_then(|f| {
+                    let child_ctx = RenderCtx { editor: self.editor, path: &child_path, id: child_id, ancestors: &child_ancestors };
+                    f(&child_ctx)
+                }).unwrap_or_else(|| {
+                    render_id_inner(self.editor, &child_path, child_id, child_ancestors)
+                });
+                D::Descend { path: child_path, selection, child: Box::new(child) }
             }
             None => {
                 let commit_path = child_path.clone();
                 D::Descend {
                     path: child_path,
+                    selection,
                     child: Box::new(D::Placeholder {
                         on_commit: Box::new(move |w: &mut Editor, value| {
                             w.doc.set_edge(&commit_path, value);
@@ -90,19 +94,21 @@ impl<'a> RenderCtx<'a> {
         }
     }
 
-    fn descend_list(&self, label: &Id, style: &ListStyle, item_render: Option<fn(&Editor, &Path, &Id) -> Option<D>>) -> D {
+    fn descend_list(&self, label: &Id, style: &ListStyle, item_render: Option<fn(&RenderCtx) -> Option<D>>) -> D {
         let child_path = self.path.child(label.clone());
+        let selection = Selection::edge(child_path.clone());
 
         match self.editor.lib().get(self.id, label) {
             Some(child_id) => {
                 let child_ancestors = self.ancestors.update(self.id.clone());
                 let child = render_list_styled(self.editor, &child_path, child_id, child_ancestors, style, item_render);
-                D::Descend { path: child_path, child: Box::new(child) }
+                D::Descend { path: child_path, selection, child: Box::new(child) }
             }
             None => {
                 let commit_path = child_path.clone();
                 D::Descend {
                     path: child_path,
+                    selection,
                     child: Box::new(D::Placeholder {
                         on_commit: Box::new(move |w: &mut Editor, value| {
                             w.doc.set_edge(&commit_path, value);
@@ -125,7 +131,7 @@ fn render_uuid(
     let edges = lib.edges(&id);
     let display_label = display_label(&lib, &id);
     let new_edge_label = editor.selection.as_ref()
-        .and_then(|s| s.edge_path())
+        .and_then(|s| s.path())
         .and_then(|sel| sel.pop())
         .filter(|(parent, _)| parent == path)
         .map(|(_, label)| label)
@@ -171,7 +177,8 @@ fn render_uuid(
                 D::FieldLabel { label_id: new_label.clone() },
                 D::Text(":".into(), TextStyle::Punctuation),
                 D::Descend {
-                    path: placeholder_path,
+                    path: placeholder_path.clone(),
+                    selection: Selection::edge(placeholder_path),
                     child: Box::new(D::Placeholder {
                         on_commit: Box::new(move |w: &mut Editor, value| {
                             w.doc.set_edge(&closure_path, value);
@@ -190,6 +197,7 @@ fn render_uuid(
 struct ListElement {
     head_path: Path,
     head_value: Option<Id>,
+    cons_id: Id,
 }
 
 fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElement>, Path)> {
@@ -210,6 +218,7 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
         elements.push(ListElement {
             head_path,
             head_value,
+            cons_id: current_id.clone(),
         });
 
         let tail_path = current_path.child(TAIL.clone());
@@ -241,23 +250,36 @@ fn render_list_styled(
     id: &Id,
     ancestors: im::HashSet<Id>,
     style: &ListStyle,
-    item_render: Option<fn(&Editor, &Path, &Id) -> Option<D>>,
+    item_render: Option<fn(&RenderCtx) -> Option<D>>,
 ) -> D {
     match flatten_list(editor, path, id) {
         Some((elements, _empty_path)) => {
             let list_ancestors = ancestors.update(id.clone());
 
             let list_elements: Vec<D> = elements.iter().map(|elem| {
+                let selection = Selection::ListElement {
+                    path: elem.head_path.clone(),
+                    cons_id: elem.cons_id.clone(),
+                    edge_state: EdgeState::default(),
+                };
                 match &elem.head_value {
                     Some(head) => {
-                        let child = item_render.and_then(|f| f(editor, &elem.head_path, head))
-                            .unwrap_or_else(|| render_id_inner(editor, &elem.head_path, head, list_ancestors.clone()));
-                        D::Descend { path: elem.head_path.clone(), child: Box::new(child) }
+                        let child = item_render.and_then(|f| {
+                            let child_ctx = RenderCtx { editor, path: &elem.head_path, id: head, ancestors: &list_ancestors };
+                            f(&child_ctx)
+                        }).unwrap_or_else(|| render_id_inner(editor, &elem.head_path, head, list_ancestors.clone()));
+                        D::Descend { path: elem.head_path.clone(), selection, child: Box::new(child) }
                     }
                     None => {
+                        let commit_path = elem.head_path.clone();
                         D::Descend {
                             path: elem.head_path.clone(),
-                            child: Box::new(D::Text("_".into(), TextStyle::Punctuation)),
+                            selection,
+                            child: Box::new(D::Placeholder {
+                                on_commit: Box::new(move |w: &mut Editor, value| {
+                                    w.doc.set_edge(&commit_path, value);
+                                }),
+                            }),
                         }
                     }
                 }
@@ -292,10 +314,10 @@ fn try_domain_render(ctx: &RenderCtx) -> Option<D> {
     PROJECTIONS.iter().find_map(|p| p(ctx))
 }
 
-fn render_ref(editor: &Editor, _path: &Path, id: &Id) -> Option<D> {
-    Some(match id {
+fn render_ref(ctx: &RenderCtx) -> Option<D> {
+    Some(match ctx.id {
         Id::Uuid(uuid) => {
-            let inner = match name_of(&editor.lib(), id) {
+            let inner = match name_of(&ctx.editor.lib(), ctx.id) {
                 Some(name) => D::Text(name, TextStyle::TypeRef),
                 None => D::Identicon(*uuid),
             };
@@ -306,10 +328,10 @@ fn render_ref(editor: &Editor, _path: &Path, id: &Id) -> Option<D> {
     })
 }
 
-fn render_type_expr(editor: &Editor, path: &Path, id: &Id) -> Option<D> {
-    let gid = &editor.lib();
-    if Type::try_wrap(gid, id).is_some() {
-        render_ref(editor, path, id)
+fn render_type_expr(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.lib();
+    if Type::try_wrap(gid, ctx.id).is_some() {
+        render_ref(ctx)
     } else {
         None // fall through to default projection
     }
@@ -391,31 +413,16 @@ fn render_forall(ctx: &RenderCtx) -> Option<D> {
     Some(D::Line(items))
 }
 
-fn render_param(editor: &Editor, path: &Path, id: &Id) -> Option<D> {
-    let name_path = path.child(NAME.clone());
-    let name_d = match editor.lib().get(id, &NAME) {
-        Some(name_id) => {
-            let child = render_id_inner(editor, &name_path, name_id, im::HashSet::new());
-            D::Descend { path: name_path, child: Box::new(child) }
-        }
-        None => {
-            let commit_path = name_path.clone();
-            D::Descend {
-                path: name_path,
-                child: Box::new(D::Placeholder {
-                    on_commit: Box::new(move |w: &mut Editor, value| {
-                        w.doc.set_edge(&commit_path, value);
-                    }),
-                }),
-            }
-        }
-    };
-    Some(name_d)
+fn render_param(ctx: &RenderCtx) -> Option<D> {
+    let gid = &ctx.editor.lib();
+    Type::try_wrap(gid, ctx.id)?;
+    Some(ctx.descend(&NAME))
 }
 
 fn number_text(editor: &Editor, path: &Path) -> Option<String> {
     match &editor.selection {
         Some(Selection::Edge(sel_path, es)) if sel_path == path => es.number_text.clone(),
+        Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => edge_state.number_text.clone(),
         _ => None,
     }
 }

@@ -1,4 +1,5 @@
 use crate::graph::{Gid, Id, MutGid, Path, PathRoot, RootSlot, Selection};
+use crate::generated::semantics::TAIL;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
 
@@ -24,6 +25,9 @@ impl Document {
     pub fn delete(&mut self, selection: &Selection) {
         match selection {
             Selection::Edge(path, _) => self.delete_edge(path),
+            Selection::ListElement { path, cons_id, .. } => {
+                self.splice_out_list_element(path, cons_id);
+            }
             Selection::GraphEdge { entity: Id::Uuid(uuid), label } => {
                 self.gid.delete(uuid, label);
             }
@@ -33,6 +37,14 @@ impl Document {
                 self.gid.purge(id);
             }
             Selection::InsertRoot(..) | Selection::InsertList(..) => {}
+        }
+    }
+
+    fn splice_out_list_element(&mut self, head_path: &Path, cons_id: &Id) {
+        if let Some((cons_path, _)) = head_path.pop()
+            && let Some(tail_value) = self.gid.get(cons_id, &TAIL).cloned()
+        {
+            self.set_edge(&cons_path, tail_value);
         }
     }
 

@@ -43,6 +43,7 @@ impl Editor {
     pub fn selected_node_id(&self) -> Option<Id> {
         match self.selection.as_ref()? {
             Selection::Edge(path, _) => self.doc.node(path),
+            Selection::ListElement { path, .. } => self.doc.node(path),
             Selection::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
             Selection::GraphNode(id) => Some(id.clone()),
             Selection::InsertRoot(..) | Selection::InsertList(..) => None,
@@ -52,9 +53,9 @@ impl Editor {
     pub fn handle_events(&mut self, events: Vec<DEvent<'_>>, mode: &InteractionMode) {
         for event in events {
             match event {
-                DEvent::ClickedNode { path, id } => match mode {
+                DEvent::ClickedNode { id, selection } => match mode {
                     InteractionMode::Normal => {
-                        self.selection = Some(Selection::edge(path));
+                        self.selection = Some(selection);
                     }
                     InteractionMode::Assign(target) => {
                         self.doc.set_edge(target, id);
@@ -98,7 +99,7 @@ impl Editor {
                     self.doc.set_edge(&path, Id::String(text));
                 }
                 DEvent::NumberEditorTextChanged { path, text } => {
-                    if let Some(Selection::Edge(_, ref mut es)) = self.selection {
+                    if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.number_text = Some(text.clone());
                     }
                     if let Ok(n) = text.parse::<f64>() {
@@ -114,13 +115,13 @@ impl Editor {
                     self.selection = None;
                 }
                 DEvent::PlaceholderTextChanged(text) => {
-                    if let Some(Selection::Edge(_, ref mut es)) = self.selection {
+                    if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.placeholder.text = text;
                         es.placeholder.selected_index = 0;
                     }
                 }
                 DEvent::PlaceholderSelectionMoved(index) => {
-                    if let Some(Selection::Edge(_, ref mut es)) = self.selection {
+                    if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.placeholder.selected_index = index;
                     }
                 }
