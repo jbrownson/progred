@@ -36,6 +36,8 @@ pub enum D {
     },
 
     VerticalList {
+        opening: String,
+        closing: String,
         elements: Vec<D>,
     },
     HorizontalList {

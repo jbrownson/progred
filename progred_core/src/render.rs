@@ -285,7 +285,11 @@ fn render_list_styled(
             }).collect();
 
             if style.vertical {
-                D::VerticalList { elements: list_elements }
+                D::VerticalList {
+                    opening: style.opening.into(),
+                    closing: style.closing.into(),
+                    elements: list_elements,
+                }
             } else {
                 D::HorizontalList {
                     opening: style.opening.into(),

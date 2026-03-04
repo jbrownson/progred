@@ -66,8 +66,10 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
             });
         }
         D::Indent(child) => {
-            ui.indent("edges", |ui| {
-                render_d(ui, editor, child, mode, ctx, events);
+            ui.vertical(|ui| {
+                ui.indent("edges", |ui| {
+                    render_d(ui, editor, child, mode, ctx, events);
+                });
             });
         }
         D::Text(s, style) => {
@@ -100,16 +102,27 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
         D::Placeholder { on_commit } => {
             render_placeholder(ui, editor, &ctx.path, on_commit, events);
         }
-        D::VerticalList { elements } => {
-            ui.vertical(|ui| {
-                let mut insert_path = ctx.path.clone();
-                for element in elements {
+        D::VerticalList { opening, closing, elements } => {
+            if elements.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    ui.label(text_rich(opening, &TextStyle::Punctuation));
+                    render_empty_list_slot(ui, editor, &ctx.path, events);
+                    ui.label(text_rich(closing, &TextStyle::Punctuation));
+                });
+            } else {
+                ui.vertical(|ui| {
+                    ui.label(text_rich(opening, &TextStyle::Punctuation));
+                    let mut insert_path = ctx.path.clone();
+                    for element in elements {
+                        render_list_slot(ui, editor, &insert_path, true, events);
+                        render_d(ui, editor, element, mode, ctx, events);
+                        insert_path = insert_path.child(TAIL.clone());
+                    }
                     render_list_slot(ui, editor, &insert_path, true, events);
-                    render_d(ui, editor, element, mode, ctx, events);
-                    insert_path = insert_path.child(TAIL.clone());
-                }
-                render_list_slot(ui, editor, &insert_path, true, events);
-            });
+                    ui.label(text_rich(closing, &TextStyle::Punctuation));
+                });
+            }
         }
         D::HorizontalList { opening, closing, separator, elements } => {
             ui.scope(|ui| {
@@ -172,6 +185,61 @@ fn render_list_slot(
                 vertical_insertion_point(ui).clicked()
             };
             if clicked {
+                events.push(DEvent::ClickedListSlot(path.clone()));
+            }
+        });
+    }
+}
+
+fn render_empty_list_slot(
+    ui: &mut Ui,
+    editor: &Editor,
+    path: &Path,
+    events: &mut Vec<DEvent<'_>>,
+) {
+    let active = matches!(
+        &editor.selection,
+        Some(Selection::InsertList(sel_path, _)) if sel_path == path
+    );
+    if active {
+        if let Some(Selection::InsertList(_, ps)) = &editor.selection {
+            let result = super::placeholder::render(ui, editor, ps);
+            match result.outcome {
+                PlaceholderOutcome::Commit(value) => {
+                    events.push(DEvent::ListSlotCommitted { path: path.clone(), value });
+                }
+                PlaceholderOutcome::Dismiss => {
+                    events.push(DEvent::ListSlotDismissed);
+                }
+                PlaceholderOutcome::Active => {
+                    if let Some(text) = result.text_changed {
+                        events.push(DEvent::ListSlotTextChanged(text));
+                    }
+                    if let Some(idx) = result.selection_moved {
+                        events.push(DEvent::ListSlotSelectionMoved(idx));
+                    }
+                }
+            }
+        }
+    } else {
+        ui.push_id(path, |ui| {
+            let text_height = ui.text_style_height(&egui::TextStyle::Body);
+            let size = Vec2::new(text_height * 0.6, text_height);
+            let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+            if response.hovered() {
+                let center_x = rect.center().x;
+                let bottom_y = rect.max.y + layout::CARET_WIDTH * 0.5;
+                ui.painter().add(eframe::epaint::Shape::convex_polygon(
+                    vec![
+                        pos2(center_x - layout::CARET_HALF_HEIGHT, bottom_y),
+                        pos2(center_x + layout::CARET_HALF_HEIGHT, bottom_y),
+                        pos2(center_x, bottom_y - layout::CARET_WIDTH),
+                    ],
+                    Color32::from_gray(150),
+                    eframe::epaint::Stroke::NONE,
+                ));
+            }
+            if response.clicked() {
                 events.push(DEvent::ClickedListSlot(path.clone()));
             }
         });

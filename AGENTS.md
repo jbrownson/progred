@@ -37,6 +37,7 @@ EOF
 
 - **Don't use `lost_focus()`** — egui's `Response::lost_focus()` is unreliable when focus moves between TextEdit widgets. It only fires if the losing widget renders *after* the gaining widget (layout-order dependent). This is a [known bug](https://github.com/emilk/egui/issues/2142) unfixed since 2022. Design interactions so they don't depend on lost_focus — e.g. commit on every valid keystroke rather than on defocus.
 - **Render pass is read-only** — The render pass takes `&Editor` and collects a `Vec<DEvent>`. All mutations happen in `handle_events` after rendering completes. This eliminates read-after-write bugs and order-dependent behavior within a frame.
+- **`ui.indent` panics in horizontal layouts** — egui's `indent` only works inside vertical layouts. Since D trees can be nested arbitrarily (e.g. a `VerticalList` or `Indent` inside a `Line`), always wrap `ui.indent` calls in `ui.vertical` to guarantee a safe layout context.
 
 ## Key Design Rules
 
@@ -58,6 +59,23 @@ See `docs/migration.md` for the procedure. Always use a temporary Rust binary th
 - **Autocomplete integration**: Hook up name lookups to the placeholder autocomplete dialog, port architecture from original prototype
 - **Red squiggles**: Real-time type system errors displayed inline
 - **Default projection improvements**: Show placeholders for missing fields, order fields per record definition, show extra fields at bottom
+- **Layout pass for block-in-inline rendering**: When a `VerticalList` appears inside a `D::Line` (e.g. default renderer: `label: [list...]`), the `[` ends up inline and elements are indented from the `[`'s cursor position, not from the logical nesting depth. Currently renders as:
+  ```
+  A bunch of stuff on a line [
+                              Item 1
+                              Item 2
+                              ]
+  ```
+  Should render as:
+  ```
+  A bunch of stuff on a line [
+    Item 1
+    Item 2
+  ]
+  ```
+  This can't be solved in egui's immediate mode layout without hacks — needs an intermediate layout pass (D → flat block sequence → egui) that can split a VerticalList's opening bracket onto the preceding line and place the body at the correct indent level. Domain projections (record, sum) are unaffected since their lists are inside `D::Indent`, not `D::Line`.
+- **Empty horizontal list insertion**: Empty `HorizontalList` has same discoverability problem as vertical — the insertion slot between brackets is zero-width and invisible. Share the empty-slot rendering approach from `VerticalList`
+- **Unify placeholder events and list slot duplication**: `Placeholder*` and `ListSlot*` events are duplicate patterns (text changed, dismissed, selection moved) that just update whichever `PlaceholderState` is active. Should collapse into one set. `render_empty_list_slot` also duplicates the active-state logic from `render_list_slot` — would be cleaned up by the same unification. The `on_commit` closure on `D::Placeholder` could be removed in favor of the editor deciding what to do based on the active `Selection` variant.
 - **Naming audit**: "Field" vs "edge label" conflation (Field is a defined semantic thing, edge labels may or may not be fields), and related inconsistencies across D, DEvent, and UI code
 
 ## Code Style
