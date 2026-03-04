@@ -1,7 +1,9 @@
 use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
 use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, ARGS, BASE, BODY, CONS_TYPE, EMPTY_TYPE, FIELDS, HEAD, ISA, NAME, PARAMS, TAIL, TYPE_, VARIANTS};
-use crate::graph::{EdgeState, Gid, Id, Path, Selection};
+use crate::graph::{Gid, Id};
+use crate::path::Path;
+use crate::selection::{EdgeState, Selection};
 
 use crate::d::{D, TextStyle};
 

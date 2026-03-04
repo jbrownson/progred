@@ -5,7 +5,10 @@ pub mod generated;
 pub mod graph_view_state;
 pub mod list_iter;
 pub mod math;
+pub mod path;
 pub mod render;
+pub mod selection;
+pub mod spanningtree;
 mod ts_runtime;
 
 pub use ordered_float;

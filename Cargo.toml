@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "progred_macros", "progred_graph", "progred_core"]
+members = [".", "progred_macros", "progred_graph", "progred_core", "progred_loader"]
 
 [package]
 name = "progred"

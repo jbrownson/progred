@@ -1,7 +1,10 @@
 use crate::d::{DEvent, PlaceholderCommit};
 use crate::document::Document;
 use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
-use crate::graph::{EdgeState, Gid, Id, Path, PlaceholderState, RootSlot, Selection, SpanningTree};
+use crate::graph::{Gid, Id};
+use crate::path::{Path, RootSlot};
+use crate::selection::{EdgeState, PlaceholderState, Selection};
+use crate::spanningtree::SpanningTree;
 use ordered_float::OrderedFloat;
 use std::path::PathBuf;
 
@@ -22,7 +25,7 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             doc: Document::new(),
-            semantics: progred_macros::load_document!("../semantics.progred"),
+            semantics: progred_loader::load_document!("../semantics.progred"),
             tree: SpanningTree::empty(),
             selection: None,
             file_path: None,

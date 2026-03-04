@@ -1,5 +1,4 @@
-use crate::gid::Gid;
-use crate::id::Id;
+use progred_graph::{Gid, Id};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 

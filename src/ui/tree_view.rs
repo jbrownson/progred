@@ -1,6 +1,8 @@
 use progred_core::d::{D, DEvent};
 use progred_core::editor::{Editor, InteractionMode};
-use progred_core::graph::{Id, Path, Selection};
+use progred_core::graph::Id;
+use progred_core::path::Path;
+use progred_core::selection::Selection;
 use eframe::egui::{self, Color32, RichText, Sense, Ui};
 use std::collections::HashSet;
 

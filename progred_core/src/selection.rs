@@ -1,4 +1,4 @@
-use crate::id::Id;
+use progred_graph::Id;
 use crate::path::Path;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

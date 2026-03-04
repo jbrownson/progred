@@ -1,7 +1,8 @@
 use progred_core::d::DEvent;
 use progred_core::editor::Editor;
 use progred_core::generated::{display_label, name_of};
-use progred_core::graph::{Id, Selection};
+use progred_core::graph::Id;
+use progred_core::selection::Selection;
 use progred_core::graph_view_state::{GraphViewState, collect_edges};
 use progred_core::math;
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};

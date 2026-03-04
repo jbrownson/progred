@@ -1,4 +1,6 @@
-use crate::graph::{Gid, Id, MutGid, Path, PathRoot, RootSlot, Selection};
+use crate::graph::{Gid, Id, MutGid};
+use crate::path::{Path, PathRoot, RootSlot};
+use crate::selection::Selection;
 use crate::generated::semantics::TAIL;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};

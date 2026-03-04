@@ -3223,6 +3223,7 @@ dependencies = [
  "im",
  "ordered-float",
  "progred_graph",
+ "progred_loader",
  "progred_macros",
  "serde",
  "serde_json",
@@ -3238,6 +3239,18 @@ dependencies = [
  "ordered-float",
  "serde",
  "serde_json",
+ "uuid",
+]
+
+[[package]]
+name = "progred_loader"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "progred_graph",
+ "quote",
+ "serde_json",
+ "syn",
  "uuid",
 ]
 

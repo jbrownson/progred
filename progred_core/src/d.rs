@@ -1,5 +1,7 @@
 use crate::editor::Editor;
-use crate::graph::{Id, Path, Selection};
+use crate::graph::Id;
+use crate::path::Path;
+use crate::selection::Selection;
 
 pub enum PlaceholderCommit {
     Existing(Id),

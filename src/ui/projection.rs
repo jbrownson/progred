@@ -2,7 +2,9 @@ use progred_core::d::{D, DEvent, TextStyle};
 use progred_core::editor::{Editor, InteractionMode};
 use progred_core::generated::name_of;
 use progred_core::generated::semantics::TAIL;
-use progred_core::graph::{Id, Path, Selection};
+use progred_core::graph::Id;
+use progred_core::selection::Selection;
+use progred_core::path::Path;
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 
 use super::colors;
@@ -505,8 +507,8 @@ fn render_placeholder<'a>(
     events: &mut Vec<DEvent<'a>>,
 ) {
     let ps = match &editor.selection {
-        Some(progred_core::graph::Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
-        Some(progred_core::graph::Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
+        Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
+        Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
         _ => return,
     };
     let result = super::placeholder::render(ui, editor, ps);

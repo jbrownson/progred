@@ -1,7 +1,8 @@
 use progred_core::d::PlaceholderCommit;
 use progred_core::editor::Editor;
 use progred_core::generated::{name_of, semantics::{ISA, Type}};
-use progred_core::graph::{Gid, Id, PlaceholderState};
+use progred_core::graph::{Gid, Id};
+use progred_core::selection::PlaceholderState;
 use eframe::egui::{self, Color32, Ui};
 use progred_core::ordered_float::OrderedFloat;
 use std::collections::HashMap;

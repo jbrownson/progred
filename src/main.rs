@@ -6,7 +6,8 @@ use progred_core::document::Document;
 use progred_core::editor::Editor;
 use progred_core::graph_view_state::GraphViewState;
 use eframe::egui;
-use progred_core::graph::{Id, Selection};
+use progred_core::graph::Id;
+use progred_core::selection::Selection;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
