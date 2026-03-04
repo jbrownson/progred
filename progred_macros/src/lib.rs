@@ -49,7 +49,7 @@ fn get_isa<'a>(gid: &'a impl Gid, id: &Id) -> Option<&'a Id> {
     gid.get(id, &ISA)
 }
 
-fn flatten_list(gid: &impl Gid, list_id: &Id) -> Vec<Id> {
+fn flatten_list(gid: &impl Gid, list_id: &Id) -> Result<Vec<Id>> {
     let mut result = Vec::new();
     let mut current = list_id.clone();
     let mut seen = std::collections::HashSet::new();
@@ -57,20 +57,20 @@ fn flatten_list(gid: &impl Gid, list_id: &Id) -> Vec<Id> {
     while seen.insert(current.clone()) {
         let isa = get_isa(gid, &current);
         if isa == Some(&CONS_T) {
-            if let Some(head_id) = gid.get(&current, &HEAD) {
-                result.push(head_id.clone());
-            }
+            let head_id = gid.get(&current, &HEAD)
+                .ok_or_else(|| format!("Cons cell {} missing HEAD edge", current))?;
+            result.push(head_id.clone());
             match gid.get(&current, &TAIL) {
                 Some(tail_id) => current = tail_id.clone(),
-                None => break,
+                None => return Err(format!("Cons cell {} missing TAIL edge", current)),
             }
         } else if isa == Some(&EMPTY_T) {
             break;
         } else {
-            break;
+            return Err(format!("Expected Cons or Empty in list, got {:?} at {}", isa, current));
         }
     }
-    result
+    Ok(result)
 }
 
 const RESERVED: &[&str] = &[
@@ -132,13 +132,14 @@ enum ResolvedType {
     TypeParam { rust_name: String, converter_name: String },
 }
 
-fn get_forall_params(gid: &impl Gid, type_id: &Id) -> Option<Vec<Id>> {
-    let body_id = gid.get(type_id, &BODY)?;
+fn get_forall_params(gid: &impl Gid, type_id: &Id) -> Result<Option<Vec<Id>>> {
+    let Some(body_id) = gid.get(type_id, &BODY) else { return Ok(None) };
     if get_isa(gid, body_id) == Some(&FORALL_T) {
-        let params_list_id = gid.get(body_id, &PARAMS)?;
-        Some(flatten_list(gid, params_list_id))
+        let params_list_id = gid.get(body_id, &PARAMS)
+            .ok_or_else(|| format!("Forall {} has no params list", body_id))?;
+        Ok(Some(flatten_list(gid, params_list_id)?))
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -177,9 +178,9 @@ fn resolve_type(gid: &impl Gid, type_id: &Id, subs: &Substitutions) -> Result<Re
             .ok_or_else(|| format!("Apply {} has no base", type_id))?;
         let args_list_id = gid.get(type_id, &ARGS)
             .ok_or_else(|| format!("Apply {} has no args", type_id))?;
-        let arg_ids = flatten_list(gid, args_list_id);
+        let arg_ids = flatten_list(gid, args_list_id)?;
 
-        if get_forall_params(gid, base_id).is_some() {
+        if get_forall_params(gid, base_id)?.is_some() {
             let rust_name = get_name(gid, base_id)
                 .ok_or_else(|| format!("Generic type {} has no name", base_id))
                 .and_then(|name| rust_type_name(&name))?;
@@ -197,7 +198,7 @@ fn resolve_type(gid: &impl Gid, type_id: &Id, subs: &Substitutions) -> Result<Re
 fn get_record_field_ids(gid: &impl Gid, record_id: &Id) -> Result<Vec<Id>> {
     let fields_list_id = gid.get(record_id, &FIELDS)
         .ok_or_else(|| format!("Record {} has no fields list", record_id))?;
-    Ok(flatten_list(gid, fields_list_id))
+    flatten_list(gid, fields_list_id)
 }
 
 fn uuid_expr(uuid: &Uuid) -> TokenStream2 {
@@ -343,7 +344,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
 fn get_sum_variant_ids(gid: &impl Gid, sum_id: &Id) -> Result<Vec<Id>> {
     let variants_list_id = gid.get(sum_id, &VARIANTS)
         .ok_or_else(|| format!("Sum {} has no variants list", sum_id))?;
-    Ok(flatten_list(gid, variants_list_id))
+    flatten_list(gid, variants_list_id)
 }
 
 struct TypeParam {
@@ -356,7 +357,7 @@ fn get_type_params(gid: &impl Gid, forall_id: &Id) -> Result<Vec<TypeParam>> {
     let params_list_id = gid.get(forall_id, &PARAMS)
         .ok_or_else(|| format!("Forall {} has no params", forall_id))?;
 
-    flatten_list(gid, params_list_id)
+    flatten_list(gid, params_list_id)?
         .into_iter()
         .map(|param_id| {
             let name = get_name(gid, &param_id)
@@ -905,7 +906,10 @@ fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
             } else if body_isa == &SUM_T {
                 Some(generate_sum_wrapper(&gid, id, body_id, &name, &[], &empty_subs))
             } else if body_isa == &FORALL_T {
-                let type_params = get_type_params(&gid, body_id).ok()?;
+                let type_params = match get_type_params(&gid, body_id) {
+                    Ok(tp) => tp,
+                    Err(e) => return Some(Err(e)),
+                };
                 let forall_body_id = gid.get(body_id, &BODY)?;
                 let forall_body_isa = get_isa(&gid, forall_body_id)?;
                 if forall_body_isa == &RECORD_T {
@@ -969,6 +973,55 @@ fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
 #[proc_macro]
 pub fn generate_semantics(input: TokenStream) -> TokenStream {
     match generate_semantics_impl(input) {
+        Ok(tokens) => tokens.into(),
+        Err(msg) => {
+            let error = syn::Error::new(proc_macro2::Span::call_site(), msg);
+            error.to_compile_error().into()
+        }
+    }
+}
+
+fn load_document_impl(input: TokenStream) -> Result<TokenStream2> {
+    let (path, gid, roots) = load_semantics(input)?;
+
+    let set_calls: Vec<TokenStream2> = gid.entities()
+        .flat_map(|uuid| {
+            let entity_expr = uuid_expr(uuid);
+            let entity_id = Id::Uuid(*uuid);
+            gid.edges(&entity_id).into_iter().flat_map(move |edges| {
+                let entity_expr = entity_expr.clone();
+                edges.iter().map(move |(label, value)| {
+                    let label_expr = id_expr(label);
+                    let value_expr = id_expr(value);
+                    let entity_expr = entity_expr.clone();
+                    quote! { gid.set(#entity_expr, #label_expr, #value_expr); }
+                })
+            })
+        })
+        .collect();
+
+    let root_exprs: Vec<TokenStream2> = roots.iter()
+        .map(|id| {
+            let id_tokens = id_expr(id);
+            quote! { crate::path::RootSlot::new(#id_tokens) }
+        })
+        .collect();
+
+    let include_path = format!("/{}", path);
+    Ok(quote! {
+        {
+            const _: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), #include_path));
+            let mut gid = crate::graph::MutGid::new();
+            #(#set_calls)*
+            let roots = vec![#(#root_exprs),*];
+            crate::document::Document { gid, roots }
+        }
+    })
+}
+
+#[proc_macro]
+pub fn load_document(input: TokenStream) -> TokenStream {
+    match load_document_impl(input) {
         Ok(tokens) => tokens.into(),
         Err(msg) => {
             let error = syn::Error::new(proc_macro2::Span::call_site(), msg);

@@ -42,6 +42,7 @@ EOF
 
 - **Documents are pure graph structure** — No semantic interpretation baked in. Use generated constants (`Field::NAME`, `Field::ISA`, etc.) for semantic access.
 - **Resilient to invalid graph states** — The graph could contain anything. Projections specify the happy path but must fall through gracefully. `descend` handles missing edges (placeholder) and unexpected values (default rendering) automatically. If someone puts a C++ program in a param's name, we project a C++ program. Never assume what's at an edge; make the good case easy but don't crash or hide data on the bad case. Item_render callbacks and projections should gate with `try_wrap` and return `None` to fall through to default rendering if the type doesn't match.
+- **Compile-time code generation must fail loudly** — Proc macros (`progred_macros`) generate code from the semantics graph at compile time. Unlike runtime projections, silent failures here produce subtly wrong generated code (missing fields, missing types) that compiles fine. Malformed graph data in the semantics file must produce a clear compile error, never be silently skipped.
 
 ## Future Considerations
 

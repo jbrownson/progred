@@ -25,7 +25,7 @@ impl Editor {
     pub fn new() -> Self {
         Self {
             doc: Document::new(),
-            semantics: progred_loader::load_document!("../semantics.progred"),
+            semantics: progred_macros::load_document!("../semantics.progred"),
             tree: SpanningTree::empty(),
             selection: None,
             file_path: None,
