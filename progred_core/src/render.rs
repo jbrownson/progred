@@ -150,48 +150,45 @@ fn render_uuid(
         None => D::Identicon(*uuid),
     };
 
-    let mut header_items: Vec<D> = vec![
-        D::NodeHeader { child: Box::new(child) },
-    ];
-    if has_content {
-        header_items.push(D::CollapseToggle { collapsed: is_collapsed });
-    }
+    let header_items: Vec<D> = [D::NodeHeader { child: Box::new(child) }].into_iter()
+        .chain(has_content.then(|| D::CollapseToggle { collapsed: is_collapsed }))
+        .collect();
 
-    let mut block_items = vec![D::Line(header_items)];
-
-    if !is_collapsed && has_content {
+    let content = (!is_collapsed && has_content).then(|| {
         let child_ancestors = ancestors.update(id.clone());
         let ctx = RenderCtx { editor, path, id: &id, ancestors: &child_ancestors };
 
-        let mut field_items: Vec<D> = Vec::new();
-        for (label, _value) in &all_edges {
-            field_items.push(D::Line(vec![
+        let field_items: Vec<D> = all_edges.iter()
+            .map(|(label, _)| D::Line(vec![
                 D::FieldLabel { label_id: label.clone() },
                 D::Text(":".into(), TextStyle::Punctuation),
                 ctx.descend(label),
-            ]));
-        }
-
-        if let Some(ref new_label) = new_edge_label {
-            let placeholder_path = path.child(new_label.clone());
-            let closure_path = placeholder_path.clone();
-            field_items.push(D::Line(vec![
-                D::FieldLabel { label_id: new_label.clone() },
-                D::Text(":".into(), TextStyle::Punctuation),
-                D::Descend {
-                    path: placeholder_path.clone(),
-                    selection: Selection::edge(placeholder_path),
-                    child: Box::new(D::Placeholder {
-                        on_commit: Box::new(move |w: &mut Editor, value| {
-                            w.doc.set_edge(&closure_path, value);
+            ]))
+            .chain(new_edge_label.as_ref().map(|new_label| {
+                let placeholder_path = path.child(new_label.clone());
+                let closure_path = placeholder_path.clone();
+                D::Line(vec![
+                    D::FieldLabel { label_id: new_label.clone() },
+                    D::Text(":".into(), TextStyle::Punctuation),
+                    D::Descend {
+                        path: placeholder_path.clone(),
+                        selection: Selection::edge(placeholder_path),
+                        child: Box::new(D::Placeholder {
+                            on_commit: Box::new(move |w: &mut Editor, value| {
+                                w.doc.set_edge(&closure_path, value);
+                            }),
                         }),
-                    }),
-                },
-            ]));
-        }
+                    },
+                ])
+            }))
+            .collect();
 
-        block_items.push(D::Indent(Box::new(D::Block(field_items))));
-    }
+        D::Indent(Box::new(D::Block(field_items)))
+    });
+
+    let block_items: Vec<D> = [D::Line(header_items)].into_iter()
+        .chain(content)
+        .collect();
 
     D::Block(block_items)
 }
@@ -375,13 +372,12 @@ fn render_record(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Record::try_wrap(gid, ctx.id)?;
     let collapsed = ctx.is_collapsed();
-    let mut items = vec![D::Line(vec![
+    let items: Vec<D> = [D::Line(vec![
         D::NodeHeader { child: Box::new(D::Text("record".into(), TextStyle::Keyword)) },
         D::CollapseToggle { collapsed },
-    ])];
-    if !collapsed {
-        items.push(D::Indent(Box::new(ctx.descend(&FIELDS))));
-    }
+    ])].into_iter()
+        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&FIELDS)))))
+        .collect();
     Some(D::Block(items))
 }
 
@@ -389,13 +385,12 @@ fn render_sum(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Sum::try_wrap(gid, ctx.id)?;
     let collapsed = ctx.is_collapsed();
-    let mut items = vec![D::Line(vec![
+    let items: Vec<D> = [D::Line(vec![
         D::NodeHeader { child: Box::new(D::Text("sum".into(), TextStyle::Keyword)) },
         D::CollapseToggle { collapsed },
-    ])];
-    if !collapsed {
-        items.push(D::Indent(Box::new(ctx.descend(&VARIANTS))));
-    }
+    ])].into_iter()
+        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&VARIANTS)))))
+        .collect();
     Some(D::Block(items))
 }
 
@@ -403,15 +398,16 @@ fn render_forall(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Forall::try_wrap(gid, ctx.id)?;
     let collapsed = ctx.is_collapsed();
-    let mut items = vec![
+    let items: Vec<D> = [
         D::NodeHeader { child: Box::new(D::Text("forall".into(), TextStyle::Keyword)) },
         ctx.descend_list(&PARAMS, &ANGLE_LIST, Some(render_param)),
         D::CollapseToggle { collapsed },
-    ];
-    if !collapsed {
-        items.push(D::Text(".".into(), TextStyle::Punctuation));
-        items.push(ctx.descend(&BODY));
-    }
+    ].into_iter()
+        .chain(if collapsed { vec![] } else { vec![
+            D::Text(".".into(), TextStyle::Punctuation),
+            ctx.descend(&BODY),
+        ]})
+        .collect();
     Some(D::Line(items))
 }
 
