@@ -2,7 +2,7 @@ use crate::d::{DEvent, PlaceholderCommit};
 use crate::document::Document;
 use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
 use crate::graph::{Gid, Id};
-use crate::path::{Path, RootSlot};
+use crate::path::Path;
 use crate::selection::{EdgeState, PlaceholderState, Selection};
 use crate::spanningtree::SpanningTree;
 use ordered_float::OrderedFloat;
@@ -49,7 +49,7 @@ impl Editor {
             Selection::ListElement { path, .. } => self.doc.node(path),
             Selection::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
             Selection::GraphNode(id) => Some(id.clone()),
-            Selection::InsertRoot(..) | Selection::InsertList(..) => None,
+            Selection::InsertList(..) => None,
         }
     }
 
@@ -85,8 +85,8 @@ impl Editor {
                 DEvent::ClickedBackground => {
                     self.selection = None;
                 }
-                DEvent::ClickedRootInsertionPoint(index) => {
-                    self.selection = Some(Selection::insert_root(index));
+                DEvent::ClickedPlaceholder(path) => {
+                    self.selection = Some(Selection::edge(path));
                 }
                 DEvent::ClickedStringEditor(path) => {
                     self.selection = Some(Selection::edge(path));
@@ -126,25 +126,6 @@ impl Editor {
                 DEvent::PlaceholderSelectionMoved(index) => {
                     if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.placeholder.selected_index = index;
-                    }
-                }
-                DEvent::RootPlaceholderCommitted { index, value } => {
-                    let id = self.realize_placeholder(value);
-                    self.doc.roots.insert(index, RootSlot::new(id));
-                    self.selection = None;
-                }
-                DEvent::RootPlaceholderDismissed => {
-                    self.selection = None;
-                }
-                DEvent::RootPlaceholderTextChanged(text) => {
-                    if let Some(Selection::InsertRoot(_, ref mut ps)) = self.selection {
-                        ps.text = text;
-                        ps.selected_index = 0;
-                    }
-                }
-                DEvent::RootPlaceholderSelectionMoved(index) => {
-                    if let Some(Selection::InsertRoot(_, ref mut ps)) = self.selection {
-                        ps.selected_index = index;
                     }
                 }
                 DEvent::ClickedListSlot(path) => {

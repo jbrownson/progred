@@ -21,7 +21,6 @@ pub enum Selection {
         cons_id: Id,
         edge_state: EdgeState,
     },
-    InsertRoot(usize, PlaceholderState),
     InsertList(Path, PlaceholderState),
     GraphEdge { entity: Id, label: Id },
     GraphNode(Id),
@@ -30,10 +29,6 @@ pub enum Selection {
 impl Selection {
     pub fn edge(path: Path) -> Self {
         Self::Edge(path, EdgeState::default())
-    }
-
-    pub fn insert_root(index: usize) -> Self {
-        Self::InsertRoot(index, PlaceholderState::default())
     }
 
     pub fn path(&self) -> Option<&Path> {

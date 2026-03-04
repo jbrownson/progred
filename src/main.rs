@@ -1,7 +1,6 @@
 mod shortcuts;
 mod ui;
 
-use progred_core::d::D;
 use progred_core::document::Document;
 use progred_core::editor::Editor;
 use progred_core::graph_view_state::GraphViewState;
@@ -107,7 +106,7 @@ impl ProgredApp {
         }
     }
 
-    fn handle_keys(&mut self, ctx: &egui::Context, _d_trees: &[Option<D>]) {
+    fn handle_keys(&mut self, ctx: &egui::Context) {
         ctx.input_mut(|i| {
             if i.consume_shortcut(&shortcuts::SAVE_AS) {
                 self.save_as();
@@ -127,7 +126,6 @@ impl ProgredApp {
 
     fn placeholder_handler(&mut self, ctx: &egui::Context) -> bool {
         let active = match &self.editor.selection {
-            Some(Selection::InsertRoot(..)) => true,
             Some(Selection::Edge(path, _)) => self.editor.doc.node(path).is_none(),
             _ => false,
         };
@@ -214,9 +212,9 @@ impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
-        let d_trees = ui::tree_view::generate(&self.editor);
+        let d_tree = ui::tree_view::generate(&self.editor);
         let orphan_ids = self.editor.doc.orphan_roots();
-        self.handle_keys(ctx, &d_trees);
+        self.handle_keys(ctx);
 
         self.render_menu_bar(ctx);
 
@@ -233,11 +231,11 @@ impl eframe::App for ProgredApp {
             .show(ctx, |ui| {
                 if self.show_graph {
                     ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split, |left, right| {
-                        ui::tree_view::render(left, &self.editor, &d_trees, &orphan_ids, &mode, &mut events);
+                        ui::tree_view::render(left, &self.editor, &d_tree, &orphan_ids, &mode, &mut events);
                         ui::graph_view::render(right, ctx, &self.editor, &mut self.graph_layout, &mut self.graph_camera, &mut events);
                     });
                 } else {
-                    ui::tree_view::render(ui, &self.editor, &d_trees, &orphan_ids, &mode, &mut events);
+                    ui::tree_view::render(ui, &self.editor, &d_tree, &orphan_ids, &mode, &mut events);
                 }
             });
 

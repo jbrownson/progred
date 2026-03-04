@@ -1,58 +1,8 @@
 use progred_graph::{Gid, Id};
-use serde::{Deserialize, Serialize};
-use std::hash::{Hash, Hasher};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(from = "Id", into = "Id")]
-pub struct RootSlot {
-    pub root_id: RootId,
-    pub value: Id,
-}
-
-impl RootSlot {
-    pub fn new(value: Id) -> Self {
-        Self { root_id: RootId(uuid::Uuid::new_v4()), value }
-    }
-}
-
-impl From<Id> for RootSlot {
-    fn from(id: Id) -> Self {
-        RootSlot::new(id)
-    }
-}
-
-impl From<RootSlot> for Id {
-    fn from(slot: RootSlot) -> Self {
-        slot.value
-    }
-}
-
-impl PartialEq for RootSlot {
-    fn eq(&self, other: &Self) -> bool {
-        self.root_id == other.root_id
-    }
-}
-
-impl PartialEq<RootId> for RootSlot {
-    fn eq(&self, other: &RootId) -> bool {
-        self.root_id == *other
-    }
-}
-
-impl Eq for RootSlot {}
-
-impl Hash for RootSlot {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.root_id.hash(state);
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RootId(uuid::Uuid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PathRoot {
-    Slot(RootId),
+    Root,
     Orphan(Id),
 }
 
@@ -63,9 +13,9 @@ pub struct Path {
 }
 
 impl Path {
-    pub fn new(root: &RootSlot) -> Self {
+    pub fn root() -> Self {
         Self {
-            root: PathRoot::Slot(root.root_id),
+            root: PathRoot::Root,
             edges: Vec::new(),
         }
     }
@@ -92,9 +42,9 @@ impl Path {
         ))
     }
 
-    pub fn node(&self, gid: &impl Gid, roots: &[RootSlot]) -> Option<Id> {
+    pub fn node(&self, gid: &impl Gid, root: Option<&Id>) -> Option<Id> {
         let start = match &self.root {
-            PathRoot::Slot(root_id) => roots.iter().find(|r| **r == *root_id)?.value.clone(),
+            PathRoot::Root => root?.clone(),
             PathRoot::Orphan(id) => id.clone(),
         };
         self.edges.iter().try_fold(start, |current, label| {

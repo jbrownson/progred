@@ -51,8 +51,8 @@ pub enum DEvent<'a> {
     ClickedFieldLabel { entity_path: Path, label_id: Id },
     ClickedCollapseToggle(Path),
     ClickedBackground,
-    ClickedRootInsertionPoint(usize),
 
+    ClickedPlaceholder(Path),
     ClickedStringEditor(Path),
     ClickedNumberEditor(Path),
 
@@ -63,11 +63,6 @@ pub enum DEvent<'a> {
     PlaceholderDismissed,
     PlaceholderTextChanged(String),
     PlaceholderSelectionMoved(usize),
-
-    RootPlaceholderCommitted { index: usize, value: PlaceholderCommit },
-    RootPlaceholderDismissed,
-    RootPlaceholderTextChanged(String),
-    RootPlaceholderSelectionMoved(usize),
 
     ClickedListSlot(Path),
     ListSlotCommitted { path: Path, value: PlaceholderCommit },

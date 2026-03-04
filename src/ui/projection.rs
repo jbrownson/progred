@@ -178,7 +178,7 @@ fn render_list_slot(
     }
 }
 
-pub fn insertion_point(ui: &mut Ui) -> Response {
+fn insertion_point(ui: &mut Ui) -> Response {
     let width = ui.available_width().min(200.0);
 
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 0.0), Sense::hover());
@@ -499,6 +499,19 @@ fn render_number_editor(
     }
 }
 
+fn render_placeholder_box(ui: &mut Ui, path: &Path, events: &mut Vec<DEvent<'_>>) {
+    let text_height = ui.text_style_height(&egui::TextStyle::Body);
+    let size = Vec2::new(text_height * 1.8, text_height);
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    if ui.is_rect_visible(rect) {
+        let color = if response.hovered() { Color32::from_gray(140) } else { Color32::from_gray(190) };
+        ui.painter().rect_stroke(rect, CornerRadius::same(2), eframe::epaint::Stroke::new(1.0, color), eframe::epaint::StrokeKind::Middle);
+    }
+    if response.clicked() {
+        events.push(DEvent::ClickedPlaceholder(path.clone()));
+    }
+}
+
 fn render_placeholder<'a>(
     ui: &mut Ui,
     editor: &Editor,
@@ -509,7 +522,7 @@ fn render_placeholder<'a>(
     let ps = match &editor.selection {
         Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
         Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
-        _ => return,
+        _ => return render_placeholder_box(ui, path, events),
     };
     let result = super::placeholder::render(ui, editor, ps);
     match result.outcome {

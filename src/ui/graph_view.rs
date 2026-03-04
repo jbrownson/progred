@@ -330,7 +330,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, layout: &
 
     let node_fill = Color32::WHITE;
     let text_font = egui::FontId::proportional(TEXT_FONT_SIZE * camera.zoom);
-    let root_ids: std::collections::HashSet<Id> = editor.doc.roots.iter().map(|r| r.value.clone()).collect();
+    let root_ids: std::collections::HashSet<Id> = editor.doc.root.iter().cloned().collect();
     let root_stroke = Stroke::new(2.0 * camera.zoom, Color32::from_gray(60));
     let selected_node = editor.selected_node_id();
 

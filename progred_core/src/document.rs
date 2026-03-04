@@ -1,5 +1,5 @@
 use crate::graph::{Gid, Id, MutGid};
-use crate::path::{Path, PathRoot, RootSlot};
+use crate::path::{Path, PathRoot};
 use crate::selection::Selection;
 use crate::generated::semantics::TAIL;
 use serde::{Deserialize, Serialize};
@@ -9,19 +9,19 @@ use std::collections::{HashSet, VecDeque};
 pub struct Document {
     #[serde(rename = "graph")]
     pub gid: MutGid,
-    pub roots: Vec<RootSlot>,
+    pub root: Option<Id>,
 }
 
 impl Document {
     pub fn new() -> Self {
         Self {
             gid: MutGid::new(),
-            roots: Vec::new(),
+            root: None,
         }
     }
 
     pub fn node(&self, path: &Path) -> Option<Id> {
-        path.node(&self.gid, &self.roots)
+        path.node(&self.gid, self.root.as_ref())
     }
 
     pub fn delete(&mut self, selection: &Selection) {
@@ -35,10 +35,12 @@ impl Document {
             }
             Selection::GraphEdge { .. } => {}
             Selection::GraphNode(id) => {
-                self.roots.retain(|r| &r.value != id);
+                if self.root.as_ref() == Some(id) {
+                    self.root = None;
+                }
                 self.gid.purge(id);
             }
-            Selection::InsertRoot(..) | Selection::InsertList(..) => {}
+            Selection::InsertList(..) => {}
         }
     }
 
@@ -53,10 +55,8 @@ impl Document {
     fn delete_edge(&mut self, path: &Path) {
         match path.pop() {
             None => {
-                if let PathRoot::Slot(root_id) = &path.root
-                    && let Some(idx) = self.roots.iter().position(|r| *r == *root_id)
-                {
-                    self.roots.remove(idx);
+                if path.root == PathRoot::Root {
+                    self.root = None;
                 }
             }
             Some((parent_path, label)) => {
@@ -75,10 +75,8 @@ impl Document {
                 }
             }
             None => {
-                if let PathRoot::Slot(root_id) = &path.root
-                    && let Some(root) = self.roots.iter_mut().find(|r| **r == *root_id)
-                {
-                    root.value = value;
+                if path.root == PathRoot::Root {
+                    self.root = Some(value);
                 }
             }
         }
@@ -87,7 +85,7 @@ impl Document {
     pub fn orphan_roots(&self) -> HashSet<Id> {
         let all_nodes: HashSet<Id> = self.gid.entities().map(|u| Id::Uuid(*u)).collect();
         let orphans = all_nodes.difference(
-            &reachable_from(&self.gid, self.roots.iter().map(|r| r.value.clone()), &all_nodes)
+            &reachable_from(&self.gid, self.root.iter().cloned(), &all_nodes)
         ).cloned().collect();
         let sources = sources_within(&self.gid, &orphans);
         let cycle_rep = cycle_representative(&self.gid, &orphans, &sources);
@@ -226,7 +224,7 @@ mod tests {
     #[test]
     fn orphan_roots_no_orphans() {
         let gid = make_gid(&[(1, 100, 2)]);
-        let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
+        let doc = Document { gid, root: Some(uuid(1)) };
         assert!(doc.orphan_roots().is_empty());
     }
 
@@ -234,7 +232,7 @@ mod tests {
     fn orphan_roots_single_orphan() {
         let mut gid = make_gid(&[(1, 100, 2)]);
         gid.merge(im::hashmap! { uuid::Uuid::from_u128(3) => im::hashmap! { uuid(100) => uuid(4) } });
-        let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
+        let doc = Document { gid, root: Some(uuid(1)) };
         let orphans = doc.orphan_roots();
         assert!(orphans.contains(&uuid(3)));
     }
@@ -243,7 +241,7 @@ mod tests {
     fn orphan_roots_cycle() {
         let mut gid = make_gid(&[(2, 100, 3), (3, 100, 2)]);
         gid.merge(im::hashmap! { uuid::Uuid::from_u128(1) => im::hashmap! { uuid(100) => uuid(1) } });
-        let doc = Document { gid, roots: vec![RootSlot::new(uuid(1))] };
+        let doc = Document { gid, root: Some(uuid(1)) };
         let orphans = doc.orphan_roots();
         assert_eq!(orphans.len(), 1);
         assert!(orphans.contains(&uuid(2)));

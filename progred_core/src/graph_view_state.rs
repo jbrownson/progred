@@ -44,7 +44,7 @@ fn deterministic_pos(id: &Id, index: usize) -> Pos2 {
 
 fn collect_all_ids(doc: &Document) -> std::collections::HashSet<Id> {
     doc.gid.all_ids().into_iter()
-        .chain(doc.roots.iter().map(|r| r.value.clone()))
+        .chain(doc.root.iter().cloned())
         .collect()
 }
 

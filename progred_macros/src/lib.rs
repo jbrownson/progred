@@ -864,7 +864,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
     }
 }
 
-fn load_semantics(input: TokenStream) -> Result<(String, MutGid, Vec<Id>)> {
+fn load_semantics(input: TokenStream) -> Result<(String, MutGid, Option<Id>)> {
     let relative_path = syn::parse::<syn::LitStr>(input)
         .map_err(|e| format!("expected path string: {}", e))?
         .value();
@@ -879,15 +879,22 @@ fn load_semantics(input: TokenStream) -> Result<(String, MutGid, Vec<Id>)> {
     let gid: MutGid = serde_json::from_value(json.get("graph").ok_or("missing graph field")?.clone())
         .map_err(|e| format!("failed to parse graph: {}", e))?;
 
-    let roots: Vec<Id> = serde_json::from_value(json.get("roots").ok_or("missing roots field")?.clone())
-        .map_err(|e| format!("failed to parse roots: {}", e))?;
+    let root: Option<Id> = json.get("root")
+        .and_then(|v| if v.is_null() { None } else { Some(v.clone()) })
+        .map(|v| serde_json::from_value(v).map_err(|e| format!("failed to parse root: {}", e)))
+        .transpose()?;
 
-    Ok((relative_path, gid, roots))
+    Ok((relative_path, gid, root))
 }
 
 fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
-    let (path, gid, roots) = load_semantics(input)?;
+    let (path, gid, root) = load_semantics(input)?;
     let empty_subs = Substitutions::new();
+
+    let roots = match &root {
+        Some(id) => flatten_list(&gid, id)?,
+        None => Vec::new(),
+    };
 
     let wrappers: Vec<TokenStream2> = roots.iter()
         .filter_map(|id| {
@@ -982,7 +989,7 @@ pub fn generate_semantics(input: TokenStream) -> TokenStream {
 }
 
 fn load_document_impl(input: TokenStream) -> Result<TokenStream2> {
-    let (path, gid, roots) = load_semantics(input)?;
+    let (path, gid, root) = load_semantics(input)?;
 
     let set_calls: Vec<TokenStream2> = gid.entities()
         .flat_map(|uuid| {
@@ -1000,12 +1007,13 @@ fn load_document_impl(input: TokenStream) -> Result<TokenStream2> {
         })
         .collect();
 
-    let root_exprs: Vec<TokenStream2> = roots.iter()
-        .map(|id| {
+    let root_expr = match &root {
+        Some(id) => {
             let id_tokens = id_expr(id);
-            quote! { crate::path::RootSlot::new(#id_tokens) }
-        })
-        .collect();
+            quote! { Some(#id_tokens) }
+        }
+        None => quote! { None },
+    };
 
     let include_path = format!("/{}", path);
     Ok(quote! {
@@ -1013,8 +1021,7 @@ fn load_document_impl(input: TokenStream) -> Result<TokenStream2> {
             const _: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), #include_path));
             let mut gid = crate::graph::MutGid::new();
             #(#set_calls)*
-            let roots = vec![#(#root_exprs),*];
-            crate::document::Document { gid, roots }
+            crate::document::Document { gid, root: #root_expr }
         }
     })
 }
