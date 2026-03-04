@@ -328,16 +328,16 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, layout: &
         }
     }
 
-    let node_fill = Color32::WHITE;
     let text_font = egui::FontId::proportional(TEXT_FONT_SIZE * camera.zoom);
-    let root_ids: std::collections::HashSet<Id> = editor.doc.root.iter().cloned().collect();
-    let root_stroke = Stroke::new(2.0 * camera.zoom, Color32::from_gray(60));
+    let root_fill = Color32::from_rgb(235, 240, 250);
+    let root_stroke = Stroke::new(2.0 * camera.zoom, Color32::from_rgb(80, 110, 160));
     let selected_node = editor.selected_node_id();
 
     for (id, &pos) in positions.iter() {
         let screen_pos = to_screen(pos);
-        let is_root = root_ids.contains(id);
+        let is_root = editor.doc.root.as_ref() == Some(id);
         let is_selected = selected_node.as_ref() == Some(id);
+        let fill = if is_root { root_fill } else { Color32::WHITE };
         match id {
             Id::Uuid(uuid) => {
                 let stroke = if is_selected { selected_stroke } else if is_root { root_stroke } else { Stroke::new(2.0 * camera.zoom, Color32::from_gray(100)) };
@@ -346,7 +346,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, layout: &
                         let galley = painter.layout_no_wrap(label.clone(), text_font.clone(), Color32::from_gray(60));
                         let text_rect = Rect::from_center_size(screen_pos, galley.rect.size() + Vec2::splat(TEXT_PADDING * camera.zoom));
                         let rounding = CornerRadius::same((4.0 * camera.zoom) as u8);
-                        painter.rect_filled(text_rect, rounding, Color32::WHITE);
+                        painter.rect_filled(text_rect, rounding, fill);
                         painter.rect_stroke(text_rect, rounding, stroke, eframe::epaint::StrokeKind::Outside);
                         painter.galley(text_rect.min + Vec2::splat(TEXT_PADDING * camera.zoom / 2.0), galley, Color32::from_gray(60));
                     }
@@ -361,7 +361,7 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, layout: &
                 let half = half_sizes.get(id).copied().unwrap_or(Vec2::splat(NODE_RADIUS));
                 let rect = Rect::from_center_size(screen_pos, half * 2.0 * camera.zoom);
                 let rounding = CornerRadius::same((6.0 * camera.zoom) as u8);
-                painter.rect_filled(rect, rounding, node_fill);
+                painter.rect_filled(rect, rounding, fill);
                 let stroke = if is_selected { selected_stroke } else if is_root { root_stroke } else { Stroke::new(1.5 * camera.zoom, Color32::from_gray(160)) };
                 painter.rect_stroke(rect, rounding, stroke, eframe::epaint::StrokeKind::Middle);
                 if let Some(text) = node_display_text(id) {
