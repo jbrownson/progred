@@ -40,7 +40,6 @@ impl Document {
                 }
                 self.gid.purge(id);
             }
-            Selection::InsertList(..) => {}
         }
     }
 

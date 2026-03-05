@@ -66,11 +66,10 @@ pub enum DEvent<'a> {
     PlaceholderTextChanged(String),
     PlaceholderSelectionMoved(usize),
 
-    ClickedListSlot(Path),
-    ListSlotCommitted { path: Path, value: PlaceholderCommit },
-    ListSlotDismissed,
-    ListSlotTextChanged(String),
-    ListSlotSelectionMoved(usize),
+    // Separate from PlaceholderCommitted because list insertion slots are rendered in
+    // projection.rs (not in the D tree), so there's no D node to own a closure that the
+    // event could borrow. Could be unified with Rc<dyn Fn> if needed.
+    ListInsertCommitted { path: Path, value: PlaceholderCommit },
 
     GraphNodeClicked(Id),
     GraphEdgeClicked { entity: Id, label: Id },

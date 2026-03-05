@@ -3,7 +3,7 @@ use crate::document::Document;
 use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
 use crate::graph::{Gid, Id};
 use crate::path::Path;
-use crate::selection::{EdgeState, PlaceholderState, Selection};
+use crate::selection::{EdgeState, Selection};
 use crate::spanningtree::SpanningTree;
 use ordered_float::OrderedFloat;
 use std::path::PathBuf;
@@ -49,7 +49,6 @@ impl Editor {
             Selection::ListElement { path, .. } => self.doc.node(path),
             Selection::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
             Selection::GraphNode(id) => Some(id.clone()),
-            Selection::InsertList(..) => None,
         }
     }
 
@@ -114,6 +113,17 @@ impl Editor {
                     on_commit(self, id);
                     self.selection = None;
                 }
+                DEvent::ListInsertCommitted { path, value } => {
+                    let head_value = self.realize_placeholder(value);
+                    if let Some(current_value) = self.doc.node(&path) {
+                        let new_cons = Id::new_uuid();
+                        self.doc.set_edge(&path, new_cons.clone());
+                        self.doc.set_edge(&path.child(ISA.clone()), CONS_TYPE.clone());
+                        self.doc.set_edge(&path.child(HEAD.clone()), head_value);
+                        self.doc.set_edge(&path.child(TAIL.clone()), current_value);
+                    }
+                    self.selection = None;
+                }
                 DEvent::PlaceholderDismissed => {
                     self.selection = None;
                 }
@@ -126,34 +136,6 @@ impl Editor {
                 DEvent::PlaceholderSelectionMoved(index) => {
                     if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.placeholder.selected_index = index;
-                    }
-                }
-                DEvent::ClickedListSlot(path) => {
-                    self.selection = Some(Selection::InsertList(path, PlaceholderState::default()));
-                }
-                DEvent::ListSlotCommitted { path, value } => {
-                    let head_value = self.realize_placeholder(value);
-                    if let Some(current_value) = self.doc.node(&path) {
-                        let new_cons = Id::new_uuid();
-                        self.doc.set_edge(&path, new_cons.clone());
-                        self.doc.set_edge(&path.child(ISA.clone()), CONS_TYPE.clone());
-                        self.doc.set_edge(&path.child(HEAD.clone()), head_value);
-                        self.doc.set_edge(&path.child(TAIL.clone()), current_value);
-                    }
-                    self.selection = None;
-                }
-                DEvent::ListSlotDismissed => {
-                    self.selection = None;
-                }
-                DEvent::ListSlotTextChanged(text) => {
-                    if let Some(Selection::InsertList(_, ref mut ps)) = self.selection {
-                        ps.text = text;
-                        ps.selected_index = 0;
-                    }
-                }
-                DEvent::ListSlotSelectionMoved(index) => {
-                    if let Some(Selection::InsertList(_, ref mut ps)) = self.selection {
-                        ps.selected_index = index;
                     }
                 }
                 DEvent::GraphNodeClicked(id) => {

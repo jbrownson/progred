@@ -21,7 +21,6 @@ pub enum Selection {
         cons_id: Id,
         edge_state: EdgeState,
     },
-    InsertList(Path, PlaceholderState),
     GraphEdge { entity: Id, label: Id },
     GraphNode(Id),
 }

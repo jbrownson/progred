@@ -107,7 +107,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.label(text_rich(opening, &TextStyle::Punctuation));
-                    render_empty_list_slot(ui, editor, &ctx.path, events);
+                    empty_list_insert_point(ui, editor, &ctx.path, events);
                     ui.label(text_rich(closing, &TextStyle::Punctuation));
                 });
             } else {
@@ -115,11 +115,11 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     ui.label(text_rich(opening, &TextStyle::Punctuation));
                     let mut insert_path = ctx.path.clone();
                     for element in elements {
-                        render_list_slot(ui, editor, &insert_path, true, events);
+                        list_insert_point(ui, editor, &insert_path, true, events);
                         render_d(ui, editor, element, mode, ctx, events);
                         insert_path = insert_path.child(TAIL.clone());
                     }
-                    render_list_slot(ui, editor, &insert_path, true, events);
+                    list_insert_point(ui, editor, &insert_path, true, events);
                     ui.label(text_rich(closing, &TextStyle::Punctuation));
                 });
             }
@@ -134,50 +134,57 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     if need_separator {
                         ui.label(text_rich(separator, &TextStyle::Punctuation));
                     }
-                    render_list_slot(ui, editor, &insert_path, false, events);
+                    list_insert_point(ui, editor, &insert_path, false, events);
                     render_d(ui, editor, element, mode, ctx, events);
                     insert_path = insert_path.child(TAIL.clone());
                     need_separator = true;
                 }
-                render_list_slot(ui, editor, &insert_path, false, events);
+                list_insert_point(ui, editor, &insert_path, false, events);
                 ui.label(text_rich(closing, &TextStyle::Punctuation));
             });
         }
     }
 }
 
-fn render_list_slot(
+fn active_list_insert(
+    ui: &mut Ui,
+    editor: &Editor,
+    path: &Path,
+    events: &mut Vec<DEvent<'_>>,
+) -> bool {
+    let ps = match &editor.selection {
+        Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
+        Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
+        _ => return false,
+    };
+    let result = super::placeholder::render(ui, editor, ps);
+    match result.outcome {
+        PlaceholderOutcome::Commit(value) => {
+            events.push(DEvent::ListInsertCommitted { path: path.clone(), value });
+        }
+        PlaceholderOutcome::Dismiss => {
+            events.push(DEvent::PlaceholderDismissed);
+        }
+        PlaceholderOutcome::Active => {
+            if let Some(text) = result.text_changed {
+                events.push(DEvent::PlaceholderTextChanged(text));
+            }
+            if let Some(idx) = result.selection_moved {
+                events.push(DEvent::PlaceholderSelectionMoved(idx));
+            }
+        }
+    }
+    true
+}
+
+fn list_insert_point(
     ui: &mut Ui,
     editor: &Editor,
     path: &Path,
     vertical: bool,
     events: &mut Vec<DEvent<'_>>,
 ) {
-    let active = matches!(
-        &editor.selection,
-        Some(Selection::InsertList(sel_path, _)) if sel_path == path
-    );
-    if active {
-        if let Some(Selection::InsertList(_, ps)) = &editor.selection {
-            let result = super::placeholder::render(ui, editor, ps);
-            match result.outcome {
-                PlaceholderOutcome::Commit(value) => {
-                    events.push(DEvent::ListSlotCommitted { path: path.clone(), value });
-                }
-                PlaceholderOutcome::Dismiss => {
-                    events.push(DEvent::ListSlotDismissed);
-                }
-                PlaceholderOutcome::Active => {
-                    if let Some(text) = result.text_changed {
-                        events.push(DEvent::ListSlotTextChanged(text));
-                    }
-                    if let Some(idx) = result.selection_moved {
-                        events.push(DEvent::ListSlotSelectionMoved(idx));
-                    }
-                }
-            }
-        }
-    } else {
+    if !active_list_insert(ui, editor, path, events) {
         ui.push_id(path, |ui| {
             let clicked = if vertical {
                 insertion_point(ui).clicked()
@@ -185,43 +192,19 @@ fn render_list_slot(
                 vertical_insertion_point(ui).clicked()
             };
             if clicked {
-                events.push(DEvent::ClickedListSlot(path.clone()));
+                events.push(DEvent::ClickedPlaceholder(path.clone()));
             }
         });
     }
 }
 
-fn render_empty_list_slot(
+fn empty_list_insert_point(
     ui: &mut Ui,
     editor: &Editor,
     path: &Path,
     events: &mut Vec<DEvent<'_>>,
 ) {
-    let active = matches!(
-        &editor.selection,
-        Some(Selection::InsertList(sel_path, _)) if sel_path == path
-    );
-    if active {
-        if let Some(Selection::InsertList(_, ps)) = &editor.selection {
-            let result = super::placeholder::render(ui, editor, ps);
-            match result.outcome {
-                PlaceholderOutcome::Commit(value) => {
-                    events.push(DEvent::ListSlotCommitted { path: path.clone(), value });
-                }
-                PlaceholderOutcome::Dismiss => {
-                    events.push(DEvent::ListSlotDismissed);
-                }
-                PlaceholderOutcome::Active => {
-                    if let Some(text) = result.text_changed {
-                        events.push(DEvent::ListSlotTextChanged(text));
-                    }
-                    if let Some(idx) = result.selection_moved {
-                        events.push(DEvent::ListSlotSelectionMoved(idx));
-                    }
-                }
-            }
-        }
-    } else {
+    if !active_list_insert(ui, editor, path, events) {
         ui.push_id(path, |ui| {
             let text_height = ui.text_style_height(&egui::TextStyle::Body);
             let size = Vec2::new(text_height * 0.6, text_height);
@@ -240,7 +223,7 @@ fn render_empty_list_slot(
                 ));
             }
             if response.clicked() {
-                events.push(DEvent::ClickedListSlot(path.clone()));
+                events.push(DEvent::ClickedPlaceholder(path.clone()));
             }
         });
     }

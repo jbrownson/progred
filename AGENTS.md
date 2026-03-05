@@ -75,7 +75,7 @@ See `docs/migration.md` for the procedure. Always use a temporary Rust binary th
   ```
   This can't be solved in egui's immediate mode layout without hacks — needs an intermediate layout pass (D → flat block sequence → egui) that can split a VerticalList's opening bracket onto the preceding line and place the body at the correct indent level. Domain projections (record, sum) are unaffected since their lists are inside `D::Indent`, not `D::Line`.
 - **Empty horizontal list insertion**: Empty `HorizontalList` has same discoverability problem as vertical — the insertion slot between brackets is zero-width and invisible. Share the empty-slot rendering approach from `VerticalList`
-- **Unify placeholder events and list slot duplication**: `Placeholder*` and `ListSlot*` events are duplicate patterns (text changed, dismissed, selection moved) that just update whichever `PlaceholderState` is active. Should collapse into one set. `render_empty_list_slot` also duplicates the active-state logic from `render_list_slot` — would be cleaned up by the same unification. The `on_commit` closure on `D::Placeholder` could be removed in favor of the editor deciding what to do based on the active `Selection` variant.
+- **Unify placeholder commit events**: `PlaceholderCommitted` borrows `on_commit` from the D tree; `ListInsertCommitted` carries a path because list insertion points live in projection.rs with no D node to own a closure. Could be unified with `Rc<dyn Fn>` on `D::Placeholder`.
 - **Naming audit**: "Field" vs "edge label" conflation (Field is a defined semantic thing, edge labels may or may not be fields), and related inconsistencies across D, DEvent, and UI code
 
 ## Code Style
