@@ -356,7 +356,7 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
     Apply::try_wrap(gid, ctx.id)?;
 
     Some(D::Line(vec![
-        D::NodeHeader { child: Box::new(ctx.descend_with(&BASE, Some(render_ref))) },
+        ctx.descend_with(&BASE, Some(render_ref)),
         ctx.descend_list(&ARGS, &ANGLE_LIST, Some(render_type_expr)),
     ]))
 }
