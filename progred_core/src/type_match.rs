@@ -6,7 +6,9 @@ use im::HashSet;
 use std::collections::HashMap;
 
 pub fn expected_type(gid: &impl Gid, path: &Path) -> Option<TypeExpression> {
-    expected_type_env(gid, path).map(|(te, _)| te)
+    let (te, _) = expected_type_env(gid, path)?;
+    if TypeParam::try_wrap(gid, &te).is_some() { return None; }
+    Some(te)
 }
 
 fn expected_type_env(gid: &impl Gid, path: &Path) -> Option<(TypeExpression, HashMap<Id, Id>)> {
@@ -178,8 +180,12 @@ mod tests {
         std::rc::Rc::new(|id| Some(TypeExpression::wrap(id.clone())))
     }
 
+    fn tp_conv() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeParam>> {
+        std::rc::Rc::new(|id| Some(TypeParam::wrap(id.clone())))
+    }
+
     fn make_generic_type(gid: &mut MutGid, params: &[&Id]) -> (Type, Forall) {
-        let conv = te_conv();
+        let conv = tp_conv();
         let empty = List::new_empty(gid, conv.clone());
         let params_list = params.iter().rev().fold(empty, |tail, param| {
             List::new_cons(gid, param, &tail, conv.clone())
@@ -212,7 +218,7 @@ mod tests {
     #[test]
     fn type_param_resolved_through_apply() {
         let mut gid = MutGid::new();
-        let param_t = Type::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid);
         let (box_type, _) = make_generic_type(&mut gid, &[param_t.id()]);
         let apply = make_apply(&mut gid, &box_type, &[&STRING_TYPE]);
 
@@ -228,8 +234,8 @@ mod tests {
     #[test]
     fn multiple_type_params() {
         let mut gid = MutGid::new();
-        let param_a = Type::new(&mut gid);
-        let param_b = Type::new(&mut gid);
+        let param_a = TypeParam::new(&mut gid);
+        let param_b = TypeParam::new(&mut gid);
         let (pair_type, _) = make_generic_type(&mut gid, &[param_a.id(), param_b.id()]);
         let apply = make_apply(&mut gid, &pair_type, &[&STRING_TYPE, &NUMBER_TYPE]);
 
@@ -252,7 +258,7 @@ mod tests {
     #[test]
     fn recursive_type_through_self_apply() {
         let mut gid = MutGid::new();
-        let param_t = Type::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid);
         let (list_type, forall) = make_generic_type(&mut gid, &[param_t.id()]);
 
         let head_field = make_field(&mut gid, param_t.id());
@@ -279,7 +285,7 @@ mod tests {
     #[test]
     fn deep_recursive_resolution() {
         let mut gid = MutGid::new();
-        let param_t = Type::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid);
         let (list_type, _) = make_generic_type(&mut gid, &[param_t.id()]);
 
         let head_field = make_field(&mut gid, param_t.id());
@@ -302,10 +308,10 @@ mod tests {
     fn nested_type_param_resolution() {
         let mut gid = MutGid::new();
 
-        let inner_param = Type::new(&mut gid);
+        let inner_param = TypeParam::new(&mut gid);
         let (inner_type, _) = make_generic_type(&mut gid, &[inner_param.id()]);
 
-        let outer_param = Type::new(&mut gid);
+        let outer_param = TypeParam::new(&mut gid);
         let (outer_type, outer_forall) = make_generic_type(&mut gid, &[outer_param.id()]);
         let inner_apply = make_apply(&mut gid, &inner_type, &[outer_param.id()]);
         let wrapper_field = make_field(&mut gid, inner_apply.id());
@@ -331,13 +337,13 @@ mod tests {
     fn nested_recursive_types() {
         let mut gid = MutGid::new();
 
-        let inner_param = Type::new(&mut gid);
+        let inner_param = TypeParam::new(&mut gid);
         let (inner_type, _) = make_generic_type(&mut gid, &[inner_param.id()]);
         let inner_head = make_field(&mut gid, inner_param.id());
         let inner_tail_apply = make_apply(&mut gid, &inner_type, &[inner_param.id()]);
         let inner_tail = make_field(&mut gid, inner_tail_apply.id());
 
-        let outer_param = Type::new(&mut gid);
+        let outer_param = TypeParam::new(&mut gid);
         let (outer_type, _) = make_generic_type(&mut gid, &[outer_param.id()]);
         let outer_value = make_field(&mut gid, outer_param.id());
         let inner_of_outer = make_apply(&mut gid, &inner_type, &[outer_param.id()]);
@@ -423,17 +429,33 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_param_returned_as_is() {
+    fn unresolved_param_returns_none() {
         let mut gid = MutGid::new();
-        let param_t = Type::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid);
         let field = make_field(&mut gid, param_t.id());
 
         let path = Path::orphan(Id::new_uuid()).child(field.id().clone());
-        assert_eq!(expected_type(&gid, &path).unwrap().id, *param_t.id());
+        assert!(expected_type(&gid, &path).is_none());
+    }
+
+    #[test]
+    fn generic_field_without_apply_returns_none() {
+        let mut gid = MutGid::new();
+        let param_t = TypeParam::new(&mut gid);
+        let (box_type, _) = make_generic_type(&mut gid, &[param_t.id()]);
+
+        // Access a field typed as T directly through the generic type (no Apply to resolve T)
+        let outer = make_field(&mut gid, box_type.id());
+        let inner = make_field(&mut gid, param_t.id());
+
+        let path = Path::orphan(Id::new_uuid())
+            .child(outer.id().clone())
+            .child(inner.id().clone());
+        assert!(expected_type(&gid, &path).is_none());
     }
 
     fn make_sum_type(gid: &mut MutGid, variant_types: &[&Type]) -> Type {
-        let conv = std::rc::Rc::new(|id: &Id| Some(Record::wrap(id.clone())));
+        let conv = te_conv();
         let empty = List::new_empty(gid, conv.clone());
         let variants_list = variant_types.iter().rev().fold(empty, |tail, vt| {
             List::new_cons(gid, vt.id(), &tail, conv.clone())
@@ -510,6 +532,69 @@ mod tests {
         // Don't set ISA — can't determine match
         let et = TypeExpression::wrap(t.id().clone());
         assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), None);
+    }
+
+    #[test]
+    fn string_autocompletes_in_sum_containing_string() {
+        let mut gid = MutGid::new();
+        // Type StringWrapper → BODY → STRING_TYPE (alias)
+        let string_type = Type::new(&mut gid);
+        string_type.set_body(&mut gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+        let number_type = Type::new(&mut gid);
+        let mixed = make_sum_type(&mut gid, &[&string_type, &number_type]);
+
+        let et = TypeExpression::wrap(mixed.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::String("hello".into()), &et), Some(true));
+    }
+
+    #[test]
+    fn string_does_not_autocomplete_in_sum_without_string() {
+        let mut gid = MutGid::new();
+        let dog = Type::new(&mut gid);
+        let cat = Type::new(&mut gid);
+        let animal = make_sum_type(&mut gid, &[&dog, &cat]);
+
+        let et = TypeExpression::wrap(animal.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::String("hello".into()), &et), Some(false));
+    }
+
+    #[test]
+    fn uuid_autocompletes_through_apply_expected() {
+        let mut gid = MutGid::new();
+        let param_t = TypeParam::new(&mut gid);
+        let (list_type, _) = make_generic_type(&mut gid, &[param_t.id()]);
+        let apply = make_apply(&mut gid, &list_type, &[&STRING_TYPE]);
+
+        let node_uuid = uuid::Uuid::new_v4();
+        gid.set(node_uuid, ISA.clone(), list_type.id().clone());
+        let et = TypeExpression::wrap(apply.id().clone());
+        // Apply → BASE → list_type, candidate ISA matches list_type
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), Some(true));
+    }
+
+    #[test]
+    fn uuid_autocompletes_through_forall_expected() {
+        let mut gid = MutGid::new();
+        let record = Record::new(&mut gid);
+        let forall = Forall::new(&mut gid);
+        forall.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+
+        let node_uuid = uuid::Uuid::new_v4();
+        gid.set(node_uuid, ISA.clone(), record.id().clone());
+        let et = TypeExpression::wrap(forall.id().clone());
+        // Forall → BODY → record, candidate ISA matches record
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), Some(true));
+    }
+
+    #[test]
+    fn string_autocompletes_through_type_alias() {
+        let mut gid = MutGid::new();
+        // Type Name = String
+        let name_type = Type::new(&mut gid);
+        name_type.set_body(&mut gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+
+        let et = TypeExpression::wrap(name_type.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::String("hello".into()), &et), Some(true));
     }
 
     #[test]

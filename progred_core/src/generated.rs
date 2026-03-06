@@ -363,18 +363,18 @@ mod tests {
         assert_eq!(is_empty, Some(true));
     }
 
-    fn type_expr_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeExpression>> {
-        std::rc::Rc::new(|id| Some(TypeExpression::wrap(id.clone())))
+    fn type_param_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeParam>> {
+        std::rc::Rc::new(|id| Some(TypeParam::wrap(id.clone())))
     }
 
     #[test]
     fn forall_with_params() {
         let mut gid = MutGid::new();
 
-        let param = Type::new(&mut gid);
+        let param = TypeParam::new(&mut gid);
         param.set_name(&mut gid, "T");
 
-        let conv = type_expr_converter();
+        let conv = type_param_converter();
         let empty = List::new_empty(&mut gid, conv.clone());
         let params = List::new_cons(&mut gid, param.id(), &empty, conv);
 
@@ -382,7 +382,7 @@ mod tests {
         forall.set_params(&mut gid, &params);
 
         let param_list = forall.params(&gid).unwrap();
-        let params_vec: Vec<TypeExpression> = param_list.iter(&gid).collect();
+        let params_vec: Vec<TypeParam> = param_list.iter(&gid).collect();
         assert_eq!(params_vec.len(), 1);
         assert_eq!(params_vec[0].id(), param.id());
     }
