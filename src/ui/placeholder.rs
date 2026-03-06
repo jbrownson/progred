@@ -3,7 +3,7 @@ use progred_core::editor::Editor;
 use progred_core::generated::{name_of, semantics::{ISA, STRING_TYPE, NUMBER_TYPE, Type, TypeExpression}};
 use progred_core::graph::{Gid, Id};
 use progred_core::selection::PlaceholderState;
-use progred_core::type_match::{autocomplete_matches, isa_autocomplete_matches, autocomplete_contains_atomic};
+use progred_core::type_possibility::{type_accepts_candidate, type_accepts_isa, type_may_accept_atomic};
 use eframe::egui::{self, Color32, Ui};
 use progred_core::ordered_float::OrderedFloat;
 use std::collections::HashMap;
@@ -44,7 +44,7 @@ struct PlaceholderEntry {
     display: String,
     disambiguation: Option<String>,
     magic: bool,
-    matching: bool,
+    possible: bool,
 }
 
 struct NamedThing {
@@ -148,7 +148,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
         display: t.name.clone(),
         disambiguation: disambiguation(&lib, &t.id),
         magic: false,
-        matching: expected_type.map_or(true, |et| autocomplete_matches(&lib, &t.id, et).unwrap_or(false)),
+        possible: expected_type.map_or(true, |et| type_accepts_candidate(&lib, &t.id, et).unwrap_or(false)),
     }).collect();
 
     // "New X" constructor entries for type nodes
@@ -159,7 +159,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
                 display: format!("new {}", t.name),
                 disambiguation: None,
                 magic: false,
-                matching: expected_type.map_or(true, |et| isa_autocomplete_matches(&lib, &t.id, et).unwrap_or(false)),
+                possible: expected_type.map_or(true, |et| type_accepts_isa(&lib, &t.id, et).unwrap_or(false)),
             });
         }
     }
@@ -172,7 +172,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: format!("\"{}\"", trimmed),
             disambiguation: None,
             magic: true,
-            matching: expected_type.map_or(true, |et| et.id == STRING_TYPE || autocomplete_contains_atomic(&lib, et, &STRING_TYPE).unwrap_or(false)),
+            possible: expected_type.map_or(true, |et| et.id == STRING_TYPE || type_may_accept_atomic(&lib, et, &STRING_TYPE).unwrap_or(false)),
         });
     }
     if let Ok(n) = filter.parse::<f64>() {
@@ -181,7 +181,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: n.to_string(),
             disambiguation: None,
             magic: true,
-            matching: expected_type.map_or(true, |et| et.id == NUMBER_TYPE || autocomplete_contains_atomic(&lib, et, &NUMBER_TYPE).unwrap_or(false)),
+            possible: expected_type.map_or(true, |et| et.id == NUMBER_TYPE || type_may_accept_atomic(&lib, et, &NUMBER_TYPE).unwrap_or(false)),
         });
     }
 
@@ -191,20 +191,20 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
         display: "New node".to_string(),
         disambiguation: None,
         magic: false,
-        matching: expected_type.is_none(),
+        possible: expected_type.is_none(),
     });
 
     // Filter
     let filtered_indices = filter_entries(&all_entries, filter);
 
-    // Sort: matching first, then non-magic before magic, then by filter tier
+    // Sort: possible first, then non-magic before magic, then by filter tier
     let mut sorted: Vec<(usize, usize)> = filtered_indices;
     sorted.sort_by(|a, b| {
-        let a_matching = all_entries[a.0].matching;
-        let b_matching = all_entries[b.0].matching;
+        let a_possible = all_entries[a.0].possible;
+        let b_possible = all_entries[b.0].possible;
         let a_magic = all_entries[a.0].magic;
         let b_magic = all_entries[b.0].magic;
-        b_matching.cmp(&a_matching)
+        b_possible.cmp(&a_possible)
             .then_with(|| a_magic.cmp(&b_magic))
             .then_with(|| a.1.cmp(&b.1))
     });
@@ -237,7 +237,7 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
                 egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
                     for (i, entry) in entries.iter().enumerate() {
                         let mut job = egui::text::LayoutJob::default();
-                        let text_color = if entry.matching {
+                        let text_color = if entry.possible {
                             ui.visuals().text_color()
                         } else {
                             Color32::from_gray(140)

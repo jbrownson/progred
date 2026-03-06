@@ -10,7 +10,7 @@ pub mod render;
 pub mod selection;
 pub mod spanningtree;
 mod ts_runtime;
-pub mod type_match;
+pub mod type_possibility;
 pub mod type_system;
 
 pub use ordered_float;
