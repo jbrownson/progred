@@ -41,6 +41,13 @@ impl Document {
                 self.gid.purge(id);
             }
         }
+        self.gc();
+    }
+
+    fn gc(&mut self) {
+        let all_entities: HashSet<Id> = self.gid.entities().map(|u| Id::Uuid(*u)).collect();
+        let reachable = reachable_from(&self.gid, self.root.iter().cloned(), &all_entities);
+        self.gid.retain_entities(&reachable);
     }
 
     fn splice_out_list_element(&mut self, head_path: &Path, cons_id: &Id) {

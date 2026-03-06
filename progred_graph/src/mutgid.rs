@@ -71,6 +71,13 @@ impl MutGid {
         }
     }
 
+    pub fn retain_entities(&mut self, keep: &std::collections::HashSet<Id>) {
+        self.data = self.data.iter()
+            .filter(|(uuid, _)| keep.contains(&Id::Uuid(**uuid)))
+            .map(|(&k, v)| (k, v.clone()))
+            .collect();
+    }
+
     pub fn purge(&mut self, id: &Id) {
         if let Id::Uuid(uuid) = id {
             self.data = self.data.without(uuid);
