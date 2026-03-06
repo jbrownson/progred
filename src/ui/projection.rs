@@ -1,10 +1,11 @@
 use progred_core::d::{D, DEvent, TextStyle};
 use progred_core::editor::{Editor, InteractionMode};
 use progred_core::generated::name_of;
-use progred_core::generated::semantics::TAIL;
+use progred_core::generated::semantics::{HEAD, TAIL};
 use progred_core::graph::Id;
 use progred_core::selection::Selection;
 use progred_core::path::Path;
+use progred_core::type_match::expected_type;
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 
 use super::colors;
@@ -157,7 +158,8 @@ fn active_list_insert(
         Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
         _ => return false,
     };
-    let result = super::placeholder::render(ui, editor, ps);
+    let et = expected_type(&editor.lib(), &path.child(HEAD.clone()));
+    let result = super::placeholder::render(ui, editor, ps, et.as_ref());
     match result.outcome {
         PlaceholderOutcome::Commit(value) => {
             events.push(DEvent::ListInsertCommitted { path: path.clone(), value });
@@ -575,7 +577,8 @@ fn render_placeholder<'a>(
         Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
         _ => return render_placeholder_box(ui, path, events),
     };
-    let result = super::placeholder::render(ui, editor, ps);
+    let et = expected_type(&editor.lib(), path);
+    let result = super::placeholder::render(ui, editor, ps, et.as_ref());
     match result.outcome {
         PlaceholderOutcome::Commit(value) => {
             events.push(DEvent::PlaceholderCommitted { on_commit, value });

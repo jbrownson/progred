@@ -10,6 +10,7 @@ pub mod render;
 pub mod selection;
 pub mod spanningtree;
 mod ts_runtime;
+pub mod type_match;
 
 pub use ordered_float;
 pub use progred_graph as graph;

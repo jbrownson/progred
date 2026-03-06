@@ -536,11 +536,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
         Ok(VariantInfo { closure_name, constructor_name, variant_id: variant_id_tokens, field_types, constructor_field_types, field_names, field_ids, conversions, field_setters })
     }).collect::<Result<_>>()?;
 
-    let self_id = if type_params.is_empty() {
-        quote! { self.0 }
-    } else {
-        quote! { self.id }
-    };
+    let self_id = quote! { self.id };
 
     let closure_params: Vec<_> = variants.iter().map(|v| {
         let closure_name = &v.closure_name;
@@ -592,7 +588,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                         let uuid = uuid::Uuid::new_v4();
                         let id = crate::graph::Id::Uuid(uuid);
                         gid.set(uuid, #isa_uuid, #variant_id);
-                        Self(id)
+                        Self { id }
                     }
                 }
             } else {
@@ -602,7 +598,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                         let id = crate::graph::Id::Uuid(uuid);
                         gid.set(uuid, #isa_uuid, #variant_id);
                         #(#field_setters)*
-                        Self(id)
+                        Self { id }
                     }
                 }
             }
@@ -611,27 +607,32 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
         let variant_uuids: Vec<_> = variants.iter().map(|v| &v.variant_id).collect();
 
         Ok(quote! {
-            #[derive(Clone, Debug)]
-            pub struct #struct_name(pub crate::graph::Id);
+            #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+            pub struct #struct_name { pub id: crate::graph::Id }
+
+            impl std::ops::Deref for #struct_name {
+                type Target = crate::graph::Id;
+                fn deref(&self) -> &Self::Target { &self.id }
+            }
 
             impl #struct_name {
                 pub const TYPE_ID: crate::graph::Id = #type_uuid;
 
                 pub fn wrap(id: crate::graph::Id) -> Self {
-                    Self(id)
+                    Self { id }
                 }
 
                 pub fn try_wrap(gid: &impl crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
                     let isa = gid.get(id, &#isa_uuid)?;
                     if #(isa == &#variant_uuids)||* {
-                        Some(Self(id.clone()))
+                        Some(Self { id: id.clone() })
                     } else {
                         None
                     }
                 }
 
                 pub fn id(&self) -> &crate::graph::Id {
-                    &self.0
+                    &self.id
                 }
 
                 #(#variant_constructors)*
@@ -642,7 +643,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     gid: &impl crate::graph::Gid,
                     #(#closure_params),*
                 ) -> Option<__R> {
-                    let isa = gid.get(&self.0, &#isa_uuid)?;
+                    let isa = gid.get(&self.id, &#isa_uuid)?;
                     match isa {
                         #(#match_arms,)*
                         _ => None,
@@ -711,6 +712,21 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                 }
             }
 
+            impl<#(#generic_params),*> PartialEq for #struct_name<#(#generic_params),*> {
+                fn eq(&self, other: &Self) -> bool { self.id == other.id }
+            }
+
+            impl<#(#generic_params),*> Eq for #struct_name<#(#generic_params),*> {}
+
+            impl<#(#generic_params),*> std::hash::Hash for #struct_name<#(#generic_params),*> {
+                fn hash<__H: std::hash::Hasher>(&self, state: &mut __H) { self.id.hash(state) }
+            }
+
+            impl<#(#generic_params),*> std::ops::Deref for #struct_name<#(#generic_params),*> {
+                type Target = crate::graph::Id;
+                fn deref(&self) -> &Self::Target { &self.id }
+            }
+
             impl<#(#generic_params),*> #struct_name<#(#generic_params),*> {
                 pub const TYPE_ID: crate::graph::Id = #type_uuid;
 
@@ -755,11 +771,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
     let type_uuid = id_expr(type_id);
     let isa_uuid = id_expr(&ISA);
 
-    let self_id = if type_params.is_empty() {
-        quote! { self.0 }
-    } else {
-        quote! { self.id }
-    };
+    let self_id = quote! { self.id };
 
     let field_methods: Vec<TokenStream2> = field_ids
         .iter()
@@ -773,8 +785,13 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
 
     if type_params.is_empty() {
         Ok(quote! {
-            #[derive(Clone, Debug)]
-            pub struct #struct_name(pub crate::graph::Id);
+            #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+            pub struct #struct_name { pub id: crate::graph::Id }
+
+            impl std::ops::Deref for #struct_name {
+                type Target = crate::graph::Id;
+                fn deref(&self) -> &Self::Target { &self.id }
+            }
 
             impl #struct_name {
                 pub const TYPE_ID: crate::graph::Id = #type_uuid;
@@ -783,23 +800,23 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
                     let uuid = uuid::Uuid::new_v4();
                     let id = crate::graph::Id::Uuid(uuid);
                     gid.set(uuid, #isa_uuid, #type_uuid);
-                    Self(id)
+                    Self { id }
                 }
 
                 pub fn wrap(id: crate::graph::Id) -> Self {
-                    Self(id)
+                    Self { id }
                 }
 
                 pub fn try_wrap(gid: &impl crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
                     if gid.get(id, &#isa_uuid) == Some(&#type_uuid) {
-                        Some(Self(id.clone()))
+                        Some(Self { id: id.clone() })
                     } else {
                         None
                     }
                 }
 
                 pub fn id(&self) -> &crate::graph::Id {
-                    &self.0
+                    &self.id
                 }
 
                 #(#field_methods)*
@@ -837,6 +854,21 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
                         .field("id", &self.id)
                         .finish()
                 }
+            }
+
+            impl<#(#generic_params),*> PartialEq for #struct_name<#(#generic_params),*> {
+                fn eq(&self, other: &Self) -> bool { self.id == other.id }
+            }
+
+            impl<#(#generic_params),*> Eq for #struct_name<#(#generic_params),*> {}
+
+            impl<#(#generic_params),*> std::hash::Hash for #struct_name<#(#generic_params),*> {
+                fn hash<__H: std::hash::Hasher>(&self, state: &mut __H) { self.id.hash(state) }
+            }
+
+            impl<#(#generic_params),*> std::ops::Deref for #struct_name<#(#generic_params),*> {
+                type Target = crate::graph::Id;
+                fn deref(&self) -> &Self::Target { &self.id }
             }
 
             impl<#(#generic_params),*> #struct_name<#(#generic_params),*> {
