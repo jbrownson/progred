@@ -481,6 +481,36 @@ mod tests {
         paths
     }
 
+    fn collect_field_labels(d: &D, labels: &mut Vec<Id>) {
+        match d {
+            D::Block(children) | D::Line(children) => {
+                for child in children {
+                    collect_field_labels(child, labels);
+                }
+            }
+            D::Indent(child) | D::NodeHeader { child } => collect_field_labels(child, labels),
+            D::Descend { child, .. } => collect_field_labels(child, labels),
+            D::FieldLabel { label_id } => labels.push(label_id.clone()),
+            D::VerticalList { elements, .. } | D::HorizontalList { elements, .. } => {
+                for element in elements {
+                    collect_field_labels(element, labels);
+                }
+            }
+            D::Text(_, _)
+            | D::Identicon(_)
+            | D::CollapseToggle { .. }
+            | D::StringEditor { .. }
+            | D::NumberEditor { .. }
+            | D::Placeholder { .. } => {}
+        }
+    }
+
+    fn field_labels(d: &D) -> Vec<Id> {
+        let mut labels = Vec::new();
+        collect_field_labels(d, &mut labels);
+        labels
+    }
+
     #[test]
     fn default_projection_shows_placeholders_for_missing_record_fields() {
         let mut editor = Editor::new();
@@ -515,5 +545,40 @@ mod tests {
 
         assert!(!placeholders.contains(&root_path.child(name.id().clone())));
         assert!(placeholders.contains(&root_path.child(age.id().clone())));
+    }
+
+    #[test]
+    fn default_projection_orders_declared_fields_before_extras() {
+        let mut editor = Editor::new();
+
+        let name = Field::new(&mut editor.doc.gid);
+        name.set_name(&mut editor.doc.gid, "name");
+        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+
+        let age = Field::new(&mut editor.doc.gid);
+        age.set_name(&mut editor.doc.gid, "age");
+        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(NUMBER_TYPE.clone()));
+
+        let empty = List::new_empty(&mut editor.doc.gid, field_converter());
+        let tail = List::new_cons(&mut editor.doc.gid, age.id(), &empty, field_converter());
+        let fields = List::new_cons(&mut editor.doc.gid, name.id(), &tail, field_converter());
+
+        let record = Record::new(&mut editor.doc.gid);
+        record.set_fields(&mut editor.doc.gid, &fields);
+
+        let person = Type::new(&mut editor.doc.gid);
+        person.set_name(&mut editor.doc.gid, "person");
+        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id().clone()));
+
+        let extra = Id::new_uuid();
+        let instance = uuid::Uuid::new_v4();
+        editor.doc.root = Some(Id::Uuid(instance));
+        editor.doc.gid.set(instance, ISA.clone(), person.id().clone());
+        editor.doc.gid.set(instance, age.id().clone(), Id::Number(ordered_float::OrderedFloat(42.0)));
+        editor.doc.gid.set(instance, extra.clone(), Id::String("extra".into()));
+        editor.doc.gid.set(instance, name.id().clone(), Id::String("Ada".into()));
+
+        let d = render(&editor, &Path::root(), &Id::Uuid(instance));
+        assert_eq!(field_labels(&d), vec![name.id().clone(), age.id().clone(), extra]);
     }
 }
