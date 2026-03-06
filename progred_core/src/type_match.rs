@@ -2,6 +2,7 @@ use crate::generated::semantics::*;
 use crate::graph::{Gid, Id};
 use crate::list_iter::ListIter;
 use crate::path::Path;
+use im::HashSet;
 use std::collections::HashMap;
 
 pub fn expected_type(gid: &impl Gid, path: &Path) -> Option<TypeExpression> {
@@ -47,41 +48,45 @@ fn tri_any(iter: impl Iterator<Item = Option<bool>>) -> Option<bool> {
 
 pub fn autocomplete_matches(gid: &impl Gid, candidate: &Id, expected: &TypeExpression) -> Option<bool> {
     match candidate {
-        Id::String(_) => if expected.id == STRING_TYPE { Some(true) } else { contains_atomic(gid, expected, &STRING_TYPE) },
-        Id::Number(_) => if expected.id == NUMBER_TYPE { Some(true) } else { contains_atomic(gid, expected, &NUMBER_TYPE) },
+        Id::String(_) => if expected.id == STRING_TYPE { Some(true) } else { contains_atomic(gid, expected, &STRING_TYPE, HashSet::new()) },
+        Id::Number(_) => if expected.id == NUMBER_TYPE { Some(true) } else { contains_atomic(gid, expected, &NUMBER_TYPE, HashSet::new()) },
         Id::Uuid(_) => gid.get(candidate, &ISA)
-            .and_then(|isa| isa_matches(gid, isa, expected)),
+            .and_then(|isa| isa_matches(gid, isa, expected, HashSet::new())),
     }
 }
 
 pub fn isa_autocomplete_matches(gid: &impl Gid, candidate_isa: &Id, expected: &TypeExpression) -> Option<bool> {
-    isa_matches(gid, candidate_isa, expected)
+    isa_matches(gid, candidate_isa, expected, HashSet::new())
 }
 
 pub fn autocomplete_contains_atomic(gid: &impl Gid, expected: &TypeExpression, atomic_type: &Id) -> Option<bool> {
-    contains_atomic(gid, expected, atomic_type)
+    contains_atomic(gid, expected, atomic_type, HashSet::new())
 }
 
-fn isa_matches(gid: &impl Gid, candidate_isa: &Id, expected: &Id) -> Option<bool> {
+fn isa_matches(gid: &impl Gid, candidate_isa: &Id, expected: &Id, ancestors: HashSet<Id>) -> Option<bool> {
+    if ancestors.contains(expected) {
+        return None;
+    }
+    let ancestors = ancestors.update(expected.clone());
     if Type::try_wrap(gid, expected).is_some() {
         if candidate_isa == expected {
             Some(true)
         } else {
             gid.get(expected, &BODY)
-                .map_or(Some(false), |body| isa_matches(gid, candidate_isa, body))
+                .map_or(Some(false), |body| isa_matches(gid, candidate_isa, body, ancestors.clone()))
         }
     } else if Sum::try_wrap(gid, expected).is_some() {
         gid.get(expected, &VARIANTS)
             .and_then(|variants| tri_any(
                 ListIter::new(gid, Some(variants))
-                    .map(|v| isa_matches(gid, candidate_isa, v))
+                    .map(|v| isa_matches(gid, candidate_isa, v, ancestors.clone()))
             ))
     } else if Apply::try_wrap(gid, expected).is_some() {
         gid.get(expected, &BASE)
-            .and_then(|base| isa_matches(gid, candidate_isa, base))
+            .and_then(|base| isa_matches(gid, candidate_isa, base, ancestors))
     } else if Forall::try_wrap(gid, expected).is_some() {
         gid.get(expected, &BODY)
-            .and_then(|body| isa_matches(gid, candidate_isa, body))
+            .and_then(|body| isa_matches(gid, candidate_isa, body, ancestors))
     } else if Record::try_wrap(gid, expected).is_some() {
         Some(candidate_isa == expected)
     } else {
@@ -89,24 +94,29 @@ fn isa_matches(gid: &impl Gid, candidate_isa: &Id, expected: &Id) -> Option<bool
     }
 }
 
-fn contains_atomic(gid: &impl Gid, type_id: &Id, atomic_type: &Id) -> Option<bool> {
+fn contains_atomic(gid: &impl Gid, type_id: &Id, atomic_type: &Id, ancestors: HashSet<Id>) -> Option<bool> {
     if type_id == atomic_type {
-        Some(true)
-    } else if Type::try_wrap(gid, type_id).is_some() {
+        return Some(true);
+    }
+    if ancestors.contains(type_id) {
+        return None;
+    }
+    let ancestors = ancestors.update(type_id.clone());
+    if Type::try_wrap(gid, type_id).is_some() {
         gid.get(type_id, &BODY)
-            .map_or(Some(false), |body| contains_atomic(gid, body, atomic_type))
+            .map_or(Some(false), |body| contains_atomic(gid, body, atomic_type, ancestors.clone()))
     } else if Forall::try_wrap(gid, type_id).is_some() {
         gid.get(type_id, &BODY)
-            .and_then(|body| contains_atomic(gid, body, atomic_type))
+            .and_then(|body| contains_atomic(gid, body, atomic_type, ancestors))
     } else if Sum::try_wrap(gid, type_id).is_some() {
         gid.get(type_id, &VARIANTS)
             .and_then(|variants| tri_any(
                 ListIter::new(gid, Some(variants))
-                    .map(|v| contains_atomic(gid, v, atomic_type))
+                    .map(|v| contains_atomic(gid, v, atomic_type, ancestors.clone()))
             ))
     } else if Apply::try_wrap(gid, type_id).is_some() {
         gid.get(type_id, &BASE)
-            .and_then(|base| contains_atomic(gid, base, atomic_type))
+            .and_then(|base| contains_atomic(gid, base, atomic_type, ancestors))
     } else if Record::try_wrap(gid, type_id).is_some() {
         Some(false)
     } else {
@@ -500,5 +510,33 @@ mod tests {
         // Don't set ISA — can't determine match
         let et = TypeExpression::wrap(t.id().clone());
         assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), None);
+    }
+
+    #[test]
+    fn cyclic_type_body_does_not_stack_overflow() {
+        let mut gid = MutGid::new();
+        // Type A → BODY → Type B → BODY → Type A
+        let a = Type::new(&mut gid);
+        let b = Type::new(&mut gid);
+        a.set_body(&mut gid, &TypeExpression::wrap(b.id().clone()));
+        b.set_body(&mut gid, &TypeExpression::wrap(a.id().clone()));
+
+        let node_uuid = uuid::Uuid::new_v4();
+        gid.set(node_uuid, ISA.clone(), Id::new_uuid());
+        let et = TypeExpression::wrap(a.id().clone());
+        // Should terminate with None (cycle), not stack overflow
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), None);
+    }
+
+    #[test]
+    fn cyclic_type_contains_atomic_does_not_stack_overflow() {
+        let mut gid = MutGid::new();
+        // Type A → BODY → Type A (self-referential)
+        let a = Type::new(&mut gid);
+        a.set_body(&mut gid, &TypeExpression::wrap(a.id().clone()));
+
+        let et = TypeExpression::wrap(a.id().clone());
+        // Should terminate with None (cycle), not stack overflow
+        assert_eq!(autocomplete_contains_atomic(&gid, &et, &STRING_TYPE), None);
     }
 }

@@ -78,7 +78,6 @@ See `docs/migration.md` for the procedure. Always use a temporary Rust binary th
 - **Unify placeholder commit events**: `PlaceholderCommitted` borrows `on_commit` from the D tree; `ListInsertCommitted` carries a path because list insertion points live in projection.rs with no D node to own a closure. Could be unified with `Rc<dyn Fn>` on `D::Placeholder`.
 - **Naming audit**: "Field" vs "edge label" conflation (Field is a defined semantic thing, edge labels may or may not be fields), and related inconsistencies across D, DEvent, and UI code
 - **Generate record field accessors**: The macro generates setters for record fields but not getters. Add accessor methods (e.g. `type_.body(gid) -> Option<&Id>`) so code can use wrappers instead of raw `gid.get` with edge constants. See `type_match::substitutions` for an example that would benefit.
-- **Cycle detection for recursive type graph traversal**: `isa_matches` and `contains_atomic` in `type_match.rs` recurse through BODY/BASE edges without cycle detection. Circular type graphs (malformed data) would stack overflow. `ListIter` already has cycle detection for cons-lists; need a similar abstraction for general graph traversal that can be reused across the codebase.
 
 ## Code Style
 
