@@ -37,21 +37,28 @@ fn substitutions(gid: &impl Gid, type_id: &Id, outer_subs: &HashMap<Id, Id>) -> 
         .unwrap_or_default()
 }
 
-pub fn type_matches(gid: &impl Gid, candidate: &Id, expected: &TypeExpression) -> Option<bool> {
+fn tri_any(iter: impl Iterator<Item = Option<bool>>) -> Option<bool> {
+    iter.fold(Some(false), |acc, r| match (acc, r) {
+        (Some(true), _) | (_, Some(true)) => Some(true),
+        (None, _) | (_, None) => None,
+        _ => Some(false),
+    })
+}
+
+pub fn autocomplete_matches(gid: &impl Gid, candidate: &Id, expected: &TypeExpression) -> Option<bool> {
     match candidate {
-        Id::String(_) => Some(expected.id == STRING_TYPE || contains_atomic(gid, expected, &STRING_TYPE)),
-        Id::Number(_) => Some(expected.id == NUMBER_TYPE || contains_atomic(gid, expected, &NUMBER_TYPE)),
+        Id::String(_) => if expected.id == STRING_TYPE { Some(true) } else { contains_atomic(gid, expected, &STRING_TYPE) },
+        Id::Number(_) => if expected.id == NUMBER_TYPE { Some(true) } else { contains_atomic(gid, expected, &NUMBER_TYPE) },
         Id::Uuid(_) => gid.get(candidate, &ISA)
-            .and_then(|isa| isa_matches(gid, isa, expected))
-            .or(Some(false)),
+            .and_then(|isa| isa_matches(gid, isa, expected)),
     }
 }
 
-pub fn isa_matches_type(gid: &impl Gid, candidate_isa: &Id, expected: &TypeExpression) -> Option<bool> {
+pub fn isa_autocomplete_matches(gid: &impl Gid, candidate_isa: &Id, expected: &TypeExpression) -> Option<bool> {
     isa_matches(gid, candidate_isa, expected)
 }
 
-pub fn type_contains_atomic(gid: &impl Gid, expected: &TypeExpression, atomic_type: &Id) -> bool {
+pub fn autocomplete_contains_atomic(gid: &impl Gid, expected: &TypeExpression, atomic_type: &Id) -> Option<bool> {
     contains_atomic(gid, expected, atomic_type)
 }
 
@@ -61,20 +68,20 @@ fn isa_matches(gid: &impl Gid, candidate_isa: &Id, expected: &Id) -> Option<bool
             Some(true)
         } else {
             gid.get(expected, &BODY)
-                .and_then(|body| isa_matches(gid, candidate_isa, body))
-                .or(Some(false))
+                .map_or(Some(false), |body| isa_matches(gid, candidate_isa, body))
         }
     } else if Sum::try_wrap(gid, expected).is_some() {
-        Some(gid.get(expected, &VARIANTS)
-            .map_or(false, |variants| ListIter::new(gid, Some(variants)).any(|v| v == candidate_isa)))
+        gid.get(expected, &VARIANTS)
+            .and_then(|variants| tri_any(
+                ListIter::new(gid, Some(variants))
+                    .map(|v| isa_matches(gid, candidate_isa, v))
+            ))
     } else if Apply::try_wrap(gid, expected).is_some() {
         gid.get(expected, &BASE)
             .and_then(|base| isa_matches(gid, candidate_isa, base))
-            .or(Some(false))
     } else if Forall::try_wrap(gid, expected).is_some() {
         gid.get(expected, &BODY)
             .and_then(|body| isa_matches(gid, candidate_isa, body))
-            .or(Some(false))
     } else if Record::try_wrap(gid, expected).is_some() {
         Some(candidate_isa == expected)
     } else {
@@ -82,23 +89,28 @@ fn isa_matches(gid: &impl Gid, candidate_isa: &Id, expected: &Id) -> Option<bool
     }
 }
 
-fn contains_atomic(gid: &impl Gid, type_id: &Id, atomic_type: &Id) -> bool {
+fn contains_atomic(gid: &impl Gid, type_id: &Id, atomic_type: &Id) -> Option<bool> {
     if type_id == atomic_type {
-        true
-    } else if Type::try_wrap(gid, type_id).is_some() || Forall::try_wrap(gid, type_id).is_some() {
+        Some(true)
+    } else if Type::try_wrap(gid, type_id).is_some() {
         gid.get(type_id, &BODY)
-            .map_or(false, |body| contains_atomic(gid, body, atomic_type))
+            .map_or(Some(false), |body| contains_atomic(gid, body, atomic_type))
+    } else if Forall::try_wrap(gid, type_id).is_some() {
+        gid.get(type_id, &BODY)
+            .and_then(|body| contains_atomic(gid, body, atomic_type))
     } else if Sum::try_wrap(gid, type_id).is_some() {
         gid.get(type_id, &VARIANTS)
-            .map_or(false, |variants| {
+            .and_then(|variants| tri_any(
                 ListIter::new(gid, Some(variants))
-                    .any(|v| contains_atomic(gid, v, atomic_type))
-            })
+                    .map(|v| contains_atomic(gid, v, atomic_type))
+            ))
     } else if Apply::try_wrap(gid, type_id).is_some() {
         gid.get(type_id, &BASE)
-            .map_or(false, |base| contains_atomic(gid, base, atomic_type))
+            .and_then(|base| contains_atomic(gid, base, atomic_type))
+    } else if Record::try_wrap(gid, type_id).is_some() {
+        Some(false)
     } else {
-        false
+        None
     }
 }
 
@@ -118,28 +130,30 @@ mod tests {
     }
 
     #[test]
-    fn string_matches_string_type() {
+    fn string_autocompletes_as_string_type() {
         let gid = MutGid::new();
         let et = TypeExpression::wrap(STRING_TYPE.clone());
-        assert_eq!(type_matches(&gid, &Id::String("hello".into()), &et), Some(true));
+        assert_eq!(autocomplete_matches(&gid, &Id::String("hello".into()), &et), Some(true));
     }
 
     #[test]
-    fn number_matches_number_type() {
+    fn number_autocompletes_as_number_type() {
         let gid = MutGid::new();
         let et = TypeExpression::wrap(NUMBER_TYPE.clone());
-        assert_eq!(type_matches(&gid, &Id::Number(ordered_float::OrderedFloat(42.0)), &et), Some(true));
+        assert_eq!(autocomplete_matches(&gid, &Id::Number(ordered_float::OrderedFloat(42.0)), &et), Some(true));
     }
 
     #[test]
-    fn string_does_not_match_number_type() {
+    fn string_does_not_autocomplete_as_number_type() {
         let gid = MutGid::new();
         let et = TypeExpression::wrap(NUMBER_TYPE.clone());
-        assert_eq!(type_matches(&gid, &Id::String("hello".into()), &et), Some(false));
+        // NUMBER_TYPE isn't recognizable via try_wrap in a bare MutGid (no semantics),
+        // so contains_atomic can't introspect it — returns None
+        assert_eq!(autocomplete_matches(&gid, &Id::String("hello".into()), &et), None);
     }
 
     #[test]
-    fn uuid_with_matching_isa() {
+    fn uuid_autocompletes_when_isa_matches() {
         let mut gid = MutGid::new();
         let t = Type::new(&mut gid);
         let record = Record::new(&mut gid);
@@ -147,7 +161,7 @@ mod tests {
         let node_uuid = uuid::Uuid::new_v4();
         gid.set(node_uuid, ISA.clone(), t.id().clone());
         let et = TypeExpression::wrap(t.id().clone());
-        assert_eq!(type_matches(&gid, &Id::Uuid(node_uuid), &et), Some(true));
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), Some(true));
     }
 
     fn te_conv() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeExpression>> {
@@ -406,5 +420,85 @@ mod tests {
 
         let path = Path::orphan(Id::new_uuid()).child(field.id().clone());
         assert_eq!(expected_type(&gid, &path).unwrap().id, *param_t.id());
+    }
+
+    fn make_sum_type(gid: &mut MutGid, variant_types: &[&Type]) -> Type {
+        let conv = std::rc::Rc::new(|id: &Id| Some(Record::wrap(id.clone())));
+        let empty = List::new_empty(gid, conv.clone());
+        let variants_list = variant_types.iter().rev().fold(empty, |tail, vt| {
+            List::new_cons(gid, vt.id(), &tail, conv.clone())
+        });
+        let sum = Sum::new(gid);
+        sum.set_variants(gid, &variants_list);
+        let t = Type::new(gid);
+        t.set_body(gid, &TypeExpression::wrap(sum.id().clone()));
+        t
+    }
+
+    #[test]
+    fn variant_autocompletes_in_sum() {
+        let mut gid = MutGid::new();
+        let dog = Type::new(&mut gid);
+        let cat = Type::new(&mut gid);
+        let animal = make_sum_type(&mut gid, &[&dog, &cat]);
+
+        let node_uuid = uuid::Uuid::new_v4();
+        gid.set(node_uuid, ISA.clone(), dog.id().clone());
+        let et = TypeExpression::wrap(animal.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), Some(true));
+    }
+
+    #[test]
+    fn non_variant_does_not_autocomplete_in_sum() {
+        let mut gid = MutGid::new();
+        let dog = Type::new(&mut gid);
+        let cat = Type::new(&mut gid);
+        let fish = Type::new(&mut gid);
+        let animal = make_sum_type(&mut gid, &[&dog, &cat]);
+
+        let node_uuid = uuid::Uuid::new_v4();
+        gid.set(node_uuid, ISA.clone(), fish.id().clone());
+        let et = TypeExpression::wrap(animal.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), Some(false));
+    }
+
+    #[test]
+    fn isa_body_autocompletes_in_sum_variant() {
+        let mut gid = MutGid::new();
+        let record = Record::new(&mut gid);
+        let dog = Type::new(&mut gid);
+        dog.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+        let cat = Type::new(&mut gid);
+        let animal = make_sum_type(&mut gid, &[&dog, &cat]);
+
+        // ISA points to the Record body, not the Type alias
+        let node_uuid = uuid::Uuid::new_v4();
+        gid.set(node_uuid, ISA.clone(), record.id().clone());
+        let et = TypeExpression::wrap(animal.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), Some(true));
+    }
+
+    #[test]
+    fn isa_body_autocompletes_as_type_alias() {
+        let mut gid = MutGid::new();
+        let record = Record::new(&mut gid);
+        let dog = Type::new(&mut gid);
+        dog.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+
+        // ISA points to Record body, expected is the Type alias
+        let node_uuid = uuid::Uuid::new_v4();
+        gid.set(node_uuid, ISA.clone(), record.id().clone());
+        let et = TypeExpression::wrap(dog.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), Some(true));
+    }
+
+    #[test]
+    fn uuid_without_isa_indeterminate() {
+        let mut gid = MutGid::new();
+        let t = Type::new(&mut gid);
+        let node_uuid = uuid::Uuid::new_v4();
+        // Don't set ISA — can't determine match
+        let et = TypeExpression::wrap(t.id().clone());
+        assert_eq!(autocomplete_matches(&gid, &Id::Uuid(node_uuid), &et), None);
     }
 }

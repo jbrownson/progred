@@ -3,7 +3,7 @@ use progred_core::editor::Editor;
 use progred_core::generated::{name_of, semantics::{ISA, STRING_TYPE, NUMBER_TYPE, Type, TypeExpression}};
 use progred_core::graph::{Gid, Id};
 use progred_core::selection::PlaceholderState;
-use progred_core::type_match::{type_matches, isa_matches_type, type_contains_atomic};
+use progred_core::type_match::{autocomplete_matches, isa_autocomplete_matches, autocomplete_contains_atomic};
 use eframe::egui::{self, Color32, Ui};
 use progred_core::ordered_float::OrderedFloat;
 use std::collections::HashMap;
@@ -148,7 +148,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
         display: t.name.clone(),
         disambiguation: disambiguation(&lib, &t.id),
         magic: false,
-        matching: expected_type.map_or(true, |et| type_matches(&lib, &t.id, et).unwrap_or(true)),
+        matching: expected_type.map_or(true, |et| autocomplete_matches(&lib, &t.id, et).unwrap_or(false)),
     }).collect();
 
     // "New X" constructor entries for type nodes
@@ -159,7 +159,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
                 display: format!("new {}", t.name),
                 disambiguation: None,
                 magic: false,
-                matching: expected_type.map_or(true, |et| isa_matches_type(&lib, &t.id, et).unwrap_or(true)),
+                matching: expected_type.map_or(true, |et| isa_autocomplete_matches(&lib, &t.id, et).unwrap_or(false)),
             });
         }
     }
@@ -172,7 +172,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: format!("\"{}\"", trimmed),
             disambiguation: None,
             magic: true,
-            matching: expected_type.map_or(true, |et| et.id == STRING_TYPE || type_contains_atomic(&lib, et, &STRING_TYPE)),
+            matching: expected_type.map_or(true, |et| et.id == STRING_TYPE || autocomplete_contains_atomic(&lib, et, &STRING_TYPE).unwrap_or(false)),
         });
     }
     if let Ok(n) = filter.parse::<f64>() {
@@ -181,7 +181,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: n.to_string(),
             disambiguation: None,
             magic: true,
-            matching: expected_type.map_or(true, |et| et.id == NUMBER_TYPE || type_contains_atomic(&lib, et, &NUMBER_TYPE)),
+            matching: expected_type.map_or(true, |et| et.id == NUMBER_TYPE || autocomplete_contains_atomic(&lib, et, &NUMBER_TYPE).unwrap_or(false)),
         });
     }
 
