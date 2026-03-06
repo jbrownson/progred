@@ -1,44 +1,7 @@
 use crate::generated::semantics::*;
 use crate::graph::{Gid, Id};
 use crate::list_iter::ListIter;
-use crate::path::Path;
 use im::HashSet;
-use std::collections::HashMap;
-
-pub fn expected_type(gid: &impl Gid, path: &Path) -> Option<TypeExpression> {
-    let (te, _) = expected_type_env(gid, path)?;
-    if TypeParam::try_wrap(gid, &te).is_some() { return None; }
-    Some(te)
-}
-
-fn expected_type_env(gid: &impl Gid, path: &Path) -> Option<(TypeExpression, HashMap<Id, Id>)> {
-    let (parent, label) = path.pop()?;
-    let parent_env = expected_type_env(gid, &parent);
-    let subs = parent_env.as_ref()
-        .map(|(te, outer_subs)| substitutions(gid, te, outer_subs))
-        .unwrap_or_default();
-    let raw_type = gid.get(&label, &TYPE_)?;
-    let resolved = subs.get(raw_type).unwrap_or(raw_type);
-    Some((TypeExpression::wrap(resolved.clone()), subs))
-}
-
-fn substitutions(gid: &impl Gid, type_id: &Id, outer_subs: &HashMap<Id, Id>) -> HashMap<Id, Id> {
-    Apply::try_wrap(gid, type_id)
-        .and_then(|apply| {
-            let base = apply.base(gid)?;
-            let base_body = base.body(gid)?;
-            let params = Forall::try_wrap(gid, &base_body)?.params(gid)?;
-            let args = apply.args(gid)?;
-            Some((params, args))
-        })
-        .map(|(params, args)| {
-            ListIter::new(gid, Some(&params))
-                .zip(ListIter::new(gid, Some(&args)))
-                .map(|(param, arg)| (param.clone(), outer_subs.get(arg).cloned().unwrap_or_else(|| arg.clone())))
-                .collect()
-        })
-        .unwrap_or_default()
-}
 
 fn tri_any(iter: impl Iterator<Item = Option<bool>>) -> Option<bool> {
     iter.fold(Some(false), |acc, r| match (acc, r) {
@@ -131,6 +94,8 @@ fn contains_atomic(gid: &impl Gid, type_id: &Id, atomic_type: &Id, ancestors: Ha
 mod tests {
     use super::*;
     use crate::graph::MutGid;
+    use crate::path::Path;
+    use crate::type_system::expected_type;
 
     #[test]
     fn expected_type_for_field() {

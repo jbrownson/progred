@@ -5,7 +5,7 @@ use progred_core::generated::semantics::{HEAD, TAIL};
 use progred_core::graph::Id;
 use progred_core::selection::Selection;
 use progred_core::path::Path;
-use progred_core::type_match::expected_type;
+use progred_core::type_system::expected_type;
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
 
 use super::colors;

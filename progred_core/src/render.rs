@@ -4,8 +4,10 @@ use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, ARGS,
 use crate::graph::{Gid, Id};
 use crate::path::Path;
 use crate::selection::{EdgeState, Selection};
+use crate::type_system::resolve_record;
 
 use crate::d::{D, TextStyle};
+use std::collections::HashSet;
 
 pub fn render(editor: &Editor, path: &Path, id: &Id) -> D {
     render_id(editor, path, id, im::HashSet::new())
@@ -132,17 +134,25 @@ fn render_uuid(
     let lib = editor.lib();
     let edges = lib.edges(&id);
     let display_label = display_label(&lib, &id);
+    let existing_labels: Vec<Id> = edges.into_iter()
+        .flat_map(|e| e.keys().cloned())
+        .filter(|label| label != &NAME && label != &ISA)
+        .collect();
     let new_edge_label = editor.selection.as_ref()
         .and_then(|s| s.path())
         .and_then(|sel| sel.pop())
         .filter(|(parent, _)| parent == path)
         .map(|(_, label)| label)
-        .filter(|label| !edges.is_some_and(|e| e.contains_key(label)));
-    let all_edges: Vec<(Id, Id)> = edges.into_iter()
-        .flat_map(|e| e.iter().map(|(k, v)| (k.clone(), v.clone())))
-        .filter(|(label, _)| label != &NAME && label != &ISA)
+        .filter(|label| !existing_labels.contains(label));
+    let declared_labels = declared_record_field_ids(&lib, &id);
+    let declared_label_set: HashSet<Id> = declared_labels.iter().cloned().collect();
+    let field_labels: Vec<Id> = declared_labels.into_iter()
+        .chain(existing_labels.iter().filter(|label| !declared_label_set.contains(*label)).cloned())
+        .chain(new_edge_label.iter().filter(|label| {
+            !declared_label_set.contains(*label) && !existing_labels.contains(*label)
+        }).cloned())
         .collect();
-    let has_content = !all_edges.is_empty() || new_edge_label.is_some();
+    let has_content = !field_labels.is_empty();
     let is_collapsed = editor.tree.is_collapsed(path).unwrap_or(ancestors.contains(&id));
 
     let child = match display_label {
@@ -158,29 +168,12 @@ fn render_uuid(
         let child_ancestors = ancestors.update(id.clone());
         let ctx = RenderCtx { editor, path, id: &id, ancestors: &child_ancestors };
 
-        let field_items: Vec<D> = all_edges.iter()
-            .map(|(label, _)| D::Line(vec![
+        let field_items: Vec<D> = field_labels.iter()
+            .map(|label| D::Line(vec![
                 D::FieldLabel { label_id: label.clone() },
                 D::Text(":".into(), TextStyle::Punctuation),
                 ctx.descend(label),
             ]))
-            .chain(new_edge_label.as_ref().map(|new_label| {
-                let placeholder_path = path.child(new_label.clone());
-                let closure_path = placeholder_path.clone();
-                D::Line(vec![
-                    D::FieldLabel { label_id: new_label.clone() },
-                    D::Text(":".into(), TextStyle::Punctuation),
-                    D::Descend {
-                        path: placeholder_path.clone(),
-                        selection: Selection::edge(placeholder_path),
-                        child: Box::new(D::Placeholder {
-                            on_commit: Box::new(move |w: &mut Editor, value| {
-                                w.doc.set_edge(&closure_path, value);
-                            }),
-                        }),
-                    },
-                ])
-            }))
             .collect();
 
         D::Indent(Box::new(D::Block(field_items)))
@@ -191,6 +184,20 @@ fn render_uuid(
         .collect();
 
     D::Block(block_items)
+}
+
+fn declared_record_field_ids(gid: &impl Gid, id: &Id) -> Vec<Id> {
+    gid.get(id, &ISA)
+        .and_then(|type_id| resolve_record(gid, type_id))
+        .and_then(|record| record.fields(gid))
+        .map(|fields| {
+            let mut seen_fields = HashSet::new();
+            fields.iter(gid)
+                .map(|field| field.id().clone())
+                .filter(|field_id| seen_fields.insert(field_id.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 struct ListElement {
@@ -426,5 +433,87 @@ fn number_text(editor: &Editor, path: &Path) -> Option<String> {
         Some(Selection::Edge(sel_path, es)) if sel_path == path => es.number_text.clone(),
         Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => edge_state.number_text.clone(),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generated::semantics::{List, NUMBER_TYPE, STRING_TYPE, TypeExpression};
+    use std::rc::Rc;
+
+    fn field_converter() -> Rc<dyn Fn(&Id) -> Option<Field>> {
+        Rc::new(|id| Some(Field::wrap(id.clone())))
+    }
+
+    fn collect_placeholder_paths(d: &D, paths: &mut Vec<Path>) {
+        match d {
+            D::Block(children) | D::Line(children) => {
+                for child in children {
+                    collect_placeholder_paths(child, paths);
+                }
+            }
+            D::Indent(child) | D::NodeHeader { child } => collect_placeholder_paths(child, paths),
+            D::Descend { path, child, .. } => {
+                if matches!(child.as_ref(), D::Placeholder { .. }) {
+                    paths.push(path.clone());
+                }
+                collect_placeholder_paths(child, paths);
+            }
+            D::VerticalList { elements, .. } | D::HorizontalList { elements, .. } => {
+                for element in elements {
+                    collect_placeholder_paths(element, paths);
+                }
+            }
+            D::Text(_, _)
+            | D::Identicon(_)
+            | D::FieldLabel { .. }
+            | D::CollapseToggle { .. }
+            | D::StringEditor { .. }
+            | D::NumberEditor { .. }
+            | D::Placeholder { .. } => {}
+        }
+    }
+
+    fn placeholder_paths(d: &D) -> Vec<Path> {
+        let mut paths = Vec::new();
+        collect_placeholder_paths(d, &mut paths);
+        paths
+    }
+
+    #[test]
+    fn default_projection_shows_placeholders_for_missing_record_fields() {
+        let mut editor = Editor::new();
+
+        let name = Field::new(&mut editor.doc.gid);
+        name.set_name(&mut editor.doc.gid, "name");
+        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+
+        let age = Field::new(&mut editor.doc.gid);
+        age.set_name(&mut editor.doc.gid, "age");
+        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(NUMBER_TYPE.clone()));
+
+        let empty = List::new_empty(&mut editor.doc.gid, field_converter());
+        let tail = List::new_cons(&mut editor.doc.gid, age.id(), &empty, field_converter());
+        let fields = List::new_cons(&mut editor.doc.gid, name.id(), &tail, field_converter());
+
+        let record = Record::new(&mut editor.doc.gid);
+        record.set_fields(&mut editor.doc.gid, &fields);
+
+        let person = Type::new(&mut editor.doc.gid);
+        person.set_name(&mut editor.doc.gid, "person");
+        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id().clone()));
+
+        let instance = uuid::Uuid::new_v4();
+        editor.doc.root = Some(Id::Uuid(instance));
+        editor.doc.gid.set(instance, ISA.clone(), person.id().clone());
+        editor.doc.gid.set(instance, name.id().clone(), Id::String("Ada".into()));
+
+        let root_path = Path::root();
+        let d = render(&editor, &root_path, &Id::Uuid(instance));
+        let placeholders = placeholder_paths(&d);
+
+        assert!(!placeholders.contains(&root_path.child(name.id().clone())));
+        assert!(placeholders.contains(&root_path.child(age.id().clone())));
     }
 }

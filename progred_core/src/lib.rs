@@ -11,6 +11,7 @@ pub mod selection;
 pub mod spanningtree;
 mod ts_runtime;
 pub mod type_match;
+pub mod type_system;
 
 pub use ordered_float;
 pub use progred_graph as graph;
