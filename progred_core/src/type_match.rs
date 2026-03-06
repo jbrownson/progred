@@ -24,14 +24,14 @@ fn substitutions(gid: &impl Gid, type_id: &Id, outer_subs: &HashMap<Id, Id>) -> 
     Apply::try_wrap(gid, type_id)
         .and_then(|apply| {
             let base = apply.base(gid)?;
-            let base_body = gid.get(&base, &BODY)?;
-            let params_id = gid.get(base_body, &PARAMS)?;
-            let args_id = gid.get(type_id, &ARGS)?;
-            Some((params_id, args_id))
+            let base_body = base.body(gid)?;
+            let params = Forall::try_wrap(gid, &base_body)?.params(gid)?;
+            let args = apply.args(gid)?;
+            Some((params, args))
         })
-        .map(|(params_id, args_id)| {
-            ListIter::new(gid, Some(params_id))
-                .zip(ListIter::new(gid, Some(args_id)))
+        .map(|(params, args)| {
+            ListIter::new(gid, Some(&params))
+                .zip(ListIter::new(gid, Some(&args)))
                 .map(|(param, arg)| (param.clone(), outer_subs.get(arg).cloned().unwrap_or_else(|| arg.clone())))
                 .collect()
         })
@@ -68,25 +68,25 @@ fn isa_matches(gid: &impl Gid, candidate_isa: &Id, expected: &Id, ancestors: Has
         return None;
     }
     let ancestors = ancestors.update(expected.clone());
-    if Type::try_wrap(gid, expected).is_some() {
+    if let Some(t) = Type::try_wrap(gid, expected) {
         if candidate_isa == expected {
             Some(true)
         } else {
-            gid.get(expected, &BODY)
-                .map_or(Some(false), |body| isa_matches(gid, candidate_isa, body, ancestors.clone()))
+            t.body(gid)
+                .map_or(Some(false), |body| isa_matches(gid, candidate_isa, &body, ancestors.clone()))
         }
-    } else if Sum::try_wrap(gid, expected).is_some() {
-        gid.get(expected, &VARIANTS)
+    } else if let Some(sum) = Sum::try_wrap(gid, expected) {
+        sum.variants(gid)
             .and_then(|variants| tri_any(
-                ListIter::new(gid, Some(variants))
+                ListIter::new(gid, Some(&variants))
                     .map(|v| isa_matches(gid, candidate_isa, v, ancestors.clone()))
             ))
-    } else if Apply::try_wrap(gid, expected).is_some() {
-        gid.get(expected, &BASE)
-            .and_then(|base| isa_matches(gid, candidate_isa, base, ancestors))
-    } else if Forall::try_wrap(gid, expected).is_some() {
-        gid.get(expected, &BODY)
-            .and_then(|body| isa_matches(gid, candidate_isa, body, ancestors))
+    } else if let Some(apply) = Apply::try_wrap(gid, expected) {
+        apply.base(gid)
+            .and_then(|base| isa_matches(gid, candidate_isa, &base, ancestors))
+    } else if let Some(forall) = Forall::try_wrap(gid, expected) {
+        forall.body(gid)
+            .and_then(|body| isa_matches(gid, candidate_isa, &body, ancestors))
     } else if Record::try_wrap(gid, expected).is_some() {
         Some(candidate_isa == expected)
     } else {
@@ -102,21 +102,21 @@ fn contains_atomic(gid: &impl Gid, type_id: &Id, atomic_type: &Id, ancestors: Ha
         return None;
     }
     let ancestors = ancestors.update(type_id.clone());
-    if Type::try_wrap(gid, type_id).is_some() {
-        gid.get(type_id, &BODY)
-            .map_or(Some(false), |body| contains_atomic(gid, body, atomic_type, ancestors.clone()))
-    } else if Forall::try_wrap(gid, type_id).is_some() {
-        gid.get(type_id, &BODY)
-            .and_then(|body| contains_atomic(gid, body, atomic_type, ancestors))
-    } else if Sum::try_wrap(gid, type_id).is_some() {
-        gid.get(type_id, &VARIANTS)
+    if let Some(t) = Type::try_wrap(gid, type_id) {
+        t.body(gid)
+            .map_or(Some(false), |body| contains_atomic(gid, &body, atomic_type, ancestors.clone()))
+    } else if let Some(forall) = Forall::try_wrap(gid, type_id) {
+        forall.body(gid)
+            .and_then(|body| contains_atomic(gid, &body, atomic_type, ancestors))
+    } else if let Some(sum) = Sum::try_wrap(gid, type_id) {
+        sum.variants(gid)
             .and_then(|variants| tri_any(
-                ListIter::new(gid, Some(variants))
+                ListIter::new(gid, Some(&variants))
                     .map(|v| contains_atomic(gid, v, atomic_type, ancestors.clone()))
             ))
-    } else if Apply::try_wrap(gid, type_id).is_some() {
-        gid.get(type_id, &BASE)
-            .and_then(|base| contains_atomic(gid, base, atomic_type, ancestors))
+    } else if let Some(apply) = Apply::try_wrap(gid, type_id) {
+        apply.base(gid)
+            .and_then(|base| contains_atomic(gid, &base, atomic_type, ancestors))
     } else if Record::try_wrap(gid, type_id).is_some() {
         Some(false)
     } else {
