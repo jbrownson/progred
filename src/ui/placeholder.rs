@@ -36,6 +36,10 @@ impl PlaceholderValue {
             PlaceholderValue::NewUuid => PlaceholderCommit::Existing(Id::new_uuid()),
         }
     }
+
+    fn creates_new_node(&self) -> bool {
+        matches!(self, PlaceholderValue::NewTyped { .. } | PlaceholderValue::NewUuid)
+    }
 }
 
 #[derive(Clone)]
@@ -197,14 +201,18 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
     // Filter
     let filtered_indices = filter_entries(&all_entries, filter);
 
-    // Sort: possible first, then non-magic before magic, then by filter tier
+    // Sort: possible first, then creation before references/literals, then non-magic before magic,
+    // then by filter tier.
     let mut sorted: Vec<(usize, usize)> = filtered_indices;
     sorted.sort_by(|a, b| {
         let a_possible = all_entries[a.0].possible;
         let b_possible = all_entries[b.0].possible;
+        let a_creates = all_entries[a.0].value.creates_new_node();
+        let b_creates = all_entries[b.0].value.creates_new_node();
         let a_magic = all_entries[a.0].magic;
         let b_magic = all_entries[b.0].magic;
         b_possible.cmp(&a_possible)
+            .then_with(|| b_creates.cmp(&a_creates))
             .then_with(|| a_magic.cmp(&b_magic))
             .then_with(|| a.1.cmp(&b.1))
     });
@@ -299,5 +307,27 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
         text_changed,
         selection_moved,
         outcome,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use progred_core::editor::Editor;
+    use progred_core::generated::semantics::Type;
+
+    #[test]
+    fn new_entries_sort_before_references() {
+        let mut editor = Editor::new();
+        let person = Type::new(&mut editor.doc.gid);
+        person.set_name(&mut editor.doc.gid, "person");
+
+        let entries = build_entries(&editor, "person", None);
+        let displays: Vec<_> = entries.iter().map(|entry| entry.display.as_str()).collect();
+
+        let new_person = displays.iter().position(|display| *display == "new person").unwrap();
+        let person_ref = displays.iter().position(|display| *display == "person").unwrap();
+
+        assert!(new_person < person_ref);
     }
 }
