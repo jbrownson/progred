@@ -3,7 +3,7 @@ use progred_core::editor::Editor;
 use progred_core::generated::{name_of, semantics::{ISA, STRING_TYPE, NUMBER_TYPE, Type, TypeExpression}};
 use progred_core::graph::{Gid, Id};
 use progred_core::selection::PlaceholderState;
-use progred_core::type_possibility::{type_accepts_candidate, type_accepts_isa, type_may_accept_atomic};
+use progred_core::type_possibility::{type_accepts_candidate, type_accepts_isa};
 use eframe::egui::{self, Color32, Ui};
 use progred_core::ordered_float::OrderedFloat;
 use std::collections::HashMap;
@@ -176,7 +176,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: format!("\"{}\"", trimmed),
             disambiguation: None,
             magic: true,
-            possible: expected_type.map_or(true, |et| et.id == STRING_TYPE || type_may_accept_atomic(&lib, et, &STRING_TYPE).unwrap_or(false)),
+            possible: expected_type.map_or(true, |et| type_accepts_isa(&lib, &STRING_TYPE, et).unwrap_or(false)),
         });
     }
     if let Ok(n) = filter.parse::<f64>() {
@@ -185,7 +185,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: n.to_string(),
             disambiguation: None,
             magic: true,
-            possible: expected_type.map_or(true, |et| et.id == NUMBER_TYPE || type_may_accept_atomic(&lib, et, &NUMBER_TYPE).unwrap_or(false)),
+            possible: expected_type.map_or(true, |et| type_accepts_isa(&lib, &NUMBER_TYPE, et).unwrap_or(false)),
         });
     }
 

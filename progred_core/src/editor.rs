@@ -1,3 +1,4 @@
+use crate::builtin_values::BuiltinValuesGid;
 use crate::d::{DEvent, PlaceholderCommit};
 use crate::document::Document;
 use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
@@ -12,20 +13,25 @@ use std::path::PathBuf;
 pub struct Editor {
     pub doc: Document,
     pub semantics: Document,
+    pub builtins: BuiltinValuesGid,
     pub tree: SpanningTree,
     pub selection: Option<Selection>,
     pub file_path: Option<PathBuf>,
 }
 
 impl Editor {
-    pub fn lib(&self) -> crate::graph::StackedGid<'_, crate::graph::MutGid, crate::graph::MutGid> {
-        crate::graph::StackedGid::new(&self.doc.gid, &self.semantics.gid)
+    pub fn lib(&self) -> impl crate::graph::Gid + '_ {
+        crate::graph::StackedGid::new(
+            &self.doc.gid,
+            crate::graph::StackedGid::new(&self.semantics.gid, &self.builtins),
+        )
     }
 
     pub fn new() -> Self {
         Self {
             doc: Document::new(),
             semantics: progred_macros::load_document!("../semantics.progred"),
+            builtins: BuiltinValuesGid,
             tree: SpanningTree::empty(),
             selection: None,
             file_path: None,

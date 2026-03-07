@@ -118,7 +118,6 @@ fn apply_target(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

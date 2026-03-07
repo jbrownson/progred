@@ -9,18 +9,24 @@ pub trait Gid {
     }
 }
 
-pub struct StackedGid<'a, Top: Gid, Bottom: Gid> {
-    top: &'a Top,
-    bottom: &'a Bottom,
+impl<T: Gid + ?Sized> Gid for &T {
+    fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>> {
+        (**self).edges(entity)
+    }
 }
 
-impl<'a, Top: Gid, Bottom: Gid> StackedGid<'a, Top, Bottom> {
-    pub fn new(top: &'a Top, bottom: &'a Bottom) -> Self {
+pub struct StackedGid<Top: Gid, Bottom: Gid> {
+    top: Top,
+    bottom: Bottom,
+}
+
+impl<Top: Gid, Bottom: Gid> StackedGid<Top, Bottom> {
+    pub fn new(top: Top, bottom: Bottom) -> Self {
         Self { top, bottom }
     }
 }
 
-impl<Top: Gid, Bottom: Gid> Gid for StackedGid<'_, Top, Bottom> {
+impl<Top: Gid, Bottom: Gid> Gid for StackedGid<Top, Bottom> {
     fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>> {
         self.top.edges(entity).or_else(|| self.bottom.edges(entity))
     }

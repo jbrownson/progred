@@ -1,3 +1,4 @@
+mod builtin_values;
 pub mod d;
 pub mod document;
 pub mod editor;
