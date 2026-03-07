@@ -8,6 +8,10 @@ use eframe::egui::{self, Color32, Ui};
 use progred_core::ordered_float::OrderedFloat;
 use std::collections::HashMap;
 
+const PLACEHOLDER_INPUT_WIDTH: f32 = 150.0;
+const PLACEHOLDER_POPUP_MAX_HEIGHT: f32 = 200.0;
+const PLACEHOLDER_POPUP_MAX_WIDTH: f32 = 420.0;
+
 pub struct PlaceholderResult {
     pub text_changed: Option<String>,
     pub selection_moved: Option<usize>,
@@ -142,6 +146,39 @@ fn fuzzy_match(haystack: &str, needle: &str) -> bool {
     true
 }
 
+fn entry_job(ui: &Ui, entry: &PlaceholderEntry) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    let text_color = if entry.possible {
+        ui.visuals().text_color()
+    } else {
+        Color32::from_gray(140)
+    };
+    job.append(&entry.display, 0.0, egui::TextFormat::simple(
+        egui::TextStyle::Body.resolve(ui.style()),
+        text_color,
+    ));
+    if let Some(dis) = &entry.disambiguation {
+        job.append(&format!(" ({dis})"), 0.0, egui::TextFormat::simple(
+            egui::TextStyle::Body.resolve(ui.style()),
+            Color32::from_gray(160),
+        ));
+    }
+    job
+}
+
+fn popup_width(ui: &Ui, entries: &[PlaceholderEntry], anchor_width: f32) -> f32 {
+    let widest_entry = entries.iter()
+        .map(|entry| ui.fonts_mut(|fonts| fonts.layout_job(entry_job(ui, entry))).rect.width())
+        .fold(anchor_width, f32::max);
+    let button_padding = ui.spacing().button_padding.x * 2.0;
+    let scrollbar_width = (entries.len() as f32 * ui.spacing().interact_size.y > PLACEHOLDER_POPUP_MAX_HEIGHT)
+        .then(|| ui.spacing().scroll.allocated_width())
+        .unwrap_or(0.0);
+
+    (widest_entry + button_padding + scrollbar_width)
+        .clamp(anchor_width, PLACEHOLDER_POPUP_MAX_WIDTH)
+}
+
 fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpression>) -> Vec<PlaceholderEntry> {
     let things = named_things(editor);
     let lib = editor.lib();
@@ -230,41 +267,30 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
     let text_response = ui.add(
         egui::TextEdit::singleline(&mut text)
             .id(text_id)
-            .desired_width(150.0)
+            .desired_width(PLACEHOLDER_INPUT_WIDTH)
             .hint_text("search...")
     );
     text_response.request_focus();
 
     let popup_commit = {
         let mut clicked = None;
+        let popup_width = popup_width(ui, &entries, text_response.rect.width());
         egui::Popup::from_response(&text_response)
             .id(ui.id().with("placeholder_popup"))
             .open(true)
-            .width(text_response.rect.width())
+            .width(popup_width)
             .show(|ui| {
-                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                ui.set_width(popup_width);
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, false])
+                    .max_height(PLACEHOLDER_POPUP_MAX_HEIGHT)
+                    .show(ui, |ui| {
                     for (i, entry) in entries.iter().enumerate() {
-                        let mut job = egui::text::LayoutJob::default();
-                        let text_color = if entry.possible {
-                            ui.visuals().text_color()
-                        } else {
-                            Color32::from_gray(140)
-                        };
-                        job.append(&entry.display, 0.0, egui::TextFormat::simple(
-                            egui::TextStyle::Body.resolve(ui.style()),
-                            text_color,
-                        ));
-                        if let Some(dis) = &entry.disambiguation {
-                            job.append(&format!(" ({dis})"), 0.0, egui::TextFormat::simple(
-                                egui::TextStyle::Body.resolve(ui.style()),
-                                Color32::from_gray(160),
-                            ));
-                        }
-                        if ui.selectable_label(i == selected_index, job).clicked() {
+                        if ui.add(egui::Button::selectable(i == selected_index, entry_job(ui, entry)).truncate()).clicked() {
                             clicked = Some(i);
                         }
                     }
-                });
+                    });
             });
         clicked
     };
