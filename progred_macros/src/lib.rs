@@ -453,26 +453,26 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 
     let variant_ids = get_sum_variant_ids(gid, sum_id)?;
     let struct_name = format_ident!("{}", rust_type_name(type_name)?);
+    let module_name = format_ident!("{}", rust_method_name(type_name)?);
     let type_uuid = id_expr(type_id);
     let isa_uuid = id_expr(&ISA);
 
     struct VariantInfo {
         closure_name: syn::Ident,
-        constructor_name: syn::Ident,
+        variant_struct_name: syn::Ident,
         variant_id: TokenStream2,
-        field_types: Vec<TokenStream2>,
+        constructor_name: syn::Ident,
         constructor_field_types: Vec<TokenStream2>,
         field_names: Vec<syn::Ident>,
-        field_ids: Vec<TokenStream2>,
-        conversions: Vec<TokenStream2>,
         field_setters: Vec<TokenStream2>,
     }
 
-    let variants: Vec<VariantInfo> = variant_ids.iter().map(|variant_id| {
+    let mut variant_wrappers = Vec::new();
+    let mut variants = Vec::new();
+
+    for variant_id in &variant_ids {
         let variant_name = get_name(gid, variant_id)
             .ok_or_else(|| format!("Variant {} has no name", variant_id))?;
-        let closure_name = format_ident!("on_{}", rust_method_name(&variant_name)?);
-        let constructor_name = format_ident!("new_{}", rust_method_name(&variant_name)?);
 
         let body_id = gid.get(variant_id, &BODY)
             .ok_or_else(|| format!("Variant {} has no body", variant_id))?;
@@ -481,24 +481,21 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
             return Err(format!("Variant {} body is not a record", variant_id));
         }
 
-        let variant_id_tokens = id_expr(variant_id);
+        // Generate variant wrapper struct for the module
+        let wrapper = generate_wrapper(gid, variant_id, body_id, &variant_name, type_params, subs)?;
+        variant_wrappers.push(wrapper);
 
+        // Collect constructor info for the sum type's convenience constructors
         let record_field_ids = get_record_field_ids(gid, body_id)?;
-        let (field_types, constructor_field_types, field_names, field_ids, conversions, field_setters) = record_field_ids.iter()
+        let (constructor_field_types, field_names, field_setters) = record_field_ids.iter()
             .enumerate()
             .map(|(i, field_id)| {
                 let field_name = format_ident!("f{}", i);
-                let raw_id = format_ident!("raw_{}", i);
-
                 let resolved = match gid.get(field_id, &TYPE_FIELD) {
                     Some(tid) => resolve_type(gid, tid, &full_subs)?,
                     None => return Err(format!("Field {} has no type", field_id)),
                 };
-
                 let field_id_tokens = id_expr(field_id);
-                let (rust_type, converter) = resolved_type_to_rust(&resolved);
-                let conversion = converter(quote! { #raw_id });
-
                 let (constructor_field_type, field_setter) = match &resolved {
                     ResolvedType::String => (
                         quote! { impl Into<std::string::String> },
@@ -528,62 +525,49 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                         quote! { gid.set(uuid, #field_id_tokens, #field_name.clone()); }
                     ),
                 };
-
-                Ok((rust_type, constructor_field_type, field_name, field_id_tokens, conversion, field_setter))
+                Ok((constructor_field_type, field_name, field_setter))
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .fold(
-                (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()),
-                |(mut types, mut ctor_types, mut names, mut ids, mut convs, mut setters), (t, ct, n, u, c, s)| {
-                    types.push(t); ctor_types.push(ct); names.push(n); ids.push(u); convs.push(c); setters.push(s);
-                    (types, ctor_types, names, ids, convs, setters)
+                (Vec::new(), Vec::new(), Vec::new()),
+                |(mut ctor_types, mut names, mut setters), (ct, n, s)| {
+                    ctor_types.push(ct); names.push(n); setters.push(s);
+                    (ctor_types, names, setters)
                 }
             );
 
-        Ok(VariantInfo { closure_name, constructor_name, variant_id: variant_id_tokens, field_types, constructor_field_types, field_names, field_ids, conversions, field_setters })
-    }).collect::<Result<_>>()?;
+        variants.push(VariantInfo {
+            closure_name: format_ident!("on_{}", rust_method_name(&variant_name)?),
+            variant_struct_name: format_ident!("{}", rust_type_name(&variant_name)?),
+            variant_id: id_expr(variant_id),
+            constructor_name: format_ident!("new_{}", rust_method_name(&variant_name)?),
+            constructor_field_types,
+            field_names,
+            field_setters,
+        });
+    }
 
-    let self_id = quote! { self.id };
-
-    let closure_params: Vec<_> = variants.iter().map(|v| {
-        let closure_name = &v.closure_name;
-        if v.field_types.is_empty() {
-            quote! { #closure_name: impl FnOnce() -> __R }
-        } else {
-            let field_types = &v.field_types;
-            quote! { #closure_name: impl FnOnce(#(#field_types),*) -> __R }
-        }
-    }).collect();
-
-    let match_arms: Vec<_> = variants.iter().map(|v| {
-        let closure_name = &v.closure_name;
-        let variant_id = &v.variant_id;
-        if v.field_types.is_empty() {
-            quote! {
-                id if id == &#variant_id => Some(#closure_name())
-            }
-        } else {
-            let field_bindings: Vec<_> = v.field_names.iter().enumerate().map(|(i, field_name)| {
-                let raw_id = format_ident!("raw_{}", i);
-                let field_id = &v.field_ids[i];
-                let conversion = &v.conversions[i];
-                quote! {
-                    let #raw_id = gid.get(&#self_id, &#field_id)?;
-                    let #field_name = #conversion
-                }
-            }).collect();
-            let field_names = &v.field_names;
-            quote! {
-                id if id == &#variant_id => {
-                    #(#field_bindings;)*
-                    Some(#closure_name(#(#field_names),*))
-                }
-            }
-        }
-    }).collect();
+    let variant_uuids: Vec<_> = variants.iter().map(|v| &v.variant_id).collect();
 
     if type_params.is_empty() {
+        let closure_params: Vec<_> = variants.iter().map(|v| {
+            let closure_name = &v.closure_name;
+            let variant_struct = &v.variant_struct_name;
+            quote! { #closure_name: impl FnOnce(#module_name::#variant_struct) -> __R }
+        }).collect();
+
+        let match_arms: Vec<_> = variants.iter().map(|v| {
+            let closure_name = &v.closure_name;
+            let variant_id = &v.variant_id;
+            let variant_struct = &v.variant_struct_name;
+            quote! {
+                id if id == &#variant_id => {
+                    Some(#closure_name(#module_name::#variant_struct::wrap(self.id.clone())))
+                }
+            }
+        }).collect();
+
         let variant_constructors: Vec<_> = variants.iter().map(|v| {
             let constructor_name = &v.constructor_name;
             let variant_id = &v.variant_id;
@@ -612,9 +596,12 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
             }
         }).collect();
 
-        let variant_uuids: Vec<_> = variants.iter().map(|v| &v.variant_id).collect();
-
         Ok(quote! {
+            pub mod #module_name {
+                use super::*;
+                #(#variant_wrappers)*
+            }
+
             #[derive(Clone, Debug, PartialEq, Eq, Hash)]
             pub struct #struct_name { pub id: crate::graph::Id }
 
@@ -668,6 +655,23 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
         }).collect();
         let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
 
+        let closure_params: Vec<_> = variants.iter().map(|v| {
+            let closure_name = &v.closure_name;
+            let variant_struct = &v.variant_struct_name;
+            quote! { #closure_name: impl FnOnce(#module_name::#variant_struct<#(#generic_params),*>) -> __R }
+        }).collect();
+
+        let match_arms: Vec<_> = variants.iter().map(|v| {
+            let closure_name = &v.closure_name;
+            let variant_id = &v.variant_id;
+            let variant_struct = &v.variant_struct_name;
+            quote! {
+                id if id == &#variant_id => {
+                    Some(#closure_name(#module_name::#variant_struct::wrap(self.id.clone(), #(self.#converter_field_names.clone()),*)))
+                }
+            }
+        }).collect();
+
         let variant_constructors: Vec<_> = variants.iter().map(|v| {
             let constructor_name = &v.constructor_name;
             let variant_id = &v.variant_id;
@@ -698,6 +702,11 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
         }).collect();
 
         Ok(quote! {
+            pub mod #module_name {
+                use super::*;
+                #(#variant_wrappers)*
+            }
+
             pub struct #struct_name<#(#generic_params),*> {
                 pub id: crate::graph::Id,
                 #(pub #converter_fields,)*

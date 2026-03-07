@@ -154,8 +154,8 @@ mod tests {
         let empty: List<Id> = List::new_empty(&mut gid, conv.clone());
         let result = empty.match_(
             &gid,
-            || "empty".to_string(),
-            |_, _| "cons".to_string(),
+            |_| "empty".to_string(),
+            |_| "cons".to_string(),
         );
         assert_eq!(result, Some("empty".to_string()));
 
@@ -163,8 +163,8 @@ mod tests {
         let cons: List<Id> = List::new_cons(&mut gid, &head_val, &empty, conv);
         let result = cons.match_(
             &gid,
-            || None,
-            |h: Id, _| Some(h.clone()),
+            |_| None,
+            |c| c.head(&gid).map(|h| h.clone()),
         );
         assert_eq!(result, Some(Some(head_val)));
     }
@@ -344,8 +344,8 @@ mod tests {
 
         let is_cons = list.match_(
             &gid,
-            || false,
-            |head, _tail| head == "hello",
+            |_| false,
+            |c| c.head(&gid) == Some("hello".to_string()),
         );
         assert_eq!(is_cons, Some(true));
     }
@@ -357,8 +357,8 @@ mod tests {
 
         let is_empty = empty.match_(
             &gid,
-            || true,
-            |_, _| false,
+            |_| true,
+            |_| false,
         );
         assert_eq!(is_empty, Some(true));
     }

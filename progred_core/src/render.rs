@@ -1,6 +1,6 @@
 use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
-use crate::generated::semantics::{Apply, Field, Forall, HEAD, Record, Sum, TAIL, Type, CONS_TYPE, EMPTY_TYPE, ISA, NAME};
+use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, list, CONS_TYPE, EMPTY_TYPE, ISA, NAME};
 use crate::graph::{Gid, Id};
 use crate::path::Path;
 use crate::selection::{EdgeState, Selection};
@@ -219,16 +219,16 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
         }
         seen = seen.update(current_id.clone());
 
-        let head_value = lib.get(current_id, &HEAD).cloned();
-        let head_path = current_path.child(HEAD.clone());
+        let head_value = lib.get(current_id, &list::Cons::<()>::HEAD).cloned();
+        let head_path = current_path.child(list::Cons::<()>::HEAD.clone());
         elements.push(ListElement {
             head_path,
             head_value,
             cons_id: current_id.clone(),
         });
 
-        let tail_path = current_path.child(TAIL.clone());
-        let tail_value = lib.get(current_id, &TAIL)?;
+        let tail_path = current_path.child(list::Cons::<()>::TAIL.clone());
+        let tail_value = lib.get(current_id, &list::Cons::<()>::TAIL)?;
         current_path = tail_path;
         current_id = tail_value;
     }

@@ -1,7 +1,7 @@
 use crate::graph::{Gid, Id, MutGid};
 use crate::path::{Path, PathRoot};
 use crate::selection::Selection;
-use crate::generated::semantics::TAIL;
+use crate::generated::semantics::list;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
 
@@ -52,7 +52,7 @@ impl Document {
 
     fn splice_out_list_element(&mut self, head_path: &Path, cons_id: &Id) {
         if let Some((cons_path, _)) = head_path.pop()
-            && let Some(tail_value) = self.gid.get(cons_id, &TAIL).cloned()
+            && let Some(tail_value) = self.gid.get(cons_id, &list::Cons::<()>::TAIL).cloned()
         {
             self.set_edge(&cons_path, tail_value);
         }

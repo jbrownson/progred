@@ -1,7 +1,7 @@
 use progred_core::d::{D, DEvent, TextStyle};
 use progred_core::editor::{Editor, InteractionMode};
 use progred_core::generated::name_of;
-use progred_core::generated::semantics::{HEAD, TAIL};
+use progred_core::generated::semantics::list;
 use progred_core::graph::Id;
 use progred_core::selection::Selection;
 use progred_core::path::Path;
@@ -118,7 +118,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     for element in elements {
                         list_insert_point(ui, editor, &insert_path, true, events);
                         render_d(ui, editor, element, mode, ctx, events);
-                        insert_path = insert_path.child(TAIL.clone());
+                        insert_path = insert_path.child(list::Cons::<()>::TAIL.clone());
                     }
                     list_insert_point(ui, editor, &insert_path, true, events);
                     ui.label(text_rich(closing, &TextStyle::Punctuation));
@@ -137,7 +137,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     }
                     list_insert_point(ui, editor, &insert_path, false, events);
                     render_d(ui, editor, element, mode, ctx, events);
-                    insert_path = insert_path.child(TAIL.clone());
+                    insert_path = insert_path.child(list::Cons::<()>::TAIL.clone());
                     need_separator = true;
                 }
                 list_insert_point(ui, editor, &insert_path, false, events);
@@ -158,7 +158,7 @@ fn active_list_insert(
         Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
         _ => return false,
     };
-    let et = expected_type(&editor.lib(), &path.child(HEAD.clone()));
+    let et = expected_type(&editor.lib(), &path.child(list::Cons::<()>::HEAD.clone()));
     let result = super::placeholder::render(ui, editor, ps, et.as_ref());
     match result.outcome {
         PlaceholderOutcome::Commit(value) => {

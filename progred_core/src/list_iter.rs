@@ -1,4 +1,4 @@
-use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
+use crate::generated::semantics::{CONS_TYPE, ISA, list};
 use crate::graph::{Gid, Id};
 use std::collections::HashSet;
 
@@ -35,8 +35,8 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
                 return None;
             }
 
-            let head = self.gid.get(current, &HEAD);
-            self.current = self.gid.get(current, &TAIL);
+            let head = self.gid.get(current, &list::Cons::<()>::HEAD);
+            self.current = self.gid.get(current, &list::Cons::<()>::TAIL);
 
             if head.is_some() {
                 return head;
@@ -64,8 +64,8 @@ mod tests {
             gid.merge(im::hashmap! {
                 cons_uuid => im::hashmap! {
                     ISA.clone() => CONS_TYPE.clone(),
-                    HEAD.clone() => elem.clone(),
-                    TAIL.clone() => tail_node,
+                    list::Cons::<()>::HEAD.clone() => elem.clone(),
+                    list::Cons::<()>::TAIL.clone() => tail_node,
                 }
             });
             Id::Uuid(cons_uuid)
@@ -116,13 +116,13 @@ mod tests {
         gid.merge(im::hashmap! {
             uuid1 => im::hashmap! {
                 ISA.clone() => CONS_TYPE.clone(),
-                HEAD.clone() => Id::String("a".into()),
-                TAIL.clone() => cons2.clone(),
+                list::Cons::<()>::HEAD.clone() => Id::String("a".into()),
+                list::Cons::<()>::TAIL.clone() => cons2.clone(),
             },
             uuid2 => im::hashmap! {
                 ISA.clone() => CONS_TYPE.clone(),
-                HEAD.clone() => Id::String("b".into()),
-                TAIL.clone() => cons1.clone(),
+                list::Cons::<()>::HEAD.clone() => Id::String("b".into()),
+                list::Cons::<()>::TAIL.clone() => cons1.clone(),
             },
         });
 

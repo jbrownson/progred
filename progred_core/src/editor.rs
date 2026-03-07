@@ -1,7 +1,7 @@
 use crate::builtin_values::BuiltinValuesGid;
 use crate::d::{DEvent, PlaceholderCommit};
 use crate::document::Document;
-use crate::generated::semantics::{CONS_TYPE, HEAD, ISA, TAIL};
+use crate::generated::semantics::{CONS_TYPE, ISA, list};
 use crate::graph::{Gid, Id};
 use crate::path::Path;
 use crate::selection::{EdgeState, Selection};
@@ -125,8 +125,8 @@ impl Editor {
                         let new_cons = Id::new_uuid();
                         self.doc.set_edge(&path, new_cons.clone());
                         self.doc.set_edge(&path.child(ISA.clone()), CONS_TYPE.clone());
-                        self.doc.set_edge(&path.child(HEAD.clone()), head_value);
-                        self.doc.set_edge(&path.child(TAIL.clone()), current_value);
+                        self.doc.set_edge(&path.child(list::Cons::<()>::HEAD.clone()), head_value);
+                        self.doc.set_edge(&path.child(list::Cons::<()>::TAIL.clone()), current_value);
                     }
                     self.selection = None;
                 }
