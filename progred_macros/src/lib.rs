@@ -229,25 +229,25 @@ fn generate_setter(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_id:
         None => return Err(format!("Field {} has no type", field_id)),
     };
     let method_name = format_ident!("set_{}", rust_method_name(&field_name)?);
-    let field_id = id_expr(field_id);
+    let const_name = format_ident!("{}", rust_const_name(&field_name)?);
     let entity = quote! { match &#self_id { crate::graph::Id::Uuid(u) => *u, _ => unreachable!() } };
 
     Ok(match field_type {
         ResolvedType::String => quote! {
             pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: impl Into<std::string::String>) {
-                gid.set(#entity, #field_id, crate::graph::Id::String(value.into()));
+                gid.set(#entity, Self::#const_name, crate::graph::Id::String(value.into()));
             }
         },
         ResolvedType::Number => quote! {
             pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: f64) {
-                gid.set(#entity, #field_id, crate::graph::Id::Number(ordered_float::OrderedFloat(value)));
+                gid.set(#entity, Self::#const_name, crate::graph::Id::Number(ordered_float::OrderedFloat(value)));
             }
         },
         ResolvedType::Record { rust_name } => {
             let wrapper_name = format_ident!("{}", rust_name);
             quote! {
                 pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &#wrapper_name) {
-                    gid.set(#entity, #field_id, value.id().clone());
+                    gid.set(#entity, Self::#const_name, value.id().clone());
                 }
             }
         },
@@ -256,14 +256,14 @@ fn generate_setter(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_id:
             let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
             quote! {
                 pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &#wrapper<#(#arg_types),*>) {
-                    gid.set(#entity, #field_id, value.id().clone());
+                    gid.set(#entity, Self::#const_name, value.id().clone());
                 }
             }
         },
         ResolvedType::TypeParam { .. } => {
             quote! {
                 pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &crate::graph::Id) {
-                    gid.set(#entity, #field_id, value.clone());
+                    gid.set(#entity, Self::#const_name, value.clone());
                 }
             }
         },
@@ -286,12 +286,12 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
         None => return Err(format!("Field {} has no type", field_id)),
     };
     let method_name = format_ident!("{}", rust_method_name(&field_name)?);
-    let field_id = id_expr(field_id);
+    let const_name = format_ident!("{}", rust_const_name(&field_name)?);
 
     Ok(match field_type {
         ResolvedType::String => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<std::string::String> {
-                match gid.get(&#self_id, &#field_id)? {
+                match gid.get(&#self_id, &Self::#const_name)? {
                     crate::graph::Id::String(s) => Some(s.clone()),
                     _ => None,
                 }
@@ -299,7 +299,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
         },
         ResolvedType::Number => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<f64> {
-                match gid.get(&#self_id, &#field_id)? {
+                match gid.get(&#self_id, &Self::#const_name)? {
                     crate::graph::Id::Number(n) => Some(n.0),
                     _ => None,
                 }
@@ -309,7 +309,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
             let wrapper_name = format_ident!("{}", rust_name);
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper_name> {
-                    let id = gid.get(&#self_id, &#field_id)?;
+                    let id = gid.get(&#self_id, &Self::#const_name)?;
                     Some(#wrapper_name::wrap(id.clone()))
                 }
             }
@@ -332,7 +332,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
             }).collect();
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper<#(#arg_types),*>> {
-                    let id = gid.get(&#self_id, &#field_id)?;
+                    let id = gid.get(&#self_id, &Self::#const_name)?;
                     Some(#wrapper::wrap(id.clone(), #(#converters),*))
                 }
             }
@@ -342,7 +342,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
             let conv = format_ident!("{}", converter_name);
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#type_ident> {
-                    let raw = gid.get(&#self_id, &#field_id)?;
+                    let raw = gid.get(&#self_id, &Self::#const_name)?;
                     (self.#conv)(raw)
                 }
             }
@@ -455,12 +455,10 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
     let struct_name = format_ident!("{}", rust_type_name(type_name)?);
     let module_name = format_ident!("{}", rust_method_name(type_name)?);
     let type_uuid = id_expr(type_id);
-    let isa_uuid = id_expr(&ISA);
 
     struct VariantInfo {
         closure_name: syn::Ident,
         variant_struct_name: syn::Ident,
-        variant_id: TokenStream2,
         constructor_name: syn::Ident,
         constructor_field_types: Vec<TokenStream2>,
         field_names: Vec<syn::Ident>,
@@ -486,6 +484,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
         variant_wrappers.push(wrapper);
 
         // Collect constructor info for the sum type's convenience constructors
+        let variant_struct_name = format_ident!("{}", rust_type_name(&variant_name)?);
         let record_field_ids = get_record_field_ids(gid, body_id)?;
         let (constructor_field_types, field_names, field_setters) = record_field_ids.iter()
             .enumerate()
@@ -495,21 +494,29 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     Some(tid) => resolve_type(gid, tid, &full_subs)?,
                     None => return Err(format!("Field {} has no type", field_id)),
                 };
-                let field_id_tokens = id_expr(field_id);
+                let field_const_name = format_ident!("{}", rust_const_name(
+                    &get_name(gid, field_id).ok_or_else(|| format!("Field {} has no name", field_id))?
+                )?);
+                let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
+                let field_id_ref = if generic_params.is_empty() {
+                    quote! { #module_name::#variant_struct_name::#field_const_name }
+                } else {
+                    quote! { #module_name::#variant_struct_name::<#(#generic_params),*>::#field_const_name }
+                };
                 let (constructor_field_type, field_setter) = match &resolved {
                     ResolvedType::String => (
                         quote! { impl Into<std::string::String> },
-                        quote! { gid.set(uuid, #field_id_tokens, crate::graph::Id::String(#field_name.into())); }
+                        quote! { gid.set(uuid, #field_id_ref, crate::graph::Id::String(#field_name.into())); }
                     ),
                     ResolvedType::Number => (
                         quote! { f64 },
-                        quote! { gid.set(uuid, #field_id_tokens, crate::graph::Id::Number(ordered_float::OrderedFloat(#field_name))); }
+                        quote! { gid.set(uuid, #field_id_ref, crate::graph::Id::Number(ordered_float::OrderedFloat(#field_name))); }
                     ),
                     ResolvedType::Record { rust_name } => {
                         let wrapper = format_ident!("{}", rust_name);
                         (
                             quote! { &#wrapper },
-                            quote! { gid.set(uuid, #field_id_tokens, #field_name.id().clone()); }
+                            quote! { gid.set(uuid, #field_id_ref, #field_name.id().clone()); }
                         )
                     },
                     ResolvedType::Generic { rust_name, args } => {
@@ -517,12 +524,12 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                         let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
                         (
                             quote! { &#wrapper<#(#arg_types),*> },
-                            quote! { gid.set(uuid, #field_id_tokens, #field_name.id().clone()); }
+                            quote! { gid.set(uuid, #field_id_ref, #field_name.id().clone()); }
                         )
                     },
                     ResolvedType::TypeParam { .. } => (
                         quote! { &crate::graph::Id },
-                        quote! { gid.set(uuid, #field_id_tokens, #field_name.clone()); }
+                        quote! { gid.set(uuid, #field_id_ref, #field_name.clone()); }
                     ),
                 };
                 Ok((constructor_field_type, field_name, field_setter))
@@ -539,8 +546,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 
         variants.push(VariantInfo {
             closure_name: format_ident!("on_{}", rust_method_name(&variant_name)?),
-            variant_struct_name: format_ident!("{}", rust_type_name(&variant_name)?),
-            variant_id: id_expr(variant_id),
+            variant_struct_name,
             constructor_name: format_ident!("new_{}", rust_method_name(&variant_name)?),
             constructor_field_types,
             field_names,
@@ -548,9 +554,12 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
         });
     }
 
-    let variant_uuids: Vec<_> = variants.iter().map(|v| &v.variant_id).collect();
-
     if type_params.is_empty() {
+        let variant_type_ids: Vec<_> = variants.iter().map(|v| {
+            let variant_struct = &v.variant_struct_name;
+            quote! { #module_name::#variant_struct::TYPE_ID }
+        }).collect();
+
         let closure_params: Vec<_> = variants.iter().map(|v| {
             let closure_name = &v.closure_name;
             let variant_struct = &v.variant_struct_name;
@@ -559,10 +568,9 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 
         let match_arms: Vec<_> = variants.iter().map(|v| {
             let closure_name = &v.closure_name;
-            let variant_id = &v.variant_id;
             let variant_struct = &v.variant_struct_name;
             quote! {
-                id if id == &#variant_id => {
+                id if id == &#module_name::#variant_struct::TYPE_ID => {
                     Some(#closure_name(#module_name::#variant_struct::wrap(self.id.clone())))
                 }
             }
@@ -570,7 +578,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 
         let variant_constructors: Vec<_> = variants.iter().map(|v| {
             let constructor_name = &v.constructor_name;
-            let variant_id = &v.variant_id;
+            let variant_struct = &v.variant_struct_name;
             let constructor_field_types = &v.constructor_field_types;
             let field_names = &v.field_names;
             let field_setters = &v.field_setters;
@@ -579,7 +587,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid) -> Self {
                         let uuid = uuid::Uuid::new_v4();
                         let id = crate::graph::Id::Uuid(uuid);
-                        gid.set(uuid, #isa_uuid, #variant_id);
+                        gid.set(uuid, ISA, #module_name::#variant_struct::TYPE_ID);
                         Self { id }
                     }
                 }
@@ -588,7 +596,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#field_names: #constructor_field_types),*) -> Self {
                         let uuid = uuid::Uuid::new_v4();
                         let id = crate::graph::Id::Uuid(uuid);
-                        gid.set(uuid, #isa_uuid, #variant_id);
+                        gid.set(uuid, ISA, #module_name::#variant_struct::TYPE_ID);
                         #(#field_setters)*
                         Self { id }
                     }
@@ -618,8 +626,8 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                 }
 
                 pub fn try_wrap(gid: &impl crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
-                    let isa = gid.get(id, &#isa_uuid)?;
-                    if #(isa == &#variant_uuids)||* {
+                    let isa = gid.get(id, &ISA)?;
+                    if #(isa == &#variant_type_ids)||* {
                         Some(Self { id: id.clone() })
                     } else {
                         None
@@ -638,7 +646,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     gid: &impl crate::graph::Gid,
                     #(#closure_params),*
                 ) -> Option<__R> {
-                    let isa = gid.get(&self.id, &#isa_uuid)?;
+                    let isa = gid.get(&self.id, &ISA)?;
                     match isa {
                         #(#match_arms,)*
                         _ => None,
@@ -663,10 +671,9 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 
         let match_arms: Vec<_> = variants.iter().map(|v| {
             let closure_name = &v.closure_name;
-            let variant_id = &v.variant_id;
             let variant_struct = &v.variant_struct_name;
             quote! {
-                id if id == &#variant_id => {
+                id if id == &#module_name::#variant_struct::<#(#generic_params),*>::TYPE_ID => {
                     Some(#closure_name(#module_name::#variant_struct::wrap(self.id.clone(), #(self.#converter_field_names.clone()),*)))
                 }
             }
@@ -674,7 +681,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 
         let variant_constructors: Vec<_> = variants.iter().map(|v| {
             let constructor_name = &v.constructor_name;
-            let variant_id = &v.variant_id;
+            let variant_struct = &v.variant_struct_name;
             let constructor_field_types = &v.constructor_field_types;
             let field_names = &v.field_names;
             let field_setters = &v.field_setters;
@@ -683,7 +690,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#converter_fields),*) -> Self {
                         let uuid = uuid::Uuid::new_v4();
                         let id = crate::graph::Id::Uuid(uuid);
-                        gid.set(uuid, #isa_uuid, #variant_id);
+                        gid.set(uuid, ISA, #module_name::#variant_struct::<#(#generic_params),*>::TYPE_ID);
                         Self { id, #(#converter_field_names,)* }
                     }
                 }
@@ -693,7 +700,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#field_names: #constructor_field_types,)* #(#converter_fields),*) -> Self {
                         let uuid = uuid::Uuid::new_v4();
                         let id = crate::graph::Id::Uuid(uuid);
-                        gid.set(uuid, #isa_uuid, #variant_id);
+                        gid.set(uuid, ISA, #module_name::#variant_struct::<#(#generic_params),*>::TYPE_ID);
                         #(#field_setters)*
                         Self { id, #(#converter_field_names,)* }
                     }
@@ -763,7 +770,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     gid: &impl crate::graph::Gid,
                     #(#closure_params),*
                 ) -> Option<__R> {
-                    let isa = gid.get(&self.id, &#isa_uuid)?;
+                    let isa = gid.get(&self.id, &ISA)?;
                     match isa {
                         #(#match_arms,)*
                         _ => None,
@@ -786,7 +793,6 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
     let field_ids = get_record_field_ids(gid, body_id)?;
     let struct_name = format_ident!("{}", rust_type_name(type_name)?);
     let type_uuid = id_expr(type_id);
-    let isa_uuid = id_expr(&ISA);
 
     let self_id = quote! { self.id };
 
@@ -823,7 +829,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
                 pub fn new(gid: &mut crate::graph::MutGid) -> Self {
                     let uuid = uuid::Uuid::new_v4();
                     let id = crate::graph::Id::Uuid(uuid);
-                    gid.set(uuid, #isa_uuid, #type_uuid);
+                    gid.set(uuid, ISA, Self::TYPE_ID);
                     Self { id }
                 }
 
@@ -832,7 +838,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
                 }
 
                 pub fn try_wrap(gid: &impl crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
-                    if gid.get(id, &#isa_uuid) == Some(&#type_uuid) {
+                    if gid.get(id, &ISA) == Some(&Self::TYPE_ID) {
                         Some(Self { id: id.clone() })
                     } else {
                         None
@@ -903,7 +909,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
                 pub fn new(gid: &mut crate::graph::MutGid, #(#converter_fields),*) -> Self {
                     let uuid = uuid::Uuid::new_v4();
                     let id = crate::graph::Id::Uuid(uuid);
-                    gid.set(uuid, #isa_uuid, #type_uuid);
+                    gid.set(uuid, ISA, Self::TYPE_ID);
                     Self { id, #(#converter_field_names,)* }
                 }
 
