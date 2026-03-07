@@ -1,6 +1,7 @@
 use crate::generated::semantics::*;
 use crate::graph::{Gid, Id};
 use crate::list_iter::ListIter;
+use crate::type_system::{substitutions_for_type, TypeSubstitutions};
 use im::HashSet;
 
 fn tri_any(iter: impl Iterator<Item = Option<bool>>) -> Option<bool> {
@@ -13,8 +14,8 @@ fn tri_any(iter: impl Iterator<Item = Option<bool>>) -> Option<bool> {
 
 pub fn type_accepts_candidate(gid: &impl Gid, candidate: &Id, expected: &TypeExpression) -> Option<bool> {
     match candidate {
-        Id::String(_) => if expected.id == STRING_TYPE { Some(true) } else { type_may_accept_atomic_inner(gid, expected, &STRING_TYPE, HashSet::new()) },
-        Id::Number(_) => if expected.id == NUMBER_TYPE { Some(true) } else { type_may_accept_atomic_inner(gid, expected, &NUMBER_TYPE, HashSet::new()) },
+        Id::String(_) => if expected.id == STRING_TYPE { Some(true) } else { type_may_accept_atomic_inner(gid, expected, &STRING_TYPE, &TypeSubstitutions::new(), HashSet::new()) },
+        Id::Number(_) => if expected.id == NUMBER_TYPE { Some(true) } else { type_may_accept_atomic_inner(gid, expected, &NUMBER_TYPE, &TypeSubstitutions::new(), HashSet::new()) },
         Id::Uuid(_) => gid.get(candidate, &ISA)
             .and_then(|isa| type_accepts_isa_inner(gid, isa, expected, HashSet::new())),
     }
@@ -25,7 +26,7 @@ pub fn type_accepts_isa(gid: &impl Gid, candidate_isa: &Id, expected: &TypeExpre
 }
 
 pub fn type_may_accept_atomic(gid: &impl Gid, expected: &TypeExpression, atomic_type: &Id) -> Option<bool> {
-    type_may_accept_atomic_inner(gid, expected, atomic_type, HashSet::new())
+    type_may_accept_atomic_inner(gid, expected, atomic_type, &TypeSubstitutions::new(), HashSet::new())
 }
 
 fn type_accepts_isa_inner(gid: &impl Gid, candidate_isa: &Id, expected: &Id, ancestors: HashSet<Id>) -> Option<bool> {
@@ -59,33 +60,61 @@ fn type_accepts_isa_inner(gid: &impl Gid, candidate_isa: &Id, expected: &Id, anc
     }
 }
 
-fn type_may_accept_atomic_inner(gid: &impl Gid, type_id: &Id, atomic_type: &Id, ancestors: HashSet<Id>) -> Option<bool> {
-    if type_id == atomic_type {
+fn type_may_accept_atomic_inner(
+    gid: &impl Gid,
+    type_id: &Id,
+    atomic_type: &Id,
+    substitutions: &TypeSubstitutions,
+    ancestors: HashSet<Id>,
+) -> Option<bool> {
+    let type_id = substituted_type_id(substitutions, type_id);
+    if type_id == *atomic_type {
         return Some(true);
     }
-    if ancestors.contains(type_id) {
+    if ancestors.contains(&type_id) {
         return None;
     }
     let ancestors = ancestors.update(type_id.clone());
-    if let Some(t) = Type::try_wrap(gid, type_id) {
+    if let Some(t) = Type::try_wrap(gid, &type_id) {
         t.body(gid)
-            .map_or(Some(false), |body| type_may_accept_atomic_inner(gid, &body, atomic_type, ancestors.clone()))
-    } else if let Some(forall) = Forall::try_wrap(gid, type_id) {
+            .map_or(Some(false), |body| type_may_accept_atomic_inner(gid, body.id(), atomic_type, substitutions, ancestors.clone()))
+    } else if let Some(forall) = Forall::try_wrap(gid, &type_id) {
         forall.body(gid)
-            .and_then(|body| type_may_accept_atomic_inner(gid, &body, atomic_type, ancestors))
-    } else if let Some(sum) = Sum::try_wrap(gid, type_id) {
+            .and_then(|body| type_may_accept_atomic_inner(gid, body.id(), atomic_type, substitutions, ancestors))
+    } else if let Some(sum) = Sum::try_wrap(gid, &type_id) {
         sum.variants(gid)
             .and_then(|variants| tri_any(
                 ListIter::new(gid, Some(&variants))
-                    .map(|v| type_may_accept_atomic_inner(gid, v, atomic_type, ancestors.clone()))
+                    .map(|v| type_may_accept_atomic_inner(gid, v, atomic_type, substitutions, ancestors.clone()))
             ))
-    } else if let Some(apply) = Apply::try_wrap(gid, type_id) {
-        apply.base(gid)
-            .and_then(|base| type_may_accept_atomic_inner(gid, &base, atomic_type, ancestors))
-    } else if Record::try_wrap(gid, type_id).is_some() {
+    } else if let Some((target, target_substitutions)) = apply_target(gid, &type_id, substitutions) {
+        type_may_accept_atomic_inner(gid, &target, atomic_type, &target_substitutions, ancestors)
+    } else if Record::try_wrap(gid, &type_id).is_some() {
         Some(false)
     } else {
         None
+    }
+}
+
+fn substituted_type_id(substitutions: &TypeSubstitutions, type_id: &Id) -> Id {
+    substitutions.get(type_id).cloned().unwrap_or_else(|| type_id.clone())
+}
+
+fn apply_target(
+    gid: &impl Gid,
+    type_id: &Id,
+    outer_substitutions: &TypeSubstitutions,
+) -> Option<(Id, TypeSubstitutions)> {
+    let apply = Apply::try_wrap(gid, type_id)?;
+    let base = apply.base(gid)?;
+    let base_body = base.body(gid);
+
+    if let Some(forall) = base_body.as_ref().and_then(|body| Forall::try_wrap(gid, body.id())) {
+        let substitutions = substitutions_for_type(gid, type_id, outer_substitutions);
+        let body = forall.body(gid)?;
+        Some((substituted_type_id(&substitutions, body.id()), substitutions))
+    } else {
+        Some((substituted_type_id(outer_substitutions, base.id()), outer_substitutions.clone()))
     }
 }
 
@@ -332,5 +361,40 @@ mod tests {
         let et = TypeExpression::wrap(a.id().clone());
         // Should terminate with None (cycle), not stack overflow
         assert_eq!(type_may_accept_atomic(&gid, &et, &STRING_TYPE), None);
+    }
+
+    #[test]
+    fn string_accepted_through_apply_substitution() {
+        let mut gid = MutGid::new();
+        let param_t = TypeParam::new(&mut gid);
+        let (id_type, forall) = make_generic_type(&mut gid, &[param_t.id()]);
+        forall.set_body(&mut gid, &TypeExpression::wrap(param_t.id().clone()));
+
+        let applied = make_apply(&mut gid, &id_type, &[&STRING_TYPE]);
+        let et = TypeExpression::wrap(applied.id().clone());
+
+        assert_eq!(type_accepts_candidate(&gid, &Id::String("hello".into()), &et), Some(true));
+    }
+
+    #[test]
+    fn string_accepted_through_sum_variant_apply_substitution() {
+        let mut gid = MutGid::new();
+        let param_a = TypeParam::new(&mut gid);
+        let param_b = TypeParam::new(&mut gid);
+        let (either_type, forall) = make_generic_type(&mut gid, &[param_a.id(), param_b.id()]);
+
+        let conv = te_conv();
+        let empty = List::new_empty(&mut gid, conv.clone());
+        let tail = List::new_cons(&mut gid, param_b.id(), &empty, conv.clone());
+        let variants = List::new_cons(&mut gid, param_a.id(), &tail, conv);
+        let sum = Sum::new(&mut gid);
+        sum.set_variants(&mut gid, &variants);
+        forall.set_body(&mut gid, &TypeExpression::wrap(sum.id().clone()));
+
+        let applied = make_apply(&mut gid, &either_type, &[&STRING_TYPE, &NUMBER_TYPE]);
+        let et = TypeExpression::wrap(applied.id().clone());
+
+        assert_eq!(type_accepts_candidate(&gid, &Id::String("hello".into()), &et), Some(true));
+        assert_eq!(type_accepts_candidate(&gid, &Id::Number(ordered_float::OrderedFloat(42.0)), &et), Some(true));
     }
 }
