@@ -166,17 +166,29 @@ fn entry_job(ui: &Ui, entry: &PlaceholderEntry) -> egui::text::LayoutJob {
     job
 }
 
+fn popup_content_height(ui: &Ui, entries: &[PlaceholderEntry]) -> f32 {
+    let row_height = ui.spacing().interact_size.y;
+    let row_spacing = ui.spacing().item_spacing.y;
+
+    entries.len() as f32 * row_height
+        + entries.len().saturating_sub(1) as f32 * row_spacing
+}
+
 fn popup_width(ui: &Ui, entries: &[PlaceholderEntry], anchor_width: f32) -> f32 {
     let widest_entry = entries.iter()
         .map(|entry| ui.fonts_mut(|fonts| fonts.layout_job(entry_job(ui, entry))).rect.width())
         .fold(anchor_width, f32::max);
     let button_padding = ui.spacing().button_padding.x * 2.0;
-    let scrollbar_width = (entries.len() as f32 * ui.spacing().interact_size.y > PLACEHOLDER_POPUP_MAX_HEIGHT)
+    let scrollbar_width = (popup_content_height(ui, entries) > PLACEHOLDER_POPUP_MAX_HEIGHT)
         .then(|| ui.spacing().scroll.allocated_width())
         .unwrap_or(0.0);
 
     (widest_entry + button_padding + scrollbar_width)
         .clamp(anchor_width, PLACEHOLDER_POPUP_MAX_WIDTH)
+}
+
+fn popup_height(ui: &Ui, entries: &[PlaceholderEntry]) -> f32 {
+    popup_content_height(ui, entries).min(PLACEHOLDER_POPUP_MAX_HEIGHT)
 }
 
 fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpression>) -> Vec<PlaceholderEntry> {
@@ -275,15 +287,18 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
     let popup_commit = {
         let mut clicked = None;
         let popup_width = popup_width(ui, &entries, text_response.rect.width());
+        let popup_height = popup_height(ui, &entries);
         egui::Popup::from_response(&text_response)
             .id(ui.id().with("placeholder_popup"))
             .open(true)
             .width(popup_width)
             .show(|ui| {
                 ui.set_width(popup_width);
+                ui.set_height(popup_height);
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
-                    .max_height(PLACEHOLDER_POPUP_MAX_HEIGHT)
+                    .max_height(popup_height)
+                    .min_scrolled_height(0.0)
                     .show(ui, |ui| {
                     for (i, entry) in entries.iter().enumerate() {
                         if ui.add(egui::Button::selectable(i == selected_index, entry_job(ui, entry)).truncate()).clicked() {
