@@ -1,6 +1,6 @@
 use progred_core::d::PlaceholderCommit;
 use progred_core::editor::Editor;
-use progred_core::generated::{name_of, semantics::{ISA, STRING_TYPE, NUMBER_TYPE, Type, TypeExpression}};
+use progred_core::generated::{name_of, semantics::{ISA, Type, TypeExpression}};
 use progred_core::graph::{Gid, Id};
 use progred_core::selection::PlaceholderState;
 use progred_core::type_possibility::{type_accepts_candidate, type_accepts_isa};
@@ -176,7 +176,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: format!("\"{}\"", trimmed),
             disambiguation: None,
             magic: true,
-            possible: expected_type.map_or(true, |et| type_accepts_isa(&lib, &STRING_TYPE, et).unwrap_or(false)),
+            possible: expected_type.map_or(true, |et| type_accepts_candidate(&lib, &Id::String(trimmed.to_string()), et).unwrap_or(false)),
         });
     }
     if let Ok(n) = filter.parse::<f64>() {
@@ -185,7 +185,7 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
             display: n.to_string(),
             disambiguation: None,
             magic: true,
-            possible: expected_type.map_or(true, |et| type_accepts_isa(&lib, &NUMBER_TYPE, et).unwrap_or(false)),
+            possible: expected_type.map_or(true, |et| type_accepts_candidate(&lib, &Id::Number(OrderedFloat(n)), et).unwrap_or(false)),
         });
     }
 
