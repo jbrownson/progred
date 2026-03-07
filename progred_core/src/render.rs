@@ -1,6 +1,6 @@
 use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
-use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, ARGS, BASE, BODY, CONS_TYPE, EMPTY_TYPE, FIELDS, HEAD, ISA, NAME, PARAMS, TAIL, TYPE_, VARIANTS};
+use crate::generated::semantics::{Apply, Field, Forall, HEAD, Record, Sum, TAIL, Type, CONS_TYPE, EMPTY_TYPE, ISA, NAME};
 use crate::graph::{Gid, Id};
 use crate::path::Path;
 use crate::selection::{EdgeState, Selection};
@@ -354,7 +354,7 @@ fn render_field(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("field".into(), TextStyle::Keyword)) },
         ctx.descend(&NAME),
         D::Text(":".into(), TextStyle::Punctuation),
-        ctx.descend_with(&TYPE_, Some(render_type_expr)),
+        ctx.descend_with(&Field::TYPE_, Some(render_type_expr)),
     ]))
 }
 
@@ -363,8 +363,8 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
     Apply::try_wrap(gid, ctx.id)?;
 
     Some(D::Line(vec![
-        ctx.descend_with(&BASE, Some(render_ref)),
-        ctx.descend_list(&ARGS, &ANGLE_LIST, Some(render_type_expr)),
+        ctx.descend_with(&Apply::BASE, Some(render_ref)),
+        ctx.descend_list(&Apply::ARGS, &ANGLE_LIST, Some(render_type_expr)),
     ]))
 }
 
@@ -375,7 +375,7 @@ fn render_type(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("type".into(), TextStyle::Keyword)) },
         ctx.descend(&NAME),
         D::Text("=".into(), TextStyle::Punctuation),
-        ctx.descend(&BODY),
+        ctx.descend(&Type::BODY),
     ]))
 }
 
@@ -387,7 +387,7 @@ fn render_record(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("record".into(), TextStyle::Keyword)) },
         D::CollapseToggle { collapsed },
     ])].into_iter()
-        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&FIELDS)))))
+        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&Record::FIELDS)))))
         .collect();
     Some(D::Block(items))
 }
@@ -400,7 +400,7 @@ fn render_sum(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("sum".into(), TextStyle::Keyword)) },
         D::CollapseToggle { collapsed },
     ])].into_iter()
-        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&VARIANTS)))))
+        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&Sum::VARIANTS)))))
         .collect();
     Some(D::Block(items))
 }
@@ -411,12 +411,12 @@ fn render_forall(ctx: &RenderCtx) -> Option<D> {
     let collapsed = ctx.is_collapsed();
     let items: Vec<D> = [
         D::NodeHeader { child: Box::new(D::Text("forall".into(), TextStyle::Keyword)) },
-        ctx.descend_list(&PARAMS, &ANGLE_LIST, Some(render_param)),
+        ctx.descend_list(&Forall::PARAMS, &ANGLE_LIST, Some(render_param)),
         D::CollapseToggle { collapsed },
     ].into_iter()
         .chain(if collapsed { vec![] } else { vec![
             D::Text(".".into(), TextStyle::Punctuation),
-            ctx.descend(&BODY),
+            ctx.descend(&Forall::BODY),
         ]})
         .collect();
     Some(D::Line(items))

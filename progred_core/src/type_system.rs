@@ -22,7 +22,7 @@ pub fn expected_type_with_substitutions(
     let subs = parent_env.as_ref()
         .map(|(te, outer_subs)| substitutions_for_type(gid, te.id(), outer_subs))
         .unwrap_or_default();
-    let raw_type = gid.get(&label, &TYPE_)?;
+    let raw_type = gid.get(&label, &Field::TYPE_)?;
     let resolved = subs.get(raw_type).unwrap_or(raw_type);
     Some((TypeExpression::wrap(resolved.clone()), subs))
 }

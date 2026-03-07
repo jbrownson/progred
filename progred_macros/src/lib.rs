@@ -20,12 +20,12 @@ const TAIL: Id = Id::Uuid(Uuid::from_bytes([0xcf, 0xfc, 0x46, 0xb8, 0x23, 0x88, 
 const TYPE_T: Id = Id::Uuid(Uuid::from_bytes([0xb7, 0x18, 0x58, 0x15, 0xd5, 0x53, 0x4f, 0xbf, 0x90, 0x25, 0xd8, 0x86, 0x43, 0xa7, 0xba, 0x6a]));
 const APPLY_T: Id = Id::Uuid(Uuid::from_bytes([0xd6, 0xad, 0x02, 0x73, 0x88, 0x6d, 0x4e, 0x83, 0x9e, 0xd7, 0xe4, 0xfe, 0x5f, 0xe2, 0xf4, 0xe8]));
 const RECORD_T: Id = Id::Uuid(Uuid::from_bytes([0x4a, 0xe8, 0xa1, 0xde, 0xf7, 0xf5, 0x47, 0x33, 0xb6, 0xca, 0x0e, 0x01, 0x86, 0x26, 0x35, 0xe6]));
-const FIELD_T: Id = Id::Uuid(Uuid::from_bytes([0xc9, 0xbd, 0xef, 0x1a, 0xc9, 0xb0, 0x49, 0x27, 0xa8, 0x81, 0x5c, 0xf7, 0xfa, 0x54, 0xbb, 0x9b]));
 const FORALL_T: Id = Id::Uuid(Uuid::from_bytes([0x2e, 0x37, 0x84, 0xa7, 0x05, 0x42, 0x44, 0xbe, 0x90, 0xde, 0x9c, 0xa8, 0xf8, 0xa6, 0x06, 0xa4]));
 const SUM_T: Id = Id::Uuid(Uuid::from_bytes([0x68, 0x47, 0x44, 0x9f, 0xa1, 0x22, 0x40, 0xf5, 0x88, 0x80, 0x16, 0x92, 0xd9, 0x68, 0xd1, 0x27]));
 const PARAMS: Id = Id::Uuid(Uuid::from_bytes([0x10, 0x65, 0x0b, 0x24, 0x48, 0x76, 0x47, 0x26, 0xbd, 0x57, 0xb0, 0x6c, 0xe8, 0xfc, 0xf8, 0x74]));
 const VARIANTS: Id = Id::Uuid(Uuid::from_bytes([0xde, 0x15, 0xc5, 0xce, 0xf6, 0x5c, 0x4e, 0x32, 0xa1, 0x5e, 0x94, 0xf3, 0x7d, 0xbb, 0x75, 0x41]));
 const TYPES: Id = Id::Uuid(Uuid::from_bytes([0x7d, 0x80, 0x45, 0xc4, 0x36, 0x60, 0x45, 0xe3, 0x97, 0x2c, 0x24, 0xaf, 0x1a, 0xc7, 0xaf, 0xaf]));
+const LIBRARY_FIELDS: Id = Id::Uuid(Uuid::from_bytes([0xb2, 0x6c, 0xdf, 0x76, 0x3c, 0xb4, 0x43, 0x01, 0x85, 0xf3, 0x15, 0x3c, 0x50, 0xb6, 0xee, 0x38]));
 
 // Primitive type IDs
 const STRING_T: Id = Id::Uuid(Uuid::from_bytes([0x35, 0x5e, 0x01, 0xb2, 0x4c, 0xbd, 0x41, 0x3a, 0xa8, 0x9d, 0xe0, 0x5f, 0xba, 0x7c, 0x57, 0x7d]));
@@ -268,6 +268,14 @@ fn generate_setter(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_id:
             }
         },
     })
+}
+
+fn generate_field_id_constant(gid: &impl Gid, field_id: &Id) -> Result<TokenStream2> {
+    let field_name = get_name(gid, field_id)
+        .ok_or_else(|| format!("Field {} has no name", field_id))?;
+    let const_name = format_ident!("{}", rust_const_name(&field_name)?);
+    let id_tokens = id_expr(field_id);
+    Ok(quote! { pub const #const_name: crate::graph::Id = #id_tokens; })
 }
 
 fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_id: &TokenStream2) -> Result<TokenStream2> {
@@ -783,6 +791,11 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
         .map(|field_id| generate_setter(gid, field_id, &full_subs, &self_id))
         .collect::<Result<_>>()?;
 
+    let field_id_constants: Vec<TokenStream2> = field_ids
+        .iter()
+        .map(|field_id| generate_field_id_constant(gid, field_id))
+        .collect::<Result<_>>()?;
+
     if type_params.is_empty() {
         Ok(quote! {
             #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -795,6 +808,8 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
 
             impl #struct_name {
                 pub const TYPE_ID: crate::graph::Id = #type_uuid;
+
+                #(#field_id_constants)*
 
                 pub fn new(gid: &mut crate::graph::MutGid) -> Self {
                     let uuid = uuid::Uuid::new_v4();
@@ -873,6 +888,8 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
 
             impl<#(#generic_params),*> #struct_name<#(#generic_params),*> {
                 pub const TYPE_ID: crate::graph::Id = #type_uuid;
+
+                #(#field_id_constants)*
 
                 pub fn new(gid: &mut crate::graph::MutGid, #(#converter_fields),*) -> Self {
                     let uuid = uuid::Uuid::new_v4();
@@ -965,21 +982,14 @@ fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
         })
         .collect::<Result<_>>()?;
 
-    let field_constants: Vec<TokenStream2> = gid.entities()
-        .filter_map(|uuid| {
-            let id = Id::Uuid(*uuid);
-            if get_isa(&gid, &id)? == &FIELD_T {
-                let name = get_name(&gid, &id)?;
-                Some((id, name))
-            } else {
-                None
-            }
-        })
-        .map(|(id, name)| {
-            let const_name = format_ident!("{}", rust_const_name(&name)?);
-            let id_tokens = id_expr(&id);
-            Ok(quote! { pub const #const_name: crate::graph::Id = #id_tokens; })
-        })
+    let exported_field_ids = root.as_ref()
+        .and_then(|id| gid.get(id, &LIBRARY_FIELDS))
+        .map(|list_id| flatten_list(&gid, list_id))
+        .transpose()?
+        .unwrap_or_default();
+
+    let field_constants: Vec<TokenStream2> = exported_field_ids.iter()
+        .map(|id| generate_field_id_constant(&gid, id))
         .collect::<Result<_>>()?;
 
     let type_constants: Vec<TokenStream2> = gid.entities()
