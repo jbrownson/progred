@@ -1008,34 +1008,12 @@ fn generate_semantics_impl(input: TokenStream) -> Result<TokenStream2> {
         .map(|id| generate_field_id_constant(&gid, id))
         .collect::<Result<_>>()?;
 
-    let sem_set_calls: Vec<TokenStream2> = gid.entities()
-        .flat_map(|uuid| {
-            let entity_expr = uuid_expr(uuid);
-            let entity_id = Id::Uuid(*uuid);
-            gid.edges(&entity_id).into_iter().flat_map(move |edges| {
-                let entity_expr = entity_expr.clone();
-                edges.iter().map(move |(label, value)| {
-                    let label_expr = id_expr(label);
-                    let value_expr = id_expr(value);
-                    let entity_expr = entity_expr.clone();
-                    quote! { gid.set(#entity_expr, #label_expr, #value_expr); }
-                })
-            })
-        })
-        .collect();
-
     let include_path = format!("/{}", path);
     Ok(quote! {
         const _: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), #include_path));
         pub mod semantics {
             #(#field_constants)*
             #(#wrappers)*
-
-            pub fn semantics_gid() -> crate::graph::MutGid {
-                let mut gid = crate::graph::MutGid::new();
-                #(#sem_set_calls)*
-                gid
-            }
         }
     })
 }

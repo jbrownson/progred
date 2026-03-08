@@ -95,7 +95,8 @@ mod tests {
     use std::rc::Rc;
 
     fn sem_gid(gid: &MutGid) -> crate::graph::StackedGid<&MutGid, MutGid> {
-        crate::graph::StackedGid::new(gid, semantics_gid())
+        let sem: crate::document::Document = progred_macros::load_document!("../semantics.progred");
+        crate::graph::StackedGid::new(gid, sem.gid)
     }
 
     fn te_conv() -> Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<TypeExpression>> {

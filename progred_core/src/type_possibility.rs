@@ -137,9 +137,10 @@ mod tests {
     }
 
     fn literal_gid(gid: &MutGid) -> crate::graph::StackedGid<crate::graph::StackedGid<&MutGid, BuiltinValuesGid>, MutGid> {
+        let sem: crate::document::Document = progred_macros::load_document!("../semantics.progred");
         crate::graph::StackedGid::new(
             crate::graph::StackedGid::new(gid, BuiltinValuesGid),
-            semantics_gid(),
+            sem.gid,
         )
     }
 
