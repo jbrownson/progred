@@ -33,6 +33,12 @@ EOF
 )"
 ```
 
+## Testing
+
+- **egui_kittest** (0.33.x): Runs egui headlessly, exposes AccessKit tree for querying widgets by label/role, simulating clicks/keypresses, and snapshot testing (with `wgpu` feature). Evaluated 2026-03-08 — works but not useful yet because our architecture cleanly separates logic from rendering. Revisit for snapshot regression testing on projections once visual stability matters.
+- **Test pure logic, not egui wiring**: `build_entries`/`filter_entries` are pure functions tested directly. Don't write kittest tests that just verify egui passes strings through to buttons.
+- **`Uuid::new_v4()`** for tests needing raw nodes: `progred_graph` re-exports `uuid::Uuid`. Use `Uuid::new_v4()` directly, never `Id::new_uuid().as_uuid().unwrap()`.
+
 ## egui Pitfalls
 
 - **Don't use `lost_focus()`** — egui's `Response::lost_focus()` is unreliable when focus moves between TextEdit widgets. It only fires if the losing widget renders *after* the gaining widget (layout-order dependent). This is a [known bug](https://github.com/emilk/egui/issues/2142) unfixed since 2022. Design interactions so they don't depend on lost_focus — e.g. commit on every valid keystroke rather than on defocus.
@@ -44,6 +50,16 @@ EOF
 - **Documents are pure graph structure** — No semantic interpretation baked in. Use generated constants (`Field::NAME`, `Field::ISA`, etc.) for semantic access.
 - **Resilient to invalid graph states** — The graph could contain anything. Projections specify the happy path but must fall through gracefully. `descend` handles missing edges (placeholder) and unexpected values (default rendering) automatically. If someone puts a C++ program in a param's name, we project a C++ program. Never assume what's at an edge; make the good case easy but don't crash or hide data on the bad case. Item_render callbacks and projections should gate with `try_wrap` and return `None` to fall through to default rendering if the type doesn't match.
 - **Compile-time code generation must fail loudly** — Proc macros (`progred_macros`) generate code from the semantics graph at compile time. Unlike runtime projections, silent failures here produce subtly wrong generated code (missing fields, missing types) that compiles fine. Malformed graph data in the semantics file must produce a clear compile error, never be silently skipped.
+
+## Architecture
+
+- `D` enum is the render tree (`progred_core/src/d.rs`)
+- `RenderCtx` builds D trees from graph data (`progred_core/src/render.rs`)
+- UI renders D trees via `render_d` (`src/ui/projection.rs`)
+- Events flow: UI → `DEvent` → `Editor.handle_events()`
+- Selection variants: `Edge`, `ListElement`, `GraphEdge`, `GraphNode`
+- `D::Descend` has `selection: Selection` — the renderer decides what selection a click produces
+- `DContext` in `projection.rs` carries `path` + `selection` from nearest `Descend`
 
 ## Migrating semantics.progred
 
