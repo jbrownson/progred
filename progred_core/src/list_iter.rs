@@ -1,15 +1,15 @@
-use crate::generated::semantics::{CONS_TYPE, ISA, list};
+use crate::generated::semantics::{ISA, list};
 use crate::graph::{Gid, Id};
 use std::collections::HashSet;
 
 pub struct ListIter<'a, G: Gid> {
     gid: &'a G,
-    current: Option<&'a Id>,
+    current: Option<Id>,
     seen: HashSet<Id>,
 }
 
 impl<'a, G: Gid> ListIter<'a, G> {
-    pub fn new(gid: &'a G, list_node: Option<&'a Id>) -> Self {
+    pub fn new(gid: &'a G, list_node: Option<Id>) -> Self {
         Self {
             gid,
             current: list_node,
@@ -23,9 +23,9 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let current = self.current?;
+            let current = self.current.as_ref()?;
 
-            if self.gid.get(current, &ISA) != Some(&CONS_TYPE) {
+            if self.gid.get(current, &ISA) != Some(&list::Cons::<()>::TYPE_ID) {
                 self.current = None;
                 return None;
             }
@@ -36,7 +36,7 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
             }
 
             let head = self.gid.get(current, &list::Cons::<()>::HEAD);
-            self.current = self.gid.get(current, &list::Cons::<()>::TAIL);
+            self.current = self.gid.get(current, &list::Cons::<()>::TAIL).cloned();
 
             if head.is_some() {
                 return head;
@@ -49,13 +49,12 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
 mod tests {
     use super::*;
     use crate::graph::MutGid;
-    use crate::generated::semantics::EMPTY_TYPE;
 
     fn make_list(gid: &mut MutGid, elements: &[Id]) -> Id {
         let empty_uuid = uuid::Uuid::new_v4();
         gid.merge(im::hashmap! {
             empty_uuid => im::hashmap! {
-                ISA.clone() => EMPTY_TYPE.clone(),
+                ISA.clone() => list::Empty::<()>::TYPE_ID.clone(),
             }
         });
 
@@ -63,7 +62,7 @@ mod tests {
             let cons_uuid = uuid::Uuid::new_v4();
             gid.merge(im::hashmap! {
                 cons_uuid => im::hashmap! {
-                    ISA.clone() => CONS_TYPE.clone(),
+                    ISA.clone() => list::Cons::<()>::TYPE_ID.clone(),
                     list::Cons::<()>::HEAD.clone() => elem.clone(),
                     list::Cons::<()>::TAIL.clone() => tail_node,
                 }
@@ -76,7 +75,7 @@ mod tests {
     fn empty_list() {
         let mut gid = MutGid::new();
         let list = make_list(&mut gid, &[]);
-        let result: Vec<_> = ListIter::new(&gid, Some(&list)).cloned().collect();
+        let result: Vec<_> = ListIter::new(&gid, Some(list.clone())).cloned().collect();
         assert!(result.is_empty());
     }
 
@@ -85,7 +84,7 @@ mod tests {
         let mut gid = MutGid::new();
         let elem = Id::String("hello".into());
         let list = make_list(&mut gid, &[elem.clone()]);
-        let result: Vec<_> = ListIter::new(&gid, Some(&list)).cloned().collect();
+        let result: Vec<_> = ListIter::new(&gid, Some(list.clone())).cloned().collect();
         assert_eq!(result, vec![elem]);
     }
 
@@ -94,14 +93,14 @@ mod tests {
         let mut gid = MutGid::new();
         let elems = vec![Id::String("a".into()), Id::String("b".into()), Id::String("c".into())];
         let list = make_list(&mut gid, &elems);
-        let result: Vec<_> = ListIter::new(&gid, Some(&list)).cloned().collect();
+        let result: Vec<_> = ListIter::new(&gid, Some(list.clone())).cloned().collect();
         assert_eq!(result, elems);
     }
 
     #[test]
     fn none_input() {
         let gid = MutGid::new();
-        let result: Vec<_> = ListIter::new(&gid, None).collect();
+        let result: Vec<_> = ListIter::new(&gid, None::<Id>).collect();
         assert!(result.is_empty());
     }
 
@@ -115,18 +114,18 @@ mod tests {
         let cons2 = Id::Uuid(uuid2);
         gid.merge(im::hashmap! {
             uuid1 => im::hashmap! {
-                ISA.clone() => CONS_TYPE.clone(),
+                ISA.clone() => list::Cons::<()>::TYPE_ID.clone(),
                 list::Cons::<()>::HEAD.clone() => Id::String("a".into()),
                 list::Cons::<()>::TAIL.clone() => cons2.clone(),
             },
             uuid2 => im::hashmap! {
-                ISA.clone() => CONS_TYPE.clone(),
+                ISA.clone() => list::Cons::<()>::TYPE_ID.clone(),
                 list::Cons::<()>::HEAD.clone() => Id::String("b".into()),
                 list::Cons::<()>::TAIL.clone() => cons1.clone(),
             },
         });
 
-        let result: Vec<_> = ListIter::new(&gid, Some(&cons1)).cloned().collect();
+        let result: Vec<_> = ListIter::new(&gid, Some(cons1.clone())).cloned().collect();
         assert_eq!(result, vec![Id::String("a".into()), Id::String("b".into())]);
     }
 }

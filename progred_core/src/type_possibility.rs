@@ -14,11 +14,11 @@ fn tri_any(iter: impl Iterator<Item = Option<bool>>) -> Option<bool> {
 
 pub fn type_accepts_candidate(gid: &impl Gid, candidate: &Id, expected: &TypeExpression) -> Option<bool> {
     gid.get(candidate, &ISA)
-        .and_then(|isa| type_accepts_isa_inner(gid, isa, expected, &TypeSubstitutions::new(), HashSet::new()))
+        .and_then(|isa| type_accepts_isa_inner(gid, isa, &expected.id(), &TypeSubstitutions::new(), HashSet::new()))
 }
 
 pub fn type_accepts_isa(gid: &impl Gid, candidate_isa: &Id, expected: &TypeExpression) -> Option<bool> {
-    type_accepts_isa_inner(gid, candidate_isa, expected, &TypeSubstitutions::new(), HashSet::new())
+    type_accepts_isa_inner(gid, candidate_isa, &expected.id(), &TypeSubstitutions::new(), HashSet::new())
 }
 
 fn type_accepts_isa_inner(
@@ -38,17 +38,17 @@ fn type_accepts_isa_inner(
     let ancestors = ancestors.update(expected.clone());
     if let Some(t) = Type::try_wrap(gid, &expected) {
         t.body(gid)
-            .map_or(Some(false), |body| type_accepts_isa_inner(gid, candidate_isa, body.id(), substitutions, ancestors.clone()))
+            .map_or(Some(false), |body| type_accepts_isa_inner(gid, candidate_isa, &body.id(), substitutions, ancestors.clone()))
     } else if let Some(sum) = Sum::try_wrap(gid, &expected) {
         sum.variants(gid)
             .and_then(|variants| tri_any(
-                ListIter::new(gid, Some(&variants))
+                ListIter::new(gid, Some(variants.id()))
                     .map(|v| type_accepts_isa_inner(gid, candidate_isa, v, substitutions, ancestors.clone()))
             ))
     } else if let Some(apply) = Apply::try_wrap(gid, &expected) {
         apply.base(gid)
             .and_then(|base| {
-                if candidate_isa == base.id() {
+                if candidate_isa == &base.id() {
                     Some(true)
                 } else {
                     apply_target(gid, &expected, substitutions)
@@ -59,7 +59,7 @@ fn type_accepts_isa_inner(
             })
     } else if let Some(forall) = Forall::try_wrap(gid, &expected) {
         forall.body(gid)
-            .and_then(|body| type_accepts_isa_inner(gid, candidate_isa, body.id(), substitutions, ancestors))
+            .and_then(|body| type_accepts_isa_inner(gid, candidate_isa, &body.id(), substitutions, ancestors))
     } else if Record::try_wrap(gid, &expected).is_some() {
         Some(false)
     } else {
@@ -80,12 +80,12 @@ fn apply_target(
     let base = apply.base(gid)?;
     let base_body = base.body(gid);
 
-    if let Some(forall) = base_body.as_ref().and_then(|body| Forall::try_wrap(gid, body.id())) {
+    if let Some(forall) = base_body.as_ref().and_then(|body| Forall::try_wrap(gid, &body.id())) {
         let substitutions = substitutions_for_type(gid, type_id, outer_substitutions);
         let body = forall.body(gid)?;
-        Some((substituted_type_id(&substitutions, body.id()), substitutions))
+        Some((substituted_type_id(&substitutions, &body.id()), substitutions))
     } else {
-        Some((substituted_type_id(outer_substitutions, base.id()), outer_substitutions.clone()))
+        Some((substituted_type_id(outer_substitutions, &base.id()), outer_substitutions.clone()))
     }
 }
 
@@ -98,21 +98,21 @@ mod tests {
     #[test]
     fn string_accepted_as_string_type() {
         let gid = MutGid::new();
-        let et = TypeExpression::wrap(STRING_TYPE.clone());
+        let et = TypeExpression::wrap(String::TYPE_ID.clone());
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
     }
 
     #[test]
     fn number_accepted_as_number_type() {
         let gid = MutGid::new();
-        let et = TypeExpression::wrap(NUMBER_TYPE.clone());
+        let et = TypeExpression::wrap(Number::TYPE_ID.clone());
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::Number(ordered_float::OrderedFloat(42.0)), &et), Some(true));
     }
 
     #[test]
     fn string_not_accepted_as_number_type() {
         let gid = MutGid::new();
-        let et = TypeExpression::wrap(NUMBER_TYPE.clone());
+        let et = TypeExpression::wrap(Number::TYPE_ID.clone());
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), None);
     }
 
@@ -169,7 +169,7 @@ mod tests {
         let conv = te_conv();
         let empty = List::new_empty(gid, conv.clone());
         let variants_list = variant_types.iter().rev().fold(empty, |tail, vt| {
-            List::new_cons(gid, vt.id(), &tail, conv.clone())
+            List::new_cons(gid, &vt.id(), &tail, conv.clone())
         });
         let sum = Sum::new(gid);
         sum.set_variants(gid, &variants_list);
@@ -248,9 +248,9 @@ mod tests {
     #[test]
     fn string_accepted_in_sum_containing_string() {
         let mut gid = MutGid::new();
-        // Type StringWrapper → BODY → STRING_TYPE (alias)
+        // Type StringWrapper → BODY → String::TYPE_ID (alias)
         let string_type = Type::new(&mut gid);
-        string_type.set_body(&mut gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+        string_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_ID.clone()));
         let number_type = Type::new(&mut gid);
         let mixed = make_sum_type(&mut gid, &[&string_type, &number_type]);
 
@@ -273,8 +273,8 @@ mod tests {
     fn uuid_accepted_through_apply_expected() {
         let mut gid = MutGid::new();
         let param_t = TypeParam::new(&mut gid);
-        let (list_type, _) = make_generic_type(&mut gid, &[param_t.id()]);
-        let apply = make_apply(&mut gid, &list_type, &[&STRING_TYPE]);
+        let (list_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
+        let apply = make_apply(&mut gid, &list_type, &[&String::TYPE_ID]);
 
         let node_uuid = uuid::Uuid::new_v4();
         gid.set(node_uuid, ISA.clone(), list_type.id().clone());
@@ -302,7 +302,7 @@ mod tests {
         let mut gid = MutGid::new();
         // Type Name = String
         let name_type = Type::new(&mut gid);
-        name_type.set_body(&mut gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+        name_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_ID.clone()));
 
         let et = TypeExpression::wrap(name_type.id().clone());
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
@@ -328,10 +328,10 @@ mod tests {
     fn string_accepted_through_apply_substitution() {
         let mut gid = MutGid::new();
         let param_t = TypeParam::new(&mut gid);
-        let (id_type, forall) = make_generic_type(&mut gid, &[param_t.id()]);
+        let (id_type, forall) = make_generic_type(&mut gid, &[&param_t.id()]);
         forall.set_body(&mut gid, &TypeExpression::wrap(param_t.id().clone()));
 
-        let applied = make_apply(&mut gid, &id_type, &[&STRING_TYPE]);
+        let applied = make_apply(&mut gid, &id_type, &[&String::TYPE_ID]);
         let et = TypeExpression::wrap(applied.id().clone());
 
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
@@ -342,17 +342,17 @@ mod tests {
         let mut gid = MutGid::new();
         let param_a = TypeParam::new(&mut gid);
         let param_b = TypeParam::new(&mut gid);
-        let (either_type, forall) = make_generic_type(&mut gid, &[param_a.id(), param_b.id()]);
+        let (either_type, forall) = make_generic_type(&mut gid, &[&param_a.id(), &param_b.id()]);
 
         let conv = te_conv();
         let empty = List::new_empty(&mut gid, conv.clone());
-        let tail = List::new_cons(&mut gid, param_b.id(), &empty, conv.clone());
-        let variants = List::new_cons(&mut gid, param_a.id(), &tail, conv);
+        let tail = List::new_cons(&mut gid, &param_b.id(), &empty, conv.clone());
+        let variants = List::new_cons(&mut gid, &param_a.id(), &tail, conv);
         let sum = Sum::new(&mut gid);
         sum.set_variants(&mut gid, &variants);
         forall.set_body(&mut gid, &TypeExpression::wrap(sum.id().clone()));
 
-        let applied = make_apply(&mut gid, &either_type, &[&STRING_TYPE, &NUMBER_TYPE]);
+        let applied = make_apply(&mut gid, &either_type, &[&String::TYPE_ID, &Number::TYPE_ID]);
         let et = TypeExpression::wrap(applied.id().clone());
 
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));

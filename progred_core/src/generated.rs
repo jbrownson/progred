@@ -23,9 +23,10 @@ pub fn display_label(gid: &impl Gid, node: &Id) -> Option<String> {
 }
 
 impl<T> semantics::List<T> {
-    pub fn iter<'a>(&'a self, gid: &'a impl crate::graph::Gid) -> impl Iterator<Item = T> + 'a {
+    pub fn iter<'a>(&self, gid: &'a impl crate::graph::Gid) -> impl Iterator<Item = T> + 'a where T: 'a {
         let conv = self.into_T.clone();
-        crate::list_iter::ListIter::new(gid, Some(&self.id)).filter_map(move |id| conv(id))
+        crate::list_iter::ListIter::new(gid, Some(self.id()))
+            .filter_map(move |id| conv(id))
     }
 }
 
@@ -129,8 +130,8 @@ mod tests {
 
         let conv = field_converter();
         let empty = List::new_empty(&mut gid, conv.clone());
-        let list2 = List::new_cons(&mut gid, field2.id(), &empty, conv.clone());
-        let list1 = List::new_cons(&mut gid, field1.id(), &list2, conv);
+        let list2 = List::new_cons(&mut gid, &field2.id(), &empty, conv.clone());
+        let list1 = List::new_cons(&mut gid, &field1.id(), &list2, conv);
 
         let record = Record::new(&mut gid);
         record.set_fields(&mut gid, &list1);
@@ -210,8 +211,8 @@ mod tests {
 
         let outer_conv = inner_list_converter();
         let outer_empty = List::new_empty(&mut gid, outer_conv.clone());
-        let outer2 = List::new_cons(&mut gid, inner2.id(), &outer_empty, outer_conv.clone());
-        let outer = List::new_cons(&mut gid, inner1.id(), &outer2, outer_conv);
+        let outer2 = List::new_cons(&mut gid, &inner2.id(), &outer_empty, outer_conv.clone());
+        let outer = List::new_cons(&mut gid, &inner1.id(), &outer2, outer_conv);
 
         let result: Vec<Vec<std::string::String>> = outer
             .iter(&gid)
@@ -249,7 +250,7 @@ mod tests {
 
         let outer_conv = make_nested_list_conv(number_converter());
         let outer_empty = List::new_empty(&mut gid, outer_conv.clone());
-        let outer = List::new_cons(&mut gid, inner.id(), &outer_empty, outer_conv);
+        let outer = List::new_cons(&mut gid, &inner.id(), &outer_empty, outer_conv);
 
         let result: Vec<Vec<f64>> = outer
             .iter(&gid)
@@ -275,7 +276,7 @@ mod tests {
         let mut gid = MutGid::new();
         let t = Type::new(&mut gid);
 
-        let isa = gid.get(t.id(), &ISA);
+        let isa = gid.get(&t.id(), &ISA);
         assert_eq!(isa, Some(&Type::TYPE_ID));
     }
 
@@ -305,8 +306,8 @@ mod tests {
 
         let conv = field_converter();
         let empty = List::new_empty(&mut gid, conv.clone());
-        let list1 = List::new_cons(&mut gid, age_field.id(), &empty, conv.clone());
-        let fields = List::new_cons(&mut gid, name_field.id(), &list1, conv);
+        let list1 = List::new_cons(&mut gid, &age_field.id(), &empty, conv.clone());
+        let fields = List::new_cons(&mut gid, &name_field.id(), &list1, conv);
 
         let record = Record::new(&mut gid);
         record.set_fields(&mut gid, &fields);
@@ -376,7 +377,7 @@ mod tests {
 
         let conv = type_param_converter();
         let empty = List::new_empty(&mut gid, conv.clone());
-        let params = List::new_cons(&mut gid, param.id(), &empty, conv);
+        let params = List::new_cons(&mut gid, &param.id(), &empty, conv);
 
         let forall = Forall::new(&mut gid);
         forall.set_params(&mut gid, &params);

@@ -1,6 +1,6 @@
 use crate::editor::Editor;
 use crate::generated::{display_label, name_of};
-use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, list, CONS_TYPE, EMPTY_TYPE, ISA, NAME};
+use crate::generated::semantics::{Apply, Field, Forall, Record, Sum, Type, list, ISA, NAME};
 use crate::graph::{Gid, Id};
 use crate::path::Path;
 use crate::selection::{EdgeState, Selection};
@@ -20,7 +20,7 @@ fn render_id(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) 
 
 fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
     match id {
-        Id::Uuid(_) if editor.lib().get(id, &ISA).is_some_and(|t| t == &CONS_TYPE || t == &EMPTY_TYPE) => {
+        Id::Uuid(_) if editor.lib().get(id, &ISA).is_some_and(|t| t == &list::Cons::<()>::TYPE_ID || t == &list::Empty::<()>::TYPE_ID) => {
             render_list(editor, path, id, ancestors)
         }
         Id::Uuid(uuid) if !ancestors.contains(id) => {
@@ -213,7 +213,7 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
     let mut current_id = node;
     let mut seen = im::HashSet::new();
 
-    while lib.get(current_id, &ISA) == Some(&CONS_TYPE) {
+    while lib.get(current_id, &ISA) == Some(&list::Cons::<()>::TYPE_ID) {
         if seen.contains(current_id) {
             return None;
         }
@@ -233,7 +233,7 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
         current_id = tail_value;
     }
 
-    if lib.get(current_id, &ISA) == Some(&EMPTY_TYPE) {
+    if lib.get(current_id, &ISA) == Some(&list::Empty::<()>::TYPE_ID) {
         Some((elements, current_path))
     } else {
         None
@@ -439,7 +439,7 @@ fn number_text(editor: &Editor, path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generated::semantics::{List, NUMBER_TYPE, STRING_TYPE, TypeExpression};
+    use crate::generated::semantics::{List, Number, String as SemString, TypeExpression};
     use std::rc::Rc;
 
     fn field_converter() -> Rc<dyn Fn(&Id) -> Option<Field>> {
@@ -517,34 +517,34 @@ mod tests {
 
         let name = Field::new(&mut editor.doc.gid);
         name.set_name(&mut editor.doc.gid, "name");
-        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_ID.clone()));
 
         let age = Field::new(&mut editor.doc.gid);
         age.set_name(&mut editor.doc.gid, "age");
-        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(NUMBER_TYPE.clone()));
+        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_ID.clone()));
 
         let empty = List::new_empty(&mut editor.doc.gid, field_converter());
-        let tail = List::new_cons(&mut editor.doc.gid, age.id(), &empty, field_converter());
-        let fields = List::new_cons(&mut editor.doc.gid, name.id(), &tail, field_converter());
+        let tail = List::new_cons(&mut editor.doc.gid, &age.id(), &empty, field_converter());
+        let fields = List::new_cons(&mut editor.doc.gid, &name.id(), &tail, field_converter());
 
         let record = Record::new(&mut editor.doc.gid);
         record.set_fields(&mut editor.doc.gid, &fields);
 
         let person = Type::new(&mut editor.doc.gid);
         person.set_name(&mut editor.doc.gid, "person");
-        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id().clone()));
+        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id()));
 
         let instance = uuid::Uuid::new_v4();
         editor.doc.root = Some(Id::Uuid(instance));
-        editor.doc.gid.set(instance, ISA.clone(), person.id().clone());
-        editor.doc.gid.set(instance, name.id().clone(), Id::String("Ada".into()));
+        editor.doc.gid.set(instance, ISA.clone(), person.id());
+        editor.doc.gid.set(instance, name.id(), Id::String("Ada".into()));
 
         let root_path = Path::root();
         let d = render(&editor, &root_path, &Id::Uuid(instance));
         let placeholders = placeholder_paths(&d);
 
-        assert!(!placeholders.contains(&root_path.child(name.id().clone())));
-        assert!(placeholders.contains(&root_path.child(age.id().clone())));
+        assert!(!placeholders.contains(&root_path.child(name.id())));
+        assert!(placeholders.contains(&root_path.child(age.id())));
     }
 
     #[test]
@@ -553,32 +553,32 @@ mod tests {
 
         let name = Field::new(&mut editor.doc.gid);
         name.set_name(&mut editor.doc.gid, "name");
-        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(STRING_TYPE.clone()));
+        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_ID.clone()));
 
         let age = Field::new(&mut editor.doc.gid);
         age.set_name(&mut editor.doc.gid, "age");
-        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(NUMBER_TYPE.clone()));
+        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_ID.clone()));
 
         let empty = List::new_empty(&mut editor.doc.gid, field_converter());
-        let tail = List::new_cons(&mut editor.doc.gid, age.id(), &empty, field_converter());
-        let fields = List::new_cons(&mut editor.doc.gid, name.id(), &tail, field_converter());
+        let tail = List::new_cons(&mut editor.doc.gid, &age.id(), &empty, field_converter());
+        let fields = List::new_cons(&mut editor.doc.gid, &name.id(), &tail, field_converter());
 
         let record = Record::new(&mut editor.doc.gid);
         record.set_fields(&mut editor.doc.gid, &fields);
 
         let person = Type::new(&mut editor.doc.gid);
         person.set_name(&mut editor.doc.gid, "person");
-        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id().clone()));
+        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id()));
 
         let extra = Id::new_uuid();
         let instance = uuid::Uuid::new_v4();
         editor.doc.root = Some(Id::Uuid(instance));
-        editor.doc.gid.set(instance, ISA.clone(), person.id().clone());
-        editor.doc.gid.set(instance, age.id().clone(), Id::Number(ordered_float::OrderedFloat(42.0)));
+        editor.doc.gid.set(instance, ISA.clone(), person.id());
+        editor.doc.gid.set(instance, age.id(), Id::Number(ordered_float::OrderedFloat(42.0)));
         editor.doc.gid.set(instance, extra.clone(), Id::String("extra".into()));
-        editor.doc.gid.set(instance, name.id().clone(), Id::String("Ada".into()));
+        editor.doc.gid.set(instance, name.id(), Id::String("Ada".into()));
 
         let d = render(&editor, &Path::root(), &Id::Uuid(instance));
-        assert_eq!(field_labels(&d), vec![name.id().clone(), age.id().clone(), extra]);
+        assert_eq!(field_labels(&d), vec![name.id(), age.id(), extra]);
     }
 }
