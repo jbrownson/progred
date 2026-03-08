@@ -357,17 +357,277 @@ mod tests {
     use progred_core::editor::Editor;
     use progred_core::generated::semantics::Type;
 
+    fn displays(entries: &[PlaceholderEntry]) -> Vec<&str> {
+        entries.iter().map(|e| e.display.as_str()).collect()
+    }
+
+    fn pos(entries: &[PlaceholderEntry], display: &str) -> usize {
+        entries.iter().position(|e| e.display == display)
+            .unwrap_or_else(|| panic!("entry {:?} not found in {:?}", display, displays(entries)))
+    }
+
+    // --- fuzzy_match ---
+
+    #[test]
+    fn fuzzy_match_exact() {
+        assert!(fuzzy_match("hello", "hello"));
+    }
+
+    #[test]
+    fn fuzzy_match_subsequence() {
+        assert!(fuzzy_match("hello world", "hlo"));
+    }
+
+    #[test]
+    fn fuzzy_match_no_match() {
+        assert!(!fuzzy_match("hello", "xyz"));
+    }
+
+    #[test]
+    fn fuzzy_match_empty_needle() {
+        assert!(fuzzy_match("anything", ""));
+    }
+
+    #[test]
+    fn fuzzy_match_empty_haystack() {
+        assert!(!fuzzy_match("", "a"));
+    }
+
+    #[test]
+    fn fuzzy_match_order_matters() {
+        assert!(!fuzzy_match("world", "dw"));
+    }
+
+    // --- filter_entries ---
+
+    fn test_entries(names: &[&str]) -> Vec<PlaceholderEntry> {
+        names.iter().map(|n| PlaceholderEntry {
+            value: PlaceholderValue::NewUuid,
+            display: n.to_string(),
+            disambiguation: None,
+            magic: false,
+            possible: true,
+        }).collect()
+    }
+
+    fn filtered_displays<'a>(entries: &'a [PlaceholderEntry], needle: &str) -> Vec<&'a str> {
+        filter_entries(entries, needle).iter()
+            .map(|(i, _)| entries[*i].display.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn filter_empty_needle_returns_all() {
+        let entries = test_entries(&["alpha", "beta", "gamma"]);
+        assert_eq!(filtered_displays(&entries, ""), vec!["alpha", "beta", "gamma"]);
+    }
+
+    #[test]
+    fn filter_exact_prefix_ranks_first() {
+        let entries = test_entries(&["person", "a_person", "Person"]);
+        let result = filtered_displays(&entries, "person");
+        assert_eq!(result[0], "person");
+    }
+
+    #[test]
+    fn filter_case_insensitive() {
+        let entries = test_entries(&["Person", "PERSON", "person"]);
+        let result = filtered_displays(&entries, "person");
+        assert!(result.contains(&"Person"));
+        assert!(result.contains(&"PERSON"));
+    }
+
+    #[test]
+    fn filter_substring_match() {
+        let entries = test_entries(&["my_field", "other"]);
+        let result = filtered_displays(&entries, "field");
+        assert!(result.contains(&"my_field"));
+        assert!(!result.contains(&"other"));
+    }
+
+    #[test]
+    fn filter_fuzzy_match() {
+        let entries = test_entries(&["my_field_name", "xyz"]);
+        let result = filtered_displays(&entries, "mfn");
+        assert!(result.contains(&"my_field_name"));
+        assert!(!result.contains(&"xyz"));
+    }
+
+    #[test]
+    fn filter_no_matches() {
+        let entries = test_entries(&["alpha", "beta"]);
+        let result = filtered_displays(&entries, "zzz");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn filter_entry_appears_only_once() {
+        // "person" matches tier 1 (exact prefix) — should not also appear in tier 2 (contains)
+        let entries = test_entries(&["person", "a_person"]);
+        let result = filter_entries(&entries, "person");
+        let person_count = result.iter().filter(|(i, _)| entries[*i].display == "person").count();
+        assert_eq!(person_count, 1);
+    }
+
+    #[test]
+    fn filter_shorter_match_ranks_higher_in_same_tier() {
+        let entries = test_entries(&["type_expression", "type"]);
+        let result = filtered_displays(&entries, "type");
+        assert_eq!(result[0], "type");
+    }
+
+    // --- build_entries ---
+
     #[test]
     fn new_entries_sort_before_references() {
         let mut editor = Editor::new();
-        let person = Type::new(&mut editor.doc.gid, Some("person"), None);
+        Type::new(&mut editor.doc.gid, Some("person"), None);
 
         let entries = build_entries(&editor, "person", None);
-        let displays: Vec<_> = entries.iter().map(|entry| entry.display.as_str()).collect();
+        assert!(pos(&entries, "new person") < pos(&entries, "person"));
+    }
 
-        let new_person = displays.iter().position(|display| *display == "new person").unwrap();
-        let person_ref = displays.iter().position(|display| *display == "person").unwrap();
+    #[test]
+    fn string_literal_entry_appears_for_nonempty_filter() {
+        let editor = Editor::new();
+        let entries = build_entries(&editor, "hello", None);
+        assert!(entries.iter().any(|e| e.display == "\"hello\""));
+    }
 
-        assert!(new_person < person_ref);
+    #[test]
+    fn string_literal_strips_quotes() {
+        let editor = Editor::new();
+        let entries = build_entries(&editor, "\"hello\"", None);
+        assert!(entries.iter().any(|e| e.display == "\"hello\""));
+    }
+
+    #[test]
+    fn number_literal_entry_appears() {
+        let editor = Editor::new();
+        let entries = build_entries(&editor, "42", None);
+        assert!(entries.iter().any(|e| e.display == "42"));
+    }
+
+    #[test]
+    fn no_literal_for_empty_filter() {
+        let editor = Editor::new();
+        let entries = build_entries(&editor, "", None);
+        assert!(!entries.iter().any(|e| e.magic));
+    }
+
+    #[test]
+    fn new_node_entry_always_present() {
+        let editor = Editor::new();
+        let entries = build_entries(&editor, "", None);
+        assert!(entries.iter().any(|e| e.display == "New node"));
+    }
+
+    #[test]
+    fn possible_entries_sort_before_impossible() {
+        let mut editor = Editor::new();
+        // Create a type with a record body so it's a valid expected type
+        use progred_core::generated::semantics::{Record, TypeExpression, NAME};
+
+        let record = Record::new(&mut editor.doc.gid, None);
+        let target_type = Type::new(&mut editor.doc.gid, Some("Target"), Some(&TypeExpression::wrap(record.uuid)));
+
+        // Create another type that won't match
+        let other_record = Record::new(&mut editor.doc.gid, None);
+        let other_type = Type::new(&mut editor.doc.gid, Some("Other"), Some(&TypeExpression::wrap(other_record.uuid)));
+
+        // Create an instance of Target (will be possible)
+        let target_uuid = progred_core::graph::Uuid::new_v4();
+        editor.doc.gid.set(target_uuid, ISA.into(), target_type.id());
+        editor.doc.gid.set(target_uuid, NAME.into(), Id::String("my_target".into()));
+
+        // Create an instance of Other (will be impossible)
+        let other_uuid = progred_core::graph::Uuid::new_v4();
+        editor.doc.gid.set(other_uuid, ISA.into(), other_type.id());
+        editor.doc.gid.set(other_uuid, NAME.into(), Id::String("my_other".into()));
+
+        let expected = TypeExpression::wrap(target_type.uuid);
+        let entries = build_entries(&editor, "", Some(&expected));
+
+        let target_pos = pos(&entries, "my_target");
+        let other_pos = pos(&entries, "my_other");
+        assert!(target_pos < other_pos, "possible entry should sort before impossible");
+        assert!(entries[target_pos].possible);
+        assert!(!entries[other_pos].possible);
+    }
+
+    #[test]
+    fn magic_entries_sort_after_non_magic() {
+        let mut editor = Editor::new();
+        Type::new(&mut editor.doc.gid, Some("something"), None);
+
+        // "something" matches both the type ref and a string literal
+        let entries = build_entries(&editor, "something", None);
+        let ref_pos = pos(&entries, "something");
+        let literal_pos = pos(&entries, "\"something\"");
+        assert!(ref_pos < literal_pos, "non-magic should sort before magic");
+    }
+
+    #[test]
+    fn no_expected_type_all_possible() {
+        let mut editor = Editor::new();
+        Type::new(&mut editor.doc.gid, Some("anything"), None);
+
+        let entries = build_entries(&editor, "", None);
+        // When no expected type, all non-"New node" entries should be possible
+        for entry in &entries {
+            if entry.display != "New node" {
+                assert!(entry.possible, "{:?} should be possible with no expected type", entry.display);
+            }
+        }
+    }
+
+    #[test]
+    fn new_entry_only_for_type_nodes() {
+        let mut editor = Editor::new();
+        use progred_core::generated::semantics::{Record, Field, TypeExpression};
+
+        // Field is a Type node (has ISA=Type) → should get "new Field"
+        // But a Field *instance* is not a Type node → should not get "new my_field"
+        let record = Record::new(&mut editor.doc.gid, None);
+        Type::new(&mut editor.doc.gid, Some("MyType"), Some(&TypeExpression::wrap(record.uuid)));
+        Field::new(&mut editor.doc.gid, Some("my_field"), None);
+
+        let entries = build_entries(&editor, "", None);
+        let displays = displays(&entries);
+        assert!(displays.contains(&"new MyType"), "Type nodes should get new entries");
+        assert!(!displays.contains(&"new my_field"), "non-Type nodes should not get new entries");
+    }
+
+    #[test]
+    fn disambiguation_shows_isa_name() {
+        let mut editor = Editor::new();
+        use progred_core::generated::semantics::{Record, TypeExpression, NAME};
+
+        let record = Record::new(&mut editor.doc.gid, None);
+        let my_type = Type::new(&mut editor.doc.gid, Some("Person"), Some(&TypeExpression::wrap(record.uuid)));
+
+        // Create an instance of Person
+        let instance_uuid = progred_core::graph::Uuid::new_v4();
+        editor.doc.gid.set(instance_uuid, ISA.into(), my_type.id());
+        editor.doc.gid.set(instance_uuid, NAME.into(), Id::String("alice".into()));
+
+        let entries = build_entries(&editor, "alice", None);
+        let alice = entries.iter().find(|e| e.display == "alice").unwrap();
+        assert_eq!(alice.disambiguation, Some("Person".to_string()));
+    }
+
+    #[test]
+    fn new_node_impossible_when_type_expected() {
+        let mut editor = Editor::new();
+        use progred_core::generated::semantics::{Record, TypeExpression};
+
+        let record = Record::new(&mut editor.doc.gid, None);
+        let t = Type::new(&mut editor.doc.gid, Some("Foo"), Some(&TypeExpression::wrap(record.uuid)));
+
+        let expected = TypeExpression::wrap(t.uuid);
+        let entries = build_entries(&editor, "", Some(&expected));
+
+        let new_node = entries.iter().find(|e| e.display == "New node").unwrap();
+        assert!(!new_node.possible, "New node should be impossible when type is expected");
     }
 }
