@@ -48,7 +48,7 @@ mod tests {
     #[test]
     fn type_accessors_compile() {
         let mut gid = MutGid::new();
-        let t = Type::new(&mut gid);
+        let t = Type::new(&mut gid, None, None);
 
         let _ = t.name(&gid);
         let _ = t.body(&gid);
@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn forall_accessors_compile() {
         let mut gid = MutGid::new();
-        let f = Forall::new(&mut gid);
+        let f = Forall::new(&mut gid, None, None);
 
         let _ = f.params(&gid);
         let _ = f.body(&gid);
@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn apply_accessors_compile() {
         let mut gid = MutGid::new();
-        let a = Apply::new(&mut gid);
+        let a = Apply::new(&mut gid, None, None);
 
         let _ = a.base(&gid);
         let _ = a.args(&gid);
@@ -75,7 +75,7 @@ mod tests {
     #[test]
     fn sum_accessors_compile() {
         let mut gid = MutGid::new();
-        let s = Sum::new(&mut gid);
+        let s = Sum::new(&mut gid, None);
 
         let _ = s.variants(&gid);
     }
@@ -83,7 +83,7 @@ mod tests {
     #[test]
     fn record_accessors_compile() {
         let mut gid = MutGid::new();
-        let r = Record::new(&mut gid);
+        let r = Record::new(&mut gid, None);
 
         let _ = r.fields(&gid);
     }
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn field_accessors_compile() {
         let mut gid = MutGid::new();
-        let f = Field::new(&mut gid);
+        let f = Field::new(&mut gid, None, None);
 
         let _ = f.name(&gid);
         let _ = f.type_(&gid);
@@ -100,8 +100,7 @@ mod tests {
     #[test]
     fn name_returns_string() {
         let mut gid = MutGid::new();
-        let t = Type::new(&mut gid);
-        t.set_name(&mut gid, "test_type");
+        let t = Type::new(&mut gid, Some("test_type"), None);
 
         let name: Option<std::string::String> = t.name(&gid);
         assert_eq!(name, Some("test_type".to_string()));
@@ -110,8 +109,8 @@ mod tests {
     #[test]
     fn accessor_types_are_correct() {
         let mut gid = MutGid::new();
-        let t = Type::new(&mut gid);
-        let f = Field::new(&mut gid);
+        let t = Type::new(&mut gid, None, None);
+        let f = Field::new(&mut gid, None, None);
 
         let _: Option<std::string::String> = t.name(&gid);
         let _: Option<std::string::String> = f.name(&gid);
@@ -125,16 +124,15 @@ mod tests {
     fn list_accessor_returns_iterator() {
         let mut gid = MutGid::new();
 
-        let field1 = Field::new(&mut gid);
-        let field2 = Field::new(&mut gid);
+        let field1 = Field::new(&mut gid, None, None);
+        let field2 = Field::new(&mut gid, None, None);
 
         let conv = field_converter();
         let empty = List::new_empty(&mut gid, conv.clone());
         let list2 = List::new_cons(&mut gid, &field2.id(), &empty, conv.clone());
         let list1 = List::new_cons(&mut gid, &field1.id(), &list2, conv);
 
-        let record = Record::new(&mut gid);
-        record.set_fields(&mut gid, &list1);
+        let record = Record::new(&mut gid, Some(&list1));
 
         let list = record.fields(&gid).expect("fields should exist");
         let fields: Vec<Field> = list.iter(&gid).collect();
@@ -274,7 +272,7 @@ mod tests {
     #[test]
     fn constructor_sets_isa() {
         let mut gid = MutGid::new();
-        let t = Type::new(&mut gid);
+        let t = Type::new(&mut gid, None, None);
 
         let isa = gid.get(&t.id(), &ISA.into());
         assert_eq!(isa, Some(&Type::TYPE_UUID.into()));
@@ -284,10 +282,8 @@ mod tests {
     fn setter_for_reference_field() {
         let mut gid = MutGid::new();
 
-        let record = Record::new(&mut gid);
-        let t = Type::new(&mut gid);
-
-        t.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut gid, None);
+        let t = Type::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
 
         let body = t.body(&gid);
         assert!(body.is_some());
@@ -298,19 +294,15 @@ mod tests {
     fn build_record_with_fields() {
         let mut gid = MutGid::new();
 
-        let name_field = Field::new(&mut gid);
-        name_field.set_name(&mut gid, "name");
-
-        let age_field = Field::new(&mut gid);
-        age_field.set_name(&mut gid, "age");
+        let name_field = Field::new(&mut gid, Some("name"), None);
+        let age_field = Field::new(&mut gid, Some("age"), None);
 
         let conv = field_converter();
         let empty = List::new_empty(&mut gid, conv.clone());
         let list1 = List::new_cons(&mut gid, &age_field.id(), &empty, conv.clone());
         let fields = List::new_cons(&mut gid, &name_field.id(), &list1, conv);
 
-        let record = Record::new(&mut gid);
-        record.set_fields(&mut gid, &fields);
+        let record = Record::new(&mut gid, Some(&fields));
 
         let field_list = record.fields(&gid).unwrap();
         let field_vec: Vec<Field> = field_list.iter(&gid).collect();
@@ -323,12 +315,8 @@ mod tests {
     fn field_type_reference() {
         let mut gid = MutGid::new();
 
-        let ref_type = Type::new(&mut gid);
-        ref_type.set_name(&mut gid, "String");
-
-        let field = Field::new(&mut gid);
-        field.set_name(&mut gid, "title");
-        field.set_type_(&mut gid, &TypeExpression::wrap(ref_type.uuid));
+        let ref_type = Type::new(&mut gid, Some("String"), None);
+        let field = Field::new(&mut gid, Some("title"), Some(&TypeExpression::wrap(ref_type.uuid)));
 
         assert_eq!(field.name(&gid), Some("title".to_string()));
         let field_type = field.type_(&gid).unwrap();
@@ -372,15 +360,13 @@ mod tests {
     fn forall_with_params() {
         let mut gid = MutGid::new();
 
-        let param = TypeParam::new(&mut gid);
-        param.set_name(&mut gid, "T");
+        let param = TypeParam::new(&mut gid, Some("T"));
 
         let conv = type_param_converter();
         let empty = List::new_empty(&mut gid, conv.clone());
         let params = List::new_cons(&mut gid, &param.id(), &empty, conv);
 
-        let forall = Forall::new(&mut gid);
-        forall.set_params(&mut gid, &params);
+        let forall = Forall::new(&mut gid, Some(&params), None);
 
         let param_list = forall.params(&gid).unwrap();
         let params_vec: Vec<TypeParam> = param_list.iter(&gid).collect();

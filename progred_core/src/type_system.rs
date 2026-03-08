@@ -113,10 +113,8 @@ mod tests {
         let params_list = params.iter().rev().fold(empty, |tail, param| {
             List::new_cons(gid, param, &tail, conv.clone())
         });
-        let forall = Forall::new(gid);
-        forall.set_params(gid, &params_list);
-        let t = Type::new(gid);
-        t.set_body(gid, &TypeExpression::wrap(forall.uuid));
+        let forall = Forall::new(gid, Some(&params_list), None);
+        let t = Type::new(gid, None, Some(&TypeExpression::wrap(forall.uuid)));
         (t, forall)
     }
 
@@ -126,24 +124,18 @@ mod tests {
         let args_list = args.iter().rev().fold(empty, |tail, arg| {
             List::new_cons(gid, arg, &tail, conv.clone())
         });
-        let apply = Apply::new(gid);
-        apply.set_base(gid, base);
-        apply.set_args(gid, &args_list);
-        apply
+        Apply::new(gid, Some(base), Some(&args_list))
     }
 
     fn make_field(gid: &mut MutGid, type_uuid: uuid::Uuid) -> Field {
-        let f = Field::new(gid);
-        f.set_type_(gid, &TypeExpression::wrap(type_uuid));
-        f
+        Field::new(gid, None, Some(&TypeExpression::wrap(type_uuid)))
     }
 
     #[test]
     fn resolve_record_through_type_alias() {
         let mut gid = MutGid::new();
-        let record = Record::new(&mut gid);
-        let alias = Type::new(&mut gid);
-        alias.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut gid, None);
+        let alias = Type::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
 
         assert_eq!(resolve_record(&gid, &alias.id()).map(|r| r.id()), Some(record.id()));
     }
@@ -151,9 +143,8 @@ mod tests {
     #[test]
     fn resolve_record_through_forall() {
         let mut gid = MutGid::new();
-        let record = Record::new(&mut gid);
-        let forall = Forall::new(&mut gid);
-        forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut gid, None);
+        let forall = Forall::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
 
         assert_eq!(resolve_record(&gid, &forall.id()).map(|r| r.id()), Some(record.id()));
     }
@@ -161,9 +152,9 @@ mod tests {
     #[test]
     fn resolve_record_through_apply() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let (container, forall) = make_generic_type(&mut gid, &[&param_t.id()]);
-        let record = Record::new(&mut gid);
+        let record = Record::new(&mut gid, None);
         forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
         let apply = make_apply(&mut gid, &container, &[&String::TYPE_UUID.into()]);
 
@@ -173,8 +164,8 @@ mod tests {
     #[test]
     fn resolve_record_cycle_returns_none() {
         let mut gid = MutGid::new();
-        let a = Type::new(&mut gid);
-        let b = Type::new(&mut gid);
+        let a = Type::new(&mut gid, None, None);
+        let b = Type::new(&mut gid, None, None);
         a.set_body(&mut gid, &TypeExpression::wrap(b.uuid));
         b.set_body(&mut gid, &TypeExpression::wrap(a.uuid));
 
@@ -184,8 +175,7 @@ mod tests {
     #[test]
     fn expected_type_for_field() {
         let mut gid = MutGid::new();
-        let field = Field::new(&mut gid);
-        field.set_type_(&mut gid, &TypeExpression::wrap(String::TYPE_UUID));
+        let field = Field::new(&mut gid, None, Some(&TypeExpression::wrap(String::TYPE_UUID)));
         let path = Path::orphan(Id::new_uuid()).child(field.id());
         assert_eq!(expected_type(&sem_gid(&gid), &path).unwrap().id(), String::TYPE_UUID.into());
     }
@@ -193,7 +183,7 @@ mod tests {
     #[test]
     fn type_param_resolved_through_apply() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let (box_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
         let apply = make_apply(&mut gid, &box_type, &[&String::TYPE_UUID.into()]);
 
@@ -209,8 +199,8 @@ mod tests {
     #[test]
     fn multiple_type_params() {
         let mut gid = MutGid::new();
-        let param_a = TypeParam::new(&mut gid);
-        let param_b = TypeParam::new(&mut gid);
+        let param_a = TypeParam::new(&mut gid, None);
+        let param_b = TypeParam::new(&mut gid, None);
         let (pair_type, _) = make_generic_type(&mut gid, &[&param_a.id(), &param_b.id()]);
         let apply = make_apply(&mut gid, &pair_type, &[&String::TYPE_UUID.into(), &Number::TYPE_UUID.into()]);
 
@@ -233,7 +223,7 @@ mod tests {
     #[test]
     fn recursive_type_through_self_apply() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let (list_type, forall) = make_generic_type(&mut gid, &[&param_t.id()]);
 
         let head_field = make_field(&mut gid, param_t.uuid);
@@ -260,7 +250,7 @@ mod tests {
     #[test]
     fn deep_recursive_resolution() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let (list_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
 
         let head_field = make_field(&mut gid, param_t.uuid);
@@ -283,18 +273,17 @@ mod tests {
     fn nested_type_param_resolution() {
         let mut gid = MutGid::new();
 
-        let inner_param = TypeParam::new(&mut gid);
+        let inner_param = TypeParam::new(&mut gid, None);
         let (inner_type, _) = make_generic_type(&mut gid, &[&inner_param.id()]);
 
-        let outer_param = TypeParam::new(&mut gid);
+        let outer_param = TypeParam::new(&mut gid, None);
         let (outer_type, outer_forall) = make_generic_type(&mut gid, &[&outer_param.id()]);
         let inner_apply = make_apply(&mut gid, &inner_type, &[&outer_param.id()]);
         let wrapper_field = make_field(&mut gid, inner_apply.uuid);
-        let record = Record::new(&mut gid);
         let field_conv: Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<Field>> = Rc::new(|gid: &dyn crate::graph::Gid, id| Field::try_wrap(gid, id));
         let empty_fields = List::new_empty(&mut gid, field_conv.clone());
         let fields_list = List::new_cons(&mut gid, &wrapper_field.id(), &empty_fields, field_conv);
-        record.set_fields(&mut gid, &fields_list);
+        let record = Record::new(&mut gid, Some(&fields_list));
         outer_forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
         let outer_apply = make_apply(&mut gid, &outer_type, &[&Number::TYPE_UUID.into()]);
@@ -312,13 +301,13 @@ mod tests {
     fn nested_recursive_types() {
         let mut gid = MutGid::new();
 
-        let inner_param = TypeParam::new(&mut gid);
+        let inner_param = TypeParam::new(&mut gid, None);
         let (inner_type, _) = make_generic_type(&mut gid, &[&inner_param.id()]);
         let inner_head = make_field(&mut gid, inner_param.uuid);
         let inner_tail_apply = make_apply(&mut gid, &inner_type, &[&inner_param.id()]);
         let inner_tail = make_field(&mut gid, inner_tail_apply.uuid);
 
-        let outer_param = TypeParam::new(&mut gid);
+        let outer_param = TypeParam::new(&mut gid, None);
         let (outer_type, _) = make_generic_type(&mut gid, &[&outer_param.id()]);
         let outer_value = make_field(&mut gid, outer_param.uuid);
         let inner_of_outer = make_apply(&mut gid, &inner_type, &[&outer_param.id()]);
@@ -360,7 +349,7 @@ mod tests {
     #[test]
     fn no_type_edge_returns_none() {
         let mut gid = MutGid::new();
-        let field = Field::new(&mut gid);
+        let field = Field::new(&mut gid, None, None);
         let path = Path::orphan(Id::new_uuid()).child(field.id());
         assert!(expected_type(&sem_gid(&gid), &path).is_none());
     }
@@ -375,12 +364,9 @@ mod tests {
     #[test]
     fn non_generic_apply_no_substitution() {
         let mut gid = MutGid::new();
-        let base_type = Type::new(&mut gid);
-        let record = Record::new(&mut gid);
-        base_type.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
-
-        let apply = Apply::new(&mut gid);
-        apply.set_base(&mut gid, &base_type);
+        let record = Record::new(&mut gid, None);
+        let base_type = Type::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
+        let apply = Apply::new(&mut gid, Some(&base_type), None);
 
         let apply_field = make_field(&mut gid, apply.uuid);
         let inner = make_field(&mut gid, String::TYPE_UUID);
@@ -406,7 +392,7 @@ mod tests {
     #[test]
     fn unresolved_param_returns_none() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let field = make_field(&mut gid, param_t.uuid);
 
         let path = Path::orphan(Id::new_uuid()).child(field.id());
@@ -416,7 +402,7 @@ mod tests {
     #[test]
     fn generic_field_without_apply_returns_none() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let (box_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
 
         let outer = make_field(&mut gid, box_type.uuid);

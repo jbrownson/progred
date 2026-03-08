@@ -119,9 +119,8 @@ mod tests {
     #[test]
     fn uuid_accepted_when_isa_matches() {
         let mut gid = MutGid::new();
-        let t = Type::new(&mut gid);
-        let record = Record::new(&mut gid);
-        t.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut gid, None);
+        let t = Type::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
         let node_uuid = uuid::Uuid::new_v4();
         gid.set(node_uuid, ISA.into(), t.id().clone());
         let et = TypeExpression::wrap(t.uuid);
@@ -150,10 +149,8 @@ mod tests {
         let params_list = params.iter().rev().fold(empty, |tail, param| {
             List::new_cons(gid, param, &tail, conv.clone())
         });
-        let forall = Forall::new(gid);
-        forall.set_params(gid, &params_list);
-        let t = Type::new(gid);
-        t.set_body(gid, &TypeExpression::wrap(forall.uuid));
+        let forall = Forall::new(gid, Some(&params_list), None);
+        let t = Type::new(gid, None, Some(&TypeExpression::wrap(forall.uuid)));
         (t, forall)
     }
 
@@ -163,10 +160,7 @@ mod tests {
         let args_list = args.iter().rev().fold(empty, |tail, arg| {
             List::new_cons(gid, arg, &tail, conv.clone())
         });
-        let apply = Apply::new(gid);
-        apply.set_base(gid, base);
-        apply.set_args(gid, &args_list);
-        apply
+        Apply::new(gid, Some(base), Some(&args_list))
     }
 
     fn make_sum_type(gid: &mut MutGid, variant_types: &[&Type]) -> Type {
@@ -175,18 +169,15 @@ mod tests {
         let variants_list = variant_types.iter().rev().fold(empty, |tail, vt| {
             List::new_cons(gid, &vt.id(), &tail, conv.clone())
         });
-        let sum = Sum::new(gid);
-        sum.set_variants(gid, &variants_list);
-        let t = Type::new(gid);
-        t.set_body(gid, &TypeExpression::wrap(sum.uuid));
-        t
+        let sum = Sum::new(gid, Some(&variants_list));
+        Type::new(gid, None, Some(&TypeExpression::wrap(sum.uuid)))
     }
 
     #[test]
     fn variant_accepted_in_sum() {
         let mut gid = MutGid::new();
-        let dog = Type::new(&mut gid);
-        let cat = Type::new(&mut gid);
+        let dog = Type::new(&mut gid, None, None);
+        let cat = Type::new(&mut gid, None, None);
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
         let node_uuid = uuid::Uuid::new_v4();
@@ -198,9 +189,9 @@ mod tests {
     #[test]
     fn non_variant_not_accepted_in_sum() {
         let mut gid = MutGid::new();
-        let dog = Type::new(&mut gid);
-        let cat = Type::new(&mut gid);
-        let fish = Type::new(&mut gid);
+        let dog = Type::new(&mut gid, None, None);
+        let cat = Type::new(&mut gid, None, None);
+        let fish = Type::new(&mut gid, None, None);
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
         let node_uuid = uuid::Uuid::new_v4();
@@ -212,10 +203,9 @@ mod tests {
     #[test]
     fn isa_body_accepted_in_sum_variant() {
         let mut gid = MutGid::new();
-        let record = Record::new(&mut gid);
-        let dog = Type::new(&mut gid);
-        dog.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
-        let cat = Type::new(&mut gid);
+        let record = Record::new(&mut gid, None);
+        let dog = Type::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
+        let cat = Type::new(&mut gid, None, None);
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
         // ISA points to the Record body, not the Type alias
@@ -228,9 +218,8 @@ mod tests {
     #[test]
     fn isa_body_accepted_as_type_alias() {
         let mut gid = MutGid::new();
-        let record = Record::new(&mut gid);
-        let dog = Type::new(&mut gid);
-        dog.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut gid, None);
+        let dog = Type::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
 
         // ISA points to Record body, expected is the Type alias
         let node_uuid = uuid::Uuid::new_v4();
@@ -242,7 +231,7 @@ mod tests {
     #[test]
     fn uuid_without_isa_indeterminate() {
         let mut gid = MutGid::new();
-        let t = Type::new(&mut gid);
+        let t = Type::new(&mut gid, None, None);
         let node_uuid = uuid::Uuid::new_v4();
         // Don't set ISA — can't determine match
         let et = TypeExpression::wrap(t.uuid);
@@ -253,9 +242,8 @@ mod tests {
     fn string_accepted_in_sum_containing_string() {
         let mut gid = MutGid::new();
         // Type StringWrapper → BODY → String::TYPE_UUID (alias)
-        let string_type = Type::new(&mut gid);
-        string_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_UUID));
-        let number_type = Type::new(&mut gid);
+        let string_type = Type::new(&mut gid, None, Some(&TypeExpression::wrap(String::TYPE_UUID)));
+        let number_type = Type::new(&mut gid, None, None);
         let mixed = make_sum_type(&mut gid, &[&string_type, &number_type]);
 
         let et = TypeExpression::wrap(mixed.uuid);
@@ -265,8 +253,8 @@ mod tests {
     #[test]
     fn string_not_accepted_in_sum_without_string() {
         let mut gid = MutGid::new();
-        let dog = Type::new(&mut gid);
-        let cat = Type::new(&mut gid);
+        let dog = Type::new(&mut gid, None, None);
+        let cat = Type::new(&mut gid, None, None);
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
         let et = TypeExpression::wrap(animal.uuid);
@@ -276,7 +264,7 @@ mod tests {
     #[test]
     fn uuid_accepted_through_apply_expected() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let (list_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
         let apply = make_apply(&mut gid, &list_type, &[&String::TYPE_UUID.into()]);
 
@@ -290,9 +278,8 @@ mod tests {
     #[test]
     fn uuid_accepted_through_forall_expected() {
         let mut gid = MutGid::new();
-        let record = Record::new(&mut gid);
-        let forall = Forall::new(&mut gid);
-        forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut gid, None);
+        let forall = Forall::new(&mut gid, None, Some(&TypeExpression::wrap(record.uuid)));
 
         let node_uuid = uuid::Uuid::new_v4();
         gid.set(node_uuid, ISA.into(), record.id().clone());
@@ -305,8 +292,7 @@ mod tests {
     fn string_accepted_through_type_alias() {
         let mut gid = MutGid::new();
         // Type Name = String
-        let name_type = Type::new(&mut gid);
-        name_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_UUID));
+        let name_type = Type::new(&mut gid, None, Some(&TypeExpression::wrap(String::TYPE_UUID)));
 
         let et = TypeExpression::wrap(name_type.uuid);
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
@@ -316,8 +302,8 @@ mod tests {
     fn cyclic_type_body_does_not_stack_overflow() {
         let mut gid = MutGid::new();
         // Type A → BODY → Type B → BODY → Type A
-        let a = Type::new(&mut gid);
-        let b = Type::new(&mut gid);
+        let a = Type::new(&mut gid, None, None);
+        let b = Type::new(&mut gid, None, None);
         a.set_body(&mut gid, &TypeExpression::wrap(b.uuid));
         b.set_body(&mut gid, &TypeExpression::wrap(a.uuid));
 
@@ -331,7 +317,7 @@ mod tests {
     #[test]
     fn string_accepted_through_apply_substitution() {
         let mut gid = MutGid::new();
-        let param_t = TypeParam::new(&mut gid);
+        let param_t = TypeParam::new(&mut gid, None);
         let (id_type, forall) = make_generic_type(&mut gid, &[&param_t.id()]);
         forall.set_body(&mut gid, &TypeExpression::wrap(param_t.uuid));
 
@@ -344,16 +330,15 @@ mod tests {
     #[test]
     fn string_accepted_through_sum_variant_apply_substitution() {
         let mut gid = MutGid::new();
-        let param_a = TypeParam::new(&mut gid);
-        let param_b = TypeParam::new(&mut gid);
+        let param_a = TypeParam::new(&mut gid, None);
+        let param_b = TypeParam::new(&mut gid, None);
         let (either_type, forall) = make_generic_type(&mut gid, &[&param_a.id(), &param_b.id()]);
 
         let conv = te_conv();
         let empty = List::new_empty(&mut gid, conv.clone());
         let tail = List::new_cons(&mut gid, &param_b.id(), &empty, conv.clone());
         let variants = List::new_cons(&mut gid, &param_a.id(), &tail, conv);
-        let sum = Sum::new(&mut gid);
-        sum.set_variants(&mut gid, &variants);
+        let sum = Sum::new(&mut gid, Some(&variants));
         forall.set_body(&mut gid, &TypeExpression::wrap(sum.uuid));
 
         let applied = make_apply(&mut gid, &either_type, &[&String::TYPE_UUID.into(), &Number::TYPE_UUID.into()]);

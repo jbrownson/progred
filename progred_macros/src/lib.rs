@@ -221,6 +221,49 @@ fn id_expr(id: &Id) -> TokenStream2 {
     }
 }
 
+fn generate_constructor_field(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Result<(syn::Ident, TokenStream2, TokenStream2)> {
+    let field_name = get_name(gid, field_id)
+        .ok_or_else(|| format!("Field {} has no name", field_id))?;
+    let field_type = match gid.get(field_id, &TYPE_FIELD) {
+        Some(t) => resolve_type(gid, t, subs)?,
+        None => return Err(format!("Field {} has no type", field_id)),
+    };
+    let param_name = format_ident!("{}", rust_method_name(&field_name)?);
+    let const_name = format_ident!("{}", rust_const_name(&field_name)?);
+
+    let (param_type, set_stmt) = match field_type {
+        ResolvedType::String => (
+            quote! { Option<&str> },
+            quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), crate::graph::Id::String(v.into())); } },
+        ),
+        ResolvedType::Number => (
+            quote! { Option<f64> },
+            quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), crate::graph::Id::Number(ordered_float::OrderedFloat(v))); } },
+        ),
+        ResolvedType::Record { rust_name } => {
+            let wrapper = format_ident!("{}", rust_name);
+            (
+                quote! { Option<&#wrapper> },
+                quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), v.id().clone()); } },
+            )
+        },
+        ResolvedType::Generic { rust_name, args } => {
+            let wrapper = format_ident!("{}", rust_name);
+            let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
+            (
+                quote! { Option<&#wrapper<#(#arg_types),*>> },
+                quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), v.id().clone()); } },
+            )
+        },
+        ResolvedType::TypeParam { .. } => (
+            quote! { Option<&crate::graph::Id> },
+            quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), v.clone()); } },
+        ),
+    };
+
+    Ok((param_name, param_type, set_stmt))
+}
+
 fn generate_setter(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Result<TokenStream2> {
     let field_name = get_name(gid, field_id)
         .ok_or_else(|| format!("Field {} has no name", field_id))?;
@@ -816,6 +859,13 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
         .map(|field_id| generate_field_id_constant(gid, field_id))
         .collect::<Result<_>>()?;
 
+    let constructor_fields: Vec<_> = field_ids
+        .iter()
+        .map(|field_id| generate_constructor_field(gid, field_id, &full_subs))
+        .collect::<Result<_>>()?;
+    let new_params: Vec<_> = constructor_fields.iter().map(|(name, ty, _)| quote! { #name: #ty }).collect();
+    let new_sets: Vec<_> = constructor_fields.iter().map(|(_, _, set)| set.clone()).collect();
+
     if type_params.is_empty() {
         Ok(quote! {
             #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -826,9 +876,11 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
 
                 #(#field_id_constants)*
 
-                pub fn new(gid: &mut crate::graph::MutGid) -> Self {
+                #[allow(clippy::too_many_arguments)]
+                pub fn new(gid: &mut crate::graph::MutGid, #(#new_params),*) -> Self {
                     let uuid = uuid::Uuid::new_v4();
                     gid.set(uuid, ISA.into(), Self::TYPE_UUID.into());
+                    #(#new_sets)*
                     Self { uuid }
                 }
 
@@ -900,9 +952,11 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
 
                 #(#field_id_constants)*
 
-                pub fn new(gid: &mut crate::graph::MutGid, #(#converter_fields),*) -> Self {
+                #[allow(clippy::too_many_arguments)]
+                pub fn new(gid: &mut crate::graph::MutGid, #(#new_params,)* #(#converter_fields),*) -> Self {
                     let uuid = uuid::Uuid::new_v4();
                     gid.set(uuid, ISA.into(), Self::TYPE_UUID.into());
+                    #(#new_sets)*
                     Self { uuid, #(#converter_field_names,)* }
                 }
 

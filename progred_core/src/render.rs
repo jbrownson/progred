@@ -515,24 +515,15 @@ mod tests {
     fn default_projection_shows_placeholders_for_missing_record_fields() {
         let mut editor = Editor::new();
 
-        let name = Field::new(&mut editor.doc.gid);
-        name.set_name(&mut editor.doc.gid, "name");
-        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_UUID));
-
-        let age = Field::new(&mut editor.doc.gid);
-        age.set_name(&mut editor.doc.gid, "age");
-        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_UUID));
+        let name = Field::new(&mut editor.doc.gid, Some("name"), Some(&TypeExpression::wrap(SemString::TYPE_UUID)));
+        let age = Field::new(&mut editor.doc.gid, Some("age"), Some(&TypeExpression::wrap(Number::TYPE_UUID)));
 
         let empty = List::new_empty(&mut editor.doc.gid, field_converter());
         let tail = List::new_cons(&mut editor.doc.gid, &age.id(), &empty, field_converter());
         let fields = List::new_cons(&mut editor.doc.gid, &name.id(), &tail, field_converter());
 
-        let record = Record::new(&mut editor.doc.gid);
-        record.set_fields(&mut editor.doc.gid, &fields);
-
-        let person = Type::new(&mut editor.doc.gid);
-        person.set_name(&mut editor.doc.gid, "person");
-        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut editor.doc.gid, Some(&fields));
+        let person = Type::new(&mut editor.doc.gid, Some("person"), Some(&TypeExpression::wrap(record.uuid)));
 
         let instance = uuid::Uuid::new_v4();
         editor.doc.root = Some(Id::Uuid(instance));
@@ -551,24 +542,15 @@ mod tests {
     fn default_projection_orders_declared_fields_before_extras() {
         let mut editor = Editor::new();
 
-        let name = Field::new(&mut editor.doc.gid);
-        name.set_name(&mut editor.doc.gid, "name");
-        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_UUID));
-
-        let age = Field::new(&mut editor.doc.gid);
-        age.set_name(&mut editor.doc.gid, "age");
-        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_UUID));
+        let name = Field::new(&mut editor.doc.gid, Some("name"), Some(&TypeExpression::wrap(SemString::TYPE_UUID)));
+        let age = Field::new(&mut editor.doc.gid, Some("age"), Some(&TypeExpression::wrap(Number::TYPE_UUID)));
 
         let empty = List::new_empty(&mut editor.doc.gid, field_converter());
         let tail = List::new_cons(&mut editor.doc.gid, &age.id(), &empty, field_converter());
         let fields = List::new_cons(&mut editor.doc.gid, &name.id(), &tail, field_converter());
 
-        let record = Record::new(&mut editor.doc.gid);
-        record.set_fields(&mut editor.doc.gid, &fields);
-
-        let person = Type::new(&mut editor.doc.gid);
-        person.set_name(&mut editor.doc.gid, "person");
-        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.uuid));
+        let record = Record::new(&mut editor.doc.gid, Some(&fields));
+        let person = Type::new(&mut editor.doc.gid, Some("person"), Some(&TypeExpression::wrap(record.uuid)));
 
         let extra = Id::new_uuid();
         let instance = uuid::Uuid::new_v4();

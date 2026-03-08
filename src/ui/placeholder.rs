@@ -360,8 +360,7 @@ mod tests {
     #[test]
     fn new_entries_sort_before_references() {
         let mut editor = Editor::new();
-        let person = Type::new(&mut editor.doc.gid);
-        person.set_name(&mut editor.doc.gid, "person");
+        let person = Type::new(&mut editor.doc.gid, Some("person"), None);
 
         let entries = build_entries(&editor, "person", None);
         let displays: Vec<_> = entries.iter().map(|entry| entry.display.as_str()).collect();
