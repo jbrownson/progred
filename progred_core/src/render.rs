@@ -20,7 +20,7 @@ fn render_id(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) 
 
 fn render_id_inner(editor: &Editor, path: &Path, id: &Id, ancestors: im::HashSet<Id>) -> D {
     match id {
-        Id::Uuid(_) if editor.lib().get(id, &ISA).is_some_and(|t| t == &list::Cons::<()>::TYPE_ID || t == &list::Empty::<()>::TYPE_ID) => {
+        Id::Uuid(_) if editor.lib().get(id, &ISA.into()).is_some_and(|t| t == &list::Cons::<()>::TYPE_UUID.into() || t == &list::Empty::<()>::TYPE_UUID.into()) => {
             render_list(editor, path, id, ancestors)
         }
         Id::Uuid(uuid) if !ancestors.contains(id) => {
@@ -136,7 +136,7 @@ fn render_uuid(
     let display_label = display_label(&lib, &id);
     let existing_labels: Vec<Id> = edges.into_iter()
         .flat_map(|e| e.keys().cloned())
-        .filter(|label| label != &NAME && label != &ISA)
+        .filter(|label| label != &NAME.into() && label != &ISA.into())
         .collect();
     let new_edge_label = editor.selection.as_ref()
         .and_then(|s| s.path())
@@ -187,7 +187,7 @@ fn render_uuid(
 }
 
 fn declared_record_field_ids(gid: &impl Gid, id: &Id) -> Vec<Id> {
-    gid.get(id, &ISA)
+    gid.get(id, &ISA.into())
         .and_then(|type_id| resolve_record(gid, type_id))
         .and_then(|record| record.fields(gid))
         .map(|fields| {
@@ -213,27 +213,27 @@ fn flatten_list(editor: &Editor, path: &Path, node: &Id) -> Option<(Vec<ListElem
     let mut current_id = node;
     let mut seen = im::HashSet::new();
 
-    while lib.get(current_id, &ISA) == Some(&list::Cons::<()>::TYPE_ID) {
+    while lib.get(current_id, &ISA.into()) == Some(&list::Cons::<()>::TYPE_UUID.into()) {
         if seen.contains(current_id) {
             return None;
         }
         seen = seen.update(current_id.clone());
 
-        let head_value = lib.get(current_id, &list::Cons::<()>::HEAD).cloned();
-        let head_path = current_path.child(list::Cons::<()>::HEAD.clone());
+        let head_value = lib.get(current_id, &list::Cons::<()>::HEAD.into()).cloned();
+        let head_path = current_path.child(list::Cons::<()>::HEAD.into());
         elements.push(ListElement {
             head_path,
             head_value,
             cons_id: current_id.clone(),
         });
 
-        let tail_path = current_path.child(list::Cons::<()>::TAIL.clone());
-        let tail_value = lib.get(current_id, &list::Cons::<()>::TAIL)?;
+        let tail_path = current_path.child(list::Cons::<()>::TAIL.into());
+        let tail_value = lib.get(current_id, &list::Cons::<()>::TAIL.into())?;
         current_path = tail_path;
         current_id = tail_value;
     }
 
-    if lib.get(current_id, &ISA) == Some(&list::Empty::<()>::TYPE_ID) {
+    if lib.get(current_id, &ISA.into()) == Some(&list::Empty::<()>::TYPE_UUID.into()) {
         Some((elements, current_path))
     } else {
         None
@@ -352,9 +352,9 @@ fn render_field(ctx: &RenderCtx) -> Option<D> {
     Field::try_wrap(gid, ctx.id)?;
     Some(D::Line(vec![
         D::NodeHeader { child: Box::new(D::Text("field".into(), TextStyle::Keyword)) },
-        ctx.descend(&NAME),
+        ctx.descend(&NAME.into()),
         D::Text(":".into(), TextStyle::Punctuation),
-        ctx.descend_with(&Field::TYPE_, Some(render_type_expr)),
+        ctx.descend_with(&Field::TYPE_.into(), Some(render_type_expr)),
     ]))
 }
 
@@ -363,8 +363,8 @@ fn render_apply(ctx: &RenderCtx) -> Option<D> {
     Apply::try_wrap(gid, ctx.id)?;
 
     Some(D::Line(vec![
-        ctx.descend_with(&Apply::BASE, Some(render_ref)),
-        ctx.descend_list(&Apply::ARGS, &ANGLE_LIST, Some(render_type_expr)),
+        ctx.descend_with(&Apply::BASE.into(), Some(render_ref)),
+        ctx.descend_list(&Apply::ARGS.into(), &ANGLE_LIST, Some(render_type_expr)),
     ]))
 }
 
@@ -373,9 +373,9 @@ fn render_type(ctx: &RenderCtx) -> Option<D> {
     Type::try_wrap(gid, ctx.id)?;
     Some(D::Line(vec![
         D::NodeHeader { child: Box::new(D::Text("type".into(), TextStyle::Keyword)) },
-        ctx.descend(&NAME),
+        ctx.descend(&NAME.into()),
         D::Text("=".into(), TextStyle::Punctuation),
-        ctx.descend(&Type::BODY),
+        ctx.descend(&Type::BODY.into()),
     ]))
 }
 
@@ -387,7 +387,7 @@ fn render_record(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("record".into(), TextStyle::Keyword)) },
         D::CollapseToggle { collapsed },
     ])].into_iter()
-        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&Record::FIELDS)))))
+        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&Record::FIELDS.into())))))
         .collect();
     Some(D::Block(items))
 }
@@ -400,7 +400,7 @@ fn render_sum(ctx: &RenderCtx) -> Option<D> {
         D::NodeHeader { child: Box::new(D::Text("sum".into(), TextStyle::Keyword)) },
         D::CollapseToggle { collapsed },
     ])].into_iter()
-        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&Sum::VARIANTS)))))
+        .chain((!collapsed).then(|| D::Indent(Box::new(ctx.descend(&Sum::VARIANTS.into())))))
         .collect();
     Some(D::Block(items))
 }
@@ -411,12 +411,12 @@ fn render_forall(ctx: &RenderCtx) -> Option<D> {
     let collapsed = ctx.is_collapsed();
     let items: Vec<D> = [
         D::NodeHeader { child: Box::new(D::Text("forall".into(), TextStyle::Keyword)) },
-        ctx.descend_list(&Forall::PARAMS, &ANGLE_LIST, Some(render_param)),
+        ctx.descend_list(&Forall::PARAMS.into(), &ANGLE_LIST, Some(render_param)),
         D::CollapseToggle { collapsed },
     ].into_iter()
         .chain(if collapsed { vec![] } else { vec![
             D::Text(".".into(), TextStyle::Punctuation),
-            ctx.descend(&Forall::BODY),
+            ctx.descend(&Forall::BODY.into()),
         ]})
         .collect();
     Some(D::Line(items))
@@ -425,7 +425,7 @@ fn render_forall(ctx: &RenderCtx) -> Option<D> {
 fn render_param(ctx: &RenderCtx) -> Option<D> {
     let gid = &ctx.editor.lib();
     Type::try_wrap(gid, ctx.id)?;
-    Some(ctx.descend(&NAME))
+    Some(ctx.descend(&NAME.into()))
 }
 
 fn number_text(editor: &Editor, path: &Path) -> Option<String> {
@@ -442,8 +442,8 @@ mod tests {
     use crate::generated::semantics::{List, Number, String as SemString, TypeExpression};
     use std::rc::Rc;
 
-    fn field_converter() -> Rc<dyn Fn(&Id) -> Option<Field>> {
-        Rc::new(|id| Some(Field::wrap(id.clone())))
+    fn field_converter() -> Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<Field>> {
+        Rc::new(|gid: &dyn crate::graph::Gid, id| Field::try_wrap(gid, id))
     }
 
     fn collect_placeholder_paths(d: &D, paths: &mut Vec<Path>) {
@@ -517,11 +517,11 @@ mod tests {
 
         let name = Field::new(&mut editor.doc.gid);
         name.set_name(&mut editor.doc.gid, "name");
-        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_ID.clone()));
+        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_UUID));
 
         let age = Field::new(&mut editor.doc.gid);
         age.set_name(&mut editor.doc.gid, "age");
-        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_ID.clone()));
+        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_UUID));
 
         let empty = List::new_empty(&mut editor.doc.gid, field_converter());
         let tail = List::new_cons(&mut editor.doc.gid, &age.id(), &empty, field_converter());
@@ -532,11 +532,11 @@ mod tests {
 
         let person = Type::new(&mut editor.doc.gid);
         person.set_name(&mut editor.doc.gid, "person");
-        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id()));
+        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.uuid));
 
         let instance = uuid::Uuid::new_v4();
         editor.doc.root = Some(Id::Uuid(instance));
-        editor.doc.gid.set(instance, ISA.clone(), person.id());
+        editor.doc.gid.set(instance, ISA.into(), person.id());
         editor.doc.gid.set(instance, name.id(), Id::String("Ada".into()));
 
         let root_path = Path::root();
@@ -553,11 +553,11 @@ mod tests {
 
         let name = Field::new(&mut editor.doc.gid);
         name.set_name(&mut editor.doc.gid, "name");
-        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_ID.clone()));
+        name.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(SemString::TYPE_UUID));
 
         let age = Field::new(&mut editor.doc.gid);
         age.set_name(&mut editor.doc.gid, "age");
-        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_ID.clone()));
+        age.set_type_(&mut editor.doc.gid, &TypeExpression::wrap(Number::TYPE_UUID));
 
         let empty = List::new_empty(&mut editor.doc.gid, field_converter());
         let tail = List::new_cons(&mut editor.doc.gid, &age.id(), &empty, field_converter());
@@ -568,12 +568,12 @@ mod tests {
 
         let person = Type::new(&mut editor.doc.gid);
         person.set_name(&mut editor.doc.gid, "person");
-        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.id()));
+        person.set_body(&mut editor.doc.gid, &TypeExpression::wrap(record.uuid));
 
         let extra = Id::new_uuid();
         let instance = uuid::Uuid::new_v4();
         editor.doc.root = Some(Id::Uuid(instance));
-        editor.doc.gid.set(instance, ISA.clone(), person.id());
+        editor.doc.gid.set(instance, ISA.into(), person.id());
         editor.doc.gid.set(instance, age.id(), Id::Number(ordered_float::OrderedFloat(42.0)));
         editor.doc.gid.set(instance, extra.clone(), Id::String("extra".into()));
         editor.doc.gid.set(instance, name.id(), Id::String("Ada".into()));

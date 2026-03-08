@@ -13,7 +13,7 @@ fn tri_any(iter: impl Iterator<Item = Option<bool>>) -> Option<bool> {
 }
 
 pub fn type_accepts_candidate(gid: &impl Gid, candidate: &Id, expected: &TypeExpression) -> Option<bool> {
-    gid.get(candidate, &ISA)
+    gid.get(candidate, &ISA.into())
         .and_then(|isa| type_accepts_isa_inner(gid, isa, &expected.id(), &TypeSubstitutions::new(), HashSet::new()))
 }
 
@@ -98,22 +98,22 @@ mod tests {
     #[test]
     fn string_accepted_as_string_type() {
         let gid = MutGid::new();
-        let et = TypeExpression::wrap(String::TYPE_ID.clone());
+        let et = TypeExpression::wrap(String::TYPE_UUID);
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
     }
 
     #[test]
     fn number_accepted_as_number_type() {
         let gid = MutGid::new();
-        let et = TypeExpression::wrap(Number::TYPE_ID.clone());
+        let et = TypeExpression::wrap(Number::TYPE_UUID);
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::Number(ordered_float::OrderedFloat(42.0)), &et), Some(true));
     }
 
     #[test]
     fn string_not_accepted_as_number_type() {
         let gid = MutGid::new();
-        let et = TypeExpression::wrap(Number::TYPE_ID.clone());
-        assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), None);
+        let et = TypeExpression::wrap(Number::TYPE_UUID);
+        assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(false));
     }
 
     #[test]
@@ -121,23 +121,26 @@ mod tests {
         let mut gid = MutGid::new();
         let t = Type::new(&mut gid);
         let record = Record::new(&mut gid);
-        t.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+        t.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), t.id().clone());
-        let et = TypeExpression::wrap(t.id().clone());
+        gid.set(node_uuid, ISA.into(), t.id().clone());
+        let et = TypeExpression::wrap(t.uuid);
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), Some(true));
     }
 
-    fn te_conv() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeExpression>> {
-        std::rc::Rc::new(|id| Some(TypeExpression::wrap(id.clone())))
+    fn te_conv() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<TypeExpression>> {
+        std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| TypeExpression::try_wrap(gid, id))
     }
 
-    fn tp_conv() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeParam>> {
-        std::rc::Rc::new(|id| Some(TypeParam::wrap(id.clone())))
+    fn tp_conv() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<TypeParam>> {
+        std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| TypeParam::try_wrap(gid, id))
     }
 
-    fn literal_gid(gid: &MutGid) -> crate::graph::StackedGid<&MutGid, BuiltinValuesGid> {
-        crate::graph::StackedGid::new(gid, BuiltinValuesGid)
+    fn literal_gid(gid: &MutGid) -> crate::graph::StackedGid<crate::graph::StackedGid<&MutGid, BuiltinValuesGid>, MutGid> {
+        crate::graph::StackedGid::new(
+            crate::graph::StackedGid::new(gid, BuiltinValuesGid),
+            semantics_gid(),
+        )
     }
 
     fn make_generic_type(gid: &mut MutGid, params: &[&Id]) -> (Type, Forall) {
@@ -149,7 +152,7 @@ mod tests {
         let forall = Forall::new(gid);
         forall.set_params(gid, &params_list);
         let t = Type::new(gid);
-        t.set_body(gid, &TypeExpression::wrap(forall.id().clone()));
+        t.set_body(gid, &TypeExpression::wrap(forall.uuid));
         (t, forall)
     }
 
@@ -174,7 +177,7 @@ mod tests {
         let sum = Sum::new(gid);
         sum.set_variants(gid, &variants_list);
         let t = Type::new(gid);
-        t.set_body(gid, &TypeExpression::wrap(sum.id().clone()));
+        t.set_body(gid, &TypeExpression::wrap(sum.uuid));
         t
     }
 
@@ -186,8 +189,8 @@ mod tests {
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), dog.id().clone());
-        let et = TypeExpression::wrap(animal.id().clone());
+        gid.set(node_uuid, ISA.into(), dog.id().clone());
+        let et = TypeExpression::wrap(animal.uuid);
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), Some(true));
     }
 
@@ -200,8 +203,8 @@ mod tests {
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), fish.id().clone());
-        let et = TypeExpression::wrap(animal.id().clone());
+        gid.set(node_uuid, ISA.into(), fish.id().clone());
+        let et = TypeExpression::wrap(animal.uuid);
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), Some(false));
     }
 
@@ -210,14 +213,14 @@ mod tests {
         let mut gid = MutGid::new();
         let record = Record::new(&mut gid);
         let dog = Type::new(&mut gid);
-        dog.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+        dog.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
         let cat = Type::new(&mut gid);
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
         // ISA points to the Record body, not the Type alias
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), record.id().clone());
-        let et = TypeExpression::wrap(animal.id().clone());
+        gid.set(node_uuid, ISA.into(), record.id().clone());
+        let et = TypeExpression::wrap(animal.uuid);
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), Some(true));
     }
 
@@ -226,12 +229,12 @@ mod tests {
         let mut gid = MutGid::new();
         let record = Record::new(&mut gid);
         let dog = Type::new(&mut gid);
-        dog.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+        dog.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
         // ISA points to Record body, expected is the Type alias
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), record.id().clone());
-        let et = TypeExpression::wrap(dog.id().clone());
+        gid.set(node_uuid, ISA.into(), record.id().clone());
+        let et = TypeExpression::wrap(dog.uuid);
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), Some(true));
     }
 
@@ -241,20 +244,20 @@ mod tests {
         let t = Type::new(&mut gid);
         let node_uuid = uuid::Uuid::new_v4();
         // Don't set ISA — can't determine match
-        let et = TypeExpression::wrap(t.id().clone());
+        let et = TypeExpression::wrap(t.uuid);
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), None);
     }
 
     #[test]
     fn string_accepted_in_sum_containing_string() {
         let mut gid = MutGid::new();
-        // Type StringWrapper → BODY → String::TYPE_ID (alias)
+        // Type StringWrapper → BODY → String::TYPE_UUID (alias)
         let string_type = Type::new(&mut gid);
-        string_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_ID.clone()));
+        string_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_UUID));
         let number_type = Type::new(&mut gid);
         let mixed = make_sum_type(&mut gid, &[&string_type, &number_type]);
 
-        let et = TypeExpression::wrap(mixed.id().clone());
+        let et = TypeExpression::wrap(mixed.uuid);
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
     }
 
@@ -265,7 +268,7 @@ mod tests {
         let cat = Type::new(&mut gid);
         let animal = make_sum_type(&mut gid, &[&dog, &cat]);
 
-        let et = TypeExpression::wrap(animal.id().clone());
+        let et = TypeExpression::wrap(animal.uuid);
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(false));
     }
 
@@ -274,11 +277,11 @@ mod tests {
         let mut gid = MutGid::new();
         let param_t = TypeParam::new(&mut gid);
         let (list_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
-        let apply = make_apply(&mut gid, &list_type, &[&String::TYPE_ID]);
+        let apply = make_apply(&mut gid, &list_type, &[&String::TYPE_UUID.into()]);
 
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), list_type.id().clone());
-        let et = TypeExpression::wrap(apply.id().clone());
+        gid.set(node_uuid, ISA.into(), list_type.id().clone());
+        let et = TypeExpression::wrap(apply.uuid);
         // Apply → BASE → list_type, candidate ISA matches list_type
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), Some(true));
     }
@@ -288,11 +291,11 @@ mod tests {
         let mut gid = MutGid::new();
         let record = Record::new(&mut gid);
         let forall = Forall::new(&mut gid);
-        forall.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+        forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), record.id().clone());
-        let et = TypeExpression::wrap(forall.id().clone());
+        gid.set(node_uuid, ISA.into(), record.id().clone());
+        let et = TypeExpression::wrap(forall.uuid);
         // Forall → BODY → record, candidate ISA matches record
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), Some(true));
     }
@@ -302,9 +305,9 @@ mod tests {
         let mut gid = MutGid::new();
         // Type Name = String
         let name_type = Type::new(&mut gid);
-        name_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_ID.clone()));
+        name_type.set_body(&mut gid, &TypeExpression::wrap(String::TYPE_UUID));
 
-        let et = TypeExpression::wrap(name_type.id().clone());
+        let et = TypeExpression::wrap(name_type.uuid);
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
     }
 
@@ -314,12 +317,12 @@ mod tests {
         // Type A → BODY → Type B → BODY → Type A
         let a = Type::new(&mut gid);
         let b = Type::new(&mut gid);
-        a.set_body(&mut gid, &TypeExpression::wrap(b.id().clone()));
-        b.set_body(&mut gid, &TypeExpression::wrap(a.id().clone()));
+        a.set_body(&mut gid, &TypeExpression::wrap(b.uuid));
+        b.set_body(&mut gid, &TypeExpression::wrap(a.uuid));
 
         let node_uuid = uuid::Uuid::new_v4();
-        gid.set(node_uuid, ISA.clone(), Id::new_uuid());
-        let et = TypeExpression::wrap(a.id().clone());
+        gid.set(node_uuid, ISA.into(), Id::new_uuid());
+        let et = TypeExpression::wrap(a.uuid);
         // Should terminate with None (cycle), not stack overflow
         assert_eq!(type_accepts_candidate(&gid, &Id::Uuid(node_uuid), &et), None);
     }
@@ -329,10 +332,10 @@ mod tests {
         let mut gid = MutGid::new();
         let param_t = TypeParam::new(&mut gid);
         let (id_type, forall) = make_generic_type(&mut gid, &[&param_t.id()]);
-        forall.set_body(&mut gid, &TypeExpression::wrap(param_t.id().clone()));
+        forall.set_body(&mut gid, &TypeExpression::wrap(param_t.uuid));
 
-        let applied = make_apply(&mut gid, &id_type, &[&String::TYPE_ID]);
-        let et = TypeExpression::wrap(applied.id().clone());
+        let applied = make_apply(&mut gid, &id_type, &[&String::TYPE_UUID.into()]);
+        let et = TypeExpression::wrap(applied.uuid);
 
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
     }
@@ -350,10 +353,10 @@ mod tests {
         let variants = List::new_cons(&mut gid, &param_a.id(), &tail, conv);
         let sum = Sum::new(&mut gid);
         sum.set_variants(&mut gid, &variants);
-        forall.set_body(&mut gid, &TypeExpression::wrap(sum.id().clone()));
+        forall.set_body(&mut gid, &TypeExpression::wrap(sum.uuid));
 
-        let applied = make_apply(&mut gid, &either_type, &[&String::TYPE_ID, &Number::TYPE_ID]);
-        let et = TypeExpression::wrap(applied.id().clone());
+        let applied = make_apply(&mut gid, &either_type, &[&String::TYPE_UUID.into(), &Number::TYPE_UUID.into()]);
+        let et = TypeExpression::wrap(applied.uuid);
 
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::String("hello".into()), &et), Some(true));
         assert_eq!(type_accepts_candidate(&literal_gid(&gid), &Id::Number(ordered_float::OrderedFloat(42.0)), &et), Some(true));

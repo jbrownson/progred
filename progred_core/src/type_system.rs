@@ -22,9 +22,9 @@ pub fn expected_type_with_substitutions(
     let subs = parent_env.as_ref()
         .map(|(te, outer_subs)| substitutions_for_type(gid, &te.id(), outer_subs))
         .unwrap_or_default();
-    let raw_type = gid.get(&label, &Field::TYPE_)?;
+    let raw_type = gid.get(&label, &Field::TYPE_.into())?;
     let resolved = subs.get(raw_type).unwrap_or(raw_type);
-    Some((TypeExpression::wrap(resolved.clone()), subs))
+    Some((TypeExpression::try_wrap(gid, resolved)?, subs))
 }
 
 pub fn substitutions_for_type(
@@ -94,12 +94,16 @@ mod tests {
     use crate::path::Path;
     use std::rc::Rc;
 
-    fn te_conv() -> Rc<dyn Fn(&Id) -> Option<TypeExpression>> {
-        Rc::new(|id| Some(TypeExpression::wrap(id.clone())))
+    fn sem_gid(gid: &MutGid) -> crate::graph::StackedGid<&MutGid, MutGid> {
+        crate::graph::StackedGid::new(gid, semantics_gid())
     }
 
-    fn tp_conv() -> Rc<dyn Fn(&Id) -> Option<TypeParam>> {
-        Rc::new(|id| Some(TypeParam::wrap(id.clone())))
+    fn te_conv() -> Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<TypeExpression>> {
+        Rc::new(|gid: &dyn crate::graph::Gid, id| TypeExpression::try_wrap(gid, id))
+    }
+
+    fn tp_conv() -> Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<TypeParam>> {
+        Rc::new(|gid: &dyn crate::graph::Gid, id| TypeParam::try_wrap(gid, id))
     }
 
     fn make_generic_type(gid: &mut MutGid, params: &[&Id]) -> (Type, Forall) {
@@ -111,7 +115,7 @@ mod tests {
         let forall = Forall::new(gid);
         forall.set_params(gid, &params_list);
         let t = Type::new(gid);
-        t.set_body(gid, &TypeExpression::wrap(forall.id()));
+        t.set_body(gid, &TypeExpression::wrap(forall.uuid));
         (t, forall)
     }
 
@@ -127,9 +131,9 @@ mod tests {
         apply
     }
 
-    fn make_field(gid: &mut MutGid, type_id: &Id) -> Field {
+    fn make_field(gid: &mut MutGid, type_uuid: uuid::Uuid) -> Field {
         let f = Field::new(gid);
-        f.set_type_(gid, &TypeExpression::wrap(type_id.clone()));
+        f.set_type_(gid, &TypeExpression::wrap(type_uuid));
         f
     }
 
@@ -138,7 +142,7 @@ mod tests {
         let mut gid = MutGid::new();
         let record = Record::new(&mut gid);
         let alias = Type::new(&mut gid);
-        alias.set_body(&mut gid, &TypeExpression::wrap(record.id()));
+        alias.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
         assert_eq!(resolve_record(&gid, &alias.id()).map(|r| r.id()), Some(record.id()));
     }
@@ -148,7 +152,7 @@ mod tests {
         let mut gid = MutGid::new();
         let record = Record::new(&mut gid);
         let forall = Forall::new(&mut gid);
-        forall.set_body(&mut gid, &TypeExpression::wrap(record.id()));
+        forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
         assert_eq!(resolve_record(&gid, &forall.id()).map(|r| r.id()), Some(record.id()));
     }
@@ -159,8 +163,8 @@ mod tests {
         let param_t = TypeParam::new(&mut gid);
         let (container, forall) = make_generic_type(&mut gid, &[&param_t.id()]);
         let record = Record::new(&mut gid);
-        forall.set_body(&mut gid, &TypeExpression::wrap(record.id()));
-        let apply = make_apply(&mut gid, &container, &[&String::TYPE_ID]);
+        forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
+        let apply = make_apply(&mut gid, &container, &[&String::TYPE_UUID.into()]);
 
         assert_eq!(resolve_record(&gid, &apply.id()).map(|r| r.id()), Some(record.id()));
     }
@@ -170,8 +174,8 @@ mod tests {
         let mut gid = MutGid::new();
         let a = Type::new(&mut gid);
         let b = Type::new(&mut gid);
-        a.set_body(&mut gid, &TypeExpression::wrap(b.id()));
-        b.set_body(&mut gid, &TypeExpression::wrap(a.id()));
+        a.set_body(&mut gid, &TypeExpression::wrap(b.uuid));
+        b.set_body(&mut gid, &TypeExpression::wrap(a.uuid));
 
         assert!(resolve_record(&gid, &a.id()).is_none());
     }
@@ -180,9 +184,9 @@ mod tests {
     fn expected_type_for_field() {
         let mut gid = MutGid::new();
         let field = Field::new(&mut gid);
-        field.set_type_(&mut gid, &TypeExpression::wrap(String::TYPE_ID.clone()));
+        field.set_type_(&mut gid, &TypeExpression::wrap(String::TYPE_UUID));
         let path = Path::orphan(Id::new_uuid()).child(field.id());
-        assert_eq!(expected_type(&gid, &path).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path).unwrap().id(), String::TYPE_UUID.into());
     }
 
     #[test]
@@ -190,15 +194,15 @@ mod tests {
         let mut gid = MutGid::new();
         let param_t = TypeParam::new(&mut gid);
         let (box_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
-        let apply = make_apply(&mut gid, &box_type, &[&String::TYPE_ID]);
+        let apply = make_apply(&mut gid, &box_type, &[&String::TYPE_UUID.into()]);
 
-        let outer = make_field(&mut gid, &apply.id());
-        let inner = make_field(&mut gid, &param_t.id());
+        let outer = make_field(&mut gid, apply.uuid);
+        let inner = make_field(&mut gid, param_t.uuid);
 
         let path = Path::orphan(Id::new_uuid())
             .child(outer.id())
             .child(inner.id());
-        assert_eq!(expected_type(&gid, &path).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path).unwrap().id(), String::TYPE_UUID.into());
     }
 
     #[test]
@@ -207,22 +211,22 @@ mod tests {
         let param_a = TypeParam::new(&mut gid);
         let param_b = TypeParam::new(&mut gid);
         let (pair_type, _) = make_generic_type(&mut gid, &[&param_a.id(), &param_b.id()]);
-        let apply = make_apply(&mut gid, &pair_type, &[&String::TYPE_ID, &Number::TYPE_ID]);
+        let apply = make_apply(&mut gid, &pair_type, &[&String::TYPE_UUID.into(), &Number::TYPE_UUID.into()]);
 
-        let pair_field = make_field(&mut gid, &apply.id());
-        let first = make_field(&mut gid, &param_a.id());
-        let second = make_field(&mut gid, &param_b.id());
+        let pair_field = make_field(&mut gid, apply.uuid);
+        let first = make_field(&mut gid, param_a.uuid);
+        let second = make_field(&mut gid, param_b.uuid);
 
         let root = Id::new_uuid();
         let path_first = Path::orphan(root.clone())
             .child(pair_field.id())
             .child(first.id());
-        assert_eq!(expected_type(&gid, &path_first).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_first).unwrap().id(), String::TYPE_UUID.into());
 
         let path_second = Path::orphan(root)
             .child(pair_field.id())
             .child(second.id());
-        assert_eq!(expected_type(&gid, &path_second).unwrap().id(), Number::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_second).unwrap().id(), Number::TYPE_UUID.into());
     }
 
     #[test]
@@ -231,25 +235,25 @@ mod tests {
         let param_t = TypeParam::new(&mut gid);
         let (list_type, forall) = make_generic_type(&mut gid, &[&param_t.id()]);
 
-        let head_field = make_field(&mut gid, &param_t.id());
+        let head_field = make_field(&mut gid, param_t.uuid);
         let tail_apply = make_apply(&mut gid, &list_type, &[&param_t.id()]);
-        let tail_field = make_field(&mut gid, &tail_apply.id());
-        forall.set_body(&mut gid, &TypeExpression::wrap(Id::new_uuid()));
+        let tail_field = make_field(&mut gid, tail_apply.uuid);
+        forall.set_body(&mut gid, &TypeExpression::wrap(uuid::Uuid::new_v4()));
 
-        let concrete = make_apply(&mut gid, &list_type, &[&String::TYPE_ID]);
-        let list_field = make_field(&mut gid, &concrete.id());
+        let concrete = make_apply(&mut gid, &list_type, &[&String::TYPE_UUID.into()]);
+        let list_field = make_field(&mut gid, concrete.uuid);
 
         let root = Id::new_uuid();
         let path_head = Path::orphan(root.clone())
             .child(list_field.id())
             .child(head_field.id());
-        assert_eq!(expected_type(&gid, &path_head).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_head).unwrap().id(), String::TYPE_UUID.into());
 
         let path_tail_head = Path::orphan(root)
             .child(list_field.id())
             .child(tail_field.id())
             .child(head_field.id());
-        assert_eq!(expected_type(&gid, &path_tail_head).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_tail_head).unwrap().id(), String::TYPE_UUID.into());
     }
 
     #[test]
@@ -258,12 +262,12 @@ mod tests {
         let param_t = TypeParam::new(&mut gid);
         let (list_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
 
-        let head_field = make_field(&mut gid, &param_t.id());
+        let head_field = make_field(&mut gid, param_t.uuid);
         let tail_apply = make_apply(&mut gid, &list_type, &[&param_t.id()]);
-        let tail_field = make_field(&mut gid, &tail_apply.id());
+        let tail_field = make_field(&mut gid, tail_apply.uuid);
 
-        let concrete = make_apply(&mut gid, &list_type, &[&Number::TYPE_ID]);
-        let list_field = make_field(&mut gid, &concrete.id());
+        let concrete = make_apply(&mut gid, &list_type, &[&Number::TYPE_UUID.into()]);
+        let list_field = make_field(&mut gid, concrete.uuid);
 
         let path = Path::orphan(Id::new_uuid())
             .child(list_field.id())
@@ -271,7 +275,7 @@ mod tests {
             .child(tail_field.id())
             .child(tail_field.id())
             .child(head_field.id());
-        assert_eq!(expected_type(&gid, &path).unwrap().id(), Number::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path).unwrap().id(), Number::TYPE_UUID.into());
     }
 
     #[test]
@@ -284,23 +288,23 @@ mod tests {
         let outer_param = TypeParam::new(&mut gid);
         let (outer_type, outer_forall) = make_generic_type(&mut gid, &[&outer_param.id()]);
         let inner_apply = make_apply(&mut gid, &inner_type, &[&outer_param.id()]);
-        let wrapper_field = make_field(&mut gid, &inner_apply.id());
+        let wrapper_field = make_field(&mut gid, inner_apply.uuid);
         let record = Record::new(&mut gid);
-        let field_conv = Rc::new(|id: &Id| Some(Field::wrap(id.clone())));
+        let field_conv: Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<Field>> = Rc::new(|gid: &dyn crate::graph::Gid, id| Field::try_wrap(gid, id));
         let empty_fields = List::new_empty(&mut gid, field_conv.clone());
         let fields_list = List::new_cons(&mut gid, &wrapper_field.id(), &empty_fields, field_conv);
         record.set_fields(&mut gid, &fields_list);
-        outer_forall.set_body(&mut gid, &TypeExpression::wrap(record.id()));
+        outer_forall.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
-        let outer_apply = make_apply(&mut gid, &outer_type, &[&Number::TYPE_ID]);
-        let container_field = make_field(&mut gid, &outer_apply.id());
-        let leaf_field = make_field(&mut gid, &inner_param.id());
+        let outer_apply = make_apply(&mut gid, &outer_type, &[&Number::TYPE_UUID.into()]);
+        let container_field = make_field(&mut gid, outer_apply.uuid);
+        let leaf_field = make_field(&mut gid, inner_param.uuid);
 
         let path = Path::orphan(Id::new_uuid())
             .child(container_field.id())
             .child(wrapper_field.id())
             .child(leaf_field.id());
-        assert_eq!(expected_type(&gid, &path).unwrap().id(), Number::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path).unwrap().id(), Number::TYPE_UUID.into());
     }
 
     #[test]
@@ -309,39 +313,39 @@ mod tests {
 
         let inner_param = TypeParam::new(&mut gid);
         let (inner_type, _) = make_generic_type(&mut gid, &[&inner_param.id()]);
-        let inner_head = make_field(&mut gid, &inner_param.id());
+        let inner_head = make_field(&mut gid, inner_param.uuid);
         let inner_tail_apply = make_apply(&mut gid, &inner_type, &[&inner_param.id()]);
-        let inner_tail = make_field(&mut gid, &inner_tail_apply.id());
+        let inner_tail = make_field(&mut gid, inner_tail_apply.uuid);
 
         let outer_param = TypeParam::new(&mut gid);
         let (outer_type, _) = make_generic_type(&mut gid, &[&outer_param.id()]);
-        let outer_value = make_field(&mut gid, &outer_param.id());
+        let outer_value = make_field(&mut gid, outer_param.uuid);
         let inner_of_outer = make_apply(&mut gid, &inner_type, &[&outer_param.id()]);
-        let outer_list_field = make_field(&mut gid, &inner_of_outer.id());
+        let outer_list_field = make_field(&mut gid, inner_of_outer.uuid);
         let outer_tail_apply = make_apply(&mut gid, &outer_type, &[&outer_param.id()]);
-        let outer_tail = make_field(&mut gid, &outer_tail_apply.id());
+        let outer_tail = make_field(&mut gid, outer_tail_apply.uuid);
 
-        let concrete = make_apply(&mut gid, &outer_type, &[&String::TYPE_ID]);
-        let root_field = make_field(&mut gid, &concrete.id());
+        let concrete = make_apply(&mut gid, &outer_type, &[&String::TYPE_UUID.into()]);
+        let root_field = make_field(&mut gid, concrete.uuid);
         let root = Id::new_uuid();
 
         let path_value = Path::orphan(root.clone())
             .child(root_field.id())
             .child(outer_value.id());
-        assert_eq!(expected_type(&gid, &path_value).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_value).unwrap().id(), String::TYPE_UUID.into());
 
         let path_inner_head = Path::orphan(root.clone())
             .child(root_field.id())
             .child(outer_list_field.id())
             .child(inner_head.id());
-        assert_eq!(expected_type(&gid, &path_inner_head).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_inner_head).unwrap().id(), String::TYPE_UUID.into());
 
         let path_inner_tail_head = Path::orphan(root.clone())
             .child(root_field.id())
             .child(outer_list_field.id())
             .child(inner_tail.id())
             .child(inner_head.id());
-        assert_eq!(expected_type(&gid, &path_inner_tail_head).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_inner_tail_head).unwrap().id(), String::TYPE_UUID.into());
 
         let path_outer_tail_inner = Path::orphan(root)
             .child(root_field.id())
@@ -349,7 +353,7 @@ mod tests {
             .child(outer_list_field.id())
             .child(inner_tail.id())
             .child(inner_head.id());
-        assert_eq!(expected_type(&gid, &path_outer_tail_inner).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path_outer_tail_inner).unwrap().id(), String::TYPE_UUID.into());
     }
 
     #[test]
@@ -357,14 +361,14 @@ mod tests {
         let mut gid = MutGid::new();
         let field = Field::new(&mut gid);
         let path = Path::orphan(Id::new_uuid()).child(field.id());
-        assert!(expected_type(&gid, &path).is_none());
+        assert!(expected_type(&sem_gid(&gid), &path).is_none());
     }
 
     #[test]
     fn root_path_returns_none() {
         let gid = MutGid::new();
         let path = Path::orphan(Id::new_uuid());
-        assert!(expected_type(&gid, &path).is_none());
+        assert!(expected_type(&sem_gid(&gid), &path).is_none());
     }
 
     #[test]
@@ -372,40 +376,40 @@ mod tests {
         let mut gid = MutGid::new();
         let base_type = Type::new(&mut gid);
         let record = Record::new(&mut gid);
-        base_type.set_body(&mut gid, &TypeExpression::wrap(record.id()));
+        base_type.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
         let apply = Apply::new(&mut gid);
         apply.set_base(&mut gid, &base_type);
 
-        let apply_field = make_field(&mut gid, &apply.id());
-        let inner = make_field(&mut gid, &String::TYPE_ID);
+        let apply_field = make_field(&mut gid, apply.uuid);
+        let inner = make_field(&mut gid, String::TYPE_UUID);
 
         let path = Path::orphan(Id::new_uuid())
             .child(apply_field.id())
             .child(inner.id());
-        assert_eq!(expected_type(&gid, &path).unwrap().id(), String::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path).unwrap().id(), String::TYPE_UUID.into());
     }
 
     #[test]
     fn concrete_type_parent_no_substitution() {
         let mut gid = MutGid::new();
-        let outer = make_field(&mut gid, &String::TYPE_ID);
-        let inner = make_field(&mut gid, &Number::TYPE_ID);
+        let outer = make_field(&mut gid, String::TYPE_UUID);
+        let inner = make_field(&mut gid, Number::TYPE_UUID);
 
         let path = Path::orphan(Id::new_uuid())
             .child(outer.id())
             .child(inner.id());
-        assert_eq!(expected_type(&gid, &path).unwrap().id(), Number::TYPE_ID);
+        assert_eq!(expected_type(&sem_gid(&gid), &path).unwrap().id(), Number::TYPE_UUID.into());
     }
 
     #[test]
     fn unresolved_param_returns_none() {
         let mut gid = MutGid::new();
         let param_t = TypeParam::new(&mut gid);
-        let field = make_field(&mut gid, &param_t.id());
+        let field = make_field(&mut gid, param_t.uuid);
 
         let path = Path::orphan(Id::new_uuid()).child(field.id());
-        assert!(expected_type(&gid, &path).is_none());
+        assert!(expected_type(&sem_gid(&gid), &path).is_none());
     }
 
     #[test]
@@ -414,12 +418,12 @@ mod tests {
         let param_t = TypeParam::new(&mut gid);
         let (box_type, _) = make_generic_type(&mut gid, &[&param_t.id()]);
 
-        let outer = make_field(&mut gid, &box_type.id());
-        let inner = make_field(&mut gid, &param_t.id());
+        let outer = make_field(&mut gid, box_type.uuid);
+        let inner = make_field(&mut gid, param_t.uuid);
 
         let path = Path::orphan(Id::new_uuid())
             .child(outer.id())
             .child(inner.id());
-        assert!(expected_type(&gid, &path).is_none());
+        assert!(expected_type(&sem_gid(&gid), &path).is_none());
     }
 }

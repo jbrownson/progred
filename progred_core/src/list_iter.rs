@@ -25,7 +25,7 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
         loop {
             let current = self.current.as_ref()?;
 
-            if self.gid.get(current, &ISA) != Some(&list::Cons::<()>::TYPE_ID) {
+            if self.gid.get(current, &ISA.into()) != Some(&list::Cons::<()>::TYPE_UUID.into()) {
                 self.current = None;
                 return None;
             }
@@ -35,8 +35,8 @@ impl<'a, G: Gid> Iterator for ListIter<'a, G> {
                 return None;
             }
 
-            let head = self.gid.get(current, &list::Cons::<()>::HEAD);
-            self.current = self.gid.get(current, &list::Cons::<()>::TAIL).cloned();
+            let head = self.gid.get(current, &list::Cons::<()>::HEAD.into());
+            self.current = self.gid.get(current, &list::Cons::<()>::TAIL.into()).cloned();
 
             if head.is_some() {
                 return head;
@@ -54,7 +54,7 @@ mod tests {
         let empty_uuid = uuid::Uuid::new_v4();
         gid.merge(im::hashmap! {
             empty_uuid => im::hashmap! {
-                ISA.clone() => list::Empty::<()>::TYPE_ID.clone(),
+                ISA.into() => list::Empty::<()>::TYPE_UUID.into(),
             }
         });
 
@@ -62,9 +62,9 @@ mod tests {
             let cons_uuid = uuid::Uuid::new_v4();
             gid.merge(im::hashmap! {
                 cons_uuid => im::hashmap! {
-                    ISA.clone() => list::Cons::<()>::TYPE_ID.clone(),
-                    list::Cons::<()>::HEAD.clone() => elem.clone(),
-                    list::Cons::<()>::TAIL.clone() => tail_node,
+                    ISA.into() => list::Cons::<()>::TYPE_UUID.into(),
+                    list::Cons::<()>::HEAD.into() => elem.clone(),
+                    list::Cons::<()>::TAIL.into() => tail_node,
                 }
             });
             Id::Uuid(cons_uuid)
@@ -114,14 +114,14 @@ mod tests {
         let cons2 = Id::Uuid(uuid2);
         gid.merge(im::hashmap! {
             uuid1 => im::hashmap! {
-                ISA.clone() => list::Cons::<()>::TYPE_ID.clone(),
-                list::Cons::<()>::HEAD.clone() => Id::String("a".into()),
-                list::Cons::<()>::TAIL.clone() => cons2.clone(),
+                ISA.into() => list::Cons::<()>::TYPE_UUID.into(),
+                list::Cons::<()>::HEAD.into() => Id::String("a".into()),
+                list::Cons::<()>::TAIL.into() => cons2.clone(),
             },
             uuid2 => im::hashmap! {
-                ISA.clone() => list::Cons::<()>::TYPE_ID.clone(),
-                list::Cons::<()>::HEAD.clone() => Id::String("b".into()),
-                list::Cons::<()>::TAIL.clone() => cons1.clone(),
+                ISA.into() => list::Cons::<()>::TYPE_UUID.into(),
+                list::Cons::<()>::HEAD.into() => Id::String("b".into()),
+                list::Cons::<()>::TAIL.into() => cons1.clone(),
             },
         });
 

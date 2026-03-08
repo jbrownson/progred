@@ -84,7 +84,7 @@ fn named_things(editor: &Editor) -> Vec<NamedThing> {
 }
 
 fn disambiguation(gid: &impl Gid, id: &Id) -> Option<String> {
-    let isa = gid.get(id, &ISA)?;
+    let isa = gid.get(id, &ISA.into())?;
     name_of(gid, isa)
 }
 

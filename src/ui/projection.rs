@@ -118,7 +118,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     for element in elements {
                         list_insert_point(ui, editor, &insert_path, true, events);
                         render_d(ui, editor, element, mode, ctx, events);
-                        insert_path = insert_path.child(list::Cons::<()>::TAIL.clone());
+                        insert_path = insert_path.child(list::Cons::<()>::TAIL.into());
                     }
                     list_insert_point(ui, editor, &insert_path, true, events);
                     ui.label(text_rich(closing, &TextStyle::Punctuation));
@@ -137,7 +137,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     }
                     list_insert_point(ui, editor, &insert_path, false, events);
                     render_d(ui, editor, element, mode, ctx, events);
-                    insert_path = insert_path.child(list::Cons::<()>::TAIL.clone());
+                    insert_path = insert_path.child(list::Cons::<()>::TAIL.into());
                     need_separator = true;
                 }
                 list_insert_point(ui, editor, &insert_path, false, events);
@@ -158,7 +158,7 @@ fn active_list_insert(
         Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
         _ => return false,
     };
-    let et = expected_type(&editor.lib(), &path.child(list::Cons::<()>::HEAD.clone()));
+    let et = expected_type(&editor.lib(), &path.child(list::Cons::<()>::HEAD.into()));
     let result = super::placeholder::render(ui, editor, ps, et.as_ref());
     match result.outcome {
         PlaceholderOutcome::Commit(value) => {

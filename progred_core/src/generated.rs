@@ -4,14 +4,14 @@ use crate::graph::{Gid, Id};
 use semantics::{ISA, NAME};
 
 pub fn name_of(gid: &impl Gid, node: &Id) -> Option<String> {
-    match gid.get(node, &NAME)? {
+    match gid.get(node, &NAME.into())? {
         Id::String(s) => Some(s.clone()),
         _ => None,
     }
 }
 
 pub fn display_label(gid: &impl Gid, node: &Id) -> Option<String> {
-    let isa_name = gid.get(node, &ISA)
+    let isa_name = gid.get(node, &ISA.into())
         .and_then(|isa_id| name_of(gid, isa_id));
 
     match (isa_name, name_of(gid, node)) {
@@ -26,7 +26,7 @@ impl<T> semantics::List<T> {
     pub fn iter<'a>(&self, gid: &'a impl crate::graph::Gid) -> impl Iterator<Item = T> + 'a where T: 'a {
         let conv = self.into_T.clone();
         crate::list_iter::ListIter::new(gid, Some(self.id()))
-            .filter_map(move |id| conv(id))
+            .filter_map(move |id| conv(gid, id))
     }
 }
 
@@ -37,12 +37,12 @@ mod tests {
 
     #[test]
     fn generated_types_exist() {
-        let _ = Type::TYPE_ID;
-        let _ = Forall::TYPE_ID;
-        let _ = Apply::TYPE_ID;
-        let _ = Sum::TYPE_ID;
-        let _ = Record::TYPE_ID;
-        let _ = Field::TYPE_ID;
+        let _ = Type::TYPE_UUID;
+        let _ = Forall::TYPE_UUID;
+        let _ = Apply::TYPE_UUID;
+        let _ = Sum::TYPE_UUID;
+        let _ = Record::TYPE_UUID;
+        let _ = Field::TYPE_UUID;
     }
 
     #[test]
@@ -117,8 +117,8 @@ mod tests {
         let _: Option<std::string::String> = f.name(&gid);
     }
 
-    fn field_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<Field>> {
-        std::rc::Rc::new(|id| Some(Field::wrap(id.clone())))
+    fn field_converter() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<Field>> {
+        std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| Field::try_wrap(gid, id))
     }
 
     #[test]
@@ -143,8 +143,8 @@ mod tests {
         assert_eq!(fields[1].id(), field2.id());
     }
 
-    fn id_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<Id>> {
-        std::rc::Rc::new(|id| Some(id.clone()))
+    fn id_converter() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<Id>> {
+        std::rc::Rc::new(|_gid, id| Some(id.clone()))
     }
 
     #[test]
@@ -170,8 +170,8 @@ mod tests {
         assert_eq!(result, Some(Some(head_val)));
     }
 
-    fn string_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<std::string::String>> {
-        std::rc::Rc::new(|id| match id {
+    fn string_converter() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<std::string::String>> {
+        std::rc::Rc::new(|_gid, id| match id {
             Id::String(s) => Some(s.clone()),
             _ => None,
         })
@@ -190,9 +190,9 @@ mod tests {
         assert_eq!(items, vec!["hello".to_string(), "world".to_string()]);
     }
 
-    fn inner_list_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<List<std::string::String>>> {
+    fn inner_list_converter() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<List<std::string::String>>> {
         let string_conv = string_converter();
-        std::rc::Rc::new(move |id| Some(List::wrap(id.clone(), string_conv.clone())))
+        std::rc::Rc::new(move |gid: &dyn crate::graph::Gid, id| List::try_wrap(gid, id, string_conv.clone()))
     }
 
     #[test]
@@ -225,8 +225,8 @@ mod tests {
         ]);
     }
 
-    fn number_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<f64>> {
-        std::rc::Rc::new(|id| match id {
+    fn number_converter() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<f64>> {
+        std::rc::Rc::new(|_gid, id| match id {
             Id::Number(n) => Some(n.0),
             _ => None,
         })
@@ -243,9 +243,9 @@ mod tests {
         let inner = List::new_cons(&mut gid, &Id::Number(ordered_float::OrderedFloat(1.0)), &inner2, num_conv);
 
         fn make_nested_list_conv<T: 'static>(
-            element_conv: std::rc::Rc<dyn Fn(&Id) -> Option<T>>,
-        ) -> std::rc::Rc<dyn Fn(&Id) -> Option<List<T>>> {
-            std::rc::Rc::new(move |id| Some(List::wrap(id.clone(), element_conv.clone())))
+            element_conv: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<T>>,
+        ) -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<List<T>>> {
+            std::rc::Rc::new(move |gid: &dyn crate::graph::Gid, id| List::try_wrap(gid, id, element_conv.clone()))
         }
 
         let outer_conv = make_nested_list_conv(number_converter());
@@ -276,8 +276,8 @@ mod tests {
         let mut gid = MutGid::new();
         let t = Type::new(&mut gid);
 
-        let isa = gid.get(&t.id(), &ISA);
-        assert_eq!(isa, Some(&Type::TYPE_ID));
+        let isa = gid.get(&t.id(), &ISA.into());
+        assert_eq!(isa, Some(&Type::TYPE_UUID.into()));
     }
 
     #[test]
@@ -287,7 +287,7 @@ mod tests {
         let record = Record::new(&mut gid);
         let t = Type::new(&mut gid);
 
-        t.set_body(&mut gid, &TypeExpression::wrap(record.id().clone()));
+        t.set_body(&mut gid, &TypeExpression::wrap(record.uuid));
 
         let body = t.body(&gid);
         assert!(body.is_some());
@@ -328,7 +328,7 @@ mod tests {
 
         let field = Field::new(&mut gid);
         field.set_name(&mut gid, "title");
-        field.set_type_(&mut gid, &TypeExpression::wrap(ref_type.id().clone()));
+        field.set_type_(&mut gid, &TypeExpression::wrap(ref_type.uuid));
 
         assert_eq!(field.name(&gid), Some("title".to_string()));
         let field_type = field.type_(&gid).unwrap();
@@ -364,8 +364,8 @@ mod tests {
         assert_eq!(is_empty, Some(true));
     }
 
-    fn type_param_converter() -> std::rc::Rc<dyn Fn(&Id) -> Option<TypeParam>> {
-        std::rc::Rc::new(|id| Some(TypeParam::wrap(id.clone())))
+    fn type_param_converter() -> std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &Id) -> Option<TypeParam>> {
+        std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| TypeParam::try_wrap(gid, id))
     }
 
     #[test]

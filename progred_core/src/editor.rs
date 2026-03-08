@@ -43,7 +43,7 @@ impl Editor {
             PlaceholderCommit::Existing(id) => id,
             PlaceholderCommit::NewNode { isa } => {
                 let uuid = uuid::Uuid::new_v4();
-                self.doc.gid.set(uuid, crate::generated::semantics::ISA.clone(), isa);
+                self.doc.gid.set(uuid, crate::generated::semantics::ISA.into(), isa);
                 Id::Uuid(uuid)
             }
         }
@@ -124,9 +124,9 @@ impl Editor {
                     if let Some(current_value) = self.doc.node(&path) {
                         let new_cons = Id::new_uuid();
                         self.doc.set_edge(&path, new_cons.clone());
-                        self.doc.set_edge(&path.child(ISA.clone()), list::Cons::<()>::TYPE_ID.clone());
-                        self.doc.set_edge(&path.child(list::Cons::<()>::HEAD.clone()), head_value);
-                        self.doc.set_edge(&path.child(list::Cons::<()>::TAIL.clone()), current_value);
+                        self.doc.set_edge(&path.child(ISA.into()), list::Cons::<()>::TYPE_UUID.into());
+                        self.doc.set_edge(&path.child(list::Cons::<()>::HEAD.into()), head_value);
+                        self.doc.set_edge(&path.child(list::Cons::<()>::TAIL.into()), current_value);
                     }
                     self.selection = None;
                 }
@@ -174,13 +174,13 @@ mod tests {
     #[test]
     fn semantics_contains_field_type() {
         let editor = Editor::new();
-        assert_eq!(name_of(&editor.semantics.gid, &Field::TYPE_ID), Some("field".to_string()));
+        assert_eq!(name_of(&editor.semantics.gid, &Field::TYPE_UUID.into()), Some("field".to_string()));
     }
 
     #[test]
     fn lib_resolves_semantics() {
         let editor = Editor::new();
-        assert_eq!(name_of(&editor.lib(), &Field::TYPE_ID), Some("field".to_string()));
+        assert_eq!(name_of(&editor.lib(), &Field::TYPE_UUID.into()), Some("field".to_string()));
     }
 
     #[test]
@@ -190,11 +190,11 @@ mod tests {
         let mut editor = Editor::new();
         let uuid = uuid::Uuid::new_v4();
         let node = Id::Uuid(uuid);
-        editor.doc.gid.set(uuid, ISA.clone(), Field::TYPE_ID.clone());
-        editor.doc.gid.set(uuid, NAME.clone(), Id::String("age".into()));
+        editor.doc.gid.set(uuid, ISA.into(), Field::TYPE_UUID.into());
+        editor.doc.gid.set(uuid, NAME.into(), Id::String("age".into()));
 
         let lib = editor.lib();
-        assert_eq!(lib.get(&node, &ISA), Some(&Field::TYPE_ID));
+        assert_eq!(lib.get(&node, &ISA.into()), Some(&Field::TYPE_UUID.into()));
         assert_eq!(display_label(&lib, &node), Some("field \"age\"".to_string()));
     }
 }

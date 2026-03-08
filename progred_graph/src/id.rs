@@ -11,7 +11,10 @@ pub enum Id {
     Number(OrderedFloat<f64>),
 }
 
-impl Id { pub fn new_uuid() -> Self { Id::Uuid(Uuid::new_v4()) } }
+impl Id {
+    pub fn new_uuid() -> Self { Id::Uuid(Uuid::new_v4()) }
+    pub fn as_uuid(&self) -> Option<Uuid> { match self { Id::Uuid(u) => Some(*u), _ => None } }
+}
 impl From<Uuid> for Id { fn from(u: Uuid) -> Self { Id::Uuid(u) } }
 impl From<String> for Id { fn from(s: String) -> Self { Id::String(s) } }
 impl From<&str> for Id { fn from(s: &str) -> Self { Id::String(s.to_string()) } }

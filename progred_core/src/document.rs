@@ -52,7 +52,7 @@ impl Document {
 
     fn splice_out_list_element(&mut self, head_path: &Path, cons_id: &Id) {
         if let Some((cons_path, _)) = head_path.pop()
-            && let Some(tail_value) = self.gid.get(cons_id, &list::Cons::<()>::TAIL).cloned()
+            && let Some(tail_value) = self.gid.get(cons_id, &list::Cons::<()>::TAIL.into()).cloned()
         {
             self.set_edge(&cons_path, tail_value);
         }
