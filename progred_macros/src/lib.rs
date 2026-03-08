@@ -221,6 +221,39 @@ fn id_expr(id: &Id) -> TokenStream2 {
     }
 }
 
+/// Returns (required_param_type, fn(value_tokens) -> id_value_expr) for setters and constructors.
+fn resolved_type_codegen(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(TokenStream2) -> TokenStream2>) {
+    match resolved {
+        ResolvedType::String => (
+            quote! { impl Into<std::string::String> },
+            Box::new(|val| quote! { crate::graph::Id::String(#val.into()) }),
+        ),
+        ResolvedType::Number => (
+            quote! { f64 },
+            Box::new(|val| quote! { crate::graph::Id::Number(ordered_float::OrderedFloat(#val)) }),
+        ),
+        ResolvedType::Record { rust_name } => {
+            let wrapper = format_ident!("{}", rust_name);
+            (
+                quote! { &#wrapper },
+                Box::new(|val| quote! { #val.id().clone() }),
+            )
+        },
+        ResolvedType::Generic { rust_name, args } => {
+            let wrapper = format_ident!("{}", rust_name);
+            let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
+            (
+                quote! { &#wrapper<#(#arg_types),*> },
+                Box::new(|val| quote! { #val.id().clone() }),
+            )
+        },
+        ResolvedType::TypeParam { .. } => (
+            quote! { &crate::graph::Id },
+            Box::new(|val| quote! { #val.clone() }),
+        ),
+    }
+}
+
 fn generate_constructor_field(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Result<(syn::Ident, TokenStream2, TokenStream2)> {
     let field_name = get_name(gid, field_id)
         .ok_or_else(|| format!("Field {} has no name", field_id))?;
@@ -230,38 +263,18 @@ fn generate_constructor_field(gid: &impl Gid, field_id: &Id, subs: &Substitution
     };
     let param_name = format_ident!("{}", rust_method_name(&field_name)?);
     let const_name = format_ident!("{}", rust_const_name(&field_name)?);
+    let (required_type, to_id) = resolved_type_codegen(&field_type);
+    let id_value = to_id(quote! { v });
 
-    let (param_type, set_stmt) = match field_type {
-        ResolvedType::String => (
-            quote! { Option<&str> },
-            quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), crate::graph::Id::String(v.into())); } },
-        ),
-        ResolvedType::Number => (
-            quote! { Option<f64> },
-            quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), crate::graph::Id::Number(ordered_float::OrderedFloat(v))); } },
-        ),
-        ResolvedType::Record { rust_name } => {
-            let wrapper = format_ident!("{}", rust_name);
-            (
-                quote! { Option<&#wrapper> },
-                quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), v.id().clone()); } },
-            )
-        },
-        ResolvedType::Generic { rust_name, args } => {
-            let wrapper = format_ident!("{}", rust_name);
-            let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
-            (
-                quote! { Option<&#wrapper<#(#arg_types),*>> },
-                quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), v.id().clone()); } },
-            )
-        },
-        ResolvedType::TypeParam { .. } => (
-            quote! { Option<&crate::graph::Id> },
-            quote! { if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), v.clone()); } },
-        ),
+    let optional_type = match field_type {
+        ResolvedType::String => quote! { Option<&str> },
+        _ => quote! { Option<#required_type> },
+    };
+    let set_stmt = quote! {
+        if let Some(v) = #param_name { gid.set(uuid, Self::#const_name.into(), #id_value); }
     };
 
-    Ok((param_name, param_type, set_stmt))
+    Ok((param_name, optional_type, set_stmt))
 }
 
 fn generate_setter(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Result<TokenStream2> {
@@ -273,43 +286,13 @@ fn generate_setter(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Resul
     };
     let method_name = format_ident!("set_{}", rust_method_name(&field_name)?);
     let const_name = format_ident!("{}", rust_const_name(&field_name)?);
-    let entity = quote! { self.uuid };
+    let (param_type, to_id) = resolved_type_codegen(&field_type);
+    let id_value = to_id(quote! { value });
 
-    Ok(match field_type {
-        ResolvedType::String => quote! {
-            pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: impl Into<std::string::String>) {
-                gid.set(#entity, Self::#const_name.into(), crate::graph::Id::String(value.into()));
-            }
-        },
-        ResolvedType::Number => quote! {
-            pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: f64) {
-                gid.set(#entity, Self::#const_name.into(), crate::graph::Id::Number(ordered_float::OrderedFloat(value)));
-            }
-        },
-        ResolvedType::Record { rust_name } => {
-            let wrapper_name = format_ident!("{}", rust_name);
-            quote! {
-                pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &#wrapper_name) {
-                    gid.set(#entity, Self::#const_name.into(), value.id().clone());
-                }
-            }
-        },
-        ResolvedType::Generic { rust_name, args } => {
-            let wrapper = format_ident!("{}", rust_name);
-            let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
-            quote! {
-                pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &#wrapper<#(#arg_types),*>) {
-                    gid.set(#entity, Self::#const_name.into(), value.id().clone());
-                }
-            }
-        },
-        ResolvedType::TypeParam { .. } => {
-            quote! {
-                pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: &crate::graph::Id) {
-                    gid.set(#entity, Self::#const_name.into(), value.clone());
-                }
-            }
-        },
+    Ok(quote! {
+        pub fn #method_name(&self, gid: &mut crate::graph::MutGid, value: #param_type) {
+            gid.set(self.uuid, Self::#const_name.into(), #id_value);
+        }
     })
 }
 
@@ -486,6 +469,47 @@ fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(T
     }
 }
 
+fn struct_definition(struct_name: &syn::Ident, type_params: &[TypeParam]) -> TokenStream2 {
+    if type_params.is_empty() {
+        quote! {
+            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+            pub struct #struct_name { pub uuid: uuid::Uuid }
+        }
+    } else {
+        let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
+        let converter_fields: Vec<TokenStream2> = type_params.iter().map(|p| {
+            let name = &p.converter_name;
+            let ty = &p.rust_name;
+            quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
+        }).collect();
+        let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
+        let generics = quote! { <#(#generic_params),*> };
+        quote! {
+            pub struct #struct_name #generics {
+                pub uuid: uuid::Uuid,
+                #(pub #converter_fields,)*
+            }
+            impl #generics Clone for #struct_name #generics {
+                fn clone(&self) -> Self {
+                    Self { uuid: self.uuid, #(#converter_field_names: self.#converter_field_names.clone(),)* }
+                }
+            }
+            impl #generics std::fmt::Debug for #struct_name #generics {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    f.debug_struct(stringify!(#struct_name)).field("uuid", &self.uuid).finish()
+                }
+            }
+            impl #generics PartialEq for #struct_name #generics {
+                fn eq(&self, other: &Self) -> bool { self.uuid == other.uuid }
+            }
+            impl #generics Eq for #struct_name #generics {}
+            impl #generics std::hash::Hash for #struct_name #generics {
+                fn hash<__H: std::hash::Hasher>(&self, state: &mut __H) { self.uuid.hash(state) }
+            }
+        }
+    }
+}
+
 fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &str, type_params: &[TypeParam], subs: &Substitutions) -> Result<TokenStream2> {
     let full_subs: Substitutions = subs.iter()
         .map(|(k, v)| (k.clone(), v.clone()))
@@ -503,13 +527,22 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
     };
     let type_uuid = uuid_expr(type_uuid_val);
 
+    let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
+    let converter_fields: Vec<TokenStream2> = type_params.iter().map(|p| {
+        let name = &p.converter_name;
+        let ty = &p.rust_name;
+        quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
+    }).collect();
+    let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
+    let generics = if type_params.is_empty() { quote! {} } else { quote! { <#(#generic_params),*> } };
+    let turbofish = if type_params.is_empty() { quote! {} } else { quote! { ::<#(#generic_params),*> } };
+    let self_construct = quote! { Self { uuid #(, #converter_field_names)* } };
+
     struct VariantInfo {
         closure_name: syn::Ident,
         variant_struct_name: syn::Ident,
         constructor_name: syn::Ident,
-        constructor_field_types: Vec<TokenStream2>,
-        field_names: Vec<syn::Ident>,
-        field_setters: Vec<TokenStream2>,
+        constructor_fields: Vec<(TokenStream2, syn::Ident, TokenStream2)>, // (param_type, name, setter)
     }
 
     let mut variant_wrappers = Vec::new();
@@ -526,307 +559,126 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
             return Err(format!("Variant {} body is not a record", variant_id));
         }
 
-        // Generate variant wrapper struct for the module
         let wrapper = generate_wrapper(gid, variant_id, body_id, &variant_name, type_params, subs)?;
         variant_wrappers.push(wrapper);
 
-        // Collect constructor info for the sum type's convenience constructors
         let variant_struct_name = format_ident!("{}", rust_type_name(&variant_name)?);
         let record_field_ids = get_record_field_ids(gid, body_id)?;
-        let (constructor_field_types, field_names, field_setters) = record_field_ids.iter()
+        let constructor_fields = record_field_ids.iter()
             .map(|field_id| {
-                let field_name = format_ident!("{}", rust_method_name(
-                    &get_name(gid, field_id).ok_or_else(|| format!("Field {} has no name", field_id))?
-                )?);
+                let name = get_name(gid, field_id)
+                    .ok_or_else(|| format!("Field {} has no name", field_id))?;
+                let field_name = format_ident!("{}", rust_method_name(&name)?);
                 let resolved = match gid.get(field_id, &TYPE_FIELD) {
                     Some(tid) => resolve_type(gid, tid, &full_subs)?,
                     None => return Err(format!("Field {} has no type", field_id)),
                 };
-                let field_const_name = format_ident!("{}", rust_const_name(
-                    &get_name(gid, field_id).ok_or_else(|| format!("Field {} has no name", field_id))?
-                )?);
-                let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
-                let field_id_ref = if generic_params.is_empty() {
-                    quote! { #module_name::#variant_struct_name::#field_const_name }
-                } else {
-                    quote! { #module_name::#variant_struct_name::<#(#generic_params),*>::#field_const_name }
-                };
-                let (constructor_field_type, field_setter) = match &resolved {
-                    ResolvedType::String => (
-                        quote! { impl Into<std::string::String> },
-                        quote! { gid.set(uuid, #field_id_ref.into(), crate::graph::Id::String(#field_name.into())); }
-                    ),
-                    ResolvedType::Number => (
-                        quote! { f64 },
-                        quote! { gid.set(uuid, #field_id_ref.into(), crate::graph::Id::Number(ordered_float::OrderedFloat(#field_name))); }
-                    ),
-                    ResolvedType::Record { rust_name } => {
-                        let wrapper = format_ident!("{}", rust_name);
-                        (
-                            quote! { &#wrapper },
-                            quote! { gid.set(uuid, #field_id_ref.into(), #field_name.id().clone()); }
-                        )
-                    },
-                    ResolvedType::Generic { rust_name, args } => {
-                        let wrapper = format_ident!("{}", rust_name);
-                        let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
-                        (
-                            quote! { &#wrapper<#(#arg_types),*> },
-                            quote! { gid.set(uuid, #field_id_ref.into(), #field_name.id().clone()); }
-                        )
-                    },
-                    ResolvedType::TypeParam { .. } => (
-                        quote! { &crate::graph::Id },
-                        quote! { gid.set(uuid, #field_id_ref.into(), #field_name.clone()); }
-                    ),
-                };
-                Ok((constructor_field_type, field_name, field_setter))
+                let field_const_name = format_ident!("{}", rust_const_name(&name)?);
+                let field_id_ref = quote! { #module_name::#variant_struct_name #turbofish::#field_const_name };
+                let (param_type, to_id) = resolved_type_codegen(&resolved);
+                let id_value = to_id(quote! { #field_name });
+                Ok((param_type, field_name, quote! { gid.set(uuid, #field_id_ref.into(), #id_value); }))
             })
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .fold(
-                (Vec::new(), Vec::new(), Vec::new()),
-                |(mut ctor_types, mut names, mut setters), (ct, n, s)| {
-                    ctor_types.push(ct); names.push(n); setters.push(s);
-                    (ctor_types, names, setters)
-                }
-            );
+            .collect::<Result<Vec<_>>>()?;
 
         variants.push(VariantInfo {
             closure_name: format_ident!("on_{}", rust_method_name(&variant_name)?),
             variant_struct_name,
             constructor_name: format_ident!("new_{}", rust_method_name(&variant_name)?),
-            constructor_field_types,
-            field_names,
-            field_setters,
+            constructor_fields,
         });
     }
 
-    if type_params.is_empty() {
-        let variant_type_ids: Vec<_> = variants.iter().map(|v| {
-            let variant_struct = &v.variant_struct_name;
-            quote! { #module_name::#variant_struct::TYPE_UUID.into() }
-        }).collect();
+    let variant_type_ids: Vec<_> = variants.iter().map(|v| {
+        let vs = &v.variant_struct_name;
+        quote! { #module_name::#vs #turbofish::TYPE_UUID.into() }
+    }).collect();
 
-        let closure_params: Vec<_> = variants.iter().map(|v| {
-            let closure_name = &v.closure_name;
-            let variant_struct = &v.variant_struct_name;
-            quote! { #closure_name: impl FnOnce(#module_name::#variant_struct) -> __R }
-        }).collect();
+    let closure_params: Vec<_> = variants.iter().map(|v| {
+        let cn = &v.closure_name;
+        let vs = &v.variant_struct_name;
+        quote! { #cn: impl FnOnce(#module_name::#vs #generics) -> __R }
+    }).collect();
 
-        let match_arms: Vec<_> = variants.iter().map(|v| {
-            let closure_name = &v.closure_name;
-            let variant_struct = &v.variant_struct_name;
-            quote! {
-                id if *id == #module_name::#variant_struct::TYPE_UUID.into() => {
-                    Some(#closure_name(#module_name::#variant_struct::wrap(self.uuid)))
-                }
+    let match_arms: Vec<_> = variants.iter().map(|v| {
+        let cn = &v.closure_name;
+        let vs = &v.variant_struct_name;
+        quote! {
+            id if *id == #module_name::#vs #turbofish::TYPE_UUID.into() => {
+                Some(#cn(#module_name::#vs::wrap(self.uuid #(, self.#converter_field_names.clone())*)))
             }
-        }).collect();
+        }
+    }).collect();
 
-        let variant_constructors: Vec<_> = variants.iter().map(|v| {
-            let constructor_name = &v.constructor_name;
-            let variant_struct = &v.variant_struct_name;
-            let constructor_field_types = &v.constructor_field_types;
-            let field_names = &v.field_names;
-            let field_setters = &v.field_setters;
-            if constructor_field_types.is_empty() {
-                quote! {
-                    pub fn #constructor_name(gid: &mut crate::graph::MutGid) -> Self {
-                        let uuid = uuid::Uuid::new_v4();
-                        gid.set(uuid, ISA.into(), #module_name::#variant_struct::TYPE_UUID.into());
-                        Self { uuid }
-                    }
-                }
-            } else {
-                quote! {
-                    pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#field_names: #constructor_field_types),*) -> Self {
-                        let uuid = uuid::Uuid::new_v4();
-                        gid.set(uuid, ISA.into(), #module_name::#variant_struct::TYPE_UUID.into());
-                        #(#field_setters)*
-                        Self { uuid }
-                    }
-                }
+    let variant_constructors: Vec<_> = variants.iter().map(|v| {
+        let constructor_name = &v.constructor_name;
+        let vs = &v.variant_struct_name;
+        let field_types: Vec<_> = v.constructor_fields.iter().map(|(t, _, _)| t).collect();
+        let field_names: Vec<_> = v.constructor_fields.iter().map(|(_, n, _)| n).collect();
+        let field_setters: Vec<_> = v.constructor_fields.iter().map(|(_, _, s)| s).collect();
+        let sc = &self_construct;
+        quote! {
+            #[allow(clippy::too_many_arguments)]
+            pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#field_names: #field_types,)* #(#converter_fields),*) -> Self {
+                let uuid = uuid::Uuid::new_v4();
+                gid.set(uuid, ISA.into(), #module_name::#vs #turbofish::TYPE_UUID.into());
+                #(#field_setters)*
+                #sc
             }
-        }).collect();
+        }
+    }).collect();
 
-        Ok(quote! {
-            pub mod #module_name {
-                use super::*;
-                #(#variant_wrappers)*
-            }
-
-            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-            pub struct #struct_name { pub uuid: uuid::Uuid }
-
-            impl #struct_name {
-                pub const TYPE_UUID: uuid::Uuid = #type_uuid;
-
-                pub fn wrap(uuid: uuid::Uuid) -> Self {
-                    Self { uuid }
-                }
-
-                pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
-                    let isa = gid.get(id, &ISA.into())?;
-                    if #(isa == &#variant_type_ids)||* {
-                        id.as_uuid().map(Self::wrap)
-                    } else {
-                        None
-                    }
-                }
-
-                pub fn id(&self) -> crate::graph::Id {
-                    crate::graph::Id::Uuid(self.uuid)
-                }
-
-                #(#variant_constructors)*
-
-                #[allow(clippy::too_many_arguments)]
-                pub fn match_<__R>(
-                    &self,
-                    gid: &impl crate::graph::Gid,
-                    #(#closure_params),*
-                ) -> Option<__R> {
-                    let isa = gid.get(&self.id(), &ISA.into())?;
-                    match isa {
-                        #(#match_arms,)*
-                        _ => None,
-                    }
-                }
-            }
-        })
+    let struct_def = struct_definition(&struct_name, type_params);
+    let try_wrap_map = if type_params.is_empty() {
+        quote! { id.as_uuid().map(Self::wrap) }
     } else {
-        let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
-        let converter_fields: Vec<_> = type_params.iter().map(|p| {
-            let name = &p.converter_name;
-            let ty = &p.rust_name;
-            quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
-        }).collect();
-        let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
+        quote! { id.as_uuid().map(|uuid| Self::wrap(uuid #(, #converter_field_names)*)) }
+    };
 
-        let variant_type_ids: Vec<_> = variants.iter().map(|v| {
-            let variant_struct = &v.variant_struct_name;
-            quote! { #module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID.into() }
-        }).collect();
+    Ok(quote! {
+        pub mod #module_name {
+            use super::*;
+            #(#variant_wrappers)*
+        }
 
-        let closure_params: Vec<_> = variants.iter().map(|v| {
-            let closure_name = &v.closure_name;
-            let variant_struct = &v.variant_struct_name;
-            quote! { #closure_name: impl FnOnce(#module_name::#variant_struct<#(#generic_params),*>) -> __R }
-        }).collect();
+        #struct_def
 
-        let match_arms: Vec<_> = variants.iter().map(|v| {
-            let closure_name = &v.closure_name;
-            let variant_struct = &v.variant_struct_name;
-            quote! {
-                id if *id == #module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID.into() => {
-                    Some(#closure_name(#module_name::#variant_struct::wrap(self.uuid, #(self.#converter_field_names.clone()),*)))
-                }
-            }
-        }).collect();
+        impl #generics #struct_name #generics {
+            pub const TYPE_UUID: uuid::Uuid = #type_uuid;
 
-        let variant_constructors: Vec<_> = variants.iter().map(|v| {
-            let constructor_name = &v.constructor_name;
-            let variant_struct = &v.variant_struct_name;
-            let constructor_field_types = &v.constructor_field_types;
-            let field_names = &v.field_names;
-            let field_setters = &v.field_setters;
-            if constructor_field_types.is_empty() {
-                quote! {
-                    pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#converter_fields),*) -> Self {
-                        let uuid = uuid::Uuid::new_v4();
-                        gid.set(uuid, ISA.into(), #module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID.into());
-                        Self { uuid, #(#converter_field_names,)* }
-                    }
-                }
-            } else {
-                quote! {
-                    #[allow(clippy::too_many_arguments)]
-                    pub fn #constructor_name(gid: &mut crate::graph::MutGid, #(#field_names: #constructor_field_types,)* #(#converter_fields),*) -> Self {
-                        let uuid = uuid::Uuid::new_v4();
-                        gid.set(uuid, ISA.into(), #module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID.into());
-                        #(#field_setters)*
-                        Self { uuid, #(#converter_field_names,)* }
-                    }
-                }
-            }
-        }).collect();
-
-        Ok(quote! {
-            pub mod #module_name {
-                use super::*;
-                #(#variant_wrappers)*
+            pub fn wrap(uuid: uuid::Uuid #(, #converter_fields)*) -> Self {
+                #self_construct
             }
 
-            pub struct #struct_name<#(#generic_params),*> {
-                pub uuid: uuid::Uuid,
-                #(pub #converter_fields,)*
-            }
-
-            impl<#(#generic_params),*> Clone for #struct_name<#(#generic_params),*> {
-                fn clone(&self) -> Self {
-                    Self {
-                        uuid: self.uuid,
-                        #(#converter_field_names: self.#converter_field_names.clone(),)*
-                    }
+            pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id #(, #converter_fields)*) -> Option<Self> {
+                let isa = gid.get(id, &ISA.into())?;
+                if #(isa == &#variant_type_ids)||* {
+                    #try_wrap_map
+                } else {
+                    None
                 }
             }
 
-            impl<#(#generic_params),*> std::fmt::Debug for #struct_name<#(#generic_params),*> {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    f.debug_struct(stringify!(#struct_name))
-                        .field("uuid", &self.uuid)
-                        .finish()
-                }
+            pub fn id(&self) -> crate::graph::Id {
+                crate::graph::Id::Uuid(self.uuid)
             }
 
-            impl<#(#generic_params),*> PartialEq for #struct_name<#(#generic_params),*> {
-                fn eq(&self, other: &Self) -> bool { self.uuid == other.uuid }
-            }
+            #(#variant_constructors)*
 
-            impl<#(#generic_params),*> Eq for #struct_name<#(#generic_params),*> {}
-
-            impl<#(#generic_params),*> std::hash::Hash for #struct_name<#(#generic_params),*> {
-                fn hash<__H: std::hash::Hasher>(&self, state: &mut __H) { self.uuid.hash(state) }
-            }
-
-            impl<#(#generic_params),*> #struct_name<#(#generic_params),*> {
-                pub const TYPE_UUID: uuid::Uuid = #type_uuid;
-
-                pub fn wrap(uuid: uuid::Uuid, #(#converter_fields),*) -> Self {
-                    Self { uuid, #(#converter_field_names,)* }
-                }
-
-                pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id, #(#converter_fields),*) -> Option<Self> {
-                    let isa = gid.get(id, &ISA.into())?;
-                    if #(isa == &#variant_type_ids)||* {
-                        id.as_uuid().map(|uuid| Self::wrap(uuid, #(#converter_field_names,)*))
-                    } else {
-                        None
-                    }
-                }
-
-                pub fn id(&self) -> crate::graph::Id {
-                    crate::graph::Id::Uuid(self.uuid)
-                }
-
-                #(#variant_constructors)*
-
-                #[allow(clippy::too_many_arguments)]
-                pub fn match_<__R>(
-                    &self,
-                    gid: &impl crate::graph::Gid,
-                    #(#closure_params),*
-                ) -> Option<__R> {
-                    let isa = gid.get(&self.id(), &ISA.into())?;
-                    match isa {
-                        #(#match_arms,)*
-                        _ => None,
-                    }
+            #[allow(clippy::too_many_arguments)]
+            pub fn match_<__R>(
+                &self,
+                gid: &impl crate::graph::Gid,
+                #(#closure_params),*
+            ) -> Option<__R> {
+                let isa = gid.get(&self.id(), &ISA.into())?;
+                match isa {
+                    #(#match_arms,)*
+                    _ => None,
                 }
             }
-        })
-    }
+        }
+    })
 }
 
 fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str, type_params: &[TypeParam], subs: &Substitutions) -> Result<TokenStream2> {
@@ -867,122 +719,59 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
     let new_params: Vec<_> = constructor_fields.iter().map(|(name, ty, _)| quote! { #name: #ty }).collect();
     let new_sets: Vec<_> = constructor_fields.iter().map(|(_, _, set)| set.clone()).collect();
 
-    if type_params.is_empty() {
-        Ok(quote! {
-            #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-            pub struct #struct_name { pub uuid: uuid::Uuid }
-
-            impl #struct_name {
-                pub const TYPE_UUID: uuid::Uuid = #type_uuid;
-
-                #(#field_id_constants)*
-
-                #[allow(clippy::too_many_arguments)]
-                pub fn new(gid: &mut crate::graph::MutGid, #(#new_params),*) -> Self {
-                    let uuid = uuid::Uuid::new_v4();
-                    gid.set(uuid, ISA.into(), Self::TYPE_UUID.into());
-                    #(#new_sets)*
-                    Self { uuid }
-                }
-
-                pub fn wrap(uuid: uuid::Uuid) -> Self {
-                    Self { uuid }
-                }
-
-                pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
-                    if gid.get(id, &ISA.into()) == Some(&Self::TYPE_UUID.into()) {
-                        id.as_uuid().map(Self::wrap)
-                    } else {
-                        None
-                    }
-                }
-
-                pub fn id(&self) -> crate::graph::Id {
-                    crate::graph::Id::Uuid(self.uuid)
-                }
-
-                #(#field_methods)*
-
-                #(#field_setters)*
-            }
-        })
+    let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
+    let converter_fields: Vec<TokenStream2> = type_params.iter().map(|p| {
+        let name = &p.converter_name;
+        let ty = &p.rust_name;
+        quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
+    }).collect();
+    let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
+    let generics = if type_params.is_empty() { quote! {} } else { quote! { <#(#generic_params),*> } };
+    let struct_def = struct_definition(&struct_name, type_params);
+    let self_construct = quote! { Self { uuid #(, #converter_field_names)* } };
+    let try_wrap_map = if type_params.is_empty() {
+        quote! { id.as_uuid().map(Self::wrap) }
     } else {
-        let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
-        let converter_fields: Vec<_> = type_params.iter().map(|p| {
-            let name = &p.converter_name;
-            let ty = &p.rust_name;
-            quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
-        }).collect();
-        let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
+        quote! { id.as_uuid().map(|uuid| Self::wrap(uuid #(, #converter_field_names)*)) }
+    };
 
-        Ok(quote! {
-            pub struct #struct_name<#(#generic_params),*> {
-                pub uuid: uuid::Uuid,
-                #(pub #converter_fields,)*
+    Ok(quote! {
+        #struct_def
+
+        impl #generics #struct_name #generics {
+            pub const TYPE_UUID: uuid::Uuid = #type_uuid;
+
+            #(#field_id_constants)*
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn new(gid: &mut crate::graph::MutGid, #(#new_params,)* #(#converter_fields),*) -> Self {
+                let uuid = uuid::Uuid::new_v4();
+                gid.set(uuid, ISA.into(), Self::TYPE_UUID.into());
+                #(#new_sets)*
+                #self_construct
             }
 
-            impl<#(#generic_params),*> Clone for #struct_name<#(#generic_params),*> {
-                fn clone(&self) -> Self {
-                    Self {
-                        uuid: self.uuid,
-                        #(#converter_field_names: self.#converter_field_names.clone(),)*
-                    }
+            pub fn wrap(uuid: uuid::Uuid #(, #converter_fields)*) -> Self {
+                #self_construct
+            }
+
+            pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id #(, #converter_fields)*) -> Option<Self> {
+                if gid.get(id, &ISA.into()) == Some(&Self::TYPE_UUID.into()) {
+                    #try_wrap_map
+                } else {
+                    None
                 }
             }
 
-            impl<#(#generic_params),*> std::fmt::Debug for #struct_name<#(#generic_params),*> {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                    f.debug_struct(stringify!(#struct_name))
-                        .field("uuid", &self.uuid)
-                        .finish()
-                }
+            pub fn id(&self) -> crate::graph::Id {
+                crate::graph::Id::Uuid(self.uuid)
             }
 
-            impl<#(#generic_params),*> PartialEq for #struct_name<#(#generic_params),*> {
-                fn eq(&self, other: &Self) -> bool { self.uuid == other.uuid }
-            }
+            #(#field_methods)*
 
-            impl<#(#generic_params),*> Eq for #struct_name<#(#generic_params),*> {}
-
-            impl<#(#generic_params),*> std::hash::Hash for #struct_name<#(#generic_params),*> {
-                fn hash<__H: std::hash::Hasher>(&self, state: &mut __H) { self.uuid.hash(state) }
-            }
-
-            impl<#(#generic_params),*> #struct_name<#(#generic_params),*> {
-                pub const TYPE_UUID: uuid::Uuid = #type_uuid;
-
-                #(#field_id_constants)*
-
-                #[allow(clippy::too_many_arguments)]
-                pub fn new(gid: &mut crate::graph::MutGid, #(#new_params,)* #(#converter_fields),*) -> Self {
-                    let uuid = uuid::Uuid::new_v4();
-                    gid.set(uuid, ISA.into(), Self::TYPE_UUID.into());
-                    #(#new_sets)*
-                    Self { uuid, #(#converter_field_names,)* }
-                }
-
-                pub fn wrap(uuid: uuid::Uuid, #(#converter_fields),*) -> Self {
-                    Self { uuid, #(#converter_field_names,)* }
-                }
-
-                pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id, #(#converter_fields),*) -> Option<Self> {
-                    if gid.get(id, &ISA.into()) == Some(&Self::TYPE_UUID.into()) {
-                        id.as_uuid().map(|uuid| Self::wrap(uuid, #(#converter_field_names,)*))
-                    } else {
-                        None
-                    }
-                }
-
-                pub fn id(&self) -> crate::graph::Id {
-                    crate::graph::Id::Uuid(self.uuid)
-                }
-
-                #(#field_methods)*
-
-                #(#field_setters)*
-            }
-        })
-    }
+            #(#field_setters)*
+        }
+    })
 }
 
 fn load_semantics(input: TokenStream) -> Result<(String, MutGid, Option<Id>)> {
