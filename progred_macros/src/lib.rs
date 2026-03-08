@@ -337,7 +337,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Res
     Ok(match field_type {
         ResolvedType::String => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<std::string::String> {
-                match gid.get(&self.id(), &crate::graph::Id::from(Self::#const_name))? {
+                match gid.get(&self.id(), &Self::#const_name.into())? {
                     crate::graph::Id::String(s) => Some(s.clone()),
                     _ => None,
                 }
@@ -345,7 +345,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Res
         },
         ResolvedType::Number => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<f64> {
-                match gid.get(&self.id(), &crate::graph::Id::from(Self::#const_name))? {
+                match gid.get(&self.id(), &Self::#const_name.into())? {
                     crate::graph::Id::Number(n) => Some(n.0),
                     _ => None,
                 }
@@ -355,7 +355,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Res
             let wrapper_name = format_ident!("{}", rust_name);
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper_name> {
-                    #wrapper_name::try_wrap(gid, gid.get(&self.id(), &crate::graph::Id::from(Self::#const_name))?)
+                    #wrapper_name::try_wrap(gid, gid.get(&self.id(), &Self::#const_name.into())?)
                 }
             }
         },
@@ -377,7 +377,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Res
             }).collect();
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper<#(#arg_types),*>> {
-                    #wrapper::try_wrap(gid, gid.get(&self.id(), &crate::graph::Id::from(Self::#const_name))?, #(#converters),*)
+                    #wrapper::try_wrap(gid, gid.get(&self.id(), &Self::#const_name.into())?, #(#converters),*)
                 }
             }
         },
@@ -386,7 +386,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Res
             let conv = format_ident!("{}", converter_name);
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#type_ident> {
-                    let raw = gid.get(&self.id(), &crate::graph::Id::from(Self::#const_name))?;
+                    let raw = gid.get(&self.id(), &Self::#const_name.into())?;
                     (self.#conv)(gid, raw)
                 }
             }
@@ -416,7 +416,7 @@ fn get_type_params(gid: &impl Gid, forall_id: &Id) -> Result<Vec<TypeParam>> {
             let name = get_name(gid, &param_id)
                 .ok_or_else(|| format!("Type param {} has no name", param_id))?;
             let rust_name = format_ident!("{}", rust_type_name(&name)?);
-            let converter_name = format_ident!("into_{}", rust_method_name(&name)?);
+            let converter_name = format_ident!("into_{}", rust_method_name(&name)?.to_lowercase());
             Ok(TypeParam { id: param_id, rust_name, converter_name })
         })
         .collect()
@@ -534,9 +534,10 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
         let variant_struct_name = format_ident!("{}", rust_type_name(&variant_name)?);
         let record_field_ids = get_record_field_ids(gid, body_id)?;
         let (constructor_field_types, field_names, field_setters) = record_field_ids.iter()
-            .enumerate()
-            .map(|(i, field_id)| {
-                let field_name = format_ident!("f{}", i);
+            .map(|field_id| {
+                let field_name = format_ident!("{}", rust_method_name(
+                    &get_name(gid, field_id).ok_or_else(|| format!("Field {} has no name", field_id))?
+                )?);
                 let resolved = match gid.get(field_id, &TYPE_FIELD) {
                     Some(tid) => resolve_type(gid, tid, &full_subs)?,
                     None => return Err(format!("Field {} has no type", field_id)),
@@ -604,7 +605,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
     if type_params.is_empty() {
         let variant_type_ids: Vec<_> = variants.iter().map(|v| {
             let variant_struct = &v.variant_struct_name;
-            quote! { crate::graph::Id::from(#module_name::#variant_struct::TYPE_UUID) }
+            quote! { #module_name::#variant_struct::TYPE_UUID.into() }
         }).collect();
 
         let closure_params: Vec<_> = variants.iter().map(|v| {
@@ -617,7 +618,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
             let closure_name = &v.closure_name;
             let variant_struct = &v.variant_struct_name;
             quote! {
-                id if *id == crate::graph::Id::from(#module_name::#variant_struct::TYPE_UUID) => {
+                id if *id == #module_name::#variant_struct::TYPE_UUID.into() => {
                     Some(#closure_name(#module_name::#variant_struct::wrap(self.uuid)))
                 }
             }
@@ -666,7 +667,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                 }
 
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
-                    let isa = gid.get(id, &crate::graph::Id::from(ISA))?;
+                    let isa = gid.get(id, &ISA.into())?;
                     if #(isa == &#variant_type_ids)||* {
                         id.as_uuid().map(Self::wrap)
                     } else {
@@ -686,7 +687,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     gid: &impl crate::graph::Gid,
                     #(#closure_params),*
                 ) -> Option<__R> {
-                    let isa = gid.get(&self.id(), &crate::graph::Id::from(ISA))?;
+                    let isa = gid.get(&self.id(), &ISA.into())?;
                     match isa {
                         #(#match_arms,)*
                         _ => None,
@@ -705,7 +706,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 
         let variant_type_ids: Vec<_> = variants.iter().map(|v| {
             let variant_struct = &v.variant_struct_name;
-            quote! { crate::graph::Id::from(#module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID) }
+            quote! { #module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID.into() }
         }).collect();
 
         let closure_params: Vec<_> = variants.iter().map(|v| {
@@ -718,7 +719,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
             let closure_name = &v.closure_name;
             let variant_struct = &v.variant_struct_name;
             quote! {
-                id if *id == crate::graph::Id::from(#module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID) => {
+                id if *id == #module_name::#variant_struct::<#(#generic_params),*>::TYPE_UUID.into() => {
                     Some(#closure_name(#module_name::#variant_struct::wrap(self.uuid, #(self.#converter_field_names.clone()),*)))
                 }
             }
@@ -797,7 +798,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                 }
 
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id, #(#converter_fields),*) -> Option<Self> {
-                    let isa = gid.get(id, &crate::graph::Id::from(ISA))?;
+                    let isa = gid.get(id, &ISA.into())?;
                     if #(isa == &#variant_type_ids)||* {
                         id.as_uuid().map(|uuid| Self::wrap(uuid, #(#converter_field_names,)*))
                     } else {
@@ -817,7 +818,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                     gid: &impl crate::graph::Gid,
                     #(#closure_params),*
                 ) -> Option<__R> {
-                    let isa = gid.get(&self.id(), &crate::graph::Id::from(ISA))?;
+                    let isa = gid.get(&self.id(), &ISA.into())?;
                     match isa {
                         #(#match_arms,)*
                         _ => None,
@@ -889,7 +890,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
                 }
 
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
-                    if gid.get(id, &crate::graph::Id::from(ISA)) == Some(&crate::graph::Id::from(Self::TYPE_UUID)) {
+                    if gid.get(id, &ISA.into()) == Some(&Self::TYPE_UUID.into()) {
                         id.as_uuid().map(Self::wrap)
                     } else {
                         None
@@ -965,7 +966,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
                 }
 
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id, #(#converter_fields),*) -> Option<Self> {
-                    if gid.get(id, &crate::graph::Id::from(ISA)) == Some(&crate::graph::Id::from(Self::TYPE_UUID)) {
+                    if gid.get(id, &ISA.into()) == Some(&Self::TYPE_UUID.into()) {
                         id.as_uuid().map(|uuid| Self::wrap(uuid, #(#converter_field_names,)*))
                     } else {
                         None

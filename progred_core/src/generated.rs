@@ -24,7 +24,7 @@ pub fn display_label(gid: &impl Gid, node: &Id) -> Option<String> {
 
 impl<T> semantics::List<T> {
     pub fn iter<'a>(&self, gid: &'a impl crate::graph::Gid) -> impl Iterator<Item = T> + 'a where T: 'a {
-        let conv = self.into_T.clone();
+        let conv = self.into_t.clone();
         crate::list_iter::ListIter::new(gid, Some(self.id()))
             .filter_map(move |id| conv(gid, id))
     }
