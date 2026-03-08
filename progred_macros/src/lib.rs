@@ -278,7 +278,7 @@ fn generate_field_id_constant(gid: &impl Gid, field_id: &Id) -> Result<TokenStre
     Ok(quote! { pub const #const_name: crate::graph::Id = #id_tokens; })
 }
 
-fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_id: &TokenStream2) -> Result<TokenStream2> {
+fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Result<TokenStream2> {
     let field_name = get_name(gid, field_id)
         .ok_or_else(|| format!("Field {} has no name", field_id))?;
     let field_type = match gid.get(field_id, &TYPE_FIELD) {
@@ -291,7 +291,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
     Ok(match field_type {
         ResolvedType::String => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<std::string::String> {
-                match gid.get(&#self_id, &Self::#const_name)? {
+                match gid.get(&self.id(), &Self::#const_name)? {
                     crate::graph::Id::String(s) => Some(s.clone()),
                     _ => None,
                 }
@@ -299,7 +299,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
         },
         ResolvedType::Number => quote! {
             pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<f64> {
-                match gid.get(&#self_id, &Self::#const_name)? {
+                match gid.get(&self.id(), &Self::#const_name)? {
                     crate::graph::Id::Number(n) => Some(n.0),
                     _ => None,
                 }
@@ -309,7 +309,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
             let wrapper_name = format_ident!("{}", rust_name);
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper_name> {
-                    let id = gid.get(&#self_id, &Self::#const_name)?;
+                    let id = gid.get(&self.id(), &Self::#const_name)?;
                     Some(#wrapper_name::wrap(id.clone()))
                 }
             }
@@ -332,7 +332,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
             }).collect();
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper<#(#arg_types),*>> {
-                    let id = gid.get(&#self_id, &Self::#const_name)?;
+                    let id = gid.get(&self.id(), &Self::#const_name)?;
                     Some(#wrapper::wrap(id.clone(), #(#converters),*))
                 }
             }
@@ -342,7 +342,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions, self_i
             let conv = format_ident!("{}", converter_name);
             quote! {
                 pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#type_ident> {
-                    let raw = gid.get(&#self_id, &Self::#const_name)?;
+                    let raw = gid.get(&self.id(), &Self::#const_name)?;
                     (self.#conv)(raw)
                 }
             }
@@ -787,11 +787,9 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
     let struct_name = format_ident!("{}", rust_type_name(type_name)?);
     let type_uuid = id_expr(type_id);
 
-    let self_id = quote! { self.id() };
-
     let field_methods: Vec<TokenStream2> = field_ids
         .iter()
-        .map(|field_id| generate_accessor(gid, field_id, &full_subs, &self_id))
+        .map(|field_id| generate_accessor(gid, field_id, &full_subs))
         .collect::<Result<_>>()?;
 
     let field_setters: Vec<TokenStream2> = field_ids
