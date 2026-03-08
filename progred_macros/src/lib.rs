@@ -316,64 +316,13 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Res
     };
     let method_name = format_ident!("{}", rust_method_name(&field_name)?);
     let const_name = format_ident!("{}", rust_const_name(&field_name)?);
+    let (return_type, convert) = resolved_type_to_rust(&field_type);
+    let body = convert(quote! { gid.get(&self.id(), &Self::#const_name.into())? });
 
-    Ok(match field_type {
-        ResolvedType::String => quote! {
-            pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<std::string::String> {
-                match gid.get(&self.id(), &Self::#const_name.into())? {
-                    crate::graph::Id::String(s) => Some(s.clone()),
-                    _ => None,
-                }
-            }
-        },
-        ResolvedType::Number => quote! {
-            pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<f64> {
-                match gid.get(&self.id(), &Self::#const_name.into())? {
-                    crate::graph::Id::Number(n) => Some(n.0),
-                    _ => None,
-                }
-            }
-        },
-        ResolvedType::Record { rust_name } => {
-            let wrapper_name = format_ident!("{}", rust_name);
-            quote! {
-                pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper_name> {
-                    #wrapper_name::try_wrap(gid, gid.get(&self.id(), &Self::#const_name.into())?)
-                }
-            }
-        },
-        ResolvedType::Generic { rust_name, args } => {
-            let wrapper = format_ident!("{}", rust_name);
-            let arg_types: Vec<_> = args.iter().map(|a| resolved_type_to_rust(a).0).collect();
-            let converters: Vec<_> = args.iter().map(|arg| {
-                match arg {
-                    ResolvedType::TypeParam { converter_name, .. } => {
-                        let conv = format_ident!("{}", converter_name);
-                        quote! { self.#conv.clone() }
-                    }
-                    _ => {
-                        let (_, converter) = resolved_type_to_rust(arg);
-                        let conversion = converter(quote! { id });
-                        quote! { std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| #conversion) }
-                    }
-                }
-            }).collect();
-            quote! {
-                pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#wrapper<#(#arg_types),*>> {
-                    #wrapper::try_wrap(gid, gid.get(&self.id(), &Self::#const_name.into())?, #(#converters),*)
-                }
-            }
-        },
-        ResolvedType::TypeParam { rust_name, converter_name } => {
-            let type_ident = format_ident!("{}", rust_name);
-            let conv = format_ident!("{}", converter_name);
-            quote! {
-                pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#type_ident> {
-                    let raw = gid.get(&self.id(), &Self::#const_name.into())?;
-                    (self.#conv)(gid, raw)
-                }
-            }
-        },
+    Ok(quote! {
+        pub fn #method_name(&self, gid: &impl crate::graph::Gid) -> Option<#return_type> {
+            #body
+        }
     })
 }
 
@@ -469,6 +418,44 @@ fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(T
     }
 }
 
+fn build_substitutions(subs: &Substitutions, type_params: &[TypeParam]) -> Substitutions {
+    subs.iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .chain(type_params.iter().map(|tp| (tp.id.clone(), ResolvedType::TypeParam {
+            rust_name: tp.rust_name.to_string(),
+            converter_name: tp.converter_name.to_string(),
+        })))
+        .collect()
+}
+
+struct GenericTokens {
+    generics: TokenStream2,
+    turbofish: TokenStream2,
+    converter_fields: Vec<TokenStream2>,
+    converter_field_names: Vec<syn::Ident>,
+    self_construct: TokenStream2,
+    try_wrap_map: TokenStream2,
+}
+
+fn generic_tokens(type_params: &[TypeParam]) -> GenericTokens {
+    let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
+    let converter_fields: Vec<TokenStream2> = type_params.iter().map(|p| {
+        let name = &p.converter_name;
+        let ty = &p.rust_name;
+        quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
+    }).collect();
+    let converter_field_names: Vec<syn::Ident> = type_params.iter().map(|p| p.converter_name.clone()).collect();
+    let generics = if type_params.is_empty() { quote! {} } else { quote! { <#(#generic_params),*> } };
+    let turbofish = if type_params.is_empty() { quote! {} } else { quote! { ::<#(#generic_params),*> } };
+    let self_construct = quote! { Self { uuid #(, #converter_field_names)* } };
+    let try_wrap_map = if type_params.is_empty() {
+        quote! { id.as_uuid().map(Self::wrap) }
+    } else {
+        quote! { id.as_uuid().map(|uuid| Self::wrap(uuid #(, #converter_field_names)*)) }
+    };
+    GenericTokens { generics, turbofish, converter_fields, converter_field_names, self_construct, try_wrap_map }
+}
+
 fn struct_definition(struct_name: &syn::Ident, type_params: &[TypeParam]) -> TokenStream2 {
     if type_params.is_empty() {
         quote! {
@@ -511,13 +498,7 @@ fn struct_definition(struct_name: &syn::Ident, type_params: &[TypeParam]) -> Tok
 }
 
 fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &str, type_params: &[TypeParam], subs: &Substitutions) -> Result<TokenStream2> {
-    let full_subs: Substitutions = subs.iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .chain(type_params.iter().map(|tp| (tp.id.clone(), ResolvedType::TypeParam {
-            rust_name: tp.rust_name.to_string(),
-            converter_name: tp.converter_name.to_string(),
-        })))
-        .collect();
+    let full_subs = build_substitutions(subs, type_params);
 
     let variant_ids = get_sum_variant_ids(gid, sum_id)?;
     let struct_name = format_ident!("{}", rust_type_name(type_name)?);
@@ -527,16 +508,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
     };
     let type_uuid = uuid_expr(type_uuid_val);
 
-    let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
-    let converter_fields: Vec<TokenStream2> = type_params.iter().map(|p| {
-        let name = &p.converter_name;
-        let ty = &p.rust_name;
-        quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
-    }).collect();
-    let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
-    let generics = if type_params.is_empty() { quote! {} } else { quote! { <#(#generic_params),*> } };
-    let turbofish = if type_params.is_empty() { quote! {} } else { quote! { ::<#(#generic_params),*> } };
-    let self_construct = quote! { Self { uuid #(, #converter_field_names)* } };
+    let GenericTokens { generics, turbofish, converter_fields, converter_field_names, self_construct, try_wrap_map } = generic_tokens(type_params);
 
     struct VariantInfo {
         closure_name: syn::Ident,
@@ -629,11 +601,6 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
     }).collect();
 
     let struct_def = struct_definition(&struct_name, type_params);
-    let try_wrap_map = if type_params.is_empty() {
-        quote! { id.as_uuid().map(Self::wrap) }
-    } else {
-        quote! { id.as_uuid().map(|uuid| Self::wrap(uuid #(, #converter_field_names)*)) }
-    };
 
     Ok(quote! {
         pub mod #module_name {
@@ -682,13 +649,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
 }
 
 fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str, type_params: &[TypeParam], subs: &Substitutions) -> Result<TokenStream2> {
-    let full_subs: Substitutions = subs.iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .chain(type_params.iter().map(|tp| (tp.id.clone(), ResolvedType::TypeParam {
-            rust_name: tp.rust_name.to_string(),
-            converter_name: tp.converter_name.to_string(),
-        })))
-        .collect();
+    let full_subs = build_substitutions(subs, type_params);
 
     let field_ids = get_record_field_ids(gid, body_id)?;
     let struct_name = format_ident!("{}", rust_type_name(type_name)?);
@@ -719,21 +680,8 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
     let new_params: Vec<_> = constructor_fields.iter().map(|(name, ty, _)| quote! { #name: #ty }).collect();
     let new_sets: Vec<_> = constructor_fields.iter().map(|(_, _, set)| set.clone()).collect();
 
-    let generic_params: Vec<_> = type_params.iter().map(|p| &p.rust_name).collect();
-    let converter_fields: Vec<TokenStream2> = type_params.iter().map(|p| {
-        let name = &p.converter_name;
-        let ty = &p.rust_name;
-        quote! { #name: std::rc::Rc<dyn Fn(&dyn crate::graph::Gid, &crate::graph::Id) -> Option<#ty>> }
-    }).collect();
-    let converter_field_names: Vec<_> = type_params.iter().map(|p| &p.converter_name).collect();
-    let generics = if type_params.is_empty() { quote! {} } else { quote! { <#(#generic_params),*> } };
+    let GenericTokens { generics, turbofish: _, converter_fields, converter_field_names: _, self_construct, try_wrap_map } = generic_tokens(type_params);
     let struct_def = struct_definition(&struct_name, type_params);
-    let self_construct = quote! { Self { uuid #(, #converter_field_names)* } };
-    let try_wrap_map = if type_params.is_empty() {
-        quote! { id.as_uuid().map(Self::wrap) }
-    } else {
-        quote! { id.as_uuid().map(|uuid| Self::wrap(uuid #(, #converter_field_names)*)) }
-    };
 
     Ok(quote! {
         #struct_def
