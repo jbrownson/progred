@@ -668,7 +668,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
                     let isa = gid.get(id, &crate::graph::Id::from(ISA))?;
                     if #(isa == &#variant_type_ids)||* {
-                        Some(Self::wrap(id.as_uuid()?))
+                        id.as_uuid().map(Self::wrap)
                     } else {
                         None
                     }
@@ -799,7 +799,7 @@ fn generate_sum_wrapper(gid: &impl Gid, type_id: &Id, sum_id: &Id, type_name: &s
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id, #(#converter_fields),*) -> Option<Self> {
                     let isa = gid.get(id, &crate::graph::Id::from(ISA))?;
                     if #(isa == &#variant_type_ids)||* {
-                        Some(Self::wrap(id.as_uuid()?, #(#converter_field_names,)*))
+                        id.as_uuid().map(|uuid| Self::wrap(uuid, #(#converter_field_names,)*))
                     } else {
                         None
                     }
@@ -890,7 +890,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
 
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id) -> Option<Self> {
                     if gid.get(id, &crate::graph::Id::from(ISA)) == Some(&crate::graph::Id::from(Self::TYPE_UUID)) {
-                        Some(Self::wrap(id.as_uuid()?))
+                        id.as_uuid().map(Self::wrap)
                     } else {
                         None
                     }
@@ -966,7 +966,7 @@ fn generate_wrapper(gid: &impl Gid, type_id: &Id, body_id: &Id, type_name: &str,
 
                 pub fn try_wrap(gid: &dyn crate::graph::Gid, id: &crate::graph::Id, #(#converter_fields),*) -> Option<Self> {
                     if gid.get(id, &crate::graph::Id::from(ISA)) == Some(&crate::graph::Id::from(Self::TYPE_UUID)) {
-                        Some(Self::wrap(id.as_uuid()?, #(#converter_field_names,)*))
+                        id.as_uuid().map(|uuid| Self::wrap(uuid, #(#converter_field_names,)*))
                     } else {
                         None
                     }
