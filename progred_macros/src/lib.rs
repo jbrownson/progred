@@ -328,7 +328,7 @@ fn generate_accessor(gid: &impl Gid, field_id: &Id, subs: &Substitutions) -> Res
                     _ => {
                         let (_, converter) = resolved_type_to_rust(arg);
                         let conversion = converter(quote! { id });
-                        quote! { std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| Some(#conversion)) }
+                        quote! { std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| #conversion) }
                     }
                 }
             }).collect();
@@ -384,13 +384,13 @@ fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(T
         ResolvedType::String => (
             quote! { std::string::String },
             Box::new(|id_expr| quote! {
-                match #id_expr { crate::graph::Id::String(s) => s.clone(), _ => return None }
+                match #id_expr { crate::graph::Id::String(s) => Some(s.clone()), _ => None }
             })
         ),
         ResolvedType::Number => (
             quote! { f64 },
             Box::new(|id_expr| quote! {
-                match #id_expr { crate::graph::Id::Number(n) => n.0, _ => return None }
+                match #id_expr { crate::graph::Id::Number(n) => Some(n.0), _ => None }
             })
         ),
         ResolvedType::Record { rust_name } => {
@@ -400,7 +400,7 @@ fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(T
                 quote! { #wrapper },
                 Box::new(move |id_expr| {
                     let w = format_ident!("{}", name_clone);
-                    quote! { #w::try_wrap(gid, #id_expr)? }
+                    quote! { #w::try_wrap(gid, #id_expr) }
                 })
             )
         },
@@ -416,7 +416,7 @@ fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(T
                     _ => {
                         let (_, converter) = resolved_type_to_rust(arg);
                         let conversion = converter(quote! { id });
-                        quote! { std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| Some(#conversion)) }
+                        quote! { std::rc::Rc::new(|gid: &dyn crate::graph::Gid, id| #conversion) }
                     }
                 }
             }).collect();
@@ -425,7 +425,7 @@ fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(T
                 quote! { #wrapper<#(#arg_types),*> },
                 Box::new(move |id_expr| {
                     let w = format_ident!("{}", wrapper_clone);
-                    quote! { #w::try_wrap(gid, #id_expr, #(#converters),*)? }
+                    quote! { #w::try_wrap(gid, #id_expr, #(#converters),*) }
                 })
             )
         },
@@ -436,7 +436,7 @@ fn resolved_type_to_rust(resolved: &ResolvedType) -> (TokenStream2, Box<dyn Fn(T
                 quote! { #type_ident },
                 Box::new(move |id_expr| {
                     let conv = format_ident!("{}", conv_name);
-                    quote! { (self.#conv)(gid, #id_expr)? }
+                    quote! { (self.#conv)(gid, #id_expr) }
                 })
             )
         },
