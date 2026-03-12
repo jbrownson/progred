@@ -1,6 +1,5 @@
 use progred_core::d::{D, DEvent, TextStyle};
 use progred_core::editor::{Editor, InteractionMode};
-use progred_core::generated::name_of;
 use progred_core::generated::semantics::list;
 use progred_core::graph::Id;
 use progred_core::selection::Selection;
@@ -86,8 +85,8 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
         D::NodeHeader { child } => {
             render_node_header(ui, editor, child, mode, ctx, events);
         }
-        D::FieldLabel { label_id } => {
-            render_field_label(ui, editor, &ctx.path, label_id, mode, events);
+        D::FieldLabel { label_id, child } => {
+            render_field_label(ui, editor, &ctx.path, label_id, child, mode, ctx, events);
         }
         D::CollapseToggle { collapsed } => {
             if collapse_toggle(ui, *collapsed).clicked() {
@@ -441,15 +440,16 @@ fn render_node_header<'a>(
     }
 }
 
-fn render_field_label(
+fn render_field_label<'a>(
     ui: &mut Ui,
     editor: &Editor,
     entity_path: &Path,
     label_id: &Id,
+    child: &'a D,
     mode: &InteractionMode,
-    events: &mut Vec<DEvent<'_>>,
+    ctx: &DContext,
+    events: &mut Vec<DEvent<'a>>,
 ) {
-    let label_color = Color32::from_gray(120);
     let secondary = editor.selected_node_id().as_ref() == Some(label_id);
     let (style, hovered) = if secondary {
         let s = selection_style(false, true);
@@ -460,13 +460,8 @@ fn render_field_label(
         mode_style(mode)
     };
     ui.push_id(label_id, |ui| {
-        if clickable(ui, |ui| match label_id {
-            Id::Uuid(uuid) => match name_of(&editor.lib(), label_id) {
-                Some(name) => ui.label(egui::RichText::new(name).color(label_color).italics()),
-                None => identicon(ui, 12.0, uuid),
-            },
-            Id::String(s) => ui.label(egui::RichText::new(s.to_string()).color(label_color).italics()),
-            Id::Number(n) => ui.label(egui::RichText::new(n.to_string()).color(label_color).italics()),
+        if clickable(ui, |ui| {
+            ui.scope(|ui| render_d(ui, editor, child, mode, ctx, events)).response
         }, style, hovered).clicked()
             && !matches!(mode, InteractionMode::Normal)
         {

@@ -168,12 +168,22 @@ fn render_uuid(
         let child_ancestors = ancestors.update(id.clone());
         let ctx = RenderCtx { editor, path, id: &id, ancestors: &child_ancestors };
 
+        let lib = editor.lib();
         let field_items: Vec<D> = field_labels.iter()
-            .map(|label| D::Line(vec![
-                D::FieldLabel { label_id: label.clone() },
-                D::Text(":".into(), TextStyle::Punctuation),
-                ctx.descend(label),
-            ]))
+            .map(|label| {
+                let child = match label {
+                    Id::Uuid(uuid) => match name_of(&lib, label) {
+                        Some(name) => D::Text(name, TextStyle::Keyword),
+                        None => D::Identicon(*uuid),
+                    },
+                    _ => D::Text(format!("{}", label), TextStyle::Keyword),
+                };
+                D::Line(vec![
+                    D::FieldLabel { label_id: label.clone(), child: Box::new(child) },
+                    D::Text(":".into(), TextStyle::Punctuation),
+                    ctx.descend(label),
+                ])
+            })
             .collect();
 
         D::Indent(Box::new(D::Block(field_items)))
@@ -490,7 +500,7 @@ mod tests {
             }
             D::Indent(child) | D::NodeHeader { child } => collect_field_labels(child, labels),
             D::Descend { child, .. } => collect_field_labels(child, labels),
-            D::FieldLabel { label_id } => labels.push(label_id.clone()),
+            D::FieldLabel { label_id, .. } => labels.push(label_id.clone()),
             D::VerticalList { elements, .. } | D::HorizontalList { elements, .. } => {
                 for element in elements {
                     collect_field_labels(element, labels);

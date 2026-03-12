@@ -26,7 +26,7 @@ pub enum D {
     Descend { path: Path, selection: Selection, child: Box<D> },
 
     NodeHeader { child: Box<D> },
-    FieldLabel { label_id: Id },
+    FieldLabel { label_id: Id, child: Box<D> },
     CollapseToggle { collapsed: bool },
     StringEditor { value: String },
     NumberEditor { value: f64, number_text: Option<String> },
