@@ -125,7 +125,7 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
             }
         }
         D::HorizontalList { opening, closing, separator, elements } => {
-            ui.scope(|ui| {
+            ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 1.0;
                 ui.label(text_rich(opening, &TextStyle::Punctuation));
                 let mut insert_path = ctx.path.clone();

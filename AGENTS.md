@@ -60,6 +60,7 @@ EOF
 - Selection variants: `Edge`, `ListElement`, `GraphEdge`, `GraphNode`
 - `D::Descend` has `selection: Selection` — the renderer decides what selection a click produces
 - `DContext` in `projection.rs` carries `path` + `selection` from nearest `Descend`
+- `StackedGid` returns edges from the **first layer that has the entity**, not a merged view — if both doc and semantics have edges for the same entity UUID, only the top layer's edges are visible. This is currently correct because doc entities and semantics entities don't overlap, but would silently drop edges if they ever did. If mixed-layer entities become needed, `StackedGid::edges` would need to merge `HashMap`s.
 
 ## Migrating semantics.progred
 
@@ -90,6 +91,7 @@ See `docs/migration.md` for the procedure. Always use a temporary Rust binary th
   ]
   ```
   This can't be solved in egui's immediate mode layout without hacks — needs an intermediate layout pass (D → flat block sequence → egui) that can split a VerticalList's opening bracket onto the preceding line and place the body at the correct indent level. Domain projections (record, sum) are unaffected since their lists are inside `D::Indent`, not `D::Line`.
+- **List rendering revamp**: Both list types have accumulated issues — empty horizontal list insertion slots are zero-width and invisible, vertical lists have the block-in-inline problem above, and the overall list rendering could benefit from a unified pass
 - **Empty horizontal list insertion**: Empty `HorizontalList` has same discoverability problem as vertical — the insertion slot between brackets is zero-width and invisible. Share the empty-slot rendering approach from `VerticalList`
 - **Unify placeholder commit events**: `PlaceholderCommitted` borrows `on_commit` from the D tree; `ListInsertCommitted` carries a path because list insertion points live in projection.rs with no D node to own a closure. Could be unified with `Rc<dyn Fn>` on `D::Placeholder`.
 - **Naming audit**: "Field" vs "edge label" conflation (Field is a defined semantic thing, edge labels may or may not be fields), and related inconsistencies across D, DEvent, and UI code
