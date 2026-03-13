@@ -4,6 +4,7 @@ mod ui;
 use progred_core::document::Document;
 use progred_core::editor::Editor;
 use progred_core::graph_view_state::GraphViewState;
+use progred_core::navigate::{self, DescendNode};
 use eframe::egui;
 use progred_core::graph::Id;
 use progred_core::selection::Selection;
@@ -93,20 +94,22 @@ impl ProgredApp {
         }
     }
 
-    fn delete_selection(&mut self) {
-        if let Some(selection) = self.editor.selection.take() {
+    fn delete_selection(&mut self, nav: &[DescendNode]) {
+        if let Some(selection) = self.editor.selection.clone() {
+            let next = selection.path().and_then(|p| navigate::post_delete(nav, p));
             self.editor.doc.delete(&selection);
+            self.editor.selection = next;
         }
     }
 
     fn insert_new_node(&mut self) {
-        if let Some(path) = self.editor.selection.as_ref().and_then(|s| s.path()) {
-            self.editor.doc.set_edge(path, Id::new_uuid());
+        if let Some(path) = self.editor.selection.as_ref().and_then(|s| s.path()).cloned() {
+            self.editor.doc.set_edge(&path, Id::new_uuid());
             self.editor.selection = None;
         }
     }
 
-    fn handle_keys(&mut self, ctx: &egui::Context) {
+    fn handle_keys(&mut self, ctx: &egui::Context, nav: &[DescendNode]) {
         ctx.input_mut(|i| {
             if i.consume_shortcut(&shortcuts::SAVE_AS) {
                 self.save_as();
@@ -114,13 +117,11 @@ impl ProgredApp {
                 self.save();
             }
         });
-        let handlers: &[fn(&mut ProgredApp, &egui::Context) -> bool] = &[
-            Self::placeholder_handler,
-            Self::leaf_edit_handler,
-            Self::global_handler,
-        ];
-        for h in handlers {
-            if h(self, ctx) { break; }
+        if !self.placeholder_handler(ctx)
+            && !self.leaf_edit_handler()
+            && !self.nav_handler(ctx, nav)
+        {
+            self.global_handler(ctx, nav);
         }
     }
 
@@ -138,7 +139,7 @@ impl ProgredApp {
         true
     }
 
-    fn leaf_edit_handler(&mut self, _ctx: &egui::Context) -> bool {
+    fn leaf_edit_handler(&self) -> bool {
         match &self.editor.selection {
             Some(Selection::Edge(path, _)) => {
                 matches!(self.editor.doc.node(path), Some(Id::String(_) | Id::Number(_)))
@@ -147,12 +148,46 @@ impl ProgredApp {
         }
     }
 
-    fn global_handler(&mut self, ctx: &egui::Context) -> bool {
+    fn nav_handler(&mut self, ctx: &egui::Context, nav: &[DescendNode]) -> bool {
+        let current = match self.editor.selection.as_ref().and_then(|s| s.path()) {
+            Some(p) => p.clone(),
+            None => {
+                return ctx.input_mut(|i| {
+                    if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
+                        self.editor.selection = navigate::first_placeholder(nav)
+                            .or_else(|| nav.first().map(|n| n.selection.clone()));
+                        true
+                    } else {
+                        false
+                    }
+                });
+            }
+        };
+        ctx.input_mut(|i| {
+            let new_sel = if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
+                navigate::arrow_down(nav, &current)
+            } else if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
+                navigate::arrow_up(nav, &current)
+            } else if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft) {
+                navigate::arrow_left(nav, &current)
+            } else if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight) {
+                navigate::arrow_right(nav, &current)
+            } else {
+                return false;
+            };
+            if let Some(sel) = new_sel {
+                self.editor.selection = Some(sel);
+            }
+            true
+        })
+    }
+
+    fn global_handler(&mut self, ctx: &egui::Context, nav: &[DescendNode]) {
         ctx.input_mut(|i| {
             if i.key_pressed(egui::Key::Escape) {
                 self.editor.selection = None;
             } else if i.key_pressed(egui::Key::Delete) || i.consume_shortcut(&shortcuts::DELETE) {
-                self.delete_selection();
+                self.delete_selection(nav);
             } else if i.consume_shortcut(&shortcuts::INSERT_NODE) {
                 self.insert_new_node();
             } else if i.consume_shortcut(&shortcuts::NEW) {
@@ -161,10 +196,9 @@ impl ProgredApp {
                 self.open();
             }
         });
-        false
     }
 
-    fn render_menu_bar(&mut self, ctx: &egui::Context) {
+    fn render_menu_bar(&mut self, ctx: &egui::Context, nav: &[DescendNode]) {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -197,7 +231,7 @@ impl ProgredApp {
                         self.editor.selection.as_ref().and_then(|s| s.path()).is_some(),
                         egui::Button::new("Delete").shortcut_text(shortcuts::format(&shortcuts::DELETE)),
                     ).clicked() {
-                        self.delete_selection();
+                        self.delete_selection(nav);
                         ui.close();
                     }
                 });
@@ -212,11 +246,12 @@ impl eframe::App for ProgredApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
-        let d_tree = ui::tree_view::generate(&self.editor);
+        let d_tree = self.editor.render_d_tree();
+        let nav = navigate::collect_descends(&d_tree);
         let orphan_ids = self.editor.doc.orphan_roots();
-        self.handle_keys(ctx);
+        self.handle_keys(ctx, &nav);
 
-        self.render_menu_bar(ctx);
+        self.render_menu_bar(ctx, &nav);
 
         if self.show_graph {
             progred_core::graph_view_state::step_physics(&mut self.graph_layout, &self.editor.doc, self.graph_camera.dragging());

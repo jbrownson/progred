@@ -33,9 +33,32 @@ impl Editor {
             semantics: progred_macros::load_document!("../semantics.progred"),
             builtins: BuiltinValuesGid,
             tree: SpanningTree::empty(),
-            selection: None,
+            selection: Some(Selection::edge(Path::root())),
             file_path: None,
         }
+    }
+
+    pub fn render_d_tree(&self) -> crate::d::D {
+        use crate::d::D;
+        match &self.doc.root {
+            Some(id) => crate::render::render(self, &Path::root(), id),
+            None => D::Descend {
+                    path: Path::root(),
+                    selection: Selection::edge(Path::root()),
+                    child: Box::new(D::Placeholder {
+                        on_commit: Box::new(|w: &mut Editor, value| {
+                            w.doc.set_edge(&Path::root(), value);
+                        }),
+                    }),
+            }
+        }
+    }
+
+    fn next_selection_from(&self, path: &Path) -> Option<Selection> {
+        let d = self.render_d_tree();
+        let nav = crate::navigate::collect_descends(&d);
+        crate::navigate::first_placeholder_from(&nav, path)
+            .or_else(|| crate::navigate::first_placeholder(&nav))
     }
 
     fn realize_placeholder(&mut self, commit: PlaceholderCommit) -> Id {
@@ -115,9 +138,10 @@ impl Editor {
                     }
                 }
                 DEvent::PlaceholderCommitted { on_commit, value } => {
+                    let focus_path = self.selection.as_ref().and_then(|s| s.path()).cloned();
                     let id = self.realize_placeholder(value);
                     on_commit(self, id);
-                    self.selection = None;
+                    self.selection = focus_path.and_then(|p| self.next_selection_from(&p));
                 }
                 DEvent::ListInsertCommitted { path, value } => {
                     let head_value = self.realize_placeholder(value);
@@ -128,7 +152,7 @@ impl Editor {
                         self.doc.set_edge(&path.child(list::Cons::<()>::HEAD.into()), head_value);
                         self.doc.set_edge(&path.child(list::Cons::<()>::TAIL.into()), current_value);
                     }
-                    self.selection = None;
+                    self.selection = self.next_selection_from(&path);
                 }
                 DEvent::PlaceholderDismissed => {
                     self.selection = None;

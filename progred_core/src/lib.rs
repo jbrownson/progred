@@ -2,6 +2,7 @@ mod builtin_values;
 pub mod d;
 pub mod document;
 pub mod editor;
+pub mod navigate;
 pub mod generated;
 pub mod graph_view_state;
 pub mod list_iter;

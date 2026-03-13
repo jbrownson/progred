@@ -338,8 +338,6 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
         Some(i) if i < entries.len() => {
             PlaceholderOutcome::Commit(entries.into_iter().nth(i).unwrap().value.commit())
         }
-        // lost_focus() is unreliable between TextEdits (https://github.com/emilk/egui/issues/2142).
-        // Works now because only one TextEdit is active at a time.
         _ if escape || text_response.lost_focus() => PlaceholderOutcome::Dismiss,
         _ => PlaceholderOutcome::Active,
     };

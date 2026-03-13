@@ -80,7 +80,9 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
         }
         D::Descend { path, selection, child } => {
             let child_ctx = DContext { path: path.clone(), selection: selection.clone() };
-            render_d(ui, editor, child, mode, &child_ctx, events);
+            ui.push_id(path, |ui| {
+                render_d(ui, editor, child, mode, &child_ctx, events);
+            });
         }
         D::NodeHeader { child } => {
             render_node_header(ui, editor, child, mode, ctx, events);
@@ -187,12 +189,12 @@ fn list_insert_point(
 ) {
     if !active_list_insert(ui, editor, path, events) {
         ui.push_id(path, |ui| {
-            let clicked = if vertical {
-                insertion_point(ui).clicked()
+            let response = if vertical {
+                insertion_point(ui)
             } else {
-                vertical_insertion_point(ui).clicked()
+                vertical_insertion_point(ui)
             };
-            if clicked {
+            if response.clicked() {
                 events.push(DEvent::ClickedPlaceholder(path.clone()));
             }
         });

@@ -10,25 +10,6 @@ use super::identicon;
 use super::layout::TREE_MARGIN;
 use super::{render_d, DContext};
 
-pub fn generate(editor: &Editor) -> D {
-    let path = Path::root();
-    match editor.doc.node(&path) {
-        Some(id) => progred_core::render::render(editor, &path, &id),
-        None => {
-            let commit_path = path.clone();
-            D::Descend {
-                path: path.clone(),
-                selection: Selection::edge(path),
-                child: Box::new(D::Placeholder {
-                    on_commit: Box::new(move |w: &mut Editor, value| {
-                        w.doc.set_edge(&commit_path, value);
-                    }),
-                }),
-            }
-        }
-    }
-}
-
 pub fn render<'a>(ui: &mut Ui, editor: &Editor, d_tree: &'a D, orphan_ids: &HashSet<Id>, mode: &InteractionMode, events: &mut Vec<DEvent<'a>>) {
     let margin = egui::Margin::same(TREE_MARGIN as i8);
     egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
