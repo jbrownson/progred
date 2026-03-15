@@ -13,6 +13,7 @@ struct Schema {
     let summandsField: UUID
     let headField: UUID
     let tailField: UUID
+    let typesField: UUID
 
     // Record declarations
     let stringRecord: UUID
@@ -24,6 +25,7 @@ struct Schema {
     let applyRecord: UUID
     let consRecord: UUID
     let emptyRecord: UUID
+    let libraryRecord: UUID
 
     // Sum declarations
     let typeFunctionSum: UUID
@@ -32,6 +34,9 @@ struct Schema {
 
     // Type parameters
     let listT: UUID
+
+    // Library instance
+    let library: UUID
 
     // MARK: - Graph queries
 
@@ -104,6 +109,7 @@ struct Schema {
         let summandsField = UUID()
         let headField = UUID()
         let tailField = UUID()
+        let typesField = UUID()
 
         let stringRecord = UUID()
         let numberRecord = UUID()
@@ -114,12 +120,15 @@ struct Schema {
         let applyRecord = UUID()
         let consRecord = UUID()
         let emptyRecord = UUID()
+        let libraryRecord = UUID()
 
         let typeFunctionSum = UUID()
         let typeExpressionSum = UUID()
         let listSum = UUID()
 
         let listT = UUID()
+
+        let library = UUID()
 
         // ── Helpers ─────────────────────────────────────────
 
@@ -161,6 +170,7 @@ struct Schema {
         let listOfField = makeApply(typeFunction: listSum, args: [(listT, fieldRecord)])
         let listOfTypeExpr = makeApply(typeFunction: listSum, args: [(listT, typeExpressionSum)])
         let listOfT = makeApply(typeFunction: listSum, args: [(listT, listT)])
+        let listOfTypeFunction = makeApply(typeFunction: listSum, args: [(listT, typeFunctionSum)])
 
         // ── Field declarations ──────────────────────────────
 
@@ -179,6 +189,7 @@ struct Schema {
         declareField(summandsField, name: "summands", typeExpr: listOfTypeExpr)
         declareField(headField, name: "head", typeExpr: listT)
         declareField(tailField, name: "tail", typeExpr: listOfT)
+        declareField(typesField, name: "types", typeExpr: listOfTypeFunction)
 
         // ── Record declarations ─────────────────────────────
 
@@ -198,6 +209,7 @@ struct Schema {
         declareRecord(applyRecord, name: "Apply", typeParams: [], fields: [typeFunctionField])
         declareRecord(consRecord, name: "Cons", typeParams: [], fields: [headField, tailField])
         declareRecord(emptyRecord, name: "Empty", typeParams: [], fields: [])
+        declareRecord(libraryRecord, name: "Library", typeParams: [], fields: [nameField, typesField, fieldsField])
 
         // ── Sum declarations ────────────────────────────────
 
@@ -217,6 +229,22 @@ struct Schema {
         set(listT, recordField, typeParameterRecord)
         setStr(listT, nameField, "T")
 
+        // ── Library instance ────────────────────────────────
+
+        set(library, recordField, libraryRecord)
+        setStr(library, nameField, "Core")
+        set(library, typesField, makeList([
+            stringRecord, numberRecord, typeParameterRecord,
+            fieldRecord, recordRecord, sumRecord, applyRecord,
+            consRecord, emptyRecord, libraryRecord,
+            typeFunctionSum, typeExpressionSum, listSum,
+        ]))
+        set(library, fieldsField, makeList([
+            nameField, recordField, typeExpressionField,
+            typeParametersField, typeFunctionField, fieldsField,
+            summandsField, headField, tailField, typesField,
+        ]))
+
         // ── Assemble ────────────────────────────────────────
 
         return Schema(
@@ -230,6 +258,7 @@ struct Schema {
             summandsField: summandsField,
             headField: headField,
             tailField: tailField,
+            typesField: typesField,
             stringRecord: stringRecord,
             numberRecord: numberRecord,
             typeParameterRecord: typeParameterRecord,
@@ -239,10 +268,12 @@ struct Schema {
             applyRecord: applyRecord,
             consRecord: consRecord,
             emptyRecord: emptyRecord,
+            libraryRecord: libraryRecord,
             typeFunctionSum: typeFunctionSum,
             typeExpressionSum: typeExpressionSum,
             listSum: listSum,
-            listT: listT
+            listT: listT,
+            library: library
         )
     }
 }
