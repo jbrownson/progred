@@ -241,8 +241,7 @@ struct Schema {
         ]))
         set(library, fieldsField, makeList([
             nameField, recordField, typeExpressionField,
-            typeParametersField, typeFunctionField, fieldsField,
-            summandsField, headField, tailField, typesField,
+            typeParametersField, typeFunctionField, typesField,
         ]))
 
         // ── Assemble ────────────────────────────────────────
