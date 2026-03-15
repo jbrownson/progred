@@ -1,24 +1,14 @@
-//
-//  ContentView.swift
-//  progred
-//
-//  Created by Jake Brownson on 3/12/26.
-//
-
 import SwiftUI
 
 struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
-    }
-}
+    @State private var schema = Schema.bootstrap()
 
-#Preview {
-    ContentView()
+    var body: some View {
+        ScrollView {
+            EntityView(entity: schema.library, schema: schema, expanded: true)
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(minWidth: 400, minHeight: 300)
+    }
 }
