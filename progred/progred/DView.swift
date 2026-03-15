@@ -147,6 +147,8 @@ struct CollapseView: View {
                 Button { isCollapsed.toggle() } label: {
                     Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
                         .font(.caption2)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
