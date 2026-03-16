@@ -16,9 +16,6 @@ indirect enum D {
     case collapse(collapsed: Bool, label: D, body: D)
     case list(separator: String, elements: [D])
 
-    // Lazy entity reference — projected on demand
-    case entity(UUID, label: String?, ancestors: Set<UUID>)
-
     // Interactive (stubs)
     case placeholder
     case stringEditor(String)

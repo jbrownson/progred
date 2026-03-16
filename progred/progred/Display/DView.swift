@@ -1,16 +1,5 @@
 import SwiftUI
 
-private struct SchemaKey: EnvironmentKey {
-    static let defaultValue = Schema.bootstrap()
-}
-
-extension EnvironmentValues {
-    var schema: Schema {
-        get { self[SchemaKey.self] }
-        set { self[SchemaKey.self] = newValue }
-    }
-}
-
 struct DView: View {
     let d: D
 
@@ -45,20 +34,12 @@ struct DView: View {
         case .collapse(let collapsed, let label, let body):
             CollapseView(collapsed: collapsed, label: label, body: body)
 
-        case .list(let separator, let elements):
+        case .list(_, let elements):
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(elements.indices, id: \.self) { i in
-                    HStack(spacing: 0) {
-                        DView(d: elements[i])
-                        if i < elements.count - 1 {
-                            Text(separator).foregroundStyle(TextStyle.punctuation.color)
-                        }
-                    }
+                    DView(d: elements[i])
                 }
             }
-
-        case .entity(let uuid, let label, let ancestors):
-            EntityDView(uuid: uuid, label: label, ancestors: ancestors)
 
         case .placeholder:
             Text("_").foregroundStyle(.tertiary)
@@ -71,61 +52,42 @@ struct DView: View {
         }
     }
 
+    private func isInline(_ d: D) -> Bool {
+        switch d {
+        case .text, .identicon, .placeholder, .stringEditor, .numberEditor: true
+        case .descend(_, let child): isInline(child)
+        case .line: true
+        default: false
+        }
+    }
+
+    private func unwrap(_ d: D) -> D {
+        if case .descend(_, let child) = d { return unwrap(child) }
+        return d
+    }
+
     @ViewBuilder
     private func lineView(_ children: [D]) -> some View {
-        if let last = children.last,
-           case .bracketed(let open, let close, let body) = last {
-            let prefix = children.dropLast()
-            if case .list(_, let elements) = body, elements.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(prefix.indices, id: \.self) { i in
-                        DView(d: prefix[i])
-                    }
-                    Text("\(open)\(close)").foregroundStyle(TextStyle.punctuation.color)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        ForEach(prefix.indices, id: \.self) { i in
-                            DView(d: prefix[i])
-                        }
-                        Text(open).foregroundStyle(TextStyle.punctuation.color)
-                    }
-                    DView(d: body).padding(.leading, 16)
-                    Text(close).foregroundStyle(TextStyle.punctuation.color)
-                }
-            }
+        if let splitIdx = children.firstIndex(where: { !isInline($0) }),
+           case .bracketed(let open, let close, let body) = unwrap(children[splitIdx]) {
+            BracketedLineView(
+                prefix: Array(children[..<splitIdx]),
+                open: open, close: close, content: body
+            )
         } else {
             HStack(spacing: 4) {
-                ForEach(children.indices, id: \.self) { i in
-                    DView(d: children[i])
-                }
+                ForEach(children.indices, id: \.self) { i in DView(d: children[i]) }
             }
         }
     }
 
     @ViewBuilder
     private func bracketedView(open: String, close: String, body: D) -> some View {
-        if case .list(_, let elements) = body, elements.isEmpty {
-            Text("\(open)\(close)").foregroundStyle(TextStyle.punctuation.color)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(open).foregroundStyle(TextStyle.punctuation.color)
-                DView(d: body).padding(.leading, 16)
-                Text(close).foregroundStyle(TextStyle.punctuation.color)
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(open).foregroundStyle(TextStyle.punctuation.color)
+            DView(d: body).padding(.leading, 16)
+            Text(close).foregroundStyle(TextStyle.punctuation.color)
         }
-    }
-}
-
-struct EntityDView: View {
-    let uuid: UUID
-    let label: String?
-    let ancestors: Set<UUID>
-    @Environment(\.schema) private var schema
-
-    var body: some View {
-        DView(d: project(entity: uuid, schema: schema, ancestors: ancestors, label: label))
     }
 }
 
@@ -144,18 +106,58 @@ struct CollapseView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 DView(d: label)
-                Button { isCollapsed.toggle() } label: {
-                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption2)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                CollapseToggle(isCollapsed: $isCollapsed)
             }
             if !isCollapsed {
                 DView(d: bodyD).padding(.leading, 16)
             }
         }
+    }
+}
+
+struct BracketedLineView: View {
+    let prefix: [D]
+    let open: String
+    let close: String
+    let content: D
+    @State private var isCollapsed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                ForEach(prefix.indices, id: \.self) { i in DView(d: prefix[i]) }
+                CollapseToggle(isCollapsed: $isCollapsed)
+                Text(isCollapsed ? "\(open)\(close)" : open)
+                    .foregroundStyle(TextStyle.punctuation.color)
+            }
+            if !isCollapsed {
+                DView(d: content).padding(.leading, 16)
+                Text(close).foregroundStyle(TextStyle.punctuation.color)
+            }
+        }
+    }
+}
+
+struct CollapseToggle: View {
+    @Binding var isCollapsed: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        Button { isCollapsed.toggle() } label: {
+            Image(systemName: isCollapsed ? "arrowtriangle.right.fill" : "arrowtriangle.down.fill")
+                .font(.system(size: 7))
+                .foregroundStyle(isHovered ? .primary : .secondary)
+                .frame(width: 16, height: 16)
+                .background(
+                    isHovered
+                        ? AnyShapeStyle(.quaternary)
+                        : AnyShapeStyle(.clear),
+                    in: RoundedRectangle(cornerRadius: 3)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
