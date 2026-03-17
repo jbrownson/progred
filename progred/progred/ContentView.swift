@@ -1,11 +1,12 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var schema = Schema.bootstrap()
+    @State private var editor = Editor.withSampleDocument()
     @State private var currentSelection: Selection?
+    @FocusState private var isFocused: Bool
 
     var body: some View {
-        let ctx = ProjectionContext(entity: schema.library, schema: schema, ancestors: [])
+        let ctx = ProjectionContext(entity: editor.root, gid: editor.gid, schema: editor.schema, editor: editor, ancestors: [])
         let d = project(ctx)
         ScrollView {
             DView(d: d)
@@ -15,9 +16,13 @@ struct ContentView: View {
         .environment(\.select, { newSelection in
             currentSelection?.deselect()
             currentSelection = newSelection
+            isFocused = true
         })
-        .onKeyPress { currentSelection?.actions.onKey?($0) ?? .ignored }
         .focusable()
+        .focused($isFocused)
+        .onDeleteCommand {
+            currentSelection?.handleDelete()
+        }
         .frame(minWidth: 400, minHeight: 300)
     }
 }

@@ -1,42 +1,42 @@
 import Foundation
 
 func projectTypeParameter(_ ctx: ProjectionContext) -> D? {
-    guard ctx.schema.record(of: ctx.entity) == ctx.schema.typeParameterRecord else { return nil }
-    return .line([.text("∀", .punctuation), ctx.descend(ctx.schema.nameField)])
+    guard ctx.record() == ctx.typeParameterRecord else { return nil }
+    return .line([.text("∀", .punctuation), ctx.descend(ctx.nameField)])
 }
 
 func projectField(_ ctx: ProjectionContext) -> D? {
-    guard ctx.schema.record(of: ctx.entity) == ctx.schema.fieldRecord else { return nil }
+    guard ctx.record() == ctx.fieldRecord else { return nil }
 
     return .line([
-        ctx.descend(ctx.schema.nameField),
+        ctx.descend(ctx.nameField),
         .space,
         .text("→", .punctuation),
         .space,
-        ctx.project(field: ctx.schema.typeExpressionField, render: renderRef),
+        ctx.project(field: ctx.typeExpressionField, render: renderRef),
     ])
 }
 
 func projectRecord(_ ctx: ProjectionContext) -> D? {
-    guard ctx.schema.record(of: ctx.entity) == ctx.schema.recordRecord else { return nil }
+    guard ctx.record() == ctx.recordRecord else { return nil }
 
     return .collapse(
-        header: typeHeader(recordType: ctx.schema.recordRecord, ctx: ctx),
-        body: labeled(ctx.schema.fieldsField, ctx.descend(ctx.schema.fieldsField), schema: ctx.schema))
+        header: typeHeader(recordType: ctx.recordRecord, ctx: ctx),
+        body: labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx))
 }
 
 func projectSum(_ ctx: ProjectionContext) -> D? {
-    guard ctx.schema.record(of: ctx.entity) == ctx.schema.sumRecord else { return nil }
+    guard ctx.record() == ctx.sumRecord else { return nil }
 
     return .collapse(
-        header: typeHeader(recordType: ctx.schema.sumRecord, ctx: ctx),
-        body: labeled(ctx.schema.summandsField, ctx.descend(ctx.schema.summandsField), schema: ctx.schema))
+        header: typeHeader(recordType: ctx.sumRecord, ctx: ctx),
+        body: labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx))
 }
 
 func projectApply(_ ctx: ProjectionContext) -> D? {
-    guard ctx.schema.record(of: ctx.entity) == ctx.schema.applyRecord else { return nil }
-    guard let tfId = ctx.get(ctx.schema.typeFunctionField),
-          let typeParams = ctx.schema.typeParams(of: tfId) else { return nil }
+    guard ctx.record() == ctx.applyRecord else { return nil }
+    guard let tfId = ctx.get(ctx.typeFunctionField),
+          let typeParams = ctx.typeParams(of: tfId) else { return nil }
 
     let args = typeParams.map { tp in
         D.line([
@@ -55,12 +55,12 @@ func projectApply(_ ctx: ProjectionContext) -> D? {
 }
 
 private func typeHeader(recordType: Id, ctx: ProjectionContext) -> D {
-    let keyword: D = ctx.schema.name(of: recordType).map { .text($0, .keyword) } ?? .placeholder
+    let keyword: D = ctx.name(of: recordType).map { .text($0, .keyword) } ?? .placeholder
     return .line([
         keyword,
         .space,
-        ctx.descend(ctx.schema.nameField),
-        ctx.project(field: ctx.schema.typeParametersField,
+        ctx.descend(ctx.nameField),
+        ctx.project(field: ctx.typeParametersField,
             render: renderList(open: "<", close: ">", inline: true, elementRender: renderRef)),
     ])
 }

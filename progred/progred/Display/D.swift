@@ -24,7 +24,7 @@ indirect enum D {
 }
 
 struct SelectionActions {
-    var onKey: ((KeyPress) -> KeyPress.Result)? = nil
+    var onDelete: (() -> Void)? = nil
 }
 
 enum TextStyle {

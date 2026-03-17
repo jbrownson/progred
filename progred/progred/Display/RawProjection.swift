@@ -3,7 +3,7 @@ import Foundation
 func projectRaw(_ ctx: ProjectionContext) -> D {
     let header = rawHeader(ctx.entity)
 
-    guard let raw = ctx.schema.gid.edges(entity: ctx.entity) else { return header }
+    guard let raw = ctx.gid.edges(entity: ctx.entity) else { return header }
     if raw.isEmpty { return header }
 
     let body: D = .block(raw.sorted { $0.key < $1.key }.map { label, value in

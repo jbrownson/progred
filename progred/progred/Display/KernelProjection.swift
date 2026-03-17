@@ -1,18 +1,16 @@
-import Foundation
+import SwiftUI
 
 func kernelHeader(ctx: ProjectionContext) -> D {
     let parts: [D] = [
-        ctx.schema.record(of: ctx.entity).map { ctx.schema.name(of: $0).map { .text($0, .typeRef) } ?? .placeholder },
-        ctx.schema.name(of: ctx.entity).map { .text($0, .literal) },
+        ctx.record().map { ctx.name(of: $0).map { .text($0, .typeRef) } ?? .placeholder },
+        ctx.name().map { .text($0, .literal) },
     ].compactMap { $0 }
     if parts.isEmpty { return rawHeader(ctx.entity) }
     return parts.count == 1 ? parts[0] : .line([parts[0], .space, parts[1]])
 }
 
 func flattenList(_ ctx: ProjectionContext) -> [Id]? {
-    guard let rec = ctx.schema.record(of: ctx.entity) else { return nil }
-    guard rec == ctx.schema.consRecord || rec == ctx.schema.emptyRecord else { return nil }
-    return ctx.schema.listToArray(ctx.entity)
+    ctx.listToArray(ctx.entity)
 }
 
 func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
@@ -39,13 +37,13 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
 }
 
 func projectKernel(_ ctx: ProjectionContext) -> D? {
-    guard ctx.schema.record(of: ctx.entity) != nil else { return nil }
+    guard ctx.record() != nil else { return nil }
 
     let header = kernelHeader(ctx: ctx)
 
-    guard let raw = ctx.schema.gid.edges(entity: ctx.entity) else { return header }
+    guard let raw = ctx.gid.edges(entity: ctx.entity) else { return header }
     let edges = raw
-        .filter { $0.key != ctx.schema.nameField && $0.key != ctx.schema.recordField }
+        .filter { $0.key != ctx.nameField && $0.key != ctx.recordField }
         .sorted { $0.key < $1.key }
 
     if edges.isEmpty { return header }
@@ -58,5 +56,5 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
 }
 
 private func kernelEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
-    labeled(label, .selectable(SelectionActions(), child: ctx.descend(to: value)), schema: ctx.schema)
+    labeled(label, .selectable(ctx.selectionActions(field: label), child: ctx.descend(to: value)), ctx: ctx)
 }

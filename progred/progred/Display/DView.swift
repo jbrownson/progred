@@ -11,6 +11,10 @@ typealias SelectFn = (Selection?) -> Void
 struct Selection {
     let deselect: () -> Void
     let actions: SelectionActions
+
+    func handleDelete() {
+        actions.onDelete?()
+    }
 }
 
 private struct SelectKey: EnvironmentKey {
