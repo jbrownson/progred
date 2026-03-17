@@ -1,31 +1,49 @@
 import Foundation
 
 func kernelHeader(ctx: ProjectionContext) -> D {
-    var parts: [D] = []
-    if let label = ctx.label {
-        parts.append(.text(label, .label))
-        parts.append(.text("→", .punctuation))
+    let parts: [D] = [
+        ctx.schema.record(of: ctx.entity).map { ctx.schema.name(of: $0).map { .text($0, .typeRef) } ?? .placeholder },
+        ctx.schema.name(of: ctx.entity).map { .text($0, .literal) },
+    ].compactMap { $0 }
+    if parts.isEmpty { return rawHeader(ctx.entity) }
+    return parts.count == 1 ? parts[0] : .line([parts[0], .space, parts[1]])
+}
+
+func flattenList(_ ctx: ProjectionContext) -> [Id]? {
+    guard let rec = ctx.schema.record(of: ctx.entity) else { return nil }
+    guard rec == ctx.schema.consRecord || rec == ctx.schema.emptyRecord else { return nil }
+    return ctx.schema.listToArray(ctx.entity)
+}
+
+func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
+    var parts: [D] = [.text(open, .punctuation)]
+    for (i, item) in items.enumerated() {
+        if i > 0 { parts.append(.text(",", .punctuation)) }
+        parts.append(item)
     }
-    if let recName = ctx.record().flatMap({ ctx.schema.name(of: $0) }) {
-        parts.append(.text(recName, .typeRef))
+    parts.append(.text(close, .punctuation))
+    return .line(parts)
+}
+
+func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
+    { ctx in
+        guard let elements = flattenList(ctx) else { return nil }
+        let items = elements.map { ctx.descend(to: $0, render: elementRender) }
+        return elements.isEmpty || inline
+            ? inlineBrackets(open: open, close: close, items)
+            : .bracketed(open: open, close: close,
+                body: .list(separator: ",", elements: items))
     }
-    if let name = ctx.name() {
-        parts.append(.text(name, .literal))
-    }
-    if ctx.record() == nil && ctx.name() == nil {
-        parts.append(.identicon(ctx.entity))
-    }
-    return parts.count == 1 ? parts[0] : .line(parts)
 }
 
 func projectKernel(_ ctx: ProjectionContext) -> D? {
-    guard ctx.record() != nil || ctx.name() != nil else { return nil }
+    guard ctx.schema.record(of: ctx.entity) != nil else { return nil }
 
     let header = kernelHeader(ctx: ctx)
 
-    guard let raw = ctx.schema.gid.edges(entity: .uuid(ctx.entity)) else { return header }
+    guard let raw = ctx.schema.gid.edges(entity: ctx.entity) else { return header }
     let edges = raw
-        .filter { $0.key != .uuid(ctx.schema.nameField) && $0.key != .uuid(ctx.schema.recordField) }
+        .filter { $0.key != ctx.schema.nameField && $0.key != ctx.schema.recordField }
         .sorted { $0.key < $1.key }
 
     if edges.isEmpty { return header }
@@ -34,36 +52,9 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
         kernelEdge(label: label, value: value, ctx: ctx)
     })
 
-    return .collapse(collapsed: false, label: header, body: body)
+    return .collapse(header: header, body: body)
 }
 
 private func kernelEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
-    let labelName = label.asUUID.flatMap { ctx.schema.name(of: $0) } ?? "\(label)"
-
-    switch value {
-    case .string(let s):
-        return .line([.text(labelName, .label), .text("→", .punctuation), .text(s, .literal)])
-    case .number(let n):
-        return .line([.text(labelName, .label), .text("→", .punctuation), .text(String(n), .literal)])
-    case .uuid(let uuid):
-        if isList(uuid, schema: ctx.schema) {
-            let elements = ctx.schema.listToArray(uuid)
-            if elements.isEmpty {
-                return .line([.text(labelName, .label), .text("→", .punctuation), .text("[]", .punctuation)])
-            }
-            return .line([
-                .text(labelName, .label),
-                .text("→", .punctuation),
-                .bracketed(open: "[", close: "]",
-                    body: .list(separator: ",", elements: elements.map { ctx.descend($0) })),
-            ])
-        } else {
-            return .descend(label: label, child: ctx.descend(uuid, label: labelName))
-        }
-    }
-}
-
-private func isList(_ uuid: UUID, schema: Schema) -> Bool {
-    guard let rec = schema.record(of: uuid) else { return false }
-    return rec == schema.consRecord || rec == schema.emptyRecord
+    labeled(label, .descend(label: label, child: ctx.descend(to:value)), schema: ctx.schema)
 }

@@ -1,22 +1,23 @@
 import Foundation
 
 indirect enum D {
-    // Layout
+    // MARK: - Layout
     case block([D])
     case line([D])
     case indent(D)
     case bracketed(open: String, close: String, body: D)
 
-    // Content
+    // MARK: - Content
     case text(String, TextStyle)
+    case space
     case identicon(UUID)
 
-    // Structure
+    // MARK: - Structure
     case descend(label: Id, child: D)
-    case collapse(collapsed: Bool, label: D, body: D)
+    case collapse(defaultCollapsed: Bool = false, header: D, body: D)
     case list(separator: String, elements: [D])
 
-    // Interactive (stubs)
+    // MARK: - Interactive
     case placeholder
     case stringEditor(String)
     case numberEditor(Double)

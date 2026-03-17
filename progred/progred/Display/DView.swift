@@ -1,5 +1,11 @@
 import SwiftUI
 
+private enum Layout {
+    static let toggleSize: CGFloat = 16
+    static let indent: CGFloat = 16
+    static let spacing: CGFloat = 4
+}
+
 struct DView: View {
     let d: D
 
@@ -7,20 +13,27 @@ struct DView: View {
     var body: some View {
         switch d {
         case .block(let children):
-            LazyVStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Layout.spacing) {
                 ForEach(children.indices, id: \.self) { i in
                     DView(d: children[i])
                 }
             }
 
         case .line(let children):
-            lineView(children)
+            HStack(spacing: 0) {
+                ForEach(children.indices, id: \.self) { i in
+                    DView(d: children[i])
+                }
+            }
+
+        case .space:
+            Spacer().frame(width: Layout.spacing, height: Layout.spacing)
 
         case .indent(let child):
-            DView(d: child).padding(.leading, 16)
+            DView(d: child).padding(.leading, Layout.indent)
 
         case .bracketed(let open, let close, let body):
-            bracketedView(open: open, close: close, body: body)
+            BracketedView(open: open, close: close, content: body)
 
         case .text(let s, let style):
             Text(s).foregroundStyle(style.color)
@@ -31,11 +44,11 @@ struct DView: View {
         case .descend(_, let child):
             DView(d: child)
 
-        case .collapse(let collapsed, let label, let body):
-            CollapseView(collapsed: collapsed, label: label, body: body)
+        case .collapse(let defaultCollapsed, let header, let body):
+            CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body)
 
         case .list(_, let elements):
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Layout.spacing) {
                 ForEach(elements.indices, id: \.self) { i in
                     DView(d: elements[i])
                 }
@@ -51,88 +64,49 @@ struct DView: View {
             Text(String(n)).foregroundStyle(TextStyle.literal.color)
         }
     }
-
-    private func isInline(_ d: D) -> Bool {
-        switch d {
-        case .text, .identicon, .placeholder, .stringEditor, .numberEditor: true
-        case .descend(_, let child): isInline(child)
-        case .line: true
-        default: false
-        }
-    }
-
-    private func unwrap(_ d: D) -> D {
-        if case .descend(_, let child) = d { return unwrap(child) }
-        return d
-    }
-
-    @ViewBuilder
-    private func lineView(_ children: [D]) -> some View {
-        if let splitIdx = children.firstIndex(where: { !isInline($0) }),
-           case .bracketed(let open, let close, let body) = unwrap(children[splitIdx]) {
-            BracketedLineView(
-                prefix: Array(children[..<splitIdx]),
-                open: open, close: close, content: body
-            )
-        } else {
-            HStack(spacing: 4) {
-                ForEach(children.indices, id: \.self) { i in DView(d: children[i]) }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func bracketedView(open: String, close: String, body: D) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(open).foregroundStyle(TextStyle.punctuation.color)
-            DView(d: body).padding(.leading, 16)
-            Text(close).foregroundStyle(TextStyle.punctuation.color)
-        }
-    }
 }
 
 struct CollapseView: View {
-    let label: D
+    let header: D
     let bodyD: D
-    @State private var isCollapsed: Bool
+    @State private var isCollapsed = false
 
-    init(collapsed: Bool, label: D, body: D) {
-        self._isCollapsed = State(initialValue: collapsed)
-        self.label = label
+    init(defaultCollapsed: Bool = false, header: D, body: D) {
+        self._isCollapsed = State(initialValue: defaultCollapsed)
+        self.header = header
         self.bodyD = body
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                DView(d: label)
+        VStack(alignment: .leading, spacing: Layout.spacing) {
+            HStack(spacing: Layout.spacing) {
+                DView(d: header)
                 CollapseToggle(isCollapsed: $isCollapsed)
             }
             if !isCollapsed {
-                DView(d: bodyD).padding(.leading, 16)
+                DView(d: bodyD).padding(.leading, Layout.indent)
             }
         }
     }
 }
 
-struct BracketedLineView: View {
-    let prefix: [D]
+struct BracketedView: View {
     let open: String
     let close: String
     let content: D
     @State private var isCollapsed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                ForEach(prefix.indices, id: \.self) { i in DView(d: prefix[i]) }
+        VStack(alignment: .leading, spacing: Layout.spacing) {
+            HStack(spacing: 0) {
                 CollapseToggle(isCollapsed: $isCollapsed)
-                Text(isCollapsed ? "\(open)\(close)" : open)
+                Text(isCollapsed ? "\(open)…\(close)" : open)
                     .foregroundStyle(TextStyle.punctuation.color)
             }
             if !isCollapsed {
-                DView(d: content).padding(.leading, 16)
+                DView(d: content).padding(.leading, Layout.toggleSize + Layout.indent)
                 Text(close).foregroundStyle(TextStyle.punctuation.color)
+                    .padding(.leading, Layout.indent)
             }
         }
     }
@@ -147,7 +121,7 @@ struct CollapseToggle: View {
             Image(systemName: isCollapsed ? "arrowtriangle.right.fill" : "arrowtriangle.down.fill")
                 .font(.system(size: 7))
                 .foregroundStyle(isHovered ? .primary : .secondary)
-                .frame(width: 16, height: 16)
+                .frame(width: Layout.toggleSize, height: Layout.toggleSize)
                 .background(
                     isHovered
                         ? AnyShapeStyle(.quaternary)

@@ -40,7 +40,7 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 
 ## Code Style
 
-- Very limited comments — code should be self-documenting; use `// MARK: -` for section navigation in Xcode
+- Very limited comments — code should be self-documenting; use `// MARK: -` for section navigation in Xcode but only when grouping non-obvious things, not echoing adjacent function/type names
 - Expression-oriented where possible
 - Prefer long expressions broken across multiple lines over multiple statements with intermediate names
 - Exception: extract helper functions when intermediate steps represent distinct semantic concepts
@@ -48,5 +48,7 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - Prefer free functions with explicit parameters over methods when `self` isn't needed
 - Apply Haskell-style thinking (explicit data flow, pure function composition) but idiomatic Swift syntax
 - `guard` for preconditions is idiomatic — use it freely for early returns
+- Prefer ternary expressions over if/else when returning or assigning a value based on a condition
+- Name constants that are repeated or related to other values; express relationships explicitly (one as a function of the other). Inline one-off values are fine.
 - Dead code should be deleted, not commented out
 - Push back if something seems wrong

@@ -3,81 +3,87 @@ import Foundation
 typealias Render = (ProjectionContext) -> D?
 
 struct ProjectionContext {
-    let entity: UUID
+    let entity: Id
     let schema: Schema
-    let ancestors: Set<UUID>
-    let label: String?
+    let ancestors: Set<Id>
 
     var isCycle: Bool { ancestors.contains(entity) }
 
-    func get(_ field: UUID) -> Id? {
-        schema.gid.get(entity: .uuid(entity), label: .uuid(field))
+    func get(_ field: Id) -> Id? {
+        schema.gid.get(entity: entity, label: field)
     }
 
-    func record() -> UUID? {
-        schema.record(of: entity)
+    func descend(_ field: Id, render: Render? = nil) -> D {
+        guard let value = get(field) else { return .placeholder }
+        return descend(to: value, render: render)
     }
 
-    func name() -> String? {
-        schema.name(of: entity)
+    func descend(to entity: Id, render: Render? = nil) -> D {
+        let childCtx = ProjectionContext(entity: entity, schema: schema, ancestors: ancestors.union([self.entity]))
+        let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
+        if childCtx.isCycle {
+            return .collapse(defaultCollapsed: true, header: kernelHeader(ctx: childCtx), body: d)
+        }
+        return d
     }
 
-    func child(_ entity: UUID, label: String? = nil) -> ProjectionContext {
-        ProjectionContext(entity: entity, schema: schema, ancestors: ancestors.union([self.entity]), label: label)
+    func project(_ id: Id, render: Render? = nil) -> D {
+        let ctx = ProjectionContext(entity: id, schema: schema, ancestors: ancestors)
+        return render.flatMap({ $0(ctx) }) ?? progred.project(ctx)
     }
 
-    func descend(_ child: UUID, label: String? = nil) -> D {
-        project(self.child(child, label: label))
+    func project(field: Id, render: Render? = nil) -> D {
+        guard let value = get(field) else { return .placeholder }
+        return project(value, render: render)
     }
 }
 
 // MARK: - Dispatch
 
 private let renders: [Render] = [
-    // Domain layer
-    // (future: projectRecord, projectSum, projectField, projectApply, ...)
+    // MARK: Domain
+    projectTypeParameter,
+    projectField,
+    projectApply,
+    projectRecord,
+    projectSum,
 
-    // Kernel layer
+    // MARK: Kernel
+    renderList(),
     projectKernel,
 ]
 
 func project(_ ctx: ProjectionContext) -> D {
-    if ctx.isCycle { return kernelHeader(ctx: ctx) }
-
     for render in renders {
         if let d = render(ctx) { return d }
     }
-
     return projectRaw(ctx)
 }
 
-// MARK: - Raw layer
+// MARK: - Shallow reference render
 
-private func projectRaw(_ ctx: ProjectionContext) -> D {
-    let header: D = .identicon(ctx.entity)
-
-    guard let raw = ctx.schema.gid.edges(entity: .uuid(ctx.entity)) else { return header }
-    if raw.isEmpty { return header }
-
-    let body: D = .block(raw.sorted { $0.key < $1.key }.map { label, value in
-        rawEdge(label: label, value: value, ctx: ctx)
-    })
-
-    return .collapse(collapsed: false, label: header, body: body)
+let renderRef: Render = { ctx in
+    if let d = projectApply(ctx) { return d }
+    if let name = ctx.schema.name(of: ctx.entity) { return .text(name, .literal) }
+    return kernelHeader(ctx: ctx)
 }
 
-private func rawEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
-    let labelD: D = switch label {
+// MARK: - Raw header
+
+func rawHeader(_ id: Id) -> D {
+    switch id {
     case .uuid(let uuid): .identicon(uuid)
     case .string(let s): .text(s, .literal)
     case .number(let n): .text(String(n), .literal)
     }
+}
 
-    let valueD: D = switch value {
-    case .uuid(let uuid): ctx.descend(uuid)
-    case .string(let s): .text(s, .literal)
-    case .number(let n): .text(String(n), .literal)
-    }
+// MARK: - Layout helpers
 
-    return .line([labelD, .text("→", .punctuation), valueD])
+func labeled(_ field: Id, _ content: D, schema: Schema) -> D {
+    let label: D = schema.name(of: field).map { .text($0, .label) } ?? .placeholder
+    return .block([
+        .line([label, .space, .text("→", .punctuation)]),
+        .indent(content),
+    ])
 }

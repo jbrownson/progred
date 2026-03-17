@@ -3,93 +3,85 @@ import Foundation
 struct Schema {
     var gid: MutGid
 
-    // Field declarations (their UUIDs serve as edge labels)
-    let nameField: UUID
-    let recordField: UUID
-    let typeExpressionField: UUID
-    let typeParametersField: UUID
-    let typeFunctionField: UUID
-    let fieldsField: UUID
-    let summandsField: UUID
-    let headField: UUID
-    let tailField: UUID
-    let typesField: UUID
+    // MARK: - Fields
+    let nameField: Id
+    let recordField: Id
+    let typeExpressionField: Id
+    let typeParametersField: Id
+    let typeFunctionField: Id
+    let fieldsField: Id
+    let summandsField: Id
+    let headField: Id
+    let tailField: Id
+    let typesField: Id
 
-    // Record declarations
-    let stringRecord: UUID
-    let numberRecord: UUID
-    let typeParameterRecord: UUID
-    let fieldRecord: UUID
-    let recordRecord: UUID
-    let sumRecord: UUID
-    let applyRecord: UUID
-    let consRecord: UUID
-    let emptyRecord: UUID
-    let libraryRecord: UUID
+    // MARK: - Records
+    let stringRecord: Id
+    let numberRecord: Id
+    let typeParameterRecord: Id
+    let fieldRecord: Id
+    let recordRecord: Id
+    let sumRecord: Id
+    let applyRecord: Id
+    let consRecord: Id
+    let emptyRecord: Id
+    let libraryRecord: Id
 
-    // Sum declarations
-    let typeFunctionSum: UUID
-    let typeExpressionSum: UUID
-    let listSum: UUID
+    // MARK: - Sums
+    let typeFunctionSum: Id
+    let typeExpressionSum: Id
+    let listSum: Id
 
-    // Type parameters
-    let listT: UUID
+    // MARK: - Type parameters
+    let listT: Id
 
-    // Library instance
-    let library: UUID
+    // MARK: - Library instance
+    let library: Id
 
     // MARK: - Graph queries
 
-    func name(of entity: UUID) -> String? {
-        switch gid.get(entity: .uuid(entity), label: .uuid(nameField)) {
+    func name(of entity: Id) -> String? {
+        switch gid.get(entity: entity, label: nameField) {
         case .string(let s): s
         default: nil
         }
     }
 
-    func record(of entity: UUID) -> UUID? {
-        gid.get(entity: .uuid(entity), label: .uuid(recordField))?.asUUID
+    func record(of entity: Id) -> Id? {
+        gid.get(entity: entity, label: recordField)
     }
 
-    func listToArray(_ listNode: UUID) -> [UUID] {
-        var result: [UUID] = []
+    func listToArray(_ listNode: Id) -> [Id]? {
+        var result: [Id] = []
         var current = listNode
-        var seen: Set<UUID> = []
+        var seen: Set<Id> = []
         while seen.insert(current).inserted {
-            if record(of: current) == consRecord {
-                if let head = gid.get(entity: .uuid(current), label: .uuid(headField))?.asUUID {
-                    result.append(head)
-                }
-                if let tail = gid.get(entity: .uuid(current), label: .uuid(tailField))?.asUUID {
-                    current = tail
-                } else {
-                    break
-                }
-            } else {
-                break
+            let rec = record(of: current)
+            if rec == emptyRecord {
+                return result
             }
+            guard rec == consRecord,
+                  let head = gid.get(entity: current, label: headField),
+                  let tail = gid.get(entity: current, label: tailField)
+            else { return nil }
+            result.append(head)
+            current = tail
         }
-        return result
+        return nil
     }
 
-    func fields(of rec: UUID) -> [UUID] {
-        guard let listId = gid.get(entity: .uuid(rec), label: .uuid(fieldsField))?.asUUID else {
-            return []
-        }
+    func fields(of entity: Id) -> [Id]? {
+        guard let listId = gid.get(entity: entity, label: fieldsField) else { return nil }
         return listToArray(listId)
     }
 
-    func typeParams(of decl: UUID) -> [UUID] {
-        guard let listId = gid.get(entity: .uuid(decl), label: .uuid(typeParametersField))?.asUUID else {
-            return []
-        }
+    func typeParams(of entity: Id) -> [Id]? {
+        guard let listId = gid.get(entity: entity, label: typeParametersField) else { return nil }
         return listToArray(listId)
     }
 
-    func summands(of sum: UUID) -> [UUID] {
-        guard let listId = gid.get(entity: .uuid(sum), label: .uuid(summandsField))?.asUUID else {
-            return []
-        }
+    func summands(of entity: Id) -> [Id]? {
+        guard let listId = gid.get(entity: entity, label: summandsField) else { return nil }
         return listToArray(listId)
     }
 
@@ -98,7 +90,7 @@ struct Schema {
     static func bootstrap() -> Schema {
         var gid = MutGid()
 
-        // ── Generate all UUIDs ──────────────────────────────
+        // MARK: Generate all UUIDs─────────────────────────────
 
         let nameField = UUID()
         let recordField = UUID()
@@ -130,7 +122,7 @@ struct Schema {
 
         let library = UUID()
 
-        // ── Helpers ─────────────────────────────────────────
+        // MARK: Helpers────────────────────────────────────────
 
         func set(_ entity: UUID, _ label: UUID, _ value: UUID) {
             gid.set(entity: entity, label: .uuid(label), value: .uuid(value))
@@ -164,7 +156,7 @@ struct Schema {
             return apply
         }
 
-        // ── Apply nodes for generic type references ─────────
+        // MARK: Apply nodes for generic type references────────
 
         let listOfTypeParam = makeApply(typeFunction: listSum, args: [(listT, typeParameterRecord)])
         let listOfField = makeApply(typeFunction: listSum, args: [(listT, fieldRecord)])
@@ -172,7 +164,7 @@ struct Schema {
         let listOfT = makeApply(typeFunction: listSum, args: [(listT, listT)])
         let listOfTypeFunction = makeApply(typeFunction: listSum, args: [(listT, typeFunctionSum)])
 
-        // ── Field declarations ──────────────────────────────
+        // MARK: Field declarations─────────────────────────────
 
         func declareField(_ uuid: UUID, name: String, typeExpr: UUID) {
             set(uuid, recordField, fieldRecord)
@@ -191,7 +183,7 @@ struct Schema {
         declareField(tailField, name: "tail", typeExpr: listOfT)
         declareField(typesField, name: "types", typeExpr: listOfTypeFunction)
 
-        // ── Record declarations ─────────────────────────────
+        // MARK: Record declarations────────────────────────────
 
         func declareRecord(_ uuid: UUID, name: String, typeParams: [UUID], fields: [UUID]) {
             set(uuid, recordField, recordRecord)
@@ -211,7 +203,7 @@ struct Schema {
         declareRecord(emptyRecord, name: "Empty", typeParams: [], fields: [])
         declareRecord(libraryRecord, name: "Library", typeParams: [], fields: [nameField, typesField, fieldsField])
 
-        // ── Sum declarations ────────────────────────────────
+        // MARK: Sum declarations───────────────────────────────
 
         func declareSum(_ uuid: UUID, name: String, typeParams: [UUID], summands: [UUID]) {
             set(uuid, recordField, sumRecord)
@@ -224,12 +216,12 @@ struct Schema {
         declareSum(typeExpressionSum, name: "Type Expression", typeParams: [], summands: [recordRecord, sumRecord, applyRecord, typeParameterRecord])
         declareSum(listSum, name: "List", typeParams: [listT], summands: [consRecord, emptyRecord])
 
-        // ── Type parameters ─────────────────────────────────
+        // MARK: Type parameters────────────────────────────────
 
         set(listT, recordField, typeParameterRecord)
         setStr(listT, nameField, "T")
 
-        // ── Library instance ────────────────────────────────
+        // MARK: Library instance───────────────────────────────
 
         set(library, recordField, libraryRecord)
         setStr(library, nameField, "Core")
@@ -244,35 +236,37 @@ struct Schema {
             typeParametersField, typeFunctionField, typesField,
         ]))
 
-        // ── Assemble ────────────────────────────────────────
+        // MARK: Assemble───────────────────────────────────────
+
+        func id(_ uuid: UUID) -> Id { .uuid(uuid) }
 
         return Schema(
             gid: gid,
-            nameField: nameField,
-            recordField: recordField,
-            typeExpressionField: typeExpressionField,
-            typeParametersField: typeParametersField,
-            typeFunctionField: typeFunctionField,
-            fieldsField: fieldsField,
-            summandsField: summandsField,
-            headField: headField,
-            tailField: tailField,
-            typesField: typesField,
-            stringRecord: stringRecord,
-            numberRecord: numberRecord,
-            typeParameterRecord: typeParameterRecord,
-            fieldRecord: fieldRecord,
-            recordRecord: recordRecord,
-            sumRecord: sumRecord,
-            applyRecord: applyRecord,
-            consRecord: consRecord,
-            emptyRecord: emptyRecord,
-            libraryRecord: libraryRecord,
-            typeFunctionSum: typeFunctionSum,
-            typeExpressionSum: typeExpressionSum,
-            listSum: listSum,
-            listT: listT,
-            library: library
+            nameField: id(nameField),
+            recordField: id(recordField),
+            typeExpressionField: id(typeExpressionField),
+            typeParametersField: id(typeParametersField),
+            typeFunctionField: id(typeFunctionField),
+            fieldsField: id(fieldsField),
+            summandsField: id(summandsField),
+            headField: id(headField),
+            tailField: id(tailField),
+            typesField: id(typesField),
+            stringRecord: id(stringRecord),
+            numberRecord: id(numberRecord),
+            typeParameterRecord: id(typeParameterRecord),
+            fieldRecord: id(fieldRecord),
+            recordRecord: id(recordRecord),
+            sumRecord: id(sumRecord),
+            applyRecord: id(applyRecord),
+            consRecord: id(consRecord),
+            emptyRecord: id(emptyRecord),
+            libraryRecord: id(libraryRecord),
+            typeFunctionSum: id(typeFunctionSum),
+            typeExpressionSum: id(typeExpressionSum),
+            listSum: id(listSum),
+            listT: id(listT),
+            library: id(library)
         )
     }
 }
