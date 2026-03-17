@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 indirect enum D {
     // MARK: - Layout
@@ -24,8 +24,7 @@ indirect enum D {
 }
 
 struct SelectionActions {
-    var delete: (() -> Void)? = nil
-    // future: navigate, edit, etc.
+    var onKey: ((KeyPress) -> KeyPress.Result)? = nil
 }
 
 enum TextStyle {

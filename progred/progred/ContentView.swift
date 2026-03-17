@@ -16,6 +16,8 @@ struct ContentView: View {
             currentSelection?.deselect()
             currentSelection = newSelection
         })
+        .onKeyPress { currentSelection?.actions.onKey?($0) ?? .ignored }
+        .focusable()
         .frame(minWidth: 400, minHeight: 300)
     }
 }
