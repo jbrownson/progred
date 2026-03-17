@@ -28,7 +28,9 @@ func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
 func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
     { ctx in
         guard let elements = flattenList(ctx) else { return nil }
-        let items = elements.map { ctx.descend(to: $0, render: elementRender) }
+        let items = elements.map { el in
+            D.descend(label: el, child: ctx.descend(to: el, render: elementRender))
+        }
         return elements.isEmpty || inline
             ? inlineBrackets(open: open, close: close, items)
             : .bracketed(open: open, close: close,

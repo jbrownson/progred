@@ -6,6 +6,23 @@ private enum Layout {
     static let spacing: CGFloat = 4
 }
 
+typealias SelectFn = (Selection?) -> Void
+
+struct Selection {
+    let deselect: () -> Void
+}
+
+private struct SelectKey: EnvironmentKey {
+    static let defaultValue: SelectFn = { _ in }
+}
+
+extension EnvironmentValues {
+    var select: SelectFn {
+        get { self[SelectKey.self] }
+        set { self[SelectKey.self] = newValue }
+    }
+}
+
 struct DView: View {
     let d: D
 
@@ -42,7 +59,7 @@ struct DView: View {
             Identicon(uuid: uuid)
 
         case .descend(_, let child):
-            DView(d: child)
+            DescendView(child: child)
 
         case .collapse(let defaultCollapsed, let header, let body):
             CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body)
@@ -63,6 +80,28 @@ struct DView: View {
         case .numberEditor(let n):
             Text(String(n)).foregroundStyle(TextStyle.literal.color)
         }
+    }
+}
+
+struct DescendView: View {
+    let child: D
+    @State private var isSelected = false
+    @Environment(\.select) private var select
+
+    var body: some View {
+        DView(d: child)
+            .padding(2)
+            .background(
+                isSelected
+                    ? AnyShapeStyle(.selection.opacity(0.3))
+                    : AnyShapeStyle(.clear),
+                in: RoundedRectangle(cornerRadius: 3)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                select(Selection(deselect: { isSelected = false }))
+                isSelected = true
+            }
     }
 }
 
