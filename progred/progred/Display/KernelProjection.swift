@@ -29,7 +29,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
     { ctx in
         guard let elements = flattenList(ctx) else { return nil }
         let items = elements.map { el in
-            D.descend(label: el, child: ctx.descend(to: el, render: elementRender))
+            D.selectable(SelectionActions(), child: ctx.descend(to: el, render: elementRender))
         }
         return elements.isEmpty || inline
             ? inlineBrackets(open: open, close: close, items)
@@ -58,5 +58,5 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
 }
 
 private func kernelEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
-    labeled(label, .descend(label: label, child: ctx.descend(to:value)), schema: ctx.schema)
+    labeled(label, .selectable(SelectionActions(), child: ctx.descend(to: value)), schema: ctx.schema)
 }

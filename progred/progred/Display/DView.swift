@@ -10,6 +10,7 @@ typealias SelectFn = (Selection?) -> Void
 
 struct Selection {
     let deselect: () -> Void
+    let actions: SelectionActions
 }
 
 private struct SelectKey: EnvironmentKey {
@@ -58,8 +59,8 @@ struct DView: View {
         case .identicon(let uuid):
             Identicon(uuid: uuid)
 
-        case .descend(_, let child):
-            DescendView(child: child)
+        case .selectable(let actions, let child):
+            SelectableView(actions: actions, child: child)
 
         case .collapse(let defaultCollapsed, let header, let body):
             CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body)
@@ -83,7 +84,8 @@ struct DView: View {
     }
 }
 
-struct DescendView: View {
+struct SelectableView: View {
+    let actions: SelectionActions
     let child: D
     @State private var isSelected = false
     @Environment(\.select) private var select
@@ -99,7 +101,7 @@ struct DescendView: View {
             )
             .contentShape(Rectangle())
             .onTapGesture {
-                select(Selection(deselect: { isSelected = false }))
+                select(Selection(deselect: { isSelected = false }, actions: actions))
                 isSelected = true
             }
     }
