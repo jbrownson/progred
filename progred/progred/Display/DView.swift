@@ -6,30 +6,9 @@ private enum Layout {
     static let spacing: CGFloat = 4
 }
 
-typealias SelectFn = (Selection?) -> Void
-
-struct Selection {
-    let deselect: () -> Void
-    let actions: SelectionActions
-
-    func handleDelete() {
-        actions.onDelete?()
-    }
-}
-
-private struct SelectKey: EnvironmentKey {
-    static let defaultValue: SelectFn = { _ in }
-}
-
-extension EnvironmentValues {
-    var select: SelectFn {
-        get { self[SelectKey.self] }
-        set { self[SelectKey.self] = newValue }
-    }
-}
-
 struct DView: View {
     let d: D
+    var focus: FocusState<Path?>.Binding
 
     @ViewBuilder
     var body: some View {
@@ -37,14 +16,14 @@ struct DView: View {
         case .block(let children):
             VStack(alignment: .leading, spacing: Layout.spacing) {
                 ForEach(children.indices, id: \.self) { i in
-                    DView(d: children[i])
+                    DView(d: children[i], focus: focus)
                 }
             }
 
         case .line(let children):
             HStack(spacing: 0) {
                 ForEach(children.indices, id: \.self) { i in
-                    DView(d: children[i])
+                    DView(d: children[i], focus: focus)
                 }
             }
 
@@ -52,10 +31,10 @@ struct DView: View {
             Spacer().frame(width: Layout.spacing, height: Layout.spacing)
 
         case .indent(let child):
-            DView(d: child).padding(.leading, Layout.indent)
+            DView(d: child, focus: focus).padding(.leading, Layout.indent)
 
         case .bracketed(let open, let close, let body):
-            BracketedView(open: open, close: close, content: body)
+            BracketedView(open: open, close: close, content: body, focus: focus)
 
         case .text(let s, let style):
             Text(s).foregroundStyle(style.color)
@@ -63,16 +42,16 @@ struct DView: View {
         case .identicon(let uuid):
             Identicon(uuid: uuid)
 
-        case .selectable(let actions, let child):
-            SelectableView(actions: actions, child: child)
+        case .selectable(let path, let child):
+            SelectableView(path: path, child: child, focus: focus)
 
         case .collapse(let defaultCollapsed, let header, let body):
-            CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body)
+            CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body, focus: focus)
 
         case .list(_, let elements):
             VStack(alignment: .leading, spacing: Layout.spacing) {
                 ForEach(elements.indices, id: \.self) { i in
-                    DView(d: elements[i])
+                    DView(d: elements[i], focus: focus)
                 }
             }
 
@@ -89,47 +68,50 @@ struct DView: View {
 }
 
 struct SelectableView: View {
-    let actions: SelectionActions
+    let path: Path
     let child: D
-    @State private var isSelected = false
-    @Environment(\.select) private var select
+    var focus: FocusState<Path?>.Binding
 
     var body: some View {
-        DView(d: child)
+        DView(d: child, focus: focus)
             .padding(2)
             .background(
-                isSelected
+                focus.wrappedValue == path
                     ? AnyShapeStyle(.selection.opacity(0.3))
                     : AnyShapeStyle(.clear),
                 in: RoundedRectangle(cornerRadius: 3)
             )
+            .focusable()
+            .focused(focus, equals: path)
+            .focusEffectDisabled()
             .contentShape(Rectangle())
             .onTapGesture {
-                select(Selection(deselect: { isSelected = false }, actions: actions))
-                isSelected = true
+                focus.wrappedValue = path
             }
     }
 }
 
 struct CollapseView: View {
     let header: D
-    let bodyD: D
+    let content: D
+    var focus: FocusState<Path?>.Binding
     @State private var isCollapsed = false
 
-    init(defaultCollapsed: Bool = false, header: D, body: D) {
+    init(defaultCollapsed: Bool = false, header: D, body: D, focus: FocusState<Path?>.Binding) {
         self._isCollapsed = State(initialValue: defaultCollapsed)
         self.header = header
-        self.bodyD = body
+        self.content = body
+        self.focus = focus
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.spacing) {
             HStack(spacing: Layout.spacing) {
-                DView(d: header)
+                DView(d: header, focus: focus)
                 CollapseToggle(isCollapsed: $isCollapsed)
             }
             if !isCollapsed {
-                DView(d: bodyD).padding(.leading, Layout.indent)
+                DView(d: content, focus: focus).padding(.leading, Layout.indent)
             }
         }
     }
@@ -139,6 +121,7 @@ struct BracketedView: View {
     let open: String
     let close: String
     let content: D
+    var focus: FocusState<Path?>.Binding
     @State private var isCollapsed = false
 
     var body: some View {
@@ -149,7 +132,7 @@ struct BracketedView: View {
                     .foregroundStyle(TextStyle.punctuation.color)
             }
             if !isCollapsed {
-                DView(d: content).padding(.leading, Layout.toggleSize + Layout.indent)
+                DView(d: content, focus: focus).padding(.leading, Layout.toggleSize + Layout.indent)
                 Text(close).foregroundStyle(TextStyle.punctuation.color)
                     .padding(.leading, Layout.indent)
             }
@@ -209,10 +192,10 @@ struct Identicon: View {
                 for col in 0..<3 {
                     if bits & (1 << (row * 3 + col)) != 0 {
                         let rect = CGRect(x: CGFloat(col) * cell, y: CGFloat(row) * cell, width: cell, height: cell)
-                        context.fill(Path(rect), with: .color(color))
+                        context.fill(SwiftUI.Path(rect), with: .color(color))
                         if col < 2 {
                             let mirror = CGRect(x: CGFloat(4 - col) * cell, y: CGFloat(row) * cell, width: cell, height: cell)
-                            context.fill(Path(mirror), with: .color(color))
+                            context.fill(SwiftUI.Path(mirror), with: .color(color))
                         }
                     }
                 }

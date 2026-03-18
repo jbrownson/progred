@@ -13,7 +13,7 @@ indirect enum D {
     case identicon(UUID)
 
     // MARK: - Structure
-    case selectable(SelectionActions, child: D)
+    case selectable(Path, child: D)
     case collapse(defaultCollapsed: Bool = false, header: D, body: D)
     case list(separator: String, elements: [D])
 
@@ -21,10 +21,6 @@ indirect enum D {
     case placeholder
     case stringEditor(String)
     case numberEditor(Double)
-}
-
-struct SelectionActions {
-    var onDelete: (() -> Void)? = nil
 }
 
 enum TextStyle {

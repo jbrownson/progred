@@ -4,13 +4,15 @@ typealias Render = (ProjectionContext) -> D?
 
 struct ProjectionContext {
     let entity: Id
+    let path: Path
     let gid: any Gid
     let editor: Editor?
     let ancestors: Set<Id>
     private let schema: Schema
 
-    init(entity: Id, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>) {
+    init(entity: Id, path: Path, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>) {
         self.entity = entity
+        self.path = path
         self.gid = gid
         self.schema = schema
         self.editor = editor
@@ -54,11 +56,16 @@ struct ProjectionContext {
 
     func typeParams(of entity: Id) -> [Id]? {
         guard let listId = gid.get(entity: entity, label: typeParametersField) else { return nil }
-        return listToArray(listId)
+        return listToArray(listId)?.map(\.head)
     }
 
-    func listToArray(_ listNode: Id) -> [Id]? {
-        var result: [Id] = []
+    struct ListElement {
+        let cons: Id
+        let head: Id
+    }
+
+    func listToArray(_ listNode: Id) -> [ListElement]? {
+        var result: [ListElement] = []
         var current = listNode
         var seen: Set<Id> = []
         while seen.insert(current).inserted {
@@ -68,7 +75,7 @@ struct ProjectionContext {
                   let head = gid.get(entity: current, label: headField),
                   let tail = gid.get(entity: current, label: tailField)
             else { return nil }
-            result.append(head)
+            result.append(ListElement(cons: current, head: head))
             current = tail
         }
         return nil
@@ -76,19 +83,14 @@ struct ProjectionContext {
 
     func descend(_ field: Id, render: Render? = nil) -> D {
         guard let value = get(field) else { return .placeholder }
-        let actions = selectionActions(field: field)
-        return .selectable(actions, child: descend(to: value, render: render))
+        let childPath = path.child(field)
+        let d = descend(to: value, via: childPath, render: render)
+        return .selectable(childPath, child: d)
     }
 
-    func selectionActions(field: Id) -> SelectionActions {
-        guard let editor, case .uuid(let uuid) = entity else { return SelectionActions() }
-        return SelectionActions(onDelete: {
-            editor.delete(entity: uuid, label: field)
-        })
-    }
-
-    func descend(to entity: Id, render: Render? = nil) -> D {
-        let childCtx = ProjectionContext(entity: entity, gid: gid, schema: schema, editor: editor, ancestors: ancestors.union([self.entity]))
+    func descend(to entity: Id, via path: Path? = nil, render: Render? = nil) -> D {
+        let childPath = path ?? self.path
+        let childCtx = ProjectionContext(entity: entity, path: childPath, gid: gid, schema: schema, editor: editor, ancestors: ancestors.union([self.entity]))
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         if childCtx.isCycle {
             return .collapse(defaultCollapsed: true, header: kernelHeader(ctx: childCtx), body: d)
@@ -97,7 +99,7 @@ struct ProjectionContext {
     }
 
     func project(_ id: Id, render: Render? = nil) -> D {
-        let ctx = ProjectionContext(entity: id, gid: gid, schema: schema, editor: editor, ancestors: ancestors)
+        let ctx = ProjectionContext(entity: id, path: path, gid: gid, schema: schema, editor: editor, ancestors: ancestors)
         return render.flatMap({ $0(ctx) }) ?? progred.project(ctx)
     }
 

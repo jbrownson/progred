@@ -9,7 +9,7 @@ func kernelHeader(ctx: ProjectionContext) -> D {
     return parts.count == 1 ? parts[0] : .line([parts[0], .space, parts[1]])
 }
 
-func flattenList(_ ctx: ProjectionContext) -> [Id]? {
+func flattenList(_ ctx: ProjectionContext) -> [ProjectionContext.ListElement]? {
     ctx.listToArray(ctx.entity)
 }
 
@@ -26,8 +26,11 @@ func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
 func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
     { ctx in
         guard let elements = flattenList(ctx) else { return nil }
-        let items = elements.map { el in
-            D.selectable(SelectionActions(), child: ctx.descend(to: el, render: elementRender))
+        var consPath = ctx.path
+        let items = elements.enumerated().map { (i, el) in
+            let item = D.selectable(consPath, child: ctx.descend(to: el.head, render: elementRender))
+            consPath = consPath.child(ctx.tailField)
+            return item
         }
         return elements.isEmpty || inline
             ? inlineBrackets(open: open, close: close, items)
@@ -56,5 +59,6 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
 }
 
 private func kernelEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
-    labeled(label, .selectable(ctx.selectionActions(field: label), child: ctx.descend(to: value)), ctx: ctx)
+    let childPath = ctx.path.child(label)
+    return labeled(label, .selectable(childPath, child: ctx.descend(to: value, via: childPath)), ctx: ctx)
 }
