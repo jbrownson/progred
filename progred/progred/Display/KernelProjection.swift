@@ -26,13 +26,29 @@ func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
 func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
     { ctx in
         guard let elements = flattenList(ctx) else { return nil }
-        var consPath = ctx.path
-        let items = elements.enumerated().map { (i, el) in
-            let item = D.selectable(consPath, child: ctx.descend(to: el.head, render: elementRender))
-            consPath = consPath.child(ctx.tailField)
-            return item
+
+        if elements.isEmpty {
+            let insertPath = ctx.path.child(ctx.insertField)
+            return ctx.focus == insertPath
+                ? .selectable(insertPath, child: .placeholder)
+                : inlineBrackets(open: open, close: close, [])
         }
-        return elements.isEmpty || inline
+
+        var consPath = ctx.path
+        var items: [D] = []
+        for el in elements {
+            let elementPath = consPath.child(ctx.headField)
+            items.append(.selectable(elementPath, child: ctx.descend(to: el.head, via: elementPath, render: elementRender)))
+
+            let tailPath = consPath.child(ctx.tailField)
+            if ctx.focus == tailPath {
+                items.append(.selectable(tailPath, child: .placeholder))
+            }
+
+            consPath = consPath.child(ctx.tailField)
+        }
+
+        return inline
             ? inlineBrackets(open: open, close: close, items)
             : .bracketed(open: open, close: close,
                 body: .list(separator: ",", elements: items))

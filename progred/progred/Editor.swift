@@ -28,7 +28,15 @@ class Editor {
         guard let path, let (parent, field) = path.pop(),
               case .uuid(let uuid) = parent.node(in: gid, root: root)
         else { return }
-        delete(entity: uuid, label: field)
+
+        // List splice: if parent is a cons cell, replace its tail with the next tail
+        if field == schema.tailField,
+           let child = gid.get(entity: .uuid(uuid), label: field),
+           let grandchildTail = gid.get(entity: child, label: schema.tailField) {
+            set(entity: uuid, label: field, value: grandchildTail)
+        } else {
+            delete(entity: uuid, label: field)
+        }
     }
 
     func handleSet(path: Path?, value: Id) {

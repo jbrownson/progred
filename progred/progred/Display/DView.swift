@@ -85,9 +85,6 @@ struct SelectableView: View {
             .focused(focus, equals: path)
             .focusEffectDisabled()
             .contentShape(Rectangle())
-            .onTapGesture {
-                focus.wrappedValue = path
-            }
     }
 }
 

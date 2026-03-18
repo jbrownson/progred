@@ -7,15 +7,17 @@ struct ProjectionContext {
     let path: Path
     let gid: any Gid
     let editor: Editor?
+    let focus: Path?
     let ancestors: Set<Id>
     private let schema: Schema
 
-    init(entity: Id, path: Path, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>) {
+    init(entity: Id, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>) {
         self.entity = entity
         self.path = path
         self.gid = gid
         self.schema = schema
         self.editor = editor
+        self.focus = focus
         self.ancestors = ancestors
     }
 
@@ -29,6 +31,7 @@ struct ProjectionContext {
     var summandsField: Id { schema.summandsField }
     var headField: Id { schema.headField }
     var tailField: Id { schema.tailField }
+    var insertField: Id { schema.insertField }
     var typeParameterRecord: Id { schema.typeParameterRecord }
     var fieldRecord: Id { schema.fieldRecord }
     var recordRecord: Id { schema.recordRecord }
@@ -90,7 +93,7 @@ struct ProjectionContext {
 
     func descend(to entity: Id, via path: Path? = nil, render: Render? = nil) -> D {
         let childPath = path ?? self.path
-        let childCtx = ProjectionContext(entity: entity, path: childPath, gid: gid, schema: schema, editor: editor, ancestors: ancestors.union([self.entity]))
+        let childCtx = ProjectionContext(entity: entity, path: childPath, gid: gid, schema: schema, editor: editor, focus: focus, ancestors: ancestors.union([self.entity]))
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         if childCtx.isCycle {
             return .collapse(defaultCollapsed: true, header: kernelHeader(ctx: childCtx), body: d)
@@ -99,7 +102,7 @@ struct ProjectionContext {
     }
 
     func project(_ id: Id, render: Render? = nil) -> D {
-        let ctx = ProjectionContext(entity: id, path: path, gid: gid, schema: schema, editor: editor, ancestors: ancestors)
+        let ctx = ProjectionContext(entity: id, path: path, gid: gid, schema: schema, editor: editor, focus: focus, ancestors: ancestors)
         return render.flatMap({ $0(ctx) }) ?? progred.project(ctx)
     }
 

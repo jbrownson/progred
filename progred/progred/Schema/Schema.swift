@@ -14,6 +14,7 @@ struct Schema {
     let headField: Id
     let tailField: Id
     let typesField: Id
+    let insertField: Id
 
     // MARK: - Records
     let stringRecord: Id
@@ -102,6 +103,7 @@ struct Schema {
         let headField = UUID()
         let tailField = UUID()
         let typesField = UUID()
+        let insertField = UUID()
 
         let stringRecord = UUID()
         let numberRecord = UUID()
@@ -182,6 +184,7 @@ struct Schema {
         declareField(headField, name: "head", typeExpr: listT)
         declareField(tailField, name: "tail", typeExpr: listOfT)
         declareField(typesField, name: "types", typeExpr: listOfTypeFunction)
+        declareField(insertField, name: "insert", typeExpr: listT)
 
         // MARK: Record declarations────────────────────────────
 
@@ -252,6 +255,7 @@ struct Schema {
             headField: id(headField),
             tailField: id(tailField),
             typesField: id(typesField),
+            insertField: id(insertField),
             stringRecord: id(stringRecord),
             numberRecord: id(numberRecord),
             typeParameterRecord: id(typeParameterRecord),
