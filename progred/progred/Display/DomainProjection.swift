@@ -13,7 +13,7 @@ func projectField(_ ctx: ProjectionContext) -> D? {
         .space,
         .text("→", .punctuation),
         .space,
-        ctx.project(field: ctx.typeExpressionField, render: renderRef),
+        ctx.descend(ctx.typeExpressionField, render: renderRef),
     ])
 }
 
