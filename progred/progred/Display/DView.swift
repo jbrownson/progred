@@ -151,26 +151,70 @@ struct BracketedView: View {
     }
 }
 
-struct CollapseToggle: View {
+struct CollapseToggle: NSViewRepresentable {
     @Binding var isCollapsed: Bool
-    @State private var isHovered = false
 
-    var body: some View {
-        Button { isCollapsed.toggle() } label: {
-            Image(systemName: isCollapsed ? "arrowtriangle.right.fill" : "arrowtriangle.down.fill")
-                .font(.system(size: 7))
-                .foregroundStyle(isHovered ? .primary : .secondary)
-                .frame(width: Layout.toggleSize, height: Layout.toggleSize)
-                .background(
-                    isHovered
-                        ? AnyShapeStyle(.quaternary)
-                        : AnyShapeStyle(.clear),
-                    in: RoundedRectangle(cornerRadius: 3)
-                )
-                .contentShape(Rectangle())
+    func makeNSView(context: Context) -> CollapseToggleNSView {
+        let view = CollapseToggleNSView()
+        view.setContentHuggingPriority(.required, for: .horizontal)
+        view.setContentHuggingPriority(.required, for: .vertical)
+        return view
+    }
+
+    func updateNSView(_ nsView: CollapseToggleNSView, context: Context) {
+        nsView.onToggle = { isCollapsed.toggle() }
+        nsView.update(isCollapsed: isCollapsed)
+    }
+}
+
+class CollapseToggleNSView: NSView {
+    var onToggle: (() -> Void)?
+    private var isCollapsed = false
+    private var isHovered = false
+    private var trackingArea: NSTrackingArea?
+
+    override var acceptsFirstResponder: Bool { false }
+    override var intrinsicContentSize: NSSize { NSSize(width: Layout.toggleSize, height: Layout.toggleSize) }
+
+    func update(isCollapsed: Bool) {
+        guard self.isCollapsed != isCollapsed else { return }
+        self.isCollapsed = isCollapsed
+        needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) { onToggle?() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { isHovered = true; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { isHovered = false; needsDisplay = true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if isHovered {
+            NSColor.gray.withAlphaComponent(0.2).setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
         }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
+
+        let symbol = isCollapsed ? "arrowtriangle.right.fill" : "arrowtriangle.down.fill"
+        guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "toggle"),
+              let configured = image.withSymbolConfiguration(.init(pointSize: 7, weight: .regular))
+        else { return }
+
+        let tint: NSColor = isHovered ? .labelColor : .secondaryLabelColor
+        let tinted = NSImage(size: configured.size, flipped: false) { rect in
+            tint.set()
+            configured.draw(in: rect)
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        let origin = NSPoint(x: (bounds.width - tinted.size.width) / 2, y: (bounds.height - tinted.size.height) / 2)
+        tinted.draw(at: origin, from: .zero, operation: .sourceOver, fraction: 1)
     }
 }
 
