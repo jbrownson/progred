@@ -151,70 +151,72 @@ struct BracketedView: View {
     }
 }
 
-struct CollapseToggle: NSViewRepresentable {
-    @Binding var isCollapsed: Bool
+// Wraps SwiftUI content in an NSView that absorbs mouseDown without
+// forwarding to the responder chain. Prevents parent .focusable() views
+// from claiming focus when this area is clicked. SwiftUI gesture
+// recognizers inside still work — they receive events separately from
+// the responder chain.
+struct FocusShield<Content: View>: NSViewRepresentable {
+    let content: Content
 
-    func makeNSView(context: Context) -> CollapseToggleNSView {
-        let view = CollapseToggleNSView()
-        view.setContentHuggingPriority(.required, for: .horizontal)
-        view.setContentHuggingPriority(.required, for: .vertical)
-        return view
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
     }
 
-    func updateNSView(_ nsView: CollapseToggleNSView, context: Context) {
-        nsView.onToggle = { isCollapsed.toggle() }
-        nsView.update(isCollapsed: isCollapsed)
+    func makeNSView(context: Context) -> FocusShieldNSView<Content> {
+        FocusShieldNSView(rootView: content)
+    }
+
+    func updateNSView(_ nsView: FocusShieldNSView<Content>, context: Context) {
+        nsView.hosting.rootView = content
     }
 }
 
-class CollapseToggleNSView: NSView {
-    var onToggle: (() -> Void)?
-    private var isCollapsed = false
-    private var isHovered = false
-    private var trackingArea: NSTrackingArea?
+class FocusShieldNSView<Content: View>: NSView {
+    let hosting: NSHostingView<Content>
+
+    init(rootView: Content) {
+        self.hosting = NSHostingView(rootView: rootView)
+        super.init(frame: .zero)
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(hosting)
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { false }
-    override var intrinsicContentSize: NSSize { NSSize(width: Layout.toggleSize, height: Layout.toggleSize) }
 
-    func update(isCollapsed: Bool) {
-        guard self.isCollapsed != isCollapsed else { return }
-        self.isCollapsed = isCollapsed
-        needsDisplay = true
-    }
+    override func mouseDown(with event: NSEvent) {}
+}
 
-    override func mouseDown(with event: NSEvent) { onToggle?() }
+struct CollapseToggle: View {
+    @Binding var isCollapsed: Bool
+    @State private var isHovered = false
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self)
-        addTrackingArea(area)
-        trackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) { isHovered = true; needsDisplay = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false; needsDisplay = true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        if isHovered {
-            NSColor.gray.withAlphaComponent(0.2).setFill()
-            NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+    var body: some View {
+        FocusShield {
+            Button { isCollapsed.toggle() } label: {
+                Image(systemName: isCollapsed ? "arrowtriangle.right.fill" : "arrowtriangle.down.fill")
+                    .font(.system(size: 7))
+                    .foregroundStyle(isHovered ? .primary : .secondary)
+                    .frame(width: Layout.toggleSize, height: Layout.toggleSize)
+                    .background(
+                        isHovered
+                            ? AnyShapeStyle(.quaternary)
+                            : AnyShapeStyle(.clear),
+                        in: RoundedRectangle(cornerRadius: 3)
+                    )
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-
-        let symbol = isCollapsed ? "arrowtriangle.right.fill" : "arrowtriangle.down.fill"
-        guard let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "toggle"),
-              let configured = image.withSymbolConfiguration(.init(pointSize: 7, weight: .regular))
-        else { return }
-
-        let tint: NSColor = isHovered ? .labelColor : .secondaryLabelColor
-        let tinted = NSImage(size: configured.size, flipped: false) { rect in
-            tint.set()
-            configured.draw(in: rect)
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-        let origin = NSPoint(x: (bounds.width - tinted.size.width) / 2, y: (bounds.height - tinted.size.height) / 2)
-        tinted.draw(at: origin, from: .zero, operation: .sourceOver, fraction: 1)
+        .onHover { isHovered = $0 }
     }
 }
 
