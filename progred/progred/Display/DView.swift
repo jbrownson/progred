@@ -1,9 +1,7 @@
 import SwiftUI
 
 private enum Layout {
-    static let toggleSize: CGFloat = 16
     static let indent: CGFloat = 16
-    static let spacing: CGFloat = 4
 }
 
 struct DView: View {
@@ -21,7 +19,7 @@ struct DView: View {
     var body: some View {
         switch d {
         case .block(let children):
-            withDescend(VStack(alignment: .leading, spacing: Layout.spacing) {
+            withDescend(VStack(alignment: .leading, spacing: 0) {
                 ForEach(children.indices, id: \.self) { i in
                     DView(d: children[i], focus: focus)
                 }
@@ -35,7 +33,8 @@ struct DView: View {
             })
 
         case .space:
-            withDescend(Spacer().frame(width: Layout.spacing, height: Layout.spacing))
+            let spacing: CGFloat = 4
+            withDescend(Spacer().frame(width: spacing, height: spacing))
 
         case .indent(let child):
             withDescend(DView(d: child, focus: focus).padding(.leading, Layout.indent))
@@ -56,7 +55,7 @@ struct DView: View {
             CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body, focus: focus, descendPath: descendPath)
 
         case .list(_, let elements):
-            withDescend(VStack(alignment: .leading, spacing: Layout.spacing) {
+            withDescend(VStack(alignment: .leading, spacing: 0) {
                 ForEach(elements.indices, id: \.self) { i in
                     DView(d: elements[i], focus: focus)
                 }
@@ -80,13 +79,13 @@ struct DescendModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .padding(2)
-            .background(
-                focus.wrappedValue == path
-                    ? AnyShapeStyle(.selection.opacity(0.3))
-                    : AnyShapeStyle(.clear),
-                in: RoundedRectangle(cornerRadius: 3)
-            )
+            .background {
+                if focus.wrappedValue == path {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(.selection.opacity(0.3))
+                        .padding(-2)
+                }
+            }
             .contentShape(Rectangle())
             .focusable()
             .focused(focus, equals: path)
@@ -110,8 +109,8 @@ struct CollapseView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.spacing) {
-            HStack(spacing: Layout.spacing) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
                 DView(d: header, focus: focus)
                 CollapseToggle(isCollapsed: $isCollapsed)
             }
@@ -136,7 +135,7 @@ struct BracketedView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             CollapseToggle(isCollapsed: $isCollapsed)
-            VStack(alignment: .leading, spacing: Layout.spacing) {
+            VStack(alignment: .leading, spacing: 0) {
                 Text(isCollapsed ? "\(open)…\(close)" : open)
                     .foregroundStyle(TextStyle.punctuation.color)
                 if !isCollapsed {
@@ -196,12 +195,13 @@ struct CollapseToggle: View {
     @State private var isHovered = false
 
     var body: some View {
+        let toggleSize: CGFloat = 16
         FocusShield {
             Button { isCollapsed.toggle() } label: {
                 Image(systemName: isCollapsed ? "arrowtriangle.right.fill" : "arrowtriangle.down.fill")
                     .font(.system(size: 7))
                     .foregroundStyle(isHovered ? .primary : .secondary)
-                    .frame(width: Layout.toggleSize, height: Layout.toggleSize)
+                    .frame(width: toggleSize, height: toggleSize)
                     .background(
                         isHovered
                             ? AnyShapeStyle(.quaternary)
