@@ -88,7 +88,7 @@ struct ProjectionContext {
         guard let value = get(field) else { return .placeholder }
         let childPath = path.child(field)
         let d = descend(to: value, via: childPath, render: render)
-        return .selectable(childPath, child: d)
+        return .descend(childPath, child: d)
     }
 
     func descend(to entity: Id, via path: Path? = nil, render: Render? = nil) -> D {

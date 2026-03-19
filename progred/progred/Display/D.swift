@@ -13,7 +13,7 @@ indirect enum D {
     case identicon(UUID)
 
     // MARK: - Structure
-    case selectable(Path, child: D)
+    case descend(Path, child: D)
     case collapse(defaultCollapsed: Bool = false, header: D, body: D)
     case list(separator: String, elements: [D])
 

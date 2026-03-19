@@ -56,11 +56,11 @@ func projectApply(_ ctx: ProjectionContext) -> D? {
 
 private func typeHeader(recordType: Id, ctx: ProjectionContext) -> D {
     let keyword: D = ctx.name(of: recordType).map { .text($0, .keyword) } ?? .placeholder
-    return .line([
+    return .descend(ctx.path, child: .line([
         keyword,
         .space,
         ctx.descend(ctx.nameField),
-        ctx.project(field: ctx.typeParametersField,
+        ctx.descend(ctx.typeParametersField,
             render: renderList(open: "<", close: ">", inline: true, elementRender: renderRef)),
-    ])
+    ]))
 }

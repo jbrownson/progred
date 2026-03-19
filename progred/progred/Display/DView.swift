@@ -42,8 +42,8 @@ struct DView: View {
         case .identicon(let uuid):
             Identicon(uuid: uuid)
 
-        case .selectable(let path, let child):
-            SelectableView(path: path, child: child, focus: focus)
+        case .descend(let path, let child):
+            DescendView(path: path, child: child, focus: focus)
 
         case .collapse(let defaultCollapsed, let header, let body):
             CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body, focus: focus)
@@ -67,7 +67,7 @@ struct DView: View {
     }
 }
 
-struct SelectableView: View {
+struct DescendView: View {
     let path: Path
     let child: D
     var focus: FocusState<Path?>.Binding

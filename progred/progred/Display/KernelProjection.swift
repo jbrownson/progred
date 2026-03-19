@@ -30,7 +30,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         if elements.isEmpty {
             let insertPath = ctx.path.child(ctx.insertField)
             return ctx.focus == insertPath
-                ? .selectable(insertPath, child: .placeholder)
+                ? .descend(insertPath, child: .placeholder)
                 : inlineBrackets(open: open, close: close, [])
         }
 
@@ -38,11 +38,11 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         var items: [D] = []
         for el in elements {
             let elementPath = consPath.child(ctx.headField)
-            items.append(.selectable(elementPath, child: ctx.descend(to: el.head, via: elementPath, render: elementRender)))
+            items.append(.descend(elementPath, child: ctx.descend(to: el.head, via: elementPath, render: elementRender)))
 
             let tailPath = consPath.child(ctx.tailField)
             if ctx.focus == tailPath {
-                items.append(.selectable(tailPath, child: .placeholder))
+                items.append(.descend(tailPath, child: .placeholder))
             }
 
             consPath = consPath.child(ctx.tailField)
@@ -76,5 +76,5 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
 
 private func kernelEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
     let childPath = ctx.path.child(label)
-    return labeled(label, .selectable(childPath, child: ctx.descend(to: value, via: childPath)), ctx: ctx)
+    return labeled(label, .descend(childPath, child: ctx.descend(to: value, via: childPath)), ctx: ctx)
 }
