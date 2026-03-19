@@ -20,17 +20,17 @@ func projectField(_ ctx: ProjectionContext) -> D? {
 func projectRecord(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.recordRecord else { return nil }
 
-    return .collapse(
-        header: typeHeader(recordType: ctx.recordRecord, ctx: ctx),
-        body: labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx))
+    return .descend(ctx.path, child: .collapse(
+        header: typeHeader(ctx: ctx),
+        body: labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx)))
 }
 
 func projectSum(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.sumRecord else { return nil }
 
-    return .collapse(
-        header: typeHeader(recordType: ctx.sumRecord, ctx: ctx),
-        body: labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx))
+    return .descend(ctx.path, child: .collapse(
+        header: typeHeader(ctx: ctx),
+        body: labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx)))
 }
 
 func projectApply(_ ctx: ProjectionContext) -> D? {
@@ -54,13 +54,13 @@ func projectApply(_ ctx: ProjectionContext) -> D? {
     ])
 }
 
-private func typeHeader(recordType: Id, ctx: ProjectionContext) -> D {
-    let keyword: D = ctx.name(of: recordType).map { .text($0, .keyword) } ?? .placeholder
-    return .descend(ctx.path, child: .line([
+private func typeHeader(ctx: ProjectionContext) -> D {
+    let keyword: D = ctx.record().flatMap { ctx.name(of: $0) }.map { .text($0, .keyword) } ?? .placeholder
+    return .line([
         keyword,
         .space,
         ctx.descend(ctx.nameField),
         ctx.descend(ctx.typeParametersField,
             render: renderList(open: "<", close: ">", inline: true, elementRender: renderRef)),
-    ]))
+    ])
 }

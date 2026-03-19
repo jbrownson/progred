@@ -115,12 +115,12 @@ struct CollapseView: View {
                 DView(d: header, focus: focus)
                 CollapseToggle(isCollapsed: $isCollapsed)
             }
-            .applyIf(descendPath) { view, path in
-                view.modifier(DescendModifier(path: path, focus: focus))
-            }
             if !isCollapsed {
                 DView(d: content, focus: focus).padding(.leading, Layout.indent)
             }
+        }
+        .applyIf(descendPath) { view, path in
+            view.modifier(DescendModifier(path: path, focus: focus))
         }
     }
 }
