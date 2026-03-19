@@ -87,10 +87,10 @@ struct DescendModifier: ViewModifier {
                     : AnyShapeStyle(.clear),
                 in: RoundedRectangle(cornerRadius: 3)
             )
+            .contentShape(Rectangle())
             .focusable()
             .focused(focus, equals: path)
             .focusEffectDisabled()
-            .contentShape(Rectangle())
     }
 }
 
