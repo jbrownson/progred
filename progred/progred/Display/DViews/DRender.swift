@@ -10,11 +10,22 @@ struct DRender: NSViewRepresentable {
     let d: D
     let editor: Editor
 
-    func makeNSView(context: Context) -> DRootView {
-        DRootView(editor: editor)
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+        scrollView.verticalScrollElasticity = .none
+        scrollView.horizontalScrollElasticity = .none
+
+        let root = DRootView(editor: editor)
+        scrollView.documentView = root
+        return scrollView
     }
 
-    func updateNSView(_ root: DRootView, context: Context) {
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let root = scrollView.documentView as? DRootView else { return }
         root.rebuild(d)
     }
 }
@@ -33,15 +44,27 @@ class DRootView: FlippedView {
 
     func rebuild(_ d: D) {
         subviews.forEach { $0.removeFromSuperview() }
-        let child = renderD(d, editor: editor)
-        addSubview(child)
-        child.translatesAutoresizingMaskIntoConstraints = false
+        let content = renderD(d, editor: editor)
+        addSubview(content)
+        content.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            child.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            child.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            child.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
-            child.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -8),
+            content.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
         ])
+    }
+
+    override func layout() {
+        super.layout()
+        guard let clipView = superview as? NSClipView else { return }
+        let visible = clipView.bounds.size
+        // Content frame is resolved by Auto Layout after super.layout()
+        let needed = subviews.reduce(CGSize.zero) { size, sub in
+            CGSize(width: max(size.width, sub.frame.maxX + 8),
+                   height: max(size.height, sub.frame.maxY + 8))
+        }
+        frame.size = NSSize(
+            width: max(visible.width, needed.width),
+            height: max(visible.height, needed.height))
     }
 
     // Click background to deselect
@@ -68,7 +91,7 @@ func renderD(_ d: D, editor: Editor) -> NSView {
         let view = renderD(child, editor: editor)
         let wrapper = FlippedView()
         wrapper.addSubview(view)
-        pin(view, to: wrapper, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
+        constrain(view, toFill: wrapper, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
         return wrapper
 
     case .text(let s, let style):

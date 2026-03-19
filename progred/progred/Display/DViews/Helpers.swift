@@ -2,6 +2,9 @@ import AppKit
 
 class FlippedView: NSView {
     override var isFlipped: Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        nextResponder?.mouseDown(with: event)
+    }
 }
 
 func label(_ text: String, color: NSColor) -> NSTextField {
@@ -42,7 +45,7 @@ func hStack(_ views: [NSView]) -> NSStackView {
     return stack
 }
 
-func pin(_ child: NSView, to parent: NSView, insets: NSEdgeInsets = NSEdgeInsets()) {
+func constrain(_ child: NSView, toFill parent: NSView, insets: NSEdgeInsets = NSEdgeInsets()) {
     child.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
         child.topAnchor.constraint(equalTo: parent.topAnchor, constant: insets.top),

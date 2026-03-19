@@ -18,12 +18,12 @@ class BracketedContainer: FlippedView {
         super.init(frame: .zero)
 
         bodyWrapper.addSubview(body)
-        pin(body, to: bodyWrapper, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
+        constrain(body, toFill: bodyWrapper, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
 
         let content = vStack([openLabel, bodyWrapper, closeLabel])
         let outer = hStack([toggle, content])
         addSubview(outer)
-        pin(outer, to: self)
+        constrain(outer, toFill: self)
 
         toggle.onToggle = { [weak self] collapsed in
             guard let self else { return }

@@ -9,7 +9,7 @@ class SelectableView: FlippedView {
         self.editor = editor
         super.init(frame: .zero)
         addSubview(child)
-        pin(child, to: self)
+        constrain(child, toFill: self)
     }
 
     required init?(coder: NSCoder) { fatalError() }
