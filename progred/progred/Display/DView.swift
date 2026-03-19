@@ -9,71 +9,77 @@ private enum Layout {
 struct DView: View {
     let d: D
     var focus: FocusState<Path?>.Binding
+    var descendPath: Path? = nil
+
+    private func withDescend<V: View>(_ view: V) -> some View {
+        view.applyIf(descendPath) { v, path in
+            v.modifier(DescendModifier(path: path, focus: focus))
+        }
+    }
 
     @ViewBuilder
     var body: some View {
         switch d {
         case .block(let children):
-            VStack(alignment: .leading, spacing: Layout.spacing) {
+            withDescend(VStack(alignment: .leading, spacing: Layout.spacing) {
                 ForEach(children.indices, id: \.self) { i in
                     DView(d: children[i], focus: focus)
                 }
-            }
+            })
 
         case .line(let children):
-            HStack(spacing: 0) {
+            withDescend(HStack(spacing: 0) {
                 ForEach(children.indices, id: \.self) { i in
                     DView(d: children[i], focus: focus)
                 }
-            }
+            })
 
         case .space:
-            Spacer().frame(width: Layout.spacing, height: Layout.spacing)
+            withDescend(Spacer().frame(width: Layout.spacing, height: Layout.spacing))
 
         case .indent(let child):
-            DView(d: child, focus: focus).padding(.leading, Layout.indent)
+            withDescend(DView(d: child, focus: focus).padding(.leading, Layout.indent))
 
         case .bracketed(let open, let close, let body):
-            BracketedView(open: open, close: close, content: body, focus: focus)
+            BracketedView(open: open, close: close, content: body, focus: focus, descendPath: descendPath)
 
         case .text(let s, let style):
-            Text(s).foregroundStyle(style.color)
+            withDescend(Text(s).foregroundStyle(style.color))
 
         case .identicon(let uuid):
-            Identicon(uuid: uuid)
+            withDescend(Identicon(uuid: uuid))
 
         case .descend(let path, let child):
-            DescendView(path: path, child: child, focus: focus)
+            withDescend(DView(d: child, focus: focus, descendPath: path))
 
         case .collapse(let defaultCollapsed, let header, let body):
-            CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body, focus: focus)
+            CollapseView(defaultCollapsed: defaultCollapsed, header: header, body: body, focus: focus, descendPath: descendPath)
 
         case .list(_, let elements):
-            VStack(alignment: .leading, spacing: Layout.spacing) {
+            withDescend(VStack(alignment: .leading, spacing: Layout.spacing) {
                 ForEach(elements.indices, id: \.self) { i in
                     DView(d: elements[i], focus: focus)
                 }
-            }
+            })
 
         case .placeholder:
-            Text("_").foregroundStyle(.tertiary)
+            withDescend(Text("_").foregroundStyle(.tertiary))
 
         case .stringEditor(let s):
-            Text(s).foregroundStyle(TextStyle.literal.color)
+            withDescend(Text(s).foregroundStyle(TextStyle.literal.color))
 
         case .numberEditor(let n):
-            Text(String(n)).foregroundStyle(TextStyle.literal.color)
+            withDescend(Text(String(n)).foregroundStyle(TextStyle.literal.color))
         }
     }
 }
 
-struct DescendView: View {
+struct DescendModifier: ViewModifier {
     let path: Path
-    let child: D
     var focus: FocusState<Path?>.Binding
 
-    var body: some View {
-        DView(d: child, focus: focus)
+    func body(content: Content) -> some View {
+        content
             .padding(2)
             .background(
                 focus.wrappedValue == path
@@ -92,13 +98,15 @@ struct CollapseView: View {
     let header: D
     let content: D
     var focus: FocusState<Path?>.Binding
+    var descendPath: Path?
     @State private var isCollapsed = false
 
-    init(defaultCollapsed: Bool = false, header: D, body: D, focus: FocusState<Path?>.Binding) {
+    init(defaultCollapsed: Bool = false, header: D, body: D, focus: FocusState<Path?>.Binding, descendPath: Path? = nil) {
         self._isCollapsed = State(initialValue: defaultCollapsed)
         self.header = header
         self.content = body
         self.focus = focus
+        self.descendPath = descendPath
     }
 
     var body: some View {
@@ -106,6 +114,9 @@ struct CollapseView: View {
             HStack(spacing: Layout.spacing) {
                 DView(d: header, focus: focus)
                 CollapseToggle(isCollapsed: $isCollapsed)
+            }
+            .applyIf(descendPath) { view, path in
+                view.modifier(DescendModifier(path: path, focus: focus))
             }
             if !isCollapsed {
                 DView(d: content, focus: focus).padding(.leading, Layout.indent)
@@ -119,19 +130,22 @@ struct BracketedView: View {
     let close: String
     let content: D
     var focus: FocusState<Path?>.Binding
+    var descendPath: Path?
     @State private var isCollapsed = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.spacing) {
-            HStack(spacing: 0) {
-                CollapseToggle(isCollapsed: $isCollapsed)
+        HStack(alignment: .top, spacing: 0) {
+            CollapseToggle(isCollapsed: $isCollapsed)
+            VStack(alignment: .leading, spacing: Layout.spacing) {
                 Text(isCollapsed ? "\(open)…\(close)" : open)
                     .foregroundStyle(TextStyle.punctuation.color)
+                if !isCollapsed {
+                    DView(d: content, focus: focus).padding(.leading, Layout.indent)
+                    Text(close).foregroundStyle(TextStyle.punctuation.color)
+                }
             }
-            if !isCollapsed {
-                DView(d: content, focus: focus).padding(.leading, Layout.toggleSize + Layout.indent)
-                Text(close).foregroundStyle(TextStyle.punctuation.color)
-                    .padding(.leading, Layout.indent)
+            .applyIf(descendPath) { view, path in
+                view.modifier(DescendModifier(path: path, focus: focus))
             }
         }
     }
@@ -157,6 +171,13 @@ struct CollapseToggle: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func applyIf<T, V: View>(_ value: T?, transform: (Self, T) -> V) -> some View {
+        if let value { transform(self, value) } else { self }
     }
 }
 
