@@ -6,7 +6,7 @@ private enum Layout {
 
 struct DView: View {
     let d: D
-    var focus: FocusState<Path?>.Binding
+    var focus: FocusState<FocusTarget?>.Binding
     var descendPath: Path? = nil
 
     private func withDescend<V: View>(_ view: V) -> some View {
@@ -75,12 +75,14 @@ struct DView: View {
 
 struct DescendModifier: ViewModifier {
     let path: Path
-    var focus: FocusState<Path?>.Binding
+    var focus: FocusState<FocusTarget?>.Binding
+
+    private var target: FocusTarget { FocusTarget(path: path, isCollapse: false) }
 
     func body(content: Content) -> some View {
         content
             .background {
-                if focus.wrappedValue == path {
+                if focus.wrappedValue == target {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(.selection.opacity(0.3))
                         .padding(-2)
@@ -88,7 +90,7 @@ struct DescendModifier: ViewModifier {
             }
             .contentShape(Rectangle())
             .focusable()
-            .focused(focus, equals: path)
+            .focused(focus, equals: target)
             .focusEffectDisabled()
     }
 }
@@ -96,11 +98,11 @@ struct DescendModifier: ViewModifier {
 struct CollapseView: View {
     let header: D
     let content: D
-    var focus: FocusState<Path?>.Binding
+    var focus: FocusState<FocusTarget?>.Binding
     var descendPath: Path?
     @State private var isCollapsed = false
 
-    init(defaultCollapsed: Bool = false, header: D, body: D, focus: FocusState<Path?>.Binding, descendPath: Path? = nil) {
+    init(defaultCollapsed: Bool = false, header: D, body: D, focus: FocusState<FocusTarget?>.Binding, descendPath: Path? = nil) {
         self._isCollapsed = State(initialValue: defaultCollapsed)
         self.header = header
         self.content = body
@@ -128,7 +130,7 @@ struct BracketedView: View {
     let open: String
     let close: String
     let content: D
-    var focus: FocusState<Path?>.Binding
+    var focus: FocusState<FocusTarget?>.Binding
     var descendPath: Path?
     @State private var isCollapsed = false
 
@@ -167,7 +169,6 @@ struct FocusShield<Content: View>: NSViewRepresentable {
     }
 
     class NSView_: NSView {
-        override var acceptsFirstResponder: Bool { false }
         override func mouseDown(with event: NSEvent) {}
     }
 
@@ -192,6 +193,7 @@ struct FocusShield<Content: View>: NSViewRepresentable {
 
 struct CollapseToggle: View {
     @Binding var isCollapsed: Bool
+    @FocusState private var isFocused: Bool
     @State private var isHovered = false
 
     var body: some View {
@@ -211,6 +213,8 @@ struct CollapseToggle: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .focusable(interactions: .activate)
+            .focused($isFocused)
         }
         .onHover { isHovered = $0 }
     }
