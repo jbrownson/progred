@@ -163,36 +163,32 @@ struct FocusShield<Content: View>: NSViewRepresentable {
         self.content = content()
     }
 
-    func makeNSView(context: Context) -> FocusShieldNSView<Content> {
-        FocusShieldNSView(rootView: content)
+    func updateNSView(_ nsView: NSView_, context: Context) {
+        (nsView.subviews.first as? NSHostingView<Content>)?.rootView = content
     }
 
-    func updateNSView(_ nsView: FocusShieldNSView<Content>, context: Context) {
-        nsView.hosting.rootView = content
+    class NSView_: NSView {
+        override var acceptsFirstResponder: Bool { false }
+        override func mouseDown(with event: NSEvent) {}
     }
-}
 
-class FocusShieldNSView<Content: View>: NSView {
-    let hosting: NSHostingView<Content>
-
-    init(rootView: Content) {
-        self.hosting = NSHostingView(rootView: rootView)
-        super.init(frame: .zero)
+    static func makeShieldView(content: Content) -> NSView_ {
+        let shield = NSView_()
+        let hosting = NSHostingView(rootView: content)
         hosting.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(hosting)
+        shield.addSubview(hosting)
         NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hosting.leadingAnchor.constraint(equalTo: shield.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: shield.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: shield.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: shield.bottomAnchor),
         ])
+        return shield
     }
 
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var acceptsFirstResponder: Bool { false }
-
-    override func mouseDown(with event: NSEvent) {}
+    func makeNSView(context: Context) -> NSView_ {
+        Self.makeShieldView(content: content)
+    }
 }
 
 struct CollapseToggle: View {
