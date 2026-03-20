@@ -33,7 +33,7 @@ class SelectableView: FlippedView {
     override func draw(_ dirtyRect: NSRect) {
         guard isSelected else { return }
         NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: -2, dy: -2), xRadius: 3, yRadius: 3).fill()
     }
 
     override func mouseDown(with event: NSEvent) {
