@@ -109,4 +109,4 @@ Value nodes carry a `record` edge identifying their constructor. Full type match
 ### Previous Prototypes
 
 - `prototype-ts/` — Original TypeScript/Electron prototype
-- `prototype-rust/` — Rust/egui prototype (moved to Swift due to egui's limited control over focus, text editing, and input handling)
+- `prototype-rust/` — Rust/egui prototype (moved to Swift due to egui's `Sense::click()` always including focusable — no way to make clickable-but-not-Tab-focusable widgets, which a structured editor needs for collapse toggles, field labels, and insertion points. Also: `lost_focus()` is render-order-dependent for click transfers, and no focus hierarchy/responder chain. See `prototype-rust/AGENTS.md` for details.)
