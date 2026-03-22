@@ -2,7 +2,7 @@ use progred_core::d::DEvent;
 use progred_core::editor::Editor;
 use progred_core::generated::{display_label, name_of};
 use progred_core::graph::Id;
-use progred_core::selection::Selection;
+use progred_core::selection::GraphSelection;
 use progred_core::graph_view_state::{GraphViewState, collect_edges};
 use progred_core::math;
 use eframe::egui::{self, Color32, CornerRadius, Pos2, Rect, Stroke, Vec2};
@@ -188,9 +188,9 @@ pub fn render(ui: &mut egui::Ui, ctx: &egui::Context, editor: &Editor, layout: &
 
     let edges = collect_edges(&editor.doc);
 
-    let graph_selected_edge = editor.selection.as_ref()
+    let graph_selected_edge = editor.graph_selection.as_ref()
         .and_then(|s| match s {
-            Selection::GraphEdge { entity, label } => Some((entity, label)),
+            GraphSelection::Edge { entity, label } => Some((entity, label)),
             _ => None,
         });
 

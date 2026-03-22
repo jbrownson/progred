@@ -1,6 +1,6 @@
 use crate::graph::{Gid, Id, MutGid};
 use crate::path::{Path, PathRoot};
-use crate::selection::Selection;
+use crate::selection::{GraphSelection, Selection};
 use crate::generated::semantics::list;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
@@ -35,6 +35,22 @@ impl Document {
             }
             Selection::GraphEdge { .. } => {}
             Selection::GraphNode(id) => {
+                if self.root.as_ref() == Some(id) {
+                    self.root = None;
+                }
+                self.gid.purge(id);
+            }
+        }
+        self.gc();
+    }
+
+    pub fn delete_graph(&mut self, selection: &GraphSelection) {
+        match selection {
+            GraphSelection::Edge { entity: Id::Uuid(uuid), label } => {
+                self.gid.delete(uuid, label);
+            }
+            GraphSelection::Edge { .. } => {}
+            GraphSelection::Node(id) => {
                 if self.root.as_ref() == Some(id) {
                     self.root = None;
                 }

@@ -156,9 +156,8 @@ fn active_list_insert(
     events: &mut Vec<DEvent<'_>>,
     focus_map: &mut HashMap<egui::Id, Path>,
 ) -> bool {
-    let ps = match &editor.selection {
-        Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
-        Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
+    let ps = match &editor.editing {
+        Some(editing) if &editing.path == path => &editing.placeholder,
         _ => return false,
     };
     let et = expected_type(&editor.lib(), &path.child(list::Cons::<()>::HEAD.into()));
@@ -609,9 +608,8 @@ fn render_placeholder<'a>(
     events: &mut Vec<DEvent<'a>>,
     focus_map: &mut HashMap<egui::Id, Path>,
 ) {
-    let ps = match &editor.selection {
-        Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
-        Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
+    let ps = match &editor.editing {
+        Some(editing) if &editing.path == path => &editing.placeholder,
         _ => return render_placeholder_box(ui, path, events, focus_map),
     };
     let et = expected_type(&editor.lib(), path);

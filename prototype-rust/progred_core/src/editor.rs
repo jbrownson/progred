@@ -4,7 +4,7 @@ use crate::document::Document;
 use crate::generated::semantics::{ISA, list};
 use crate::graph::{Gid, Id};
 use crate::path::Path;
-use crate::selection::{EdgeState, Selection};
+use crate::selection::{EdgeState, EditingState, GraphSelection, PlaceholderState, Selection};
 use crate::spanningtree::SpanningTree;
 use ordered_float::OrderedFloat;
 use std::path::PathBuf;
@@ -16,6 +16,8 @@ pub struct Editor {
     pub builtins: BuiltinValuesGid,
     pub tree: SpanningTree,
     pub selection: Option<Selection>,
+    pub editing: Option<EditingState>,
+    pub graph_selection: Option<GraphSelection>,
     pub file_path: Option<PathBuf>,
 }
 
@@ -34,6 +36,8 @@ impl Editor {
             builtins: BuiltinValuesGid,
             tree: SpanningTree::empty(),
             selection: Some(Selection::edge(Path::root())),
+            editing: None,
+            graph_selection: None,
             file_path: None,
         }
     }
@@ -73,11 +77,15 @@ impl Editor {
     }
 
     pub fn selected_node_id(&self) -> Option<Id> {
-        match self.selection.as_ref()? {
-            Selection::Edge(path, _) => self.doc.node(path),
-            Selection::ListElement { path, .. } => self.doc.node(path),
-            Selection::GraphEdge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
-            Selection::GraphNode(id) => Some(id.clone()),
+        if let Some(sel) = &self.selection {
+            match sel {
+                Selection::Edge(path, _) | Selection::ListElement { path, .. } => return self.doc.node(path),
+                _ => {}
+            }
+        }
+        match self.graph_selection.as_ref()? {
+            GraphSelection::Edge { entity, label } => self.doc.gid.edges(entity).and_then(|e| e.get(label)).cloned(),
+            GraphSelection::Node(id) => Some(id.clone()),
         }
     }
 
@@ -114,13 +122,16 @@ impl Editor {
                     self.selection = None;
                 }
                 DEvent::ClickedPlaceholder(path) => {
+                    self.editing = Some(EditingState { path: path.clone(), placeholder: PlaceholderState::default(), number_text: None });
                     self.selection = Some(Selection::edge(path));
                 }
                 DEvent::ClickedStringEditor(path) => {
+                    self.editing = None;
                     self.selection = Some(Selection::edge(path));
                 }
                 DEvent::ClickedNumberEditor(path) => {
                     if let Some(Id::Number(n)) = self.doc.node(&path) {
+                        self.editing = Some(EditingState { path: path.clone(), placeholder: PlaceholderState::default(), number_text: Some(n.to_string()) });
                         let mut es = EdgeState::default();
                         es.number_text = Some(n.to_string());
                         self.selection = Some(Selection::Edge(path, es));
@@ -130,6 +141,9 @@ impl Editor {
                     self.doc.set_edge(&path, Id::String(text));
                 }
                 DEvent::NumberEditorTextChanged { path, text } => {
+                    if let Some(editing) = &mut self.editing {
+                        editing.number_text = Some(text.clone());
+                    }
                     if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.number_text = Some(text.clone());
                     }
@@ -138,9 +152,12 @@ impl Editor {
                     }
                 }
                 DEvent::PlaceholderCommitted { on_commit, value } => {
-                    let focus_path = self.selection.as_ref().and_then(|s| s.path()).cloned();
+                    let focus_path = self.editing.as_ref().map(|e| &e.path)
+                        .or_else(|| self.selection.as_ref().and_then(|s| s.path()))
+                        .cloned();
                     let id = self.realize_placeholder(value);
                     on_commit(self, id);
+                    self.editing = None;
                     self.selection = focus_path.and_then(|p| self.next_selection_from(&p));
                 }
                 DEvent::ListInsertCommitted { path, value } => {
@@ -152,30 +169,39 @@ impl Editor {
                         self.doc.set_edge(&path.child(list::Cons::<()>::HEAD.into()), head_value);
                         self.doc.set_edge(&path.child(list::Cons::<()>::TAIL.into()), current_value);
                     }
+                    self.editing = None;
                     self.selection = self.next_selection_from(&path);
                 }
                 DEvent::PlaceholderDismissed => {
+                    self.editing = None;
                     self.selection = None;
                 }
                 DEvent::PlaceholderTextChanged(text) => {
+                    if let Some(editing) = &mut self.editing {
+                        editing.placeholder.text = text.clone();
+                        editing.placeholder.selected_index = 0;
+                    }
                     if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.placeholder.text = text;
                         es.placeholder.selected_index = 0;
                     }
                 }
                 DEvent::PlaceholderSelectionMoved(index) => {
+                    if let Some(editing) = &mut self.editing {
+                        editing.placeholder.selected_index = index;
+                    }
                     if let Some(es) = self.selection.as_mut().and_then(|s| s.edge_state_mut()) {
                         es.placeholder.selected_index = index;
                     }
                 }
                 DEvent::GraphNodeClicked(id) => {
-                    self.selection = Some(Selection::GraphNode(id));
+                    self.graph_selection = Some(GraphSelection::Node(id));
                 }
                 DEvent::GraphEdgeClicked { entity, label } => {
-                    self.selection = Some(Selection::GraphEdge { entity, label });
+                    self.graph_selection = Some(GraphSelection::Edge { entity, label });
                 }
                 DEvent::GraphBackgroundClicked => {
-                    self.selection = None;
+                    self.graph_selection = None;
                 }
             }
         }

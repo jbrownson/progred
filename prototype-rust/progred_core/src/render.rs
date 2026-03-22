@@ -439,11 +439,9 @@ fn render_param(ctx: &RenderCtx) -> Option<D> {
 }
 
 fn number_text(editor: &Editor, path: &Path) -> Option<String> {
-    match &editor.selection {
-        Some(Selection::Edge(sel_path, es)) if sel_path == path => es.number_text.clone(),
-        Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => edge_state.number_text.clone(),
-        _ => None,
-    }
+    editor.editing.as_ref()
+        .filter(|e| &e.path == path)
+        .and_then(|e| e.number_text.clone())
 }
 
 #[cfg(test)]

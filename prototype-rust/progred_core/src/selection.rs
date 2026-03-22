@@ -14,6 +14,19 @@ pub struct EdgeState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditingState {
+    pub path: Path,
+    pub placeholder: PlaceholderState,
+    pub number_text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GraphSelection {
+    Edge { entity: Id, label: Id },
+    Node(Id),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Selection {
     Edge(Path, EdgeState),
     ListElement {
