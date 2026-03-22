@@ -5,9 +5,11 @@ use progred_core::document::Document;
 use progred_core::editor::Editor;
 use progred_core::graph_view_state::GraphViewState;
 use progred_core::navigate::{self, DescendNode};
+use progred_core::path::Path;
+use progred_core::selection::Selection;
 use eframe::egui;
 use progred_core::graph::Id;
-use progred_core::selection::Selection;
+use std::collections::HashMap;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -260,19 +262,27 @@ impl eframe::App for ProgredApp {
         let modifiers = ctx.input(|i| i.modifiers);
         let mode = ui::compute_interaction_mode(modifiers, &self.editor);
         let mut events = Vec::new();
+        let mut focus_map = HashMap::<egui::Id, Path>::new();
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(ctx.style().visuals.panel_fill))
             .show(ctx, |ui| {
                 if self.show_graph {
                     ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split, |left, right| {
-                        ui::tree_view::render(left, &self.editor, &d_tree, &orphan_ids, &mode, &mut events);
+                        ui::tree_view::render(left, &self.editor, &d_tree, &orphan_ids, &mode, &mut events, &mut focus_map);
                         ui::graph_view::render(right, ctx, &self.editor, &mut self.graph_layout, &mut self.graph_camera, &mut events);
                     });
                 } else {
-                    ui::tree_view::render(ui, &self.editor, &d_tree, &orphan_ids, &mode, &mut events);
+                    ui::tree_view::render(ui, &self.editor, &d_tree, &orphan_ids, &mode, &mut events, &mut focus_map);
                 }
             });
+
+        // Sync egui focus → editor selection
+        let focused_path = ctx.memory(|mem| mem.focused())
+            .and_then(|id| focus_map.get(&id).cloned());
+        if focused_path.as_ref() != self.editor.selection.as_ref().and_then(|s| s.path()) {
+            self.editor.selection = focused_path.map(Selection::edge);
+        }
 
         self.editor.handle_events(events, &mode);
     }

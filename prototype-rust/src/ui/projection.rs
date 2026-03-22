@@ -6,6 +6,7 @@ use progred_core::selection::Selection;
 use progred_core::path::Path;
 use progred_core::type_system::expected_type;
 use eframe::egui::{self, pos2, Color32, CornerRadius, Response, Sense, Ui, Vec2};
+use std::collections::HashMap;
 
 use super::colors;
 use super::identicon;
@@ -46,7 +47,7 @@ pub struct DContext {
     pub selection: Selection,
 }
 
-pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMode, ctx: &DContext, events: &mut Vec<DEvent<'a>>) {
+pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMode, ctx: &DContext, events: &mut Vec<DEvent<'a>>, focus_map: &mut HashMap<egui::Id, Path>) {
     match d {
         D::Block(children) => {
             ui.vertical(|ui| {
@@ -54,21 +55,21 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     if i > 0 {
                         ui.add_space(2.0);
                     }
-                    render_d(ui, editor, child, mode, ctx, events);
+                    render_d(ui, editor, child, mode, ctx, events, focus_map);
                 }
             });
         }
         D::Line(children) => {
             ui.horizontal(|ui| {
                 for child in children {
-                    render_d(ui, editor, child, mode, ctx, events);
+                    render_d(ui, editor, child, mode, ctx, events, focus_map);
                 }
             });
         }
         D::Indent(child) => {
             ui.vertical(|ui| {
                 ui.indent("edges", |ui| {
-                    render_d(ui, editor, child, mode, ctx, events);
+                    render_d(ui, editor, child, mode, ctx, events, focus_map);
                 });
             });
         }
@@ -81,14 +82,14 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
         D::Descend { path, selection, child } => {
             let child_ctx = DContext { path: path.clone(), selection: selection.clone() };
             ui.push_id(path, |ui| {
-                render_d(ui, editor, child, mode, &child_ctx, events);
+                render_d(ui, editor, child, mode, &child_ctx, events, focus_map);
             });
         }
         D::NodeHeader { child } => {
-            render_node_header(ui, editor, child, mode, ctx, events);
+            render_node_header(ui, editor, child, mode, ctx, events, focus_map);
         }
         D::FieldLabel { label_id, child } => {
-            render_field_label(ui, editor, &ctx.path, label_id, child, mode, ctx, events);
+            render_field_label(ui, editor, &ctx.path, label_id, child, mode, ctx, events, focus_map);
         }
         D::CollapseToggle { collapsed } => {
             if collapse_toggle(ui, *collapsed).clicked() {
@@ -96,20 +97,20 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
             }
         }
         D::StringEditor { value } => {
-            render_string_editor(ui, editor, &ctx.path, value, events);
+            render_string_editor(ui, editor, &ctx.path, value, events, focus_map);
         }
         D::NumberEditor { value, number_text } => {
-            render_number_editor(ui, editor, &ctx.path, *value, number_text.as_deref(), events);
+            render_number_editor(ui, editor, &ctx.path, *value, number_text.as_deref(), events, focus_map);
         }
         D::Placeholder { on_commit } => {
-            render_placeholder(ui, editor, &ctx.path, on_commit, events);
+            render_placeholder(ui, editor, &ctx.path, on_commit, events, focus_map);
         }
         D::VerticalList { opening, closing, elements } => {
             if elements.is_empty() {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.label(text_rich(opening, &TextStyle::Punctuation));
-                    empty_list_insert_point(ui, editor, &ctx.path, events);
+                    empty_list_insert_point(ui, editor, &ctx.path, events, focus_map);
                     ui.label(text_rich(closing, &TextStyle::Punctuation));
                 });
             } else {
@@ -117,11 +118,11 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     ui.label(text_rich(opening, &TextStyle::Punctuation));
                     let mut insert_path = ctx.path.clone();
                     for element in elements {
-                        list_insert_point(ui, editor, &insert_path, true, events);
-                        render_d(ui, editor, element, mode, ctx, events);
+                        list_insert_point(ui, editor, &insert_path, true, events, focus_map);
+                        render_d(ui, editor, element, mode, ctx, events, focus_map);
                         insert_path = insert_path.child(list::Cons::<()>::TAIL.into());
                     }
-                    list_insert_point(ui, editor, &insert_path, true, events);
+                    list_insert_point(ui, editor, &insert_path, true, events, focus_map);
                     ui.label(text_rich(closing, &TextStyle::Punctuation));
                 });
             }
@@ -136,12 +137,12 @@ pub fn render_d<'a>(ui: &mut Ui, editor: &Editor, d: &'a D, mode: &InteractionMo
                     if need_separator {
                         ui.label(text_rich(separator, &TextStyle::Punctuation));
                     }
-                    list_insert_point(ui, editor, &insert_path, false, events);
-                    render_d(ui, editor, element, mode, ctx, events);
+                    list_insert_point(ui, editor, &insert_path, false, events, focus_map);
+                    render_d(ui, editor, element, mode, ctx, events, focus_map);
                     insert_path = insert_path.child(list::Cons::<()>::TAIL.into());
                     need_separator = true;
                 }
-                list_insert_point(ui, editor, &insert_path, false, events);
+                list_insert_point(ui, editor, &insert_path, false, events, focus_map);
                 ui.label(text_rich(closing, &TextStyle::Punctuation));
             });
         }
@@ -153,6 +154,7 @@ fn active_list_insert(
     editor: &Editor,
     path: &Path,
     events: &mut Vec<DEvent<'_>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) -> bool {
     let ps = match &editor.selection {
         Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
@@ -160,7 +162,7 @@ fn active_list_insert(
         _ => return false,
     };
     let et = expected_type(&editor.lib(), &path.child(list::Cons::<()>::HEAD.into()));
-    let result = super::placeholder::render(ui, editor, ps, et.as_ref());
+    let result = super::placeholder::render(ui, editor, ps, et.as_ref(), path, focus_map);
     match result.outcome {
         PlaceholderOutcome::Commit(value) => {
             events.push(DEvent::ListInsertCommitted { path: path.clone(), value });
@@ -186,8 +188,9 @@ fn list_insert_point(
     path: &Path,
     vertical: bool,
     events: &mut Vec<DEvent<'_>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) {
-    if !active_list_insert(ui, editor, path, events) {
+    if !active_list_insert(ui, editor, path, events, focus_map) {
         ui.push_id(path, |ui| {
             let response = if vertical {
                 insertion_point(ui)
@@ -206,8 +209,9 @@ fn empty_list_insert_point(
     editor: &Editor,
     path: &Path,
     events: &mut Vec<DEvent<'_>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) {
-    if !active_list_insert(ui, editor, path, events) {
+    if !active_list_insert(ui, editor, path, events, focus_map) {
         ui.push_id(path, |ui| {
             let text_height = ui.text_style_height(&egui::TextStyle::Body);
             let size = Vec2::new(text_height * 0.6, text_height);
@@ -225,6 +229,7 @@ fn empty_list_insert_point(
                     eframe::epaint::Stroke::NONE,
                 ));
             }
+            draw_focus_ring(ui, &response);
             if response.clicked() {
                 events.push(DEvent::ClickedPlaceholder(path.clone()));
             }
@@ -255,6 +260,7 @@ fn insertion_point(ui: &mut Ui) -> Response {
         ));
     }
 
+    draw_focus_ring(ui, &response);
     response
 }
 
@@ -281,6 +287,7 @@ fn vertical_insertion_point(ui: &mut Ui) -> Response {
         ));
     }
 
+    draw_focus_ring(ui, &response);
     response
 }
 
@@ -317,7 +324,14 @@ fn clickable(
     let rect = inner.rect.expand(layout::SELECTION_PADDING);
     let response = ui.interact(rect, id, Sense::click());
 
-    paint_highlight(ui, rect, bg_idx, border_idx, if response.hovered() { hovered_style } else { style });
+    let effective_style = if response.has_focus() {
+        selection_style(true, false)
+    } else if response.hovered() {
+        hovered_style
+    } else {
+        style
+    };
+    paint_highlight(ui, rect, bg_idx, border_idx, effective_style);
     response
 }
 
@@ -363,6 +377,18 @@ fn mode_style(mode: &InteractionMode) -> (HighlightStyle, HighlightStyle) {
     }
 }
 
+fn draw_focus_ring(ui: &Ui, response: &Response) {
+    if response.has_focus() {
+        let rect = response.rect.expand(layout::SELECTION_PADDING);
+        ui.painter().rect_stroke(
+            rect,
+            CornerRadius::same(3),
+            eframe::epaint::Stroke::new(1.5, colors::SELECTION),
+            eframe::epaint::StrokeKind::Middle,
+        );
+    }
+}
+
 fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
     let size = 12.0;
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
@@ -393,6 +419,7 @@ fn collapse_toggle(ui: &mut Ui, collapsed: bool) -> Response {
         ui.painter().add(eframe::epaint::Shape::convex_polygon(points, color, eframe::epaint::Stroke::NONE));
     }
 
+    draw_focus_ring(ui, &response);
     response
 }
 
@@ -420,6 +447,7 @@ fn render_node_header<'a>(
     mode: &InteractionMode,
     ctx: &DContext,
     events: &mut Vec<DEvent<'a>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) {
     let id = editor.doc.node(&ctx.path);
     let primary = editor.selection.as_ref().and_then(|s| s.path()) == Some(&ctx.path);
@@ -431,11 +459,14 @@ fn render_node_header<'a>(
     } else {
         mode_style(mode)
     };
-    if clickable(ui, |ui| {
+    let response = clickable(ui, |ui| {
         ui.scope(|ui| {
-            render_d(ui, editor, child, mode, ctx, events);
+            render_d(ui, editor, child, mode, ctx, events, focus_map);
         }).response
-    }, style, hovered).clicked() {
+    }, style, hovered);
+    focus_map.insert(response.id, ctx.path.clone());
+    if response.clicked() {
+        response.request_focus();
         if let Some(id) = id {
             events.push(DEvent::ClickedNode { id, selection: ctx.selection.clone() });
         }
@@ -451,6 +482,7 @@ fn render_field_label<'a>(
     mode: &InteractionMode,
     ctx: &DContext,
     events: &mut Vec<DEvent<'a>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) {
     let secondary = editor.selected_node_id().as_ref() == Some(label_id);
     let (style, hovered) = if secondary {
@@ -463,7 +495,7 @@ fn render_field_label<'a>(
     };
     ui.push_id(label_id, |ui| {
         if clickable(ui, |ui| {
-            ui.scope(|ui| render_d(ui, editor, child, mode, ctx, events)).response
+            ui.scope(|ui| render_d(ui, editor, child, mode, ctx, events, focus_map)).response
         }, style, hovered).clicked()
             && !matches!(mode, InteractionMode::Normal)
         {
@@ -478,6 +510,7 @@ fn render_string_editor(
     path: &Path,
     value: &str,
     events: &mut Vec<DEvent<'_>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) {
     let id = Id::String(value.to_string());
     let primary = editor.selection.as_ref().and_then(|s| s.path()) == Some(path);
@@ -491,6 +524,7 @@ fn render_string_editor(
     let desired_width = text_width.max(8.0);
 
     let stable_id = egui::Id::new(path);
+    focus_map.insert(stable_id, path.clone());
     let response = highlighted(ui, |ui| {
         ui.add(
             egui::TextEdit::singleline(&mut text)
@@ -516,6 +550,7 @@ fn render_number_editor(
     value: f64,
     number_text: Option<&str>,
     events: &mut Vec<DEvent<'_>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) {
     let id = Id::Number(progred_core::ordered_float::OrderedFloat(value));
     let primary = editor.selection.as_ref().and_then(|s| s.path()) == Some(path);
@@ -531,6 +566,7 @@ fn render_number_editor(
     let desired_width = text_width.max(8.0);
 
     let stable_id = egui::Id::new(path);
+    focus_map.insert(stable_id, path.clone());
     let response = highlighted(ui, |ui| {
         ui.add(
             egui::TextEdit::singleline(&mut text)
@@ -549,15 +585,18 @@ fn render_number_editor(
     }
 }
 
-fn render_placeholder_box(ui: &mut Ui, path: &Path, events: &mut Vec<DEvent<'_>>) {
+fn render_placeholder_box(ui: &mut Ui, path: &Path, events: &mut Vec<DEvent<'_>>, focus_map: &mut HashMap<egui::Id, Path>) {
     let text_height = ui.text_style_height(&egui::TextStyle::Body);
     let size = Vec2::new(text_height * 1.8, text_height);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    focus_map.insert(response.id, path.clone());
     if ui.is_rect_visible(rect) {
         let color = if response.hovered() { Color32::from_gray(140) } else { Color32::from_gray(190) };
         ui.painter().rect_stroke(rect, CornerRadius::same(2), eframe::epaint::Stroke::new(1.0, color), eframe::epaint::StrokeKind::Middle);
     }
+    draw_focus_ring(ui, &response);
     if response.clicked() {
+        response.request_focus();
         events.push(DEvent::ClickedPlaceholder(path.clone()));
     }
 }
@@ -568,14 +607,15 @@ fn render_placeholder<'a>(
     path: &Path,
     on_commit: &'a dyn Fn(&mut Editor, Id),
     events: &mut Vec<DEvent<'a>>,
+    focus_map: &mut HashMap<egui::Id, Path>,
 ) {
     let ps = match &editor.selection {
         Some(Selection::Edge(sel_path, es)) if sel_path == path => &es.placeholder,
         Some(Selection::ListElement { path: sel_path, edge_state, .. }) if sel_path == path => &edge_state.placeholder,
-        _ => return render_placeholder_box(ui, path, events),
+        _ => return render_placeholder_box(ui, path, events, focus_map),
     };
     let et = expected_type(&editor.lib(), path);
-    let result = super::placeholder::render(ui, editor, ps, et.as_ref());
+    let result = super::placeholder::render(ui, editor, ps, et.as_ref(), path, focus_map);
     match result.outcome {
         PlaceholderOutcome::Commit(value) => {
             events.push(DEvent::PlaceholderCommitted { on_commit, value });

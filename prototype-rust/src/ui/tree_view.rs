@@ -4,13 +4,13 @@ use progred_core::graph::Id;
 use progred_core::path::Path;
 use progred_core::selection::Selection;
 use eframe::egui::{self, Color32, RichText, Sense, Ui};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::identicon;
 use super::layout::TREE_MARGIN;
 use super::{render_d, DContext};
 
-pub fn render<'a>(ui: &mut Ui, editor: &Editor, d_tree: &'a D, orphan_ids: &HashSet<Id>, mode: &InteractionMode, events: &mut Vec<DEvent<'a>>) {
+pub fn render<'a>(ui: &mut Ui, editor: &Editor, d_tree: &'a D, orphan_ids: &HashSet<Id>, mode: &InteractionMode, events: &mut Vec<DEvent<'a>>, focus_map: &mut HashMap<egui::Id, Path>) {
     let margin = egui::Margin::same(TREE_MARGIN as i8);
     egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
         egui::Frame::NONE.inner_margin(margin).show(ui, |ui| {
@@ -22,7 +22,7 @@ pub fn render<'a>(ui: &mut Ui, editor: &Editor, d_tree: &'a D, orphan_ids: &Hash
 
         let path = Path::root();
         let ctx = DContext { path: path.clone(), selection: Selection::edge(path) };
-        render_d(ui, editor, d_tree, mode, &ctx, events);
+        render_d(ui, editor, d_tree, mode, &ctx, events, focus_map);
 
         if !orphan_ids.is_empty() {
             ui.add_space(8.0);

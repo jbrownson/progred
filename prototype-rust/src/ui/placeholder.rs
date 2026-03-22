@@ -6,6 +6,7 @@ use progred_core::selection::PlaceholderState;
 use progred_core::type_possibility::{type_accepts_candidate, type_accepts_isa};
 use eframe::egui::{self, Color32, Ui};
 use progred_core::ordered_float::OrderedFloat;
+use progred_core::path::Path;
 use std::collections::HashMap;
 
 const PLACEHOLDER_INPUT_WIDTH: f32 = 150.0;
@@ -269,12 +270,13 @@ fn build_entries(editor: &Editor, filter: &str, expected_type: Option<&TypeExpre
     sorted.into_iter().map(|(i, _)| all_entries[i].clone()).collect()
 }
 
-pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type: Option<&TypeExpression>) -> PlaceholderResult {
+pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type: Option<&TypeExpression>, path: &Path, focus_map: &mut HashMap<egui::Id, Path>) -> PlaceholderResult {
     let entries = build_entries(editor, &ps.text, expected_type);
     let selected_index = if entries.is_empty() { 0 } else { ps.selected_index.min(entries.len() - 1) };
 
     let mut text = ps.text.clone();
     let text_id = ui.id().with("placeholder_input");
+    focus_map.insert(text_id, path.clone());
 
     let text_response = ui.add(
         egui::TextEdit::singleline(&mut text)
