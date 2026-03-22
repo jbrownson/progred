@@ -284,7 +284,6 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
             .desired_width(PLACEHOLDER_INPUT_WIDTH)
             .hint_text("search...")
     );
-    text_response.request_focus();
 
     let popup_commit = {
         let mut clicked = None;
@@ -340,7 +339,7 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
         Some(i) if i < entries.len() => {
             PlaceholderOutcome::Commit(entries.into_iter().nth(i).unwrap().value.commit())
         }
-        _ if escape || text_response.lost_focus() => PlaceholderOutcome::Dismiss,
+        _ if escape => PlaceholderOutcome::Dismiss,
         _ => PlaceholderOutcome::Active,
     };
 

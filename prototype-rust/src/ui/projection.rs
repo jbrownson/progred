@@ -587,8 +587,11 @@ fn render_number_editor(
 fn render_placeholder_box(ui: &mut Ui, path: &Path, events: &mut Vec<DEvent<'_>>, focus_map: &mut HashMap<egui::Id, Path>) {
     let text_height = ui.text_style_height(&egui::TextStyle::Body);
     let size = Vec2::new(text_height * 1.8, text_height);
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
-    focus_map.insert(response.id, path.clone());
+    // Share ID with the active placeholder TextEdit so focus transfers naturally
+    let shared_id = ui.id().with("placeholder_input");
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let response = ui.interact(rect, shared_id, Sense::click());
+    focus_map.insert(shared_id, path.clone());
     if ui.is_rect_visible(rect) {
         let color = if response.hovered() { Color32::from_gray(140) } else { Color32::from_gray(190) };
         ui.painter().rect_stroke(rect, CornerRadius::same(2), eframe::epaint::Stroke::new(1.0, color), eframe::epaint::StrokeKind::Middle);

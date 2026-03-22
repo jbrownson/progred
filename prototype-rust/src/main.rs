@@ -6,7 +6,7 @@ use progred_core::editor::Editor;
 use progred_core::graph_view_state::GraphViewState;
 use progred_core::navigate::{self, DescendNode};
 use progred_core::path::Path;
-use progred_core::selection::Selection;
+use progred_core::selection::{EditingState, PlaceholderState, Selection};
 use eframe::egui;
 use progred_core::graph::Id;
 use std::collections::HashMap;
@@ -277,10 +277,20 @@ impl eframe::App for ProgredApp {
                 }
             });
 
-        // Sync egui focus → editor selection
+        // Sync egui focus → editor selection + editing state
         let focused_path = ctx.memory(|mem| mem.focused())
             .and_then(|id| focus_map.get(&id).cloned());
         if focused_path.as_ref() != self.editor.selection.as_ref().and_then(|s| s.path()) {
+            if let Some(ref path) = focused_path {
+                let is_placeholder = self.editor.doc.node(path).is_none();
+                self.editor.editing = is_placeholder.then(|| EditingState {
+                    path: path.clone(),
+                    placeholder: PlaceholderState::default(),
+                    number_text: None,
+                });
+            } else {
+                self.editor.editing = None;
+            }
             self.editor.selection = focused_path.map(Selection::edge);
         }
 
