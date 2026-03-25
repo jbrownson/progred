@@ -1,11 +1,11 @@
 import AppKit
 
-class DDescend: FlippedView, DView {
-    var path: Path
+class DListElement: FlippedView, DView {
+    var consPath: Path
     weak var editor: Editor?
 
-    init(path: Path, editor: Editor, child: D) {
-        self.path = path
+    init(consPath: Path, editor: Editor, child: D) {
+        self.consPath = consPath
         self.editor = editor
         super.init(frame: .zero)
         let childView = createView(child, editor: editor)
@@ -16,8 +16,8 @@ class DDescend: FlippedView, DView {
     required init?(coder: NSCoder) { fatalError() }
 
     func reconcile(_ d: D, editor: Editor) -> Bool {
-        guard case .descend(let path, let child) = d, let childView = subviews.first else { return false }
-        self.path = path
+        guard case .descendListElement(let consPath, let child) = d, let childView = subviews.first else { return false }
+        self.consPath = consPath
         let resolved = reconcileChild(childView, child, editor: editor)
         if resolved !== childView {
             childView.removeFromSuperview()
@@ -59,7 +59,7 @@ class DDescend: FlippedView, DView {
     }
 
     @objc func delete(_ sender: Any?) {
-        editor?.handleDelete(path: path)
+        spliceOut()
     }
 
     override func deleteBackward(_ sender: Any?) { delete(sender) }
@@ -67,5 +67,15 @@ class DDescend: FlippedView, DView {
 
     override func cancelOperation(_ sender: Any?) {
         window?.makeFirstResponder(superview)
+    }
+
+    private func spliceOut() {
+        guard let editor,
+              case .uuid(let consUuid) = consPath.node(in: editor.gid, root: editor.root),
+              let tail = editor.gid.get(entity: .uuid(consUuid), label: editor.schema.tailField),
+              let (parentPath, edgeLabel) = consPath.pop(),
+              case .uuid(let parentUuid) = parentPath.node(in: editor.gid, root: editor.root)
+        else { return }
+        editor.set(entity: parentUuid, label: edgeLabel, value: tail)
     }
 }

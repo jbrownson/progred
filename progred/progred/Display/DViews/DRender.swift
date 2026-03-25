@@ -84,6 +84,7 @@ func createView(_ d: D, editor: Editor) -> NSView {
     case .list(_, let elements): DList(elements: elements, editor: editor)
     case .indent(let child): DIndent(child: child, editor: editor)
     case .descend(let path, let child): DDescend(path: path, editor: editor, child: child)
+    case .descendListElement(let consPath, let child): DListElement(consPath: consPath, editor: editor, child: child)
     case .collapse(let defaultCollapsed, let header, let body):
         DCollapse(defaultCollapsed: defaultCollapsed, header: header, body: body, editor: editor)
     case .bracketed(let open, let close, let body):

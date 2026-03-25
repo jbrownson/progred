@@ -38,7 +38,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         var items: [D] = []
         for el in elements {
             let elementPath = consPath.child(ctx.headField)
-            items.append(.descend(elementPath, child: ctx.descend(to: el.head, via: elementPath, render: elementRender)))
+            items.append(.descendListElement(consPath: consPath, child: ctx.descend(to: el.head, via: elementPath, render: elementRender)))
 
             let tailPath = consPath.child(ctx.tailField)
             if ctx.focus == tailPath {
