@@ -45,10 +45,14 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - Prefer long expressions broken across multiple lines over multiple statements with intermediate names
 - Exception: extract helper functions when intermediate steps represent distinct semantic concepts
 - Look for generic abstractions — extract patterns in how computations combine and data flows
+- Factor generic algorithms from concrete operations — parameterize with closures, keep the algorithm free of domain types (e.g., `reconcile<T, Ts>` takes closures for replace/append/remove, knows nothing about NSView)
+- Prefer `zip`, `dropFirst`, `enumerated`, `forEach`, `map` over index arithmetic, `stride`, and manual `for i in 0..<n` loops
 - Prefer free functions with explicit parameters over methods when `self` isn't needed
 - Apply Haskell-style thinking (explicit data flow, pure function composition) but idiomatic Swift syntax
 - `guard` for preconditions is idiomatic — use it freely for early returns
 - Prefer ternary expressions over if/else when returning or assigning a value based on a condition
 - Name constants that are repeated or related to other values; express relationships explicitly (one as a function of the other). Inline one-off values are fine.
+- Use consistent naming across abstraction levels — if the generic algorithm uses `reconcile`, the concrete wrappers and protocol methods should too, not `resolve` or `update`
+- Don't introduce words without clear meaning — every term in a name should pull its weight. If `DView` suffices, don't say `DNodeView` unless "Node" means something distinct from "D"
 - Dead code should be deleted, not commented out
 - Push back if something seems wrong

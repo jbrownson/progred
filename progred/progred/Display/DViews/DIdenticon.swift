@@ -1,7 +1,7 @@
 import AppKit
 
-class IdenticonView: NSView {
-    let uuid: UUID
+class DIdenticon: NSView, DView {
+    var uuid: UUID
 
     init(uuid: UUID) {
         self.uuid = uuid
@@ -12,6 +12,13 @@ class IdenticonView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    func reconcile(_ d: D, editor: Editor) -> Bool {
+        guard case .identicon(let uuid) = d else { return false }
+        if self.uuid != uuid { self.uuid = uuid; needsDisplay = true }
+        return true
+    }
+
     override var intrinsicContentSize: NSSize { NSSize(width: 10, height: 10) }
 
     override func draw(_ dirtyRect: NSRect) {

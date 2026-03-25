@@ -1,6 +1,6 @@
 import SwiftUI
 
-indirect enum D {
+indirect enum D: Equatable {
     // MARK: - Layout
     case block([D])
     case line([D])

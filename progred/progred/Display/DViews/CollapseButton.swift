@@ -1,14 +1,16 @@
 import AppKit
 
-class TriangleButton: NSButton {
+class CollapseButton: NSButton {
+    static let size: CGFloat = 16
+
     var isCollapsed: Bool
-    var onToggle: ((Bool) -> Void)?
+    var onCollapsedChanged: ((Bool) -> Void)?
     private var isHovered = false
     private var trackingArea: NSTrackingArea?
 
     init(collapsed: Bool) {
         self.isCollapsed = collapsed
-        super.init(frame: NSRect(x: 0, y: 0, width: 16, height: 16))
+        super.init(frame: .zero)
         isBordered = false
         title = ""
         imagePosition = .imageOnly
@@ -18,8 +20,8 @@ class TriangleButton: NSButton {
         setContentHuggingPriority(.required, for: .horizontal)
         setContentHuggingPriority(.required, for: .vertical)
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 16).isActive = true
-        heightAnchor.constraint(equalToConstant: 16).isActive = true
+        widthAnchor.constraint(equalToConstant: Self.size).isActive = true
+        heightAnchor.constraint(equalToConstant: Self.size).isActive = true
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -27,7 +29,7 @@ class TriangleButton: NSButton {
     @objc private func didPress() {
         isCollapsed.toggle()
         updateAppearance()
-        onToggle?(isCollapsed)
+        onCollapsedChanged?(isCollapsed)
     }
 
     private func updateAppearance() {
@@ -37,7 +39,7 @@ class TriangleButton: NSButton {
         contentTintColor = isHovered ? .labelColor : .secondaryLabelColor
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 16, height: 16) }
+    override var intrinsicContentSize: NSSize { NSSize(width: Self.size, height: Self.size) }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
