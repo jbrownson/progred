@@ -1,36 +1,7 @@
 import AppKit
-import SwiftUI
 
 let indentWidth: CGFloat = 16
 private let spacing: CGFloat = 4
-
-// MARK: - SwiftUI bridge
-
-struct DRender: NSViewRepresentable {
-    let d: D
-    let editor: Editor
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = false
-        scrollView.verticalScrollElasticity = .none
-        scrollView.horizontalScrollElasticity = .none
-
-        let root = DRootView(editor: editor)
-        scrollView.documentView = root
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let root = scrollView.documentView as? DRootView else { return }
-        root.rebuild(d)
-    }
-}
-
-// MARK: - Root
 
 class DRootView: FlippedView {
     let editor: Editor

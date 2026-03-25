@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 indirect enum D: Equatable {
     // MARK: - Layout

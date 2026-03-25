@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 func kernelHeader(ctx: ProjectionContext) -> D {
     let parts: [D] = [
