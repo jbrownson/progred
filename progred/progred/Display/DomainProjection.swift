@@ -8,19 +8,19 @@ func projectTypeParameter(_ ctx: ProjectionContext) -> D? {
 func projectField(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.fieldRecord else { return nil }
 
-    return .line([
+    return .descend(ctx.path, readOnly: ctx.readOnly, child: .line([
         ctx.descend(ctx.nameField),
         .space,
         .text("→", .punctuation),
         .space,
         ctx.descend(ctx.typeExpressionField, render: renderRef),
-    ])
+    ]))
 }
 
 func projectRecord(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.recordRecord else { return nil }
 
-    return .descend(ctx.path, child: .collapse(
+    return .descend(ctx.path, readOnly: ctx.readOnly, child: .collapse(
         header: typeHeader(ctx: ctx),
         body: labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx)))
 }
@@ -28,7 +28,7 @@ func projectRecord(_ ctx: ProjectionContext) -> D? {
 func projectSum(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.sumRecord else { return nil }
 
-    return .descend(ctx.path, child: .collapse(
+    return .descend(ctx.path, readOnly: ctx.readOnly, child: .collapse(
         header: typeHeader(ctx: ctx),
         body: labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx)))
 }

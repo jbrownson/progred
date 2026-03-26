@@ -54,23 +54,25 @@ class DRootView: FlippedView {
     }
 }
 
-func createView(_ d: D, editor: Editor) -> NSView {
+func createView(_ d: D, editor: Editor, parentReadOnly: Bool = false, editPath: Path? = nil) -> NSView {
     switch d {
     case .text(let text, let style): DText(text, style)
     case .space: DSpace(spacing)
     case .identicon(let uuid): DIdenticon(uuid: uuid)
-    case .block(let children): DBlock(children: children, editor: editor)
-    case .line(let children): DLine(children: children, editor: editor)
-    case .list(_, let elements): DList(elements: elements, editor: editor)
-    case .indent(let child): DIndent(child: child, editor: editor)
-    case .descend(let path, let child): DDescend(path: path, editor: editor, child: child)
-    case .descendListElement(let consPath, let child): DListElement(consPath: consPath, editor: editor, child: child)
+    case .block(let children): DBlock(children: children, editor: editor, parentReadOnly: parentReadOnly)
+    case .line(let children): DLine(children: children, editor: editor, parentReadOnly: parentReadOnly)
+    case .list(_, let elements): DList(elements: elements, editor: editor, parentReadOnly: parentReadOnly)
+    case .indent(let child): DIndent(child: child, editor: editor, parentReadOnly: parentReadOnly)
+    case .descend(let path, let readOnly, let child):
+        DDescend(path: path, readOnly: readOnly, parentReadOnly: parentReadOnly, editor: editor, child: child)
+    case .descendListElement(let consPath, let readOnly, let child):
+        DListElement(consPath: consPath, readOnly: readOnly, parentReadOnly: parentReadOnly, editor: editor, child: child)
     case .collapse(let defaultCollapsed, let header, let body):
-        DCollapse(defaultCollapsed: defaultCollapsed, header: header, body: body, editor: editor)
+        DCollapse(defaultCollapsed: defaultCollapsed, header: header, body: body, editor: editor, parentReadOnly: parentReadOnly)
     case .bracketed(let open, let close, let body):
-        DBracketed(open: open, close: close, body: body, editor: editor)
+        DBracketed(open: open, close: close, body: body, editor: editor, parentReadOnly: parentReadOnly)
     case .placeholder: DText("_", .punctuation)
-    case .stringEditor(let string): DText(string, .literal)
+    case .stringEditor(let string): DStringEditor(string, editor: editor, path: editPath, readOnly: parentReadOnly)
     case .numberEditor(let number): DText(String(number), .literal)
     }
 }

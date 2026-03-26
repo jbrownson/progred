@@ -1,6 +1,6 @@
 import AppKit
 
-class DSpace: NSView, DView {
+class DSpace: NSView, Reconcilable {
     init(_ size: CGFloat) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -10,7 +10,7 @@ class DSpace: NSView, DView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
         if case .space = d { return true }
         return false
     }

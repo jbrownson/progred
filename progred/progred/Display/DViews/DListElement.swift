@@ -1,24 +1,30 @@
 import AppKit
 
-class DListElement: FlippedView, DView {
+class DListElement: FlippedView, Reconcilable {
     var consPath: Path
+    var readOnly: Bool
+    var parentReadOnly: Bool
     weak var editor: Editor?
 
-    init(consPath: Path, editor: Editor, child: D) {
+    init(consPath: Path, readOnly: Bool, parentReadOnly: Bool, editor: Editor, child: D) {
         self.consPath = consPath
+        self.readOnly = readOnly
+        self.parentReadOnly = parentReadOnly
         self.editor = editor
         super.init(frame: .zero)
-        let childView = createView(child, editor: editor)
+        let childView = createView(child, editor: editor, parentReadOnly: readOnly)
         addSubview(childView)
         constrain(childView, toFill: self)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor) -> Bool {
-        guard case .descendListElement(let consPath, let child) = d, let childView = subviews.first else { return false }
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
+        guard case .descendListElement(let consPath, let readOnly, let child) = d, let childView = subviews.first else { return false }
         self.consPath = consPath
-        let resolved = reconcileChild(childView, child, editor: editor)
+        self.readOnly = readOnly
+        self.parentReadOnly = parentReadOnly
+        let resolved = reconcileChild(childView, child, editor: editor, parentReadOnly: readOnly)
         if resolved !== childView {
             childView.removeFromSuperview()
             addSubview(resolved)
@@ -44,9 +50,13 @@ class DListElement: FlippedView, DView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: -2, dy: -2)
         if isSelected {
             NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).setFill()
-            NSBezierPath(roundedRect: bounds.insetBy(dx: -2, dy: -2), xRadius: 3, yRadius: 3).fill()
+            NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
+        } else if readOnly, !parentReadOnly {
+            NSColor.windowBackgroundColor.shadow(withLevel: 0.04)!.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
         }
     }
 

@@ -1,20 +1,23 @@
 import AppKit
 
-class DBlock: NSStackView, DView {
-    init(children: [D], editor: Editor) {
+class DBlock: NSStackView, Reconcilable {
+    var parentReadOnly: Bool
+
+    init(children: [D], editor: Editor, parentReadOnly: Bool) {
+        self.parentReadOnly = parentReadOnly
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
         spacing = 0
         translatesAutoresizingMaskIntoConstraints = false
-        children.forEach { addArrangedSubview(createView($0, editor: editor)) }
+        children.forEach { addArrangedSubview(createView($0, editor: editor, parentReadOnly: parentReadOnly)) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
         guard case .block(let children) = d else { return false }
-        reconcileChildren(stack: self, children: children, editor: editor)
+        reconcileChildren(stack: self, children: children, editor: editor, parentReadOnly: parentReadOnly)
         return true
     }
 }

@@ -24,7 +24,7 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - `D` enum is the display language (`Display/D.swift`)
 - `ProjectionContext` + dispatch chain projects graph → D (`Display/Projection.swift`)
 - Layered projections: domain (`Display/DomainProjection.swift`) → kernel (`Display/KernelProjection.swift`) → raw
-- `DView` renders D → SwiftUI (`Display/DView.swift`)
+- `Reconcilable` protocol for D → AppKit view reconciliation (`Display/DViews/Reconcilable.swift`)
 - `descend(field)` looks up an edge and dispatches; `projectChild(entity)` dispatches a known UUID
 - `renderRef` renders shallow type references (just names); full `descend` renders declarations
 - Lists (cons/empty) need custom handling — their graph structure doesn't match the editing/display structure
@@ -53,6 +53,6 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - Prefer ternary expressions over if/else when returning or assigning a value based on a condition
 - Name constants that are repeated or related to other values; express relationships explicitly (one as a function of the other). Inline one-off values are fine.
 - Use consistent naming across abstraction levels — if the generic algorithm uses `reconcile`, the concrete wrappers and protocol methods should too, not `resolve` or `update`
-- Don't introduce words without clear meaning — every term in a name should pull its weight. If `DView` suffices, don't say `DNodeView` unless "Node" means something distinct from "D"
+- Don't introduce words without clear meaning — every term in a name should pull its weight
 - Dead code should be deleted, not commented out
 - Push back if something seems wrong

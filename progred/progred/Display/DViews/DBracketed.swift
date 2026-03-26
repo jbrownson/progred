@@ -1,6 +1,6 @@
 import AppKit
 
-class DBracketed: FlippedView, DView {
+class DBracketed: FlippedView, Reconcilable {
     let bodyContainer: FlippedView
     let closeText: NSTextField
     let openText: NSTextField
@@ -8,7 +8,10 @@ class DBracketed: FlippedView, DView {
     var open: String
     var close: String
 
-    init(open: String, close: String, body: D, editor: Editor) {
+    var parentReadOnly: Bool
+
+    init(open: String, close: String, body: D, editor: Editor, parentReadOnly: Bool) {
+        self.parentReadOnly = parentReadOnly
         self.open = open
         self.close = close
         self.collapseButton = CollapseButton(collapsed: false)
@@ -17,7 +20,7 @@ class DBracketed: FlippedView, DView {
         self.bodyContainer = FlippedView()
         super.init(frame: .zero)
 
-        let bodyView = createView(body, editor: editor)
+        let bodyView = createView(body, editor: editor, parentReadOnly: parentReadOnly)
         bodyContainer.addSubview(bodyView)
         constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
 
@@ -46,7 +49,7 @@ class DBracketed: FlippedView, DView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
         guard case .bracketed(let open, let close, let body) = d else { return false }
         self.open = open
         self.close = close
@@ -54,7 +57,7 @@ class DBracketed: FlippedView, DView {
         closeText.stringValue = close
 
         if let bodyView = bodyContainer.subviews.first {
-            let resolved = reconcileChild(bodyView, body, editor: editor)
+            let resolved = reconcileChild(bodyView, body, editor: editor, parentReadOnly: parentReadOnly)
             if resolved !== bodyView {
                 bodyView.removeFromSuperview()
                 bodyContainer.addSubview(resolved)

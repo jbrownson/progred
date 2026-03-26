@@ -9,9 +9,10 @@ struct ProjectionContext {
     let editor: Editor?
     let focus: Path?
     let ancestors: Set<Id>
+    let readOnly: Bool
     private let schema: Schema
 
-    init(entity: Id, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>) {
+    init(entity: Id, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>, readOnly: Bool = false) {
         self.entity = entity
         self.path = path
         self.gid = gid
@@ -19,6 +20,7 @@ struct ProjectionContext {
         self.editor = editor
         self.focus = focus
         self.ancestors = ancestors
+        self.readOnly = readOnly
     }
 
     var isCycle: Bool { ancestors.contains(entity) }
@@ -87,18 +89,19 @@ struct ProjectionContext {
     func descend(_ field: Id, render: Render? = nil) -> D {
         guard let value = get(field) else { return .placeholder }
         let childPath = path.child(field)
-        let d = descend(to: value, via: childPath, render: render)
-        return .descend(childPath, child: d)
+        let (d, _) = descend(to: value, via: childPath, render: render)
+        return .descend(childPath, readOnly: readOnly, child: d)
     }
 
-    func descend(to entity: Id, via path: Path? = nil, render: Render? = nil) -> D {
+    func descend(to entity: Id, via path: Path? = nil, render: Render? = nil) -> (d: D, readOnly: Bool) {
         let childPath = path ?? self.path
-        let childCtx = ProjectionContext(entity: entity, path: childPath, gid: gid, schema: schema, editor: editor, focus: focus, ancestors: ancestors.union([self.entity]))
+        let childReadOnly = readOnly || (gid.edges(entity: entity)?.readOnly ?? false)
+        let childCtx = ProjectionContext(entity: entity, path: childPath, gid: gid, schema: schema, editor: editor, focus: focus, ancestors: ancestors.union([self.entity]), readOnly: childReadOnly)
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         if childCtx.isCycle {
-            return .collapse(defaultCollapsed: true, header: kernelHeader(ctx: childCtx), body: d)
+            return (.collapse(defaultCollapsed: true, header: kernelHeader(ctx: childCtx), body: d), childReadOnly)
         }
-        return d
+        return (d, childReadOnly)
     }
 
     func project(_ id: Id, render: Render? = nil) -> D {
@@ -147,8 +150,8 @@ let renderRef: Render = { ctx in
 func rawHeader(_ id: Id) -> D {
     switch id {
     case .uuid(let uuid): .identicon(uuid)
-    case .string(let s): .text(s, .literal)
-    case .number(let n): .text(String(n), .literal)
+    case .string(let s): .stringEditor(s)
+    case .number(let n): .numberEditor(n)
     }
 }
 

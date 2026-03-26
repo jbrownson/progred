@@ -1,4 +1,5 @@
 import Foundation
+import HashTreeCollections
 import Observation
 
 @Observable
@@ -13,7 +14,7 @@ class Editor {
         self.root = schema.library
     }
 
-    var gid: StackedGid<MutGid, MutGid> {
+    var gid: StackedGid<MutGid, ImmGid> {
         StackedGid(top: document, bottom: schema.gid)
     }
 
@@ -29,6 +30,7 @@ class Editor {
         guard let path, let (parent, field) = path.pop(),
               case .uuid(let uuid) = parent.node(in: gid, root: root)
         else { return }
+        assert(document.data[uuid] != nil, "Attempted to delete from non-document entity")
         delete(entity: uuid, label: field)
     }
 
@@ -36,6 +38,7 @@ class Editor {
         guard let path, let (parent, field) = path.pop(),
               case .uuid(let uuid) = parent.node(in: gid, root: root)
         else { return }
+        assert(document.data[uuid] != nil, "Attempted to set on non-document entity")
         set(entity: uuid, label: field, value: value)
     }
 

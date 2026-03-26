@@ -1,14 +1,14 @@
 import AppKit
 
-protocol DView: NSView {
-    func reconcile(_ d: D, editor: Editor) -> Bool
+protocol Reconcilable: NSView {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool
 }
 
-func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor) -> NSView {
-    if let node = existing as? (any DView), node.reconcile(d, editor: editor) {
+func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, parentReadOnly: Bool = false, editPath: Path? = nil) -> NSView {
+    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, parentReadOnly: parentReadOnly, editPath: editPath) {
         return node
     }
-    return createView(d, editor: editor)
+    return createView(d, editor: editor, parentReadOnly: parentReadOnly, editPath: editPath)
 }
 
 func reconcileList<T: AnyObject, Ts>(
@@ -27,11 +27,11 @@ func reconcileList<T: AnyObject, Ts>(
     existing.dropFirst(ts.count).forEach { remove($0) }
 }
 
-func reconcileChildren(stack: NSStackView, children: [D], editor: Editor) {
+func reconcileChildren(stack: NSStackView, children: [D], editor: Editor, parentReadOnly: Bool = false, editPath: Path? = nil) {
     reconcileList(
         stack.arrangedSubviews,
         with: children,
-        reconcile: { reconcileChild($0, $1, editor: editor) },
+        reconcile: { reconcileChild($0, $1, editor: editor, parentReadOnly: parentReadOnly, editPath: editPath) },
         replace: { i, old, new in
             stack.removeArrangedSubview(old)
             old.removeFromSuperview()

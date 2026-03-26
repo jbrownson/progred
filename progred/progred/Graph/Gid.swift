@@ -1,10 +1,15 @@
 import Foundation
 import HashTreeCollections
 
-protocol Gid {
-    func edges(entity: Id) -> TreeDictionary<Id, Id>?
+struct Edges {
+    let data: TreeDictionary<Id, Id>
+    let readOnly: Bool
 
-    func get(entity: Id, label: Id) -> Id?
+    subscript(_ label: Id) -> Id? { data[label] }
+}
+
+protocol Gid {
+    func edges(entity: Id) -> Edges?
 }
 
 extension Gid {
@@ -17,7 +22,7 @@ struct StackedGid<Top: Gid, Bottom: Gid>: Gid {
     let top: Top
     let bottom: Bottom
 
-    func edges(entity: Id) -> TreeDictionary<Id, Id>? {
+    func edges(entity: Id) -> Edges? {
         top.edges(entity: entity) ?? bottom.edges(entity: entity)
     }
 }

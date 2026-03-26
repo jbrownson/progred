@@ -2,15 +2,18 @@ import AppKit
 
 private class HeaderRow: NSStackView {}
 
-class DCollapse: FlippedView, DView {
+class DCollapse: FlippedView, Reconcilable {
     let bodyContainer: FlippedView
     let collapseButton: CollapseButton
     var header: NSView
 
-    init(defaultCollapsed: Bool, header: D, body: D, editor: Editor) {
+    var parentReadOnly: Bool
+
+    init(defaultCollapsed: Bool, header: D, body: D, editor: Editor, parentReadOnly: Bool) {
+        self.parentReadOnly = parentReadOnly
         self.collapseButton = CollapseButton(collapsed: defaultCollapsed)
         self.bodyContainer = FlippedView()
-        let header = createView(header, editor: editor)
+        let header = createView(header, editor: editor, parentReadOnly: parentReadOnly)
         self.header = header
         super.init(frame: .zero)
 
@@ -21,7 +24,7 @@ class DCollapse: FlippedView, DView {
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         addSubview(headerRow)
 
-        let bodyView = createView(body, editor: editor)
+        let bodyView = createView(body, editor: editor, parentReadOnly: parentReadOnly)
         bodyContainer.addSubview(bodyView)
         constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
         bodyContainer.isHidden = defaultCollapsed
@@ -49,10 +52,10 @@ class DCollapse: FlippedView, DView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
         guard case .collapse(_, let header, let body) = d else { return false }
 
-        let resolvedHeader = reconcileChild(self.header, header, editor: editor)
+        let resolvedHeader = reconcileChild(self.header, header, editor: editor, parentReadOnly: parentReadOnly)
         if resolvedHeader !== self.header {
             if let headerRow = self.header.superview as? HeaderRow,
                let index = headerRow.arrangedSubviews.firstIndex(of: self.header) {
@@ -64,7 +67,7 @@ class DCollapse: FlippedView, DView {
         }
 
         if let bodyView = bodyContainer.subviews.first {
-            let resolvedBody = reconcileChild(bodyView, body, editor: editor)
+            let resolvedBody = reconcileChild(bodyView, body, editor: editor, parentReadOnly: parentReadOnly)
             if resolvedBody !== bodyView {
                 bodyView.removeFromSuperview()
                 bodyContainer.addSubview(resolvedBody)

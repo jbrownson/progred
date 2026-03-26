@@ -1,6 +1,6 @@
 import AppKit
 
-class DText: NSTextField, DView {
+class DText: NSTextField, Reconcilable {
     init(_ text: String, _ style: TextStyle) {
         super.init(frame: .zero)
         stringValue = text
@@ -14,16 +14,12 @@ class DText: NSTextField, DView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
         switch d {
         case .text(let s, let style):
             stringValue = s; textColor = style.nsColor
         case .placeholder:
             stringValue = "_"; textColor = NSColor.tertiaryLabelColor
-        case .stringEditor(let s):
-            stringValue = s; textColor = TextStyle.literal.nsColor
-        case .numberEditor(let n):
-            stringValue = String(n); textColor = TextStyle.literal.nsColor
         default:
             return false
         }

@@ -13,8 +13,8 @@ indirect enum D: Equatable {
     case identicon(UUID)
 
     // MARK: - Structure
-    case descend(Path, child: D)
-    case descendListElement(consPath: Path, child: D)
+    case descend(Path, readOnly: Bool, child: D)
+    case descendListElement(consPath: Path, readOnly: Bool, child: D)
     case collapse(defaultCollapsed: Bool = false, header: D, body: D)
     case list(separator: String, elements: [D])
 

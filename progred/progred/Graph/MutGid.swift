@@ -12,9 +12,9 @@ struct MutGid: Gid {
         data.keys
     }
 
-    func edges(entity: Id) -> TreeDictionary<Id, Id>? {
+    func edges(entity: Id) -> Edges? {
         guard case .uuid(let uuid) = entity else { return nil }
-        return data[uuid]
+        return data[uuid].map { Edges(data: $0, readOnly: false) }
     }
 
     mutating func set(entity: UUID, label: Id, value: Id) {
@@ -42,6 +42,10 @@ struct MutGid: Gid {
         } else {
             data[entity] = edges
         }
+    }
+
+    func frozen() -> ImmGid {
+        ImmGid(data: data)
     }
 
     mutating func retainEntities(_ keep: Set<Id>) {

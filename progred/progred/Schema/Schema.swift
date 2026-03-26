@@ -1,7 +1,7 @@
 import Foundation
 
 struct Schema {
-    var gid: MutGid
+    var gid: ImmGid
 
     // MARK: - Fields
     let nameField: Id
@@ -244,7 +244,7 @@ struct Schema {
         func id(_ uuid: UUID) -> Id { .uuid(uuid) }
 
         return Schema(
-            gid: gid,
+            gid: gid.frozen(),
             nameField: id(nameField),
             recordField: id(recordField),
             typeExpressionField: id(typeExpressionField),

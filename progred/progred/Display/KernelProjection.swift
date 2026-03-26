@@ -30,7 +30,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         if elements.isEmpty {
             let insertPath = ctx.path.child(ctx.insertField)
             return ctx.focus == insertPath
-                ? .descend(insertPath, child: .placeholder)
+                ? .descend(insertPath, readOnly: ctx.readOnly, child: .placeholder)
                 : inlineBrackets(open: open, close: close, [])
         }
 
@@ -38,11 +38,11 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         var items: [D] = []
         for el in elements {
             let elementPath = consPath.child(ctx.headField)
-            items.append(.descendListElement(consPath: consPath, child: ctx.descend(to: el.head, via: elementPath, render: elementRender)))
+            items.append(.descendListElement(consPath: consPath, readOnly: ctx.readOnly, child: ctx.descend(to: el.head, via: elementPath, render: elementRender).d))
 
             let tailPath = consPath.child(ctx.tailField)
             if ctx.focus == tailPath {
-                items.append(.descend(tailPath, child: .placeholder))
+                items.append(.descend(tailPath, readOnly: ctx.readOnly, child: .placeholder))
             }
 
             consPath = consPath.child(ctx.tailField)
@@ -61,7 +61,7 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
     let header = kernelHeader(ctx: ctx)
 
     guard let raw = ctx.gid.edges(entity: ctx.entity) else { return header }
-    let edges = raw
+    let edges = raw.data
         .filter { $0.key != ctx.nameField && $0.key != ctx.recordField }
         .sorted { $0.key < $1.key }
 
@@ -76,5 +76,5 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
 
 private func kernelEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
     let childPath = ctx.path.child(label)
-    return labeled(label, .descend(childPath, child: ctx.descend(to: value, via: childPath)), ctx: ctx)
+    return labeled(label, .descend(childPath, readOnly: ctx.readOnly, child: ctx.descend(to: value, via: childPath).d), ctx: ctx)
 }
