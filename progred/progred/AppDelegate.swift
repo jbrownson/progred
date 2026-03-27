@@ -46,10 +46,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func rebuild() {
         withObservationTracking {
-            let ctx = ProjectionContext(
-                entity: editor.root, path: .root(), gid: editor.gid,
-                schema: editor.schema, editor: editor, focus: nil, ancestors: [])
-            rootView.rebuild(project(ctx))
+            let d: D
+            if let root = editor.root {
+                let ctx = ProjectionContext(
+                    entity: root, path: .root(), gid: editor.gid,
+                    schema: editor.schema, editor: editor, focus: nil, ancestors: [])
+                d = .descend(Descend(
+                    path: .root(),
+                    readOnly: false,
+                    delete: { $0.root = nil },
+                    body: project(ctx)))
+            } else {
+                d = .placeholder
+            }
+            rootView.rebuild(d)
         } onChange: { [weak self] in
             DispatchQueue.main.async { self?.rebuild() }
         }

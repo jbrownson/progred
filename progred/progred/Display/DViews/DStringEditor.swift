@@ -2,10 +2,10 @@ import AppKit
 
 class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
     weak var editor: Editor?
-    var path: Path?
+    var path: Path
     var readOnly: Bool
 
-    init(_ string: String, editor: Editor, path: Path?, readOnly: Bool) {
+    init(_ string: String, editor: Editor, path: Path, readOnly: Bool) {
         self.editor = editor
         self.path = path
         self.readOnly = readOnly
@@ -32,12 +32,12 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
 
     func controlTextDidChange(_ obj: Notification) {
         invalidateIntrinsicContentSize()
-        guard !readOnly, let editor, let path else { return }
+        guard !readOnly, let editor else { return }
         editor.handleSet(path: path, value: .string(stringValue))
     }
 
     func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
-        guard case .stringEditor(let s) = d else { return false }
+        guard case .stringEditor(let s) = d, let editPath else { return false }
         self.editor = editor
         self.path = editPath
         self.readOnly = parentReadOnly

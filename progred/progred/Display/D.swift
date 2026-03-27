@@ -1,6 +1,13 @@
 import Foundation
 
-indirect enum D: Equatable {
+struct Descend {
+    let path: Path
+    let readOnly: Bool
+    let delete: ((Editor) -> Void)?
+    let body: D
+}
+
+indirect enum D {
     // MARK: - Layout
     case block([D])
     case line([D])
@@ -13,8 +20,7 @@ indirect enum D: Equatable {
     case identicon(UUID)
 
     // MARK: - Structure
-    case descend(Path, readOnly: Bool, child: D)
-    case descendListElement(consPath: Path, readOnly: Bool, child: D)
+    case descend(Descend)
     case collapse(defaultCollapsed: Bool = false, header: D, body: D)
     case list(separator: String, elements: [D])
 

@@ -1,5 +1,16 @@
 import Foundation
 
+func spliceAction(consPath: Path) -> (Editor) -> Void {
+    { editor in
+        guard case .uuid(let consUuid) = consPath.node(in: editor.gid, root: editor.root),
+              let tail = editor.gid.get(entity: .uuid(consUuid), label: editor.schema.tailField),
+              let (parentPath, edgeLabel) = consPath.pop(),
+              case .uuid(let parentUuid) = parentPath.node(in: editor.gid, root: editor.root)
+        else { return }
+        editor.set(entity: parentUuid, label: edgeLabel, value: tail)
+    }
+}
+
 func kernelHeader(ctx: ProjectionContext) -> D {
     let parts: [D] = [
         ctx.record().map { ctx.name(of: $0).map { .text($0, .typeRef) } ?? .placeholder },
@@ -30,7 +41,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         if elements.isEmpty {
             let insertPath = ctx.path.child(ctx.insertField)
             return ctx.focus == insertPath
-                ? .descend(insertPath, readOnly: ctx.readOnly, child: .placeholder)
+                ? .descend(Descend(path: insertPath, readOnly: ctx.readOnly, delete: nil, body: .placeholder))
                 : inlineBrackets(open: open, close: close, [])
         }
 
@@ -38,11 +49,16 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         var items: [D] = []
         for el in elements {
             let elementPath = consPath.child(ctx.headField)
-            items.append(.descendListElement(consPath: consPath, readOnly: ctx.readOnly, child: ctx.descend(to: el.head, via: elementPath, render: elementRender).d))
+            let (body, childReadOnly) = ctx.descend(to: el.head, via: elementPath, render: elementRender)
+            items.append(.descend(Descend(
+                path: elementPath,
+                readOnly: childReadOnly,
+                delete: ctx.readOnly ? nil : spliceAction(consPath: consPath),
+                body: body)))
 
             let tailPath = consPath.child(ctx.tailField)
             if ctx.focus == tailPath {
-                items.append(.descend(tailPath, readOnly: ctx.readOnly, child: .placeholder))
+                items.append(.descend(Descend(path: tailPath, readOnly: ctx.readOnly, delete: nil, body: .placeholder)))
             }
 
             consPath = consPath.child(ctx.tailField)
@@ -67,14 +83,10 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
 
     if edges.isEmpty { return header }
 
-    let body: D = .block(edges.map { label, value in
-        kernelEdge(label: label, value: value, ctx: ctx)
+    let body: D = .block(edges.map { label, _ in
+        labeled(label, ctx.descend(label), ctx: ctx)
     })
 
     return .collapse(header: header, body: body)
 }
 
-private func kernelEdge(label: Id, value: Id, ctx: ProjectionContext) -> D {
-    let childPath = ctx.path.child(label)
-    return labeled(label, .descend(childPath, readOnly: ctx.readOnly, child: ctx.descend(to: value, via: childPath).d), ctx: ctx)
-}

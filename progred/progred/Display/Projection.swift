@@ -89,8 +89,12 @@ struct ProjectionContext {
     func descend(_ field: Id, render: Render? = nil) -> D {
         guard let value = get(field) else { return .placeholder }
         let childPath = path.child(field)
-        let (d, _) = descend(to: value, via: childPath, render: render)
-        return .descend(childPath, readOnly: readOnly, child: d)
+        let (d, childReadOnly) = descend(to: value, via: childPath, render: render)
+        return .descend(Descend(
+            path: childPath,
+            readOnly: childReadOnly,
+            delete: readOnly ? nil : { $0.handleDelete(path: childPath) },
+            body: d))
     }
 
     func descend(to entity: Id, via path: Path? = nil, render: Render? = nil) -> (d: D, readOnly: Bool) {

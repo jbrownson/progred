@@ -6,7 +6,7 @@ import Observation
 class Editor {
     let schema: Schema
     var document: MutGid
-    var root: Id
+    var root: Id?
 
     init(schema: Schema) {
         self.schema = schema
@@ -26,16 +26,16 @@ class Editor {
         document.delete(entity: entity, label: label)
     }
 
-    func handleDelete(path: Path?) {
-        guard let path, let (parent, field) = path.pop(),
+    func handleDelete(path: Path) {
+        guard let (parent, field) = path.pop(),
               case .uuid(let uuid) = parent.node(in: gid, root: root)
         else { return }
         assert(document.data[uuid] != nil, "Attempted to delete from non-document entity")
         delete(entity: uuid, label: field)
     }
 
-    func handleSet(path: Path?, value: Id) {
-        guard let path, let (parent, field) = path.pop(),
+    func handleSet(path: Path, value: Id) {
+        guard let (parent, field) = path.pop(),
               case .uuid(let uuid) = parent.node(in: gid, root: root)
         else { return }
         assert(document.data[uuid] != nil, "Attempted to set on non-document entity")

@@ -63,16 +63,14 @@ func createView(_ d: D, editor: Editor, parentReadOnly: Bool = false, editPath: 
     case .line(let children): DLine(children: children, editor: editor, parentReadOnly: parentReadOnly)
     case .list(_, let elements): DList(elements: elements, editor: editor, parentReadOnly: parentReadOnly)
     case .indent(let child): DIndent(child: child, editor: editor, parentReadOnly: parentReadOnly)
-    case .descend(let path, let readOnly, let child):
-        DDescend(path: path, readOnly: readOnly, parentReadOnly: parentReadOnly, editor: editor, child: child)
-    case .descendListElement(let consPath, let readOnly, let child):
-        DListElement(consPath: consPath, readOnly: readOnly, parentReadOnly: parentReadOnly, editor: editor, child: child)
+    case .descend(let descend):
+        DDescend(descend, parentReadOnly: parentReadOnly, editor: editor)
     case .collapse(let defaultCollapsed, let header, let body):
         DCollapse(defaultCollapsed: defaultCollapsed, header: header, body: body, editor: editor, parentReadOnly: parentReadOnly)
     case .bracketed(let open, let close, let body):
         DBracketed(open: open, close: close, body: body, editor: editor, parentReadOnly: parentReadOnly)
     case .placeholder: DText("_", .punctuation)
-    case .stringEditor(let string): DStringEditor(string, editor: editor, path: editPath, readOnly: parentReadOnly)
+    case .stringEditor(let string): DStringEditor(string, editor: editor, path: editPath!, readOnly: parentReadOnly)
     case .numberEditor(let number): DText(String(number), .literal)
     }
 }
