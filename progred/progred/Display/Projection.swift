@@ -3,7 +3,7 @@ import Foundation
 typealias Render = (ProjectionContext) -> D?
 
 struct ProjectionContext {
-    let entity: Id
+    let entity: Id?
     let path: Path
     let gid: any Gid
     let editor: Editor?
@@ -12,7 +12,7 @@ struct ProjectionContext {
     let readOnly: Bool
     private let schema: Schema
 
-    init(entity: Id, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>, readOnly: Bool = false) {
+    init(entity: Id?, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>, readOnly: Bool = false) {
         self.entity = entity
         self.path = path
         self.gid = gid
@@ -23,7 +23,10 @@ struct ProjectionContext {
         self.readOnly = readOnly
     }
 
-    var isCycle: Bool { ancestors.contains(entity) }
+    var isCycle: Bool {
+        guard let entity else { return false }
+        return ancestors.contains(entity)
+    }
     var nameField: Id { schema.nameField }
     var recordField: Id { schema.recordField }
     var typeExpressionField: Id { schema.typeExpressionField }
@@ -43,15 +46,17 @@ struct ProjectionContext {
     var emptyRecord: Id { schema.emptyRecord }
 
     func get(_ field: Id) -> Id? {
-        gid.get(entity: entity, label: field)
+        guard let entity else { return nil }
+        return gid.get(entity: entity, label: field)
     }
 
     func record() -> Id? {
-        gid.get(entity: entity, label: recordField)
+        get(recordField)
     }
 
     func name() -> String? {
-        name(of: entity)
+        guard let entity else { return nil }
+        return name(of: entity)
     }
 
     func name(of id: Id) -> String? {
@@ -86,26 +91,32 @@ struct ProjectionContext {
         return nil
     }
 
+    func with(entity: Id?, path: Path, readOnly: Bool) -> ProjectionContext {
+        ProjectionContext(entity: entity, path: path, gid: gid, schema: schema,
+            editor: editor, focus: focus, ancestors: ancestors, readOnly: readOnly)
+    }
+
     func descend(_ field: Id, render: Render? = nil) -> D {
-        guard let value = get(field) else { return .placeholder }
         let childPath = path.child(field)
-        let (d, childReadOnly) = descend(to: value, via: childPath, render: render)
+        let value = get(field)
+        let childReadOnly = readOnly
+            || (value.flatMap { gid.edges(entity: $0)?.readOnly } ?? false)
+        let childCtx = ProjectionContext(
+            entity: value, path: childPath, gid: gid, schema: schema,
+            editor: editor, focus: focus,
+            ancestors: entity.map { ancestors.union([$0]) } ?? ancestors,
+            readOnly: childReadOnly)
+        var d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
+        if childCtx.isCycle {
+            d = .collapse(defaultCollapsed: true,
+                header: kernelHeader(ctx: childCtx), body: d)
+        }
         return .descend(Descend(
             path: childPath,
             readOnly: childReadOnly,
-            delete: readOnly ? nil : { $0.handleDelete(path: childPath) },
+            delete: value != nil && !readOnly
+                ? { $0.handleDelete(path: childPath) } : nil,
             body: d))
-    }
-
-    func descend(to entity: Id, via path: Path? = nil, render: Render? = nil) -> (d: D, readOnly: Bool) {
-        let childPath = path ?? self.path
-        let childReadOnly = readOnly || (gid.edges(entity: entity)?.readOnly ?? false)
-        let childCtx = ProjectionContext(entity: entity, path: childPath, gid: gid, schema: schema, editor: editor, focus: focus, ancestors: ancestors.union([self.entity]), readOnly: childReadOnly)
-        let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
-        if childCtx.isCycle {
-            return (.collapse(defaultCollapsed: true, header: kernelHeader(ctx: childCtx), body: d), childReadOnly)
-        }
-        return (d, childReadOnly)
     }
 
     func project(_ id: Id, render: Render? = nil) -> D {

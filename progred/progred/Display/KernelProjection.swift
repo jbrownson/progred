@@ -16,12 +16,16 @@ func kernelHeader(ctx: ProjectionContext) -> D {
         ctx.record().map { ctx.name(of: $0).map { .text($0, .typeRef) } ?? .placeholder },
         ctx.name().map { .text($0, .literal) },
     ].compactMap { $0 }
-    if parts.isEmpty { return rawHeader(ctx.entity) }
+    if parts.isEmpty {
+        guard let entity = ctx.entity else { return .placeholder }
+        return rawHeader(entity)
+    }
     return parts.count == 1 ? parts[0] : .line([parts[0], .space, parts[1]])
 }
 
 func flattenList(_ ctx: ProjectionContext) -> [ProjectionContext.ListElement]? {
-    ctx.listToArray(ctx.entity)
+    guard let entity = ctx.entity else { return nil }
+    return ctx.listToArray(entity)
 }
 
 func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
@@ -48,13 +52,17 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         var consPath = ctx.path
         var items: [D] = []
         for el in elements {
-            let elementPath = consPath.child(ctx.headField)
-            let (body, childReadOnly) = ctx.descend(to: el.head, via: elementPath, render: elementRender)
-            items.append(.descend(Descend(
-                path: elementPath,
-                readOnly: childReadOnly,
-                delete: ctx.readOnly ? nil : spliceAction(consPath: consPath),
-                body: body)))
+            let consReadOnly = ctx.readOnly
+                || (ctx.gid.edges(entity: el.cons)?.readOnly ?? false)
+            let consCtx = ctx.with(entity: el.cons, path: consPath, readOnly: consReadOnly)
+
+            if case .descend(let d) = consCtx.descend(ctx.headField, render: elementRender) {
+                items.append(.descend(Descend(
+                    path: d.path,
+                    readOnly: d.readOnly,
+                    delete: ctx.readOnly ? nil : spliceAction(consPath: consPath),
+                    body: d.body)))
+            }
 
             let tailPath = consPath.child(ctx.tailField)
             if ctx.focus == tailPath {
@@ -72,11 +80,11 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
 }
 
 func projectKernel(_ ctx: ProjectionContext) -> D? {
-    guard ctx.record() != nil else { return nil }
+    guard let entity = ctx.entity, ctx.record() != nil else { return nil }
 
     let header = kernelHeader(ctx: ctx)
 
-    guard let raw = ctx.gid.edges(entity: ctx.entity) else { return header }
+    guard let raw = ctx.gid.edges(entity: entity) else { return header }
     let edges = raw.data
         .filter { $0.key != ctx.nameField && $0.key != ctx.recordField }
         .sorted { $0.key < $1.key }
