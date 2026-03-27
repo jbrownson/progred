@@ -47,14 +47,10 @@ class DDescend: FlippedView, Reconcilable {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard isSelected else { return }
         let rect = bounds.insetBy(dx: -2, dy: -2)
-        if isSelected {
-            NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
-        } else if descend.readOnly, !parentReadOnly {
-            NSColor.windowBackgroundColor.shadow(withLevel: 0.04)!.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
-        }
+        NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
     }
 
     override func mouseDown(with event: NSEvent) {
