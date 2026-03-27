@@ -1,10 +1,7 @@
 import AppKit
 
 class DList: NSStackView, Reconcilable {
-    var parentReadOnly: Bool
-
     init(elements: [D], editor: Editor, parentReadOnly: Bool) {
-        self.parentReadOnly = parentReadOnly
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading

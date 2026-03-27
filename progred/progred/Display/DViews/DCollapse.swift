@@ -7,10 +7,7 @@ class DCollapse: FlippedView, Reconcilable {
     let collapseButton: CollapseButton
     var header: NSView
 
-    var parentReadOnly: Bool
-
     init(defaultCollapsed: Bool, header: D, body: D, editor: Editor, parentReadOnly: Bool) {
-        self.parentReadOnly = parentReadOnly
         self.collapseButton = CollapseButton(collapsed: defaultCollapsed)
         self.bodyContainer = FlippedView()
         let header = createView(header, editor: editor, parentReadOnly: parentReadOnly)

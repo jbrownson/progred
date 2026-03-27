@@ -1,10 +1,7 @@
 import AppKit
 
 class DIndent: FlippedView, Reconcilable {
-    var parentReadOnly: Bool
-
     init(child: D, editor: Editor, parentReadOnly: Bool) {
-        self.parentReadOnly = parentReadOnly
         super.init(frame: .zero)
         let childView = createView(child, editor: editor, parentReadOnly: parentReadOnly)
         addSubview(childView)

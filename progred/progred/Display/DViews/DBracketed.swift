@@ -8,10 +8,7 @@ class DBracketed: FlippedView, Reconcilable {
     var open: String
     var close: String
 
-    var parentReadOnly: Bool
-
     init(open: String, close: String, body: D, editor: Editor, parentReadOnly: Bool) {
-        self.parentReadOnly = parentReadOnly
         self.open = open
         self.close = close
         self.collapseButton = CollapseButton(collapsed: false)

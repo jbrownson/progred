@@ -2,12 +2,10 @@ import AppKit
 
 class DDescend: FlippedView, Reconcilable {
     var descend: Descend
-    var parentReadOnly: Bool = false
     weak var editor: Editor?
 
     init(_ descend: Descend, parentReadOnly: Bool, editor: Editor) {
         self.descend = descend
-        self.parentReadOnly = parentReadOnly
         self.editor = editor
         super.init(frame: .zero)
         let childView = createView(descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path)
@@ -20,7 +18,6 @@ class DDescend: FlippedView, Reconcilable {
     func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
         guard case .descend(let descend) = d, let childView = subviews.first else { return false }
         self.descend = descend
-        self.parentReadOnly = parentReadOnly
         let resolved = reconcileChild(childView, descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path)
         if resolved !== childView {
             childView.removeFromSuperview()
