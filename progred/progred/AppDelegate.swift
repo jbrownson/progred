@@ -54,6 +54,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 d = .descend(Descend(
                     path: .root(),
                     readOnly: false,
+                    inCycle: false,
                     delete: { $0.root = nil },
                     body: project(ctx)))
             } else {

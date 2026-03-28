@@ -36,7 +36,7 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
         editor.handleSet(path: path, value: .string(stringValue))
     }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
         guard case .stringEditor(let s) = d, let editPath else { return false }
         self.editor = editor
         self.path = editPath

@@ -45,7 +45,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         if elements.isEmpty {
             let insertPath = ctx.path.child(ctx.insertField)
             return ctx.focus == insertPath
-                ? .descend(Descend(path: insertPath, readOnly: ctx.readOnly, delete: nil, body: .placeholder))
+                ? .descend(Descend(path: insertPath, readOnly: ctx.readOnly, inCycle: false, delete: nil, body: .placeholder))
                 : inlineBrackets(open: open, close: close, [])
         }
 
@@ -60,13 +60,14 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
                 items.append(.descend(Descend(
                     path: d.path,
                     readOnly: d.readOnly,
+                    inCycle: d.inCycle,
                     delete: ctx.readOnly ? nil : spliceAction(consPath: consPath),
                     body: d.body)))
             }
 
             let tailPath = consPath.child(ctx.tailField)
             if ctx.focus == tailPath {
-                items.append(.descend(Descend(path: tailPath, readOnly: ctx.readOnly, delete: nil, body: .placeholder)))
+                items.append(.descend(Descend(path: tailPath, readOnly: ctx.readOnly, inCycle: false, delete: nil, body: .placeholder)))
             }
 
             consPath = consPath.child(ctx.tailField)
@@ -91,10 +92,10 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
 
     if edges.isEmpty { return header }
 
-    let body: D = .block(edges.map { label, _ in
-        labeled(label, ctx.descend(label), ctx: ctx)
-    })
-
-    return .collapse(header: header, body: body)
+    return .collapse(collapsed: false, header: header) {
+        .block(edges.map { label, _ in
+            labeled(label, ctx.descend(label), ctx: ctx)
+        })
+    }
 }
 

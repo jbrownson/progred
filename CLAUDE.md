@@ -25,7 +25,7 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - `ProjectionContext` + dispatch chain projects graph → D (`Display/Projection.swift`)
 - Layered projections: domain (`Display/DomainProjection.swift`) → kernel (`Display/KernelProjection.swift`) → raw
 - `Reconcilable` protocol for D → AppKit view reconciliation (`Display/DViews/Reconcilable.swift`)
-- `descend(field)` looks up an edge and wraps in `Descend`; `descend(to: entity)` projects a known entity
+- `descend(field)` looks up an edge, projects through the dispatch chain, and wraps in `Descend` — handles missing values (placeholder via raw fallback), cycles, and readOnly
 - `renderRef` renders shallow type references (just names); full `descend` renders declarations
 - Lists (cons/empty) need custom handling — their graph structure doesn't match the editing/display structure
 
@@ -54,5 +54,6 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - Name constants that are repeated or related to other values; express relationships explicitly (one as a function of the other). Inline one-off values are fine.
 - Use consistent naming across abstraction levels — if the generic algorithm uses `reconcile`, the concrete wrappers and protocol methods should too, not `resolve` or `update`
 - Don't introduce words without clear meaning — every term in a name should pull its weight
+- Be sparing with default arguments — only when the default is a genuinely reasonable "most of the time" value that is occasionally overridden, not just to save typing at one call site
 - Dead code should be deleted, not commented out
 - Push back if something seems wrong

@@ -46,7 +46,7 @@ class DBracketed: FlippedView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
         guard case .bracketed(let open, let close, let body) = d else { return false }
         self.open = open
         self.close = close

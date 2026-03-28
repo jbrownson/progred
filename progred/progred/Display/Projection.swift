@@ -99,21 +99,20 @@ struct ProjectionContext {
     func descend(_ field: Id, render: Render? = nil) -> D {
         let childPath = path.child(field)
         let value = get(field)
+        let childAncestors = entity.map { ancestors.union([$0]) } ?? ancestors
+        let childInCycle = value.map { childAncestors.contains($0) } ?? false
         let childReadOnly = readOnly
             || (value.flatMap { gid.edges(entity: $0)?.readOnly } ?? false)
         let childCtx = ProjectionContext(
             entity: value, path: childPath, gid: gid, schema: schema,
             editor: editor, focus: focus,
-            ancestors: entity.map { ancestors.union([$0]) } ?? ancestors,
+            ancestors: childAncestors,
             readOnly: childReadOnly)
-        var d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
-        if childCtx.isCycle {
-            d = .collapse(defaultCollapsed: true,
-                header: kernelHeader(ctx: childCtx), body: d)
-        }
+        let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         return .descend(Descend(
             path: childPath,
             readOnly: childReadOnly,
+            inCycle: childInCycle,
             delete: value != nil && !readOnly
                 ? { $0.handleDelete(path: childPath) } : nil,
             body: d))

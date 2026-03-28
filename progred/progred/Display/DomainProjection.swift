@@ -20,17 +20,17 @@ func projectField(_ ctx: ProjectionContext) -> D? {
 func projectRecord(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.recordRecord else { return nil }
 
-    return .collapse(
+    return .collapse(collapsed: false,
         header: typeHeader(ctx: ctx),
-        body: labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx))
+        body: { labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx) })
 }
 
 func projectSum(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.sumRecord else { return nil }
 
-    return .collapse(
+    return .collapse(collapsed: false,
         header: typeHeader(ctx: ctx),
-        body: labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx))
+        body: { labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx) })
 }
 
 func projectApply(_ ctx: ProjectionContext) -> D? {

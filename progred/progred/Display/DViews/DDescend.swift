@@ -8,17 +8,17 @@ class DDescend: FlippedView, Reconcilable {
         self.descend = descend
         self.editor = editor
         super.init(frame: .zero)
-        let childView = createView(descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path)
+        let childView = createView(descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle)
         addSubview(childView)
         constrain(childView, toFill: self)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
         guard case .descend(let descend) = d, let childView = subviews.first else { return false }
         self.descend = descend
-        let resolved = reconcileChild(childView, descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path)
+        let resolved = reconcileChild(childView, descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle)
         if resolved !== childView {
             childView.removeFromSuperview()
             addSubview(resolved)

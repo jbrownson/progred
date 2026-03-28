@@ -3,14 +3,27 @@ import AppKit
 private class HeaderRow: NSStackView {}
 
 class DCollapse: FlippedView, Reconcilable {
+    enum BodyState {
+        case pending(() -> D)
+        case rendered(NSView)
+    }
+
     let bodyContainer: FlippedView
     let collapseButton: CollapseButton
     var header: NSView
+    var body: BodyState
+    var editor: Editor
+    var parentReadOnly: Bool
+    var inCycle: Bool
 
-    init(defaultCollapsed: Bool, header: D, body: D, editor: Editor, parentReadOnly: Bool) {
-        self.collapseButton = CollapseButton(collapsed: defaultCollapsed)
+    init(collapsed: Bool, header: D, body: @escaping () -> D, editor: Editor, parentReadOnly: Bool, inCycle: Bool) {
+        self.collapseButton = CollapseButton(collapsed: collapsed || inCycle)
         self.bodyContainer = FlippedView()
-        let header = createView(header, editor: editor, parentReadOnly: parentReadOnly)
+        self.body = .pending(body)
+        self.editor = editor
+        self.parentReadOnly = parentReadOnly
+        self.inCycle = inCycle
+        let header = createView(header, editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
         self.header = header
         super.init(frame: .zero)
 
@@ -21,10 +34,6 @@ class DCollapse: FlippedView, Reconcilable {
         headerRow.translatesAutoresizingMaskIntoConstraints = false
         addSubview(headerRow)
 
-        let bodyView = createView(body, editor: editor, parentReadOnly: parentReadOnly)
-        bodyContainer.addSubview(bodyView)
-        constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
-        bodyContainer.isHidden = defaultCollapsed
         addSubview(bodyContainer)
         bodyContainer.translatesAutoresizingMaskIntoConstraints = false
 
@@ -42,17 +51,34 @@ class DCollapse: FlippedView, Reconcilable {
         tight.priority = NSLayoutConstraint.Priority(1)
         tight.isActive = true
 
-        collapseButton.onCollapsedChanged = { [weak self] collapsed in
-            self?.bodyContainer.isHidden = collapsed
-        }
+        syncBody()
+
+        collapseButton.onCollapsedChanged = { [weak self] _ in self?.syncBody() }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?) -> Bool {
-        guard case .collapse(_, let header, let body) = d else { return false }
+    private func syncBody() {
+        if collapseButton.isCollapsed {
+            bodyContainer.isHidden = true
+        } else {
+            if case .pending(let thunk) = body {
+                let bodyView = createView(thunk(), editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
+                bodyContainer.addSubview(bodyView)
+                constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
+                body = .rendered(bodyView)
+            }
+            bodyContainer.isHidden = false
+        }
+    }
 
-        let resolvedHeader = reconcileChild(self.header, header, editor: editor, parentReadOnly: parentReadOnly)
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
+        guard case .collapse(_, let header, let body) = d else { return false }
+        self.editor = editor
+        self.parentReadOnly = parentReadOnly
+        self.inCycle = inCycle
+
+        let resolvedHeader = reconcileChild(self.header, header, editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
         if resolvedHeader !== self.header {
             if let headerRow = self.header.superview as? HeaderRow,
                let index = headerRow.arrangedSubviews.firstIndex(of: self.header) {
@@ -63,12 +89,16 @@ class DCollapse: FlippedView, Reconcilable {
             self.header = resolvedHeader
         }
 
-        if let bodyView = bodyContainer.subviews.first {
-            let resolvedBody = reconcileChild(bodyView, body, editor: editor, parentReadOnly: parentReadOnly)
-            if resolvedBody !== bodyView {
+        switch self.body {
+        case .pending:
+            self.body = .pending(body)
+        case .rendered(let bodyView):
+            let resolved = reconcileChild(bodyView, body(), editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
+            if resolved !== bodyView {
                 bodyView.removeFromSuperview()
-                bodyContainer.addSubview(resolvedBody)
-                constrain(resolvedBody, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
+                bodyContainer.addSubview(resolved)
+                constrain(resolved, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
+                self.body = .rendered(resolved)
             }
         }
         return true
