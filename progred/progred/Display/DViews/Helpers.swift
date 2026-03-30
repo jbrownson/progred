@@ -25,6 +25,13 @@ func styledLabel(_ text: String, _ style: TextStyle) -> NSTextField {
     return field
 }
 
+extension NSTextField {
+    func textWidth(_ text: String) -> CGFloat {
+        guard let font else { return 0 }
+        return ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+}
+
 extension TextStyle {
     var nsColor: NSColor {
         switch self {

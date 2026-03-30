@@ -25,9 +25,7 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
     required init?(coder: NSCoder) { fatalError() }
 
     override var intrinsicContentSize: NSSize {
-        guard let font else { return super.intrinsicContentSize }
-        let width = ceil((stringValue as NSString).size(withAttributes: [.font: font]).width)
-        return NSSize(width: width, height: super.intrinsicContentSize.height)
+        NSSize(width: textWidth(stringValue), height: super.intrinsicContentSize.height)
     }
 
     func controlTextDidChange(_ obj: Notification) {
