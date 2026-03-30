@@ -33,10 +33,10 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
     func controlTextDidChange(_ obj: Notification) {
         invalidateIntrinsicContentSize()
         guard !readOnly, let editor else { return }
-        editor.handleSet(path: path, value: .string(stringValue))
+        editor.commit(path: path, value: .string(stringValue))
     }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .stringEditor(let s) = d, let editPath else { return false }
         self.editor = editor
         self.path = editPath

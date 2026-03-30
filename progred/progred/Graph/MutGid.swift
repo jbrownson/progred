@@ -23,14 +23,11 @@ struct MutGid: Gid {
         data[entity] = edges
     }
 
-    mutating func merge(_ other: TreeDictionary<UUID, TreeDictionary<Id, Id>>) {
-        for (entity, newEdges) in other {
-            if var existing = data[entity] {
-                existing.merge(newEdges, uniquingKeysWith: { _, new in new })
-                data[entity] = existing
-            } else {
-                data[entity] = newEdges
-            }
+    mutating func commit(entity: UUID, label: Id, value: Id?) {
+        if let value {
+            set(entity: entity, label: label, value: value)
+        } else {
+            delete(entity: entity, label: label)
         }
     }
 
@@ -41,6 +38,17 @@ struct MutGid: Gid {
             data.removeValue(forKey: entity)
         } else {
             data[entity] = edges
+        }
+    }
+
+    mutating func merge(_ other: TreeDictionary<UUID, TreeDictionary<Id, Id>>) {
+        for (entity, newEdges) in other {
+            if var existing = data[entity] {
+                existing.merge(newEdges, uniquingKeysWith: { _, new in new })
+                data[entity] = existing
+            } else {
+                data[entity] = newEdges
+            }
         }
     }
 

@@ -109,12 +109,14 @@ struct ProjectionContext {
             ancestors: childAncestors,
             readOnly: childReadOnly)
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
+        let commit: Commit? = readOnly ? nil : { editor, id in
+            editor.commit(path: childPath, value: id)
+        }
         return .descend(Descend(
             path: childPath,
             readOnly: childReadOnly,
             inCycle: childInCycle,
-            delete: value != nil && !readOnly
-                ? { $0.handleDelete(path: childPath) } : nil,
+            commit: commit,
             body: d))
     }
 

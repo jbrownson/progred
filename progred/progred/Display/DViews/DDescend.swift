@@ -8,17 +8,17 @@ class DDescend: FlippedView, Reconcilable {
         self.descend = descend
         self.editor = editor
         super.init(frame: .zero)
-        let childView = createView(descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle)
+        let childView = createView(descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle, commit: descend.commit)
         addSubview(childView)
         constrain(childView, toFill: self)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .descend(let descend) = d, let childView = subviews.first else { return false }
         self.descend = descend
-        let resolved = reconcileChild(childView, descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle)
+        let resolved = reconcileChild(childView, descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle, commit: descend.commit)
         if resolved !== childView {
             childView.removeFromSuperview()
             addSubview(resolved)
@@ -59,8 +59,8 @@ class DDescend: FlippedView, Reconcilable {
     }
 
     @objc func delete(_ sender: Any?) {
-        guard let editor, let delete = descend.delete else { return }
-        delete(editor)
+        guard let editor, let commit = descend.commit else { return }
+        commit(editor, nil)
     }
 
     override func deleteBackward(_ sender: Any?) { delete(sender) }

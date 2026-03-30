@@ -55,7 +55,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     path: .root(),
                     readOnly: false,
                     inCycle: false,
-                    delete: { $0.root = nil },
+                    commit: { editor, id in editor.root = id },
                     body: project(ctx)))
             } else {
                 d = .placeholder

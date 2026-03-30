@@ -14,15 +14,9 @@ class DText: NSTextField, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
-        switch d {
-        case .text(let s, let style):
-            stringValue = s; textColor = style.nsColor
-        case .placeholder:
-            stringValue = "_"; textColor = NSColor.tertiaryLabelColor
-        default:
-            return false
-        }
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
+        guard case .text(let s, let style) = d else { return false }
+        stringValue = s; textColor = style.nsColor
         return true
     }
 }

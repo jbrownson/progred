@@ -12,7 +12,7 @@ class DList: NSStackView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .list(_, let elements) = d else { return false }
         reconcileChildren(stack: self, children: elements, editor: editor, parentReadOnly: parentReadOnly)
         return true

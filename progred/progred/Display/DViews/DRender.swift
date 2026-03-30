@@ -54,7 +54,7 @@ class DRootView: FlippedView {
     }
 }
 
-func createView(_ d: D, editor: Editor, parentReadOnly: Bool = false, editPath: Path? = nil, inCycle: Bool = false) -> NSView {
+func createView(_ d: D, editor: Editor, parentReadOnly: Bool = false, editPath: Path? = nil, inCycle: Bool = false, commit: Commit? = nil) -> NSView {
     switch d {
     case .text(let text, let style): DText(text, style)
     case .space: DSpace(spacing)
@@ -69,7 +69,7 @@ func createView(_ d: D, editor: Editor, parentReadOnly: Bool = false, editPath: 
         DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
     case .bracketed(let open, let close, let body):
         DBracketed(open: open, close: close, body: body, editor: editor, parentReadOnly: parentReadOnly)
-    case .placeholder: DText("_", .punctuation)
+    case .placeholder: DPlaceholder(commit: commit, editor: editor)
     case .stringEditor(let string): DStringEditor(string, editor: editor, path: editPath!, readOnly: parentReadOnly)
     case .numberEditor(let number): DText(String(number), .literal)
     }

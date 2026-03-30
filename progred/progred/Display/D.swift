@@ -1,10 +1,12 @@
 import Foundation
 
+typealias Commit = (Editor, Id?) -> Void
+
 struct Descend {
     let path: Path
     let readOnly: Bool
     let inCycle: Bool
-    let delete: ((Editor) -> Void)?
+    let commit: Commit?
     let body: D
 }
 
