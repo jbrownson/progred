@@ -6,7 +6,8 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
     let searchField: NSTextField
     let tableView: NSTableView
     let scrollView: NSScrollView
-    var entries: [(display: String, action: () -> Void)] = []
+    var popupPanel: NSPanel?
+    var filtered: [SearchResult] = []
 
     init(commit: Commit?, editor: Editor) {
         self.commit = commit
@@ -32,14 +33,13 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         tableView.style = .plain
         tableView.selectionHighlightStyle = .regular
         tableView.rowHeight = 20
+        tableView.intercellSpacing = NSSize(width: 0, height: 0)
 
         self.scrollView = NSScrollView()
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .lineBorder
-        scrollView.isHidden = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
 
         super.init(frame: .zero)
         searchField.delegate = self
@@ -49,17 +49,12 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         tableView.doubleAction = #selector(tableViewDoubleClick)
 
         addSubview(searchField)
-        addSubview(scrollView)
 
         NSLayoutConstraint.activate([
             searchField.topAnchor.constraint(equalTo: topAnchor),
             searchField.leadingAnchor.constraint(equalTo: leadingAnchor),
             searchField.trailingAnchor.constraint(equalTo: trailingAnchor),
             searchField.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 2),
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scrollView.widthAnchor.constraint(greaterThanOrEqualToConstant: 150),
-            scrollView.heightAnchor.constraint(lessThanOrEqualToConstant: 200),
         ])
     }
 
@@ -81,7 +76,7 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         searchField.invalidateIntrinsicContentSize()
         window?.makeFirstResponder(searchField)
         rebuildEntries()
-        scrollView.isHidden = false
+        showPopup()
     }
 
     private func deactivate() {
@@ -90,47 +85,112 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         searchField.isEditable = false
         searchField.placeholderString = nil
         searchField.invalidateIntrinsicContentSize()
-        scrollView.isHidden = true
+        hidePopup()
+    }
+
+    private func showPopup() {
+        guard let window else { return }
+        let fieldRect = searchField.convert(searchField.bounds, to: nil)
+        let screenRect = window.convertToScreen(fieldRect)
+        let height = min(CGFloat(filtered.count) * tableView.rowHeight + 4, 300)
+        let panelRect = NSRect(
+            x: screenRect.minX,
+            y: screenRect.minY - height - 2,
+            width: max(screenRect.width, 200),
+            height: height)
+
+        if let panel = popupPanel {
+            panel.setFrame(panelRect, display: true)
+        } else {
+            let panel = NSPanel(contentRect: panelRect, styleMask: [.borderless], backing: .buffered, defer: false)
+            panel.isFloatingPanel = true
+            panel.hasShadow = true
+            panel.backgroundColor = .controlBackgroundColor
+            panel.contentView = scrollView
+            window.addChildWindow(panel, ordered: .above)
+            self.popupPanel = panel
+        }
+    }
+
+    private func hidePopup() {
+        if let panel = popupPanel {
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
+            popupPanel = nil
+        }
     }
 
     private func rebuildEntries() {
-        entries = []
-        let text = searchField.stringValue
-        if !text.isEmpty {
-            entries.append((display: "\"\(text)\"", action: { [weak self] in
-                guard let self, let editor, let commit else { return }
-                commit(editor, .string(text))
-                deactivate()
-            }))
+        guard let editor, let commit else { return }
+        let needle = searchField.stringValue
+        let entries = buildEntries(editor: editor, commit: commit, needle: needle)
+        filtered = searchEntries(entries, needle: needle)
+
+        filtered.sort {
+            if $0.entry.matching != $1.entry.matching { return $0.entry.matching }
+            if $0.entry.magic != $1.entry.magic { return !$0.entry.magic }
+            return false
         }
+
         tableView.reloadData()
-        if !entries.isEmpty {
+        if !filtered.isEmpty {
             tableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         }
-        let height = min(CGFloat(max(entries.count, 1)) * tableView.rowHeight + 4, 200)
-        scrollView.heightAnchor.constraint(equalToConstant: height).isActive = true
+        if popupPanel != nil { showPopup() }
     }
 
     private func commitSelected() {
         let row = tableView.selectedRow
-        guard row >= 0, row < entries.count else { return }
-        entries[row].action()
+        guard row >= 0, row < filtered.count, let editor else { return }
+        filtered[row].entry.action(editor)
+        deactivate()
     }
 
     @objc private func tableViewDoubleClick() {
         commitSelected()
     }
 
+    override func removeFromSuperview() {
+        hidePopup()
+        super.removeFromSuperview()
+    }
+
     // MARK: - NSTableViewDataSource
 
-    func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
+    func numberOfRows(in tableView: NSTableView) -> Int { filtered.count }
 
     // MARK: - NSTableViewDelegate
 
+    private let entryInset: CGFloat = 6
+
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let cell = NSTextField(labelWithString: entries[row].display)
-        cell.font = .systemFont(ofSize: NSFont.systemFontSize)
-        return cell
+        let entry = filtered[row].entry
+        let name = NSTextField(labelWithString: entry.display)
+        name.font = .systemFont(ofSize: NSFont.systemFontSize)
+        name.textColor = entry.matching ? .labelColor : .tertiaryLabelColor
+        name.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = FlippedView()
+        container.addSubview(name)
+        NSLayoutConstraint.activate([
+            name.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: entryInset),
+            name.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+        ])
+
+        if let dis = entry.disambiguation {
+            let disLabel = NSTextField(labelWithString: dis)
+            disLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize - 1)
+            disLabel.textColor = .tertiaryLabelColor
+            disLabel.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(disLabel)
+            NSLayoutConstraint.activate([
+                disLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -entryInset),
+                disLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                disLabel.leadingAnchor.constraint(greaterThanOrEqualTo: name.trailingAnchor, constant: 8),
+            ])
+        }
+
+        return container
     }
 
     // MARK: - NSTextFieldDelegate
@@ -145,7 +205,7 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
             return true
         }
         if commandSelector == #selector(moveDown(_:)) {
-            let next = min(tableView.selectedRow + 1, entries.count - 1)
+            let next = min(tableView.selectedRow + 1, filtered.count - 1)
             tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
             tableView.scrollRowToVisible(next)
             return true

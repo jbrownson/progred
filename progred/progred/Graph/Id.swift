@@ -10,10 +10,11 @@ enum Id: Hashable, Comparable {
     }
 
     var asUUID: UUID? {
-        switch self {
-        case .uuid(let u): u
-        default: nil
-        }
+        if case .uuid(let u) = self { u } else { nil }
+    }
+
+    var asString: String? {
+        if case .string(let s) = self { s } else { nil }
     }
 
     static func < (lhs: Id, rhs: Id) -> Bool {

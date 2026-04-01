@@ -18,6 +18,10 @@ class Editor {
         StackedGid(top: document, bottom: schema.gid)
     }
 
+    func name(of entity: Id) -> String? {
+        gid.get(entity: entity, label: schema.nameField)?.asString
+    }
+
     func commit(entity: UUID, label: Id, value: Id?) {
         document.commit(entity: entity, label: label, value: value)
     }
