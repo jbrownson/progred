@@ -46,6 +46,7 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - Exception: extract helper functions when intermediate steps represent distinct semantic concepts
 - Look for generic abstractions — extract patterns in how computations combine and data flows
 - Factor generic algorithms from concrete operations — parameterize with closures, keep the algorithm free of domain types (e.g., `reconcile<T, Ts>` takes closures for replace/append/remove, knows nothing about NSView)
+- Prefer composable combinators over monolithic functions — small functions that transform or wrap behavior (e.g., `orFilter`, `caseInsensitive`, `sortedFilter`) let you build complex pipelines that read as a declaration of intent
 - Prefer `zip`, `dropFirst`, `enumerated`, `forEach`, `map` over index arithmetic, `stride`, and manual `for i in 0..<n` loops
 - Prefer free functions with explicit parameters over methods when `self` isn't needed
 - Apply Haskell-style thinking (explicit data flow, pure function composition) but idiomatic Swift syntax
