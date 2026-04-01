@@ -1,19 +1,16 @@
 import AppKit
 
 private class Pill: NSView {
-    static let pillHeight: CGFloat = 12
     override var isFlipped: Bool { true }
 
     override var intrinsicContentSize: NSSize {
         let textHeight = NSFont.systemFont(ofSize: NSFont.systemFontSize).boundingRectForFont.height
-        return NSSize(width: Self.pillHeight, height: ceil(textHeight))
+        return NSSize(width: ceil(textHeight), height: ceil(textHeight))
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let rect = NSRect(x: 0, y: (bounds.height - Self.pillHeight) / 2,
-                          width: Self.pillHeight, height: Self.pillHeight)
         NSColor.separatorColor.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
+        NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
     }
 }
 
