@@ -23,7 +23,7 @@ private class SearchField: NSTextField {
 
 class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     var commit: Commit?
-    weak var editor: Editor?
+    var editor: Editor
     fileprivate let pill = Pill()
     fileprivate let searchField = SearchField()
     let tableView: NSTableView
@@ -139,15 +139,13 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
     }
 
     private func rebuildEntries() {
-        guard let editor, let commit else { return }
+        guard let commit else { return }
         let needle = searchField.stringValue
         let entries = buildEntries(editor: editor, commit: commit, needle: needle)
         filtered = searchEntries(entries, needle: needle)
 
         filtered.sort {
-            if $0.entry.matching != $1.entry.matching { return $0.entry.matching }
-            if $0.entry.magic != $1.entry.magic { return !$0.entry.magic }
-            return false
+            ($0.entry.matching ? 1 : 0, $0.entry.magic ? 0 : 1) > ($1.entry.matching ? 1 : 0, $1.entry.magic ? 0 : 1)
         }
 
         tableView.reloadData()
@@ -159,7 +157,7 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
 
     private func commitSelected() {
         let row = tableView.selectedRow
-        guard row >= 0, row < filtered.count, let editor else { return }
+        guard row >= 0, row < filtered.count else { return }
         filtered[row].entry.action(editor)
         deactivate()
     }
@@ -246,7 +244,7 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         deactivate()
     }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .placeholder = d else { return false }
         self.editor = editor
         self.commit = commit

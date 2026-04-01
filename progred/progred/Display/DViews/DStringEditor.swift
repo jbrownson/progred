@@ -1,14 +1,12 @@
 import AppKit
 
 class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
-    weak var editor: Editor?
-    var path: Path
-    var readOnly: Bool
+    var editor: Editor
+    var commit: Commit?
 
-    init(_ string: String, editor: Editor, path: Path, readOnly: Bool) {
+    init(_ string: String, editor: Editor, readOnly: Bool, commit: Commit?) {
         self.editor = editor
-        self.path = path
-        self.readOnly = readOnly
+        self.commit = commit
         super.init(frame: .zero)
         stringValue = string
         isBordered = false
@@ -30,15 +28,14 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
 
     func controlTextDidChange(_ obj: Notification) {
         invalidateIntrinsicContentSize()
-        guard !readOnly, let editor else { return }
-        editor.commit(path: path, value: .string(stringValue))
+        commit?(editor, .string(stringValue))
     }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
-        guard case .stringEditor(let s) = d, let editPath else { return false }
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
+        guard case .stringEditor(let s) = d else { return false }
         self.editor = editor
-        self.path = editPath
-        self.readOnly = parentReadOnly
+        self.commit = commit
+        isEditable = !parentReadOnly
         if currentEditor() == nil { stringValue = s }
         return true
     }

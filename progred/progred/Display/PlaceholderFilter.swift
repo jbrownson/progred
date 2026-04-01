@@ -12,6 +12,7 @@ struct SearchResult {
 
 // MARK: - Filter pipeline
 
+private typealias TextOf = (PlaceholderEntry) -> String
 private typealias Filter = ([PlaceholderEntry], String) -> (accepted: [SearchResult], rejected: [PlaceholderEntry])
 
 private func orFilter(_ a: @escaping Filter, _ b: @escaping Filter) -> Filter {
@@ -26,55 +27,36 @@ private func orFilters(_ filters: [Filter]) -> Filter {
     filters.dropFirst().reduce(filters.first ?? { entries, _ in ([], entries) }) { orFilter($0, $1) }
 }
 
-private func predicateFilter(_ predicate: @escaping (String, String) -> [Match]?) -> Filter {
+private func predicateFilter(_ predicate: @escaping (String, String) -> [Match]?, textOf: @escaping TextOf = \.display) -> Filter {
     { entries, needle in
-        var accepted: [SearchResult] = []
-        var rejected: [PlaceholderEntry] = []
-        for entry in entries {
-            if let matches = predicate(needle, entry.display) {
-                accepted.append(SearchResult(entry: entry, matches: matches))
+        entries.reduce(into: ([SearchResult](), [PlaceholderEntry]())) { result, entry in
+            if let matches = predicate(needle, textOf(entry)) {
+                result.0.append(SearchResult(entry: entry, matches: matches))
             } else {
-                rejected.append(entry)
+                result.1.append(entry)
             }
         }
-        return (accepted, rejected)
     }
 }
 
 private func sortedFilter(_ base: @escaping Filter) -> Filter {
     { entries, needle in
         var result = base(entries, needle)
-        result.accepted.sort { a, b in
-            percentMatched(a) > percentMatched(b)
-        }
+        result.accepted.sort { percentMatched($0) > percentMatched($1) }
         return result
     }
 }
 
-private func percentMatched(_ entry: SearchResult) -> Double {
-    guard !entry.entry.display.isEmpty else { return 0 }
-    let matched = entry.matches.reduce(0) { $0 + $1.length }
-    return Double(matched) / Double(entry.entry.display.count)
+private func percentMatched(_ result: SearchResult) -> Double {
+    guard !result.entry.display.isEmpty else { return 0 }
+    let matched = result.matches.reduce(0) { $0 + $1.length }
+    return Double(matched) / Double(result.entry.display.count)
 }
 
-private func caseInsensitive(_ base: @escaping Filter) -> Filter {
-    { entries, needle in
-        let lowerNeedle = needle.lowercased()
-        // Create entries with lowercased display for matching, restore originals after
-        let lowered = entries.map { ($0, $0.display.lowercased()) }
-        var accepted: [SearchResult] = []
-        var rejected: [PlaceholderEntry] = []
-        for (entry, lowerDisplay) in lowered {
-            let temp = PlaceholderEntry(display: lowerDisplay, disambiguation: entry.disambiguation, action: entry.action, matching: entry.matching, magic: entry.magic)
-            let result = base([temp], lowerNeedle)
-            if let filtered = result.accepted.first {
-                accepted.append(SearchResult(entry: entry, matches: filtered.matches))
-            } else {
-                rejected.append(entry)
-            }
-        }
-        return (accepted.sorted { percentMatched($0) > percentMatched($1) }, rejected)
-    }
+private func caseInsensitive(_ predicate: @escaping (String, String) -> [Match]?) -> Filter {
+    sortedFilter(predicateFilter(
+        { predicate($0.lowercased(), $1) },
+        textOf: { $0.display.lowercased() }))
 }
 
 // MARK: - Matching predicates
@@ -108,10 +90,10 @@ func searchEntries(_ entries: [PlaceholderEntry], needle: String) -> [SearchResu
     let pipeline = orFilters([
         sortedFilter(predicateFilter(prefixMatch)),
         sortedFilter(predicateFilter(substringMatch)),
-        caseInsensitive(sortedFilter(predicateFilter(prefixMatch))),
-        caseInsensitive(sortedFilter(predicateFilter(substringMatch))),
+        caseInsensitive(prefixMatch),
+        caseInsensitive(substringMatch),
         sortedFilter(predicateFilter(fuzzyMatch)),
-        caseInsensitive(sortedFilter(predicateFilter(fuzzyMatch))),
+        caseInsensitive(fuzzyMatch),
     ])
     return pipeline(entries, needle).accepted
 }

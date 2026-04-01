@@ -3,11 +3,11 @@ import AppKit
 class DDescend: FlippedView, Reconcilable {
     var descend: Descend
     var childView: NSView
-    weak var editor: Editor?
+    var editor: Editor
 
     init(_ descend: Descend, parentReadOnly: Bool, editor: Editor) {
         self.descend = descend
-        self.childView = createView(descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle, commit: descend.commit)
+        self.childView = createView(descend.body, editor: editor, parentReadOnly: descend.readOnly, inCycle: descend.inCycle, commit: descend.commit)
         self.editor = editor
         super.init(frame: .zero)
         addSubview(childView)
@@ -16,10 +16,10 @@ class DDescend: FlippedView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .descend(let descend) = d else { return false }
         self.descend = descend
-        let resolved = reconcileChild(childView, descend.body, editor: editor, parentReadOnly: descend.readOnly, editPath: descend.path, inCycle: descend.inCycle, commit: descend.commit)
+        let resolved = reconcileChild(childView, descend.body, editor: editor, parentReadOnly: descend.readOnly, inCycle: descend.inCycle, commit: descend.commit)
         if resolved !== childView {
             childView.removeFromSuperview()
             addSubview(resolved)
@@ -61,7 +61,7 @@ class DDescend: FlippedView, Reconcilable {
     }
 
     @objc func delete(_ sender: Any?) {
-        guard let editor, let commit = descend.commit else { return }
+        guard let commit = descend.commit else { return }
         window?.makeFirstResponder(nil)
         commit(editor, nil)
     }

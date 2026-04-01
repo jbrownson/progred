@@ -44,9 +44,9 @@ private func newEntries(_ named: [NamedEntity], schema: Schema, commit: @escapin
             display: "new \(entity.name)",
             disambiguation: nil,
             action: { editor in
-                let newId = Id.newUUID()
-                editor.commit(entity: newId.asUUID!, label: schema.recordField, value: entity.id)
-                commit(editor, newId)
+                let uuid = UUID()
+                editor.commit(entity: uuid, label: schema.recordField, value: entity.id)
+                commit(editor, .uuid(uuid))
             },
             matching: true,
             magic: false)
