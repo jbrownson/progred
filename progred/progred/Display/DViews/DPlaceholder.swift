@@ -1,9 +1,34 @@
 import AppKit
 
+private class Pill: NSView {
+    static let pillHeight: CGFloat = 12
+    override var isFlipped: Bool { true }
+
+    override var intrinsicContentSize: NSSize {
+        let textHeight = NSFont.systemFont(ofSize: NSFont.systemFontSize).boundingRectForFont.height
+        return NSSize(width: Self.pillHeight, height: ceil(textHeight))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = NSRect(x: 0, y: (bounds.height - Self.pillHeight) / 2,
+                          width: Self.pillHeight, height: Self.pillHeight)
+        NSColor.separatorColor.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
+    }
+}
+
+private class SearchField: NSTextField {
+    override var intrinsicContentSize: NSSize {
+        let text = stringValue.isEmpty ? (placeholderString ?? "") : stringValue
+        return NSSize(width: max(textWidth(text), 20), height: super.intrinsicContentSize.height)
+    }
+}
+
 class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     var commit: Commit?
     weak var editor: Editor?
-    let searchField: NSTextField
+    fileprivate let pill = Pill()
+    fileprivate let searchField = SearchField()
     let tableView: NSTableView
     let scrollView: NSScrollView
     var popupPanel: NSPanel?
@@ -13,16 +38,12 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         self.commit = commit
         self.editor = editor
 
-        self.searchField = AutoSizingTextField()
-        searchField.stringValue = "_"
-        searchField.textColor = .tertiaryLabelColor
         searchField.isBezeled = false
-        searchField.isEditable = false
         searchField.drawsBackground = false
+        searchField.focusRingType = .none
         searchField.font = .systemFont(ofSize: NSFont.systemFontSize)
-        searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.placeholderString = "search..."
         searchField.setContentHuggingPriority(.required, for: .horizontal)
-        searchField.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("entry"))
         column.isEditable = false
@@ -48,17 +69,14 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         tableView.target = self
         tableView.doubleAction = #selector(tableViewDoubleClick)
 
-        addSubview(searchField)
-
-        NSLayoutConstraint.activate([
-            searchField.topAnchor.constraint(equalTo: topAnchor),
-            searchField.leadingAnchor.constraint(equalTo: leadingAnchor),
-            searchField.trailingAnchor.constraint(equalTo: trailingAnchor),
-            searchField.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
+        showPill()
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize {
+        subviews.first?.intrinsicContentSize ?? pill.intrinsicContentSize
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard commit != nil else {
@@ -68,29 +86,32 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         activate()
     }
 
+    private func showPill() {
+        subviews.forEach { $0.removeFromSuperview() }
+        addSubview(pill)
+        constrain(pill, toFill: self)
+        invalidateIntrinsicContentSize()
+    }
+
     private func activate() {
+        subviews.forEach { $0.removeFromSuperview() }
         searchField.stringValue = ""
-        searchField.textColor = .labelColor
-        searchField.isEditable = true
-        searchField.placeholderString = "search..."
-        searchField.invalidateIntrinsicContentSize()
+        addSubview(searchField)
+        constrain(searchField, toFill: self)
+        invalidateIntrinsicContentSize()
         window?.makeFirstResponder(searchField)
         rebuildEntries()
         showPopup()
     }
 
     private func deactivate() {
-        searchField.stringValue = "_"
-        searchField.textColor = .tertiaryLabelColor
-        searchField.isEditable = false
-        searchField.placeholderString = nil
-        searchField.invalidateIntrinsicContentSize()
+        showPill()
         hidePopup()
     }
 
     private func showPopup() {
         guard let window else { return }
-        let fieldRect = searchField.convert(searchField.bounds, to: nil)
+        let fieldRect = convert(bounds, to: nil)
         let screenRect = window.convertToScreen(fieldRect)
         let height = min(CGFloat(filtered.count) * tableView.rowHeight + 4, 300)
         let panelRect = NSRect(
@@ -225,7 +246,7 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
     }
 
     func controlTextDidEndEditing(_ obj: Notification) {
-        if searchField.isEditable { deactivate() }
+        deactivate()
     }
 
     func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, editPath: Path?, inCycle: Bool, commit: Commit?) -> Bool {
@@ -233,12 +254,5 @@ class DPlaceholder: FlippedView, Reconcilable, NSTextFieldDelegate, NSTableViewD
         self.editor = editor
         self.commit = commit
         return true
-    }
-}
-
-private class AutoSizingTextField: NSTextField {
-    override var intrinsicContentSize: NSSize {
-        let text = isEditable ? (stringValue.isEmpty ? (placeholderString ?? "") : stringValue) : stringValue
-        return NSSize(width: max(textWidth(text), 20), height: super.intrinsicContentSize.height)
     }
 }

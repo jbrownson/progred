@@ -62,6 +62,7 @@ class DDescend: FlippedView, Reconcilable {
 
     @objc func delete(_ sender: Any?) {
         guard let editor, let commit = descend.commit else { return }
+        window?.makeFirstResponder(nil)
         commit(editor, nil)
     }
 
@@ -69,6 +70,6 @@ class DDescend: FlippedView, Reconcilable {
     override func deleteForward(_ sender: Any?) { delete(sender) }
 
     override func cancelOperation(_ sender: Any?) {
-        window?.makeFirstResponder(superview)
+        window?.makeFirstResponder(nil)
     }
 }
