@@ -86,11 +86,15 @@ class InsertionOverlay: FlippedView {
 
     override func layout() {
         super.layout()
-        rescan()
+        updateZones()
     }
 
     func rescan() {
         layoutSubtreeIfNeeded()
+        updateZones()
+    }
+
+    private func updateZones() {
         zones.forEach { removeTrackingArea($0.tracking) }
         let found = findZones(in: self)
         zones = found.map { zone in
