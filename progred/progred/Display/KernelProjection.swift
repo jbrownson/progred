@@ -23,11 +23,6 @@ func kernelHeader(ctx: ProjectionContext) -> D {
     return parts.count == 1 ? parts[0] : .line([parts[0], .space, parts[1]])
 }
 
-func flattenList(_ ctx: ProjectionContext) -> [ProjectionContext.ListElement]? {
-    guard let entity = ctx.entity else { return nil }
-    return ctx.listToArray(entity)
-}
-
 func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
     var parts: [D] = [.text(open, .punctuation)]
     for (i, item) in items.enumerated() {
@@ -40,13 +35,22 @@ func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
 
 func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
     { ctx in
-        guard let elements = flattenList(ctx) else { return nil }
+        guard let entity = ctx.entity,
+              let elements = ctx.listToArray(entity)
+        else { return nil }
 
         if elements.isEmpty {
-            let insertPath = ctx.path.child(ctx.insertField)
-            return ctx.focus == insertPath
-                ? .descend(Descend(path: insertPath, readOnly: ctx.readOnly, inCycle: false, commit: nil, body: .placeholder))
-                : inlineBrackets(open: open, close: close, [])
+            let insertCommit = ctx.readOnly ? nil : ctx.commit.map { commit in
+                { (editor: Editor, id: Id) in
+                    let cons = UUID()
+                    editor.commit(entity: cons, label: ctx.recordField, value: ctx.consRecord)
+                    editor.commit(entity: cons, label: ctx.headField, value: id)
+                    editor.commit(entity: cons, label: ctx.tailField, value: entity)
+                    commit(editor, .uuid(cons))
+                }
+            }
+            let items: [D] = insertCommit.map { [.insertionPoint($0)] } ?? []
+            return inlineBrackets(open: open, close: close, items)
         }
 
         var consPath = ctx.path

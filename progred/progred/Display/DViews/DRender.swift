@@ -69,7 +69,8 @@ func createView(_ d: D, editor: Editor, parentReadOnly: Bool = false, inCycle: B
         DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
     case .bracketed(let open, let close, let body):
         DBracketed(open: open, close: close, body: body, editor: editor, parentReadOnly: parentReadOnly)
-    case .placeholder: DPlaceholder(commit: commit, editor: editor)
+    case .placeholder: DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, editor: editor)
+    case .insertionPoint(let commit): DInsertionPoint(commit: commit, editor: editor)
     case .stringEditor(let string): DStringEditor(string, editor: editor, readOnly: parentReadOnly, commit: commit)
     case .numberEditor(let number): DText(String(number), .literal)
     }

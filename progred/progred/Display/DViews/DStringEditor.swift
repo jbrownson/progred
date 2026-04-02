@@ -1,7 +1,7 @@
 import AppKit
 
 class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
-    var editor: Editor
+    let editor: Editor
     var commit: Commit?
 
     init(_ string: String, editor: Editor, readOnly: Bool, commit: Commit?) {
@@ -33,7 +33,6 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
 
     func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .stringEditor(let s) = d else { return false }
-        self.editor = editor
         self.commit = commit
         isEditable = !parentReadOnly
         if currentEditor() == nil { stringValue = s }

@@ -3,7 +3,7 @@ import AppKit
 class DDescend: FlippedView, Reconcilable {
     var descend: Descend
     var childView: NSView
-    var editor: Editor
+    let editor: Editor
 
     init(_ descend: Descend, parentReadOnly: Bool, editor: Editor) {
         self.descend = descend

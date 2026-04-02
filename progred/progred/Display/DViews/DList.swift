@@ -4,8 +4,8 @@ class DList: NSStackView, Reconcilable {
     init(elements: [D], editor: Editor, parentReadOnly: Bool) {
         super.init(frame: .zero)
         orientation = .vertical
-        alignment = .leading
         spacing = 0
+        alignment = .leading
         translatesAutoresizingMaskIntoConstraints = false
         elements.forEach { addArrangedSubview(createView($0, editor: editor, parentReadOnly: parentReadOnly)) }
     }

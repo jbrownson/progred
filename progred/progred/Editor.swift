@@ -27,9 +27,11 @@ class Editor {
     }
 
     func commit(path: Path, value: Id?) {
-        guard let (parent, field) = path.pop(),
-              case .uuid(let uuid) = parent.node(in: gid, root: root)
-        else { return }
+        guard let (parent, field) = path.pop() else {
+            if case .root = path.root { root = value }
+            return
+        }
+        guard case .uuid(let uuid) = parent.node(in: gid, root: root) else { return }
         assert(document.data[uuid] != nil, "Attempted to modify non-document entity")
         commit(entity: uuid, label: field, value: value)
     }

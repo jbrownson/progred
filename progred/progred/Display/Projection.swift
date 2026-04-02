@@ -10,9 +10,10 @@ struct ProjectionContext {
     let focus: Path?
     let ancestors: Set<Id>
     let readOnly: Bool
+    let commit: Commit?
     private let schema: Schema
 
-    init(entity: Id?, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>, readOnly: Bool = false) {
+    init(entity: Id?, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>, readOnly: Bool = false, commit: Commit? = nil) {
         self.entity = entity
         self.path = path
         self.gid = gid
@@ -21,6 +22,7 @@ struct ProjectionContext {
         self.focus = focus
         self.ancestors = ancestors
         self.readOnly = readOnly
+        self.commit = commit
     }
 
     var isCycle: Bool {
@@ -93,7 +95,8 @@ struct ProjectionContext {
 
     func with(entity: Id?, path: Path, readOnly: Bool) -> ProjectionContext {
         ProjectionContext(entity: entity, path: path, gid: gid, schema: schema,
-            editor: editor, focus: focus, ancestors: ancestors, readOnly: readOnly)
+            editor: editor, focus: focus, ancestors: ancestors, readOnly: readOnly,
+            commit: commit)
     }
 
     func descend(_ field: Id, render: Render? = nil) -> D {
@@ -103,15 +106,16 @@ struct ProjectionContext {
         let childInCycle = value.map { childAncestors.contains($0) } ?? false
         let childReadOnly = readOnly
             || (value.flatMap { gid.edges(entity: $0)?.readOnly } ?? false)
+        let commit: Commit? = readOnly ? nil : { editor, id in
+            editor.commit(path: childPath, value: id)
+        }
         let childCtx = ProjectionContext(
             entity: value, path: childPath, gid: gid, schema: schema,
             editor: editor, focus: focus,
             ancestors: childAncestors,
-            readOnly: childReadOnly)
+            readOnly: childReadOnly,
+            commit: commit)
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
-        let commit: Commit? = readOnly ? nil : { editor, id in
-            editor.commit(path: childPath, value: id)
-        }
         return .descend(Descend(
             path: childPath,
             readOnly: childReadOnly,

@@ -29,6 +29,7 @@ indirect enum D {
 
     // MARK: - Interactive
     case placeholder
+    case insertionPoint((Editor, Id) -> Void)
     case stringEditor(String)
     case numberEditor(Double)
 }

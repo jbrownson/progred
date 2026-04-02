@@ -26,7 +26,7 @@ func namedEntities(editor: Editor) -> [Id: NamedEntity] {
         uniquingKeysWith: { _, latest in latest })
 }
 
-private func dataEntries(_ named: [NamedEntity], editor: Editor, commit: @escaping Commit) -> [PlaceholderEntry] {
+private func dataEntries(_ named: [NamedEntity], editor: Editor, commit: @escaping (Editor, Id) -> Void) -> [PlaceholderEntry] {
     named.map { entity in
         PlaceholderEntry(
             display: entity.name,
@@ -37,7 +37,7 @@ private func dataEntries(_ named: [NamedEntity], editor: Editor, commit: @escapi
     }
 }
 
-private func newEntries(_ named: [NamedEntity], schema: Schema, commit: @escaping Commit) -> [PlaceholderEntry] {
+private func newEntries(_ named: [NamedEntity], schema: Schema, commit: @escaping (Editor, Id) -> Void) -> [PlaceholderEntry] {
     named.compactMap { entity in
         guard entity.record == schema.recordRecord || entity.record == schema.sumRecord else { return nil }
         return PlaceholderEntry(
@@ -53,7 +53,7 @@ private func newEntries(_ named: [NamedEntity], schema: Schema, commit: @escapin
     }
 }
 
-private func magicEntries(needle: String, commit: @escaping Commit) -> [PlaceholderEntry] {
+private func magicEntries(needle: String, commit: @escaping (Editor, Id) -> Void) -> [PlaceholderEntry] {
     [
         Double(needle).map { n in
             PlaceholderEntry(display: needle, disambiguation: nil,
@@ -64,7 +64,7 @@ private func magicEntries(needle: String, commit: @escaping Commit) -> [Placehol
     ].compactMap { $0 }
 }
 
-func buildEntries(editor: Editor, commit: @escaping Commit, needle: String) -> [PlaceholderEntry] {
+func buildEntries(editor: Editor, commit: @escaping (Editor, Id) -> Void, needle: String) -> [PlaceholderEntry] {
     let named = namedEntities(editor: editor).values
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     return dataEntries(named, editor: editor, commit: commit)

@@ -12,7 +12,7 @@ class DCollapse: FlippedView, Reconcilable {
     let collapseButton: CollapseButton
     var header: NSView
     var body: BodyState
-    var editor: Editor
+    let editor: Editor
     var parentReadOnly: Bool
     var inCycle: Bool
 
@@ -74,7 +74,6 @@ class DCollapse: FlippedView, Reconcilable {
 
     func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .collapse(_, let header, let body) = d else { return false }
-        self.editor = editor
         self.parentReadOnly = parentReadOnly
         self.inCycle = inCycle
 

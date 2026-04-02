@@ -84,16 +84,21 @@ private func fuzzyMatch(_ needle: String, _ haystack: String) -> [Match]? {
 // MARK: - Default filter
 
 func searchEntries(_ entries: [PlaceholderEntry], needle: String) -> [SearchResult] {
+    let results: [SearchResult]
     if needle.isEmpty {
-        return entries.map { SearchResult(entry: $0, matches: []) }
+        results = entries.map { SearchResult(entry: $0, matches: []) }
+    } else {
+        let pipeline = orFilters([
+            sortedFilter(predicateFilter(prefixMatch)),
+            sortedFilter(predicateFilter(substringMatch)),
+            caseInsensitive(prefixMatch),
+            caseInsensitive(substringMatch),
+            sortedFilter(predicateFilter(fuzzyMatch)),
+            caseInsensitive(fuzzyMatch),
+        ])
+        results = pipeline(entries, needle).accepted
     }
-    let pipeline = orFilters([
-        sortedFilter(predicateFilter(prefixMatch)),
-        sortedFilter(predicateFilter(substringMatch)),
-        caseInsensitive(prefixMatch),
-        caseInsensitive(substringMatch),
-        sortedFilter(predicateFilter(fuzzyMatch)),
-        caseInsensitive(fuzzyMatch),
-    ])
-    return pipeline(entries, needle).accepted
+    return results.sorted {
+        ($0.entry.matching ? 1 : 0, $0.entry.magic ? 0 : 1) > ($1.entry.matching ? 1 : 0, $1.entry.magic ? 0 : 1)
+    }
 }

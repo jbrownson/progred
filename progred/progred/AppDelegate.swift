@@ -46,17 +46,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func rebuild() {
         withObservationTracking {
+            let rootCommit: Commit = { editor, id in editor.root = id }
             let body: D = editor.root.map { root in
                 let ctx = ProjectionContext(
                     entity: root, path: .root(), gid: editor.gid,
-                    schema: editor.schema, editor: editor, focus: nil, ancestors: [])
+                    schema: editor.schema, editor: editor, focus: nil, ancestors: [],
+                    commit: rootCommit)
                 return project(ctx)
             } ?? .placeholder
             let d: D = .descend(Descend(
                 path: .root(),
                 readOnly: false,
                 inCycle: false,
-                commit: { editor, id in editor.root = id },
+                commit: rootCommit,
                 body: body))
             rootView.rebuild(d)
         } onChange: { [weak self] in
