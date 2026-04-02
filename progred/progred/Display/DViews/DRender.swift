@@ -5,24 +5,27 @@ private let spacing: CGFloat = 4
 
 class DRootView: FlippedView {
     let editor: Editor
+    private let insertionOverlay = InsertionOverlay()
 
     init(editor: Editor) {
         self.editor = editor
         super.init(frame: .zero)
+        addSubview(insertionOverlay)
+        insertionOverlay.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            insertionOverlay.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            insertionOverlay.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+        ])
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     func rebuild(_ d: D) {
-        let resolved = reconcileChild(subviews.first, d, editor: editor)
-        if resolved !== subviews.first {
-            subviews.forEach { $0.removeFromSuperview() }
-            addSubview(resolved)
-            resolved.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                resolved.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-                resolved.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            ])
+        let resolved = reconcileChild(insertionOverlay.subviews.first, d, editor: editor)
+        if resolved !== insertionOverlay.subviews.first {
+            insertionOverlay.subviews.forEach { $0.removeFromSuperview() }
+            insertionOverlay.addSubview(resolved)
+            constrain(resolved, toFill: insertionOverlay)
         }
     }
 
@@ -30,10 +33,9 @@ class DRootView: FlippedView {
         super.layout()
         guard let clipView = superview as? NSClipView else { return }
         let visible = clipView.bounds.size
-        let needed = subviews.reduce(CGSize.zero) { size, sub in
-            CGSize(width: max(size.width, sub.frame.maxX + 8),
-                   height: max(size.height, sub.frame.maxY + 8))
-        }
+        let needed = CGSize(
+            width: insertionOverlay.frame.maxX + 8,
+            height: insertionOverlay.frame.maxY + 8)
         frame.size = NSSize(
             width: max(visible.width, needed.width),
             height: max(visible.height, needed.height))
