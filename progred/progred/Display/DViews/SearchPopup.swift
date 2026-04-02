@@ -62,7 +62,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         tableView.dataSource = self
         tableView.delegate = self
         tableView.target = self
-        tableView.doubleAction = #selector(tableViewDoubleClick)
+        tableView.action = #selector(tableViewClick)
 
         addSubview(searchField)
         constrain(searchField, toFill: self)
@@ -126,7 +126,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         onDismiss()
     }
 
-    @objc private func tableViewDoubleClick() {
+    @objc private func tableViewClick() {
         commitSelected()
     }
 
