@@ -25,7 +25,7 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 - `ProjectionContext` + dispatch chain projects graph → D (`Display/Projection.swift`)
 - Layered projections: domain (`Display/DomainProjection.swift`) → kernel (`Display/KernelProjection.swift`) → raw
 - `Reconcilable` protocol for D → AppKit view reconciliation (`Display/DViews/Reconcilable.swift`)
-- `descend(field)` looks up an edge, projects through the dispatch chain, and wraps in `Descend` — handles missing values (placeholder via raw fallback), cycles, and readOnly
+- `descend(field)` looks up an edge, projects through the dispatch chain, and wraps in `Descend` — handles missing values (placeholder via raw fallback), cycles, and editability (`commit == nil` means read-only)
 - `renderRef` renders shallow type references (just names); full `descend` renders declarations
 - Lists (cons/empty) need custom handling — their graph structure doesn't match the editing/display structure
 
