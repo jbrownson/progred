@@ -67,7 +67,7 @@ class DPlaceholder: FlippedView, Reconcilable {
         showPill()
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
         guard case .placeholder = d else { return false }
         self.commit = commit.map { c in { editor, id in c(editor, id) } }
         return true

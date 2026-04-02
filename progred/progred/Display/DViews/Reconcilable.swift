@@ -1,14 +1,14 @@
 import AppKit
 
 protocol Reconcilable: NSView {
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool
 }
 
-func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil) -> NSView {
-    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit) {
+func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, vertical: Bool? = nil) -> NSView {
+    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit, vertical: vertical) {
         return node
     }
-    return createView(d, editor: editor, inCycle: inCycle, commit: commit)
+    return createView(d, editor: editor, inCycle: inCycle, commit: commit, vertical: vertical)
 }
 
 func reconcileList<T: AnyObject, Ts>(
@@ -27,11 +27,11 @@ func reconcileList<T: AnyObject, Ts>(
     existing.dropFirst(ts.count).forEach { remove($0) }
 }
 
-func reconcileChildren(stack: NSStackView, children: [D], editor: Editor, inCycle: Bool = false, commit: Commit? = nil) {
+func reconcileChildren(stack: NSStackView, children: [D], editor: Editor, vertical: Bool) {
     reconcileList(
         stack.arrangedSubviews,
         with: children,
-        reconcile: { reconcileChild($0, $1, editor: editor, inCycle: inCycle, commit: commit) },
+        reconcile: { reconcileChild($0, $1, editor: editor, vertical: vertical) },
         replace: { i, old, new in
             stack.removeArrangedSubview(old)
             old.removeFromSuperview()

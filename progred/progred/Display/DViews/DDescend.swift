@@ -5,9 +5,9 @@ class DDescend: FlippedView, Reconcilable {
     var childView: NSView
     let editor: Editor
 
-    init(_ descend: Descend, editor: Editor) {
+    init(_ descend: Descend, editor: Editor, vertical: Bool?) {
         self.descend = descend
-        self.childView = createView(descend.body, editor: editor, inCycle: descend.inCycle, commit: descend.commit)
+        self.childView = createView(descend.body, editor: editor, inCycle: descend.inCycle, commit: descend.commit, vertical: vertical)
         self.editor = editor
         super.init(frame: .zero)
         addSubview(childView)
@@ -16,10 +16,10 @@ class DDescend: FlippedView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
         guard case .descend(let descend) = d else { return false }
         self.descend = descend
-        let resolved = reconcileChild(childView, descend.body, editor: editor, inCycle: descend.inCycle, commit: descend.commit)
+        let resolved = reconcileChild(childView, descend.body, editor: editor, inCycle: descend.inCycle, commit: descend.commit, vertical: vertical)
         if resolved !== childView {
             childView.removeFromSuperview()
             addSubview(resolved)

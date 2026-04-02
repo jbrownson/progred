@@ -3,11 +3,8 @@ import AppKit
 private class Caret: FlippedView {
     var onMouseDown: (() -> Void)?
     var isHovered = false
+    var vertical = false
 
-    override var intrinsicContentSize: NSSize {
-        let textHeight = NSFont.systemFont(ofSize: NSFont.systemFontSize).boundingRectForFont.height
-        return NSSize(width: 8, height: ceil(textHeight))
-    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -32,11 +29,19 @@ private class Caret: FlippedView {
         guard isHovered else { return }
         let size: CGFloat = 6
         let path = NSBezierPath()
-        let midX = bounds.midX
-        let bottom = bounds.maxY
-        path.move(to: NSPoint(x: midX - size / 2, y: bottom))
-        path.line(to: NSPoint(x: midX, y: bottom - size))
-        path.line(to: NSPoint(x: midX + size / 2, y: bottom))
+        if vertical {
+            let midX = bounds.midX
+            let midY = bounds.midY
+            path.move(to: NSPoint(x: midX - size / 2, y: midY - size / 2))
+            path.line(to: NSPoint(x: midX + size / 2, y: midY))
+            path.line(to: NSPoint(x: midX - size / 2, y: midY + size / 2))
+        } else {
+            let midX = bounds.midX
+            let bottom = bounds.maxY
+            path.move(to: NSPoint(x: midX - size / 2, y: bottom))
+            path.line(to: NSPoint(x: midX, y: bottom - size))
+            path.line(to: NSPoint(x: midX + size / 2, y: bottom))
+        }
         NSColor.secondaryLabelColor.setStroke()
         path.lineWidth = 1.5
         path.stroke()
@@ -53,9 +58,10 @@ class DInsertionPoint: FlippedView, Reconcilable {
     private let caret = Caret()
     private var searchPopup: SearchPopup?
 
-    init(commit: @escaping (Editor, Id) -> Void, editor: Editor) {
+    init(vertical: Bool?, commit: @escaping (Editor, Id) -> Void, editor: Editor) {
         self.commit = commit
         self.editor = editor
+        caret.vertical = vertical ?? false
         super.init(frame: .zero)
         caret.onMouseDown = { [weak self] in self?.activate() }
         showCaret()
@@ -63,12 +69,19 @@ class DInsertionPoint: FlippedView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    private let caretOverlap: CGFloat = 8
+
     override var intrinsicContentSize: NSSize {
-        searchPopup?.intrinsicContentSize ?? caret.intrinsicContentSize
+        if let searchPopup { return searchPopup.intrinsicContentSize }
+        let textHeight = NSFont.systemFont(ofSize: NSFont.systemFontSize).boundingRectForFont.height
+        return caret.vertical
+            ? NSSize(width: caretOverlap * 2, height: caretOverlap * 2)
+            : NSSize(width: caretOverlap * 2, height: ceil(textHeight))
     }
 
     private func showCaret() {
         subviews.forEach { $0.removeFromSuperview() }
+        caret.isHovered = false
         addSubview(caret)
         constrain(caret, toFill: self)
         invalidateIntrinsicContentSize()
@@ -92,9 +105,10 @@ class DInsertionPoint: FlippedView, Reconcilable {
         showCaret()
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
         guard case .insertionPoint(let commit) = d else { return false }
         self.commit = commit
+        caret.vertical = vertical ?? false
         return true
     }
 }

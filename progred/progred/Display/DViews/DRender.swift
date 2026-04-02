@@ -54,7 +54,7 @@ class DRootView: FlippedView {
     }
 }
 
-func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil) -> NSView {
+func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, vertical: Bool? = nil) -> NSView {
     switch d {
     case .text(let text, let style): DText(text, style)
     case .space: DSpace(spacing)
@@ -62,14 +62,14 @@ func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? =
     case .block(let children): DBlock(children: children, editor: editor)
     case .line(let children): DLine(children: children, editor: editor)
     case .list(_, let elements): DList(elements: elements, editor: editor)
-    case .indent(let child): DIndent(child: child, editor: editor)
-    case .descend(let descend): DDescend(descend, editor: editor)
+    case .indent(let child): DIndent(child: child, editor: editor, vertical: vertical)
+    case .descend(let descend): DDescend(descend, editor: editor, vertical: vertical)
     case .collapse(let collapsed, let header, let body):
-        DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, inCycle: inCycle)
+        DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, inCycle: inCycle, vertical: vertical)
     case .bracketed(let open, let close, let body):
-        DBracketed(open: open, close: close, body: body, editor: editor)
+        DBracketed(open: open, close: close, body: body, editor: editor, vertical: vertical)
     case .placeholder: DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, editor: editor)
-    case .insertionPoint(let commit): DInsertionPoint(commit: commit, editor: editor)
+    case .insertionPoint(let commit): DInsertionPoint(vertical: vertical, commit: commit, editor: editor)
     case .stringEditor(let string): DStringEditor(string, editor: editor, commit: commit)
     case .numberEditor(let number): DText(String(number), .literal)
     }
