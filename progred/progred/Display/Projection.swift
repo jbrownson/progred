@@ -62,45 +62,41 @@ struct ProjectionContext {
 
     func typeParams(of entity: Id) -> [Id]? {
         guard let listId = gid.get(entity: entity, label: typeParametersField) else { return nil }
-        return listToArray(listId)?.map(\.head)
+        return conses(listId)?.cells.compactMap { gid.get(entity: $0, label: headField) }
     }
 
-    struct ListElement {
-        let cons: Id
-        let head: Id
-    }
-
-    func listToArray(_ listNode: Id) -> [ListElement]? {
-        var result: [ListElement] = []
+    func conses(_ listNode: Id) -> (cells: [Id], readOnly: Bool)? {
+        var result: [Id] = []
+        var readOnly = false
         var current = listNode
         var seen: Set<Id> = []
         while seen.insert(current).inserted {
-            let rec = gid.get(entity: current, label: recordField)
-            if rec == emptyRecord { return result }
-            guard rec == consRecord,
-                  let head = gid.get(entity: current, label: headField),
-                  let tail = gid.get(entity: current, label: tailField)
+            guard let edges = gid.edges(entity: current) else { return nil }
+            if edges[recordField] == emptyRecord { return (result, readOnly) }
+            guard edges[recordField] == consRecord,
+                  let tail = edges[tailField]
             else { return nil }
-            result.append(ListElement(cons: current, head: head))
+            if edges.readOnly { readOnly = true }
+            result.append(current)
             current = tail
         }
         return nil
     }
 
-    func with(entity: Id?, commit: Commit?) -> ProjectionContext {
+    func with(entity: Id?, ancestors: Set<Id>? = nil, commit: Commit?) -> ProjectionContext {
         ProjectionContext(entity: entity, gid: gid, schema: schema,
-            editor: editor, ancestors: ancestors,
+            editor: editor, ancestors: ancestors ?? self.ancestors,
             commit: commit)
     }
 
-    func descend(_ field: Id, render: Render? = nil) -> D {
+    func descend(_ field: Id, render: Render? = nil, commit: Commit? = nil) -> D {
         let value = get(field)
         let childAncestors = entity.map { ancestors.union([$0]) } ?? ancestors
         let childInCycle = value.map { childAncestors.contains($0) } ?? false
         let edgeReadOnly = value.flatMap { gid.edges(entity: $0)?.readOnly } ?? false
-        let childCommit: Commit? = (commit == nil || edgeReadOnly)
+        let childCommit: Commit? = (self.commit == nil || edgeReadOnly)
             ? nil
-            : entity.flatMap { parent in
+            : commit ?? entity.flatMap { parent in
                 guard case .uuid(let uuid) = parent else { return nil }
                 return { editor, id in editor.commit(entity: uuid, label: field, value: id) }
             }

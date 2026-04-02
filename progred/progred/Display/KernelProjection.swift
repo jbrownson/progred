@@ -39,37 +39,33 @@ private func renderEmptyList(open: String, close: String, list: Id, ctx: Project
 func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
     { ctx in
         guard let entity = ctx.entity,
-              let elements = ctx.listToArray(entity)
+              let (conses, consesReadOnly) = ctx.conses(entity)
         else { return nil }
 
-        if elements.isEmpty {
+        if conses.isEmpty {
             return renderEmptyList(open: open, close: close, list: entity, ctx: ctx)
         }
 
-        var items: [D] = []
-        for (i, el) in elements.enumerated() {
-            let edgeReadOnly = ctx.gid.edges(entity: el.cons)?.readOnly ?? false
-            let consCtx = ctx.with(entity: el.cons, commit: (ctx.commit == nil || edgeReadOnly) ? nil : ctx.commit)
+        let listCommit: Commit? = consesReadOnly ? nil : ctx.commit
 
-            guard case .descend(let d) = consCtx.descend(ctx.headField, render: elementRender)
-            else { continue }
-            let elementCommit: Commit? = d.commit.map { headCommit in
-                let spliceCommit: Commit = i == 0
-                    ? { editor, _ in ctx.commit?(editor, ctx.gid.get(entity: el.cons, label: ctx.tailField)) }
-                    : { editor, _ in
-                        guard case .uuid(let prevUuid) = elements[i - 1].cons,
-                              let tail = editor.gid.get(entity: el.cons, label: ctx.tailField)
-                        else { return }
-                        editor.commit(entity: prevUuid, label: ctx.tailField, value: tail)
+        let prevConses = [nil] + conses.dropLast().map(Optional.some)
+        let items = zip(conses, prevConses).map { cons, prev in
+            let elementCommit: Commit = { editor, id in
+                if let id {
+                    editor.commit(entity: cons.asUUID!, label: ctx.headField, value: id)
+                } else {
+                    let tail = editor.gid.get(entity: cons, label: ctx.tailField)
+                    if let prev {
+                        editor.commit(entity: prev.asUUID!, label: ctx.tailField, value: tail)
+                    } else {
+                        listCommit!(editor, tail) // safe: elementCommit is only reachable when listCommit is non-nil
                     }
-                return { editor, id in
-                    if let id { headCommit(editor, id) } else { spliceCommit(editor, nil) }
                 }
             }
-            items.append(.descend(Descend(
-                inCycle: d.inCycle,
-                commit: elementCommit,
-                body: d.body)))
+
+            let commit: Commit? = listCommit != nil ? elementCommit : nil
+            let consCtx = ctx.with(entity: cons, commit: commit)
+            return consCtx.descend(ctx.headField, render: elementRender, commit: commit)
         }
 
         return inline
