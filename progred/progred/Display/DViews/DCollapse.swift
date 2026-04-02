@@ -13,17 +13,15 @@ class DCollapse: FlippedView, Reconcilable {
     var header: NSView
     var body: BodyState
     let editor: Editor
-    var parentReadOnly: Bool
     var inCycle: Bool
 
-    init(collapsed: Bool, header: D, body: @escaping () -> D, editor: Editor, parentReadOnly: Bool, inCycle: Bool) {
+    init(collapsed: Bool, header: D, body: @escaping () -> D, editor: Editor, inCycle: Bool) {
         self.collapseButton = CollapseButton(collapsed: collapsed || inCycle)
         self.bodyContainer = FlippedView()
         self.body = .pending(body)
         self.editor = editor
-        self.parentReadOnly = parentReadOnly
         self.inCycle = inCycle
-        let header = createView(header, editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
+        let header = createView(header, editor: editor, inCycle: inCycle)
         self.header = header
         super.init(frame: .zero)
 
@@ -63,7 +61,7 @@ class DCollapse: FlippedView, Reconcilable {
             bodyContainer.isHidden = true
         } else {
             if case .pending(let thunk) = body {
-                let bodyView = createView(thunk(), editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
+                let bodyView = createView(thunk(), editor: editor, inCycle: inCycle)
                 bodyContainer.addSubview(bodyView)
                 constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
                 body = .rendered(bodyView)
@@ -72,12 +70,11 @@ class DCollapse: FlippedView, Reconcilable {
         }
     }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .collapse(_, let header, let body) = d else { return false }
-        self.parentReadOnly = parentReadOnly
         self.inCycle = inCycle
 
-        let resolvedHeader = reconcileChild(self.header, header, editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
+        let resolvedHeader = reconcileChild(self.header, header, editor: editor, inCycle: inCycle)
         if resolvedHeader !== self.header {
             if let headerRow = self.header.superview as? HeaderRow,
                let index = headerRow.arrangedSubviews.firstIndex(of: self.header) {
@@ -92,7 +89,7 @@ class DCollapse: FlippedView, Reconcilable {
         case .pending:
             self.body = .pending(body)
         case .rendered(let bodyView):
-            let resolved = reconcileChild(bodyView, body(), editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
+            let resolved = reconcileChild(bodyView, body(), editor: editor, inCycle: inCycle)
             if resolved !== bodyView {
                 bodyView.removeFromSuperview()
                 bodyContainer.addSubview(resolved)

@@ -56,7 +56,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } ?? .placeholder
             let d: D = .descend(Descend(
                 path: .root(),
-                readOnly: false,
                 inCycle: false,
                 commit: rootCommit,
                 body: body))

@@ -92,7 +92,7 @@ class DInsertionPoint: FlippedView, Reconcilable {
         showCaret()
     }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .insertionPoint(let commit) = d else { return false }
         self.commit = commit
         return true

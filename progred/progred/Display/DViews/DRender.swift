@@ -54,24 +54,23 @@ class DRootView: FlippedView {
     }
 }
 
-func createView(_ d: D, editor: Editor, parentReadOnly: Bool = false, inCycle: Bool = false, commit: Commit? = nil) -> NSView {
+func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil) -> NSView {
     switch d {
     case .text(let text, let style): DText(text, style)
     case .space: DSpace(spacing)
     case .identicon(let uuid): DIdenticon(uuid: uuid)
-    case .block(let children): DBlock(children: children, editor: editor, parentReadOnly: parentReadOnly)
-    case .line(let children): DLine(children: children, editor: editor, parentReadOnly: parentReadOnly)
-    case .list(_, let elements): DList(elements: elements, editor: editor, parentReadOnly: parentReadOnly)
-    case .indent(let child): DIndent(child: child, editor: editor, parentReadOnly: parentReadOnly)
-    case .descend(let descend):
-        DDescend(descend, parentReadOnly: parentReadOnly, editor: editor)
+    case .block(let children): DBlock(children: children, editor: editor)
+    case .line(let children): DLine(children: children, editor: editor)
+    case .list(_, let elements): DList(elements: elements, editor: editor)
+    case .indent(let child): DIndent(child: child, editor: editor)
+    case .descend(let descend): DDescend(descend, editor: editor)
     case .collapse(let collapsed, let header, let body):
-        DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, parentReadOnly: parentReadOnly, inCycle: inCycle)
+        DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, inCycle: inCycle)
     case .bracketed(let open, let close, let body):
-        DBracketed(open: open, close: close, body: body, editor: editor, parentReadOnly: parentReadOnly)
+        DBracketed(open: open, close: close, body: body, editor: editor)
     case .placeholder: DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, editor: editor)
     case .insertionPoint(let commit): DInsertionPoint(commit: commit, editor: editor)
-    case .stringEditor(let string): DStringEditor(string, editor: editor, readOnly: parentReadOnly, commit: commit)
+    case .stringEditor(let string): DStringEditor(string, editor: editor, commit: commit)
     case .numberEditor(let number): DText(String(number), .literal)
     }
 }

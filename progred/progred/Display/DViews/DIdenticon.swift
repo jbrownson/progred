@@ -13,7 +13,7 @@ class DIdenticon: NSView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .identicon(let uuid) = d else { return false }
         if self.uuid != uuid { self.uuid = uuid; needsDisplay = true }
         return true

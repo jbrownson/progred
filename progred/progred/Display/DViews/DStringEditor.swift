@@ -4,7 +4,7 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
     let editor: Editor
     var commit: Commit?
 
-    init(_ string: String, editor: Editor, readOnly: Bool, commit: Commit?) {
+    init(_ string: String, editor: Editor, commit: Commit?) {
         self.editor = editor
         self.commit = commit
         super.init(frame: .zero)
@@ -13,7 +13,7 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
         drawsBackground = false
         font = .systemFont(ofSize: NSFont.systemFontSize)
         textColor = TextStyle.literal.nsColor
-        isEditable = !readOnly
+        isEditable = commit != nil
         isSelectable = true
         delegate = self
         setContentHuggingPriority(.required, for: .horizontal)
@@ -31,10 +31,10 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
         commit?(editor, .string(stringValue))
     }
 
-    func reconcile(_ d: D, editor: Editor, parentReadOnly: Bool, inCycle: Bool, commit: Commit?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?) -> Bool {
         guard case .stringEditor(let s) = d else { return false }
         self.commit = commit
-        isEditable = !parentReadOnly
+        isEditable = commit != nil
         if currentEditor() == nil { stringValue = s }
         return true
     }

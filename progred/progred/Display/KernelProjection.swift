@@ -40,7 +40,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         else { return nil }
 
         if elements.isEmpty {
-            let insertCommit = ctx.readOnly ? nil : ctx.commit.map { commit in
+            let insertCommit = ctx.commit.map { commit in
                 { (editor: Editor, id: Id) in
                     let cons = UUID()
                     editor.commit(entity: cons, label: ctx.recordField, value: ctx.consRecord)
@@ -56,13 +56,13 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         var consPath = ctx.path
         var items: [D] = []
         for el in elements {
-            let consReadOnly = ctx.readOnly
-                || (ctx.gid.edges(entity: el.cons)?.readOnly ?? false)
-            let consCtx = ctx.with(entity: el.cons, path: consPath, readOnly: consReadOnly)
+            let consCommit: Commit? = (ctx.commit == nil
+                || (ctx.gid.edges(entity: el.cons)?.readOnly ?? false)) ? nil : ctx.commit
+            let consCtx = ctx.with(entity: el.cons, path: consPath, commit: consCommit)
 
             if case .descend(let d) = consCtx.descend(ctx.headField, render: elementRender) {
                 let currentConsPath = consPath
-                let elementCommit: Commit? = ctx.readOnly ? nil : { editor, id in
+                let elementCommit: Commit? = consCommit == nil ? nil : { editor, id in
                     if let id {
                         editor.commit(path: d.path, value: id)
                     } else {
@@ -71,7 +71,6 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
                 }
                 items.append(.descend(Descend(
                     path: d.path,
-                    readOnly: d.readOnly,
                     inCycle: d.inCycle,
                     commit: elementCommit,
                     body: d.body)))
@@ -79,7 +78,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
 
             let tailPath = consPath.child(ctx.tailField)
             if ctx.focus == tailPath {
-                items.append(.descend(Descend(path: tailPath, readOnly: ctx.readOnly, inCycle: false, commit: nil, body: .placeholder)))
+                items.append(.descend(Descend(path: tailPath, inCycle: false, commit: nil, body: .placeholder)))
             }
 
             consPath = consPath.child(ctx.tailField)
