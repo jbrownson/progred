@@ -73,6 +73,11 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
 
     override var intrinsicContentSize: NSSize { searchField.intrinsicContentSize }
 
+    override func layout() {
+        super.layout()
+        if popupPanel.isVisible { repositionPanel() }
+    }
+
     func focus() {
         window?.makeFirstResponder(searchField)
     }
