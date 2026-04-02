@@ -73,6 +73,6 @@ func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? =
     case .placeholder: DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, editor: editor)
     case .insertionPoint(let commit): DInsertionPoint(vertical: vertical, commit: commit, editor: editor)
     case .stringEditor(let string): DStringEditor(string, editor: editor, commit: commit)
-    case .numberEditor(let number): DText(String(number), .literal)
+    case .numberEditor(let number): DNumberEditor(number, editor: editor, commit: commit)
     }
 }
