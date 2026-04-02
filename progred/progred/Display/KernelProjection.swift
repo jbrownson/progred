@@ -22,24 +22,32 @@ func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
     return .line(parts)
 }
 
-private func renderEmptyList(open: String, close: String, list: Id, ctx: ProjectionContext) -> D {
-    let insertCommit = ctx.commit.map { commit in
-        { (editor: Editor, id: Id) in
-            let cons = UUID()
-            editor.commit(entity: cons, label: ctx.recordField, value: ctx.consRecord)
-            editor.commit(entity: cons, label: ctx.headField, value: id)
-            editor.commit(entity: cons, label: ctx.tailField, value: list)
-            commit(editor, .uuid(cons))
-        }
+private func insertionPoint(tail: Id, link: @escaping Commit, ctx: ProjectionContext) -> D {
+    .insertionPoint { editor, id in
+        let cons = UUID()
+        editor.commit(entity: cons, label: ctx.recordField, value: ctx.consRecord)
+        editor.commit(entity: cons, label: ctx.headField, value: id)
+        editor.commit(entity: cons, label: ctx.tailField, value: tail)
+        link(editor, .uuid(cons))
     }
-    let items: [D] = insertCommit.map { [.insertionPoint($0)] } ?? []
+}
+
+private func renderEmptyList(open: String, close: String, list: Id, ctx: ProjectionContext) -> D {
+    let items: [D] = ctx.commit.map { commit in
+        [insertionPoint(tail: list, link: commit, ctx: ctx)]
+    } ?? []
     return inlineBrackets(open: open, close: close, items)
+}
+
+private func mapBetween<T, U>(_ posts: [T], _ post: (T) -> U, _ panel: (T, T) -> U) -> [U] {
+    guard let first = posts.first else { return [] }
+    return [post(first)] + zip(posts, posts.dropFirst()).flatMap { [panel($0, $1), post($1)] }
 }
 
 func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
     { ctx in
         guard let entity = ctx.entity,
-              let (conses, consesReadOnly) = ctx.conses(entity)
+              let (conses, empty, consesReadOnly) = ctx.conses(entity)
         else { return nil }
 
         if conses.isEmpty {
@@ -48,8 +56,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
 
         let listCommit: Commit? = consesReadOnly ? nil : ctx.commit
 
-        let prevConses = [nil] + conses.dropLast().map(Optional.some)
-        let items = zip(conses, prevConses).map { cons, prev in
+        let projectElement = { (cons: Id, prev: Id?) -> D in
             let elementCommit: Commit = { editor, id in
                 if let id {
                     editor.commit(entity: cons.asUUID!, label: ctx.headField, value: id)
@@ -62,11 +69,24 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
                     }
                 }
             }
-
-            let commit: Commit? = listCommit != nil ? elementCommit : nil
-            let consCtx = ctx.with(entity: cons, commit: commit)
-            return consCtx.descend(ctx.headField, render: elementRender, commit: commit)
+            let consCtx = ctx.with(entity: cons, commit: listCommit != nil ? elementCommit : nil)
+            return consCtx.descend(ctx.headField, render: elementRender, commit: elementCommit)
         }
+
+        let consesWithPrev = zip(conses, [nil] + conses.dropLast().map(Optional.some))
+            .map { ($0, $1) }
+
+        let linkCommit = { (prev: Id) -> Commit in
+            { editor, id in editor.commit(entity: prev.asUUID!, label: ctx.tailField, value: id) }
+        }
+
+        let items: [D] = listCommit.map { listCommit in
+            [insertionPoint(tail: conses[0], link: listCommit, ctx: ctx)]
+                + mapBetween(consesWithPrev,
+                    { projectElement($0.0, $0.1) },
+                    { insertionPoint(tail: $1.0, link: linkCommit($0.0), ctx: ctx) })
+                + [insertionPoint(tail: empty, link: linkCommit(conses.last!), ctx: ctx)]
+        } ?? consesWithPrev.map { projectElement($0.0, $0.1) }
 
         return inline
             ? inlineBrackets(open: open, close: close, items)

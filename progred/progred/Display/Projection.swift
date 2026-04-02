@@ -65,14 +65,14 @@ struct ProjectionContext {
         return conses(listId)?.cells.compactMap { gid.get(entity: $0, label: headField) }
     }
 
-    func conses(_ listNode: Id) -> (cells: [Id], readOnly: Bool)? {
+    func conses(_ listNode: Id) -> (cells: [Id], empty: Id, readOnly: Bool)? {
         var result: [Id] = []
         var readOnly = false
         var current = listNode
         var seen: Set<Id> = []
         while seen.insert(current).inserted {
             guard let edges = gid.edges(entity: current) else { return nil }
-            if edges[recordField] == emptyRecord { return (result, readOnly) }
+            if edges[recordField] == emptyRecord { return (result, current, readOnly) }
             guard edges[recordField] == consRecord,
                   let tail = edges[tailField]
             else { return nil }
