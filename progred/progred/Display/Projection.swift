@@ -4,21 +4,17 @@ typealias Render = (ProjectionContext) -> D?
 
 struct ProjectionContext {
     let entity: Id?
-    let path: Path
     let gid: any Gid
     let editor: Editor?
-    let focus: Path?
     let ancestors: Set<Id>
     let commit: Commit?
     private let schema: Schema
 
-    init(entity: Id?, path: Path, gid: any Gid, schema: Schema, editor: Editor?, focus: Path?, ancestors: Set<Id>, commit: Commit? = nil) {
+    init(entity: Id?, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>, commit: Commit? = nil) {
         self.entity = entity
-        self.path = path
         self.gid = gid
         self.schema = schema
         self.editor = editor
-        self.focus = focus
         self.ancestors = ancestors
         self.commit = commit
     }
@@ -91,36 +87,36 @@ struct ProjectionContext {
         return nil
     }
 
-    func with(entity: Id?, path: Path, commit: Commit?) -> ProjectionContext {
-        ProjectionContext(entity: entity, path: path, gid: gid, schema: schema,
-            editor: editor, focus: focus, ancestors: ancestors,
+    func with(entity: Id?, commit: Commit?) -> ProjectionContext {
+        ProjectionContext(entity: entity, gid: gid, schema: schema,
+            editor: editor, ancestors: ancestors,
             commit: commit)
     }
 
     func descend(_ field: Id, render: Render? = nil) -> D {
-        let childPath = path.child(field)
         let value = get(field)
         let childAncestors = entity.map { ancestors.union([$0]) } ?? ancestors
         let childInCycle = value.map { childAncestors.contains($0) } ?? false
         let edgeReadOnly = value.flatMap { gid.edges(entity: $0)?.readOnly } ?? false
-        let childCommit: Commit? = (commit == nil || edgeReadOnly) ? nil : { editor, id in
-            editor.commit(path: childPath, value: id)
-        }
+        let childCommit: Commit? = (commit == nil || edgeReadOnly)
+            ? nil
+            : entity.flatMap { parent in
+                guard case .uuid(let uuid) = parent else { return nil }
+                return { editor, id in editor.commit(entity: uuid, label: field, value: id) }
+            }
         let childCtx = ProjectionContext(
-            entity: value, path: childPath, gid: gid, schema: schema,
-            editor: editor, focus: focus,
-            ancestors: childAncestors,
+            entity: value, gid: gid, schema: schema,
+            editor: editor, ancestors: childAncestors,
             commit: childCommit)
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         return .descend(Descend(
-            path: childPath,
             inCycle: childInCycle,
             commit: childCommit,
             body: d))
     }
 
     func project(_ id: Id, render: Render? = nil) -> D {
-        let ctx = ProjectionContext(entity: id, path: path, gid: gid, schema: schema, editor: editor, focus: focus, ancestors: ancestors)
+        let ctx = ProjectionContext(entity: id, gid: gid, schema: schema, editor: editor, ancestors: ancestors)
         return render.flatMap({ $0(ctx) }) ?? progred.project(ctx)
     }
 

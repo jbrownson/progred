@@ -26,17 +26,7 @@ class Editor {
         document.commit(entity: entity, label: label, value: value)
     }
 
-    func commit(path: Path, value: Id?) {
-        guard let (parent, field) = path.pop() else {
-            if case .root = path.root { root = value }
-            return
-        }
-        guard case .uuid(let uuid) = parent.node(in: gid, root: root) else { return }
-        assert(document.data[uuid] != nil, "Attempted to modify non-document entity")
-        commit(entity: uuid, label: field, value: value)
-    }
-
-    static func withSampleDocument() -> Editor {
+static func withSampleDocument() -> Editor {
         let schema = Schema.bootstrap()
         let editor = Editor(schema: schema)
 

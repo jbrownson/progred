@@ -3,7 +3,6 @@ import Foundation
 typealias Commit = (Editor, Id?) -> Void
 
 struct Descend {
-    let path: Path
     let inCycle: Bool
     let commit: Commit?
     let body: D

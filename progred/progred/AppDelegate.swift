@@ -49,13 +49,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let rootCommit: Commit = { editor, id in editor.root = id }
             let body: D = editor.root.map { root in
                 let ctx = ProjectionContext(
-                    entity: root, path: .root(), gid: editor.gid,
-                    schema: editor.schema, editor: editor, focus: nil, ancestors: [],
+                    entity: root, gid: editor.gid,
+                    schema: editor.schema, editor: editor, ancestors: [],
                     commit: rootCommit)
                 return project(ctx)
             } ?? .placeholder
             let d: D = .descend(Descend(
-                path: .root(),
                 inCycle: false,
                 commit: rootCommit,
                 body: body))

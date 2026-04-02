@@ -1,13 +1,5 @@
 import Foundation
 
-func spliceCons(cons: Id, consPath: Path, editor: Editor) {
-    guard let tail = editor.gid.get(entity: cons, label: editor.schema.tailField),
-          let (parentPath, edgeLabel) = consPath.pop(),
-          case .uuid(let parentUuid) = parentPath.node(in: editor.gid, root: editor.root)
-    else { assertionFailure("spliceCons: failed to resolve \(consPath)"); return }
-    editor.commit(entity: parentUuid, label: edgeLabel, value: tail)
-}
-
 func kernelHeader(ctx: ProjectionContext) -> D {
     let parts: [D] = [
         ctx.record().map { ctx.name(of: $0).map { .text($0, .typeRef) } ?? .placeholder },
@@ -54,35 +46,30 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
             return renderEmptyList(open: open, close: close, list: entity, ctx: ctx)
         }
 
-        var consPath = ctx.path
         var items: [D] = []
-        for el in elements {
-            let consCommit: Commit? = (ctx.commit == nil
-                || (ctx.gid.edges(entity: el.cons)?.readOnly ?? false)) ? nil : ctx.commit
-            let consCtx = ctx.with(entity: el.cons, path: consPath, commit: consCommit)
+        for (i, el) in elements.enumerated() {
+            let edgeReadOnly = ctx.gid.edges(entity: el.cons)?.readOnly ?? false
+            let consCtx = ctx.with(entity: el.cons, commit: (ctx.commit == nil || edgeReadOnly) ? nil : ctx.commit)
 
             guard case .descend(let d) = consCtx.descend(ctx.headField, render: elementRender)
             else { continue }
-            let currentConsPath = consPath
-            let elementCommit: Commit? = consCommit == nil ? nil : { editor, id in
-                if let id {
-                    editor.commit(path: d.path, value: id)
-                } else {
-                    spliceCons(cons: el.cons, consPath: currentConsPath, editor: editor)
+            let elementCommit: Commit? = d.commit.map { headCommit in
+                let spliceCommit: Commit = i == 0
+                    ? { editor, _ in ctx.commit?(editor, ctx.gid.get(entity: el.cons, label: ctx.tailField)) }
+                    : { editor, _ in
+                        guard case .uuid(let prevUuid) = elements[i - 1].cons,
+                              let tail = editor.gid.get(entity: el.cons, label: ctx.tailField)
+                        else { return }
+                        editor.commit(entity: prevUuid, label: ctx.tailField, value: tail)
+                    }
+                return { editor, id in
+                    if let id { headCommit(editor, id) } else { spliceCommit(editor, nil) }
                 }
             }
             items.append(.descend(Descend(
-                path: d.path,
                 inCycle: d.inCycle,
                 commit: elementCommit,
                 body: d.body)))
-
-            let tailPath = consPath.child(ctx.tailField)
-            if ctx.focus == tailPath {
-                items.append(.descend(Descend(path: tailPath, inCycle: false, commit: nil, body: .placeholder)))
-            }
-
-            consPath = consPath.child(ctx.tailField)
         }
 
         return inline
