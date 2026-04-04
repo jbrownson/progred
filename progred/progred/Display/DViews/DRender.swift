@@ -20,6 +20,19 @@ class DRootView: FlippedView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        guard let clipView = superview as? NSClipView else { return }
+        clipView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(clipViewFrameChanged),
+            name: NSView.frameDidChangeNotification, object: clipView)
+    }
+
+    @objc private func clipViewFrameChanged(_ notification: Notification) {
+        needsLayout = true
+    }
+
     func rebuild(_ d: D) {
         let resolved = reconcileChild(insertionOverlay.subviews.first, d, editor: editor)
         if resolved !== insertionOverlay.subviews.first {
