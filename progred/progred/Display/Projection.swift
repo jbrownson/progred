@@ -94,7 +94,7 @@ struct ProjectionContext {
         let childAncestors = entity.map { ancestors.union([$0]) } ?? ancestors
         let childInCycle = value.map { childAncestors.contains($0) } ?? false
         let edgeReadOnly = value.flatMap { gid.edges(entity: $0)?.readOnly } ?? false
-        let childCommit: Commit? = (self.commit == nil || edgeReadOnly)
+        let edgeCommit: Commit? = self.commit == nil
             ? nil
             : commit ?? entity.flatMap { parent in
                 guard case .uuid(let uuid) = parent else { return nil }
@@ -103,11 +103,11 @@ struct ProjectionContext {
         let childCtx = ProjectionContext(
             entity: value, gid: gid, schema: schema,
             editor: editor, ancestors: childAncestors,
-            commit: childCommit)
+            commit: edgeReadOnly ? nil : edgeCommit)
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         return .descend(Descend(
             inCycle: childInCycle,
-            commit: childCommit,
+            commit: edgeCommit,
             body: d))
     }
 
@@ -124,6 +124,14 @@ struct ProjectionContext {
 
 // MARK: - Dispatch
 
+private let projectPrimitive: Render = { ctx in
+    guard let entity = ctx.entity else { return nil }
+    switch entity {
+    case .string, .number: return rawHeader(entity)
+    case .uuid: return nil
+    }
+}
+
 private let renders: [Render] = [
     // MARK: Domain
     projectTypeParameter,
@@ -134,6 +142,7 @@ private let renders: [Render] = [
 
     // MARK: Kernel
     renderList(),
+    projectPrimitive,
     projectKernel,
 ]
 

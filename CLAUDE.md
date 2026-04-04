@@ -32,6 +32,7 @@ Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache
 ## Key Design Rules
 
 - **Documents are pure graph structure** — No semantic interpretation baked in. The graph is a dumb substrate.
+- **All ids are eternal nodes** — Primitive ids (strings, numbers) are not created or destroyed; they simply exist in the universe. Editing a string field doesn't mutate a string node — it repoints the parent's edge at a different string id. `readOnly` on a node means its edges can't be mutated, but the parent's edge pointing *to* it can still be replaced (`descend` separates `edgeCommit` from child context commit).
 - **Resilient to invalid graph states** — The graph can contain anything. Projections specify the happy path but must fall through gracefully. `descend` handles missing edges (placeholder) and unexpected values (default rendering) automatically. Never assume what's at an edge; make the good case easy but don't crash or hide data on the bad case.
 - **Dispatch on record type, not edge presence** — Check `ctx.record() == schema.someRecord`, not "has fields edge therefore is a record." Duck typing breaks when unrelated nodes share edge labels.
 - **`record` edge is the value head** — Every value node's schema head is determined by its `record` edge (kernel convention). This replaces `isa` from the Rust prototype.
