@@ -41,23 +41,23 @@ struct Schema {
 
     // MARK: - Graph queries
 
-    func name(of entity: Id) -> String? {
+    func name(of entity: Id, gid: any Gid) -> String? {
         switch gid.get(entity: entity, label: nameField) {
         case .string(let s): s
         default: nil
         }
     }
 
-    func record(of entity: Id) -> Id? {
+    func record(of entity: Id, gid: any Gid) -> Id? {
         gid.get(entity: entity, label: recordField)
     }
 
-    func listToArray(_ listNode: Id) -> [Id]? {
+    func listToArray(_ listNode: Id, gid: any Gid) -> [Id]? {
         var result: [Id] = []
         var current = listNode
         var seen: Set<Id> = []
         while seen.insert(current).inserted {
-            let rec = record(of: current)
+            let rec = gid.get(entity: current, label: recordField)
             if rec == emptyRecord {
                 return result
             }
@@ -71,19 +71,19 @@ struct Schema {
         return nil
     }
 
-    func fields(of entity: Id) -> [Id]? {
+    func fields(of entity: Id, gid: any Gid) -> [Id]? {
         guard let listId = gid.get(entity: entity, label: fieldsField) else { return nil }
-        return listToArray(listId)
+        return listToArray(listId, gid: gid)
     }
 
-    func typeParams(of entity: Id) -> [Id]? {
+    func typeParams(of entity: Id, gid: any Gid) -> [Id]? {
         guard let listId = gid.get(entity: entity, label: typeParametersField) else { return nil }
-        return listToArray(listId)
+        return listToArray(listId, gid: gid)
     }
 
-    func summands(of entity: Id) -> [Id]? {
+    func summands(of entity: Id, gid: any Gid) -> [Id]? {
         guard let listId = gid.get(entity: entity, label: summandsField) else { return nil }
-        return listToArray(listId)
+        return listToArray(listId, gid: gid)
     }
 
     // MARK: - Bootstrap

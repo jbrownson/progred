@@ -14,8 +14,13 @@ class Editor {
         self.root = schema.library
     }
 
-    var gid: StackedGid<MutGid, ImmGid> {
-        StackedGid(top: document, bottom: schema.gid)
+    var gid: StackedGid<StackedGid<MutGid, ImmGid>, PrimitiveGid> {
+        StackedGid(
+            top: StackedGid(top: document, bottom: schema.gid),
+            bottom: PrimitiveGid(
+                recordField: schema.recordField,
+                stringRecord: schema.stringRecord,
+                numberRecord: schema.numberRecord))
     }
 
     func name(of entity: Id) -> String? {

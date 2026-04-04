@@ -18,6 +18,20 @@ extension Gid {
     }
 }
 
+struct PrimitiveGid: Gid {
+    let recordField: Id
+    let stringRecord: Id
+    let numberRecord: Id
+
+    func edges(entity: Id) -> Edges? {
+        switch entity {
+        case .string: Edges(data: [recordField: stringRecord], readOnly: true)
+        case .number: Edges(data: [recordField: numberRecord], readOnly: true)
+        case .uuid: nil
+        }
+    }
+}
+
 struct StackedGid<Top: Gid, Bottom: Gid>: Gid {
     let top: Top
     let bottom: Bottom

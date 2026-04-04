@@ -39,7 +39,7 @@ private func dataEntries(_ named: [NamedEntity], editor: Editor, commit: @escapi
 
 private func newEntries(_ named: [NamedEntity], schema: Schema, commit: @escaping (Editor, Id) -> Void) -> [PlaceholderEntry] {
     named.compactMap { entity in
-        guard entity.record == schema.recordRecord || entity.record == schema.sumRecord else { return nil }
+        guard entity.record == schema.recordRecord else { return nil }
         return PlaceholderEntry(
             display: "new \(entity.name)",
             disambiguation: nil,
