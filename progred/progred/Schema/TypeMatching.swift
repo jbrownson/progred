@@ -10,21 +10,44 @@ func matches(_ value: Id, _ type: Id, _ substitution: Substitution,
 
 func admits(_ record: Id, _ type: Id, _ substitution: Substitution,
             gid: any Gid, schema: Schema) -> Bool? {
+    admitsImpl(record, type, substitution, gid: gid, schema: schema)
+}
+
+// MARK: -
+
+private struct IdPair: Hashable {
+    let value: Id, type: Id
+}
+
+private func resolveParam(_ type: Id, _ substitution: Substitution,
+                           gid: any Gid, schema: Schema) -> Id? {
+    var current = type
+    var seen = Set<Id>()
+    while gid.get(entity: current, label: schema.recordField) == schema.typeParameterRecord {
+        guard seen.insert(current).inserted, let resolved = substitution[current] else { return nil }
+        current = resolved
+    }
+    return current
+}
+
+private func admitsImpl(_ record: Id, _ type: Id, _ substitution: Substitution,
+                         gid: any Gid, schema: Schema) -> Bool? {
     switch gid.get(entity: type, label: schema.recordField) {
     case schema.typeParameterRecord:
-        guard let resolved = substitution[type] else { return nil }
-        return admits(record, resolved, substitution, gid: gid, schema: schema)
+        guard let resolved = resolveParam(type, substitution, gid: gid, schema: schema)
+        else { return nil }
+        return admitsImpl(record, resolved, substitution, gid: gid, schema: schema)
 
     case schema.applyRecord:
         guard let tf = gid.get(entity: type, label: schema.typeFunctionField),
               let extended = bindTypeArgs(type, tf, substitution, gid: gid, schema: schema)
         else { return nil }
-        return admits(record, tf, extended, gid: gid, schema: schema)
+        return admitsImpl(record, tf, extended, gid: gid, schema: schema)
 
     case schema.sumRecord:
         guard let sums = schema.summands(of: type, gid: gid) else { return nil }
         for summand in sums {
-            guard let result = admits(record, summand, substitution, gid: gid, schema: schema)
+            guard let result = admitsImpl(record, summand, substitution, gid: gid, schema: schema)
             else { return nil }
             if result { return true }
         }
@@ -38,17 +61,12 @@ func admits(_ record: Id, _ type: Id, _ substitution: Substitution,
     }
 }
 
-// MARK: -
-
-private struct IdPair: Hashable {
-    let value: Id, type: Id
-}
-
 private func matchesImpl(_ value: Id, _ type: Id, _ substitution: Substitution,
                          gid: any Gid, schema: Schema, visited: inout Set<IdPair>) -> Bool? {
     switch gid.get(entity: type, label: schema.recordField) {
     case schema.typeParameterRecord:
-        guard let resolved = substitution[type] else { return nil }
+        guard let resolved = resolveParam(type, substitution, gid: gid, schema: schema)
+        else { return nil }
         return matchesImpl(value, resolved, substitution, gid: gid, schema: schema, visited: &visited)
 
     case schema.applyRecord:

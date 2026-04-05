@@ -154,6 +154,70 @@ private func ctx(_ entity: Id?, _ s: Schema, substitution: Substitution = [:]) -
     #expect(descend.expectedType == tailTypeExpr)
 }
 
+@Test func admitsNeedsOuterSubstitution() throws {
+    let s = Schema.bootstrap()
+    var doc = MutGid()
+
+    // Build: Sum Optional<T> { summands: [T, Empty] }
+    let optT = UUID()
+    doc.set(entity: optT, label: s.recordField, value: s.typeParameterRecord)
+    doc.set(entity: optT, label: s.nameField, value: .string("T"))
+
+    let emptyList = UUID()
+    doc.set(entity: emptyList, label: s.recordField, value: s.emptyRecord)
+    let optTCons = UUID()
+    doc.set(entity: optTCons, label: s.recordField, value: s.consRecord)
+    doc.set(entity: optTCons, label: s.headField, value: .uuid(optT))
+    doc.set(entity: optTCons, label: s.tailField, value: .uuid(emptyList))
+    let summandsList = UUID()
+    doc.set(entity: summandsList, label: s.recordField, value: s.consRecord)
+    doc.set(entity: summandsList, label: s.headField, value: s.emptyRecord)
+    doc.set(entity: summandsList, label: s.tailField, value: .uuid(optTCons))
+
+    let optSum = UUID()
+    doc.set(entity: optSum, label: s.recordField, value: s.sumRecord)
+    doc.set(entity: optSum, label: s.nameField, value: .string("Optional"))
+    let tpList = UUID()
+    doc.set(entity: tpList, label: s.recordField, value: s.consRecord)
+    doc.set(entity: tpList, label: s.headField, value: .uuid(optT))
+    let tpEmpty = UUID()
+    doc.set(entity: tpEmpty, label: s.recordField, value: s.emptyRecord)
+    doc.set(entity: tpList, label: s.tailField, value: .uuid(tpEmpty))
+    doc.set(entity: optSum, label: s.typeParametersField, value: .uuid(tpList))
+    doc.set(entity: optSum, label: s.summandsField, value: .uuid(summandsList))
+
+    // Build: Apply Optional<Field> — fully applied, T → fieldRecord
+    let optField = UUID()
+    doc.set(entity: optField, label: s.recordField, value: s.applyRecord)
+    doc.set(entity: optField, label: s.typeFunctionField, value: .uuid(optSum))
+    doc.set(entity: optField, label: .uuid(optT), value: s.fieldRecord)
+
+    let g = StackedGid(top: doc, bottom: gid(s))
+
+    // Fully applied: Field is admitted (T summand resolves to Field)
+    #expect(admits(s.fieldRecord, .uuid(optField), [:], gid: g, schema: s) == true)
+    // Empty is also admitted (direct summand)
+    #expect(admits(s.emptyRecord, .uuid(optField), [:], gid: g, schema: s) == true)
+    // Record is not admitted
+    #expect(admits(s.recordRecord, .uuid(optField), [:], gid: g, schema: s) == false)
+
+    // Now build: Apply Optional<T> — argument is a TypeParameter, needs outer substitution
+    let optOuterT = UUID()
+    doc.set(entity: optOuterT, label: s.recordField, value: s.applyRecord)
+    doc.set(entity: optOuterT, label: s.typeFunctionField, value: .uuid(optSum))
+    doc.set(entity: optOuterT, label: .uuid(optT), value: .uuid(optT))  // T → T (self-referential)
+
+    let g2 = StackedGid(top: doc, bottom: gid(s))
+
+    // Without outer substitution: T → T is self-referential, returns nil (unresolvable)
+    #expect(admits(s.fieldRecord, .uuid(optOuterT), [:], gid: g2, schema: s) == nil)
+    // Empty still matches (direct summand, doesn't need T)
+    #expect(admits(s.emptyRecord, .uuid(optOuterT), [:], gid: g2, schema: s) == true)
+
+    // WITH the outer substitution: T → Field, Field is admitted
+    #expect(admits(s.fieldRecord, .uuid(optOuterT), [.uuid(optT): s.fieldRecord], gid: g2, schema: s) == true)
+}
+
 @Test func schemaSelfDescribes() {
     let s = Schema.bootstrap()
     let g = gid(s)
