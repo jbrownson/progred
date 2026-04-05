@@ -86,6 +86,74 @@ private func gid(_ s: Schema) -> some Gid {
     #expect(admits(s.stringRecord, s.listT, [:], gid: g, schema: s) == nil)
 }
 
+// MARK: - Substitution flow
+
+private func ctx(_ entity: Id?, _ s: Schema, substitution: Substitution = [:]) -> ProjectionContext {
+    let g = gid(s)
+    return ProjectionContext(entity: entity, gid: g, schema: s, editor: nil, ancestors: [],
+                             substitution: substitution)
+}
+
+@Test func resolveConcreteFieldType() {
+    let s = Schema.bootstrap()
+    // nameField's typeExpression is stringRecord (concrete)
+    let c = ctx(s.nameField, s, substitution: [:])
+    #expect(c.resolveExpectedType(for: s.nameField) == s.stringRecord)
+}
+
+@Test func resolveTypeParameterThroughSubstitution() {
+    let s = Schema.bootstrap()
+    // headField's typeExpression is listT (a TypeParameter)
+    // With T→fieldRecord in substitution, should resolve to fieldRecord
+    let c = ctx(nil, s, substitution: [s.listT: s.fieldRecord])
+    #expect(c.resolveExpectedType(for: s.headField) == s.fieldRecord)
+}
+
+@Test func resolveTypeParameterUnbound() {
+    let s = Schema.bootstrap()
+    // headField's typeExpression is listT, no substitution → nil
+    let c = ctx(nil, s)
+    #expect(c.resolveExpectedType(for: s.headField) == nil)
+}
+
+@Test func descendApplyExtendsSubstitution() throws {
+    let s = Schema.bootstrap()
+    // recordRecord has fieldsField → a cons list. fieldsField's type is List<Field> (Apply).
+    // Descending should extend substitution with T→fieldRecord.
+    // The first cons's headField should then resolve T→fieldRecord.
+    let c = ctx(s.recordRecord, s)
+    let d = c.descend(s.fieldsField)
+    // The Descend's expectedType is the Apply node (List<Field>)
+    guard case .descend(let outer) = d else { Issue.record("Expected descend"); return }
+    let listOfField = try #require(gid(s).get(entity: s.fieldsField, label: s.typeExpressionField))
+    #expect(outer.expectedType == listOfField)
+
+    // Now project the first cons — descend into its headField should give expectedType = fieldRecord
+    let fieldsList = try #require(gid(s).get(entity: s.recordRecord, label: s.fieldsField))
+    let firstCons = try #require(gid(s).get(entity: fieldsList, label: s.headField))
+    // Simulate being inside the list with T→fieldRecord substitution
+    let consCtx = ctx(fieldsList, s, substitution: [s.listT: s.fieldRecord])
+    let headD = consCtx.descend(s.headField)
+    guard case .descend(let inner) = headD else { Issue.record("Expected descend"); return }
+    #expect(inner.expectedType == s.fieldRecord)
+    // The head value (nameField) should be rendered, and it IS a Field
+    #expect(firstCons == s.nameField)
+}
+
+@Test func descendTailPreservesSubstitution() throws {
+    let s = Schema.bootstrap()
+    // Inside a cons with T→fieldRecord, descending into tailField (type List<T>)
+    // should extend substitution with T→resolveArg(T, [T→fieldRecord]) = T→fieldRecord
+    // The expectedType for tail should be the Apply node for List<T>
+    let fieldsList = try #require(gid(s).get(entity: s.recordRecord, label: s.fieldsField))
+    let consCtx = ctx(fieldsList, s, substitution: [s.listT: s.fieldRecord])
+    let tailD = consCtx.descend(s.tailField)
+    guard case .descend(let descend) = tailD else { Issue.record("Expected descend"); return }
+    // tailField's typeExpression is Apply{List, T: T} — an Apply node
+    let tailTypeExpr = try #require(gid(s).get(entity: s.tailField, label: s.typeExpressionField))
+    #expect(descend.expectedType == tailTypeExpr)
+}
+
 @Test func schemaSelfDescribes() {
     let s = Schema.bootstrap()
     let g = gid(s)

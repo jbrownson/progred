@@ -12,7 +12,7 @@ class DLine: NSStackView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool {
         guard case .line(let children) = d else { return false }
         reconcileChildren(stack: self, children: children, editor: editor, vertical: false)
         return true

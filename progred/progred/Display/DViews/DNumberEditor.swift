@@ -50,7 +50,7 @@ class DNumberEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
         return false
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool {
         guard case .numberEditor(let n) = d else { return false }
         self.commit = commit
         isEditable = commit != nil

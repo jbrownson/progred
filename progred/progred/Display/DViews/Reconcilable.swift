@@ -1,14 +1,14 @@
 import AppKit
 
 protocol Reconcilable: NSView {
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool
 }
 
-func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, vertical: Bool? = nil) -> NSView {
-    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit, vertical: vertical) {
+func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, vertical: Bool? = nil) -> NSView {
+    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, vertical: vertical) {
         return node
     }
-    return createView(d, editor: editor, inCycle: inCycle, commit: commit, vertical: vertical)
+    return createView(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, vertical: vertical)
 }
 
 func reconcileList<T: AnyObject, Ts>(

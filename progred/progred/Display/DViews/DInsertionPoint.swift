@@ -2,13 +2,15 @@ import AppKit
 
 class DInsertionPoint: FlippedView, Reconcilable {
     var commit: (Editor, Id) -> Void
+    var expectedType: Id?
     let editor: Editor
     var isHovered = false
     var vertical = false
     private var searchPopup: SearchPopup?
 
-    init(vertical: Bool?, commit: @escaping (Editor, Id) -> Void, editor: Editor) {
+    init(vertical: Bool?, commit: @escaping (Editor, Id) -> Void, expectedType: Id?, editor: Editor) {
         self.commit = commit
+        self.expectedType = expectedType
         self.editor = editor
         self.vertical = vertical ?? false
         super.init(frame: .zero)
@@ -23,7 +25,7 @@ class DInsertionPoint: FlippedView, Reconcilable {
 
     func activate() {
         guard searchPopup == nil else { return }
-        let popup = SearchPopup(commit: commit, editor: editor) { [weak self] in
+        let popup = SearchPopup(commit: commit, expectedType: expectedType, editor: editor) { [weak self] in
             self?.dismissSearch()
         }
         self.searchPopup = popup
@@ -51,9 +53,10 @@ class DInsertionPoint: FlippedView, Reconcilable {
         }
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
-        guard case .insertionPoint(let commit) = d else { return false }
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool {
+        guard case .insertionPoint(let commit, let expectedType) = d else { return false }
         self.commit = commit
+        self.expectedType = expectedType
         self.vertical = vertical ?? false
         return true
     }

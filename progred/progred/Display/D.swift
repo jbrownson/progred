@@ -5,6 +5,7 @@ typealias Commit = (Editor, Id?) -> Void
 struct Descend {
     let inCycle: Bool
     let commit: Commit?
+    let expectedType: Id?
     let body: D
 }
 
@@ -27,7 +28,7 @@ indirect enum D {
 
     // MARK: - Interactive
     case placeholder
-    case insertionPoint((Editor, Id) -> Void)
+    case insertionPoint(commit: (Editor, Id) -> Void, expectedType: Id?)
     case stringEditor(String)
     case numberEditor(Double)
 }

@@ -8,15 +8,18 @@ struct ProjectionContext {
     let editor: Editor?
     let ancestors: Set<Id>
     let commit: Commit?
+    let substitution: Substitution
     private let schema: Schema
 
-    init(entity: Id?, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>, commit: Commit? = nil) {
+    init(entity: Id?, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>,
+         commit: Commit? = nil, substitution: Substitution = [:]) {
         self.entity = entity
         self.gid = gid
         self.schema = schema
         self.editor = editor
         self.ancestors = ancestors
         self.commit = commit
+        self.substitution = substitution
     }
 
     var isCycle: Bool {
@@ -83,10 +86,18 @@ struct ProjectionContext {
         return nil
     }
 
+    func resolveExpectedType(for field: Id) -> Id? {
+        guard let typeExpr = gid.get(entity: field, label: typeExpressionField) else { return nil }
+        if gid.get(entity: typeExpr, label: recordField) == typeParameterRecord {
+            return substitution[typeExpr]
+        }
+        return typeExpr
+    }
+
     func with(entity: Id?, ancestors: Set<Id>? = nil, commit: Commit?) -> ProjectionContext {
         ProjectionContext(entity: entity, gid: gid, schema: schema,
             editor: editor, ancestors: ancestors ?? self.ancestors,
-            commit: commit)
+            commit: commit, substitution: substitution)
     }
 
     func descend(_ field: Id, render: Render? = nil, commit: Commit? = nil) -> D {
@@ -100,14 +111,26 @@ struct ProjectionContext {
                 guard case .uuid(let uuid) = parent else { return nil }
                 return { editor, id in editor.commit(entity: uuid, label: field, value: id) }
             }
+        let expectedType = resolveExpectedType(for: field)
+        let typeExpr = gid.get(entity: field, label: typeExpressionField)
+        let childSubstitution: Substitution = {
+            guard let typeExpr,
+                  gid.get(entity: typeExpr, label: recordField) == applyRecord,
+                  let tf = gid.get(entity: typeExpr, label: typeFunctionField),
+                  let extended = bindTypeArgs(typeExpr, tf, substitution, gid: gid, schema: schema)
+            else { return substitution }
+            return extended
+        }()
         let childCtx = ProjectionContext(
             entity: value, gid: gid, schema: schema,
             editor: editor, ancestors: childAncestors,
-            commit: edgeReadOnly ? nil : edgeCommit)
+            commit: edgeReadOnly ? nil : edgeCommit,
+            substitution: childSubstitution)
         let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         return .descend(Descend(
             inCycle: childInCycle,
             commit: edgeCommit,
+            expectedType: expectedType,
             body: d))
     }
 

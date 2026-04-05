@@ -72,7 +72,7 @@ class DCollapse: FlippedView, Reconcilable {
         }
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool {
         guard case .collapse(_, let header, let body) = d else { return false }
         self.inCycle = inCycle
         self.vertical = vertical

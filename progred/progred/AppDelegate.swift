@@ -57,6 +57,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let d: D = .descend(Descend(
                 inCycle: false,
                 commit: rootCommit,
+                expectedType: nil,
                 body: body))
             rootView.rebuild(d)
         } onChange: { [weak self] in

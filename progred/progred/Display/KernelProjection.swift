@@ -22,19 +22,19 @@ func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
     return .line(parts)
 }
 
-private func insertionPoint(tail: Id, link: @escaping Commit, ctx: ProjectionContext) -> D {
-    .insertionPoint { editor, id in
+private func insertionPoint(tail: Id, link: @escaping Commit, expectedType: Id?, ctx: ProjectionContext) -> D {
+    .insertionPoint(commit: { editor, id in
         let cons = UUID()
         editor.commit(entity: cons, label: ctx.recordField, value: ctx.consRecord)
         editor.commit(entity: cons, label: ctx.headField, value: id)
         editor.commit(entity: cons, label: ctx.tailField, value: tail)
         link(editor, .uuid(cons))
-    }
+    }, expectedType: expectedType)
 }
 
-private func renderEmptyList(open: String, close: String, list: Id, ctx: ProjectionContext) -> D {
+private func renderEmptyList(open: String, close: String, list: Id, expectedType: Id?, ctx: ProjectionContext) -> D {
     let items: [D] = ctx.commit.map { commit in
-        [insertionPoint(tail: list, link: commit, ctx: ctx)]
+        [insertionPoint(tail: list, link: commit, expectedType: expectedType, ctx: ctx)]
     } ?? []
     return inlineBrackets(open: open, close: close, items)
 }
@@ -50,8 +50,10 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
               let (conses, empty, consesReadOnly) = ctx.conses(entity)
         else { return nil }
 
+        let elementType = ctx.resolveExpectedType(for: ctx.headField)
+
         if conses.isEmpty {
-            return renderEmptyList(open: open, close: close, list: entity, ctx: ctx)
+            return renderEmptyList(open: open, close: close, list: entity, expectedType: elementType, ctx: ctx)
         }
 
         let listCommit: Commit? = consesReadOnly ? nil : ctx.commit
@@ -81,11 +83,11 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
         }
 
         let items: [D] = listCommit.map { listCommit in
-            [insertionPoint(tail: conses[0], link: listCommit, ctx: ctx)]
+            [insertionPoint(tail: conses[0], link: listCommit, expectedType: elementType, ctx: ctx)]
                 + mapBetween(consesWithPrev,
                     { projectElement($0.0, $0.1) },
-                    { insertionPoint(tail: $1.0, link: linkCommit($0.0), ctx: ctx) })
-                + [insertionPoint(tail: empty, link: linkCommit(conses.last!), ctx: ctx)]
+                    { insertionPoint(tail: $1.0, link: linkCommit($0.0), expectedType: elementType, ctx: ctx) })
+                + [insertionPoint(tail: empty, link: linkCommit(conses.last!), expectedType: elementType, ctx: ctx)]
         } ?? consesWithPrev.map { projectElement($0.0, $0.1) }
 
         return inline

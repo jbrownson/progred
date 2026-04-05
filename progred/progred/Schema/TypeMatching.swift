@@ -87,7 +87,7 @@ private func matchesImpl(_ value: Id, _ type: Id, _ substitution: Substitution,
     }
 }
 
-private func bindTypeArgs(_ apply: Id, _ tf: Id, _ base: Substitution,
+func bindTypeArgs(_ apply: Id, _ tf: Id, _ base: Substitution,
                            gid: any Gid, schema: Schema) -> Substitution? {
     guard let params = schema.typeParams(of: tf, gid: gid) else { return nil }
     var extended = base
@@ -98,7 +98,7 @@ private func bindTypeArgs(_ apply: Id, _ tf: Id, _ base: Substitution,
     return extended
 }
 
-private func resolveArg(_ arg: Id, _ substitution: Substitution,
+func resolveArg(_ arg: Id, _ substitution: Substitution,
                           gid: any Gid, schema: Schema) -> Id {
     if gid.get(entity: arg, label: schema.recordField) == schema.typeParameterRecord,
        let resolved = substitution[arg] {

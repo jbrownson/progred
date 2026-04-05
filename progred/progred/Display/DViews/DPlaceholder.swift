@@ -16,12 +16,14 @@ private class Pill: NSView {
 
 class DPlaceholder: FlippedView, Reconcilable {
     var commit: ((Editor, Id) -> Void)?
+    var expectedType: Id?
     let editor: Editor
     private let pill = Pill()
     private var searchPopup: SearchPopup?
 
-    init(commit: ((Editor, Id) -> Void)?, editor: Editor) {
+    init(commit: ((Editor, Id) -> Void)?, expectedType: Id?, editor: Editor) {
         self.commit = commit
+        self.expectedType = expectedType
         self.editor = editor
         super.init(frame: .zero)
         showPill()
@@ -50,7 +52,7 @@ class DPlaceholder: FlippedView, Reconcilable {
 
     private func activate() {
         guard let commit else { return }
-        let popup = SearchPopup(commit: commit, editor: editor) { [weak self] in
+        let popup = SearchPopup(commit: commit, expectedType: expectedType, editor: editor) { [weak self] in
             self?.dismissSearch()
         }
         self.searchPopup = popup
@@ -67,9 +69,10 @@ class DPlaceholder: FlippedView, Reconcilable {
         showPill()
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool {
         guard case .placeholder = d else { return false }
         self.commit = commit.map { c in { editor, id in c(editor, id) } }
+        self.expectedType = expectedType
         return true
     }
 }
