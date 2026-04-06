@@ -46,12 +46,15 @@ private func admitsImpl(_ record: Id, _ type: Id, _ substitution: Substitution,
 
     case schema.sumRecord:
         guard let sums = schema.summands(of: type, gid: gid) else { return nil }
+        var sawNil = false
         for summand in sums {
-            guard let result = admitsImpl(record, summand, substitution, gid: gid, schema: schema)
-            else { return nil }
-            if result { return true }
+            switch admitsImpl(record, summand, substitution, gid: gid, schema: schema) {
+            case true: return true
+            case nil: sawNil = true
+            case false: break
+            }
         }
-        return false
+        return sawNil ? nil : false
 
     case schema.recordRecord:
         return record == type
@@ -77,12 +80,15 @@ private func matchesImpl(_ value: Id, _ type: Id, _ substitution: Substitution,
 
     case schema.sumRecord:
         guard let sums = schema.summands(of: type, gid: gid) else { return nil }
+        var sawNil = false
         for summand in sums {
-            guard let result = matchesImpl(value, summand, substitution, gid: gid, schema: schema, visited: &visited)
-            else { return nil }
-            if result { return true }
+            switch matchesImpl(value, summand, substitution, gid: gid, schema: schema, visited: &visited) {
+            case true: return true
+            case nil: sawNil = true
+            case false: break
+            }
         }
-        return false
+        return sawNil ? nil : false
 
     case schema.recordRecord:
         guard gid.get(entity: value, label: schema.recordField) == type else { return false }
