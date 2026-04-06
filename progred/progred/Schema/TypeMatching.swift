@@ -4,7 +4,7 @@ typealias Substitution = [Id: Id]
 
 func matches(_ value: Id, _ type: Id, _ substitution: Substitution,
              gid: any Gid, schema: Schema) -> Bool? {
-    var visited = Set<IdPair>()
+    var visited = Set<MatchKey>()
     return matchesImpl(value, type, substitution, gid: gid, schema: schema, visited: &visited)
 }
 
@@ -15,8 +15,24 @@ func admits(_ record: Id, _ type: Id, _ substitution: Substitution,
 
 // MARK: -
 
-private struct IdPair: Hashable {
-    let value: Id, type: Id
+private struct MatchKey: Hashable {
+    let value: Id, type: Id, substitution: [(Id, Id)]
+
+    init(value: Id, type: Id, substitution: Substitution) {
+        self.value = value
+        self.type = type
+        self.substitution = substitution.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+
+    static func == (lhs: MatchKey, rhs: MatchKey) -> Bool {
+        lhs.value == rhs.value && lhs.type == rhs.type && lhs.substitution.elementsEqual(rhs.substitution, by: ==)
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(value)
+        hasher.combine(type)
+        for (k, v) in substitution { hasher.combine(k); hasher.combine(v) }
+    }
 }
 
 private func resolveParam(_ type: Id, _ substitution: Substitution,
@@ -65,7 +81,7 @@ private func admitsImpl(_ record: Id, _ type: Id, _ substitution: Substitution,
 }
 
 private func matchesImpl(_ value: Id, _ type: Id, _ substitution: Substitution,
-                         gid: any Gid, schema: Schema, visited: inout Set<IdPair>) -> Bool? {
+                         gid: any Gid, schema: Schema, visited: inout Set<MatchKey>) -> Bool? {
     switch gid.get(entity: type, label: schema.recordField) {
     case schema.typeParameterRecord:
         guard let resolved = resolveParam(type, substitution, gid: gid, schema: schema)
@@ -92,7 +108,7 @@ private func matchesImpl(_ value: Id, _ type: Id, _ substitution: Substitution,
 
     case schema.recordRecord:
         guard gid.get(entity: value, label: schema.recordField) == type else { return false }
-        guard visited.insert(IdPair(value: value, type: type)).inserted else { return true }
+        guard visited.insert(MatchKey(value: value, type: type, substitution: substitution)).inserted else { return true }
         guard let fs = schema.fields(of: type, gid: gid) else { return nil }
         for field in fs {
             guard gid.get(entity: field, label: schema.recordField) == schema.fieldRecord,
