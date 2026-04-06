@@ -35,35 +35,79 @@ static func withSampleDocument() -> Editor {
         let schema = Schema.bootstrap()
         let editor = Editor(schema: schema)
 
-        let personRecord = UUID()
+        func set(_ entity: UUID, _ label: Id, _ value: Id) {
+            editor.commit(entity: entity, label: label, value: value)
+        }
+
+        func makeList(_ items: [Id]) -> UUID {
+            let empty = UUID()
+            set(empty, schema.recordField, schema.emptyRecord)
+            var current: Id = .uuid(empty)
+            for item in items.reversed() {
+                let cons = UUID()
+                set(cons, schema.recordField, schema.consRecord)
+                set(cons, schema.headField, item)
+                set(cons, schema.tailField, current)
+                current = .uuid(cons)
+            }
+            return current.asUUID!
+        }
+
+        // Option<T> = Some | None
+        let optionT = UUID()
+        set(optionT, schema.recordField, schema.typeParameterRecord)
+        set(optionT, schema.nameField, .string("T"))
+
+        let valueField = UUID()
+        set(valueField, schema.recordField, schema.fieldRecord)
+        set(valueField, schema.nameField, .string("value"))
+        set(valueField, schema.typeExpressionField, .uuid(optionT))
+
+        let someRecord = UUID()
+        set(someRecord, schema.recordField, schema.recordRecord)
+        set(someRecord, schema.nameField, .string("Some"))
+        set(someRecord, schema.fieldsField, .uuid(makeList([.uuid(valueField)])))
+        set(someRecord, schema.typeParametersField, .uuid(makeList([])))
+
+        let noneRecord = UUID()
+        set(noneRecord, schema.recordField, schema.recordRecord)
+        set(noneRecord, schema.nameField, .string("None"))
+        set(noneRecord, schema.fieldsField, .uuid(makeList([])))
+        set(noneRecord, schema.typeParametersField, .uuid(makeList([])))
+
+        let optionSum = UUID()
+        set(optionSum, schema.recordField, schema.sumRecord)
+        set(optionSum, schema.nameField, .string("Option"))
+        set(optionSum, schema.typeParametersField, .uuid(makeList([.uuid(optionT)])))
+        set(optionSum, schema.summandsField, .uuid(makeList([.uuid(someRecord), .uuid(noneRecord)])))
+
+        // Person { name: String, age: Option<Number> }
         let ageField = UUID()
+        set(ageField, schema.recordField, schema.fieldRecord)
+        set(ageField, schema.nameField, .string("age"))
+        let optionOfNumber = UUID()
+        set(optionOfNumber, schema.recordField, schema.applyRecord)
+        set(optionOfNumber, schema.typeFunctionField, .uuid(optionSum))
+        set(optionOfNumber, .uuid(optionT), schema.numberRecord)
+        set(ageField, schema.typeExpressionField, .uuid(optionOfNumber))
 
-        editor.commit(entity: personRecord, label: schema.recordField, value: schema.recordRecord)
-        editor.commit(entity: personRecord, label: schema.nameField, value: .string("Person"))
+        let personRecord = UUID()
+        set(personRecord, schema.recordField, schema.recordRecord)
+        set(personRecord, schema.nameField, .string("Person"))
+        set(personRecord, schema.fieldsField, .uuid(makeList([schema.nameField, .uuid(ageField)])))
+        set(personRecord, schema.typeParametersField, .uuid(makeList([])))
 
-        editor.commit(entity: ageField, label: schema.recordField, value: schema.fieldRecord)
-        editor.commit(entity: ageField, label: schema.nameField, value: .string("age"))
+        // Instance: Person { name: "Alice", age: Some { value: _ } }
+        let aliceAge = UUID()
+        set(aliceAge, schema.recordField, .uuid(someRecord))
+        // value field intentionally missing → placeholder
 
-        let empty = UUID()
-        editor.commit(entity: empty, label: schema.recordField, value: schema.emptyRecord)
+        let alice = UUID()
+        set(alice, schema.recordField, .uuid(personRecord))
+        set(alice, schema.nameField, .string("Alice"))
+        set(alice, .uuid(ageField), .uuid(aliceAge))
 
-        let cons2 = UUID()
-        editor.commit(entity: cons2, label: schema.recordField, value: schema.consRecord)
-        editor.commit(entity: cons2, label: schema.headField, value: .uuid(ageField))
-        editor.commit(entity: cons2, label: schema.tailField, value: .uuid(empty))
-
-        let cons1 = UUID()
-        editor.commit(entity: cons1, label: schema.recordField, value: schema.consRecord)
-        editor.commit(entity: cons1, label: schema.headField, value: schema.nameField)
-        editor.commit(entity: cons1, label: schema.tailField, value: .uuid(cons2))
-
-        editor.commit(entity: personRecord, label: schema.fieldsField, value: .uuid(cons1))
-
-        let emptyParams = UUID()
-        editor.commit(entity: emptyParams, label: schema.recordField, value: schema.emptyRecord)
-        editor.commit(entity: personRecord, label: schema.typeParametersField, value: .uuid(emptyParams))
-
-        editor.root = .uuid(personRecord)
+        editor.root = .uuid(makeList([.uuid(optionSum), .uuid(personRecord), .uuid(alice)]))
         return editor
     }
 }
