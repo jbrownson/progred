@@ -26,23 +26,23 @@ func namedEntities(editor: Editor) -> [Id: NamedEntity] {
         uniquingKeysWith: { _, latest in latest })
 }
 
-private func typeMatches(_ record: Id?, _ expectedType: Id?, editor: Editor) -> Bool {
+private func typeMatches(_ record: Id?, _ expectedType: Id?, substitution: Substitution, editor: Editor) -> Bool {
     guard let expectedType, let record else { return true }
-    return admits(record, expectedType, [:], gid: editor.gid, schema: editor.schema) != false
+    return admits(record, expectedType, substitution, gid: editor.gid, schema: editor.schema) != false
 }
 
-private func dataEntries(_ named: [NamedEntity], editor: Editor, commit: @escaping (Editor, Id) -> Void, expectedType: Id?) -> [PlaceholderEntry] {
+private func dataEntries(_ named: [NamedEntity], editor: Editor, commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution) -> [PlaceholderEntry] {
     named.map { entity in
         PlaceholderEntry(
             display: entity.name,
             disambiguation: entity.record.flatMap { editor.name(of: $0) },
             action: { editor in commit(editor, entity.id) },
-            matching: typeMatches(entity.record, expectedType, editor: editor),
+            matching: typeMatches(entity.record, expectedType, substitution: substitution, editor: editor),
             magic: false)
     }
 }
 
-private func newEntries(_ named: [NamedEntity], editor: Editor, commit: @escaping (Editor, Id) -> Void, expectedType: Id?) -> [PlaceholderEntry] {
+private func newEntries(_ named: [NamedEntity], editor: Editor, commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution) -> [PlaceholderEntry] {
     named.compactMap { entity in
         guard entity.record == editor.schema.recordRecord,
               entity.id != editor.schema.stringRecord,
@@ -56,30 +56,30 @@ private func newEntries(_ named: [NamedEntity], editor: Editor, commit: @escapin
                 editor.commit(entity: uuid, label: editor.schema.recordField, value: entity.id)
                 commit(editor, .uuid(uuid))
             },
-            matching: typeMatches(entity.id, expectedType, editor: editor),
+            matching: typeMatches(entity.id, expectedType, substitution: substitution, editor: editor),
             magic: false)
     }
 }
 
-private func magicEntries(needle: String, editor: Editor, commit: @escaping (Editor, Id) -> Void, expectedType: Id?) -> [PlaceholderEntry] {
+private func magicEntries(needle: String, editor: Editor, commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution) -> [PlaceholderEntry] {
     [
         Double(needle).map { n in
             PlaceholderEntry(display: needle, disambiguation: nil,
                 action: { editor in commit(editor, .number(n)) },
-                matching: typeMatches(editor.schema.numberRecord, expectedType, editor: editor),
+                matching: typeMatches(editor.schema.numberRecord, expectedType, substitution: substitution, editor: editor),
                 magic: true)
         },
         PlaceholderEntry(display: "\"\(needle)\"", disambiguation: nil,
             action: { editor in commit(editor, .string(needle)) },
-            matching: typeMatches(editor.schema.stringRecord, expectedType, editor: editor),
+            matching: typeMatches(editor.schema.stringRecord, expectedType, substitution: substitution, editor: editor),
             magic: true),
     ].compactMap { $0 }
 }
 
-func buildEntries(editor: Editor, commit: @escaping (Editor, Id) -> Void, needle: String, expectedType: Id?) -> [PlaceholderEntry] {
+func buildEntries(editor: Editor, commit: @escaping (Editor, Id) -> Void, needle: String, expectedType: Id?, substitution: Substitution) -> [PlaceholderEntry] {
     let named = namedEntities(editor: editor).values
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    return dataEntries(named, editor: editor, commit: commit, expectedType: expectedType)
-        + newEntries(named, editor: editor, commit: commit, expectedType: expectedType)
-        + magicEntries(needle: needle, editor: editor, commit: commit, expectedType: expectedType)
+    return dataEntries(named, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
+        + newEntries(named, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
+        + magicEntries(needle: needle, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
 }

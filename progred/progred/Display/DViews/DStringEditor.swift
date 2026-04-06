@@ -31,7 +31,7 @@ class DStringEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
         commit?(editor, .string(stringValue))
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
         guard case .stringEditor(let s) = d else { return false }
         self.commit = commit
         isEditable = commit != nil

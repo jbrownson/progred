@@ -131,6 +131,7 @@ struct ProjectionContext {
             inCycle: childInCycle,
             commit: edgeCommit,
             expectedType: expectedType,
+            substitution: substitution,
             body: d))
     }
 

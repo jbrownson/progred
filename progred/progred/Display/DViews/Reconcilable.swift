@@ -1,14 +1,14 @@
 import AppKit
 
 protocol Reconcilable: NSView {
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool
 }
 
-func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, vertical: Bool? = nil) -> NSView {
-    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, vertical: vertical) {
+func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = [:], vertical: Bool? = nil) -> NSView {
+    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, substitution: substitution, vertical: vertical) {
         return node
     }
-    return createView(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, vertical: vertical)
+    return createView(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, substitution: substitution, vertical: vertical)
 }
 
 func reconcileList<T: AnyObject, Ts>(
@@ -27,11 +27,11 @@ func reconcileList<T: AnyObject, Ts>(
     existing.dropFirst(ts.count).forEach { remove($0) }
 }
 
-func reconcileChildren(stack: NSStackView, children: [D], editor: Editor, vertical: Bool) {
+func reconcileChildren(stack: NSStackView, children: [D], editor: Editor, substitution: Substitution = [:], vertical: Bool) {
     reconcileList(
         stack.arrangedSubviews,
         with: children,
-        reconcile: { reconcileChild($0, $1, editor: editor, vertical: vertical) },
+        reconcile: { reconcileChild($0, $1, editor: editor, substitution: substitution, vertical: vertical) },
         replace: { i, old, new in
             stack.removeArrangedSubview(old)
             old.removeFromSuperview()

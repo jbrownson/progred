@@ -10,7 +10,7 @@ class DIndent: FlippedView, Reconcilable {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
         guard case .indent(let child) = d, let childView = subviews.first else { return false }
         let resolved = reconcileChild(childView, child, editor: editor, vertical: vertical)
         if resolved !== childView {

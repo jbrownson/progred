@@ -58,6 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 inCycle: false,
                 commit: rootCommit,
                 expectedType: nil,
+                substitution: [:],
                 body: body))
             rootView.rebuild(d)
         } onChange: { [weak self] in

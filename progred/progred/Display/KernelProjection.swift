@@ -29,7 +29,7 @@ private func insertionPoint(tail: Id, link: @escaping Commit, expectedType: Id?,
         editor.commit(entity: cons, label: ctx.headField, value: id)
         editor.commit(entity: cons, label: ctx.tailField, value: tail)
         link(editor, .uuid(cons))
-    }, expectedType: expectedType)
+    }, expectedType: expectedType, substitution: ctx.substitution)
 }
 
 private func renderEmptyList(open: String, close: String, list: Id, expectedType: Id?, ctx: ProjectionContext) -> D {

@@ -69,7 +69,7 @@ class DRootView: FlippedView {
     }
 }
 
-func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, vertical: Bool? = nil) -> NSView {
+func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = [:], vertical: Bool? = nil) -> NSView {
     switch d {
     case .text(let text, let style): DText(text, style)
     case .space: DSpace(spacing)
@@ -84,9 +84,9 @@ func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? =
     case .bracketed(let open, let close, let body):
         DBracketed(open: open, close: close, body: body, editor: editor, vertical: vertical)
     case .placeholder:
-        DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, expectedType: expectedType, editor: editor)
-    case .insertionPoint(let commit, let expectedType):
-        DInsertionPoint(vertical: vertical, commit: commit, expectedType: expectedType, editor: editor)
+        DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, expectedType: expectedType, substitution: substitution, editor: editor)
+    case .insertionPoint(let commit, let expectedType, let substitution):
+        DInsertionPoint(vertical: vertical, commit: commit, expectedType: expectedType, substitution: substitution, editor: editor)
     case .stringEditor(let string): DStringEditor(string, editor: editor, commit: commit)
     case .numberEditor(let number): DNumberEditor(number, editor: editor, commit: commit)
     }

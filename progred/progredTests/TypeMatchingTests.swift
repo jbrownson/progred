@@ -218,6 +218,134 @@ private func ctx(_ entity: Id?, _ s: Schema, substitution: Substitution = [:]) -
     #expect(admits(s.fieldRecord, .uuid(optOuterT), [.uuid(optT): s.fieldRecord], gid: g2, schema: s) == true)
 }
 
+@Test func admitsSumReversedOrder() throws {
+    let s = Schema.bootstrap()
+    var doc = MutGid()
+
+    // Same Optional<T> as admitsNeedsOuterSubstitution, but summands reversed: [T, Empty]
+    let optT = UUID()
+    doc.set(entity: optT, label: s.recordField, value: s.typeParameterRecord)
+    doc.set(entity: optT, label: s.nameField, value: .string("T"))
+
+    let emptyList = UUID()
+    doc.set(entity: emptyList, label: s.recordField, value: s.emptyRecord)
+
+    // summands list: [T, Empty] — T comes first
+    let emptyCons = UUID()
+    doc.set(entity: emptyCons, label: s.recordField, value: s.consRecord)
+    doc.set(entity: emptyCons, label: s.headField, value: s.emptyRecord)
+    doc.set(entity: emptyCons, label: s.tailField, value: .uuid(emptyList))
+    let tCons = UUID()
+    doc.set(entity: tCons, label: s.recordField, value: s.consRecord)
+    doc.set(entity: tCons, label: s.headField, value: .uuid(optT))
+    doc.set(entity: tCons, label: s.tailField, value: .uuid(emptyCons))
+
+    let optSum = UUID()
+    doc.set(entity: optSum, label: s.recordField, value: s.sumRecord)
+    doc.set(entity: optSum, label: s.nameField, value: .string("Optional"))
+    let tpList = UUID()
+    doc.set(entity: tpList, label: s.recordField, value: s.consRecord)
+    doc.set(entity: tpList, label: s.headField, value: .uuid(optT))
+    let tpEmpty = UUID()
+    doc.set(entity: tpEmpty, label: s.recordField, value: s.emptyRecord)
+    doc.set(entity: tpList, label: s.tailField, value: .uuid(tpEmpty))
+    doc.set(entity: optSum, label: s.typeParametersField, value: .uuid(tpList))
+    doc.set(entity: optSum, label: s.summandsField, value: .uuid(tCons))
+
+    // Apply Optional<T> with T → T (unresolvable)
+    let optOuterT = UUID()
+    doc.set(entity: optOuterT, label: s.recordField, value: s.applyRecord)
+    doc.set(entity: optOuterT, label: s.typeFunctionField, value: .uuid(optSum))
+    doc.set(entity: optOuterT, label: .uuid(optT), value: .uuid(optT))
+
+    let g = StackedGid(top: doc, bottom: gid(s))
+
+    // T is first and unresolvable, but Empty should still be admitted
+    #expect(admits(s.emptyRecord, .uuid(optOuterT), [:], gid: g, schema: s) == true)
+    // Field should return nil (T unresolvable, Empty doesn't match)
+    #expect(admits(s.fieldRecord, .uuid(optOuterT), [:], gid: g, schema: s) == nil)
+}
+
+@Test func matchesVisitedSetDistinguishesInstantiations() throws {
+    let s = Schema.bootstrap()
+    var doc = MutGid()
+
+    // Record Box { content: T }
+    let boxT = UUID()
+    doc.set(entity: boxT, label: s.recordField, value: s.typeParameterRecord)
+    doc.set(entity: boxT, label: s.nameField, value: .string("T"))
+
+    let contentField = UUID()
+    doc.set(entity: contentField, label: s.recordField, value: s.fieldRecord)
+    doc.set(entity: contentField, label: s.nameField, value: .string("content"))
+    doc.set(entity: contentField, label: s.typeExpressionField, value: .uuid(boxT))
+
+    let boxRecord = UUID()
+    doc.set(entity: boxRecord, label: s.recordField, value: s.recordRecord)
+    doc.set(entity: boxRecord, label: s.nameField, value: .string("Box"))
+    let contentList = UUID()
+    doc.set(entity: contentList, label: s.recordField, value: s.consRecord)
+    doc.set(entity: contentList, label: s.headField, value: .uuid(contentField))
+    let contentEmpty = UUID()
+    doc.set(entity: contentEmpty, label: s.recordField, value: s.emptyRecord)
+    doc.set(entity: contentList, label: s.tailField, value: .uuid(contentEmpty))
+    doc.set(entity: boxRecord, label: s.fieldsField, value: .uuid(contentList))
+    let boxTpList = UUID()
+    doc.set(entity: boxTpList, label: s.recordField, value: s.consRecord)
+    doc.set(entity: boxTpList, label: s.headField, value: .uuid(boxT))
+    let boxTpEmpty = UUID()
+    doc.set(entity: boxTpEmpty, label: s.recordField, value: s.emptyRecord)
+    doc.set(entity: boxTpList, label: s.tailField, value: .uuid(boxTpEmpty))
+    doc.set(entity: boxRecord, label: s.typeParametersField, value: .uuid(boxTpList))
+
+    // Sum Wrapper { summands: [Box<String>, Box<Number>] }
+    let boxOfString = UUID()
+    doc.set(entity: boxOfString, label: s.recordField, value: s.applyRecord)
+    doc.set(entity: boxOfString, label: s.typeFunctionField, value: .uuid(boxRecord))
+    doc.set(entity: boxOfString, label: .uuid(boxT), value: s.stringRecord)
+
+    let boxOfNumber = UUID()
+    doc.set(entity: boxOfNumber, label: s.recordField, value: s.applyRecord)
+    doc.set(entity: boxOfNumber, label: s.typeFunctionField, value: .uuid(boxRecord))
+    doc.set(entity: boxOfNumber, label: .uuid(boxT), value: s.numberRecord)
+
+    let wrapperEmpty = UUID()
+    doc.set(entity: wrapperEmpty, label: s.recordField, value: s.emptyRecord)
+    let boxNumCons = UUID()
+    doc.set(entity: boxNumCons, label: s.recordField, value: s.consRecord)
+    doc.set(entity: boxNumCons, label: s.headField, value: .uuid(boxOfNumber))
+    doc.set(entity: boxNumCons, label: s.tailField, value: .uuid(wrapperEmpty))
+    let boxStrCons = UUID()
+    doc.set(entity: boxStrCons, label: s.recordField, value: s.consRecord)
+    doc.set(entity: boxStrCons, label: s.headField, value: .uuid(boxOfString))
+    doc.set(entity: boxStrCons, label: s.tailField, value: .uuid(boxNumCons))
+
+    let wrapperSum = UUID()
+    doc.set(entity: wrapperSum, label: s.recordField, value: s.sumRecord)
+    doc.set(entity: wrapperSum, label: s.nameField, value: .string("Wrapper"))
+    let wrapperTpEmpty = UUID()
+    doc.set(entity: wrapperTpEmpty, label: s.recordField, value: s.emptyRecord)
+    doc.set(entity: wrapperSum, label: s.typeParametersField, value: .uuid(wrapperTpEmpty))
+    doc.set(entity: wrapperSum, label: s.summandsField, value: .uuid(boxStrCons))
+
+    // A Box value with content = nameField (a Field — neither String nor Number)
+    let myBox = UUID()
+    doc.set(entity: myBox, label: s.recordField, value: .uuid(boxRecord))
+    doc.set(entity: myBox, label: .uuid(contentField), value: s.nameField)
+
+    let g = StackedGid(top: doc, bottom: gid(s))
+
+    // myBox has a Field as content — should NOT match Wrapper (neither Box<String> nor Box<Number>)
+    #expect(matches(.uuid(myBox), .uuid(wrapperSum), [:], gid: g, schema: s) == false)
+
+    // Sanity: a Box with a string content SHOULD match
+    let goodBox = UUID()
+    doc.set(entity: goodBox, label: s.recordField, value: .uuid(boxRecord))
+    doc.set(entity: goodBox, label: .uuid(contentField), value: .string("hello"))
+    let g2 = StackedGid(top: doc, bottom: gid(s))
+    #expect(matches(.uuid(goodBox), .uuid(wrapperSum), [:], gid: g2, schema: s) == true)
+}
+
 @Test func schemaSelfDescribes() {
     let s = Schema.bootstrap()
     let g = gid(s)

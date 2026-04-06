@@ -6,6 +6,7 @@ struct Descend {
     let inCycle: Bool
     let commit: Commit?
     let expectedType: Id?
+    let substitution: Substitution
     let body: D
 }
 
@@ -28,7 +29,7 @@ indirect enum D {
 
     // MARK: - Interactive
     case placeholder
-    case insertionPoint(commit: (Editor, Id) -> Void, expectedType: Id?)
+    case insertionPoint(commit: (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution)
     case stringEditor(String)
     case numberEditor(Double)
 }

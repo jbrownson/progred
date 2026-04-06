@@ -15,6 +15,7 @@ private class SearchField: NSTextField {
 class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     let commit: (Editor, Id) -> Void
     let expectedType: Id?
+    let substitution: Substitution
     let editor: Editor
     let onDismiss: () -> Void
     private let searchField = SearchField()
@@ -23,9 +24,10 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
     private let popupPanel: NSPanel
     private var filtered: [SearchResult] = []
 
-    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, editor: Editor, onDismiss: @escaping () -> Void) {
+    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, onDismiss: @escaping () -> Void) {
         self.commit = commit
         self.expectedType = expectedType
+        self.substitution = substitution
         self.editor = editor
         self.onDismiss = onDismiss
 
@@ -112,7 +114,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
 
     private func rebuildEntries() {
         let needle = searchField.stringValue
-        let entries = buildEntries(editor: editor, commit: commit, needle: needle, expectedType: expectedType)
+        let entries = buildEntries(editor: editor, commit: commit, needle: needle, expectedType: expectedType, substitution: substitution)
         filtered = searchEntries(entries, needle: needle)
 
         tableView.reloadData()
