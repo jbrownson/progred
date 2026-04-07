@@ -7,7 +7,7 @@ private let trackingKey = "zone"
 private struct Zone {
     let rect: NSRect
     let caretPoint: NSPoint
-    let view: DInsertionPoint
+    let view: InsertionPointView
     let vertical: Bool
 }
 
@@ -18,7 +18,7 @@ private func findZones(in root: NSView) -> [Zone] {
 }
 
 private func findZonesRecursive(_ view: NSView, in root: NSView, zones: inout [Zone]) {
-    if let ip = view as? DInsertionPoint, let parent = ip.superview {
+    if let ip = view as? InsertionPointView, let parent = ip.superview {
         let size = ip.vertical ? ip.frame.height : ip.frame.width
         guard size < 1 else { return }
         let rectInParent = ip.vertical
@@ -125,13 +125,13 @@ class InsertionOverlay: FlippedView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        guard let ip = event.trackingArea?.userInfo?[trackingKey] as? DInsertionPoint else { return }
+        guard let ip = event.trackingArea?.userInfo?[trackingKey] as? InsertionPointView else { return }
         ip.isHovered = true
         drawingOverlay.needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) {
-        guard let ip = event.trackingArea?.userInfo?[trackingKey] as? DInsertionPoint else { return }
+        guard let ip = event.trackingArea?.userInfo?[trackingKey] as? InsertionPointView else { return }
         ip.isHovered = false
         drawingOverlay.needsDisplay = true
     }

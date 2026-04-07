@@ -10,12 +10,26 @@ struct Descend {
     let body: D
 }
 
+struct ListInsert {
+    let insert: (Editor, Id, Int) -> Void
+    let expectedType: Id?
+    let substitution: Substitution
+}
+
+struct List {
+    let open: String
+    let close: String
+    let separator: String
+    let inline: Bool
+    let elements: [D]
+    let insertion: ListInsert?
+}
+
 indirect enum D {
     // MARK: - Layout
     case block([D])
     case line([D])
     case indent(D)
-    case bracketed(open: String, close: String, body: D)
 
     // MARK: - Content
     case text(String, TextStyle)
@@ -25,11 +39,10 @@ indirect enum D {
     // MARK: - Structure
     case descend(Descend)
     case collapse(collapsed: Bool, header: D, body: () -> D)
-    case list(separator: String, elements: [D])
+    case list(List)
 
     // MARK: - Interactive
     case placeholder
-    case insertionPoint(commit: (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution)
     case stringEditor(String)
     case numberEditor(Double)
 }

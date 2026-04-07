@@ -76,17 +76,13 @@ func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? =
     case .identicon(let uuid): DIdenticon(uuid: uuid)
     case .block(let children): DBlock(children: children, editor: editor)
     case .line(let children): DLine(children: children, editor: editor)
-    case .list(_, let elements): DList(elements: elements, editor: editor)
+    case .list(let list): DList(list, editor: editor)
     case .indent(let child): DIndent(child: child, editor: editor, vertical: vertical)
     case .descend(let descend): DDescend(descend, editor: editor, vertical: vertical)
     case .collapse(let collapsed, let header, let body):
         DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, inCycle: inCycle, vertical: vertical)
-    case .bracketed(let open, let close, let body):
-        DBracketed(open: open, close: close, body: body, editor: editor, vertical: vertical)
     case .placeholder:
         DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, expectedType: expectedType, substitution: substitution, editor: editor)
-    case .insertionPoint(let commit, let expectedType, let substitution):
-        DInsertionPoint(vertical: vertical, commit: commit, expectedType: expectedType, substitution: substitution, editor: editor)
     case .stringEditor(let string): DStringEditor(string, editor: editor, commit: commit)
     case .numberEditor(let number): DNumberEditor(number, editor: editor, commit: commit)
     }

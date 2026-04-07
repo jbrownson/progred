@@ -1,28 +1,37 @@
 import AppKit
 
-class DInsertionPoint: FlippedView, Reconcilable {
+class InsertionPointView: FlippedView {
     var commit: (Editor, Id) -> Void
     var expectedType: Id?
     var substitution: Substitution
     let editor: Editor
     var isHovered = false
     var vertical = false
+    var onLayoutChange: (() -> Void)?
     private var searchPopup: SearchPopup?
 
-    init(vertical: Bool?, commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor) {
+    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, vertical: Bool) {
         self.commit = commit
         self.expectedType = expectedType
         self.substitution = substitution
         self.editor = editor
-        self.vertical = vertical ?? false
+        self.vertical = vertical
         super.init(frame: .zero)
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    var isActive: Bool { searchPopup != nil }
+
     override var intrinsicContentSize: NSSize {
         if let searchPopup { return searchPopup.intrinsicContentSize }
         return .zero
+    }
+
+    func update(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution) {
+        self.commit = commit
+        self.expectedType = expectedType
+        self.substitution = substitution
     }
 
     func activate() {
@@ -35,6 +44,7 @@ class DInsertionPoint: FlippedView, Reconcilable {
         addSubview(popup)
         constrain(popup, toFill: self)
         invalidateIntrinsicContentSize()
+        onLayoutChange?()
         popup.focus()
         rescanInsertionZones()
     }
@@ -44,6 +54,7 @@ class DInsertionPoint: FlippedView, Reconcilable {
         searchPopup = nil
         isHovered = false
         invalidateIntrinsicContentSize()
+        onLayoutChange?()
         rescanInsertionZones()
     }
 
@@ -53,14 +64,5 @@ class DInsertionPoint: FlippedView, Reconcilable {
             if let overlay = v as? InsertionOverlay { overlay.rescan(); return }
             view = v.superview
         }
-    }
-
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
-        guard case .insertionPoint(let commit, let expectedType, let substitution) = d else { return false }
-        self.commit = commit
-        self.expectedType = expectedType
-        self.substitution = substitution
-        self.vertical = vertical ?? false
-        return true
     }
 }
