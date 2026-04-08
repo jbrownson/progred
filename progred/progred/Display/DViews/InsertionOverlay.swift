@@ -21,9 +21,10 @@ private func findZonesRecursive(_ view: NSView, in root: NSView, zones: inout [Z
     if let ip = view as? InsertionPointView, let parent = ip.superview {
         let size = ip.vertical ? ip.frame.height : ip.frame.width
         guard size < 1 else { return }
+        let crossExtent: CGFloat = 20
         let rectInParent = ip.vertical
-            ? NSRect(x: 0, y: ip.frame.midY - zoneOverlap,
-                     width: parent.bounds.width, height: zoneOverlap * 2)
+            ? NSRect(x: ip.frame.midX - crossExtent / 2, y: ip.frame.midY - zoneOverlap,
+                     width: crossExtent, height: zoneOverlap * 2)
             : NSRect(x: ip.frame.midX - zoneOverlap, y: 0,
                      width: zoneOverlap * 2, height: parent.bounds.height)
         let originInRoot = root.convert(ip.frame.origin, from: parent)
@@ -33,7 +34,7 @@ private func findZonesRecursive(_ view: NSView, in root: NSView, zones: inout [Z
             view: ip, vertical: ip.vertical))
         return
     }
-    for subview in view.subviews {
+    for subview in view.subviews where !subview.isHiddenOrHasHiddenAncestor {
         findZonesRecursive(subview, in: root, zones: &zones)
     }
 }
@@ -70,6 +71,16 @@ private class DrawingOverlay: FlippedView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+extension NSView {
+    func rescanInsertionZones() {
+        var view: NSView? = self
+        while let v = view {
+            if let overlay = v as? InsertionOverlay { overlay.rescan(); return }
+            view = v.superview
+        }
+    }
 }
 
 class InsertionOverlay: FlippedView {

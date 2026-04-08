@@ -74,6 +74,7 @@ class DCollapse: FlippedView, Reconcilable {
                 bodyContainer.isHidden = false
                 renderBody()
             }
+            rescanInsertionZones()
         }
     }
 

@@ -126,6 +126,7 @@ class DList: FlippedView, Reconcilable {
             container.isHidden = collapsed
             close.isHidden = collapsed
             open.stringValue = collapsed ? "\(self.list.open)…\(self.list.close)" : self.list.open
+            rescanInsertionZones()
         }
     }
 

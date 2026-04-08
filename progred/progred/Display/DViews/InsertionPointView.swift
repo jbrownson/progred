@@ -58,11 +58,4 @@ class InsertionPointView: FlippedView {
         rescanInsertionZones()
     }
 
-    private func rescanInsertionZones() {
-        var view: NSView? = self
-        while let v = view {
-            if let overlay = v as? InsertionOverlay { overlay.rescan(); return }
-            view = v.superview
-        }
-    }
 }

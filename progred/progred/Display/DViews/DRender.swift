@@ -40,6 +40,7 @@ class DRootView: FlippedView {
             insertionOverlay.addSubview(resolved)
             constrain(resolved, toFill: insertionOverlay)
         }
+        insertionOverlay.rescan()
     }
 
     override func layout() {
