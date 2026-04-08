@@ -4,7 +4,7 @@ let indentWidth: CGFloat = 16
 private let spacing: CGFloat = 4
 
 class DRootView: FlippedView {
-    let editor: Editor
+    var editor: Editor
     private let insertionOverlay = InsertionOverlay()
 
     init(editor: Editor) {

@@ -4,19 +4,21 @@ import Observation
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
-    private let editor = Editor.withSampleDocument()
+    private var editor: Editor!
     private var rootView: DRootView!
 
     static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
-        app.mainMenu = buildMainMenu()
+        app.mainMenu = buildMainMenu(target: delegate)
         app.setActivationPolicy(.regular)
         app.run()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        editor = Editor.withSampleDocument()
+
         rootView = DRootView(editor: editor)
 
         let scrollView = NSScrollView()
@@ -44,6 +46,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    @objc func newDocument(_ sender: Any?) {
+        editor = Editor(schema: editor.schema)
+        rootView.editor = editor
+        rebuild()
+    }
+
     private func rebuild() {
         withObservationTracking {
             let rootCommit: Commit = { editor, id in editor.root = id }
@@ -67,7 +75,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-func buildMainMenu() -> NSMenu {
+func buildMainMenu(target: AnyObject) -> NSMenu {
     let mainMenu = NSMenu()
 
     let appMenuItem = NSMenuItem()
@@ -77,6 +85,13 @@ func buildMainMenu() -> NSMenu {
     appMenu.addItem(withTitle: "About progred", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
     appMenu.addItem(.separator())
     appMenu.addItem(withTitle: "Quit progred", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+    let fileMenuItem = NSMenuItem()
+    mainMenu.addItem(fileMenuItem)
+    let fileMenu = NSMenu(title: "File")
+    fileMenuItem.submenu = fileMenu
+    let newItem = fileMenu.addItem(withTitle: "New", action: #selector(AppDelegate.newDocument(_:)), keyEquivalent: "n")
+    newItem.target = target
 
     let editMenuItem = NSMenuItem()
     mainMenu.addItem(editMenuItem)

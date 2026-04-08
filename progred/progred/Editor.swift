@@ -5,13 +5,11 @@ import Observation
 @Observable
 class Editor {
     let schema: Schema
-    var document: MutGid
+    var document: MutGid = MutGid()
     var root: Id?
 
     init(schema: Schema) {
         self.schema = schema
-        self.document = MutGid()
-        self.root = schema.library
     }
 
     var gid: StackedGid<StackedGid<MutGid, ImmGid>, PrimitiveGid> {
