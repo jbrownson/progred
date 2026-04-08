@@ -1,7 +1,5 @@
 import AppKit
 
-private class HeaderRow: NSStackView {}
-
 class DCollapse: FlippedView, Reconcilable {
     enum BodyState {
         case pending(() -> D)
@@ -10,11 +8,15 @@ class DCollapse: FlippedView, Reconcilable {
 
     let bodyContainer: FlippedView
     let collapseButton: CollapseButton
+    let headerRow: NSStackView
     var header: NSView
     var body: BodyState
     let editor: Editor
     var inCycle: Bool
     var vertical: Bool?
+
+    private var bodyConstraints: [NSLayoutConstraint] = []
+    private var collapsedConstraint: NSLayoutConstraint!
 
     init(collapsed: Bool, header: D, body: @escaping () -> D, editor: Editor, inCycle: Bool, vertical: Bool?) {
         self.collapseButton = CollapseButton(collapsed: collapsed || inCycle)
@@ -25,51 +27,64 @@ class DCollapse: FlippedView, Reconcilable {
         self.vertical = vertical
         let header = createView(header, editor: editor, inCycle: inCycle, vertical: vertical)
         self.header = header
-        super.init(frame: .zero)
 
-        let headerRow = HeaderRow(views: [header, collapseButton])
+        let headerRow = NSStackView(views: [header, collapseButton])
         headerRow.orientation = .horizontal
         headerRow.alignment = .top
         headerRow.spacing = 0
         headerRow.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(headerRow)
+        self.headerRow = headerRow
 
+        super.init(frame: .zero)
+
+        addSubview(headerRow)
         addSubview(bodyContainer)
         bodyContainer.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
             headerRow.topAnchor.constraint(equalTo: topAnchor),
             headerRow.leadingAnchor.constraint(equalTo: leadingAnchor),
+            trailingAnchor.constraint(greaterThanOrEqualTo: headerRow.trailingAnchor),
+        ])
+
+        bodyConstraints = [
             bodyContainer.topAnchor.constraint(equalTo: headerRow.bottomAnchor),
             bodyContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
             bodyContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
-            trailingAnchor.constraint(greaterThanOrEqualTo: headerRow.trailingAnchor),
             trailingAnchor.constraint(greaterThanOrEqualTo: bodyContainer.trailingAnchor),
-        ])
+        ]
+        collapsedConstraint = headerRow.bottomAnchor.constraint(equalTo: bottomAnchor)
 
-        let tight = widthAnchor.constraint(equalToConstant: 0)
-        tight.priority = NSLayoutConstraint.Priority(1)
-        tight.isActive = true
+        if collapseButton.isCollapsed {
+            collapsedConstraint.isActive = true
+        } else {
+            NSLayoutConstraint.activate(bodyConstraints)
+            renderBody()
+        }
 
-        syncBody()
-
-        collapseButton.onCollapsedChanged = { [weak self] _ in self?.syncBody() }
+        collapseButton.onCollapsedChanged = { [weak self] collapsed in
+            guard let self else { return }
+            if collapsed {
+                NSLayoutConstraint.deactivate(bodyConstraints)
+                collapsedConstraint.isActive = true
+                bodyContainer.isHidden = true
+            } else {
+                collapsedConstraint.isActive = false
+                NSLayoutConstraint.activate(bodyConstraints)
+                bodyContainer.isHidden = false
+                renderBody()
+            }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    private func syncBody() {
-        if collapseButton.isCollapsed {
-            bodyContainer.isHidden = true
-        } else {
-            if case .pending(let thunk) = body {
-                let bodyView = createView(thunk(), editor: editor, inCycle: inCycle, vertical: vertical)
-                bodyContainer.addSubview(bodyView)
-                constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
-                body = .rendered(bodyView)
-            }
-            bodyContainer.isHidden = false
-        }
+    private func renderBody() {
+        guard case .pending(let thunk) = body else { return }
+        let bodyView = createView(thunk(), editor: editor, inCycle: inCycle, vertical: vertical)
+        bodyContainer.addSubview(bodyView)
+        constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
+        body = .rendered(bodyView)
     }
 
     func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
@@ -79,12 +94,10 @@ class DCollapse: FlippedView, Reconcilable {
 
         let resolvedHeader = reconcileChild(self.header, header, editor: editor, inCycle: inCycle, vertical: vertical)
         if resolvedHeader !== self.header {
-            if let headerRow = self.header.superview as? HeaderRow,
-               let index = headerRow.arrangedSubviews.firstIndex(of: self.header) {
-                headerRow.removeArrangedSubview(self.header)
-                self.header.removeFromSuperview()
-                headerRow.insertArrangedSubview(resolvedHeader, at: index)
-            }
+            let index = headerRow.arrangedSubviews.firstIndex(of: self.header) ?? 0
+            headerRow.removeArrangedSubview(self.header)
+            self.header.removeFromSuperview()
+            headerRow.insertArrangedSubview(resolvedHeader, at: index)
             self.header = resolvedHeader
         }
 
