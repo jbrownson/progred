@@ -2,7 +2,7 @@ import AppKit
 
 class DList: FlippedView, Reconcilable {
     var list: List
-    let editor: Editor
+    var editor: Editor
     private var elementViews: [NSView] = []
     private var insertionPoints: [InsertionPointView] = []
 
@@ -189,6 +189,7 @@ class DList: FlippedView, Reconcilable {
 
     func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
         guard case .list(let newList) = d, newList.inline == list.inline else { return false }
+        self.editor = editor
         list = newList
 
         reconcileList(

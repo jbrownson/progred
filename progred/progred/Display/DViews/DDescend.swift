@@ -3,7 +3,7 @@ import AppKit
 class DDescend: FlippedView, Reconcilable {
     var descend: Descend
     var childView: NSView
-    let editor: Editor
+    var editor: Editor
 
     init(_ descend: Descend, editor: Editor, vertical: Bool?) {
         self.descend = descend
@@ -18,6 +18,7 @@ class DDescend: FlippedView, Reconcilable {
 
     func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
         guard case .descend(let descend) = d else { return false }
+        self.editor = editor
         self.descend = descend
         let resolved = reconcileChild(childView, descend.body, editor: editor, inCycle: descend.inCycle, commit: descend.commit, expectedType: descend.expectedType, substitution: descend.substitution, vertical: vertical)
         if resolved !== childView {

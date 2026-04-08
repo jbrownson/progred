@@ -11,7 +11,7 @@ class DCollapse: FlippedView, Reconcilable {
     let headerRow: NSStackView
     var header: NSView
     var body: BodyState
-    let editor: Editor
+    var editor: Editor
     var inCycle: Bool
     var vertical: Bool?
 
@@ -89,6 +89,7 @@ class DCollapse: FlippedView, Reconcilable {
 
     func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
         guard case .collapse(_, let header, let body) = d else { return false }
+        self.editor = editor
         self.inCycle = inCycle
         self.vertical = vertical
 
