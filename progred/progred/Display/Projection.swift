@@ -68,6 +68,11 @@ struct ProjectionContext {
         return conses(listId)?.cells.compactMap { gid.get(entity: $0, label: headField) }
     }
 
+    func fields(of entity: Id) -> [Id]? {
+        guard let listId = gid.get(entity: entity, label: fieldsField) else { return nil }
+        return conses(listId)?.cells.compactMap { gid.get(entity: $0, label: headField) }
+    }
+
     func conses(_ listNode: Id) -> (cells: [Id], empty: Id, readOnly: Bool)? {
         var result: [Id] = []
         var readOnly = false

@@ -75,20 +75,26 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
 }
 
 func projectKernel(_ ctx: ProjectionContext) -> D? {
-    guard let entity = ctx.entity, ctx.record() != nil else { return nil }
+    guard let entity = ctx.entity, let rec = ctx.record() else { return nil }
 
     let header = kernelHeader(ctx: ctx)
 
-    guard let raw = ctx.gid.edges(entity: entity) else { return header }
-    let edges = raw.data
-        .filter { $0.key != ctx.nameField && $0.key != ctx.recordField }
-        .sorted { $0.key < $1.key }
+    let headerFields: Set<Id> = [ctx.nameField, ctx.recordField]
+    let declaredFields = (ctx.fields(of: rec) ?? []).filter { !headerFields.contains($0) }
+    let declaredSet = Set(declaredFields)
 
-    if edges.isEmpty { return header }
+    let extras = ctx.gid.edges(entity: entity)?.data
+        .filter { !declaredSet.contains($0.key) && !headerFields.contains($0.key) }
+        .sorted { $0.key < $1.key }
+        .map(\.key)
+        ?? []
+
+    let allFields = declaredFields + extras
+    if allFields.isEmpty { return header }
 
     return .collapse(collapsed: false, header: header) {
-        .block(edges.map { label, _ in
-            labeled(label, ctx.descend(label), ctx: ctx)
+        .block(allFields.map { field in
+            labeled(field, ctx.descend(field), ctx: ctx)
         })
     }
 }
