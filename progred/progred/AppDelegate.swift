@@ -52,6 +52,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         rebuild()
     }
 
+    @objc func loadSampleDocument(_ sender: Any?) {
+        editor = Editor.withSampleDocument()
+        rootView.editor = editor
+        rebuild()
+    }
+
     private func rebuild() {
         withObservationTracking {
             let rootCommit: Commit = { editor, id in editor.root = id }
@@ -92,6 +98,8 @@ func buildMainMenu(target: AnyObject) -> NSMenu {
     fileMenuItem.submenu = fileMenu
     let newItem = fileMenu.addItem(withTitle: "New", action: #selector(AppDelegate.newDocument(_:)), keyEquivalent: "n")
     newItem.target = target
+    let sampleItem = fileMenu.addItem(withTitle: "Load Sample Document", action: #selector(AppDelegate.loadSampleDocument(_:)), keyEquivalent: "")
+    sampleItem.target = target
 
     let editMenuItem = NSMenuItem()
     mainMenu.addItem(editMenuItem)
