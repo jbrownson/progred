@@ -70,7 +70,7 @@ class DRootView: FlippedView {
     }
 }
 
-func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = [:], vertical: Bool? = nil) -> NSView {
+func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = .init(), vertical: Bool? = nil) -> NSView {
     switch d {
     case .text(let text, let style): DText(text, style)
     case .space: DSpace(spacing)

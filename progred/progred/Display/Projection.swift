@@ -12,7 +12,7 @@ struct ProjectionContext {
     private let schema: Schema
 
     init(entity: Id?, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>,
-         commit: Commit? = nil, substitution: Substitution = [:]) {
+         commit: Commit? = nil, substitution: Substitution = .init()) {
         self.entity = entity
         self.gid = gid
         self.schema = schema
