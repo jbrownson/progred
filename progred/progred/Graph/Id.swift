@@ -1,6 +1,6 @@
 import Foundation
 
-enum Id: Hashable, Comparable {
+nonisolated enum Id: Hashable, Comparable, Sendable {
     case uuid(UUID)
     case string(String)
     case number(Double)
