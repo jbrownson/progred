@@ -2,6 +2,7 @@ import AppKit
 
 private class Pill: NSView {
     override var isFlipped: Bool { true }
+    var onActivate: (() -> Void)?
 
     override var intrinsicContentSize: NSSize {
         let textHeight = NSFont.systemFont(ofSize: NSFont.systemFontSize).boundingRectForFont.height
@@ -11,6 +12,18 @@ private class Pill: NSView {
     override func draw(_ dirtyRect: NSRect) {
         NSColor.separatorColor.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+    }
+
+    override var acceptsFirstResponder: Bool { onActivate != nil }
+    override var canBecomeKeyView: Bool { onActivate != nil }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        onActivate?()
+        return true
     }
 }
 
@@ -28,6 +41,7 @@ class DPlaceholder: FlippedView, Reconcilable {
         self.substitution = substitution
         self.editor = editor
         super.init(frame: .zero)
+        pill.onActivate = commit != nil ? { [weak self] in self?.activate() } : nil
         showPill()
     }
 
@@ -35,14 +49,6 @@ class DPlaceholder: FlippedView, Reconcilable {
 
     override var intrinsicContentSize: NSSize {
         searchPopup?.intrinsicContentSize ?? pill.intrinsicContentSize
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        guard commit != nil, searchPopup == nil else {
-            nextResponder?.mouseDown(with: event)
-            return
-        }
-        activate()
     }
 
     private func showPill() {
@@ -77,6 +83,7 @@ class DPlaceholder: FlippedView, Reconcilable {
         self.commit = commit.map { c in { editor, id in c(editor, id) } }
         self.expectedType = expectedType
         self.substitution = substitution
+        pill.onActivate = self.commit != nil ? { [weak self] in self?.activate() } : nil
         return true
     }
 }
