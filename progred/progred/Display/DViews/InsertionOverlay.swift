@@ -106,8 +106,12 @@ class InsertionOverlay: FlippedView {
     }
 
     private func updateZones() {
-        zones.forEach { removeTrackingArea($0.tracking) }
+        zones.forEach {
+            $0.zone.view.isHovered = false
+            removeTrackingArea($0.tracking)
+        }
         let found = findZones(in: self)
+        let mouseLocal = window.map { convert($0.mouseLocationOutsideOfEventStream, from: nil) }
         zones = found.map { zone in
             let area = NSTrackingArea(
                 rect: zone.rect,
@@ -115,6 +119,7 @@ class InsertionOverlay: FlippedView {
                 owner: self,
                 userInfo: [trackingKey: zone.view])
             addTrackingArea(area)
+            if let mouseLocal, zone.rect.contains(mouseLocal) { zone.view.isHovered = true }
             return (zone, area)
         }
         drawingOverlay.zones = found
