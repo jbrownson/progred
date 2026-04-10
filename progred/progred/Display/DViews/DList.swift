@@ -159,7 +159,12 @@ class DList: FlippedView, Reconcilable {
 
     private func populateInline() {
         guard let stack = lineStack else { return }
-        stack.arrangedSubviews.forEach { stack.removeArrangedSubview($0); $0.removeFromSuperview() }
+        for view in stack.arrangedSubviews {
+            stack.removeArrangedSubview(view)
+            if !(view is InsertionPointView) && !elementViews.contains(where: { $0 === view }) {
+                view.removeFromSuperview()
+            }
+        }
         stack.addArrangedSubview(styledLabel(list.open, .punctuation))
         var needsComma = false
         for i in 0..<elementViews.count {
