@@ -33,6 +33,14 @@ class DNumberEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(deleteBackward(_:)) && textView.selectedRange().location == 0 && textView.selectedRange().length == 0 {
+            commit?(editor, nil)
+            return true
+        }
+        if commandSelector == #selector(deleteForward(_:)) && textView.selectedRange() == NSRange(location: stringValue.count, length: 0) {
+            commit?(editor, nil)
+            return true
+        }
         if commandSelector == #selector(insertNewline(_:)) {
             if let value = Double(stringValue) {
                 commit?(editor, .number(value))
