@@ -6,7 +6,7 @@ private class TabStop: NSView {
 
     override var intrinsicContentSize: NSSize { .zero }
     override var acceptsFirstResponder: Bool { onActivate != nil }
-    override var canBecomeKeyView: Bool { onActivate != nil }
+    override var canBecomeKeyView: Bool { onActivate != nil && !isHiddenOrHasHiddenAncestor }
 
     override func becomeFirstResponder() -> Bool {
         onActivate?()

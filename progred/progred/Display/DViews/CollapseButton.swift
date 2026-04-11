@@ -61,6 +61,11 @@ class CollapseButton: NSButton {
         needsDisplay = true
     }
 
+    override func keyDown(with event: NSEvent) {
+        if event.characters == " " { performClick(nil) }
+        else { super.keyDown(with: event) }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         if isHovered {
             NSColor.quaternaryLabelColor.setFill()

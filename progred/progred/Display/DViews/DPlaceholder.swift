@@ -15,7 +15,7 @@ private class Pill: NSView {
     }
 
     override var acceptsFirstResponder: Bool { onActivate != nil }
-    override var canBecomeKeyView: Bool { onActivate != nil && !isHidden }
+    override var canBecomeKeyView: Bool { onActivate != nil && !isHiddenOrHasHiddenAncestor }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
