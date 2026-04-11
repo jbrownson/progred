@@ -15,7 +15,7 @@ private class Pill: NSView {
     }
 
     override var acceptsFirstResponder: Bool { onActivate != nil }
-    override var canBecomeKeyView: Bool { onActivate != nil }
+    override var canBecomeKeyView: Bool { onActivate != nil && !isHidden }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
@@ -42,7 +42,8 @@ class DPlaceholder: FlippedView, Reconcilable {
         self.editor = editor
         super.init(frame: .zero)
         pill.onActivate = commit != nil ? { [weak self] in self?.activate() } : nil
-        showPill()
+        addSubview(pill)
+        constrain(pill, toFill: self)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -51,30 +52,26 @@ class DPlaceholder: FlippedView, Reconcilable {
         searchPopup?.intrinsicContentSize ?? pill.intrinsicContentSize
     }
 
-    private func showPill() {
-        subviews.forEach { $0.removeFromSuperview() }
-        addSubview(pill)
-        constrain(pill, toFill: self)
-        invalidateIntrinsicContentSize()
-    }
-
     private func activate() {
         guard let commit else { return }
         let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor) { [weak self] in
             self?.dismissSearch()
         }
         self.searchPopup = popup
-        subviews.forEach { $0.removeFromSuperview() }
+        pill.isHidden = true
         addSubview(popup)
         constrain(popup, toFill: self)
         invalidateIntrinsicContentSize()
+        window?.recalculateKeyViewLoop()
         popup.focus()
     }
 
     private func dismissSearch() {
-        searchPopup?.removeFromSuperview()
+        guard let popup = searchPopup else { return }
         searchPopup = nil
-        showPill()
+        popup.removeFromSuperview()
+        pill.isHidden = false
+        invalidateIntrinsicContentSize()
     }
 
     func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {

@@ -1,6 +1,15 @@
 import AppKit
 import Observation
 
+class EditorWindow: NSWindow {
+    override func keyDown(with event: NSEvent) {
+        interpretKeyEvents([event])
+    }
+
+    override func insertTab(_ sender: Any?) { selectNextKeyView(sender) }
+    override func insertBacktab(_ sender: Any?) { selectPreviousKeyView(sender) }
+}
+
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
@@ -17,7 +26,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        editor = Editor.withSampleDocument()
+        editor = Editor(schema: Editor.withSampleDocument().schema)
 
         rootView = DRootView(editor: editor)
 
@@ -30,7 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         scrollView.horizontalScrollElasticity = .none
         scrollView.documentView = rootView
 
-        window = NSWindow(
+        window = EditorWindow(
             contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,

@@ -202,7 +202,23 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         rebuildEntries()
     }
 
+    // When Tab/Shift-Tab ends editing, NSTextField.textDidEndEditing calls:
+    //   1. Our controlTextDidEndEditing (this method)
+    //   2. selectKeyView(following:/preceding:) to advance focus
+    // Step 2 needs the SearchField in the view hierarchy to find the next key view.
+    // Our onDismiss removes it (swaps SearchPopup for the Pill/TabStop). We can't
+    // advance synchronously before removing either — removeFromSuperview triggers
+    // NSControl._setWindow → abortEditing → makeFirstResponder(window), which
+    // clobbers any focus we set. Deferring the dismiss lets step 2 complete with
+    // the SearchField still in place, then we clean up after the stack unwinds.
     func controlTextDidEndEditing(_ obj: Notification) {
-        onDismiss()
+        let movement = obj.userInfo?["NSTextMovement"] as? Int
+        if movement == NSTabTextMovement || movement == NSBacktabTextMovement {
+            popupPanel.parent?.removeChildWindow(popupPanel)
+            popupPanel.orderOut(nil)
+            DispatchQueue.main.async { [self] in onDismiss() }
+        } else {
+            onDismiss()
+        }
     }
 }

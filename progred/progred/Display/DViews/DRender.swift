@@ -55,18 +55,8 @@ class DRootView: FlippedView {
             height: max(visible.height, needed.height))
     }
 
-    override var acceptsFirstResponder: Bool { true }
-    override var canBecomeKeyView: Bool { false }
-
-    override func keyDown(with event: NSEvent) {
-        interpretKeyEvents([event])
-    }
-
-    override func insertTab(_ sender: Any?) { window?.selectNextKeyView(self) }
-    override func insertBacktab(_ sender: Any?) { window?.selectPreviousKeyView(self) }
-
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
+        window?.makeFirstResponder(nil)
     }
 }
 
