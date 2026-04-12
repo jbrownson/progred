@@ -37,6 +37,7 @@ class DList: FlippedView, Reconcilable {
 
     private func makeInsertionPoints() -> [InsertionPointView] {
         guard let insertion = list.insertion else { return [] }
+        let tabReachable = list.elements.isEmpty
         return (0...list.elements.count).map { position in
             let ip = InsertionPointView(
                 commit: { editor, id in insertion.insert(editor, id, position) },
@@ -44,6 +45,7 @@ class DList: FlippedView, Reconcilable {
                 substitution: insertion.substitution,
                 editor: editor,
                 vertical: !list.inline)
+            ip.isTabReachable = tabReachable
             if list.inline { ip.onLayoutChange = { [weak self] in self?.populateInline() } }
             return ip
         }
@@ -56,6 +58,7 @@ class DList: FlippedView, Reconcilable {
             return
         }
         let needed = list.elements.count + 1
+        let tabReachable = list.elements.isEmpty
         while insertionPoints.count > needed {
             let ip = insertionPoints.removeLast()
             ip.removeFromSuperview()
@@ -67,6 +70,7 @@ class DList: FlippedView, Reconcilable {
                 expectedType: insertion.expectedType,
                 substitution: insertion.substitution)
             ip.vertical = !list.inline
+            ip.isTabReachable = tabReachable
         }
         while insertionPoints.count < needed {
             let position = insertionPoints.count
@@ -76,6 +80,7 @@ class DList: FlippedView, Reconcilable {
                 substitution: insertion.substitution,
                 editor: editor,
                 vertical: !list.inline)
+            ip.isTabReachable = tabReachable
             if list.inline { ip.onLayoutChange = { [weak self] in self?.populateInline() } }
             insertionPoints.append(ip)
         }

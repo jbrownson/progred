@@ -3,10 +3,13 @@ import AppKit
 private class TabStop: NSView {
     override var isFlipped: Bool { true }
     var onActivate: (() -> Void)?
+    var isInTabLoop: Bool = false
 
     override var intrinsicContentSize: NSSize { .zero }
     override var acceptsFirstResponder: Bool { onActivate != nil }
-    override var canBecomeKeyView: Bool { onActivate != nil && !isHiddenOrHasHiddenAncestor }
+    override var canBecomeKeyView: Bool {
+        onActivate != nil && !isHiddenOrHasHiddenAncestor && isInTabLoop
+    }
 
     override func becomeFirstResponder() -> Bool {
         onActivate?()
@@ -22,6 +25,9 @@ class InsertionPointView: FlippedView {
     var isHovered = false
     var vertical = false
     var onLayoutChange: (() -> Void)?
+    var isTabReachable: Bool = false {
+        didSet { tabStop.isInTabLoop = isTabReachable }
+    }
     private var searchPopup: SearchPopup?
     private let tabStop = TabStop()
 

@@ -24,6 +24,8 @@ class DNumberEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override var canBecomeKeyView: Bool { false }
+
     override var intrinsicContentSize: NSSize {
         NSSize(width: textWidth(stringValue), height: super.intrinsicContentSize.height)
     }

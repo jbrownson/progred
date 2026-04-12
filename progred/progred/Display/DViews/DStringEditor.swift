@@ -1,6 +1,8 @@
 import AppKit
 
-private class SizingTextField: NSTextField {
+private class EditorField: NSTextField {
+    override var canBecomeKeyView: Bool { false }
+
     override var intrinsicContentSize: NSSize {
         NSSize(width: max(textWidth(stringValue), 2), height: super.intrinsicContentSize.height)
     }
@@ -19,7 +21,7 @@ class DStringEditor: FlippedView, Reconcilable, NSTextFieldDelegate {
     init(_ string: String, editor: Editor, commit: Commit?) {
         self.editor = editor
         self.commit = commit
-        self.field = SizingTextField()
+        self.field = EditorField()
         super.init(frame: .zero)
 
         field.stringValue = string

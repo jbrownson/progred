@@ -26,6 +26,8 @@ class CollapseButton: NSButton {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    override var canBecomeKeyView: Bool { false }
+
     @objc private func didPress() {
         isCollapsed.toggle()
         updateAppearance()
