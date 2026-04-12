@@ -1,6 +1,6 @@
 import Foundation
 
-typealias Render = (ProjectionContext) -> D?
+typealias Projector = (ProjectionContext) -> D?
 
 struct ProjectionContext {
     let entity: Id?
@@ -105,7 +105,7 @@ struct ProjectionContext {
             commit: commit, substitution: substitution)
     }
 
-    func descend(_ field: Id, render: Render? = nil, commit: Commit? = nil) -> D {
+    func descend(_ field: Id, projector: Projector? = nil, commit: Commit? = nil) -> D {
         let value = get(field)
         let childAncestors = entity.map { ancestors.union([$0]) } ?? ancestors
         let childInCycle = value.map { childAncestors.contains($0) } ?? false
@@ -131,7 +131,7 @@ struct ProjectionContext {
             editor: editor, ancestors: childAncestors,
             commit: edgeReadOnly ? nil : edgeCommit,
             substitution: childSubstitution)
-        let d = render.flatMap { $0(childCtx) } ?? progred.project(childCtx)
+        let d = projector.flatMap { $0(childCtx) } ?? progred.project(childCtx)
         return .descend(Descend(
             inCycle: childInCycle,
             commit: edgeCommit,
@@ -140,20 +140,20 @@ struct ProjectionContext {
             body: d))
     }
 
-    func project(_ id: Id, render: Render? = nil) -> D {
+    func project(_ id: Id, projector: Projector? = nil) -> D {
         let ctx = ProjectionContext(entity: id, gid: gid, schema: schema, editor: editor, ancestors: ancestors)
-        return render.flatMap({ $0(ctx) }) ?? progred.project(ctx)
+        return projector.flatMap({ $0(ctx) }) ?? progred.project(ctx)
     }
 
-    func project(field: Id, render: Render? = nil) -> D {
+    func project(field: Id, projector: Projector? = nil) -> D {
         guard let value = get(field) else { return .placeholder }
-        return project(value, render: render)
+        return project(value, projector: projector)
     }
 }
 
 // MARK: - Dispatch
 
-private let projectPrimitive: Render = { ctx in
+private let projectPrimitive: Projector = { ctx in
     guard let entity = ctx.entity else { return nil }
     switch entity {
     case .string, .number: return rawHeader(entity)
@@ -161,7 +161,7 @@ private let projectPrimitive: Render = { ctx in
     }
 }
 
-private let renders: [Render] = [
+private let projectors: [Projector] = [
     // MARK: Domain
     projectTypeParameter,
     projectField,
@@ -170,21 +170,21 @@ private let renders: [Render] = [
     projectSum,
 
     // MARK: Kernel
-    renderList(),
+    projectList(),
     projectPrimitive,
     projectKernel,
 ]
 
 func project(_ ctx: ProjectionContext) -> D {
-    for render in renders {
-        if let d = render(ctx) { return d }
+    for projector in projectors {
+        if let d = projector(ctx) { return d }
     }
     return projectRaw(ctx)
 }
 
-// MARK: - Shallow reference render
+// MARK: - Shallow reference projection
 
-let renderRef: Render = { ctx in
+let projectRef: Projector = { ctx in
     if let d = projectApply(ctx) { return d }
     if let name = ctx.name() { return .text(name, .literal) }
     return kernelHeader(ctx: ctx)

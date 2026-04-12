@@ -22,7 +22,7 @@ func inlineBrackets(open: String, close: String, _ items: [D]) -> D {
     return .line(parts)
 }
 
-func renderList(open: String = "[", close: String = "]", inline: Bool = false, elementRender: Render? = nil) -> Render {
+func projectList(open: String = "[", close: String = "]", inline: Bool = false, elementProjector: Projector? = nil) -> Projector {
     { ctx in
         guard let entity = ctx.entity,
               let (conses, empty, consesReadOnly) = ctx.conses(entity)
@@ -46,7 +46,7 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
                     }
                 }
                 let consCtx = ctx.with(entity: cons, commit: listCommit != nil ? elementCommit : nil)
-                return consCtx.descend(ctx.headField, render: elementRender, commit: elementCommit)
+                return consCtx.descend(ctx.headField, projector: elementProjector, commit: elementCommit)
             }
 
         let insertion: ListInsert? = listCommit.map { listCommit in

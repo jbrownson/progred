@@ -13,7 +13,7 @@ func projectField(_ ctx: ProjectionContext) -> D? {
         .space,
         .text("→", .punctuation),
         .space,
-        ctx.descend(ctx.typeExpressionField, render: renderRef),
+        ctx.descend(ctx.typeExpressionField, projector: projectRef),
     ]))
 }
 
@@ -40,16 +40,16 @@ func projectApply(_ ctx: ProjectionContext) -> D? {
 
     let args = typeParams.map { tp in
         D.line([
-            ctx.project(tp, render: renderRef),
+            ctx.project(tp, projector: projectRef),
             .space,
             .text("→", .punctuation),
             .space,
-            ctx.project(field: tp, render: renderRef),
+            ctx.project(field: tp, projector: projectRef),
         ])
     }
 
     return .selectable(.line([
-        ctx.project(tfId, render: renderRef),
+        ctx.project(tfId, projector: projectRef),
         inlineBrackets(open: "<", close: ">", args),
     ]))
 }
@@ -61,6 +61,6 @@ private func typeHeader(ctx: ProjectionContext) -> D {
         .space,
         ctx.descend(ctx.nameField),
         ctx.descend(ctx.typeParametersField,
-            render: renderList(open: "<", close: ">", inline: true, elementRender: renderRef)),
+            projector: projectList(open: "<", close: ">", inline: true, elementProjector: projectRef)),
     ])
 }
