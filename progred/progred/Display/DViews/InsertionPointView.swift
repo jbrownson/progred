@@ -53,7 +53,7 @@ class InsertionPointView: FlippedView {
     }
 
     func activate() {
-        guard searchPopup == nil else { return }
+        assert(searchPopup == nil, "activate called while popup already present")
         let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor) { [weak self] in
             self?.dismissSearch()
         }

@@ -54,6 +54,7 @@ class DPlaceholder: FlippedView, Reconcilable {
 
     private func activate() {
         guard let commit else { return }
+        assert(searchPopup == nil, "activate called while popup already present")
         let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor) { [weak self] in
             self?.dismissSearch()
         }
@@ -64,6 +65,7 @@ class DPlaceholder: FlippedView, Reconcilable {
         invalidateIntrinsicContentSize()
         window?.recalculateKeyViewLoop()
         popup.focus()
+        rescanInsertionZones()
     }
 
     private func dismissSearch() {
@@ -72,6 +74,7 @@ class DPlaceholder: FlippedView, Reconcilable {
         popup.removeFromSuperview()
         pill.isHidden = false
         invalidateIntrinsicContentSize()
+        rescanInsertionZones()
     }
 
     func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
