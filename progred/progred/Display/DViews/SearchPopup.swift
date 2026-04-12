@@ -73,6 +73,51 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         rebuildEntries()
     }
 
+    // Tab / Shift-Tab handling.
+    //
+    // We handle tab advancement ourselves instead of letting NSTextField's built-in
+    // Tab handling run, because the default path fights our dismiss-then-show pattern:
+    //
+    //   Default path:
+    //     1. NSTextField calls endEditing with NSTabTextMovement
+    //     2. controlTextDidEndEditing fires
+    //     3. NSTextField then calls window.selectKeyView(following:/preceding:)
+    //
+    //   If our dismiss runs in step 2, the SearchPopup (containing the SearchField
+    //   that's the current first responder) gets removeFromSuperview'd. That triggers
+    //   NSControl._setWindow → abortEditing → makeFirstResponder(window), which
+    //   clobbers focus. Step 3 then advances from whatever that clobber set — not
+    //   from the SearchField's original position in the key view loop.
+    //
+    //   Previous workaround: defer dismiss via DispatchQueue.main.async so step 3
+    //   runs while SearchField is still in place. This worked for focus but caused
+    //   a distinct bug — during the async gap, the NEXT placeholder's becomeFirst-
+    //   Responder fires and its popup anchors against the still-wide layout (the
+    //   dismissing placeholder hasn't shrunk back to pill size yet). Result: the
+    //   next popup's panel shows up at a stale screen X, often visibly too far right.
+    //   See git history around this comment for the log that traced this.
+    //
+    //   Also tried: keyDown intercept on SearchField. Works but semantically dishonest
+    //   ("a key was pressed" — we only care about one key). Handling in doCommandBy
+    //   at the insertTab:/insertBacktab: selector is still slightly misnamed (we're
+    //   not inserting tab characters), but it's Apple's own repurposed convention for
+    //   single-line NSTextFields: the default insertTab: action on a single-line
+    //   control calls endEditing with NSTabTextMovement, so we're replacing a
+    //   dismiss-and-advance with our own dismiss-and-advance that orders correctly.
+    //
+    // Correct ordering, which this method implements:
+    //   1. Capture nextValidKeyView while SearchField is still in the hierarchy
+    //   2. onDismiss sync — SearchPopup removed, owning placeholder collapses to pill,
+    //      layout settles
+    //   3. makeFirstResponder on the captured target — its activate() anchors its
+    //      popup against the settled (post-collapse) layout
+    private func advanceKeyView(following: Bool) {
+        let target = following ? searchField.nextValidKeyView : searchField.previousValidKeyView
+        let window = self.window
+        onDismiss()
+        target.flatMap { window?.makeFirstResponder($0) }
+    }
+
     required init?(coder: NSCoder) { fatalError() }
 
     override var intrinsicContentSize: NSSize { searchField.intrinsicContentSize }
@@ -195,6 +240,14 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
             tableView.scrollRowToVisible(prev)
             return true
         }
+        if commandSelector == #selector(NSResponder.insertTab(_:)) {
+            advanceKeyView(following: true)
+            return true
+        }
+        if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
+            advanceKeyView(following: false)
+            return true
+        }
         return false
     }
 
@@ -202,23 +255,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         rebuildEntries()
     }
 
-    // When Tab/Shift-Tab ends editing, NSTextField.textDidEndEditing calls:
-    //   1. Our controlTextDidEndEditing (this method)
-    //   2. selectKeyView(following:/preceding:) to advance focus
-    // Step 2 needs the SearchField in the view hierarchy to find the next key view.
-    // Our onDismiss removes it (swaps SearchPopup for the Pill/TabStop). We can't
-    // advance synchronously before removing either — removeFromSuperview triggers
-    // NSControl._setWindow → abortEditing → makeFirstResponder(window), which
-    // clobbers any focus we set. Deferring the dismiss lets step 2 complete with
-    // the SearchField still in place, then we clean up after the stack unwinds.
     func controlTextDidEndEditing(_ obj: Notification) {
-        let movement = obj.userInfo?["NSTextMovement"] as? Int
-        if movement == NSTabTextMovement || movement == NSBacktabTextMovement {
-            popupPanel.parent?.removeChildWindow(popupPanel)
-            popupPanel.orderOut(nil)
-            DispatchQueue.main.async { [self] in onDismiss() }
-        } else {
-            onDismiss()
-        }
+        onDismiss()
     }
 }
