@@ -65,6 +65,6 @@ private func typeHeader(ctx: ProjectionContext) -> D {
         .space,
         ctx.descend(ctx.nameField),
         ctx.descend(ctx.typeParametersField,
-            projector: projectList(open: "<", close: ">", inline: true, elementProjector: projectRef)),
+            projector: projectList(open: "<", close: ">", inline: true)),
     ])
 }
