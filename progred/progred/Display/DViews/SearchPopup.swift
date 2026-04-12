@@ -128,7 +128,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
     }
 
     func focus() {
-        window?.makeFirstResponder(searchField)
+        window!.makeFirstResponder(searchField)
     }
 
     override func viewDidMoveToWindow() {

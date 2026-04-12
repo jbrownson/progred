@@ -58,13 +58,13 @@ class InsertionPointView: FlippedView {
             self?.dismissSearch()
         }
         self.searchPopup = popup
-        tabStop.removeFromSuperview()
         addSubview(popup)
         constrain(popup, toFill: self)
         invalidateIntrinsicContentSize()
+        popup.focus()
+        tabStop.removeFromSuperview()
         onLayoutChange?()
         window?.recalculateKeyViewLoop()
-        popup.focus()
         rescanInsertionZones()
     }
 

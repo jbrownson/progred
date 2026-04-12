@@ -52,6 +52,12 @@ class DPlaceholder: FlippedView, Reconcilable {
         searchPopup?.intrinsicContentSize ?? pill.intrinsicContentSize
     }
 
+    // Focus must move to the searchField before the pill is hidden. Hiding a
+    // currently-first-responder view makes AppKit auto-advance to the next
+    // valid key view, cascading through every activatable pill in the window.
+    // If more AppKit weirdness shows up around this state toggle, consider
+    // switching to remove/re-add (like InsertionPointView does with tabStop) —
+    // removal nulls FR to the window rather than advancing.
     private func activate() {
         guard let commit else { return }
         assert(searchPopup == nil, "activate called while popup already present")
@@ -59,12 +65,14 @@ class DPlaceholder: FlippedView, Reconcilable {
             self?.dismissSearch()
         }
         self.searchPopup = popup
-        pill.isHidden = true
         addSubview(popup)
         constrain(popup, toFill: self)
         invalidateIntrinsicContentSize()
-        window?.recalculateKeyViewLoop()
         popup.focus()
+        pill.isHidden = true
+        // Explicit recalc — autorecalculatesKeyViewLoop doesn't reliably pick
+        // up the isHidden change before the user's next Tab traversal.
+        window?.recalculateKeyViewLoop()
         rescanInsertionZones()
     }
 
