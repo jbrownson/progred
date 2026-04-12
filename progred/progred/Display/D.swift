@@ -42,6 +42,7 @@ indirect enum D {
     case list(List)
 
     // MARK: - Interactive
+    case selectable(D)
     case placeholder
     case stringEditor(String)
     case numberEditor(Double)

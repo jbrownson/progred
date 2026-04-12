@@ -2,35 +2,35 @@ import Foundation
 
 func projectTypeParameter(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.typeParameterRecord else { return nil }
-    return .line([.text("∀", .punctuation), ctx.descend(ctx.nameField)])
+    return .selectable(.line([.text("∀", .punctuation), ctx.descend(ctx.nameField)]))
 }
 
 func projectField(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.fieldRecord else { return nil }
 
-    return .line([
+    return .selectable(.line([
         ctx.descend(ctx.nameField),
         .space,
         .text("→", .punctuation),
         .space,
         ctx.descend(ctx.typeExpressionField, render: renderRef),
-    ])
+    ]))
 }
 
 func projectRecord(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.recordRecord else { return nil }
 
-    return .collapse(collapsed: false,
+    return .selectable(.collapse(collapsed: false,
         header: typeHeader(ctx: ctx),
-        body: { labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx) })
+        body: { labeled(ctx.fieldsField, ctx.descend(ctx.fieldsField), ctx: ctx) }))
 }
 
 func projectSum(_ ctx: ProjectionContext) -> D? {
     guard ctx.record() == ctx.sumRecord else { return nil }
 
-    return .collapse(collapsed: false,
+    return .selectable(.collapse(collapsed: false,
         header: typeHeader(ctx: ctx),
-        body: { labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx) })
+        body: { labeled(ctx.summandsField, ctx.descend(ctx.summandsField), ctx: ctx) }))
 }
 
 func projectApply(_ ctx: ProjectionContext) -> D? {
@@ -48,10 +48,10 @@ func projectApply(_ ctx: ProjectionContext) -> D? {
         ])
     }
 
-    return .line([
+    return .selectable(.line([
         ctx.project(tfId, render: renderRef),
         inlineBrackets(open: "<", close: ">", args),
-    ])
+    ]))
 }
 
 private func typeHeader(ctx: ProjectionContext) -> D {

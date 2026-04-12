@@ -29,48 +29,4 @@ class DDescend: FlippedView, Reconcilable {
         }
         return true
     }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func becomeFirstResponder() -> Bool {
-        needsDisplay = true
-        return true
-    }
-
-    override func resignFirstResponder() -> Bool {
-        needsDisplay = true
-        return true
-    }
-
-    private var isSelected: Bool {
-        window?.firstResponder === self
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard isSelected else { return }
-        let rect = bounds.insetBy(dx: -2, dy: -2)
-        NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        interpretKeyEvents([event])
-    }
-
-    @objc func delete(_ sender: Any?) {
-        guard let commit = descend.commit else { return }
-        window?.makeFirstResponder(nil)
-        commit(editor, nil)
-    }
-
-    override func deleteBackward(_ sender: Any?) { delete(sender) }
-    override func deleteForward(_ sender: Any?) { delete(sender) }
-
-    override func cancelOperation(_ sender: Any?) {
-        window?.makeFirstResponder(nil)
-    }
 }

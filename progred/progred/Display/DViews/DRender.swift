@@ -69,6 +69,7 @@ func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? =
     case .line(let children): DLine(children: children, editor: editor)
     case .list(let list): DList(list, editor: editor)
     case .indent(let child): DIndent(child: child, editor: editor, vertical: vertical)
+    case .selectable(let body): DSelectable(body, editor: editor, commit: commit)
     case .descend(let descend): DDescend(descend, editor: editor, vertical: vertical)
     case .collapse(let collapsed, let header, let body):
         DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, inCycle: inCycle, vertical: vertical)

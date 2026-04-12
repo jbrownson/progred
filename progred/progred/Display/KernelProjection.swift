@@ -66,11 +66,11 @@ func renderList(open: String = "[", close: String = "]", inline: Bool = false, e
                 substitution: ctx.substitution)
         }
 
-        return .list(List(
+        return .selectable(.list(List(
             open: open, close: close, separator: ", ",
             inline: inline,
             elements: elements,
-            insertion: insertion))
+            insertion: insertion)))
     }
 }
 
@@ -90,12 +90,12 @@ func projectKernel(_ ctx: ProjectionContext) -> D? {
         ?? []
 
     let allFields = declaredFields + extras
-    if allFields.isEmpty { return header }
+    if allFields.isEmpty { return .selectable(header) }
 
-    return .collapse(collapsed: false, header: header) {
+    return .selectable(.collapse(collapsed: false, header: header) {
         .block(allFields.map { field in
             labeled(field, ctx.descend(field), ctx: ctx)
         })
-    }
+    })
 }
 
