@@ -185,9 +185,9 @@ func project(_ ctx: ProjectionContext) -> D {
 // MARK: - Shallow reference projection
 
 let projectRef: Projector = { ctx in
-    if let d = projectApply(ctx) { return d }
-    if let name = ctx.name() { return .text(name, .literal) }
-    return kernelHeader(ctx: ctx)
+    guard let entity = ctx.entity else { return .placeholder }
+    let body: D = ctx.name().map { .text($0, .literal) } ?? rawHeader(entity)
+    return .selectable(body)
 }
 
 // MARK: - Raw header

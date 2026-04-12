@@ -13,7 +13,7 @@ func projectField(_ ctx: ProjectionContext) -> D? {
         .space,
         .text("→", .punctuation),
         .space,
-        ctx.descend(ctx.typeExpressionField, projector: projectRef),
+        ctx.descend(ctx.typeExpressionField, projector: projectTypeExpression),
     ]))
 }
 
@@ -44,7 +44,7 @@ func projectApply(_ ctx: ProjectionContext) -> D? {
             .space,
             .text("→", .punctuation),
             .space,
-            ctx.project(field: tp, projector: projectRef),
+            ctx.project(field: tp, projector: projectTypeExpression),
         ])
     }
 
@@ -52,6 +52,10 @@ func projectApply(_ ctx: ProjectionContext) -> D? {
         ctx.project(tfId, projector: projectRef),
         inlineBrackets(open: "<", close: ">", args),
     ]))
+}
+
+let projectTypeExpression: Projector = { ctx in
+    projectApply(ctx) ?? projectRef(ctx)
 }
 
 private func typeHeader(ctx: ProjectionContext) -> D {
