@@ -1,6 +1,6 @@
 import AppKit
 
-private class EditorField: NSTextField {
+private class EditorField: NSTextField, StructuralNode {
     override var canBecomeKeyView: Bool { false }
 
     override var intrinsicContentSize: NSSize {

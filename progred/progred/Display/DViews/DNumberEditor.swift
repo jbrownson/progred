@@ -1,6 +1,6 @@
 import AppKit
 
-class DNumberEditor: NSTextField, Reconcilable, NSTextFieldDelegate {
+class DNumberEditor: NSTextField, Reconcilable, NSTextFieldDelegate, StructuralNode {
     var editor: Editor
     var commit: Commit?
     private var original: Double
