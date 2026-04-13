@@ -21,7 +21,9 @@ class EditorWindow: NSWindow {
         }
         switch direction {
         case .up, .down, .left, .right:
-            contentView?.firstDescendantStructural().flatMap { makeFirstResponder($0) }
+            if let root = contentView?.firstDescendantStructural() {
+                makeFirstResponder(root)
+            }
         case .tab, .backtab:
             break
         }
