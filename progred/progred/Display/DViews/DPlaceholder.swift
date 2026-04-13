@@ -1,6 +1,6 @@
 import AppKit
 
-private class Pill: NSView, FocusTarget {
+private class Pill: NSView, FocusTarget, StructuralNode {
     override var isFlipped: Bool { true }
     var onActivate: (() -> Void)?
 

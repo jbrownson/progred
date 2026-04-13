@@ -1,6 +1,6 @@
 import AppKit
 
-class DSelectable: FlippedView, Reconcilable, FocusTarget {
+class DSelectable: FlippedView, Reconcilable, FocusTarget, StructuralNode {
     var commit: Commit?
     var childView: NSView
     var editor: Editor
@@ -66,6 +66,22 @@ class DSelectable: FlippedView, Reconcilable, FocusTarget {
 
     override func insertBacktab(_ sender: Any?) {
         nextFocusTarget(.backtab).flatMap { window?.makeFirstResponder($0) }
+    }
+
+    override func moveUp(_ sender: Any?) {
+        nextFocusTarget(.up).flatMap { window?.makeFirstResponder($0) }
+    }
+
+    override func moveDown(_ sender: Any?) {
+        nextFocusTarget(.down).flatMap { window?.makeFirstResponder($0) }
+    }
+
+    override func moveLeft(_ sender: Any?) {
+        nextFocusTarget(.left).flatMap { window?.makeFirstResponder($0) }
+    }
+
+    override func moveRight(_ sender: Any?) {
+        nextFocusTarget(.right).flatMap { window?.makeFirstResponder($0) }
     }
 
     @objc func delete(_ sender: Any?) {

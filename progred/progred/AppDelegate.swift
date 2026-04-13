@@ -6,17 +6,25 @@ class EditorWindow: NSWindow {
         interpretKeyEvents([event])
     }
 
-    override func insertTab(_ sender: Any?) {
-        advance(.tab)
-    }
-
-    override func insertBacktab(_ sender: Any?) {
-        advance(.backtab)
-    }
+    override func insertTab(_ sender: Any?) { advance(.tab) }
+    override func insertBacktab(_ sender: Any?) { advance(.backtab) }
+    override func moveUp(_ sender: Any?) { advance(.up) }
+    override func moveDown(_ sender: Any?) { advance(.down) }
+    override func moveLeft(_ sender: Any?) { advance(.left) }
+    override func moveRight(_ sender: Any?) { advance(.right) }
 
     private func advance(_ direction: NavigationDirection) {
         let start: NSView = (firstResponder as? NSView) ?? contentView!
-        start.nextFocusTarget(direction).flatMap { makeFirstResponder($0) }
+        if let target = start.nextFocusTarget(direction) {
+            makeFirstResponder(target)
+            return
+        }
+        switch direction {
+        case .up, .down, .left, .right:
+            contentView?.firstDescendantStructural().flatMap { makeFirstResponder($0) }
+        case .tab, .backtab:
+            break
+        }
     }
 }
 

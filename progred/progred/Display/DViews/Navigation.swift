@@ -1,14 +1,11 @@
 import AppKit
 
 enum NavigationDirection {
-    case tab
-    case backtab
-    // Arrow directions coming later (up/down/left/right over structural tree).
+    case tab, backtab   // Document-order, skipping to next unfilled slot.
+    case left, right    // Parent / first-child over StructuralNodes.
+    case up, down       // Previous / next sibling StructuralNode.
 }
 
-/// Views that participate in our keyboard navigation by declaring what the user
-/// can reach them via. Default implementation lands nothing — conforming views
-/// opt in by overriding `isTabTarget` etc.
 protocol FocusTarget: NSView {
     var isTabTarget: Bool { get }
 }
@@ -17,9 +14,9 @@ extension FocusTarget {
     var isTabTarget: Bool { false }
 }
 
+protocol StructuralNode: NSView {}
+
 extension NSView {
-    /// Next view in document order (preorder traversal of the tree).
-    /// First child if any; else the next sibling; else the ancestor's next sibling; else nil.
     fileprivate func nextInDocumentOrder() -> NSView? {
         if let first = subviews.first { return first }
         var view: NSView = self
@@ -30,9 +27,6 @@ extension NSView {
         return nil
     }
 
-    /// Previous view in document order.
-    /// Previous sibling's deepest-last descendant if there's a previous sibling;
-    /// else the parent.
     fileprivate func prevInDocumentOrder() -> NSView? {
         guard let parent = superview else { return nil }
         if let prevSib = parent.sibling(before: self) {
@@ -57,20 +51,62 @@ extension NSView {
         return view
     }
 
-    /// Walk the tree to find the next FocusTarget matching the given direction.
-    /// Returns nil if no target is found (e.g. end of document).
     func nextFocusTarget(_ direction: NavigationDirection) -> NSView? {
-        let step: (NSView) -> NSView? = { view in
+        switch direction {
+        case .tab, .backtab:
+            let step: (NSView) -> NSView? = { view in
+                direction == .tab ? view.nextInDocumentOrder() : view.prevInDocumentOrder()
+            }
+            var view = step(self)
+            while let v = view {
+                if let target = v as? FocusTarget, target.isTabTarget { return v }
+                view = step(v)
+            }
+            return nil
+        case .up, .down, .left, .right:
+            guard let current = enclosingStructural() else { return nil }
             switch direction {
-            case .tab: return view.nextInDocumentOrder()
-            case .backtab: return view.prevInDocumentOrder()
+            case .left:
+                return current.superview?.enclosingStructural()
+            case .right:
+                return current.firstDescendantStructural()
+            case .up, .down:
+                guard let parent = current.superview?.enclosingStructural() else { return nil }
+                let siblings = parent.childStructurals()
+                guard let idx = siblings.firstIndex(where: { $0 === current }) else { return nil }
+                let target = direction == .up ? idx - 1 : idx + 1
+                return siblings.indices.contains(target) ? siblings[target] : nil
+            default: return nil
             }
         }
-        var view = step(self)
+    }
+
+    func enclosingStructural() -> StructuralNode? {
+        var view: NSView? = self
         while let v = view {
-            if let target = v as? FocusTarget, target.isTabTarget { return v }
-            view = step(v)
+            if let node = v as? StructuralNode { return node }
+            view = v.superview
         }
         return nil
+    }
+
+    func firstDescendantStructural() -> StructuralNode? {
+        for sub in subviews {
+            if let node = sub as? StructuralNode { return node }
+            if let found = sub.firstDescendantStructural() { return found }
+        }
+        return nil
+    }
+
+    fileprivate func childStructurals() -> [StructuralNode] {
+        var result: [StructuralNode] = []
+        for sub in subviews {
+            if let node = sub as? StructuralNode {
+                result.append(node)
+            } else {
+                result.append(contentsOf: sub.childStructurals())
+            }
+        }
+        return result
     }
 }
