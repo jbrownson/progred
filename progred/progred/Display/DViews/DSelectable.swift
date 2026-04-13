@@ -1,9 +1,11 @@
 import AppKit
 
-class DSelectable: FlippedView, Reconcilable {
+class DSelectable: FlippedView, Reconcilable, FocusTarget {
     var commit: Commit?
     var childView: NSView
     var editor: Editor
+
+    var isTabTarget: Bool { false }
 
     init(_ body: D, editor: Editor, commit: Commit?) {
         self.commit = commit
@@ -56,6 +58,14 @@ class DSelectable: FlippedView, Reconcilable {
 
     override func keyDown(with event: NSEvent) {
         interpretKeyEvents([event])
+    }
+
+    override func insertTab(_ sender: Any?) {
+        nextFocusTarget(.tab).flatMap { window?.makeFirstResponder($0) }
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        nextFocusTarget(.backtab).flatMap { window?.makeFirstResponder($0) }
     }
 
     @objc func delete(_ sender: Any?) {

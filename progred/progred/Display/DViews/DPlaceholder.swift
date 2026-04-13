@@ -1,6 +1,6 @@
 import AppKit
 
-private class Pill: NSView {
+private class Pill: NSView, FocusTarget {
     override var isFlipped: Bool { true }
     var onActivate: (() -> Void)?
 
@@ -17,6 +17,8 @@ private class Pill: NSView {
     override var acceptsFirstResponder: Bool { onActivate != nil }
     override var canBecomeKeyView: Bool { onActivate != nil && !isHiddenOrHasHiddenAncestor }
 
+    var isTabTarget: Bool { onActivate != nil && !isHiddenOrHasHiddenAncestor }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
     }
@@ -24,6 +26,14 @@ private class Pill: NSView {
     override func becomeFirstResponder() -> Bool {
         onActivate?()
         return true
+    }
+
+    override func insertTab(_ sender: Any?) {
+        nextFocusTarget(.tab).flatMap { window?.makeFirstResponder($0) }
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        nextFocusTarget(.backtab).flatMap { window?.makeFirstResponder($0) }
     }
 }
 

@@ -57,6 +57,14 @@ class DStringEditor: FlippedView, Reconcilable, NSTextFieldDelegate {
             commit?(editor, nil)
             return true
         }
+        if commandSelector == #selector(NSResponder.insertTab(_:)) {
+            control.nextFocusTarget(.tab).flatMap { control.window?.makeFirstResponder($0) }
+            return true
+        }
+        if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
+            control.nextFocusTarget(.backtab).flatMap { control.window?.makeFirstResponder($0) }
+            return true
+        }
         return false
     }
 

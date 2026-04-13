@@ -6,8 +6,18 @@ class EditorWindow: NSWindow {
         interpretKeyEvents([event])
     }
 
-    override func insertTab(_ sender: Any?) { selectNextKeyView(sender) }
-    override func insertBacktab(_ sender: Any?) { selectPreviousKeyView(sender) }
+    override func insertTab(_ sender: Any?) {
+        advance(.tab)
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        advance(.backtab)
+    }
+
+    private func advance(_ direction: NavigationDirection) {
+        let start: NSView = (firstResponder as? NSView) ?? contentView!
+        start.nextFocusTarget(direction).flatMap { makeFirstResponder($0) }
+    }
 }
 
 @main
@@ -46,7 +56,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false)
         window.title = "progred"
         window.contentView = scrollView
-        window.autorecalculatesKeyViewLoop = true
+        window.autorecalculatesKeyViewLoop = false
         window.center()
         window.makeKeyAndOrderFront(nil)
 

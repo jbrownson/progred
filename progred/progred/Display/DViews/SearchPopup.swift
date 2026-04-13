@@ -112,7 +112,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
     //   3. makeFirstResponder on the captured target — its activate() anchors its
     //      popup against the settled (post-collapse) layout
     private func advanceKeyView(following: Bool) {
-        let target = following ? searchField.nextValidKeyView : searchField.previousValidKeyView
+        let target = searchField.nextFocusTarget(following ? .tab : .backtab)
         let window = self.window
         onDismiss()
         target.flatMap { window?.makeFirstResponder($0) }
