@@ -1,12 +1,11 @@
 import Foundation
 import HashTreeCollections
-import Observation
 
-@Observable
 class Editor {
     let schema: Schema
     var document: MutGid = MutGid()
-    var root: Id?
+    var root: Id? { didSet { onMutate?() } }
+    var onMutate: (() -> Void)?
 
     init(schema: Schema) {
         self.schema = schema
@@ -27,6 +26,7 @@ class Editor {
 
     func commit(entity: UUID, label: Id, value: Id?) {
         document.commit(entity: entity, label: label, value: value)
+        onMutate?()
     }
 
 static func withSampleDocument() -> Editor {

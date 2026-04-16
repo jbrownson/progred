@@ -1,5 +1,4 @@
 import AppKit
-import Observation
 
 class EditorWindow: NSWindow {
     override func keyDown(with event: NSEvent) {
@@ -48,6 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         editor = Editor(schema: Editor.withSampleDocument().schema)
 
+        wireEditor()
         rootView = DRootView(editor: editor)
 
         let scrollView = NSScrollView()
@@ -77,36 +77,38 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func newDocument(_ sender: Any?) {
         editor = Editor(schema: editor.schema)
+        wireEditor()
         rootView.editor = editor
         rebuild()
     }
 
     @objc func loadSampleDocument(_ sender: Any?) {
         editor = Editor.withSampleDocument()
+        wireEditor()
         rootView.editor = editor
         rebuild()
     }
 
+    private func wireEditor() {
+        editor.onMutate = { [weak self] in self?.rebuild() }
+    }
+
     private func rebuild() {
-        withObservationTracking {
-            let rootCommit: Commit = { editor, id in editor.root = id }
-            let body: D = editor.root.map { root in
-                let ctx = ProjectionContext(
-                    entity: root, gid: editor.gid,
-                    schema: editor.schema, editor: editor, ancestors: [],
-                    commit: rootCommit)
-                return project(ctx)
-            } ?? .placeholder
-            let d: D = .descend(Descend(
-                inCycle: false,
-                commit: rootCommit,
-                expectedType: nil,
-                substitution: [:],
-                body: body))
-            rootView.rebuild(d)
-        } onChange: { [weak self] in
-            DispatchQueue.main.async { self?.rebuild() }
-        }
+        let rootCommit: Commit = { editor, id in editor.root = id }
+        let body: D = editor.root.map { root in
+            let ctx = ProjectionContext(
+                entity: root, gid: editor.gid,
+                schema: editor.schema, editor: editor, ancestors: [],
+                commit: rootCommit)
+            return project(ctx)
+        } ?? .placeholder
+        let d: D = .descend(Descend(
+            inCycle: false,
+            commit: rootCommit,
+            expectedType: nil,
+            substitution: [:],
+            body: body))
+        rootView.rebuild(d)
     }
 }
 
