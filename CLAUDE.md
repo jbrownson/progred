@@ -13,11 +13,11 @@ Read `README.md` for project philosophy and architecture.
 ## Building and Testing
 
 ```bash
-xcodebuild -scheme progred -destination 'platform=macOS' build
-xcodebuild -scheme progred -destination 'platform=macOS' test
+xcodebuild -project progred/progred.xcodeproj -scheme progred -destination 'platform=macOS' build
+xcodebuild -project progred/progred.xcodeproj -scheme progred -destination 'platform=macOS' test
 ```
 
-Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache access.
+Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache access. Pass `-project` instead of `cd`-ing into the subdirectory; bash `cd` persists across tool calls and will silently break later relative paths (e.g. `git add`).
 
 ## Architecture
 
