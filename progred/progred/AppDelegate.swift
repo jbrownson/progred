@@ -45,9 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        editor = Editor(schema: Editor.withSampleDocument().schema)
-
-        wireEditor()
+        editor = Editor(schema: Schema.bootstrap(), onMutate: { [weak self] in self?.rebuild() })
         rootView = DRootView(editor: editor)
 
         let scrollView = NSScrollView()
@@ -76,21 +74,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     @objc func newDocument(_ sender: Any?) {
-        editor = Editor(schema: editor.schema)
-        wireEditor()
+        editor = Editor(schema: editor.schema, onMutate: { [weak self] in self?.rebuild() })
         rootView.editor = editor
         rebuild()
     }
 
     @objc func loadSampleDocument(_ sender: Any?) {
-        editor = Editor.withSampleDocument()
-        wireEditor()
+        editor = Editor.withSampleDocument(onMutate: { [weak self] in self?.rebuild() })
         rootView.editor = editor
         rebuild()
-    }
-
-    private func wireEditor() {
-        editor.onMutate = { [weak self] in self?.rebuild() }
     }
 
     private func rebuild() {

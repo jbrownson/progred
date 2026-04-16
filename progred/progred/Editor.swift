@@ -3,12 +3,15 @@ import HashTreeCollections
 
 class Editor {
     let schema: Schema
-    var document: MutGid = MutGid()
-    var root: Id? { didSet { onMutate?() } }
-    var onMutate: (() -> Void)?
+    var document: MutGid
+    var root: Id? { didSet { onMutate() } }
+    let onMutate: () -> Void
 
-    init(schema: Schema) {
+    init(schema: Schema, document: MutGid = MutGid(), root: Id? = nil, onMutate: @escaping () -> Void) {
         self.schema = schema
+        self.document = document
+        self.root = root
+        self.onMutate = onMutate
     }
 
     var gid: StackedGid<StackedGid<MutGid, ImmGid>, PrimitiveGid> {
@@ -26,15 +29,15 @@ class Editor {
 
     func commit(entity: UUID, label: Id, value: Id?) {
         document.commit(entity: entity, label: label, value: value)
-        onMutate?()
+        onMutate()
     }
 
-static func withSampleDocument() -> Editor {
+    static func withSampleDocument(onMutate: @escaping () -> Void) -> Editor {
         let schema = Schema.bootstrap()
-        let editor = Editor(schema: schema)
+        var document = MutGid()
 
         func set(_ entity: UUID, _ label: Id, _ value: Id) {
-            editor.commit(entity: entity, label: label, value: value)
+            document.commit(entity: entity, label: label, value: value)
         }
 
         func makeList(_ items: [Id]) -> UUID {
@@ -105,7 +108,7 @@ static func withSampleDocument() -> Editor {
         set(alice, schema.nameField, .string("Alice"))
         set(alice, .uuid(ageField), .uuid(aliceAge))
 
-        editor.root = .uuid(makeList([.uuid(optionSum), .uuid(personRecord), .uuid(alice)]))
-        return editor
+        let root: Id = .uuid(makeList([.uuid(optionSum), .uuid(personRecord), .uuid(alice)]))
+        return Editor(schema: schema, document: document, root: root, onMutate: onMutate)
     }
 }
