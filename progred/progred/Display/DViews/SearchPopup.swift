@@ -24,6 +24,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
     private let scrollView: NSScrollView
     private let popupPanel: NSPanel
     private var filtered: [SearchResult] = []
+    private var isExpanded = false
 
     init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?, onDismiss: @escaping () -> Void) {
         self.commit = commit
@@ -90,13 +91,40 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if let window {
-            repositionPanel()
-            window.addChildWindow(popupPanel, ordered: .above)
-        } else {
+        if window == nil {
             popupPanel.parent?.removeChildWindow(popupPanel)
             popupPanel.orderOut(nil)
+        } else if isExpanded {
+            showPanel()
         }
+    }
+
+    private func showPanel() {
+        repositionPanel()
+        window?.addChildWindow(popupPanel, ordered: .above)
+    }
+
+    private func expand() {
+        guard !isExpanded else { return }
+        isExpanded = true
+        if window != nil { showPanel() }
+    }
+
+    private func collapse() {
+        guard isExpanded else { return }
+        isExpanded = false
+        searchField.stringValue = ""
+        searchField.invalidateIntrinsicContentSize()
+        rebuildEntries()
+        popupPanel.parent?.removeChildWindow(popupPanel)
+        popupPanel.orderOut(nil)
+    }
+
+    private func navigateAway(_ direction: NavigationDirection) {
+        let target = searchField.nextFocusTarget(direction)
+        let win = window
+        onDismiss()
+        target.flatMap { win?.makeFirstResponder($0) }
     }
 
     private let maxPanelHeight: CGFloat = 300
@@ -180,37 +208,46 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
-            commitSelected(advance: .tab)
+            if isExpanded { commitSelected(advance: .tab) } else { expand() }
             return true
         }
         if commandSelector == #selector(cancelOperation(_:)) {
-            onDismiss()
+            if isExpanded { collapse() } else { onDismiss() }
             return true
         }
         if commandSelector == #selector(moveDown(_:)) {
-            let next = min(tableView.selectedRow + 1, filtered.count - 1)
-            tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
-            tableView.scrollRowToVisible(next)
+            if !isExpanded {
+                expand()
+            } else {
+                let next = min(tableView.selectedRow + 1, filtered.count - 1)
+                tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
+                tableView.scrollRowToVisible(next)
+            }
             return true
         }
         if commandSelector == #selector(moveUp(_:)) {
-            let prev = max(tableView.selectedRow - 1, 0)
-            tableView.selectRowIndexes(IndexSet(integer: prev), byExtendingSelection: false)
-            tableView.scrollRowToVisible(prev)
+            if !isExpanded {
+                expand()
+            } else {
+                let prev = max(tableView.selectedRow - 1, 0)
+                tableView.selectRowIndexes(IndexSet(integer: prev), byExtendingSelection: false)
+                tableView.scrollRowToVisible(prev)
+            }
             return true
         }
         if commandSelector == #selector(NSResponder.insertTab(_:)) {
-            commitSelected(advance: .tab)
+            if isExpanded { commitSelected(advance: .tab) } else { navigateAway(.tab) }
             return true
         }
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
-            commitSelected(advance: .backtab)
+            if isExpanded { commitSelected(advance: .backtab) } else { navigateAway(.backtab) }
             return true
         }
         return false
     }
 
     func controlTextDidChange(_ obj: Notification) {
+        expand()
         rebuildEntries()
     }
 
