@@ -42,14 +42,16 @@ class DPlaceholder: FlippedView, Reconcilable {
     var expectedType: Id?
     var substitution: Substitution
     var editor: Editor
+    var advance: Advance?
     private let pill = Pill()
     private var searchPopup: SearchPopup?
 
-    init(commit: ((Editor, Id) -> Void)?, expectedType: Id?, substitution: Substitution, editor: Editor) {
+    init(commit: ((Editor, Id) -> Void)?, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?) {
         self.commit = commit
         self.expectedType = expectedType
         self.substitution = substitution
         self.editor = editor
+        self.advance = advance
         super.init(frame: .zero)
         pill.onActivate = commit != nil ? { [weak self] in self?.activate() } : nil
         addSubview(pill)
@@ -71,7 +73,7 @@ class DPlaceholder: FlippedView, Reconcilable {
     private func activate() {
         guard let commit else { return }
         assert(searchPopup == nil, "activate called while popup already present")
-        let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor) { [weak self] in
+        let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance) { [weak self] in
             self?.dismissSearch()
         }
         self.searchPopup = popup
@@ -95,12 +97,13 @@ class DPlaceholder: FlippedView, Reconcilable {
         rescanInsertionZones()
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
         guard case .placeholder = d else { return false }
         self.editor = editor
         self.commit = commit.map { c in { editor, id in c(editor, id) } }
         self.expectedType = expectedType
         self.substitution = substitution
+        self.advance = advance
         pill.onActivate = self.commit != nil ? { [weak self] in self?.activate() } : nil
         return true
     }

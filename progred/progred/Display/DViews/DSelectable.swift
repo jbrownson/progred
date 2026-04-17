@@ -7,10 +7,10 @@ class DSelectable: FlippedView, Reconcilable, FocusTarget, StructuralNode {
 
     var isTabTarget: Bool { false }
 
-    init(_ body: D, editor: Editor, commit: Commit?) {
+    init(_ body: D, editor: Editor, commit: Commit?, advance: Advance?) {
         self.commit = commit
         self.editor = editor
-        self.childView = createView(body, editor: editor)
+        self.childView = createView(body, editor: editor, advance: advance)
         super.init(frame: .zero)
         addSubview(childView)
         constrain(childView, toFill: self)
@@ -18,11 +18,11 @@ class DSelectable: FlippedView, Reconcilable, FocusTarget, StructuralNode {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
         guard case .selectable(let body) = d else { return false }
         self.editor = editor
         self.commit = commit
-        let resolved = reconcileChild(childView, body, editor: editor)
+        let resolved = reconcileChild(childView, body, editor: editor, advance: advance)
         if resolved !== childView {
             childView.removeFromSuperview()
             addSubview(resolved)

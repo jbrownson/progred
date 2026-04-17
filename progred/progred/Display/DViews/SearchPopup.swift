@@ -17,6 +17,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
     let expectedType: Id?
     let substitution: Substitution
     let editor: Editor
+    let advance: Advance?
     let onDismiss: () -> Void
     private let searchField = SearchField()
     private let tableView: NSTableView
@@ -24,11 +25,12 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
     private let popupPanel: NSPanel
     private var filtered: [SearchResult] = []
 
-    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, onDismiss: @escaping () -> Void) {
+    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?, onDismiss: @escaping () -> Void) {
         self.commit = commit
         self.expectedType = expectedType
         self.substitution = substitution
         self.editor = editor
+        self.advance = advance
         self.onDismiss = onDismiss
 
         searchField.isBezeled = false
@@ -71,51 +73,6 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         addSubview(searchField)
         constrain(searchField, toFill: self)
         rebuildEntries()
-    }
-
-    // Tab / Shift-Tab handling.
-    //
-    // We handle tab advancement ourselves instead of letting NSTextField's built-in
-    // Tab handling run, because the default path fights our dismiss-then-show pattern:
-    //
-    //   Default path:
-    //     1. NSTextField calls endEditing with NSTabTextMovement
-    //     2. controlTextDidEndEditing fires
-    //     3. NSTextField then calls window.selectKeyView(following:/preceding:)
-    //
-    //   If our dismiss runs in step 2, the SearchPopup (containing the SearchField
-    //   that's the current first responder) gets removeFromSuperview'd. That triggers
-    //   NSControl._setWindow → abortEditing → makeFirstResponder(window), which
-    //   clobbers focus. Step 3 then advances from whatever that clobber set — not
-    //   from the SearchField's original position in the key view loop.
-    //
-    //   Previous workaround: defer dismiss via DispatchQueue.main.async so step 3
-    //   runs while SearchField is still in place. This worked for focus but caused
-    //   a distinct bug — during the async gap, the NEXT placeholder's becomeFirst-
-    //   Responder fires and its popup anchors against the still-wide layout (the
-    //   dismissing placeholder hasn't shrunk back to pill size yet). Result: the
-    //   next popup's panel shows up at a stale screen X, often visibly too far right.
-    //   See git history around this comment for the log that traced this.
-    //
-    //   Also tried: keyDown intercept on SearchField. Works but semantically dishonest
-    //   ("a key was pressed" — we only care about one key). Handling in doCommandBy
-    //   at the insertTab:/insertBacktab: selector is still slightly misnamed (we're
-    //   not inserting tab characters), but it's Apple's own repurposed convention for
-    //   single-line NSTextFields: the default insertTab: action on a single-line
-    //   control calls endEditing with NSTabTextMovement, so we're replacing a
-    //   dismiss-and-advance with our own dismiss-and-advance that orders correctly.
-    //
-    // Correct ordering, which this method implements:
-    //   1. Capture nextValidKeyView while SearchField is still in the hierarchy
-    //   2. onDismiss sync — SearchPopup removed, owning placeholder collapses to pill,
-    //      layout settles
-    //   3. makeFirstResponder on the captured target — its activate() anchors its
-    //      popup against the settled (post-collapse) layout
-    private func advanceKeyView(following: Bool) {
-        let target = searchField.nextFocusTarget(following ? .tab : .backtab)
-        let window = self.window
-        onDismiss()
-        target.flatMap { window?.makeFirstResponder($0) }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -169,14 +126,16 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         if popupPanel.isVisible { repositionPanel() }
     }
 
-    private func commitSelected() {
-        guard filtered.indices.contains(tableView.selectedRow) else { return }
-        filtered[tableView.selectedRow].entry.action(editor)
+    private func commitSelected(advance direction: NavigationDirection) {
+        if filtered.indices.contains(tableView.selectedRow) {
+            filtered[tableView.selectedRow].entry.action(editor)
+        }
         onDismiss()
+        advance?(direction)
     }
 
     @objc private func tableViewClick() {
-        commitSelected()
+        commitSelected(advance: .tab)
     }
 
     // MARK: - NSTableViewDataSource
@@ -221,7 +180,7 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
-            commitSelected()
+            commitSelected(advance: .tab)
             return true
         }
         if commandSelector == #selector(cancelOperation(_:)) {
@@ -241,11 +200,11 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
             return true
         }
         if commandSelector == #selector(NSResponder.insertTab(_:)) {
-            advanceKeyView(following: true)
+            commitSelected(advance: .tab)
             return true
         }
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
-            advanceKeyView(following: false)
+            commitSelected(advance: .backtab)
             return true
         }
         return false

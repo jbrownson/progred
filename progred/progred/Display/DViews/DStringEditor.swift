@@ -16,11 +16,13 @@ private class EditorField: NSTextField, StructuralNode {
 class DStringEditor: FlippedView, Reconcilable, NSTextFieldDelegate {
     var editor: Editor
     var commit: Commit?
+    var advance: Advance?
     private let field: NSTextField
 
-    init(_ string: String, editor: Editor, commit: Commit?) {
+    init(_ string: String, editor: Editor, commit: Commit?, advance: Advance?) {
         self.editor = editor
         self.commit = commit
+        self.advance = advance
         self.field = EditorField()
         super.init(frame: .zero)
 
@@ -58,11 +60,11 @@ class DStringEditor: FlippedView, Reconcilable, NSTextFieldDelegate {
             return true
         }
         if commandSelector == #selector(NSResponder.insertTab(_:)) {
-            control.nextFocusTarget(.tab).flatMap { control.window?.makeFirstResponder($0) }
+            advance?(.tab)
             return true
         }
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
-            control.nextFocusTarget(.backtab).flatMap { control.window?.makeFirstResponder($0) }
+            advance?(.backtab)
             return true
         }
         return false
@@ -73,10 +75,11 @@ class DStringEditor: FlippedView, Reconcilable, NSTextFieldDelegate {
         commit?(editor, .string(field.stringValue))
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
         guard case .stringEditor(let s) = d else { return false }
         self.editor = editor
         self.commit = commit
+        self.advance = advance
         field.isEditable = commit != nil
         if field.currentEditor() == nil { field.stringValue = s }
         return true

@@ -3,6 +3,7 @@ import AppKit
 class DList: FlippedView, Reconcilable {
     var list: List
     var editor: Editor
+    var advance: Advance?
     private var elementViews: [NSView] = []
     private var insertionPoints: [InsertionPointView] = []
 
@@ -16,12 +17,13 @@ class DList: FlippedView, Reconcilable {
     // Inline layout
     private var lineStack: NSStackView?
 
-    init(_ list: List, editor: Editor) {
+    init(_ list: List, editor: Editor, advance: Advance?) {
         self.list = list
         self.editor = editor
+        self.advance = advance
         super.init(frame: .zero)
 
-        elementViews = list.elements.map { createView($0, editor: editor, vertical: list.inline ? nil : true) }
+        elementViews = list.elements.map { createView($0, editor: editor, vertical: list.inline ? nil : true, advance: advance) }
         insertionPoints = makeInsertionPoints()
 
         if list.inline {
@@ -44,7 +46,8 @@ class DList: FlippedView, Reconcilable {
                 expectedType: insertion.expectedType,
                 substitution: insertion.substitution,
                 editor: editor,
-                vertical: !list.inline)
+                vertical: !list.inline,
+                advance: advance)
             ip.isTabReachable = tabReachable
             if list.inline { ip.onLayoutChange = { [weak self] in self?.populateInline() } }
             return ip
@@ -68,7 +71,8 @@ class DList: FlippedView, Reconcilable {
             ip.update(
                 commit: { editor, id in insertion.insert(editor, id, position) },
                 expectedType: insertion.expectedType,
-                substitution: insertion.substitution)
+                substitution: insertion.substitution,
+                advance: advance)
             ip.vertical = !list.inline
             ip.isTabReachable = tabReachable
         }
@@ -79,7 +83,8 @@ class DList: FlippedView, Reconcilable {
                 expectedType: insertion.expectedType,
                 substitution: insertion.substitution,
                 editor: editor,
-                vertical: !list.inline)
+                vertical: !list.inline,
+                advance: advance)
             ip.isTabReachable = tabReachable
             if list.inline { ip.onLayoutChange = { [weak self] in self?.populateInline() } }
             insertionPoints.append(ip)
@@ -198,16 +203,17 @@ class DList: FlippedView, Reconcilable {
 
     // MARK: - Reconcile
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
         guard case .list(let newList) = d, newList.inline == list.inline else { return false }
         self.editor = editor
+        self.advance = advance
         list = newList
 
         reconcileList(
             elementViews,
             with: newList.elements,
             reconcile: { existing, d in
-                reconcileChild(existing, d, editor: editor, vertical: newList.inline ? nil : true)
+                reconcileChild(existing, d, editor: editor, vertical: newList.inline ? nil : true, advance: advance)
             },
             replace: { i, _, new in self.elementViews[i] = new },
             append: { self.elementViews.append($0) },

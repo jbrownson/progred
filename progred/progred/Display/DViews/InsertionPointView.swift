@@ -33,6 +33,7 @@ class InsertionPointView: FlippedView {
     var commit: (Editor, Id) -> Void
     var expectedType: Id?
     var substitution: Substitution
+    var advance: Advance?
     let editor: Editor
     var isHovered = false
     var vertical = false
@@ -43,12 +44,13 @@ class InsertionPointView: FlippedView {
     private var searchPopup: SearchPopup?
     private let tabStop = TabStop()
 
-    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, vertical: Bool) {
+    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, vertical: Bool, advance: Advance?) {
         self.commit = commit
         self.expectedType = expectedType
         self.substitution = substitution
         self.editor = editor
         self.vertical = vertical
+        self.advance = advance
         super.init(frame: .zero)
         tabStop.onActivate = { [weak self] in self?.activate() }
         addSubview(tabStop)
@@ -64,15 +66,16 @@ class InsertionPointView: FlippedView {
         return .zero
     }
 
-    func update(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution) {
+    func update(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, advance: Advance?) {
         self.commit = commit
         self.expectedType = expectedType
         self.substitution = substitution
+        self.advance = advance
     }
 
     func activate() {
         assert(searchPopup == nil, "activate called while popup already present")
-        let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor) { [weak self] in
+        let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance) { [weak self] in
             self?.dismissSearch()
         }
         self.searchPopup = popup

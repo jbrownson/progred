@@ -60,22 +60,22 @@ class DRootView: FlippedView {
     }
 }
 
-func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = .init(), vertical: Bool? = nil) -> NSView {
+func createView(_ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = .init(), vertical: Bool? = nil, advance: Advance? = nil) -> NSView {
     switch d {
     case .text(let text, let style): DText(text, style)
     case .space: DSpace(spacing)
     case .identicon(let uuid): DIdenticon(uuid: uuid)
-    case .block(let children): DBlock(children: children, editor: editor)
-    case .line(let children): DLine(children: children, editor: editor)
-    case .list(let list): DList(list, editor: editor)
-    case .indent(let child): DIndent(child: child, editor: editor, vertical: vertical)
-    case .selectable(let body): DSelectable(body, editor: editor, commit: commit)
+    case .block(let children): DBlock(children: children, editor: editor, advance: advance)
+    case .line(let children): DLine(children: children, editor: editor, advance: advance)
+    case .list(let list): DList(list, editor: editor, advance: advance)
+    case .indent(let child): DIndent(child: child, editor: editor, vertical: vertical, advance: advance)
+    case .selectable(let body): DSelectable(body, editor: editor, commit: commit, advance: advance)
     case .descend(let descend): DDescend(descend, editor: editor, vertical: vertical)
     case .collapse(let collapsed, let header, let body):
-        DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, inCycle: inCycle, vertical: vertical)
+        DCollapse(collapsed: collapsed, header: header, body: body, editor: editor, inCycle: inCycle, vertical: vertical, advance: advance)
     case .placeholder:
-        DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, expectedType: expectedType, substitution: substitution, editor: editor)
-    case .stringEditor(let string): DStringEditor(string, editor: editor, commit: commit)
-    case .numberEditor(let number): DNumberEditor(number, editor: editor, commit: commit)
+        DPlaceholder(commit: commit.map { c in { editor, id in c(editor, id) } }, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance)
+    case .stringEditor(let string): DStringEditor(string, editor: editor, commit: commit, advance: advance)
+    case .numberEditor(let number): DNumberEditor(number, editor: editor, commit: commit, advance: advance)
     }
 }
