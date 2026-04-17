@@ -14,7 +14,13 @@ extension FocusTarget {
     var isTabTarget: Bool { false }
 }
 
-protocol StructuralNode: NSView {}
+protocol StructuralNode: NSView {
+    var isStructural: Bool { get }
+}
+
+extension StructuralNode {
+    var isStructural: Bool { true }
+}
 
 extension NSView {
     fileprivate func nextInDocumentOrder() -> NSView? {
@@ -84,7 +90,7 @@ extension NSView {
     func enclosingStructural() -> StructuralNode? {
         var view: NSView? = self
         while let v = view {
-            if let node = v as? StructuralNode { return node }
+            if let node = v as? StructuralNode, node.isStructural { return node }
             view = v.superview
         }
         return nil
@@ -92,7 +98,7 @@ extension NSView {
 
     func firstDescendantStructural() -> StructuralNode? {
         for sub in subviews {
-            if let node = sub as? StructuralNode { return node }
+            if let node = sub as? StructuralNode, node.isStructural { return node }
             if let found = sub.firstDescendantStructural() { return found }
         }
         return nil
@@ -101,7 +107,7 @@ extension NSView {
     fileprivate func childStructurals() -> [StructuralNode] {
         var result: [StructuralNode] = []
         for sub in subviews {
-            if let node = sub as? StructuralNode {
+            if let node = sub as? StructuralNode, node.isStructural {
                 result.append(node)
             } else {
                 result.append(contentsOf: sub.childStructurals())

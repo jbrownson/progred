@@ -135,7 +135,7 @@ class InsertionOverlay: FlippedView {
     override func mouseDown(with event: NSEvent) {
         let local = convert(event.locationInWindow, from: nil)
         for (zone, _) in zones {
-            if zone.rect.contains(local) { zone.view.activate(); return }
+            if zone.rect.contains(local) { zone.view.activate(expanded: true); return }
         }
         nextResponder?.mouseDown(with: event)
     }

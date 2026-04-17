@@ -1,6 +1,6 @@
 import AppKit
 
-private class TabStop: NSView, FocusTarget {
+private class TabStop: NSView, FocusTarget, StructuralNode {
     override var isFlipped: Bool { true }
     var onActivate: (() -> Void)?
     var isInTabLoop: Bool = false
@@ -52,7 +52,7 @@ class InsertionPointView: FlippedView {
         self.vertical = vertical
         self.advance = advance
         super.init(frame: .zero)
-        tabStop.onActivate = { [weak self] in self?.activate() }
+        tabStop.onActivate = { [weak self] in self?.activate(expanded: false) }
         addSubview(tabStop)
         constrain(tabStop, toFill: self)
     }
@@ -73,17 +73,18 @@ class InsertionPointView: FlippedView {
         self.advance = advance
     }
 
-    func activate() {
+    func activate(expanded: Bool) {
         assert(searchPopup == nil, "activate called while popup already present")
-        let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance) { [weak self] in
-            self?.dismissSearch()
-        }
+        let popup = SearchPopup(
+            commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance,
+            initiallyExpanded: expanded,
+            navAnchor: tabStop,
+            onDismiss: { [weak self] in self?.dismissSearch() })
         self.searchPopup = popup
         addSubview(popup)
         constrain(popup, toFill: self)
         invalidateIntrinsicContentSize()
         popup.focus()
-        tabStop.removeFromSuperview()
         onLayoutChange?()
         window?.recalculateKeyViewLoop()
         rescanInsertionZones()
@@ -93,8 +94,6 @@ class InsertionPointView: FlippedView {
         searchPopup?.removeFromSuperview()
         searchPopup = nil
         isHovered = false
-        addSubview(tabStop)
-        constrain(tabStop, toFill: self)
         invalidateIntrinsicContentSize()
         onLayoutChange?()
         rescanInsertionZones()

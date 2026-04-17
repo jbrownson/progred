@@ -2,7 +2,11 @@ import AppKit
 
 private class Pill: NSView, FocusTarget, StructuralNode {
     override var isFlipped: Bool { true }
-    var onActivate: (() -> Void)?
+    var onActivate: ((Bool) -> Void)?
+    // Set in mouseDown, consumed in becomeFirstResponder. Relies on
+    // makeFirstResponder synchronously calling becomeFirstResponder, so the
+    // flag is read in the same call stack — don't add async between them.
+    private var clickPending = false
 
     override var intrinsicContentSize: NSSize {
         let textHeight = NSFont.systemFont(ofSize: NSFont.systemFontSize).boundingRectForFont.height
@@ -20,11 +24,14 @@ private class Pill: NSView, FocusTarget, StructuralNode {
     var isTabTarget: Bool { onActivate != nil && !isHiddenOrHasHiddenAncestor }
 
     override func mouseDown(with event: NSEvent) {
+        clickPending = true
         window?.makeFirstResponder(self)
     }
 
     override func becomeFirstResponder() -> Bool {
-        onActivate?()
+        let expanded = clickPending
+        clickPending = false
+        onActivate?(expanded)
         return true
     }
 
@@ -53,7 +60,7 @@ class DPlaceholder: FlippedView, Reconcilable {
         self.editor = editor
         self.advance = advance
         super.init(frame: .zero)
-        pill.onActivate = commit != nil ? { [weak self] in self?.activate() } : nil
+        pill.onActivate = commit != nil ? { [weak self] expanded in self?.activate(expanded: expanded) } : nil
         addSubview(pill)
         constrain(pill, toFill: self)
     }
@@ -70,12 +77,14 @@ class DPlaceholder: FlippedView, Reconcilable {
     // If more AppKit weirdness shows up around this state toggle, consider
     // switching to remove/re-add (like InsertionPointView does with tabStop) —
     // removal nulls FR to the window rather than advancing.
-    private func activate() {
+    private func activate(expanded: Bool) {
         guard let commit else { return }
         assert(searchPopup == nil, "activate called while popup already present")
-        let popup = SearchPopup(commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance) { [weak self] in
-            self?.dismissSearch()
-        }
+        let popup = SearchPopup(
+            commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance,
+            initiallyExpanded: expanded,
+            navAnchor: pill,
+            onDismiss: { [weak self] in self?.dismissSearch() })
         self.searchPopup = popup
         addSubview(popup)
         constrain(popup, toFill: self)
@@ -104,7 +113,7 @@ class DPlaceholder: FlippedView, Reconcilable {
         self.expectedType = expectedType
         self.substitution = substitution
         self.advance = advance
-        pill.onActivate = self.commit != nil ? { [weak self] in self?.activate() } : nil
+        pill.onActivate = self.commit != nil ? { [weak self] expanded in self?.activate(expanded: expanded) } : nil
         return true
     }
 }

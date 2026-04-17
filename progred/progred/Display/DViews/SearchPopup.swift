@@ -1,5 +1,10 @@
 import AppKit
 
+// TODO: clicking the empty field in focused state should expand the popup.
+// A mouseDown override here only fires for the first click that activates the
+// field — once it's FR (e.g. via popup.focus() on tab-in), clicks go to the
+// field editor (an internal NSTextView), not here. Fix needs a custom field
+// editor via NSWindowDelegate.windowWillReturnFieldEditor.
 private class SearchField: NSTextField {
     override var intrinsicContentSize: NSSize {
         let text = stringValue.isEmpty ? (placeholderString ?? "") : stringValue
@@ -19,19 +24,22 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
     let editor: Editor
     let advance: Advance?
     let onDismiss: () -> Void
+    let navAnchor: NSView
     private let searchField = SearchField()
     private let tableView: NSTableView
     private let scrollView: NSScrollView
     private let popupPanel: NSPanel
     private var filtered: [SearchResult] = []
-    private var isExpanded = false
+    private var isExpanded: Bool
 
-    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?, onDismiss: @escaping () -> Void) {
+    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?, initiallyExpanded: Bool, navAnchor: NSView, onDismiss: @escaping () -> Void) {
         self.commit = commit
         self.expectedType = expectedType
         self.substitution = substitution
         self.editor = editor
         self.advance = advance
+        self.isExpanded = initiallyExpanded
+        self.navAnchor = navAnchor
         self.onDismiss = onDismiss
 
         searchField.isBezeled = false
@@ -127,6 +135,13 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
         target.flatMap { win?.makeFirstResponder($0) }
     }
 
+    private func navStructural(_ direction: NavigationDirection) {
+        guard let target = navAnchor.nextFocusTarget(direction) else { return }
+        let win = navAnchor.window
+        onDismiss()
+        win?.makeFirstResponder(target)
+    }
+
     private let maxPanelHeight: CGFloat = 300
     private let minPanelWidth: CGFloat = 200
     private let panelGap: CGFloat = 2
@@ -216,24 +231,38 @@ class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTa
             return true
         }
         if commandSelector == #selector(moveDown(_:)) {
-            if !isExpanded {
-                expand()
-            } else {
+            if isExpanded {
                 let next = min(tableView.selectedRow + 1, filtered.count - 1)
                 tableView.selectRowIndexes(IndexSet(integer: next), byExtendingSelection: false)
                 tableView.scrollRowToVisible(next)
+            } else {
+                navStructural(.down)
             }
             return true
         }
         if commandSelector == #selector(moveUp(_:)) {
-            if !isExpanded {
-                expand()
-            } else {
+            if isExpanded {
                 let prev = max(tableView.selectedRow - 1, 0)
                 tableView.selectRowIndexes(IndexSet(integer: prev), byExtendingSelection: false)
                 tableView.scrollRowToVisible(prev)
+            } else {
+                navStructural(.up)
             }
             return true
+        }
+        if commandSelector == #selector(moveLeft(_:)) {
+            if !isExpanded {
+                navStructural(.left)
+                return true
+            }
+            return false
+        }
+        if commandSelector == #selector(moveRight(_:)) {
+            if !isExpanded {
+                navStructural(.right)
+                return true
+            }
+            return false
         }
         if commandSelector == #selector(NSResponder.insertTab(_:)) {
             if isExpanded { commitSelected(advance: .tab) } else { navigateAway(.tab) }
