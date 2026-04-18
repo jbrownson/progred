@@ -54,10 +54,16 @@ func createProjection(_ ctx: ProjectionContext) -> any Projection {
         if case .string(let s) = entity { return StringView(text: s) }
     case ctx.schema.numberRecord?:
         if case .number(let n) = entity { return NumberView(number: n) }
-    default: break
+    case ctx.schema.consRecord?, ctx.schema.emptyRecord?:
+        if case .uuid(let uuid) = entity { return ListView(ctx, entity: uuid) }
+    default:
+        break
     }
 
-    // Fall through: render as a plain entity label for now.
+    if case .uuid(let uuid) = entity {
+        return RecordView(ctx, entity: uuid)
+    }
+
     let name = ctx.editor.name(of: entity) ?? "\(entity)"
     return TextView(text: name, style: .literal)
 }
