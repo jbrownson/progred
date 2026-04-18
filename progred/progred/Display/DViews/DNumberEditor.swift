@@ -49,7 +49,6 @@ class DNumberEditor: NSTextField, Reconcilable, NSTextFieldDelegate, StructuralN
             if let value = Double(stringValue) {
                 commit?(editor, .number(value))
                 original = value
-                window?.makeFirstResponder(nil)
             }
             return true
         }

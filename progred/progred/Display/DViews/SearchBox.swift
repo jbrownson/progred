@@ -223,7 +223,7 @@ class SearchBox: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTabl
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
-            if isExpanded { commitSelected(advance: .tab) } else { expand() }
+            if isExpanded { commitSelected(advance: .right) } else { expand() }
             return true
         }
         if commandSelector == #selector(cancelOperation(_:)) {
