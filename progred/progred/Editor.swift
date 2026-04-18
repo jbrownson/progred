@@ -4,14 +4,14 @@ import HashTreeCollections
 class Editor {
     let schema: Schema
     var document: MutGid
-    var root: Id? { didSet { onMutate() } }
-    let onMutate: () -> Void
+    var root: Id?
+    let onChange: (GraphDelta) -> Void
 
-    init(schema: Schema, document: MutGid = MutGid(), root: Id? = nil, onMutate: @escaping () -> Void) {
+    init(schema: Schema, document: MutGid = MutGid(), root: Id? = nil, onChange: @escaping (GraphDelta) -> Void) {
         self.schema = schema
         self.document = document
         self.root = root
-        self.onMutate = onMutate
+        self.onChange = onChange
     }
 
     var gid: StackedGid<StackedGid<MutGid, ImmGid>, PrimitiveGid> {
@@ -27,12 +27,21 @@ class Editor {
         gid.get(entity: entity, label: schema.nameField)?.asString
     }
 
-    func commit(entity: UUID, label: Id, value: Id?) {
-        document.commit(entity: entity, label: label, value: value)
-        onMutate()
+    func apply(_ delta: GraphDelta) {
+        guard !delta.isEmpty else { return }
+        document.apply(delta)
+        onChange(delta)
     }
 
-    static func withSampleDocument(onMutate: @escaping () -> Void) -> Editor {
+    func setRoot(_ id: Id?) {
+        root = id
+        // Root change isn't expressible as a graph delta (it's editor state,
+        // not a graph edge). Notify with empty delta so consumers know
+        // something changed and can re-read root.
+        onChange(.empty)
+    }
+
+    static func withSampleDocument(onChange: @escaping (GraphDelta) -> Void) -> Editor {
         let schema = Schema.bootstrap()
         var document = MutGid()
 
@@ -101,7 +110,6 @@ class Editor {
         // Instance: Person { name: "Alice", age: Some { value: _ } }
         let aliceAge = UUID()
         set(aliceAge, schema.recordField, .uuid(someRecord))
-        // value field intentionally missing → placeholder
 
         let alice = UUID()
         set(alice, schema.recordField, .uuid(personRecord))
@@ -109,6 +117,6 @@ class Editor {
         set(alice, .uuid(ageField), .uuid(aliceAge))
 
         let root: Id = .uuid(makeList([.uuid(optionSum), .uuid(personRecord), .uuid(alice)]))
-        return Editor(schema: schema, document: document, root: root, onMutate: onMutate)
+        return Editor(schema: schema, document: document, root: root, onChange: onChange)
     }
 }

@@ -1,211 +1,30 @@
-import Foundation
+import AppKit
 
-typealias Projector = (ProjectionContext) -> D?
+/// A view that's the result of projecting a graph value. Knows how to apply
+/// graph deltas to itself — either re-project or propagate to children
+/// depending on what changed.
+protocol Projection: NSView {
+    func apply(_ delta: GraphDelta)
+}
 
+/// Inputs to a projection: where in the graph we are, what we have access to,
+/// and the type-substitution context for resolving type-parameter applications.
 struct ProjectionContext {
     let entity: Id?
     let gid: any Gid
-    let editor: Editor?
-    let ancestors: Set<Id>
-    let commit: Commit?
+    let schema: Schema
+    let editor: Editor
+    let ancestors: Set<UUID>
     let substitution: Substitution
-    private let schema: Schema
 
-    init(entity: Id?, gid: any Gid, schema: Schema, editor: Editor?, ancestors: Set<Id>,
-         commit: Commit? = nil, substitution: Substitution = .init()) {
-        self.entity = entity
-        self.gid = gid
-        self.schema = schema
-        self.editor = editor
-        self.ancestors = ancestors
-        self.commit = commit
-        self.substitution = substitution
+    func descending(to value: Id?, throughEntity entity: UUID? = nil) -> ProjectionContext {
+        let newAncestors = entity.map { ancestors.union([$0]) } ?? ancestors
+        return ProjectionContext(
+            entity: value,
+            gid: gid,
+            schema: schema,
+            editor: editor,
+            ancestors: newAncestors,
+            substitution: substitution)
     }
-
-    var isCycle: Bool {
-        guard let entity else { return false }
-        return ancestors.contains(entity)
-    }
-    var nameField: Id { schema.nameField }
-    var recordField: Id { schema.recordField }
-    var typeExpressionField: Id { schema.typeExpressionField }
-    var typeParametersField: Id { schema.typeParametersField }
-    var typeFunctionField: Id { schema.typeFunctionField }
-    var fieldsField: Id { schema.fieldsField }
-    var summandsField: Id { schema.summandsField }
-    var headField: Id { schema.headField }
-    var tailField: Id { schema.tailField }
-    var insertField: Id { schema.insertField }
-    var typeParameterRecord: Id { schema.typeParameterRecord }
-    var fieldRecord: Id { schema.fieldRecord }
-    var recordRecord: Id { schema.recordRecord }
-    var sumRecord: Id { schema.sumRecord }
-    var applyRecord: Id { schema.applyRecord }
-    var consRecord: Id { schema.consRecord }
-    var emptyRecord: Id { schema.emptyRecord }
-
-    func get(_ field: Id) -> Id? {
-        guard let entity else { return nil }
-        return gid.get(entity: entity, label: field)
-    }
-
-    func record() -> Id? {
-        get(recordField)
-    }
-
-    func name() -> String? {
-        guard let entity else { return nil }
-        return name(of: entity)
-    }
-
-    func name(of id: Id) -> String? {
-        if case .string(let s) = gid.get(entity: id, label: nameField) { return s }
-        return nil
-    }
-
-    func typeParams(of entity: Id) -> [Id]? {
-        guard let listId = gid.get(entity: entity, label: typeParametersField) else { return nil }
-        return conses(listId)?.cells.compactMap { gid.get(entity: $0, label: headField) }
-    }
-
-    func fields(of entity: Id) -> [Id]? {
-        guard let listId = gid.get(entity: entity, label: fieldsField) else { return nil }
-        return conses(listId)?.cells.compactMap { gid.get(entity: $0, label: headField) }
-    }
-
-    func conses(_ listNode: Id) -> (cells: [Id], empty: Id, readOnly: Bool)? {
-        var result: [Id] = []
-        var readOnly = false
-        var current = listNode
-        var seen: Set<Id> = []
-        while seen.insert(current).inserted {
-            guard let edges = gid.edges(entity: current) else { return nil }
-            if edges[recordField] == emptyRecord { return (result, current, readOnly) }
-            guard edges[recordField] == consRecord,
-                  let tail = edges[tailField]
-            else { return nil }
-            if edges.readOnly { readOnly = true }
-            result.append(current)
-            current = tail
-        }
-        return nil
-    }
-
-    func resolveExpectedType(for field: Id) -> Id? {
-        guard let typeExpr = gid.get(entity: field, label: typeExpressionField) else { return nil }
-        if gid.get(entity: typeExpr, label: recordField) == typeParameterRecord {
-            return substitution[typeExpr]
-        }
-        return typeExpr
-    }
-
-    func with(entity: Id?, ancestors: Set<Id>? = nil, commit: Commit?) -> ProjectionContext {
-        ProjectionContext(entity: entity, gid: gid, schema: schema,
-            editor: editor, ancestors: ancestors ?? self.ancestors,
-            commit: commit, substitution: substitution)
-    }
-
-    func descend(_ field: Id, projector: Projector? = nil, commit: Commit? = nil) -> D {
-        let value = get(field)
-        let childAncestors = entity.map { ancestors.union([$0]) } ?? ancestors
-        let childInCycle = value.map { childAncestors.contains($0) } ?? false
-        let edgeReadOnly = value.flatMap { gid.edges(entity: $0)?.readOnly } ?? false
-        let edgeCommit: Commit? = self.commit == nil
-            ? nil
-            : commit ?? entity.flatMap { parent in
-                guard case .uuid(let uuid) = parent else { return nil }
-                return { editor, id in editor.commit(entity: uuid, label: field, value: id) }
-            }
-        let expectedType = resolveExpectedType(for: field)
-        let typeExpr = gid.get(entity: field, label: typeExpressionField)
-        let childSubstitution: Substitution = {
-            guard let typeExpr,
-                  gid.get(entity: typeExpr, label: recordField) == applyRecord,
-                  let tf = gid.get(entity: typeExpr, label: typeFunctionField),
-                  let extended = bindTypeArgs(typeExpr, tf, substitution, gid: gid, schema: schema)
-            else { return substitution }
-            return extended
-        }()
-        let childCtx = ProjectionContext(
-            entity: value, gid: gid, schema: schema,
-            editor: editor, ancestors: childAncestors,
-            commit: edgeReadOnly ? nil : edgeCommit,
-            substitution: childSubstitution)
-        let d = projector.flatMap { $0(childCtx) } ?? progred.project(childCtx)
-        return .descend(Descend(
-            inCycle: childInCycle,
-            commit: edgeCommit,
-            expectedType: expectedType,
-            substitution: substitution,
-            body: d))
-    }
-
-    func project(_ id: Id, projector: Projector? = nil) -> D {
-        let ctx = ProjectionContext(entity: id, gid: gid, schema: schema, editor: editor, ancestors: ancestors)
-        return projector.flatMap({ $0(ctx) }) ?? progred.project(ctx)
-    }
-
-    func project(field: Id, projector: Projector? = nil) -> D {
-        guard let value = get(field) else { return .placeholder }
-        return project(value, projector: projector)
-    }
-}
-
-// MARK: - Dispatch
-
-private let projectPrimitive: Projector = { ctx in
-    guard let entity = ctx.entity else { return nil }
-    switch entity {
-    case .string, .number: return rawHeader(entity)
-    case .uuid: return nil
-    }
-}
-
-private let projectors: [Projector] = [
-    // MARK: Domain
-    projectTypeParameter,
-    projectField,
-    projectApply,
-    projectRecord,
-    projectSum,
-
-    // MARK: Kernel
-    projectList(),
-    projectPrimitive,
-    projectKernel,
-]
-
-func project(_ ctx: ProjectionContext) -> D {
-    for projector in projectors {
-        if let d = projector(ctx) { return d }
-    }
-    return projectRaw(ctx)
-}
-
-// MARK: - Shallow reference projection
-
-let projectRef: Projector = { ctx in
-    guard let entity = ctx.entity else { return .placeholder }
-    let body: D = ctx.name().map { .text($0, .literal) } ?? rawHeader(entity)
-    return .selectable(body)
-}
-
-// MARK: - Raw header
-
-func rawHeader(_ id: Id) -> D {
-    switch id {
-    case .uuid(let uuid): .identicon(uuid)
-    case .string(let s): .stringEditor(s)
-    case .number(let n): .numberEditor(n)
-    }
-}
-
-// MARK: - Layout helpers
-
-func labeled(_ field: Id, _ content: D, ctx: ProjectionContext) -> D {
-    let label: D = ctx.name(of: field).map { .text($0, .label) } ?? .placeholder
-    return .block([
-        .line([label, .space, .text("→", .punctuation)]),
-        .indent(content),
-    ])
 }

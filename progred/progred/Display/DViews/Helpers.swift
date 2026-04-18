@@ -32,7 +32,13 @@ extension NSTextField {
     }
 }
 
-extension TextStyle {
+enum TextStyle {
+    case keyword
+    case typeRef
+    case punctuation
+    case label
+    case literal
+
     var nsColor: NSColor {
         switch self {
         case .keyword: .systemPurple

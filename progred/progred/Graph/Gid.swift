@@ -10,6 +10,7 @@ struct Edges {
 
 protocol Gid {
     func edges(entity: Id) -> Edges?
+    func get(entity: Id, label: Id) -> Id?
 }
 
 extension Gid {
