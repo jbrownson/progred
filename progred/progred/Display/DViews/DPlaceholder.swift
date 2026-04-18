@@ -51,7 +51,7 @@ class DPlaceholder: FlippedView, Reconcilable {
     var editor: Editor
     var advance: Advance?
     private let pill = Pill()
-    private var searchPopup: SearchPopup?
+    private var searchBox: SearchBox?
 
     init(commit: ((Editor, Id) -> Void)?, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?) {
         self.commit = commit
@@ -68,7 +68,7 @@ class DPlaceholder: FlippedView, Reconcilable {
     required init?(coder: NSCoder) { fatalError() }
 
     override var intrinsicContentSize: NSSize {
-        searchPopup?.intrinsicContentSize ?? pill.intrinsicContentSize
+        searchBox?.intrinsicContentSize ?? pill.intrinsicContentSize
     }
 
     // Focus must move to the searchField before the pill is hidden. Hiding a
@@ -79,17 +79,17 @@ class DPlaceholder: FlippedView, Reconcilable {
     // removal nulls FR to the window rather than advancing.
     private func activate(expanded: Bool) {
         guard let commit else { return }
-        assert(searchPopup == nil, "activate called while popup already present")
-        let popup = SearchPopup(
+        assert(searchBox == nil, "activate called while a search box is already present")
+        let box = SearchBox(
             commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance,
             initiallyExpanded: expanded,
             navAnchor: pill,
             onDismiss: { [weak self] in self?.dismissSearch() })
-        self.searchPopup = popup
-        addSubview(popup)
-        constrain(popup, toFill: self)
+        self.searchBox = box
+        addSubview(box)
+        constrain(box, toFill: self)
         invalidateIntrinsicContentSize()
-        popup.focus()
+        box.focus()
         pill.isHidden = true
         // Explicit recalc — autorecalculatesKeyViewLoop doesn't reliably pick
         // up the isHidden change before the user's next Tab traversal.
@@ -98,9 +98,9 @@ class DPlaceholder: FlippedView, Reconcilable {
     }
 
     private func dismissSearch() {
-        guard let popup = searchPopup else { return }
-        searchPopup = nil
-        popup.removeFromSuperview()
+        guard let box = searchBox else { return }
+        searchBox = nil
+        box.removeFromSuperview()
         pill.isHidden = false
         invalidateIntrinsicContentSize()
         rescanInsertionZones()

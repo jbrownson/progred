@@ -41,7 +41,7 @@ class InsertionPointView: FlippedView {
     var isTabReachable: Bool = false {
         didSet { tabStop.isInTabLoop = isTabReachable }
     }
-    private var searchPopup: SearchPopup?
+    private var searchBox: SearchBox?
     private let tabStop = TabStop()
 
     init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, vertical: Bool, advance: Advance?) {
@@ -59,10 +59,10 @@ class InsertionPointView: FlippedView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    var isActive: Bool { searchPopup != nil }
+    var isActive: Bool { searchBox != nil }
 
     override var intrinsicContentSize: NSSize {
-        if let searchPopup { return searchPopup.intrinsicContentSize }
+        if let searchBox { return searchBox.intrinsicContentSize }
         return .zero
     }
 
@@ -74,25 +74,25 @@ class InsertionPointView: FlippedView {
     }
 
     func activate(expanded: Bool) {
-        assert(searchPopup == nil, "activate called while popup already present")
-        let popup = SearchPopup(
+        assert(searchBox == nil, "activate called while a search box is already present")
+        let box = SearchBox(
             commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance,
             initiallyExpanded: expanded,
             navAnchor: tabStop,
             onDismiss: { [weak self] in self?.dismissSearch() })
-        self.searchPopup = popup
-        addSubview(popup)
-        constrain(popup, toFill: self)
+        self.searchBox = box
+        addSubview(box)
+        constrain(box, toFill: self)
         invalidateIntrinsicContentSize()
-        popup.focus()
+        box.focus()
         onLayoutChange?()
         window?.recalculateKeyViewLoop()
         rescanInsertionZones()
     }
 
     private func dismissSearch() {
-        searchPopup?.removeFromSuperview()
-        searchPopup = nil
+        searchBox?.removeFromSuperview()
+        searchBox = nil
         isHovered = false
         invalidateIntrinsicContentSize()
         onLayoutChange?()

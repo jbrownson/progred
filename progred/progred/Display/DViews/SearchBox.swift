@@ -2,9 +2,9 @@ import AppKit
 
 // TODO: clicking the empty field in focused state should expand the popup.
 // A mouseDown override here only fires for the first click that activates the
-// field — once it's FR (e.g. via popup.focus() on tab-in), clicks go to the
-// field editor (an internal NSTextView), not here. Fix needs a custom field
-// editor via NSWindowDelegate.windowWillReturnFieldEditor.
+// field — once it's FR (e.g. via SearchBox.focus() on tab-in), clicks go to
+// the field editor (an internal NSTextView), not here. Fix needs a custom
+// field editor via NSWindowDelegate.windowWillReturnFieldEditor.
 private class SearchField: NSTextField {
     override var intrinsicContentSize: NSSize {
         let text = stringValue.isEmpty ? (placeholderString ?? "") : stringValue
@@ -17,7 +17,7 @@ private class SearchField: NSTextField {
     }
 }
 
-class SearchPopup: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
+class SearchBox: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     let commit: (Editor, Id) -> Void
     let expectedType: Id?
     let substitution: Substitution
