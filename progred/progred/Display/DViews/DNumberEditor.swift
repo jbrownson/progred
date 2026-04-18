@@ -77,7 +77,7 @@ class DNumberEditor: NSTextField, Reconcilable, NSTextFieldDelegate, StructuralN
         return false
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?, focusBody: FocusBody?) -> Bool {
         guard case .numberEditor(let n) = d else { return false }
         self.editor = editor
         self.commit = commit

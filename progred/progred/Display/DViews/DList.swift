@@ -4,6 +4,7 @@ class DList: FlippedView, Reconcilable {
     var list: List
     var editor: Editor
     var advance: Advance?
+    var focusBody: FocusBody?
     private var elementViews: [NSView] = []
     private var insertionPoints: [InsertionPointView] = []
 
@@ -17,13 +18,14 @@ class DList: FlippedView, Reconcilable {
     // Inline layout
     private var lineStack: NSStackView?
 
-    init(_ list: List, editor: Editor, advance: Advance?) {
+    init(_ list: List, editor: Editor, advance: Advance?, focusBody: FocusBody?) {
         self.list = list
         self.editor = editor
         self.advance = advance
+        self.focusBody = focusBody
         super.init(frame: .zero)
 
-        elementViews = list.elements.map { createView($0, editor: editor, vertical: list.inline ? nil : true, advance: advance) }
+        elementViews = list.elements.map { createView($0, editor: editor, vertical: list.inline ? nil : true, advance: advance, focusBody: focusBody) }
         insertionPoints = makeInsertionPoints()
 
         if list.inline {
@@ -203,17 +205,18 @@ class DList: FlippedView, Reconcilable {
 
     // MARK: - Reconcile
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?, focusBody: FocusBody?) -> Bool {
         guard case .list(let newList) = d, newList.inline == list.inline else { return false }
         self.editor = editor
         self.advance = advance
+        self.focusBody = focusBody
         list = newList
 
         reconcileList(
             elementViews,
             with: newList.elements,
             reconcile: { existing, d in
-                reconcileChild(existing, d, editor: editor, vertical: newList.inline ? nil : true, advance: advance)
+                reconcileChild(existing, d, editor: editor, vertical: newList.inline ? nil : true, advance: advance, focusBody: focusBody)
             },
             replace: { i, _, new in self.elementViews[i] = new },
             append: { self.elementViews.append($0) },

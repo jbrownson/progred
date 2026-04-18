@@ -23,6 +23,7 @@ class SearchBox: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTabl
     let substitution: Substitution
     let editor: Editor
     let advance: Advance?
+    let focusBody: FocusBody?
     let onDismiss: () -> Void
     let navAnchor: NSView
     private let searchField = SearchField()
@@ -32,12 +33,13 @@ class SearchBox: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTabl
     private var filtered: [SearchResult] = []
     private var isExpanded: Bool
 
-    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?, initiallyExpanded: Bool, navAnchor: NSView, onDismiss: @escaping () -> Void) {
+    init(commit: @escaping (Editor, Id) -> Void, expectedType: Id?, substitution: Substitution, editor: Editor, advance: Advance?, focusBody: FocusBody?, initiallyExpanded: Bool, navAnchor: NSView, onDismiss: @escaping () -> Void) {
         self.commit = commit
         self.expectedType = expectedType
         self.substitution = substitution
         self.editor = editor
         self.advance = advance
+        self.focusBody = focusBody
         self.isExpanded = initiallyExpanded
         self.navAnchor = navAnchor
         self.onDismiss = onDismiss
@@ -169,16 +171,16 @@ class SearchBox: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTabl
         if popupPanel.isVisible { repositionPanel() }
     }
 
-    private func commitSelected(advance direction: NavigationDirection) {
+    private func commitSelected(after: () -> Void) {
         if filtered.indices.contains(tableView.selectedRow) {
             filtered[tableView.selectedRow].entry.action(editor)
         }
         onDismiss()
-        advance?(direction)
+        after()
     }
 
     @objc private func tableViewClick() {
-        commitSelected(advance: .tab)
+        commitSelected(after: { focusBody?() })
     }
 
     // MARK: - NSTableViewDataSource
@@ -223,7 +225,7 @@ class SearchBox: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTabl
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(insertNewline(_:)) {
-            if isExpanded { commitSelected(advance: .right) } else { expand() }
+            if isExpanded { commitSelected(after: { focusBody?() }) } else { expand() }
             return true
         }
         if commandSelector == #selector(cancelOperation(_:)) {
@@ -265,11 +267,11 @@ class SearchBox: FlippedView, NSTextFieldDelegate, NSTableViewDataSource, NSTabl
             return false
         }
         if commandSelector == #selector(NSResponder.insertTab(_:)) {
-            if isExpanded { commitSelected(advance: .tab) } else { navigateAway(.tab) }
+            if isExpanded { commitSelected(after: { advance?(.tab) }) } else { navigateAway(.tab) }
             return true
         }
         if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
-            if isExpanded { commitSelected(advance: .backtab) } else { navigateAway(.backtab) }
+            if isExpanded { commitSelected(after: { advance?(.backtab) }) } else { navigateAway(.backtab) }
             return true
         }
         return false

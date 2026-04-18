@@ -75,7 +75,7 @@ class DStringEditor: FlippedView, Reconcilable, NSTextFieldDelegate {
         commit?(editor, .string(field.stringValue))
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?, focusBody: FocusBody?) -> Bool {
         guard case .stringEditor(let s) = d else { return false }
         self.editor = editor
         self.commit = commit

@@ -1,16 +1,17 @@
 import AppKit
 
 typealias Advance = (NavigationDirection) -> Void
+typealias FocusBody = () -> Void
 
 protocol Reconcilable: NSView {
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?, focusBody: FocusBody?) -> Bool
 }
 
-func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = .init(), vertical: Bool? = nil, advance: Advance? = nil) -> NSView {
-    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, substitution: substitution, vertical: vertical, advance: advance) {
+func reconcileChild(_ existing: NSView?, _ d: D, editor: Editor, inCycle: Bool = false, commit: Commit? = nil, expectedType: Id? = nil, substitution: Substitution = .init(), vertical: Bool? = nil, advance: Advance? = nil, focusBody: FocusBody? = nil) -> NSView {
+    if let node = existing as? (any Reconcilable), node.reconcile(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, substitution: substitution, vertical: vertical, advance: advance, focusBody: focusBody) {
         return node
     }
-    return createView(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, substitution: substitution, vertical: vertical, advance: advance)
+    return createView(d, editor: editor, inCycle: inCycle, commit: commit, expectedType: expectedType, substitution: substitution, vertical: vertical, advance: advance, focusBody: focusBody)
 }
 
 func reconcileList<T: AnyObject, Ts>(
@@ -29,11 +30,11 @@ func reconcileList<T: AnyObject, Ts>(
     existing.dropFirst(ts.count).forEach { remove($0) }
 }
 
-func reconcileChildren(stack: NSStackView, children: [D], editor: Editor, substitution: Substitution = .init(), vertical: Bool, advance: Advance? = nil) {
+func reconcileChildren(stack: NSStackView, children: [D], editor: Editor, substitution: Substitution = .init(), vertical: Bool, advance: Advance? = nil, focusBody: FocusBody? = nil) {
     reconcileList(
         stack.arrangedSubviews,
         with: children,
-        reconcile: { reconcileChild($0, $1, editor: editor, substitution: substitution, vertical: vertical, advance: advance) },
+        reconcile: { reconcileChild($0, $1, editor: editor, substitution: substitution, vertical: vertical, advance: advance, focusBody: focusBody) },
         replace: { i, old, new in
             stack.removeArrangedSubview(old)
             old.removeFromSuperview()

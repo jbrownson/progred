@@ -19,8 +19,9 @@ class DCollapse: FlippedView, Reconcilable {
     private var collapsedConstraint: NSLayoutConstraint!
 
     var advance: Advance?
+    var focusBody: FocusBody?
 
-    init(collapsed: Bool, header: D, body: @escaping () -> D, editor: Editor, inCycle: Bool, vertical: Bool?, advance: Advance?) {
+    init(collapsed: Bool, header: D, body: @escaping () -> D, editor: Editor, inCycle: Bool, vertical: Bool?, advance: Advance?, focusBody: FocusBody?) {
         self.collapseButton = CollapseButton(collapsed: collapsed || inCycle)
         self.bodyContainer = FlippedView()
         self.body = .pending(body)
@@ -28,7 +29,8 @@ class DCollapse: FlippedView, Reconcilable {
         self.inCycle = inCycle
         self.vertical = vertical
         self.advance = advance
-        let header = createView(header, editor: editor, inCycle: inCycle, vertical: vertical, advance: advance)
+        self.focusBody = focusBody
+        let header = createView(header, editor: editor, inCycle: inCycle, vertical: vertical, advance: advance, focusBody: focusBody)
         self.header = header
 
         let headerRow = NSStackView(views: [header, collapseButton])
@@ -85,20 +87,21 @@ class DCollapse: FlippedView, Reconcilable {
 
     private func renderBody() {
         guard case .pending(let thunk) = body else { return }
-        let bodyView = createView(thunk(), editor: editor, inCycle: inCycle, vertical: vertical, advance: advance)
+        let bodyView = createView(thunk(), editor: editor, inCycle: inCycle, vertical: vertical, advance: advance, focusBody: focusBody)
         bodyContainer.addSubview(bodyView)
         constrain(bodyView, toFill: bodyContainer, insets: NSEdgeInsets(top: 0, left: indentWidth, bottom: 0, right: 0))
         body = .rendered(bodyView)
     }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?, focusBody: FocusBody?) -> Bool {
         guard case .collapse(_, let header, let body) = d else { return false }
         self.editor = editor
         self.inCycle = inCycle
         self.vertical = vertical
         self.advance = advance
+        self.focusBody = focusBody
 
-        let resolvedHeader = reconcileChild(self.header, header, editor: editor, inCycle: inCycle, vertical: vertical, advance: advance)
+        let resolvedHeader = reconcileChild(self.header, header, editor: editor, inCycle: inCycle, vertical: vertical, advance: advance, focusBody: focusBody)
         if resolvedHeader !== self.header {
             let index = headerRow.arrangedSubviews.firstIndex(of: self.header) ?? 0
             headerRow.removeArrangedSubview(self.header)
@@ -111,7 +114,7 @@ class DCollapse: FlippedView, Reconcilable {
         case .pending:
             self.body = .pending(body)
         case .rendered(let bodyView):
-            let resolved = reconcileChild(bodyView, body(), editor: editor, inCycle: inCycle, vertical: vertical, advance: advance)
+            let resolved = reconcileChild(bodyView, body(), editor: editor, inCycle: inCycle, vertical: vertical, advance: advance, focusBody: focusBody)
             if resolved !== bodyView {
                 bodyView.removeFromSuperview()
                 bodyContainer.addSubview(resolved)

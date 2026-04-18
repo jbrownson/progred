@@ -77,6 +77,11 @@ class InsertionPointView: FlippedView {
         assert(searchBox == nil, "activate called while a search box is already present")
         let box = SearchBox(
             commit: commit, expectedType: expectedType, substitution: substitution, editor: editor, advance: advance,
+            focusBody: { [weak self] in
+                // After insertion, the new element is the next structural sibling of this IP.
+                guard let self else { return }
+                self.tabStop.nextFocusTarget(.down).flatMap { self.window?.makeFirstResponder($0) }
+            },
             initiallyExpanded: expanded,
             navAnchor: tabStop,
             onDismiss: { [weak self] in self?.dismissSearch() })

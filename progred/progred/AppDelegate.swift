@@ -5,6 +5,15 @@ class EditorWindow: NSWindow {
         interpretKeyEvents([event])
     }
 
+    @discardableResult
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        let result = super.makeFirstResponder(responder)
+        if let view = responder as? NSView, view.window === self {
+            view.scrollToVisible(view.bounds)
+        }
+        return result
+    }
+
     override func insertTab(_ sender: Any?) { advance(.tab) }
     override func insertBacktab(_ sender: Any?) { advance(.backtab) }
     override func moveUp(_ sender: Any?) { advance(.up) }

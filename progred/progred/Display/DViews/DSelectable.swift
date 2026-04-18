@@ -2,13 +2,18 @@ import AppKit
 
 class DSelectable: FlippedView, Reconcilable, FocusTarget, StructuralNode {
     var commit: Commit?
+    var advance: Advance?
     var childView: NSView
     var editor: Editor
 
     var isTabTarget: Bool { false }
 
-    init(_ body: D, editor: Editor, commit: Commit?, advance: Advance?) {
+    var focusBody: FocusBody?
+
+    init(_ body: D, editor: Editor, commit: Commit?, advance: Advance?, focusBody: FocusBody?) {
         self.commit = commit
+        self.advance = advance
+        self.focusBody = focusBody
         self.editor = editor
         self.childView = createView(body, editor: editor, advance: advance)
         super.init(frame: .zero)
@@ -18,10 +23,12 @@ class DSelectable: FlippedView, Reconcilable, FocusTarget, StructuralNode {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?) -> Bool {
+    func reconcile(_ d: D, editor: Editor, inCycle: Bool, commit: Commit?, expectedType: Id?, substitution: Substitution, vertical: Bool?, advance: Advance?, focusBody: FocusBody?) -> Bool {
         guard case .selectable(let body) = d else { return false }
         self.editor = editor
         self.commit = commit
+        self.advance = advance
+        self.focusBody = focusBody
         let resolved = reconcileChild(childView, body, editor: editor, advance: advance)
         if resolved !== childView {
             childView.removeFromSuperview()
@@ -86,8 +93,18 @@ class DSelectable: FlippedView, Reconcilable, FocusTarget, StructuralNode {
 
     @objc func delete(_ sender: Any?) {
         guard let commit else { return }
-        window?.makeFirstResponder(nil)
+        let focusBody = self.focusBody
+        let prevSibling = nextFocusTarget(.up)
         commit(editor, nil)
+        if let window {
+            // self was kept (e.g. list element reused for the next element);
+            // focus the previous structural — the insertion point at this slot.
+            window.makeFirstResponder(prevSibling!)
+        } else {
+            // self was replaced (non-list: slot became a placeholder);
+            // focusBody walks into the new body and lands on the new placeholder.
+            focusBody?()
+        }
     }
 
     override func deleteBackward(_ sender: Any?) { delete(sender) }
