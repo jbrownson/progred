@@ -79,7 +79,7 @@ private func magicEntries(needle: String, editor: Editor, commit: @escaping (Edi
 func buildEntries(editor: Editor, commit: @escaping (Editor, Id) -> Void, needle: String, expectedType: Id?, substitution: Substitution) -> [PlaceholderEntry] {
     let named = namedEntities(editor: editor).values
         .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    return dataEntries(named, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
-        + newEntries(named, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
+    return newEntries(named, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
+        + dataEntries(named, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
         + magicEntries(needle: needle, editor: editor, commit: commit, expectedType: expectedType, substitution: substitution)
 }
