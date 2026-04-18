@@ -31,6 +31,14 @@ struct MutGid: Gid {
         }
     }
 
+    mutating func apply(_ delta: GraphDelta) {
+        for (entity, entityEdges) in delta.edges {
+            for (label, value) in entityEdges {
+                commit(entity: entity, label: label, value: value)
+            }
+        }
+    }
+
     mutating func delete(entity: UUID, label: Id) {
         guard var edges = data[entity] else { return }
         edges.removeValue(forKey: label)
