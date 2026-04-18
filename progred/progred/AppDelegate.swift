@@ -23,7 +23,11 @@ class EditorWindow: NSWindow {
             if let root = contentView?.firstDescendantStructural() {
                 makeFirstResponder(root)
             }
-        case .tab, .backtab:
+        case .backtab:
+            if let last = contentView?.lastFocusTarget() {
+                makeFirstResponder(last)
+            }
+        case .tab:
             break
         }
     }

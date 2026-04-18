@@ -104,6 +104,14 @@ extension NSView {
         return nil
     }
 
+    func lastFocusTarget() -> NSView? {
+        for sub in subviews.reversed() {
+            if let target = sub.lastFocusTarget() { return target }
+        }
+        if let target = self as? FocusTarget, target.isTabTarget { return self }
+        return nil
+    }
+
     fileprivate func childStructurals() -> [StructuralNode] {
         var result: [StructuralNode] = []
         for sub in subviews {
