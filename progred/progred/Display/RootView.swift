@@ -18,6 +18,10 @@ class RootView: FlippedView {
         rebuild()
     }
 
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(nil)
+    }
+
     private func rebuild() {
         content?.removeFromSuperview()
         let projection = projectValue(editor, [], editor.root)

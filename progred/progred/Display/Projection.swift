@@ -24,7 +24,7 @@ func projectValue(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: Id?) -> NS
 func projectRecord(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> Block {
     let recordType = editor.gid.get(entity: .uuid(entity), label: editor.schema.recordField)
     let typeName = recordType.flatMap { editor.name(of: $0) } ?? "?"
-    let header = Text(typeName, .typeRef)
+    let header = Text(typeName, .typeRef, focusable: false)
 
     let fieldIds: [Id] = recordType.flatMap { type -> [Id]? in
         guard let fieldsListId = editor.gid.get(entity: type, label: editor.schema.fieldsField),
@@ -34,16 +34,16 @@ func projectRecord(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> 
 
     let childAncestors = ancestors.union([entity])
     let rows = fieldIds.map { projectField(editor, childAncestors, entity, $0) }
-    return Block([header, Indent(Block(rows))])
+    return Block([header, Indent(Block(rows, focusable: false))])
 }
 
 func projectField(_ editor: Editor, _ ancestors: Set<UUID>, _ parent: UUID, _ field: Id) -> NSView {
     let valueId = editor.gid.get(entity: .uuid(parent), label: field)
     let value = projectValue(editor, ancestors, valueId)
-    let label = Text(editor.name(of: field) ?? "?", .label)
-    let arrow = Text("→", .punctuation)
+    let label = Text(editor.name(of: field) ?? "?", .label, focusable: false)
+    let arrow = Text("→", .punctuation, focusable: false)
     if value is Block {
-        return Block([Line([label, arrow]), Indent(value)])
+        return Block([Line([label, arrow], focusable: false), Indent(value)])
     }
     return Line([label, arrow, value])
 }
@@ -54,11 +54,11 @@ func projectList(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> NS
         return Text("[]", .punctuation)
     }
     let childAncestors = ancestors.union([entity])
-    let body = Block(elements.map { projectValue(editor, childAncestors, $0) })
+    let body = Block(elements.map { projectValue(editor, childAncestors, $0) }, focusable: false)
     return Block([
-        Text("[", .punctuation),
+        Text("[", .punctuation, focusable: false),
         Indent(body),
-        Text("]", .punctuation),
+        Text("]", .punctuation, focusable: false),
     ])
 }
 

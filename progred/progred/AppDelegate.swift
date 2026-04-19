@@ -1,17 +1,10 @@
 import AppKit
 
 class EditorWindow: NSWindow {
+    override var acceptsFirstResponder: Bool { true }
+
     override func keyDown(with event: NSEvent) {
         interpretKeyEvents([event])
-    }
-
-    @discardableResult
-    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
-        let result = super.makeFirstResponder(responder)
-        if let view = responder as? NSView, view.window === self {
-            view.scrollToVisible(view.bounds)
-        }
-        return result
     }
 
     override func insertTab(_ sender: Any?) { advance(.tab) }

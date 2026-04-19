@@ -3,6 +3,16 @@ import AppKit
 let indentWidth: CGFloat = 16
 let outerPadding: CGFloat = 8
 
+extension NSView {
+    func setFocusIndicator(_ focused: Bool) {
+        wantsLayer = true
+        layer?.cornerRadius = 3
+        layer?.backgroundColor = focused
+            ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.3).cgColor
+            : nil
+    }
+}
+
 class FlippedView: NSView {
     override var isFlipped: Bool { true }
     override func mouseDown(with event: NSEvent) {
