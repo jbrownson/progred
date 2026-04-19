@@ -51,7 +51,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        editor = Editor.withSampleDocument(onChange: { [weak self] delta in self?.rootView.apply(delta) })
+        let schema = Schema.bootstrap()
+        let (document, root) = Editor.sampleDocument(schema)
+        editor = Editor(
+            schema: schema, document: document, root: root,
+            onChange: { [weak self] delta in self?.rootView.apply(delta) })
         rootView = RootView(editor: editor)
 
         let scrollView = NSScrollView()
@@ -81,13 +85,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     @objc func newDocument(_ sender: Any?) {
-        editor = Editor(schema: editor.schema, onChange: { [weak self] delta in self?.rootView.apply(delta) })
-        rootView.editor = editor
+        editor.replace(document: MutGid(), root: nil)
     }
 
     @objc func loadSampleDocument(_ sender: Any?) {
-        editor = Editor.withSampleDocument(onChange: { [weak self] delta in self?.rootView.apply(delta) })
-        rootView.editor = editor
+        let (document, root) = Editor.sampleDocument(editor.schema)
+        editor.replace(document: document, root: root)
     }
 }
 

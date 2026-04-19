@@ -1,82 +1,118 @@
 import AppKit
+import HashTreeCollections
 
-func projectValue(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: Id?) -> NSView {
-    guard let entity else { return Text("·", .literal) }
-
-    if case .uuid(let uuid) = entity, ancestors.contains(uuid) {
-        return Text("↻ \(editor.name(of: entity) ?? "<cycle>")", .keyword)
+func projectId(_ editor: Editor, _ ancestors: Set<UUID>, _ id: Id?, _ commit: Commit?) -> NSView {
+    guard let id else { return Text("·", .literal) }
+    switch id {
+    case .string(let s): return Text("\"\(s)\"", .literal)
+    case .number(let n): return Text("\(n)", .literal)
+    case .uuid(let uuid): return projectUUID(editor, ancestors, uuid, commit)
     }
-
-    if case .string(let s) = entity { return Text("\"\(s)\"", .literal) }
-    if case .number(let n) = entity { return Text("\(n)", .literal) }
-
-    guard case .uuid(let uuid) = entity else {
-        return Text(editor.name(of: entity) ?? "\(entity)", .literal)
-    }
-
-    let recordType = editor.gid.get(entity: entity, label: editor.schema.recordField)
-    if recordType == editor.schema.consRecord || recordType == editor.schema.emptyRecord {
-        return projectList(editor, ancestors, uuid)
-    }
-    return projectRecord(editor, ancestors, uuid)
 }
 
-func projectRecord(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> Block {
-    let recordType = editor.gid.get(entity: .uuid(entity), label: editor.schema.recordField)
-    let typeName = recordType.flatMap { editor.name(of: $0) } ?? "?"
-    let header = Text(typeName, .typeRef, focusable: false)
+func projectUUID(_ editor: Editor, _ ancestors: Set<UUID>, _ uuid: UUID, _ commit: Commit?) -> NSView {
+    if ancestors.contains(uuid) {
+        return Text("↻ \(editor.name(of: .uuid(uuid)) ?? "<cycle>")", .keyword)
+    }
+    return projectList(editor, ancestors, list: uuid, commit)
+        ?? projectRecord(editor, ancestors, record: uuid)
+        ?? projectRaw(editor, ancestors, entity: uuid)
+}
 
-    let fieldIds: [Id] = recordType.flatMap { type -> [Id]? in
-        guard let fieldsListId = editor.gid.get(entity: type, label: editor.schema.fieldsField),
-              case .uuid(let listUuid) = fieldsListId else { return nil }
-        return walkCons(editor, from: listUuid)
-    } ?? []
-
-    let childAncestors = ancestors.union([entity])
-    let rows = fieldIds.map { projectField(editor, childAncestors, entity, $0) }
-    return Block([header, Indent(Block(rows, focusable: false))])
+func projectRecord(_ editor: Editor, _ ancestors: Set<UUID>, record: UUID) -> NSView? {
+    guard let recordType = editor.gid.get(entity: .uuid(record), label: editor.schema.recordField),
+          let fieldsListId = editor.gid.get(entity: recordType, label: editor.schema.fieldsField),
+          case .uuid(let listUuid) = fieldsListId,
+          let conses = conses(editor, of: listUuid)
+    else { return nil }
+    let typeName = editor.name(of: recordType) ?? "?"
+    let header = Text(typeName, .typeRef)
+    let childAncestors = ancestors.union([record])
+    let rows = conses.map { projectField(editor, childAncestors, record, $0.head) }
+    return Block([header, Indent(Block(rows))])
 }
 
 func projectField(_ editor: Editor, _ ancestors: Set<UUID>, _ parent: UUID, _ field: Id) -> NSView {
-    let valueId = editor.gid.get(entity: .uuid(parent), label: field)
-    let value = projectValue(editor, ancestors, valueId)
-    let label = Text(editor.name(of: field) ?? "?", .label, focusable: false)
-    let arrow = Text("→", .punctuation, focusable: false)
-    if value is Block {
-        return Block([Line([label, arrow], focusable: false), Indent(value)])
+    let valueCommit: Commit = { newValue in
+        editor.apply(GraphDelta.setting(entity: parent, label: field, value: newValue))
     }
-    return Line([label, arrow, value])
-}
-
-func projectList(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> NSView {
-    let elements = walkCons(editor, from: entity)
-    if elements.isEmpty {
-        return Text("[]", .punctuation)
-    }
-    let childAncestors = ancestors.union([entity])
-    let body = Block(elements.map { projectValue(editor, childAncestors, $0) }, focusable: false)
     return Block([
-        Text("[", .punctuation, focusable: false),
-        Indent(body),
-        Text("]", .punctuation, focusable: false),
+        Line([Text(editor.name(of: field) ?? "?", .label), Text("→", .punctuation)]),
+        Indent(Selectable(
+            projectId(
+                editor, ancestors,
+                editor.gid.get(entity: .uuid(parent), label: field),
+                valueCommit),
+            commit: valueCommit))
     ])
 }
 
-/// Stops at emptyRecord; bails on non-cons cells (resilient to malformed chains).
-func walkCons(_ editor: Editor, from entity: UUID) -> [Id] {
-    var result: [Id] = []
+func projectList(_ editor: Editor, _ ancestors: Set<UUID>, list: UUID, _ listCommit: Commit?) -> NSView? {
+    let recordType = editor.gid.get(entity: .uuid(list), label: editor.schema.recordField)
+    guard recordType == editor.schema.consRecord || recordType == editor.schema.emptyRecord,
+          let conses = conses(editor, of: list)
+    else { return nil }
+    if conses.isEmpty {
+        return Text("[]", .punctuation)
+    }
+    let childAncestors = ancestors.union([list])
+    let elementViews = conses.enumerated().map { i, current -> Selectable in
+        let cons = current.cons
+        let prev: UUID? = i > 0 ? conses[i - 1].cons : nil
+        let elementCommit: Commit = { newValue in
+            if let newValue {
+                editor.apply(GraphDelta.setting(entity: cons, label: editor.schema.headField, value: newValue))
+            } else if let prev {
+                editor.apply(spliceCons(editor, cons: cons, prev: prev))
+            } else {
+                listCommit?(editor.gid.get(entity: .uuid(cons), label: editor.schema.tailField))
+            }
+        }
+        return Selectable(
+            projectId(editor, childAncestors, current.head, elementCommit),
+            commit: elementCommit)
+    }
+    let body = Block(elementViews)
+    return Block([
+        Text("[", .punctuation),
+        Indent(body),
+        Text("]", .punctuation),
+    ])
+}
+
+func projectRaw(_ editor: Editor, _ ancestors: Set<UUID>, entity: UUID) -> NSView {
+    let recordType = editor.gid.get(entity: .uuid(entity), label: editor.schema.recordField)
+    let typeName = recordType.flatMap { editor.name(of: $0) } ?? "?"
+    let header = Text(typeName, .typeRef)
+    let headerLabels: Set<Id> = [editor.schema.recordField, editor.schema.nameField]
+    let labels = (editor.gid.edges(entity: .uuid(entity))?.data ?? [:])
+        .keys
+        .filter { !headerLabels.contains($0) }
+        .sorted()
+    let childAncestors = ancestors.union([entity])
+    let rows = labels.map { projectField(editor, childAncestors, entity, $0) }
+    return Block([header, Indent(Block(rows))])
+}
+
+func spliceCons(_ editor: Editor, cons: UUID, prev: UUID) -> GraphDelta {
+    let tail = editor.gid.get(entity: .uuid(cons), label: editor.schema.tailField)
+    return GraphDelta.setting(entity: prev, label: editor.schema.tailField, value: tail)
+}
+
+func conses(_ editor: Editor, of entity: UUID) -> [(cons: UUID, head: Id)]? {
+    var result: [(UUID, Id)] = []
     var current: Id = .uuid(entity)
     var visited: Set<UUID> = []
     while case .uuid(let uuid) = current {
-        guard !visited.contains(uuid) else { break }
+        guard !visited.contains(uuid) else { return nil }
         visited.insert(uuid)
-        guard let recordType = editor.gid.get(entity: current, label: editor.schema.recordField) else { break }
-        if recordType == editor.schema.emptyRecord { break }
-        guard recordType == editor.schema.consRecord else { break }
-        guard let head = editor.gid.get(entity: current, label: editor.schema.headField) else { break }
-        result.append(head)
-        guard let tail = editor.gid.get(entity: current, label: editor.schema.tailField) else { break }
+        guard let recordType = editor.gid.get(entity: current, label: editor.schema.recordField) else { return nil }
+        if recordType == editor.schema.emptyRecord { return result }
+        guard recordType == editor.schema.consRecord else { return nil }
+        guard let head = editor.gid.get(entity: current, label: editor.schema.headField) else { return nil }
+        result.append((uuid, head))
+        guard let tail = editor.gid.get(entity: current, label: editor.schema.tailField) else { return nil }
         current = tail
     }
-    return result
+    return nil
 }

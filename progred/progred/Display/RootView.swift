@@ -1,10 +1,7 @@
 import AppKit
 
 class RootView: FlippedView {
-    var editor: Editor {
-        didSet { rebuild() }
-    }
-    private var content: NSView?
+    let editor: Editor
 
     init(editor: Editor) {
         self.editor = editor
@@ -23,8 +20,13 @@ class RootView: FlippedView {
     }
 
     private func rebuild() {
-        content?.removeFromSuperview()
-        let projection = projectValue(editor, [], editor.root)
+        subviews.first?.removeFromSuperview()
+        assert(subviews.isEmpty)
+        let editor = self.editor
+        let rootCommit: Commit = { newValue in editor.setRoot(newValue) }
+        let projection = Selectable(
+            projectId(editor, [], editor.root, rootCommit),
+            commit: rootCommit)
         addSubview(projection)
         projection.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -33,6 +35,5 @@ class RootView: FlippedView {
             bottomAnchor.constraint(greaterThanOrEqualTo: projection.bottomAnchor, constant: outerPadding),
             trailingAnchor.constraint(greaterThanOrEqualTo: projection.trailingAnchor, constant: outerPadding),
         ])
-        content = projection
     }
 }

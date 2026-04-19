@@ -41,8 +41,13 @@ class Editor {
         onChange(.empty)
     }
 
-    static func withSampleDocument(onChange: @escaping (GraphDelta) -> Void) -> Editor {
-        let schema = Schema.bootstrap()
+    func replace(document: MutGid, root: Id?) {
+        self.document = document
+        self.root = root
+        onChange(.empty)
+    }
+
+    static func sampleDocument(_ schema: Schema) -> (document: MutGid, root: Id?) {
         var document = MutGid()
 
         func set(_ entity: UUID, _ label: Id, _ value: Id) {
@@ -117,6 +122,6 @@ class Editor {
         set(alice, .uuid(ageField), .uuid(aliceAge))
 
         let root: Id = .uuid(makeList([.uuid(optionSum), .uuid(personRecord), .uuid(alice)]))
-        return Editor(schema: schema, document: document, root: root, onChange: onChange)
+        return (document, root)
     }
 }
