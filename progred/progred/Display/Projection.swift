@@ -1,8 +1,5 @@
 import AppKit
 
-// Project-only for now. RootView.apply(delta) does a full rebuild;
-// per-projection update functions will land later.
-
 func projectValue(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: Id?) -> NSView {
     guard let entity else { return Text("·", .literal) }
 
@@ -10,7 +7,7 @@ func projectValue(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: Id?) -> NS
         return Text("↻ \(editor.name(of: entity) ?? "<cycle>")", .keyword)
     }
 
-    if case .string(let s) = entity { return Text(s, .literal) }
+    if case .string(let s) = entity { return Text("\"\(s)\"", .literal) }
     if case .number(let n) = entity { return Text("\(n)", .literal) }
 
     guard case .uuid(let uuid) = entity else {
@@ -40,18 +37,22 @@ func projectRecord(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> 
     return Block([header, Indent(Block(rows))])
 }
 
-func projectField(_ editor: Editor, _ ancestors: Set<UUID>, _ parent: UUID, _ field: Id) -> Block {
-    let labelLine = Line([
-        Text(editor.name(of: field) ?? "?", .label),
-        Text("→", .punctuation),
-    ])
+func projectField(_ editor: Editor, _ ancestors: Set<UUID>, _ parent: UUID, _ field: Id) -> NSView {
     let valueId = editor.gid.get(entity: .uuid(parent), label: field)
-    let valueView = projectValue(editor, ancestors, valueId)
-    return Block([labelLine, Indent(valueView)])
+    let value = projectValue(editor, ancestors, valueId)
+    let label = Text(editor.name(of: field) ?? "?", .label)
+    let arrow = Text("→", .punctuation)
+    if value is Block {
+        return Block([Line([label, arrow]), Indent(value)])
+    }
+    return Line([label, arrow, value])
 }
 
-func projectList(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> Block {
+func projectList(_ editor: Editor, _ ancestors: Set<UUID>, _ entity: UUID) -> NSView {
     let elements = walkCons(editor, from: entity)
+    if elements.isEmpty {
+        return Text("[]", .punctuation)
+    }
     let childAncestors = ancestors.union([entity])
     let body = Block(elements.map { projectValue(editor, childAncestors, $0) })
     return Block([
