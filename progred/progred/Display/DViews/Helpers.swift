@@ -1,5 +1,8 @@
 import AppKit
 
+let indentWidth: CGFloat = 16
+let outerPadding: CGFloat = 8
+
 class FlippedView: NSView {
     override var isFlipped: Bool { true }
     override func mouseDown(with event: NSEvent) {

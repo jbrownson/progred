@@ -58,7 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        editor = Editor(schema: Schema.bootstrap(), onChange: { [weak self] delta in self?.rootView.apply(delta) })
+        editor = Editor.withSampleDocument(onChange: { [weak self] delta in self?.rootView.apply(delta) })
         rootView = RootView(editor: editor)
 
         let scrollView = NSScrollView()
@@ -66,9 +66,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = false
-        scrollView.verticalScrollElasticity = .none
-        scrollView.horizontalScrollElasticity = .none
         scrollView.documentView = rootView
+        NSLayoutConstraint.activate([
+            rootView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
+            rootView.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
+            rootView.widthAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.widthAnchor),
+        ])
 
         window = EditorWindow(
             contentRect: NSRect(x: 0, y: 0, width: 600, height: 400),
