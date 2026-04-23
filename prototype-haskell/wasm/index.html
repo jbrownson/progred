@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>prototype-haskell-wasm</title>
+    <style>
+      body { font: 14px -apple-system, system-ui, sans-serif; padding: 24px; }
+      #root { font-family: ui-monospace, Menlo, monospace; padding: 12px; background: #f4f4f4; border-radius: 4px; }
+      button { margin-top: 12px; padding: 6px 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="root">loading…</div>
+    <button id="go">click me</button>
+    <script type="module">
+      import { WASI, OpenFile, File, ConsoleStdout }
+        from "https://unpkg.com/@bjorn3/browser_wasi_shim@0.3.0/dist/index.js";
+      // GHC's post-link.mjs generated this — it provides the JS bodies
+      // for every `foreign import javascript` we declared in Main.hs.
+      import ghc_wasm_jsffi from "./ghc_wasm_jsffi.js";
+
+      const args = [];
+      const env = [];
+      const fds = [
+        new OpenFile(new File([])),
+        ConsoleStdout.lineBuffered(m => console.log(m)),
+        ConsoleStdout.lineBuffered(m => console.warn(m)),
+      ];
+      const wasi = new WASI(args, env, fds);
+
+      const wasm = await WebAssembly.compileStreaming(fetch("./prototype-haskell-wasm.wasm"));
+
+      // ghc_wasm_jsffi(__exports) returns the JSFFI import object;
+      // __exports is filled in after instantiation. Two-step dance so
+      // the generated functions can reach the wasm exports.
+      const __exports = {};
+      const inst = await WebAssembly.instantiate(wasm, {
+        wasi_snapshot_preview1: wasi.wasiImport,
+        ghc_wasm_jsffi: ghc_wasm_jsffi(__exports),
+      });
+      Object.assign(__exports, inst.exports);
+
+      wasi.initialize(inst);
+      inst.exports.hs_init(0, 0);
+
+      let n = 0;
+      document.getElementById("go").addEventListener("click", () => {
+        inst.exports.onClick(++n);
+      });
+    </script>
+  </body>
+</html>

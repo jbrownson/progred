@@ -1,0 +1,25 @@
+cabal-version: 3.0
+name:          prototype-haskell-wasm
+version:       0.1.0.0
+synopsis:      Haskell -> WASM prototype, talks to DOM via JSFFI
+build-type:    Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
+               -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+
+executable prototype-haskell-wasm
+  import:           warnings
+  main-is:          Main.hs
+  hs-source-dirs:   src
+  default-language: GHC2021
+  build-depends:
+    , base ^>= 4.21
+
+  -- The WASM build uses GHC's WASM backend (cabal -w wasm32-wasi-ghc).
+  -- The flags below produce a self-initializing WASI module that the
+  -- browser shim can boot.
+  ghc-options:
+    -no-hs-main
+    -optl-mexec-model=reactor
+    -optl-Wl,--export=hs_init

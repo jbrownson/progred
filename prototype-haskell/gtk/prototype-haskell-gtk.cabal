@@ -1,0 +1,23 @@
+cabal-version: 3.0
+name:          prototype-haskell-gtk
+version:       0.1.0.0
+synopsis:      GTK4 native prototype via gi-gtk (GObject introspection bindings)
+build-type:    Simple
+
+common warnings
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
+               -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
+
+executable prototype-haskell-gtk
+  import:           warnings
+  main-is:          Main.hs
+  hs-source-dirs:   src
+  default-language: GHC2021
+  default-extensions:
+    OverloadedLabels
+    OverloadedStrings
+  build-depends:
+    , base            ^>= 4.18
+    , gi-gtk          >= 4.0
+    , haskell-gi-base
+    , text

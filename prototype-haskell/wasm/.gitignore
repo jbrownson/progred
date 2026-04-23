@@ -1,0 +1,5 @@
+dist-newstyle/
+.ghc.environment.*
+*.hi
+*.o
+*.wasm
