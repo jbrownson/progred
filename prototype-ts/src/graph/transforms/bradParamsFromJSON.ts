@@ -1,6 +1,6 @@
-import { altMaybe, bindMaybe, mapMaybe, Maybe, sequenceMaybe } from "../lib/Maybe"
-import { GUIDBradParams, GUIDHouseAdEntry, GUIDHouseAdImage, GUIDNetworkEntry, GUIDWeightedEntry, JSON, jsonArrayFromJSON, jsonNumberFromJSON, JSONObject, jsonObjectFromJSON, jsonStringFromJSON, weightedEntryFromID } from "./graph"
-import { listFromArray } from "./listFromArray"
+import { altMaybe, bindMaybe, mapMaybe, Maybe, sequenceMaybe } from "../../lib/Maybe"
+import { GUIDBradParams, GUIDHouseAdEntry, GUIDHouseAdImage, GUIDNetworkEntry, GUIDWeightedEntry, JSON, jsonArrayFromJSON, jsonNumberFromJSON, JSONObject, jsonObjectFromJSON, jsonStringFromJSON, weightedEntryFromID } from "../graph"
+import { listFromArray } from "../listFromArray"
 
 function mapFromJSON(json: JSON): Maybe<Map<string, JSON>> { return mapMaybe(jsonObjectFromJSON(json), mapFromJSONObject) }
 

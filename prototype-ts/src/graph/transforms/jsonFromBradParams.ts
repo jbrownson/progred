@@ -1,6 +1,6 @@
-import { bindMaybe, filterMaybes, mapMaybe, Maybe, sequenceMaybe } from "../lib/Maybe"
-import { arrayFromList } from "./arrayFromList"
-import { BradParams, GUIDJSONArray, GUIDJSONNumber, GUIDJSONObject, GUIDJSONString, GUIDKeyValuePair, HouseAdImage, JSONArray, JSONObject, List, matchWeightedEntry, WeightedEntry } from "./graph"
+import { bindMaybe, filterMaybes, mapMaybe, Maybe, sequenceMaybe } from "../../lib/Maybe"
+import { arrayFromList } from "../arrayFromList"
+import { BradParams, GUIDJSONArray, GUIDJSONNumber, GUIDJSONObject, GUIDJSONString, GUIDKeyValuePair, HouseAdImage, JSONArray, JSONObject, List, matchWeightedEntry, WeightedEntry } from "../graph"
 
 function jsonFromImage(image: HouseAdImage): GUIDJSONObject {
   return GUIDJSONObject.new().setKeyValuePairs(filterMaybes([

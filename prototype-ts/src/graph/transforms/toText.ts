@@ -1,8 +1,8 @@
-import { altMaybe, bindMaybe, firstMaybe, fromMaybe, guardMaybe, mapMaybe, Maybe, sequenceMaybe } from "../lib/Maybe"
-import { arrayFromList } from "./arrayFromList"
-import { _get } from "./Environment"
-import { ctorField, D, listFromID, matchD, matchRender, nameField, Render } from "./graph"
-import { ID, matchID, numberFromNID, stringFromID } from "./ID"
+import { altMaybe, bindMaybe, firstMaybe, fromMaybe, guardMaybe, mapMaybe, Maybe, sequenceMaybe } from "../../lib/Maybe"
+import { arrayFromList } from "../arrayFromList"
+import { _get } from "../Environment"
+import { ctorField, D, listFromID, matchD, matchRender, nameField, Render } from "../graph"
+import { ID, matchID, numberFromNID, stringFromID } from "../ID"
 
 export type ToText = (id: ID, depth: number) => Maybe<string>
 

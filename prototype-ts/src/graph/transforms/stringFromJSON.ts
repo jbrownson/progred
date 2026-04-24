@@ -1,7 +1,7 @@
-import { mapMaybe, Maybe } from "../lib/Maybe"
-import { HasSID } from "./graph"
-import type { JSON } from "./graph"
-import { sidFromString } from "./ID"
+import { mapMaybe, Maybe } from "../../lib/Maybe"
+import { HasSID } from "../graph"
+import type { JSON } from "../graph"
+import { sidFromString } from "../ID"
 import { jsonToJSON } from "./jsonFromJSON"
 
 export function stringFromJSON(json: JSON): Maybe<HasSID> {

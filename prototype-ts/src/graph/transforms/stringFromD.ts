@@ -1,4 +1,4 @@
-import { D, matchD } from "./render/D"
+import { D, matchD } from "../render/D"
 
 function indent(depth: number) { return Array((depth + 1) * 2 + 1).join(" ") }
 
