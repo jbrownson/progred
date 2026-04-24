@@ -1,10 +1,10 @@
-import { concatMap, removeDupesBy } from "../lib/Array"
-import { assert } from "../lib/assert"
-import { maybe, Maybe, maybeMap, maybeToArray, nothing, unsafeUnwrapMaybe } from "../lib/Maybe"
-import { camelCase, indent, pascalCase } from "../lib/String"
+import { concatMap, removeDupesBy } from "../../lib/Array"
+import { assert } from "../../lib/assert"
+import { maybe, Maybe, maybeMap, maybeToArray, nothing, unsafeUnwrapMaybe } from "../../lib/Maybe"
+import { camelCase, indent, pascalCase } from "../../lib/String"
 import { ctorsAtomicsFromCtorOrAlgebraicTypes } from "./ctorsAtomicsFromCtorOrAlgebraicTypes"
-import { AlgebraicType, AtomicType, Ctor, Field, listAlgebraicType, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "./graph"
-import { guidFromID } from "./ID"
+import { AlgebraicType, AtomicType, Ctor, Field, listAlgebraicType, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "../graph"
+import { guidFromID } from "../ID"
 
 export function typescriptFromCtorOrAlgebraicTypes(algebraicTypes: AlgebraicType[], ctors: Ctor[], atomicTypes: AtomicType[]): string {
   return [

@@ -1,6 +1,6 @@
-import { Ctor, nonemptyListCtor } from "./graph/graph"
-import { unsafeUnwrapMaybe } from "./lib/Maybe"
-import { camelCase, pascalCase } from "./lib/String"
+import { Ctor, nonemptyListCtor } from "../graph"
+import { unsafeUnwrapMaybe } from "../../lib/Maybe"
+import { camelCase, pascalCase } from "../../lib/String"
 
 export function genRenderIfs(ctors: Ctor[]): string { return [
   [

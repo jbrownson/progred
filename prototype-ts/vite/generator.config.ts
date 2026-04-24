@@ -8,7 +8,7 @@ export default defineConfig({
     outDir: "build",
     emptyOutDir: false,
     lib: {
-      entry: "src/graph/generator.ts",
+      entry: "src/graph/codegen/generator.ts",
       formats: ["cjs"],
       fileName: () => "generator.cjs",
     },
