@@ -5,8 +5,8 @@ import { cursorFromD } from "../cursorFromD"
 import { StringEditor } from "../render/D"
 import { environment, set } from "../Environment"
 import { guidFromID, sidFromString } from "../ID"
-import { blur, focus, handleFocusEvent } from "../ignoreFocusEvents"
-import { stopPropagationForTextInputs } from "../stopPropagationForTextInputs"
+import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
+import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
 export class StringEditorComponent extends React.Component<{stringEditor: StringEditor, runE: (f: () => void) => void}, {}> {
   textArea: HTMLTextAreaElement | null

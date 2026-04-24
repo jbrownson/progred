@@ -1,12 +1,12 @@
 import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing, unsafeUnwrapMaybe } from "../lib/Maybe"
 import { Cursor } from "./Cursor"
 import { D } from "./render/D"
-import { ECallbacks } from "./ECallbacks"
+import { ECallbacks } from "./editor/ECallbacks"
 import { ctorField, GUIDRootViews, nameField } from "./graph"
 import { GUIDMap } from "./GUIDMap"
 import { GUID, guidFromID, ID, stringFromID } from "./ID"
 import { IDMap } from "./IDMap"
-import { _Selection } from "./Selection"
+import { _Selection } from "./editor/Selection"
 import { SparseSpanningTree } from "./SparseSpanningTree"
 
 export class Environment {

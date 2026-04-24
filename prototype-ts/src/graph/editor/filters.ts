@@ -1,5 +1,5 @@
-import { stableSort } from "../lib/Array"
-import { mapMaybe, Maybe, maybe, maybeReduce, nothing } from "../lib/Maybe"
+import { stableSort } from "../../lib/Array"
+import { mapMaybe, Maybe, maybe, maybeReduce, nothing } from "../../lib/Maybe"
 
 export type Match = {start: number, length: number}
 

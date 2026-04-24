@@ -1,6 +1,6 @@
-import { mapMaybe, Maybe, maybe, nothing } from "../lib/Maybe"
-import { Cursor } from "./Cursor"
-import { SparseSpanningTree } from "./SparseSpanningTree"
+import { mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
+import { Cursor } from "../Cursor"
+import { SparseSpanningTree } from "../SparseSpanningTree"
 
 export function setCollapsed(cursor: Cursor, collapsed: Maybe<boolean>) {
   function f(cursor: Cursor, sparseSpanningTree: SparseSpanningTree) {

@@ -1,4 +1,4 @@
-import { nothing } from "../lib/Maybe"
+import { nothing } from "../../lib/Maybe"
 
 let ignoreFocusEventsCount = 0
 

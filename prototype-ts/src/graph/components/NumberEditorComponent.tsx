@@ -6,8 +6,8 @@ import { cursorFromD } from "../cursorFromD"
 import { NumberEditor } from "../render/D"
 import { environment, set } from "../Environment"
 import { guidFromID, nidFromNumber } from "../ID"
-import { blur, focus, handleFocusEvent } from "../ignoreFocusEvents"
-import { stopPropagationForTextInputs } from "../stopPropagationForTextInputs"
+import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
+import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
 export class NumberEditorComponent extends React.Component<{numberEditor: NumberEditor, runE: (f: () => void) => void}, {}> {
   input: HTMLInputElement | null

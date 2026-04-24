@@ -6,7 +6,7 @@ import { D, matchD } from "../render/D"
 import { environment } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderComponent } from "./PlaceholderComponent"
-import { SelectionState } from "../selectionIfSelected"
+import { SelectionState } from "../editor/selectionIfSelected"
 import { StringEditorComponent } from "./StringEditorComponent"
 
 export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {

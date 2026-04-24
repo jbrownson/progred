@@ -1,6 +1,6 @@
-import { bindMaybe, maybe, nothing } from "../lib/Maybe"
-import { Cursor, cursorsEqual } from "./Cursor"
-import { _get, environment } from "./Environment"
+import { bindMaybe, maybe, nothing } from "../../lib/Maybe"
+import { Cursor, cursorsEqual } from "../Cursor"
+import { _get, environment } from "../Environment"
 import { _Selection } from "./Selection"
 
 export const enum SelectionState { Selected, Hinted }

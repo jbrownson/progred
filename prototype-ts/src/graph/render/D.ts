@@ -2,12 +2,12 @@ import { assert } from "../../lib/assert"
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "../Cursor"
 import { tryFirst } from "./defaultRender"
-import { Entry } from "../Entry"
+import { Entry } from "../editor/Entry"
 import { environment, get, SourceType } from "../Environment"
-import { Match } from "../filters"
+import { Match } from "../editor/filters"
 import { rootField, viewsField } from "../graph"
 import { alwaysFail, Render } from "./R"
-import { SelectionState, selectionStateFromCursor } from "../selectionIfSelected"
+import { SelectionState, selectionStateFromCursor } from "../editor/selectionIfSelected"
 
 export type D = Block | Line | DText | DList | Descend | Label | Button | Placeholder | StringEditor | NumberEditor
 

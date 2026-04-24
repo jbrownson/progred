@@ -1,13 +1,13 @@
-import { join } from "../lib/Array"
-import { lexCompare } from "../lib/lexCompare"
-import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray } from "../lib/Maybe"
+import { join } from "../../lib/Array"
+import { lexCompare } from "../../lib/lexCompare"
+import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray } from "../../lib/Maybe"
 import { Entry } from "./Entry"
-import { _get, set, Source, SourceType } from "./Environment"
+import { _get, set, Source, SourceType } from "../Environment"
 import { defaultFilter, Match, sortFilter } from "./filters"
-import { Ctor, ctorField, emptyListCtor, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "./graph"
-import { generateGUID, ID, nidFromNumber, sidFromString } from "./ID"
-import { LoadedNamedThing, loadedNamedThings } from "./loadedNamedThings"
-import { algebraicTypeHasCtor, typeIsOrHasAtomicType, typeMatches } from "./typeMatches"
+import { Ctor, ctorField, emptyListCtor, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "../graph"
+import { generateGUID, ID, nidFromNumber, sidFromString } from "../ID"
+import { LoadedNamedThing, loadedNamedThings } from "../loadedNamedThings"
+import { algebraicTypeHasCtor, typeIsOrHasAtomicType, typeMatches } from "../typeMatches"
 
 function entryForID(name: string, id: ID, source: Source, cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry {
   let matching = fromMaybe(mapMaybe(cursorType, cursorType => typeMatches(id, cursorType)), () => true)

@@ -1,6 +1,6 @@
-import { altMaybe, bindMaybe, Maybe, nothing } from "../lib/Maybe"
-import { D, Descend } from "./render/D"
-import { _get } from "./Environment"
+import { altMaybe, bindMaybe, Maybe, nothing } from "../../lib/Maybe"
+import { D, Descend } from "../render/D"
+import { _get } from "../Environment"
 
 function findTabStopDownChildren(d: D, n: number): Maybe<Descend> {
   function f(children: D[]): Maybe<Descend> {

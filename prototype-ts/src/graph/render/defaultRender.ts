@@ -1,5 +1,5 @@
 import { bindMaybe, booleanFromMaybe, fromMaybe, mapMaybe, Maybe, maybe } from "../../lib/Maybe"
-import { buildEntries } from "../buildEntries"
+import { buildEntries } from "../editor/buildEntries"
 import { _childCursor } from "../childCursor"
 import { Cursor } from "../Cursor"
 import { Block, D, DList, DText, Label, Line, matchD, NumberEditor, Placeholder, StringEditor } from "./D"
@@ -8,7 +8,7 @@ import { Ctor, ctorField, EmptyList, Field, GUIDNonemptyList, HasID, headField, 
 import { GUID, guidFromID, ID, matchID } from "../ID"
 import { stringFromID } from "../ID"
 import { alwaysFail, descend, Render } from "./R"
-import { selectionIfSelected } from "../selectionIfSelected"
+import { selectionIfSelected } from "../editor/selectionIfSelected"
 import { typeFromCursor } from "../typeFromCursor"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>) => D): (cursor: Cursor, id: Maybe<SourceID>) => D {
