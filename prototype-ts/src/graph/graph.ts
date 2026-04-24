@@ -141,19 +141,6 @@ export class GUIDAtomicType extends AtomicType {
   get guidAtomicType() { return this }
   setName(x: Maybe<string>) { return _set(this, nameField, sidFromString, x) } }
 
-export class AWSCredentials {
-  constructor(public readonly id: ID) {}
-  static fromID(id: ID) { return checkCtor(id, awsCredentialsCtor) ? new AWSCredentials(id) : nothing }
-  get guidAWSCredentials() { return mapMaybe(guidFromID(this.id), guid => new GUIDAWSCredentials(guid)) }
-  get accessKeyId(): Maybe<string> { return get(this, accessKeyIdField, stringFromID) }
-  get secretAccessKey(): Maybe<string> { return get(this, secretAccessKeyField, stringFromID) } }
-export class GUIDAWSCredentials extends AWSCredentials {
-  constructor(public readonly id: GUID) { super(id) }
-  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, awsCredentialsCtor.id); return new GUIDAWSCredentials(guid) }
-  get guidAWSCredentials() { return this }
-  setAccessKeyId(x: Maybe<string>) { return _set(this, accessKeyIdField, sidFromString, x) }
-  setSecretAccessKey(x: Maybe<string>) { return _set(this, secretAccessKeyField, sidFromString, x) } }
-
 export class BinaryInline {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, binaryInlineCtor) ? new BinaryInline(id) : nothing }
@@ -602,21 +589,6 @@ export class GUIDListType extends ListType {
   get guidListType() { return this }
   setType(x: Maybe<Type>) { return _set(this, typeField, getID, x) } }
 
-export class LoadAWS {
-  constructor(public readonly id: ID) {}
-  static fromID(id: ID) { return checkCtor(id, loadAWSCtor) ? new LoadAWS(id) : nothing }
-  get guidLoadAWS() { return mapMaybe(guidFromID(this.id), guid => new GUIDLoadAWS(guid)) }
-  get bucket(): Maybe<string> { return get(this, bucketField, stringFromID) }
-  get credentials(): Maybe<AWSCredentials> { return get(this, credentialsField, AWSCredentials.fromID) }
-  get key(): Maybe<string> { return get(this, keyField, stringFromID) } }
-export class GUIDLoadAWS extends LoadAWS {
-  constructor(public readonly id: GUID) { super(id) }
-  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, loadAWSCtor.id); return new GUIDLoadAWS(guid) }
-  get guidLoadAWS() { return this }
-  setBucket(x: Maybe<string>) { return _set(this, bucketField, sidFromString, x) }
-  setCredentials(x: Maybe<AWSCredentials>) { return _set(this, credentialsField, getID, x) }
-  setKey(x: Maybe<string>) { return _set(this, keyField, sidFromString, x) } }
-
 export class LoadJSON {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, loadJSONCtor) ? new LoadJSON(id) : nothing }
@@ -748,34 +720,6 @@ export class GUIDProduct extends Product {
   constructor(public readonly id: GUID) { super(id) }
   static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, productCtor.id); return new GUIDProduct(guid) }
   get guidProduct() { return this }
-   }
-
-export class PutAWS {
-  constructor(public readonly id: ID) {}
-  static fromID(id: ID) { return checkCtor(id, putAWSCtor) ? new PutAWS(id) : nothing }
-  get guidPutAWS() { return mapMaybe(guidFromID(this.id), guid => new GUIDPutAWS(guid)) }
-  get bucket(): Maybe<string> { return get(this, bucketField, stringFromID) }
-  get credentials(): Maybe<AWSCredentials> { return get(this, credentialsField, AWSCredentials.fromID) }
-  get key(): Maybe<string> { return get(this, keyField, stringFromID) }
-  get string(): Maybe<string> { return get(this, stringField, stringFromID) } }
-export class GUIDPutAWS extends PutAWS {
-  constructor(public readonly id: GUID) { super(id) }
-  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, putAWSCtor.id); return new GUIDPutAWS(guid) }
-  get guidPutAWS() { return this }
-  setBucket(x: Maybe<string>) { return _set(this, bucketField, sidFromString, x) }
-  setCredentials(x: Maybe<AWSCredentials>) { return _set(this, credentialsField, getID, x) }
-  setKey(x: Maybe<string>) { return _set(this, keyField, sidFromString, x) }
-  setString(x: Maybe<string>) { return _set(this, stringField, sidFromString, x) } }
-
-export class PutAWSSucceeded {
-  constructor(public readonly id: ID) {}
-  static fromID(id: ID) { return checkCtor(id, putAWSSucceededCtor) ? new PutAWSSucceeded(id) : nothing }
-  get guidPutAWSSucceeded() { return mapMaybe(guidFromID(this.id), guid => new GUIDPutAWSSucceeded(guid)) }
-   }
-export class GUIDPutAWSSucceeded extends PutAWSSucceeded {
-  constructor(public readonly id: GUID) { super(id) }
-  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, putAWSSucceededCtor.id); return new GUIDPutAWSSucceeded(guid) }
-  get guidPutAWSSucceeded() { return this }
    }
 
 export class Quotient {
@@ -1053,20 +997,17 @@ export function networkEntryFromWeightedEntry(x: WeightedEntry) { return x insta
 export function houseAdEntryFromWeightedEntry(x: WeightedEntry) { return x instanceof HouseAdEntry ? x : nothing }
 
 export const
-  accessKeyIdField = new GUIDField("17b303d4b1ff8f745cf761e6c9be64cb"),
   actionURLField = new GUIDField("380d186f699bf418eb78c420e1ecaefa"),
   adProbabilityField = new GUIDField("32945debf12af7f536c235bbbf18ac6d"),
   appField = new GUIDField("29bee9c65d2cec2af757bedc2fbf90aa"),
   argumentsField = new GUIDField("40c9d6a1d748f79df7704ac5629b0e76"),
   binaryOperatorField = new GUIDField("a6bd0e68fd675a8b5de2f12f48e83d07"),
-  bucketField = new GUIDField("3c92672106547a6fa857e3a75f29a3e3"),
   childField = new GUIDField("b8b38542590248fddea03aa7faa9004c"),
   childrenField = new GUIDField("55944d181e596b9c1642f9687ac9fcd5"),
   closingField = new GUIDField("022d34a8b5652176e825bb0440454ab2"),
   conditionField = new GUIDField("b061582a37c4c6930f3d5c74a0201263"),
   constLetVarField = new GUIDField("da71dfbbc95473dcf8171a99caa8c117"),
   contextRenderField = new GUIDField("908e3614a53ec485765099f4f88ffd5e"),
-  credentialsField = new GUIDField("9cb3cca5dcdc302d2f6f62359ba8cc38"),
   ctorField = new GUIDField("aba6ac79fd3d409da860a77c90942852"),
   ctorOrAlgebraicTypesField = new GUIDField("1088fc911436441ca7f0b569fcf72da5"),
   dField = new GUIDField("06468db341494c6d0f1a1113453b5284"),
@@ -1104,11 +1045,9 @@ export const
   rendersField = new GUIDField("abb3a705a157db4b6f2b0ae1a75f6439"),
   rightField = new GUIDField("12c8dcfc40feb95766d8810013c47ed5"),
   rootField = new GUIDField("8621e90c49184656ae024c94fbabd439"),
-  secretAccessKeyField = new GUIDField("23e6e46577eeb97fd232639c42e866f2"),
   separatorField = new GUIDField("ce030d314931a9df1ba07c298b0cad90"),
   sha1Field = new GUIDField("b008bca2b15f47feebd5c6ee7e7afae7"),
   statementsField = new GUIDField("b00e2d33c8ef3a0188a9bab0bacea20a"),
-  stringField = new GUIDField("c4c842eda0ff65ab2857163315ca35f5"),
   tailField = new GUIDField("e53f14ab72eb40f590e5ae53fb53e988"),
   tiersField = new GUIDField("a98114eed3d688c868a150465530d989"),
   timeIntervalPerAdField = new GUIDField("bb230ff584c4d4da4133e31d7c733e41"),
@@ -1129,7 +1068,6 @@ export const
   arrowFunctionCtor = new GUIDCtor("1bbe86935fc983f3107a64211436e63b"),
   assignmentCtor = new GUIDCtor("9df5e800c0bcb78c0cd46def7a8350b3"),
   atomicTypeCtor = new GUIDCtor("4e63cb391b72641490acd1b3e2619ddb"),
-  awsCredentialsCtor = new GUIDCtor("bbeaf300c9c0e027dac6d7c91c3fab66"),
   binaryInlineCtor = new GUIDCtor("42d7915ca3b0acc8921ea2135bef3719"),
   blockCtor = new GUIDCtor("69578eb3ad4ec4d286443c21cf1d78fc"),
   bradParamsCtor = new GUIDCtor("4f4e5a4bb6f56d5c618156e9d7a539d5"),
@@ -1166,7 +1104,6 @@ export const
   letCtor = new GUIDCtor("5556f62d14253cb7b58887ad5f5da099"),
   lineCtor = new GUIDCtor("732ed87bdb114213ddaf17ce6b167d9c"),
   listTypeCtor = new GUIDCtor("6410d2232b824a38bf61780cc1a12886"),
-  loadAWSCtor = new GUIDCtor("3184682ef8bff8421abc525d3c292e09"),
   loadJSONCtor = new GUIDCtor("a33b56ef93a72c0ae3ab1709cf308928"),
   moduleCtor = new GUIDCtor("3c0e5c714e551ef48390f803fa17569b"),
   networkEntryCtor = new GUIDCtor("191b15b7460b928c1dc29d518f16eb18"),
@@ -1179,8 +1116,6 @@ export const
   parameterCtor = new GUIDCtor("ee0ccdd47b67323bb4442be189813268"),
   platformCtor = new GUIDCtor("31c3b378fad19ce374296bc7b93a6c32"),
   productCtor = new GUIDCtor("64663d851ac8fd5667c29f9eb836a16f"),
-  putAWSCtor = new GUIDCtor("a44c85987be19b3ea473ae0be2e048cb"),
-  putAWSSucceededCtor = new GUIDCtor("fe3f998b2fd0a3700a9d29a9460821d1"),
   quotientCtor = new GUIDCtor("d4dfa5bba3f44b1c8db13b38c8504939"),
   renderCtorCtor = new GUIDCtor("e4ba7b3350b6ba78485c3b0fe66d74e7"),
   renderListCtor = new GUIDCtor("bfe62ce7b212eb753823b3a5f244c404"),
