@@ -1,6 +1,6 @@
 import { setDifference } from "../../lib/Array"
 import { Maybe, maybe } from "../../lib/Maybe"
-import { Cursor } from "../Cursor"
+import { Cursor } from "../cursor/Cursor"
 import { D, Line } from "./D"
 import { renderField } from "./defaultRender"
 import { edges, SourceID } from "../Environment"

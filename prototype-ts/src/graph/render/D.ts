@@ -1,6 +1,6 @@
 import { assert } from "../../lib/assert"
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
-import { Cursor } from "../Cursor"
+import { Cursor } from "../cursor/Cursor"
 import { tryFirst } from "./defaultRender"
 import { Entry } from "../editor/Entry"
 import { environment, get, SourceType } from "../Environment"

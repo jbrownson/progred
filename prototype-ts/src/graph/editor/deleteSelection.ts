@@ -1,5 +1,5 @@
 import { bindMaybe, booleanFromMaybe, fromMaybe, mapMaybe } from "../../lib/Maybe"
-import { Cursor } from "../Cursor"
+import { Cursor } from "../cursor/Cursor"
 import { _delete, documentSourceFromSource, get } from "../Environment"
 import { guidFromID } from "../model/ID"
 import { deleteListElemCursor, selectionCursorBindMaybe } from "./listCursorActions"

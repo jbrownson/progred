@@ -1,7 +1,7 @@
 import * as React from "react"
 import { bindMaybe, mapMaybe, nothing } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
-import { cursorFromD } from "../cursorFromD"
+import { cursorFromD } from "../cursor/cursorFromD"
 import { StringEditor } from "../render/D"
 import { environment, set } from "../Environment"
 import { guidFromID, sidFromString } from "../model/ID"

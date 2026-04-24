@@ -2,7 +2,7 @@ import * as React from 'react'
 import { getTextWidth } from "../../lib/getTextWidth"
 import { bindMaybe, fromMaybe, mapMaybe, maybe, nothing } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
-import { cursorFromD } from "../cursorFromD"
+import { cursorFromD } from "../cursor/cursorFromD"
 import { NumberEditor } from "../render/D"
 import { environment, set } from "../Environment"
 import { guidFromID, nidFromNumber } from "../model/ID"

@@ -1,8 +1,8 @@
-import { assert } from "../lib/assert"
-import { mapMaybe, Maybe, maybe, maybesEqual, nothing } from "../lib/Maybe"
-import { _get, environment, logID } from "./Environment"
-import { ID } from "./model/ID"
-import { SparseSpanningTree } from "./SparseSpanningTree"
+import { assert } from "../../lib/assert"
+import { mapMaybe, Maybe, maybe, maybesEqual, nothing } from "../../lib/Maybe"
+import { _get, environment, logID } from "../Environment"
+import { ID } from "../model/ID"
+import { SparseSpanningTree } from "../SparseSpanningTree"
 
 export class Cursor {
   constructor(public parentCursor: Maybe<Cursor>, public parent: ID, public label: ID, public sparseSpanningTree: Maybe<SparseSpanningTree>) { assert(parentCursor !== nothing || sparseSpanningTree !== nothing) } }

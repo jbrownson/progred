@@ -1,6 +1,6 @@
 import { bindMaybe, booleanFromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
-import { _childCursor } from "../childCursor"
-import { Cursor } from "../Cursor"
+import { _childCursor } from "../cursor/childCursor"
+import { Cursor } from "../cursor/Cursor"
 import { _delete, _get, documentSourceFromSource, environment, get, set, Source, SourceType } from "../Environment"
 import { ctorField, emptyListCtor, GUIDEmptyList, GUIDNonemptyList, headField, listFromID, nonemptyListCtor, tailField } from "../graph"
 import { guidFromID } from "../model/ID"

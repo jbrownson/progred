@@ -5,7 +5,7 @@ import { camelCase, pascalCase } from "../../lib/String"
 export function genRenderIfs(ctors: Ctor[]): string { return [
   [
     'import { bindMaybe, mapMaybe, Maybe } from "../lib/Maybe"',
-    'import { Cursor } from "./Cursor"',
+    'import { Cursor } from "./cursor/Cursor"',
     'import { D } from "./render/D"',
     `import * as G from "./graph"`,
     'import { descend, Render } from "./render/R"',

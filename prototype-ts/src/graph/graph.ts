@@ -1,8 +1,7 @@
 import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, nothing } from "../lib/Maybe"
-import { arrayFromList } from "./arrayFromList"
+import { arrayFromList, listFromArray } from "./list"
 import { _get, set, setOrDelete } from "./Environment"
 import { generateGUID, GUID, guidFromID, ID, NID, nidFromID, nidFromNumber, numberFromID, numberFromNID, SID, sidFromID, sidFromString, stringFromID, stringFromSID } from "./model/ID"
-import { listFromArray } from "./listFromArray"
 
 function checkCtor(id: ID, forCtor: Ctor): boolean {
   return fromMaybe(bindMaybe(_get(id, ctorField.id), ctor => ctor === forCtor.id), () => false) }

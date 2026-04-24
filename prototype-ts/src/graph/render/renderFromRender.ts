@@ -1,6 +1,6 @@
 import { bindMaybe, guardMaybe, mapMaybe, Maybe, maybeMap, sequenceMaybe } from "../../lib/Maybe"
-import { childCursor } from "../childCursor"
-import { Cursor } from "../Cursor"
+import { childCursor } from "../cursor/childCursor"
+import { Cursor } from "../cursor/Cursor"
 import { Block, D, DText, Label, Line } from "./D"
 import { renderList } from "./defaultRender"
 import { _get, SourceID } from "../Environment"

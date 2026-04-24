@@ -1,6 +1,6 @@
-import { maybe } from "../lib/Maybe"
+import { maybe } from "../../lib/Maybe"
 import { Cursor } from "./Cursor"
-import { ID } from "./model/ID"
+import { ID } from "../model/ID"
 
 export function cursorHasCycle(cursor: Cursor) {
   function cursorHasEdge(id: ID, label: ID, cursor: Cursor): boolean {

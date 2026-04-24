@@ -1,6 +1,6 @@
-import { bindMaybe, Maybe, nothing } from "../lib/Maybe"
+import { bindMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "./Cursor"
-import { Field, headField, ListType, tailField, Type } from "./graph"
+import { Field, headField, ListType, tailField, Type } from "../graph"
 
 function findListStart(cursor: Maybe<Cursor>): Maybe<Cursor> {
   return bindMaybe(cursor, cursor => cursor.label === tailField.id ? findListStart(cursor.parentCursor) : cursor) }

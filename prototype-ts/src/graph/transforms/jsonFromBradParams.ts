@@ -1,5 +1,5 @@
 import { bindMaybe, filterMaybes, mapMaybe, Maybe, sequenceMaybe } from "../../lib/Maybe"
-import { arrayFromList } from "../arrayFromList"
+import { arrayFromList } from "../list"
 import { BradParams, GUIDJSONArray, GUIDJSONNumber, GUIDJSONObject, GUIDJSONString, GUIDKeyValuePair, HouseAdImage, JSONArray, JSONObject, List, matchWeightedEntry, WeightedEntry } from "../graph"
 
 function jsonFromImage(image: HouseAdImage): GUIDJSONObject {

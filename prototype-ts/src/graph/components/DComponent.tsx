@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { concatMap, intersperse, join } from "../../lib/Array"
 import { mapMaybe, maybeMap, nothing } from "../../lib/Maybe"
-import { cursorFromD } from "../cursorFromD"
+import { cursorFromD } from "../cursor/cursorFromD"
 import { D, matchD } from "../render/D"
 import { environment } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"

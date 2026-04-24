@@ -1,5 +1,5 @@
 import { bindMaybe, maybe, nothing } from "../../lib/Maybe"
-import { Cursor, cursorsEqual } from "../Cursor"
+import { Cursor, cursorsEqual } from "../cursor/Cursor"
 import { _get, environment } from "../Environment"
 import { _Selection } from "./Selection"
 

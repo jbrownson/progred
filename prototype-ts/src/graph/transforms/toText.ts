@@ -1,5 +1,5 @@
 import { altMaybe, bindMaybe, firstMaybe, fromMaybe, guardMaybe, mapMaybe, Maybe, sequenceMaybe } from "../../lib/Maybe"
-import { arrayFromList } from "../arrayFromList"
+import { arrayFromList } from "../list"
 import { _get } from "../Environment"
 import { ctorField, D, listFromID, matchD, matchRender, nameField, Render } from "../graph"
 import { ID, matchID, numberFromNID, stringFromID } from "../model/ID"

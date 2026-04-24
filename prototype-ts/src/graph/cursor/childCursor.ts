@@ -1,7 +1,7 @@
-import { bindMaybe, mapMaybe } from "../lib/Maybe"
+import { bindMaybe, mapMaybe } from "../../lib/Maybe"
 import { Cursor } from "./Cursor"
-import { _get } from "./Environment"
-import { ID } from "./model/ID"
+import { _get } from "../Environment"
+import { ID } from "../model/ID"
 
 export function childCursor(cursor: Cursor, label: ID) { return mapMaybe(_get(cursor.parent, label), newParent => _childCursor(cursor, newParent, label)) }
 

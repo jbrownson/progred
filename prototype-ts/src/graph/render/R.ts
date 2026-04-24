@@ -1,13 +1,13 @@
 import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, nothing } from "../../lib/Maybe"
-import { _childCursor } from "../childCursor"
-import { Cursor } from "../Cursor"
-import { cursorHasCycle } from "../cursorHasCycle"
+import { _childCursor } from "../cursor/childCursor"
+import { Cursor } from "../cursor/Cursor"
+import { cursorHasCycle } from "../cursor/cursorHasCycle"
 import { Button, D, Descend } from "./D"
 import { environment, get, SourceID } from "../Environment"
 import { ID } from "../model/ID"
 import { selectionStateFromCursor } from "../editor/selectionIfSelected"
 import { getCollapsed, setCollapsed } from "../editor/setCollapsed"
-import { typeFromCursor } from "../typeFromCursor"
+import { typeFromCursor } from "../cursor/typeFromCursor"
 import { typeMatches } from "../typeMatches"
 
 export type Render = (cursor: Cursor, id: Maybe<SourceID>) => Maybe<D>
