@@ -1,8 +1,8 @@
-import { bindMaybe, Maybe, nothing } from "../lib/Maybe"
+import { bindMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { D } from "./D"
-import { _get } from "./Environment"
-import { Ctor, ctorField, Field } from "./graph"
-import { ID } from "./ID"
+import { _get } from "../Environment"
+import { Ctor, ctorField, Field } from "../graph"
+import { ID } from "../ID"
 import { alwaysFail, descend, Render } from "./R"
 
 // TODO we shouldn't be calling renderByCtor this much

@@ -1,7 +1,7 @@
 import { bindArray } from "../lib/Array"
 import { bindMaybe, mapMaybe, Maybe, maybe, nothing } from "../lib/Maybe"
 import { Cursor } from "./Cursor"
-import { D, Descend } from "./D"
+import { D, Descend } from "./render/D"
 import { descendFromCursor } from "./descendFromCursor"
 import { _get, edges, set } from "./Environment"
 import { generateGUID, guidFromID, ID } from "./ID"

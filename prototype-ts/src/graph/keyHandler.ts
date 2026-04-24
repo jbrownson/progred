@@ -1,7 +1,7 @@
 import { altMaybe, bindMaybe, booleanFromMaybe, firstMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../lib/Maybe"
 import { Cursor } from "./Cursor"
 import { cursorFromD } from "./cursorFromD"
-import { createD, D, Descend } from "./D"
+import { createD, D, Descend } from "./render/D"
 import { deleteCursor } from "./deleteSelection"
 import { descendFromCursor } from "./descendFromCursor"
 import { _get, environment } from "./Environment"

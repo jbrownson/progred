@@ -1,6 +1,6 @@
 import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing, unsafeUnwrapMaybe } from "../lib/Maybe"
 import { Cursor } from "./Cursor"
-import { D } from "./D"
+import { D } from "./render/D"
 import { ECallbacks } from "./ECallbacks"
 import { ctorField, GUIDRootViews, nameField } from "./graph"
 import { GUIDMap } from "./GUIDMap"

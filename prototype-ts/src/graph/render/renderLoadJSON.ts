@@ -1,9 +1,9 @@
-import { bindMaybe, mapMaybe } from "../lib/Maybe"
+import { bindMaybe, mapMaybe } from "../../lib/Maybe"
 import { Button, DText, Line } from "./D"
-import { set } from "./Environment"
-import { LoadJSON, urlField } from "./graph"
-import { guidFromID } from "./ID"
-import { jsonFromJSON } from "./jsonFromJSON"
+import { set } from "../Environment"
+import { LoadJSON, urlField } from "../graph"
+import { guidFromID } from "../ID"
+import { jsonFromJSON } from "../jsonFromJSON"
 import { descend, Render } from "./R"
 
 export const renderLoadJSON: Render = (cursor, sourceID) => bindMaybe(sourceID, sourceID => mapMaybe(LoadJSON.fromID(sourceID.id), loadJSON => new Line(

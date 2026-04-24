@@ -1,9 +1,9 @@
 import { bindMaybe, mapMaybe, Maybe } from "../lib/Maybe"
 import { Cursor } from "./Cursor"
-import { D } from "./D"
+import { D } from "./render/D"
 import * as G from "./graph"
-import { descend, Render } from "./R"
-import { renderOtherFields } from "./renderOtherFields"
+import { descend, Render } from "./render/R"
+import { renderOtherFields } from "./render/renderOtherFields"
 
 export function renderIfAlgebraicType(f: (_name: D, _ctorOrAlgebraicTypes: D, __algebraicType: G.AlgebraicType, cursor: Cursor) => Maybe<D>, rs: {name?: Render, ctorOrAlgebraicTypes?: Render} = {}): Render { return (cursor, sourceID) => bindMaybe(bindMaybe(sourceID, ({id}) => G.AlgebraicType.fromID(id)), x => mapMaybe(f(descend(cursor, x.id, G.nameField.id, rs.name), descend(cursor, x.id, G.ctorOrAlgebraicTypesField.id, rs.ctorOrAlgebraicTypes), x, cursor), d => renderOtherFields(cursor, sourceID, d, [G.nameField,G.ctorOrAlgebraicTypesField]))) }
 export function renderIfAnd(f: (__and: G.And, cursor: Cursor) => Maybe<D>, rs: {} = {}): Render { return (cursor, sourceID) => bindMaybe(bindMaybe(sourceID, ({id}) => G.And.fromID(id)), x => mapMaybe(f(x, cursor), d => renderOtherFields(cursor, sourceID, d, []))) }

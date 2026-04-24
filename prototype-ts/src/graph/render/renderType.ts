@@ -1,8 +1,8 @@
 import { DText, Line } from "./D"
 import { renderListCurly, renderListParens } from "./defaultRender"
-import { algebraicTypeCtor, atomicTypeCtor, ctorCtor } from "./graph"
+import { algebraicTypeCtor, atomicTypeCtor, ctorCtor } from "../graph"
 import { dispatch } from "./R"
-import { renderIfAlgebraicType, renderIfCtor, renderIfField, renderIfListType } from "./renderIfs"
+import { renderIfAlgebraicType, renderIfCtor, renderIfField, renderIfListType } from "../renderIfs"
 import { renderNameShallow } from "./renderNameShallow"
 
 const renderAlgebraicTypeName = renderNameShallow(algebraicTypeCtor)

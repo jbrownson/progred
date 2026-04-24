@@ -6,10 +6,10 @@ export function genRenderIfs(ctors: Ctor[]): string { return [
   [
     'import { bindMaybe, mapMaybe, Maybe } from "../lib/Maybe"',
     'import { Cursor } from "./Cursor"',
-    'import { D } from "./D"',
+    'import { D } from "./render/D"',
     `import * as G from "./graph"`,
-    'import { descend, Render } from "./R"',
-    'import { renderOtherFields } from "./renderOtherFields"' ].join("\n"),
+    'import { descend, Render } from "./render/R"',
+    'import { renderOtherFields } from "./render/renderOtherFields"' ].join("\n"),
   ctors.filter(ctor => ctor.id !== nonemptyListCtor.id).map(ctor => [
     `export function renderIf${pascalCase(unsafeUnwrapMaybe(ctor.name))}(f: (${[...unsafeUnwrapMaybe(ctor.fields).map(field => `_${camelCase(unsafeUnwrapMaybe(field.name))}: D`), `__${camelCase(unsafeUnwrapMaybe(ctor.name))}: G.${pascalCase(unsafeUnwrapMaybe(ctor.name))}`, "cursor: Cursor"].join(', ')}) => Maybe<D>, rs: {${unsafeUnwrapMaybe(ctor.fields).map(field => `${camelCase(unsafeUnwrapMaybe(field.name))}?: Render`).join(', ')}} = {}): Render {`,
     `return (cursor, sourceID) => bindMaybe(bindMaybe(sourceID, ({id}) => G.${pascalCase(unsafeUnwrapMaybe(ctor.name))}.fromID(id)), x => mapMaybe(f(${[...unsafeUnwrapMaybe(ctor.fields).map(field => `descend(cursor, x.id, G.${camelCase(unsafeUnwrapMaybe(field.name))}Field.id, rs.${camelCase(unsafeUnwrapMaybe(field.name))})`), "x", "cursor"].join(', ')}), d => renderOtherFields(cursor, sourceID, d, [${unsafeUnwrapMaybe(ctor.fields).map(field => `G.${camelCase(unsafeUnwrapMaybe(field.name))}Field`)}]))) }` ].join(" ")).join("\n")].join("\n\n") + "\n"}

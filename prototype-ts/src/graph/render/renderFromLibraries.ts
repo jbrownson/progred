@@ -1,6 +1,6 @@
-import { bindMaybe, mapMaybe, maybe, maybeMap } from "../lib/Maybe"
-import { Module } from "./graph"
-import { Library } from "./libraries/libraries"
+import { bindMaybe, mapMaybe, maybe, maybeMap } from "../../lib/Maybe"
+import { Module } from "../graph"
+import { Library } from "../libraries/libraries"
 import { dispatch, Render } from "./R"
 import { renderFromRender } from "./renderFromRender"
 
