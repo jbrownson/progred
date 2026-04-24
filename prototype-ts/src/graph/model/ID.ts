@@ -1,6 +1,6 @@
-import { assert } from "../lib/assert"
-import { generateGUID as generateRawGUID } from "../lib/generateGUID"
-import { Maybe, nothing } from "../lib/Maybe"
+import { assert } from "../../lib/assert"
+import { generateGUID as generateRawGUID } from "../../lib/generateGUID"
+import { Maybe, nothing } from "../../lib/Maybe"
 
 export type GUID = string
 export type SID = string

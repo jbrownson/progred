@@ -4,7 +4,7 @@ import { noop } from "../../lib/noop"
 import { cursorFromD } from "../cursorFromD"
 import { StringEditor } from "../render/D"
 import { environment, set } from "../Environment"
-import { guidFromID, sidFromString } from "../ID"
+import { guidFromID, sidFromString } from "../model/ID"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 

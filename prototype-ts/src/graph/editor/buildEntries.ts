@@ -5,7 +5,7 @@ import { Entry } from "./Entry"
 import { _get, set, Source, SourceType } from "../Environment"
 import { defaultFilter, Match, sortFilter } from "./filters"
 import { Ctor, ctorField, emptyListCtor, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "../graph"
-import { generateGUID, ID, nidFromNumber, sidFromString } from "../ID"
+import { generateGUID, ID, nidFromNumber, sidFromString } from "../model/ID"
 import { LoadedNamedThing, loadedNamedThings } from "../loadedNamedThings"
 import { algebraicTypeHasCtor, typeIsOrHasAtomicType, typeMatches } from "../typeMatches"
 

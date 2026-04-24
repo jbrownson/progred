@@ -4,7 +4,7 @@ import { maybe, Maybe, maybeMap, maybeToArray, nothing, unsafeUnwrapMaybe } from
 import { camelCase, indent, pascalCase } from "../../lib/String"
 import { ctorsAtomicsFromCtorOrAlgebraicTypes } from "./ctorsAtomicsFromCtorOrAlgebraicTypes"
 import { AlgebraicType, AtomicType, Ctor, Field, listAlgebraicType, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "../graph"
-import { guidFromID } from "../ID"
+import { guidFromID } from "../model/ID"
 
 export function typescriptFromCtorOrAlgebraicTypes(algebraicTypes: AlgebraicType[], ctors: Ctor[], atomicTypes: AtomicType[]): string {
   return [
@@ -12,7 +12,7 @@ export function typescriptFromCtorOrAlgebraicTypes(algebraicTypes: AlgebraicType
       'import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, nothing } from "../lib/Maybe"',
       'import { arrayFromList } from "./arrayFromList"',
       'import { _get, set, setOrDelete } from "./Environment"',
-      'import { generateGUID, GUID, guidFromID, ID, NID, nidFromID, nidFromNumber, numberFromID, numberFromNID, SID, sidFromID, sidFromString, stringFromID, stringFromSID } from "./ID"',
+      'import { generateGUID, GUID, guidFromID, ID, NID, nidFromID, nidFromNumber, numberFromID, numberFromNID, SID, sidFromID, sidFromString, stringFromID, stringFromSID } from "./model/ID"',
       'import { listFromArray } from "./listFromArray"' ].join("\n"),
     [
       'function checkCtor(id: ID, forCtor: Ctor): boolean {',

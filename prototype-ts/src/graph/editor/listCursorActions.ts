@@ -3,7 +3,7 @@ import { _childCursor } from "../childCursor"
 import { Cursor } from "../Cursor"
 import { _delete, _get, documentSourceFromSource, environment, get, set, Source, SourceType } from "../Environment"
 import { ctorField, emptyListCtor, GUIDEmptyList, GUIDNonemptyList, headField, listFromID, nonemptyListCtor, tailField } from "../graph"
-import { guidFromID } from "../ID"
+import { guidFromID } from "../model/ID"
 
 function doAppend(cursor: Cursor): Maybe<Cursor> {
   return bindMaybe(bindMaybe(_get(cursor.parent, cursor.label), tailID => listFromID(tailID, id => ({id}))), oldTail =>

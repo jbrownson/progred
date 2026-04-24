@@ -4,7 +4,7 @@ import { Cursor } from "./Cursor"
 import { D, Descend } from "./render/D"
 import { descendFromCursor } from "./descendFromCursor"
 import { _get, edges, set } from "./Environment"
-import { generateGUID, guidFromID, ID } from "./ID"
+import { generateGUID, guidFromID, ID } from "./model/ID"
 
 // TODO: tail field on last nonempty list has no matching Descend
 // this is not actually a problem since empty list has no fields except type

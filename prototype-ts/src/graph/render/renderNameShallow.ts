@@ -2,7 +2,7 @@ import { bindMaybe, fromMaybe } from "../../lib/Maybe"
 import { DText } from "./D"
 import { _get } from "../Environment"
 import { Ctor, nameField } from "../graph"
-import { stringFromID } from "../ID"
+import { stringFromID } from "../model/ID"
 import { render0 } from "./render"
 
 export function renderNameShallow(ctor: Ctor) {

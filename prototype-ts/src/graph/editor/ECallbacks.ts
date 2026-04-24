@@ -1,7 +1,7 @@
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { cursorsEqual } from "../Cursor"
 import { _delete, _get, environment, set } from "../Environment"
-import { GUID, ID } from "../ID"
+import { GUID, ID } from "../model/ID"
 import { _Selection } from "./Selection"
 import { UndoRedo } from "./UndoRedo"
 

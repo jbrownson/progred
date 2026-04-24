@@ -1,5 +1,5 @@
-import { Maybe, nothing, unsafeUnwrapMaybe } from "../lib/Maybe"
-import { tuple } from "../lib/Tuple"
+import { Maybe, nothing, unsafeUnwrapMaybe } from "../../lib/Maybe"
+import { tuple } from "../../lib/Tuple"
 import { GUIDMap } from "./GUIDMap"
 import { GUID, ID, nidFromNumber, sidFromString } from "./ID"
 

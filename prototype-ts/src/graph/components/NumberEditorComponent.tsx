@@ -5,7 +5,7 @@ import { noop } from "../../lib/noop"
 import { cursorFromD } from "../cursorFromD"
 import { NumberEditor } from "../render/D"
 import { environment, set } from "../Environment"
-import { guidFromID, nidFromNumber } from "../ID"
+import { guidFromID, nidFromNumber } from "../model/ID"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 

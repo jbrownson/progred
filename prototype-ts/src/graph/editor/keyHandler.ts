@@ -6,7 +6,7 @@ import { deleteCursor } from "./deleteSelection"
 import { descendFromCursor } from "../descendFromCursor"
 import { _get, environment } from "../Environment"
 import { findNextTabStop, findTabStop } from "./findNextTabStop"
-import { matchID } from "../ID"
+import { matchID } from "../model/ID"
 import { appendToListCursor, insertAfterListElemCursor, selectionCursorBindMaybe } from "./listCursorActions"
 
 export type KeyHandler = (e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A) => boolean

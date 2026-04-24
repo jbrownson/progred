@@ -2,7 +2,7 @@ import { join, removeDupesBy } from "../lib/Array"
 import { bindMaybe, booleanFromMaybe, mapMaybe, maybeMap, maybeToArray } from "../lib/Maybe"
 import { edges, environment, get, Source, SourceType } from "./Environment"
 import { nameField } from "./graph"
-import { guidFromID, ID, stringFromID } from "./ID"
+import { guidFromID, ID, stringFromID } from "./model/ID"
 
 export type LoadedNamedThing = {name: string, id: ID, source: Source}
 

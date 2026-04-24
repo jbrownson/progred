@@ -2,7 +2,7 @@ import { bindMaybe, mapMaybe } from "../../lib/Maybe"
 import { Button, DText, Line } from "./D"
 import { set } from "../Environment"
 import { LoadJSON, urlField } from "../graph"
-import { guidFromID } from "../ID"
+import { guidFromID } from "../model/ID"
 import { jsonFromJSON } from "../transforms/jsonFromJSON"
 import { descend, Render } from "./R"
 

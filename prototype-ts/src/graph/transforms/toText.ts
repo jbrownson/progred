@@ -2,7 +2,7 @@ import { altMaybe, bindMaybe, firstMaybe, fromMaybe, guardMaybe, mapMaybe, Maybe
 import { arrayFromList } from "../arrayFromList"
 import { _get } from "../Environment"
 import { ctorField, D, listFromID, matchD, matchRender, nameField, Render } from "../graph"
-import { ID, matchID, numberFromNID, stringFromID } from "../ID"
+import { ID, matchID, numberFromNID, stringFromID } from "../model/ID"
 
 export type ToText = (id: ID, depth: number) => Maybe<string>
 

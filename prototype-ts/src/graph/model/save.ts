@@ -1,4 +1,4 @@
-import { Maybe } from "../lib/Maybe"
+import { Maybe } from "../../lib/Maybe"
 import { GUIDMap } from "./GUIDMap"
 import { ID, matchID, numberFromNID } from "./ID"
 

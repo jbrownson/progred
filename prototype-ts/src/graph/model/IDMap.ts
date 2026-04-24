@@ -1,4 +1,4 @@
-import { Maybe } from "../lib/Maybe"
+import { Maybe } from "../../lib/Maybe"
 import { ID } from "./ID"
 
 export interface IDMap {

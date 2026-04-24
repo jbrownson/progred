@@ -1,4 +1,4 @@
-import { mapMaybe, maybe, Maybe } from "../lib/Maybe"
+import { mapMaybe, maybe, Maybe } from "../../lib/Maybe"
 import { GUID, guidFromID, ID } from "./ID"
 
 export class GUIDMap {

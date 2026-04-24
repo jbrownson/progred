@@ -1,4 +1,4 @@
-import { bindMaybe, fromMaybe } from "../lib/Maybe"
+import { bindMaybe, fromMaybe } from "../../lib/Maybe"
 import { GUID, guidFromID, ID } from "./ID"
 import { IDMap } from "./IDMap"
 

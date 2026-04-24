@@ -2,7 +2,7 @@
 import { join } from "../../lib/Array"
 import { mapMaybe, maybeMap } from "../../lib/Maybe"
 import { AtomicType, Ctor, CtorOrAlgebraicType, matchCtorOrAlgebraicType } from "../graph"
-import { ID } from "../ID"
+import { ID } from "../model/ID"
 
 function _ctorsAtomicsFromCtorOrAlgebraicTypes(ctorsOrAlgebraicTypes: CtorOrAlgebraicType[], visited = new Set<ID>()): {ctors: Ctor[], atomics: AtomicType[]} {
   let x = maybeMap(ctorsOrAlgebraicTypes, ctorsOrAlgebraicType => matchCtorOrAlgebraicType(ctorsOrAlgebraicType,

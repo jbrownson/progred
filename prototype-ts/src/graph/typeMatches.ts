@@ -1,7 +1,7 @@
 import { bindMaybe, booleanFromMaybe, fromMaybe, maybe, Maybe } from "../lib/Maybe"
 import { _get } from "./Environment"
 import { AlgebraicType, AtomicType, Ctor, ctorField, emptyListCtor, matchCtorOrAlgebraicType, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "./graph"
-import { ID, matchID } from "./ID"
+import { ID, matchID } from "./model/ID"
 
 function _algebraicTypeHasCtor(algebraicType: AlgebraicType, ctor: Ctor, visited = new Set<ID>()): boolean {
   return visited.has(algebraicType.id) ? false : fromMaybe(bindMaybe(algebraicType.ctorOrAlgebraicTypes, ctorOrAlgebraicTypes =>
