@@ -1,4 +1,5 @@
 import { assert } from "../lib/assert"
+import { generateGUID as generateRawGUID } from "../lib/generateGUID"
 import { Maybe, nothing } from "../lib/Maybe"
 
 export type GUID = string
@@ -10,8 +11,7 @@ export function matchID<A>(id: ID, guidF: (guid: GUID) => A, sidF: (sid: SID, st
   return typeof id === "number" ? nidF(id) : id.startsWith("sid:") ? sidF(id, stringFromSID(id)) : guidF(id) }
 
 export function generateGUID(): GUID {
-  function s4() { return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1) }
-  return s4() + s4() + s4() + s4() + s4() + s4() + s4() + s4() }
+  return generateRawGUID() }
 
 export function sidFromID(id: ID): Maybe<SID> { return typeof id === "string" && id.startsWith("sid:") ? id : nothing }
 export function nidFromID(id: ID): Maybe<NID> { return typeof id === "number" ? id : nothing }
