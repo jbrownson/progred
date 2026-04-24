@@ -89,7 +89,7 @@ Single-valued edges: each entity has at most one value per label. Multiplicity i
 
 ### Type System
 
-A self-describing schema defined in the graph itself. See `progred/structured-editor-type-system-reference.md` for the full design. Key constructs:
+A self-describing schema defined in the graph itself. See `prototype-swift/structured-editor-type-system-reference.md` for the full design. Key constructs:
 
 - **Record**: constructor/schema head with named fields
 - **Sum**: choice among type expressions
@@ -99,14 +99,25 @@ A self-describing schema defined in the graph itself. See `progred/structured-ed
 
 Value nodes carry a `record` edge identifying their constructor. Full type matching is contextual via `matches(value, type expression, substitution)`.
 
-### Tech Stack
+### Current Prototype
 
-- **Language**: Swift
-- **UI**: AppKit (macOS)
-- **Data structures**: `TreeDictionary`/`TreeSet` from swift-collections (CHAMP-based persistent collections with structural sharing)
-- **JS runtime**: JavaScriptCore (for projection code)
+The active path is `prototype-ts/`: a TypeScript/Electron prototype using React DOM for the renderer, Vite for bundling, and `tsc --noEmit` for typechecking.
 
-### Previous Prototypes
+Useful commands:
 
-- `prototype-ts/` — Original TypeScript/Electron prototype
-- `prototype-rust/` — Rust/egui prototype (moved to Swift due to egui's `Sense::click()` always including focusable — no way to make clickable-but-not-Tab-focusable widgets, which a structured editor needs for collapse toggles, field labels, and insertion points. Also: `lost_focus()` is render-order-dependent for click transfers, and no focus hierarchy/responder chain. See `prototype-rust/AGENTS.md` for details.)
+```sh
+cd prototype-ts
+npm install
+npm start
+npm run typecheck
+npm run build
+npm run gen
+```
+
+`npm start` builds the app and launches Electron. `npm run gen` rebuilds the graph wrappers from the graph schema and rewrites `src/graph/graph.ts` and `src/graph/renderIfs.ts`; inspect the diff after running it.
+
+### Other Prototypes
+
+- `prototype-swift/` — Swift/AppKit native exploration
+- `prototype-rust/` — Rust/egui prototype, paused due to focus and tab-navigation constraints. See `prototype-rust/AGENTS.md` for details.
+- `prototype-haskell/` — Haskell exploration

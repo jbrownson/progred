@@ -1,23 +1,37 @@
-to run:
+# TypeScript/Electron Prototype
 
-from this directory:
+This is the active prototype. It uses Electron for the desktop shell, React DOM for the renderer, Vite for bundling, and the TypeScript compiler for typechecking.
 
-1. npm install
-2. npm start
+## Setup
 
-This prototype uses npm and package-lock.json. Do not regenerate yarn.lock.
+```sh
+npm install
+```
 
-to build without launching Electron:
+This prototype uses npm and `package-lock.json`. Do not regenerate `yarn.lock`.
 
-$ npm run build
+## Commands
 
-to run the TypeScript compiler without emitting files:
+```sh
+npm start
+```
 
-$ npm run typecheck
+Builds the renderer, Electron main process, and preload script, then launches Electron.
 
-to run the wrapper generator:
+```sh
+npm run typecheck
+```
 
-$ npm run gen
+Runs `tsc --noEmit`.
 
-The generator rewrites src/graph/graph.ts and src/graph/renderIfs.ts. Inspect the
-diff after running it; renderIfs generation still needs a modernization pass.
+```sh
+npm run build
+```
+
+Builds without launching Electron.
+
+```sh
+npm run gen
+```
+
+Builds and runs the graph wrapper generator. This rewrites `src/graph/graph.ts` and `src/graph/renderIfs.ts`; inspect the diff after running it.
