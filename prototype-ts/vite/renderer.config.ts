@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
-import { progredDataPlugin } from "./vite.progred"
+import { progredDataPlugin } from "./progred"
 
 export default defineConfig({
   base: "./",

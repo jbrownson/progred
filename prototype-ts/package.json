@@ -4,10 +4,10 @@
   "private": true,
   "description": "",
   "scripts": {
-    "build": "vite build --config vite.renderer.config.ts && vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts",
+    "build": "vite build --config vite/renderer.config.ts && vite build --config vite/main.config.ts && vite build --config vite/preload.config.ts",
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
-    "gen": "vite build --config vite.generator.config.ts && node build/generator.cjs",
+    "gen": "vite build --config vite/generator.config.ts && node build/generator.cjs",
     "dist": "electron-packager ."
   },
   "main": "build/main.cjs",

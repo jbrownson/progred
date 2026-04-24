@@ -11,6 +11,6 @@
     "include": [
         "./src/**/*.ts",
         "./src/**/*.tsx",
-        "./vite.*.ts" ],
+        "./vite/**/*.ts" ],
     "exclude": [
         "./src/graph2/**" ]}
