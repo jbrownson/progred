@@ -13,8 +13,8 @@ unselectable {
 span.unmatching { border-bottom: 1px solid red }
 .selected { outline: black solid 1px }
 .hinted { outline: #ccc dotted 1px }
-.i { height: 16px; border: none; outline: none; color: inherit; font: inherit; background-color: transparent; padding: 0 }
-textarea.i { resize: none; overflow: auto; white-space: nowrap; width: 0; vertical-align: text-top }
+.i { height: 16px; border: none; outline: none; color: inherit; font: inherit; background-color: transparent; padding: 0; box-sizing: content-box }
+textarea.i { resize: none; overflow: hidden; white-space: pre; width: 0; vertical-align: text-top }
 .string { color: #808dd3 }
 .number { color: #f66153 }
 .boolean { color: #f66153 }

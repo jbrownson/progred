@@ -17,6 +17,9 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
   render() {
     return <textarea
       className="string i"
+      rows={1}
+      wrap="off"
+      spellCheck={false}
       onChange={e => { if (this.props.stringEditor.stringEditorSelectedState && this.props.stringEditor.stringEditorSelectedState.writable)
         this.props.runE(() => bindMaybe(cursorFromD(this.props.stringEditor), cursor => mapMaybe(guidFromID(cursor.parent), guid => {if (this.textArea) set(guid, cursor.label, sidFromString(this.textArea.value))})))}}
       value={this.props.stringEditor.string}
@@ -26,8 +29,9 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
       onKeyDown={e => this.onKeyDown(e)}
       ref={input => { this.textArea = input }} /> }
   resizeTextArea() { if (this.textArea) {
+    const sizeBuffer = 2
     this.textArea.style.width = this.textArea.style.height = "0"
-    this.textArea.style.width = `${this.textArea.scrollWidth}px`
-    this.textArea.style.height = `${this.textArea.scrollHeight}px` }}
+    this.textArea.style.width = `${this.textArea.scrollWidth + sizeBuffer}px`
+    this.textArea.style.height = `${this.textArea.scrollHeight + sizeBuffer}px` }}
   componentDidMount() { this.resizeTextArea(); this.focusIfSelected() }
   componentDidUpdate() { this.resizeTextArea(); this.focusIfSelected() } }
