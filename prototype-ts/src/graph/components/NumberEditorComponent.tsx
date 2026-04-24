@@ -1,13 +1,13 @@
 import * as React from 'react'
-import { getTextWidth } from "../lib/getTextWidth"
-import { bindMaybe, fromMaybe, mapMaybe, maybe, nothing } from "../lib/Maybe"
-import { noop } from "../lib/noop"
-import { cursorFromD } from "./cursorFromD"
-import { NumberEditor } from "./D"
-import { environment, set } from "./Environment"
-import { guidFromID, nidFromNumber } from "./ID"
-import { blur, focus, handleFocusEvent } from "./ignoreFocusEvents"
-import { stopPropagationForTextInputs } from "./stopPropagationForTextInputs"
+import { getTextWidth } from "../../lib/getTextWidth"
+import { bindMaybe, fromMaybe, mapMaybe, maybe, nothing } from "../../lib/Maybe"
+import { noop } from "../../lib/noop"
+import { cursorFromD } from "../cursorFromD"
+import { NumberEditor } from "../D"
+import { environment, set } from "../Environment"
+import { guidFromID, nidFromNumber } from "../ID"
+import { blur, focus, handleFocusEvent } from "../ignoreFocusEvents"
+import { stopPropagationForTextInputs } from "../stopPropagationForTextInputs"
 
 export class NumberEditorComponent extends React.Component<{numberEditor: NumberEditor, runE: (f: () => void) => void}, {}> {
   input: HTMLInputElement | null

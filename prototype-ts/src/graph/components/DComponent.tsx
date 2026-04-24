@@ -1,12 +1,12 @@
 import * as React from 'react'
-import { concatMap, intersperse, join } from "../lib/Array"
-import { mapMaybe, maybeMap, nothing } from "../lib/Maybe"
-import { cursorFromD } from "./cursorFromD"
-import { D, matchD } from "./D"
-import { environment } from "./Environment"
+import { concatMap, intersperse, join } from "../../lib/Array"
+import { mapMaybe, maybeMap, nothing } from "../../lib/Maybe"
+import { cursorFromD } from "../cursorFromD"
+import { D, matchD } from "../D"
+import { environment } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderComponent } from "./PlaceholderComponent"
-import { SelectionState } from "./selectionIfSelected"
+import { SelectionState } from "../selectionIfSelected"
 import { StringEditorComponent } from "./StringEditorComponent"
 
 export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {

@@ -6,7 +6,7 @@ import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybe2, maybeToArray, not
 import { bradParamsFromJSON } from "./bradParamsFromJSON"
 import { Cursor } from "./Cursor"
 import { createD, Descend } from "./D"
-import { DComponent } from "./DComponent"
+import { DComponent } from "./components/DComponent"
 import { defaultRender, tryFirst } from "./defaultRender"
 import { deleteSelection } from "./deleteSelection"
 import { ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./ECallbacks"

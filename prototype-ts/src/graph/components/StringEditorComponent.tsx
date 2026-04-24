@@ -1,12 +1,12 @@
 import * as React from "react"
-import { bindMaybe, mapMaybe, nothing } from "../lib/Maybe"
-import { noop } from "../lib/noop"
-import { cursorFromD } from "./cursorFromD"
-import { StringEditor } from "./D"
-import { environment, set } from "./Environment"
-import { guidFromID, sidFromString } from "./ID"
-import { blur, focus, handleFocusEvent } from "./ignoreFocusEvents"
-import { stopPropagationForTextInputs } from "./stopPropagationForTextInputs"
+import { bindMaybe, mapMaybe, nothing } from "../../lib/Maybe"
+import { noop } from "../../lib/noop"
+import { cursorFromD } from "../cursorFromD"
+import { StringEditor } from "../D"
+import { environment, set } from "../Environment"
+import { guidFromID, sidFromString } from "../ID"
+import { blur, focus, handleFocusEvent } from "../ignoreFocusEvents"
+import { stopPropagationForTextInputs } from "../stopPropagationForTextInputs"
 
 export class StringEditorComponent extends React.Component<{stringEditor: StringEditor, runE: (f: () => void) => void}, {}> {
   textArea: HTMLTextAreaElement | null
