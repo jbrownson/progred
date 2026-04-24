@@ -1,5 +1,6 @@
 import { bindMaybe, mapMaybe, Maybe, sequenceMaybe } from "../lib/Maybe"
-import { GUIDJSONArray, GUIDJSONNumber, GUIDJSONObject, GUIDJSONString, GUIDKeyValuePair, JSON, matchJSON } from "./graph"
+import { GUIDJSONArray, GUIDJSONNumber, GUIDJSONObject, GUIDJSONString, GUIDKeyValuePair, matchJSON } from "./graph"
+import type { JSON } from "./graph"
 
 export function jsonFromJSON(json: any): Maybe<JSON> {
   return typeof json === "string"

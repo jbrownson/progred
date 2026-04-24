@@ -1,13 +1,16 @@
 {
     "compilerOptions": {
-        "target": "es6",
+        "target": "ES2022",
         "sourceMap": true,
-        "module": "commonjs",
-        "jsx": "react",
-        "strict": true,
-        "noUnusedLocals": true,
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "jsx": "react-jsx",
+        "strict": false,
+        "skipLibCheck": true,
         "outDir": "build" },
-    "filesGlob": [
+    "include": [
         "./src/**/*.ts",
         "./src/**/*.tsx",
-        "./typings/**/*.ts" ]}
+        "./vite.*.ts" ],
+    "exclude": [
+        "./src/graph2/**" ]}

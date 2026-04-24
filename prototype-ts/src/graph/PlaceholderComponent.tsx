@@ -15,8 +15,8 @@ import { stopPropagationForTextInputs } from "./stopPropagationForTextInputs"
 
 class EntryList extends React.Component<{placeholder: Placeholder, selectedState: PlaceholderSelectedState, entries: {a: Entry, matches: Match[]}[], runE: (f: () => void) => void}, {}> {
   div: HTMLElement | null
-  liRef(index: number) { return `entry${index}` }
-  li(index: number): HTMLElement { return this.refs[this.liRef(index)] as HTMLElement }
+  lis = new Map<number, HTMLElement>()
+  li(index: number): HTMLElement { return this.lis.get(index) as HTMLElement }
   up(itemSelection: number) {
     let newItemSelection = Math.max(0, itemSelection - 1)
     this.props.selectedState.placeholderState.itemSelection = newItemSelection
@@ -86,12 +86,12 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
       case "Tab":
         this.tab(e)
         break }}
-  render(): JSX.Element {
-    return <div ref={div => this.div = div} className="entrylist" style={this.props.selectedState.placeholderState.entryListAbove ? {bottom: 17} : {}}><ul>{
+  render() {
+    return <div ref={div => { this.div = div }} className="entrylist" style={this.props.selectedState.placeholderState.entryListAbove ? {bottom: 17} : {}}><ul>{
       this.props.entries.map(({a: {string, disambiguation, matching, action, external}, matches}, i) =>
         <li
           key={i}
-          ref={this.liRef(i)}
+          ref={li => { if (li) this.lis.set(i, li); else this.lis.delete(i) }}
           className={[
             ...i === this.props.selectedState.placeholderState.itemSelection ? ["selected"] : [],
             matching ? "matching" : "unmatching",
@@ -125,13 +125,13 @@ export class PlaceholderComponent extends React.Component<{placeholder: Placehol
           this.entryList.forceUpdate() }}}
   focusIfSelected() { if (this.input) focus(this.input) }
   onScroll() { this.updateEntryListAbove() }
-  render(): JSX.Element {
+  render() {
     return maybe(this.props.placeholder.selectedState, () =>
       <span className="uneditable" onClick={e => { e.stopPropagation(); this.props.runE(() => mapMaybe(cursorFromD(this.props.placeholder), cursor => environment().selection = {cursor})) }} >{this.props.placeholder.name}</span>,
     selectedState =>
       <span className="edgefield" style={{position: "relative"}}>
         <input
-          ref={input => this.input = input}
+          ref={input => { this.input = input }}
           className="i edgefield"
           style={{width: getTextWidth(selectedState.placeholderState.value || this.props.placeholder.name) + "px"}}
           type="text"
@@ -148,6 +148,6 @@ export class PlaceholderComponent extends React.Component<{placeholder: Placehol
               stopPropagationForTextInputs(e)
               this.entryList.onKeyDown(e) }}}
           onChange={e => { if (this.input) { selectedState.placeholderState.value = this.input.value; selectedState.placeholderState.itemSelection = nothing; this.forceUpdate() } } } />
-      <EntryList ref={entryList => this.entryList = entryList} placeholder={this.props.placeholder} selectedState={selectedState} entries={selectedState.entries(fromMaybe(selectedState.placeholderState.value, () => ""))} runE={this.props.runE} /></span> )}
+      <EntryList ref={entryList => { this.entryList = entryList }} placeholder={this.props.placeholder} selectedState={selectedState} entries={selectedState.entries(fromMaybe(selectedState.placeholderState.value, () => ""))} runE={this.props.runE} /></span> )}
   componentDidMount() { this.focusIfSelected(); this.updateEntryListAbove() }
   componentDidUpdate() { this.focusIfSelected(); this.updateEntryListAbove() }}

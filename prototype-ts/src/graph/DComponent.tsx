@@ -12,7 +12,7 @@ import { StringEditorComponent } from "./StringEditorComponent"
 export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
   children: (DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent)[]
   onScroll() { this.children.forEach(child => child.onScroll()) }
-  render(): JSX.Element {
+  render() {
     this.children = []
     let addChild = (child: DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent | null) => { if (child) this.children.push(child) }
     return matchD(this.props.d,

@@ -14,7 +14,7 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
     if (!((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0)) stopPropagationForTextInputs(e) }
   focusIfSelected() { if (this.textArea) (this.props.stringEditor.stringEditorSelectedState ? focus : blur)(this.textArea) }
   onScroll() { noop() }
-  render(): JSX.Element {
+  render() {
     return <textarea
       className="string i"
       onChange={e => { if (this.props.stringEditor.stringEditorSelectedState && this.props.stringEditor.stringEditorSelectedState.writable)
@@ -24,7 +24,7 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
       onBlur={e => handleFocusEvent(() => this.props.runE(() => environment().selection = nothing))}
       onClick={e => e.stopPropagation() }
       onKeyDown={e => this.onKeyDown(e)}
-      ref={input => this.textArea = input} /> }
+      ref={input => { this.textArea = input }} /> }
   resizeTextArea() { if (this.textArea) {
     this.textArea.style.width = this.textArea.style.height = "0"
     this.textArea.style.width = `${this.textArea.scrollWidth}px`

@@ -1,5 +1,6 @@
 import { mapMaybe, Maybe } from "../lib/Maybe"
-import { HasSID, JSON } from "./graph"
+import { HasSID } from "./graph"
+import type { JSON } from "./graph"
 import { sidFromString } from "./ID"
 import { jsonToJSON } from "./jsonFromJSON"
 

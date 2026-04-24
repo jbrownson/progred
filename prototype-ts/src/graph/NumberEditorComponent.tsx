@@ -23,7 +23,7 @@ export class NumberEditorComponent extends React.Component<{numberEditor: Number
       if (!isNaN(number)) this.props.runE(() => bindMaybe(cursorFromD(this.props.numberEditor), cursor => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, nidFromNumber(number))))) }
   focusIfSelected() { if (this.input) maybe(this.props.numberEditor.numberEditorSelectedState, () => blur, () => focus)(this.input) }
   onScroll() { noop() }
-  render(): JSX.Element {
+  render() {
     const value = maybe(this.props.numberEditor.numberEditorSelectedState, () => "" + this.props.numberEditor.number, ({numberEditorState}) => fromMaybe(numberEditorState.value, () => `${this.props.numberEditor.number}`))
     return <input
       className={"number i"}
@@ -37,6 +37,6 @@ export class NumberEditorComponent extends React.Component<{numberEditor: Number
       value={value}
       onClick={e => e.stopPropagation()}
       onKeyDown={e => this.onKeyDown(e) }
-      ref={input => this.input = input} /> }
+      ref={input => { this.input = input }} /> }
   componentDidMount() { this.focusIfSelected() }
   componentDidUpdate() { this.focusIfSelected() } }
