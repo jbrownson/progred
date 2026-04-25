@@ -10,6 +10,11 @@ function sendMenuAction(action: string) {
   browserWindow?.webContents.send("menu:action", action)
 }
 
+function setMenuItemEnabled(id: string, enabled: boolean) {
+  const item = Menu.getApplicationMenu()?.getMenuItemById(id)
+  if (item) item.enabled = enabled
+}
+
 function buildMainMenu() {
   return Menu.buildFromTemplate([
     { label: app.name, submenu: [{ role: "about" }, { role: "quit" }] },
@@ -34,6 +39,8 @@ function buildMainMenu() {
         { label: "Undo", accelerator: "CmdOrCtrl+Z", click: () => sendMenuAction("undo") },
         { label: "Redo", accelerator: "Shift+CmdOrCtrl+Z", click: () => sendMenuAction("redo") },
         { type: "separator" },
+        { label: "New Node", accelerator: "CmdOrCtrl+Shift+N", click: () => sendMenuAction("new-node") },
+        { id: "new-edge", label: "New Edge", accelerator: "CmdOrCtrl+Shift+E", enabled: false, click: () => sendMenuAction("new-edge") },
         { label: "Cut", accelerator: "CmdOrCtrl+X", click: () => sendMenuAction("cut") },
         { label: "Copy", accelerator: "CmdOrCtrl+C", click: () => sendMenuAction("copy") },
         { label: "Paste Structure", accelerator: "CmdOrCtrl+Shift+V", click: () => sendMenuAction("paste-structure") },
@@ -120,4 +127,8 @@ ipcMain.handle("file:write", async (_event, { path: filePath, contents }: { path
 ipcMain.on("menu:send-action-to-first-responder", (_event, action: string) => {
   const sendAction = (Menu as any).sendActionToFirstResponder
   if (typeof sendAction === "function") sendAction(action)
+})
+
+ipcMain.on("menu:set-enabled", (_event, { id, enabled }: { id: string, enabled: boolean }) => {
+  setMenuItemEnabled(id, enabled)
 })

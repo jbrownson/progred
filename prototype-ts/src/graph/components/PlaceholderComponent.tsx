@@ -99,7 +99,9 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
             .join(" ") }
           onMouseMove={() => { if (i !== this.props.selectedState.placeholderState.itemSelection) {this.props.selectedState.placeholderState.itemSelection = i; this.forceUpdate()} }}
           onClick={e => e.stopPropagation()}
-          onMouseDown={() => this.props.runE(action)}>
+          onMouseDown={e => {
+            e.preventDefault()
+            this.props.runE(action) }}>
             {renderMatches(string, matches)}{maybe(disambiguation, () => nothing, disambiguation => <span className="disambiguation">{disambiguation}</span>)}</li>)}</ul></div> }}
 
 function renderMatches(string: string, matches: Match[]) {

@@ -2,21 +2,23 @@ import { bindMaybe, booleanFromMaybe, fromMaybe, mapMaybe, Maybe, maybe } from "
 import { buildEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
-import { Block, D, DList, DText, Label, Line, matchD, NumberEditor, Placeholder, StringEditor } from "./D"
+import { Block, D, DIdenticon, DList, DText, Label, Line, matchD, NumberEditor, Placeholder, StringEditor, SupportsUnderselection } from "./D"
 import { _get, edges, environment, set, Source, SourceID, SourceType } from "../Environment"
 import { Ctor, ctorField, EmptyList, Field, GUIDNonemptyList, HasID, headField, List, listFromID, matchList, nameField, NonemptyList, tailField } from "../graph"
-import { GUID, guidFromID, ID, matchID } from "../model/ID"
+import { GUID, guidFromID, ID, matchID, numberFromNID } from "../model/ID"
 import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
 import { selectionIfSelected } from "../editor/selectionIfSelected"
 import { typeFromCursor } from "../cursor/typeFromCursor"
+import { selectedMissingLabels } from "./selectedMissingLabels"
+import { pendingEdgeLabel } from "./pendingEdgeLabel"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>) => D): (cursor: Cursor, id: Maybe<SourceID>) => D {
   return (cursor, sourceID) => fromMaybe(render(cursor, sourceID), () => defaultRender(cursor, sourceID)) }
 
 function _defaultRender(cursor: Cursor, sourceID: Maybe<SourceID>): D {
   return maybe(sourceID, () => renderNothing(cursor), sourceID => matchID(sourceID.id,
-    guid => renderGUID(cursor, guid),
+    guid => renderGUID(cursor, guid, sourceID.source),
     (sid, string) => renderString(cursor, string, sourceID.source),
     number => renderNumber(cursor, number, sourceID.source) ))}
 
@@ -28,8 +30,14 @@ function renderNothing(cursor: Cursor): D {
   return new Placeholder(fromMaybe(bindMaybe(Field.fromID(cursor.label), field => field.name), () => "[unnamed]"), selectedState) }
 
 function isSingleLine(d: D): boolean {
-  return matchD(d, block => false, line => !booleanFromMaybe(line.children.find(child => !isSingleLine(child))), dText => true, dList => dList.children.length > 1 || !dList.children.find(child => !isSingleLine(child)),
-    descend => isSingleLine(descend.child), label => isSingleLine(label.child), button => true, placeholder => true, stringEditor => true, numberEditor => true )}
+  return matchD(d, block => false, line => !booleanFromMaybe(line.children.find(child => !isSingleLine(child))), dText => true, dIdenticon => true, dList => dList.children.length > 1 || !dList.children.find(child => !isSingleLine(child)),
+    descend => isSingleLine(descend.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), button => true, placeholder => true, stringEditor => true, numberEditor => true )}
+
+function renderIDLabel(id: ID): D {
+  return matchID<D>(id,
+    guid => fromMaybe<D>(mapMaybe(bindMaybe(_get(guid, nameField.id), stringFromID), name => new DText(name)), () => new DIdenticon(guid)),
+    (sid, string) => new DText(`"${string}"`),
+    nid => new DText(`${numberFromNID(nid)}`)) }
 
 export function renderField(cursor: Cursor, id: ID, label: ID): D {
   let childD = descend(cursor, id, label)
@@ -37,22 +45,27 @@ export function renderField(cursor: Cursor, id: ID, label: ID): D {
     new Cursor(
       cursor, id, label,
       bindMaybe(cursor.sparseSpanningTree, sparseSpanningTree =>
-        sparseSpanningTree.map.get(label) )), new Line(new DText(fromMaybe(bindMaybe(_get(label, nameField.id), stringFromID), () => "[unnamed]")), new DText(":")) )
+        sparseSpanningTree.map.get(label) )), new Line(renderIDLabel(label), new DText(":")) )
   return isSingleLine(childD)
     ? new Block(new Line(labelD, new DText(" "), childD))
     : new Block(labelD, new Block(childD)) }
 
-function renderGUID(cursor: Cursor, guid: GUID): D {
+function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
   let ctor = bindMaybe(_get(guid, ctorField.id), Ctor.fromID)
   let ctorFields = fromMaybe(bindMaybe(ctor, ctor => ctor.fields), () => [])
-  let extraLabels = maybe(edges(guid), () => [], ({edges}) => Array.from(edges.keys()).filter(edge => ctorFields.find(field => field.id === edge) === undefined))
-  return new Line(
-    new DText(fromMaybe(mapMaybe(ctor, ctor => ctor.name), () => "[unnamed]")),
+  let guidEdges = edges(guid)
+  let writable = maybe(guidEdges, () => sourceIsWritable(source), ({source}) => sourceIsWritable(source))
+  let extraLabels = maybe(guidEdges, () => [], ({edges}) => Array.from(edges.keys()).filter(edge => ctorFields.find(field => field.id === edge) === undefined))
+  extraLabels = [...extraLabels, ...selectedMissingLabels(cursor, guid, [...ctorFields.map(field => field.id), ...extraLabels])]
+  const d = new Line(
+    fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
     ...booleanFromMaybe(ctorFields.find(field => field.id === nameField.id)) || booleanFromMaybe(extraLabels.find(label => label === nameField.id))
       ? [new DText(" "), descend(cursor, guid, nameField.id)]
       : [],
     ...ctorFields.filter(field => field.id !== nameField.id && field.id !== ctorField.id).map(field => renderField(cursor, guid, field.id)),
-    ...extraLabels.filter(label => label !== nameField.id && label !== ctorField.id).map(label => renderField(cursor, guid, label)) )}
+    ...extraLabels.filter(label => label !== nameField.id && label !== ctorField.id).map(label => renderField(cursor, guid, label)),
+    ...(writable ? pendingEdgeLabel(cursor, guid) : []) )
+  return writable ? new SupportsUnderselection(d) : d }
 
 function cursorsFromList<A extends HasID>(cursor: Cursor, list: List<A>): Maybe<{nonemptys: {cursor: Cursor, list: NonemptyList<A>}[], emptyListCursor: Cursor, emptyList: EmptyList}> {
   return matchList(list,

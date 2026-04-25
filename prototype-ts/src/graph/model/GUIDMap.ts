@@ -18,6 +18,8 @@ export function garbageCollectGUIDMap(guidMap: GUIDMap, root: ID): GUIDMap {
     mapMaybe(guidFromID(id), guid => {
       if (!visited.has(guid)) {
         visited.add(guid)
-        mapMaybe(guidMap.map.get(guid), edges => Array.from(edges.values()).forEach(_garbageCollectGUIDMap)) }})}
+        mapMaybe(guidMap.map.get(guid), edges => Array.from(edges).forEach(([label, value]) => {
+          _garbageCollectGUIDMap(label)
+          _garbageCollectGUIDMap(value) })) }})}
   _garbageCollectGUIDMap(root)
   return new GUIDMap(new Map(Array.from(guidMap.map).filter(([k, v]) => visited.has(k)))) }

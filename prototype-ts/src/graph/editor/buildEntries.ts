@@ -1,6 +1,6 @@
 import { join } from "../../lib/Array"
 import { lexCompare } from "../../lib/lexCompare"
-import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray } from "../../lib/Maybe"
+import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } from "../../lib/Maybe"
 import { Entry } from "./Entry"
 import { _get, set, Source, SourceType } from "../Environment"
 import { defaultFilter, Match, sortFilter } from "./filters"
@@ -45,6 +45,14 @@ function stringMagicEntry(searchString: string, typeMatchesString: boolean, acti
     matching: typeMatchesString,
     external: true, magic: true }]}
 
+function newRawNodeEntry(cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry {
+  return {
+    string: "New node",
+    action: () => action(() => generateGUID()),
+    matching: cursorType === nothing,
+    external: false,
+    magic: false }}
+
 function newEntries(loadedNamedThings: LoadedNamedThing[], cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry[] {
   return join(loadedNamedThings.map(({name, id, source}) => maybeToArray(newEntryForData(name, id, cursorType, action)))) }
 
@@ -58,7 +66,7 @@ export function buildEntries(type: Maybe<Type>, action: (id: () => ID) => void):
   function _defaultFilter(needle: string, entries: Entry[]) {
     return sortFilter(defaultFilter<Entry>(), ({a:lhs}, {a:rhs}) => compareEntries(lhs, rhs))(entries, entry => entry.string, needle).accepted }
   let _loadedNamedThings = loadedNamedThings().sort((loadedNamedThing0, loadedNamedThing1) => loadedNamedThing0.name.localeCompare(loadedNamedThing1.name))
-  let newDataEntries = [...newEntries(_loadedNamedThings, type, action), ...dataEntries(_loadedNamedThings, type, action)]
+  let newDataEntries = [newRawNodeEntry(type, action), ...newEntries(_loadedNamedThings, type, action), ...dataEntries(_loadedNamedThings, type, action)]
   let typeMatchesNumber = maybe(type, () => true, type => typeIsOrHasAtomicType(type, numberAtomicType))
   let typeMatchesString = maybe(type, () => true, type => typeIsOrHasAtomicType(type, stringAtomicType))
   return needle => _defaultFilter(needle, [...newDataEntries, ...numberMagicEntry(needle, typeMatchesNumber, action), ...stringMagicEntry(needle, typeMatchesString, action)]) }

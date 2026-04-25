@@ -8,6 +8,7 @@ import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderComponent } from "./PlaceholderComponent"
 import { SelectionState } from "../editor/selectionIfSelected"
 import { StringEditorComponent } from "./StringEditorComponent"
+import { IdenticonComponent } from "./IdenticonComponent"
 
 export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
   children: (DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent)[]
@@ -22,6 +23,7 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
         <DComponent ref={addChild} d={d} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />])}</span>,
       line => <span>{line.children.map((d, index) => <DComponent ref={addChild} key={index} d={d} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />)}</span>,
       dText => <span onClick={e => { e.stopPropagation(); this.props.runE(() => mapMaybe(cursorFromD(this.props.d), cursor => environment().selection = ({cursor}))) }}>{dText.string}</span>,
+      dIdenticon => <span onClick={e => { e.stopPropagation(); this.props.runE(() => mapMaybe(cursorFromD(this.props.d), cursor => environment().selection = ({cursor}))) }}><IdenticonComponent guid={dIdenticon.guid} size={dIdenticon.size} /></span>,
       dList => dList.children.length <= 1
         // TOOD probably something to factor out of these two clauses
         ? <span><span onClick={e => { e.stopPropagation(); this.props.runE(() => mapMaybe(cursorFromD(this.props.d), cursor => environment().selection = ({cursor}))) }}>{dList.opening}</span><span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(0)) }}> </span>{
@@ -34,6 +36,7 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
       descend => {
         let classNames = maybeMap([[descend.selectionState === SelectionState.Selected, "selected"], [descend.unmatching, "unmatching"], [descend.selectionState === SelectionState.Hinted, "hinted"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)
         return <span className={classNames.join(" ")}><DComponent ref={addChild} d={descend.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /></span> },
+      supportsUnderselection => <DComponent ref={addChild} d={supportsUnderselection.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       label => <DComponent ref={addChild} d={label.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       button => <input type="button" value={button.text} onClick={e => { e.stopPropagation(); this.props.runE(button.action) }} />,
       placeholder => <PlaceholderComponent ref={addChild} placeholder={placeholder} scrollParent={this.props.scrollParent} runE={this.props.runE} />,

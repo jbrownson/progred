@@ -8,17 +8,18 @@ import { Match } from "../editor/filters"
 import { rootField, viewsField } from "../graph"
 import { alwaysFail, Render } from "./R"
 import { SelectionState, selectionStateFromCursor } from "../editor/selectionIfSelected"
+import { GUID } from "../model/ID"
 
-export type D = Block | Line | DText | DList | Descend | Label | Button | Placeholder | StringEditor | NumberEditor
+export type D = Block | Line | DText | DIdenticon | DList | Descend | SupportsUnderselection | Label | Button | Placeholder | StringEditor | NumberEditor
 
-export function matchD<A>(d: D, blockF: (block: Block) => A, lineF: (line: Line) => A, dTextF: (dText: DText) => A, dListF: (dList: DList) => A,
-    descendF: (descend: Descend) => A, labelF: (label: Label) => A, buttonF: (button: Button) => A, placeholderF: (placeholder: Placeholder) => A,
+export function matchD<A>(d: D, blockF: (block: Block) => A, lineF: (line: Line) => A, dTextF: (dText: DText) => A, dIdenticonF: (dIdenticon: DIdenticon) => A, dListF: (dList: DList) => A,
+    descendF: (descend: Descend) => A, supportsUnderselectionF: (supportsUnderselection: SupportsUnderselection) => A, labelF: (label: Label) => A, buttonF: (button: Button) => A, placeholderF: (placeholder: Placeholder) => A,
     stringEditorF: (stringEditor: StringEditor) => A, numberEditorF: (numberEditor: NumberEditor) => A): A {
-  return d instanceof Block ? blockF(d) : d instanceof Line ? lineF(d) : d instanceof DText ? dTextF(d) : d instanceof DList ? dListF(d) : d instanceof Descend ? descendF(d) :
-    d instanceof Label ? labelF(d) : d instanceof Button ? buttonF(d) : d instanceof Placeholder ? placeholderF(d) : d instanceof StringEditor ? stringEditorF(d) : numberEditorF(d) }
+  return d instanceof Block ? blockF(d) : d instanceof Line ? lineF(d) : d instanceof DText ? dTextF(d) : d instanceof DIdenticon ? dIdenticonF(d) : d instanceof DList ? dListF(d) : d instanceof Descend ? descendF(d) :
+    d instanceof SupportsUnderselection ? supportsUnderselectionF(d) : d instanceof Label ? labelF(d) : d instanceof Button ? buttonF(d) : d instanceof Placeholder ? placeholderF(d) : d instanceof StringEditor ? stringEditorF(d) : numberEditorF(d) }
 
 export function isD<A>(a: A): Maybe<D> {
-  return a instanceof Block || a instanceof Line || a instanceof DText || a instanceof DList || a instanceof Descend || a instanceof Label || a instanceof Button || a instanceof Placeholder || a instanceof StringEditor || a instanceof NumberEditor ? a : nothing }
+  return a instanceof Block || a instanceof Line || a instanceof DText || a instanceof DIdenticon || a instanceof DList || a instanceof Descend || a instanceof SupportsUnderselection || a instanceof Label || a instanceof Button || a instanceof Placeholder || a instanceof StringEditor || a instanceof NumberEditor ? a : nothing }
 
 export class Block {
   block() {} // These are a workaround this problem: https://github.com/Microsoft/TypeScript/issues/15615
@@ -38,6 +39,12 @@ export class DText {
   get children() { return [] as D[] }
   constructor(public string: string) {} }
 
+export class DIdenticon {
+  dIdenticon() {}
+  parent: Maybe<D>
+  get children() { return [] as D[] }
+  constructor(public guid: GUID, public size = 16) {} }
+
 export class DList {
   dList() {}
   parent: Maybe<D>
@@ -49,6 +56,12 @@ export class Descend {
   parent: Maybe<D>
   get children() { return [this.child] }
   constructor(public cursor: Cursor, public child: D, public selectionState: Maybe<SelectionState>, public unmatching: boolean) { assert(child.parent === nothing); child.parent = this } }
+
+export class SupportsUnderselection {
+  supportsUnderselection() {}
+  parent: Maybe<D>
+  get children() { return [this.child] }
+  constructor(public child: D) { assert(child.parent === nothing); child.parent = this } }
 
 export class Label {
   label() {}
@@ -89,3 +102,6 @@ export function createD(r: Render = alwaysFail) {
   let viewsCursor = new Cursor(nothing, environment().rootViews.id, viewsField.id, environment().sparseSpanningTree.map.get(viewsField.id))
   let viewsDescend = mapMaybe(get(environment().rootViews.id, viewsField.id), viewsSourceID => new Descend(viewsCursor, environment().defaultRender(viewsCursor, viewsSourceID), selectionStateFromCursor(viewsCursor), false))
   return {rootDescend, viewsDescend} }
+
+export function supportsUnderselection(d: D): boolean {
+  return d instanceof SupportsUnderselection || !(d instanceof Descend) && d.children.some(supportsUnderselection) }

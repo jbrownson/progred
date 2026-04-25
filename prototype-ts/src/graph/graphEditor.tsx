@@ -5,7 +5,8 @@ import { assert } from "../lib/assert"
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybe2, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
 import { Cursor } from "./cursor/Cursor"
-import { createD, Descend } from "./render/D"
+import { createD, Descend, supportsUnderselection } from "./render/D"
+import { descendFromCursor } from "./cursor/descendFromCursor"
 import { DComponent } from "./components/DComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { deleteSelection } from "./editor/deleteSelection"
@@ -70,6 +71,12 @@ function handleMenuAction(action: string) {
       break
     case "redo":
       redo()
+      break
+    case "new-node":
+      rootComponent.runE(newNode)
+      break
+    case "new-edge":
+      rootComponent.runE(startNewEdge)
       break
     case "cut":
       if (actionIfTextInputWithSelection("cut:")) return
@@ -146,6 +153,19 @@ function saveCurrentAs() {
 }
 
 function view(id: Maybe<ID>) { let views = fromMaybe(environment().rootViews.views, () => []); environment().rootViews.setViews(maybe(id, () => views, id => [...views, {id}])) }
+
+function newNode() {
+  const id = generateGUID()
+  maybe(environment().selection,
+    () => set(environment().rootViews.id, rootField.id, id),
+    selection => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, id))) }
+
+function startNewEdge() {
+  mapMaybe(environment().selection, selection => {
+    if (rootComponent.selectionSupportsUnderselection()) {
+      environment().selection = {
+        cursor: selection.cursor,
+        pendingEdgeLabel: true }}}) }
 
 function transform(f: (id: ID) => Maybe<HasID>) {
   rootComponent.runE(() => bindMaybe(environment().selection, selection => bindMaybe(get(selection.cursor.parent, selection.cursor.label), ({id, source}) =>
@@ -289,6 +309,13 @@ export class RootComponent extends React.Component<{}, {}> {
           const toModify = redoStack[redoStack.length - 1]
           redoStack[redoStack.length - 1] = [new UndoRedo(toInsert.redo, toInsert.undo, true), ...toModify] }}}
     return a }
+  selectionSupportsUnderselection(): boolean {
+    return fromMaybe(
+      bindMaybe(selection.selection, selection =>
+        mapMaybe(descendFromCursor(this.rootDescend, this.viewsDescend, selection.cursor), descend => supportsUnderselection(descend.child))),
+      () => false) }
+  updateMenuState() {
+    progred.setMenuItemEnabled("new-edge", this.selectionSupportsUnderselection()) }
   render() {
     let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       bindMaybe(bindMaybe(environment().rootViews.root, ({id}) => Module.fromID(id)), renderFromModule) )
@@ -317,8 +344,8 @@ export class RootComponent extends React.Component<{}, {}> {
               scrollParent={() => this.rightPanel}
               runE={f => this.runE(f)} /></div></div></div>)}</div> }
   onScroll() { if(this.rootDComponent) this.rootDComponent.onScroll(); if (this.viewsDComponent) this.viewsDComponent.onScroll() }
-  componentDidMount() { this.onScroll() }
-  componentDidUpdate() { this.onScroll() } }
+  componentDidMount() { this.onScroll(); this.updateMenuState() }
+  componentDidUpdate() { this.onScroll(); this.updateMenuState() } }
 
 window.onclick = () => { if (rootComponent) rootComponent.runE(() => environment().selection = nothing) }
 window.onkeydown = e => { if (rootComponent) defaultKeyHandler(e, rootComponent.rootDescend, rootComponent.viewsDescend, f => rootComponent.runE(f)) }

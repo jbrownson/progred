@@ -37,6 +37,10 @@ const progred = {
     ipcRenderer.send("menu:send-action-to-first-responder", action)
   },
 
+  setMenuItemEnabled: (id: string, enabled: boolean) => {
+    ipcRenderer.send("menu:set-enabled", { id, enabled })
+  },
+
   onMenuAction: (callback: (action: string) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action)
     ipcRenderer.on("menu:action", listener)

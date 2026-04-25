@@ -7,12 +7,14 @@ export function stringFromD(d: D, depth = 0): string {
     block => block.children.map(d => `\n${indent(depth)}${stringFromD(d, depth + 1)}`).join(""),
     line => line.children.map(d => stringFromD(d, depth)).join(""),
     dText => dText.string,
+    dIdenticon => `[${dIdenticon.guid.slice(0, 8)}]`,
     dList => dList.children.length === 0
       ? `${dList.opening}${dList.closing}`
       : dList.children.length === 1
         ? `${dList.opening}${stringFromD(dList.children[0], depth)}${dList.closing}`
         : `${dList.opening}${dList.children.map(child => `\n${indent(depth)}${stringFromD(child, depth + 1)}`).join(dList.separator)} ${dList.closing}`,
     descend => stringFromD(descend.child, depth),
+    supportsUnderselection => stringFromD(supportsUnderselection.child, depth),
     label => stringFromD(label.child, depth),
     button => `[${button.text}]`,
     placeholder => "[…]",

@@ -1,8 +1,7 @@
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
-import { cursorsEqual } from "../cursor/Cursor"
 import { _delete, _get, environment, set } from "../Environment"
 import { GUID, ID } from "../model/ID"
-import { _Selection } from "./Selection"
+import { _Selection, selectionsEqual } from "./Selection"
 import { UndoRedo } from "./UndoRedo"
 
 export type ECallbacks = {
@@ -59,7 +58,7 @@ export function undoRedoECallbacks(): {undoRedoArray: UndoRedo[], eCallbacks: EC
     onGetSelection: () => {},
     willSetSelection: (nextSelection: Maybe<_Selection>) => {
       const prevSelection = environment().selection
-      const equal = prevSelection === nextSelection || (prevSelection && nextSelection && cursorsEqual(prevSelection.cursor, nextSelection.cursor))
+      const equal = prevSelection === nextSelection || (prevSelection && nextSelection && selectionsEqual(prevSelection, nextSelection))
       if (!equal) {
         undoRedoArray.push(
           new UndoRedo(
