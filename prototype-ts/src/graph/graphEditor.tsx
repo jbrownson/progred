@@ -4,6 +4,7 @@ import { groupBy } from "../lib/Array"
 import { assert } from "../lib/assert"
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybe2, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
+import { chooseIDForSelection } from "./editor/chooseIDForSelection"
 import { Cursor } from "./cursor/Cursor"
 import { createD, Descend, supportsUnderselection } from "./render/D"
 import { descendFromCursor } from "./cursor/descendFromCursor"
@@ -407,7 +408,8 @@ export class RootComponent extends React.Component<{}, {}> {
               <div className="graphPanel" style={{height: viewsDescend === nothing ? "100%" : "50%"}}>
                 <GraphViewComponent
                   snapshot={graphSnapshot}
-                  setGraphSelection={selection => this.setGraphSelection(selection)} />
+                  setGraphSelection={selection => this.setGraphSelection(selection)}
+                  chooseID={id => this.runE(() => chooseIDForSelection(id))} />
               </div>)}
             {maybe(this.viewsDescend, () => null, viewsDescend =>
               <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewsPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "scroll"}}

@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Maybe, maybe } from "../../lib/Maybe"
+import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { GraphEdge, GraphLabel, GraphLabelPart, GraphNode, GraphSelection, GraphSelectionStrength, GraphViewSnapshot } from "../graphView/GraphViewSnapshot"
 import { IdenticonComponent } from "./IdenticonComponent"
 import { ID, matchID } from "../model/ID"
@@ -153,7 +154,7 @@ class GraphLayoutState {
       this.velocities.set(node.id, velocity)
       this.positions.set(node.id, add(pos, velocity)) }) }}
 
-export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnapshot, setGraphSelection: (selection: Maybe<GraphSelection>) => void}, {}> {
+export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnapshot, setGraphSelection: (selection: Maybe<GraphSelection>) => void, chooseID: (id: ID) => boolean}, {}> {
   svg: SVGSVGElement | null
   animationFrame: Maybe<number>
   layout = new GraphLayoutState()
@@ -226,12 +227,22 @@ export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnap
     this.startWindowDragListeners() }
 
   onNodeMouseDown(e: React.MouseEvent<SVGGElement>, id: ID) {
+    if (chooseIDModifier(e)) {
+      e.stopPropagation()
+      e.preventDefault()
+      return }
     e.stopPropagation()
     this.dragging = id
     this.dragMoved = false
     this.dragOffset = sub(this.toScreen(this.layout.positions.get(id)!), this.pointer(e))
     this.lastPointer = this.pointer(e)
     this.startWindowDragListeners() }
+
+  onNodeClick(e: React.MouseEvent<SVGGElement>, id: ID) {
+    if (chooseIDModifier(e)) {
+      e.stopPropagation()
+      e.preventDefault()
+      this.props.chooseID(id) }}
 
   dragTo(pointer: Point) {
     if (!this.dragging && !this.panning) return
@@ -292,8 +303,17 @@ export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnap
     const size = edgeLabelSize(edge)
     const screenSize = scale(size, this.zoom)
     return <g key={key} className={["graphEdgeLabel", graphSelectionClass(selected)].filter(x => x !== "").join(" ")}
-      onMouseDown={e => e.stopPropagation()}
-      onClick={e => { e.stopPropagation(); this.props.setGraphSelection({kind: "edge", source: edge.source, label: edge.label}) }}>
+      onMouseDown={e => {
+        e.stopPropagation()
+        if (chooseIDModifier(e)) {
+          e.preventDefault() } }}
+      onClick={e => {
+        e.stopPropagation()
+        if (chooseIDModifier(e)) {
+          e.preventDefault()
+          this.props.chooseID(edge.label)
+          return }
+        this.props.setGraphSelection({kind: "edge", source: edge.source, label: edge.label}) }}>
       <rect x={pos.x - screenSize.x / 2} y={pos.y - screenSize.y / 2} width={screenSize.x} height={screenSize.y} />
       {this.renderGraphLabel(edge.labelText, pos.x, pos.y, edgeLabelIconSize)}
     </g> }
@@ -350,7 +370,7 @@ export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnap
     const selected = this.props.snapshot.selectedNode !== undefined && this.props.snapshot.selectedNode.id === node.id ? this.props.snapshot.selectedNode.strength : undefined
     const className = ["graphNode", node.root ? "rootGraphNode" : "", graphSelectionClass(selected)].filter(x => x !== "").join(" ")
     const size = scale(nodeSize(node), this.zoom)
-    return <g key={idKey(node.id)} className={className} onMouseDown={e => this.onNodeMouseDown(e, node.id)}>
+    return <g key={idKey(node.id)} className={className} onMouseDown={e => this.onNodeMouseDown(e, node.id)} onClick={e => this.onNodeClick(e, node.id)}>
       <rect x={screen.x - size.x / 2} y={screen.y - size.y / 2} width={size.x} height={size.y} rx={4 * this.zoom} />
       {this.renderGraphLabel(node.label, screen.x, screen.y, labelIconSize)}
     </g> }
