@@ -1,10 +1,10 @@
-import { D, matchD } from "../render/D"
+import { Block, D, matchD } from "../render/D"
 
 function indent(depth: number) { return Array((depth + 1) * 2 + 1).join(" ") }
 
 export function stringFromD(d: D, depth = 0): string {
   return matchD(d,
-    block => block.children.map(d => `\n${indent(depth)}${stringFromD(d, depth + 1)}`).join(""),
+    block => block.children.map(d => d instanceof Block ? stringFromD(d, depth + 1) : `\n${indent(depth)}${stringFromD(d, depth + 1)}`).join(""),
     line => line.children.map(d => stringFromD(d, depth)).join(""),
     dText => dText.string,
     dIdenticon => `[${dIdenticon.guid.slice(0, 8)}]`,

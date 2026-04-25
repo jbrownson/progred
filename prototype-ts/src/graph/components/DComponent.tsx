@@ -4,7 +4,7 @@ import { bindMaybe, mapMaybe, maybe, maybeMap, Maybe, nothing } from "../../lib/
 import { chooseIDForSelection } from "../editor/chooseIDForSelection"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { cursorFromD } from "../cursor/cursorFromD"
-import { D, Descend, Label, matchD } from "../render/D"
+import { Block, D, Descend, Label, matchD } from "../render/D"
 import { _get, environment } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderComponent } from "./PlaceholderComponent"
@@ -39,10 +39,12 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
       this.props.runE(() => {
         mapMaybe(cursorFromD(this.props.d), cursor => environment().selection = ({cursor})) }) }
     return matchD(this.props.d,
-      block => <span>{concatMap(block.children, (d, index) => [
-        <br key={`br${index}`} />,
-        <span key={"span" + index} style={{width: 13*(this.props.depth+1)+"px", display: "inline-block"}} />,
-        <DComponent ref={addChild} d={d} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />])}</span>,
+      block => <span>{concatMap(block.children, (d, index) => d instanceof Block
+        ? [<DComponent key={`block${index}`} ref={addChild} d={d} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />]
+        : [
+          <br key={`br${index}`} />,
+          <span key={"span" + index} style={{width: 13*(this.props.depth+1)+"px", display: "inline-block"}} />,
+          <DComponent key={`d${index}`} ref={addChild} d={d} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />])}</span>,
       line => <span>{line.children.map((d, index) => <DComponent ref={addChild} key={index} d={d} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />)}</span>,
       dText => <span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dText.string}</span>,
       dIdenticon => <span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}><IdenticonComponent guid={dIdenticon.guid} size={dIdenticon.size} /></span>,
