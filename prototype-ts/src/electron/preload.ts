@@ -41,6 +41,10 @@ const progred = {
     ipcRenderer.send("menu:set-enabled", { id, enabled })
   },
 
+  setMenuItemChecked: (id: string, checked: boolean) => {
+    ipcRenderer.send("menu:set-checked", { id, checked })
+  },
+
   onMenuAction: (callback: (action: string) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action)
     ipcRenderer.on("menu:action", listener)

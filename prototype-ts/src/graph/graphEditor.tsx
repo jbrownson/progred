@@ -8,16 +8,17 @@ import { Cursor } from "./cursor/Cursor"
 import { createD, Descend, supportsUnderselection } from "./render/D"
 import { descendFromCursor } from "./cursor/descendFromCursor"
 import { DComponent } from "./components/DComponent"
+import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { deleteSelection } from "./editor/deleteSelection"
-import { ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
-import { _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
+import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
+import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
 import { generateGUID, guidFromID, ID, matchID, nidFromNumber, sidFromString } from "./model/ID"
 import { jsonFromBradParams } from "./transforms/jsonFromBradParams"
 import { jsonFromString } from "./transforms/jsonFromString"
-import { defaultKeyHandler } from "./editor/keyHandler"
+import { composedKeyHandler, defaultKeyHandler, KeyHandler } from "./editor/keyHandler"
 import { libraries } from "./libraries/libraries"
 import { load } from "./model/load"
 import { dispatch } from "./render/R"
@@ -25,6 +26,7 @@ import { renderFromLibraries, renderFromModule } from "./render/renderFromLibrar
 import { renders } from "./render/renders"
 import { save } from "./model/save"
 import { _Selection } from "./editor/Selection"
+import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSnapshot"
 import { setCollapsed } from "./editor/setCollapsed"
 import { SparseSpanningTree } from "./SparseSpanningTree"
 import { stringFromD } from "./transforms/stringFromD"
@@ -45,6 +47,7 @@ function handleMenuAction(action: string) {
       guidRootViews = new GUIDRootViews(generateGUID())
       guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
       selection = {selection: nothing}
+      graphHighlight = nothing
       filename = nothing
       rootComponent.forceUpdate()
       break
@@ -92,12 +95,19 @@ function handleMenuAction(action: string) {
     case "paste-reference":
       rootComponent.runE(_pasteID)
       break
+    case "delete":
+      rootComponent.runE(deleteActiveSelection)
+      break
     case "select-all":
       if (!actionIfTextInput("selectAll:"))
         rootComponent.runE(() => environment().selection = {cursor: new Cursor(nothing, environment().rootViews.id, rootField.id, environment().sparseSpanningTree)})
       break
     case "console-log-selection":
       rootComponent.runE(() => logSelection())
+      break
+    case "toggle-graph":
+      rootComponent.showGraph = !rootComponent.showGraph
+      rootComponent.forceUpdate()
       break
     case "collapse":
       rootComponent.runE(() => bindMaybe(environment().selection, selection => setCollapsed(selection.cursor, true)))
@@ -167,6 +177,49 @@ function startNewEdge() {
         cursor: selection.cursor,
         pendingEdgeLabel: true }}}) }
 
+function deleteActiveSelection(): boolean {
+  return graphHighlight !== nothing
+    ? deleteGraphSelection()
+    : deleteSelection() }
+
+function deleteGraphSelection(): boolean {
+  return maybe(graphHighlight, () => false, graphSelection => {
+    let deleted = false
+    switch (graphSelection.kind) {
+      case "edge":
+        if (environment().guidMap.edges(graphSelection.source)?.has(graphSelection.label)) {
+          _delete(graphSelection.source, graphSelection.label)
+          deleted = true }
+        break
+      case "node":
+        mapMaybe(guidFromID(graphSelection.id), guid =>
+          mapMaybe(environment().guidMap.edges(guid), edges =>
+            Array.from(edges.keys()).forEach(label => {
+              _delete(guid, label)
+              deleted = true })))
+        for (let [source, edges] of Array.from(environment().guidMap.map)) {
+          for (let [label, target] of Array.from(edges)) {
+            if (target === graphSelection.id) {
+              _delete(source, label)
+              deleted = true }}}}
+    if (deleted) graphHighlight = nothing
+    return deleted }) }
+
+function clearGraphHighlightCallbacks(eCallbacks: ECallbacks): ECallbacks {
+  return composeECallbacks(eCallbacks, {...noopECallbacks, willSetSelection: () => { graphHighlight = nothing }}) }
+
+const graphKeyHandler: KeyHandler = (e, _rootDescend, _viewsDescend, runE) => {
+  switch (e.key) {
+    case "Delete":
+    case "Backspace":
+      if (graphHighlight === nothing) return false
+      e.stopPropagation()
+      e.preventDefault()
+      return runE(deleteGraphSelection) }
+  return false }
+
+const keyHandler = composedKeyHandler(graphKeyHandler, defaultKeyHandler)
+
 function transform(f: (id: ID) => Maybe<HasID>) {
   rootComponent.runE(() => bindMaybe(environment().selection, selection => bindMaybe(get(selection.cursor.parent, selection.cursor.label), ({id, source}) =>
     bindMaybe(guidFromSource(source), guid => bindMaybe(f(id), newID => set(guid, selection.cursor.label, newID.id))) )))}
@@ -177,6 +230,7 @@ let sparseSpanningTree = new SparseSpanningTree(nothing, new Map([[rootField.id,
 let guidRootViews = new GUIDRootViews(generateGUID())
 let guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
 let selection: {selection: Maybe<_Selection>} = {selection: nothing}
+let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 
 let libraryRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
@@ -273,6 +327,7 @@ function loadJson(json: string) {
     redoStack = []
     guidMap = _guidMap
     selection = {selection: nothing}
+    graphHighlight = nothing
     guidRootViews = new GUIDRootViews(generateGUID())
     guidMap.set(guidRootViews.id, ctorField.id, rootViewsCtor.id)
     mapMaybe(_root, _root => guidMap.set(guidRootViews.id, rootField.id, _root))
@@ -283,13 +338,14 @@ export class RootComponent extends React.Component<{}, {}> {
   viewsDComponent: DComponent | null
   rootDescend: Descend
   viewsDescend: Maybe<Descend>
+  showGraph = false
   inRunE = false
   leftPanel: HTMLElement | null
   rightPanel: HTMLElement | null
   runWithCustomCallbacks<A>(f: () => A, eCallbacks: ECallbacks) {
     assert(!this.inRunE)
     this.inRunE = true
-    let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(renders, defaultRender), eCallbacks), f)
+    let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
     this.forceUpdate() // TODO
     this.inRunE = false
     return a }
@@ -315,16 +371,27 @@ export class RootComponent extends React.Component<{}, {}> {
         mapMaybe(descendFromCursor(this.rootDescend, this.viewsDescend, selection.cursor), descend => supportsUnderselection(descend.child))),
       () => false) }
   updateMenuState() {
-    progred.setMenuItemEnabled("new-edge", this.selectionSupportsUnderselection()) }
+    progred.setMenuItemEnabled("new-edge", this.selectionSupportsUnderselection())
+    progred.setMenuItemEnabled("delete", selection.selection !== nothing || graphHighlight !== nothing)
+    progred.setMenuItemChecked("show-graph", this.showGraph) }
+  setGraphSelection(nextGraphSelection: Maybe<GraphSelection>) {
+    graphHighlight = nextGraphSelection
+    if (graphHighlight !== nothing) selection.selection = nothing
+    this.forceUpdate() }
   render() {
     let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       bindMaybe(bindMaybe(environment().rootViews.root, ({id}) => Module.fromID(id)), renderFromModule) )
     let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createD)
+    let graphSnapshot = this.showGraph
+      ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+        buildGraphViewSnapshot(guidMap, guidRootViews, selection.selection, graphHighlight))
+      : nothing
     this.rootDescend = rootDescend
     this.viewsDescend = viewsDescend
+    let hasSidebar = this.showGraph || viewsDescend !== nothing
     return <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}}>
-      <div ref={leftPanel => { this.leftPanel = leftPanel }} className={maybe(viewsDescend, () => "", () => "leftPanel")}
-        style={{display: "inline-block", width: maybe(viewsDescend, () => "100%", () => "60%"), height: "100%", overflow: "scroll"}}
+      <div ref={leftPanel => { this.leftPanel = leftPanel }} className={hasSidebar ? "leftPanel" : ""}
+        style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "scroll"}}
         onScroll={() => { if (this.rootDComponent) this.rootDComponent.onScroll() }} >
         <div className="doc"><DComponent
           ref={dComponent => { this.rootDComponent = dComponent }}
@@ -332,23 +399,33 @@ export class RootComponent extends React.Component<{}, {}> {
           depth={0}
           scrollParent={() => this.leftPanel}
           runE={f => this.runE(f)} /></div></div>
-      {maybe(this.viewsDescend, () => null, viewsDescend =>
-        <div className="sidebar" style={{width: "40%", height: "100%", display: "inline-block"}}>
+      {hasSidebar
+        ? <div className="sidebar" style={{width: "40%", height: "100%", display: "inline-block"}}>
           <div className="separator" style={{height: "100%", display: "inline-block"}} />
-          <div ref={rightPanel => { this.rightPanel = rightPanel }} className="rightPanel" style={{width: "100%", height: "100%", overflow: "scroll", display: "inline-block"}}
-            onScroll={() => {if (this.viewsDComponent) this.viewsDComponent.onScroll()}} >
-            <div className="views"><DComponent
-              ref={dComponent => { this.viewsDComponent = dComponent }}
-              d={viewsDescend}
-              depth={0}
-              scrollParent={() => this.rightPanel}
-              runE={f => this.runE(f)} /></div></div></div>)}</div> }
+          <div className="rightPanel" style={{width: "100%", height: "100%", display: "inline-block"}}>
+            {maybe(graphSnapshot, () => null, graphSnapshot =>
+              <div className="graphPanel" style={{height: viewsDescend === nothing ? "100%" : "50%"}}>
+                <GraphViewComponent
+                  snapshot={graphSnapshot}
+                  setGraphSelection={selection => this.setGraphSelection(selection)} />
+              </div>)}
+            {maybe(this.viewsDescend, () => null, viewsDescend =>
+              <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewsPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "scroll"}}
+                onScroll={() => {if (this.viewsDComponent) this.viewsDComponent.onScroll()}} >
+                <div className="views"><DComponent
+                  ref={dComponent => { this.viewsDComponent = dComponent }}
+                  d={viewsDescend}
+                  depth={0}
+                  scrollParent={() => this.rightPanel}
+                  runE={f => this.runE(f)} /></div></div>)}
+          </div></div>
+        : null}</div> }
   onScroll() { if(this.rootDComponent) this.rootDComponent.onScroll(); if (this.viewsDComponent) this.viewsDComponent.onScroll() }
   componentDidMount() { this.onScroll(); this.updateMenuState() }
   componentDidUpdate() { this.onScroll(); this.updateMenuState() } }
 
 window.onclick = () => { if (rootComponent) rootComponent.runE(() => environment().selection = nothing) }
-window.onkeydown = e => { if (rootComponent) defaultKeyHandler(e, rootComponent.rootDescend, rootComponent.viewsDescend, f => rootComponent.runE(f)) }
+window.onkeydown = e => { if (rootComponent) keyHandler(e, rootComponent.rootDescend, rootComponent.viewsDescend, f => rootComponent.runE(f)) }
 progred.onMenuAction(action => { if (rootComponent) handleMenuAction(action) })
 
 export let rootComponent: RootComponent

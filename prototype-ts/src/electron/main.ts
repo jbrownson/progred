@@ -15,6 +15,11 @@ function setMenuItemEnabled(id: string, enabled: boolean) {
   if (item) item.enabled = enabled
 }
 
+function setMenuItemChecked(id: string, checked: boolean) {
+  const item = Menu.getApplicationMenu()?.getMenuItemById(id)
+  if (item) item.checked = checked
+}
+
 function buildMainMenu() {
   return Menu.buildFromTemplate([
     { label: app.name, submenu: [{ role: "about" }, { role: "quit" }] },
@@ -45,6 +50,7 @@ function buildMainMenu() {
         { label: "Copy", accelerator: "CmdOrCtrl+C", click: () => sendMenuAction("copy") },
         { label: "Paste Structure", accelerator: "CmdOrCtrl+Shift+V", click: () => sendMenuAction("paste-structure") },
         { label: "Paste Reference", accelerator: "CmdOrCtrl+V", click: () => sendMenuAction("paste-reference") },
+        { id: "delete", label: "Delete", enabled: false, click: () => sendMenuAction("delete") },
         { label: "Select All", accelerator: "CmdOrCtrl+A", click: () => sendMenuAction("select-all") },
       ],
     },
@@ -59,6 +65,7 @@ function buildMainMenu() {
     {
       label: "View",
       submenu: [
+        { id: "show-graph", type: "checkbox", label: "Graph", accelerator: "CmdOrCtrl+Shift+G", click: () => sendMenuAction("toggle-graph") },
         { label: "Collapse", accelerator: "CmdOrCtrl+Shift+[", click: () => sendMenuAction("collapse") },
       ],
     },
@@ -131,4 +138,8 @@ ipcMain.on("menu:send-action-to-first-responder", (_event, action: string) => {
 
 ipcMain.on("menu:set-enabled", (_event, { id, enabled }: { id: string, enabled: boolean }) => {
   setMenuItemEnabled(id, enabled)
+})
+
+ipcMain.on("menu:set-checked", (_event, { id, checked }: { id: string, checked: boolean }) => {
+  setMenuItemChecked(id, checked)
 })
