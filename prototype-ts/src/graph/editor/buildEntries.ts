@@ -47,7 +47,7 @@ function stringMagicEntry(searchString: string, typeMatchesString: boolean, acti
 
 function newRawNodeEntry(cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry {
   return {
-    string: "New node",
+    string: "random node",
     action: () => action(() => generateGUID()),
     matching: cursorType === nothing,
     external: false,
