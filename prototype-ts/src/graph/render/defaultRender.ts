@@ -45,7 +45,7 @@ export function renderField(cursor: Cursor, id: ID, label: ID): D {
     new Cursor(
       cursor, id, label,
       bindMaybe(cursor.sparseSpanningTree, sparseSpanningTree =>
-        sparseSpanningTree.map.get(label) )), new Line(renderIDLabel(label), new DText(":")) )
+        sparseSpanningTree.map.get(label) )), new Line(renderIDLabel(label), new DText(" →")) )
   return isSingleLine(childD)
     ? new Block(new Line(labelD, new DText(" "), childD))
     : new Block(labelD, new Block(childD)) }

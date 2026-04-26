@@ -15,5 +15,5 @@ export function pendingEdgeLabel(cursor: Cursor, guid: GUID): D[] {
           entries: buildEntries(nothing, id => {
             environment().selection = {cursor: _childCursor(cursor, guid, id())} }),
           placeholderState: selection }),
-        new DText(":"))) ]
+        new DText(" →"))) ]
       : []) }
