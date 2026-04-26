@@ -1,6 +1,7 @@
 :root {
   --editor-font-size: 13px;
-  --editor-line-height: 1.45 }
+  --editor-line-height: 1.45;
+  --editor-row-height: 20px }
 * {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-weight: 400 }
@@ -56,6 +57,44 @@ textarea.i {
 .string { color: #5b6fc9 }
 .number { color: #d85a4f }
 .boolean { color: #d85a4f }
+.collapseToggle {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: #8f96a1;
+  cursor: default;
+  user-select: none }
+.collapseToggle:hover {
+  color: #3f454d;
+  background-color: #eceef1;
+  border-radius: 3px }
+.collapsedListContents { color: #8f96a1 }
+.identicon {
+  align-items: center;
+  display: inline-flex;
+  height: var(--editor-row-height);
+  justify-content: center;
+  line-height: 0;
+  vertical-align: top }
+.identicon > svg { display: block }
+.edgeLabel .identicon {
+  background-color: #fafafa;
+  border: 0.8px solid #8f96a1;
+  border-radius: 50%;
+  box-sizing: border-box;
+  overflow: hidden;
+  width: var(--editor-row-height) }
+.edgeLabel .identicon > svg {
+  width: 16px;
+  height: 16px;
+  filter: saturate(0.78);
+  padding: 0 }
+.edgeLabel .identicon > svg .identiconBackground {
+  fill: #fafafa;
+  stroke: none }
+.edgeLabel .identicon > svg rect:not(.identiconBackground) { opacity: 0.9 }
 .edgefield { display: inline-block }
 .entrylist {
   position: absolute;
@@ -90,6 +129,15 @@ textarea.i {
 .graphEdgeLabel > rect { fill: #fafafa; stroke: none }
 .graphEdgeLabel text, .graphNode text { fill: #555; font-family: sans-serif; font-weight: 500; text-anchor: middle; user-select: none }
 .graphEdgeLabel .graphLabelType, .graphNode .graphLabelType { fill: #999; opacity: 0.72 }
+.graphEdgeIdenticon > circle {
+  fill: #fafafa;
+  stroke: #8f96a1;
+  stroke-width: 0.8px }
+.graphEdgeIdenticon svg { filter: saturate(0.78) }
+.graphEdgeIdenticon svg .identiconBackground {
+  fill: #fafafa;
+  stroke: none }
+.graphEdgeIdenticon svg rect:not(.identiconBackground) { opacity: 0.9 }
 .graphNode { cursor: grab }
 .graphNode:active { cursor: grabbing }
 .graphNode > rect { fill: white; stroke: #777; stroke-width: 1.5px }

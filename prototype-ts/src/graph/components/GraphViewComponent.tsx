@@ -18,12 +18,14 @@ const textFontSize = 10
 const textPadding = 8
 const nodeIconSize = 28
 const labelIconSize = 16
-const edgeLabelIconSize = 18
+const edgeLabelIconSize = 20
+const edgeLabelInnerIconSize = 16
 const edgeLabelPadding = 4
 const labelPartGap = 4
 const textFont = `500 ${textFontSize}px sans-serif`
 let textMeasureContext: CanvasRenderingContext2D | null = null
 let textWidthCache = new Map<string, number>()
+let nextGraphViewID = 0
 
 function add(a: Point, b: Point): Point { return {x: a.x + b.x, y: a.y + b.y} }
 function sub(a: Point, b: Point): Point { return {x: a.x - b.x, y: a.y - b.y} }
@@ -155,6 +157,7 @@ class GraphLayoutState {
       this.positions.set(node.id, add(pos, velocity)) }) }}
 
 export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnapshot, setGraphSelection: (selection: Maybe<GraphSelection>) => void, chooseID: (id: ID) => boolean}, {}> {
+  clipIDPrefix = `graphView${nextGraphViewID++}`
   svg: SVGSVGElement | null
   animationFrame: Maybe<number>
   layout = new GraphLayoutState()
@@ -282,7 +285,7 @@ export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnap
     const p2 = add(sub(tip, scale(norm, size)), scale(perp, -width))
     return <polyline key={key} points={`${p1.x},${p1.y} ${tip.x},${tip.y} ${p2.x},${p2.y}`} className={["graphArrow", graphSelectionClass(selected)].filter(x => x !== "").join(" ")} /> }
 
-  renderGraphLabel(label: GraphLabel, x: number, y: number, iconSize: number) {
+  renderGraphLabel(label: GraphLabel, x: number, y: number, iconSize: number, edgeLabelClipPrefix: Maybe<string> = undefined) {
     const partWidths = label.parts.map(part => graphLabelPartWidth(part, iconSize) * this.zoom)
     const gap = labelPartGap * this.zoom
     let partX = x - (partWidths.reduce((a, b) => a + b, 0) + Math.max(0, label.parts.length - 1) * gap) / 2
@@ -290,10 +293,21 @@ export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnap
       {label.parts.map((part, index) => {
         const width = partWidths[index]
         const className = index < label.parts.length - 1 ? "graphLabelType" : ""
+        const clipID = `${this.clipIDPrefix}-${edgeLabelClipPrefix}-${index}`
         const element = maybe(part.name,
           () => maybe(part.guid,
             () => null,
-            guid => <IdenticonComponent guid={guid} size={iconSize * this.zoom} x={partX} y={y - iconSize * this.zoom / 2} className={className} />),
+            guid => edgeLabelClipPrefix
+              ? <g className={["graphEdgeIdenticon", className].filter(x => x !== "").join(" ")}>
+                <clipPath id={clipID}>
+                  <circle cx={partX + width / 2} cy={y} r={edgeLabelIconSize * this.zoom / 2} />
+                </clipPath>
+                <circle cx={partX + width / 2} cy={y} r={edgeLabelIconSize * this.zoom / 2} />
+                <g clipPath={`url(#${clipID})`}>
+                  <IdenticonComponent guid={guid} size={edgeLabelInnerIconSize * this.zoom} x={partX + (width - edgeLabelInnerIconSize * this.zoom) / 2} y={y - edgeLabelInnerIconSize * this.zoom / 2} />
+                </g>
+              </g>
+              : <IdenticonComponent guid={guid} size={iconSize * this.zoom} x={partX} y={y - iconSize * this.zoom / 2} className={className} />),
           name => <text className={className} x={partX + width / 2} y={y + textFontSize * this.zoom * 0.35} fontSize={textFontSize * this.zoom}>{truncateLabel(name)}</text>)
         partX += width + gap
         return <React.Fragment key={index}>{element}</React.Fragment> })}
@@ -315,7 +329,7 @@ export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnap
           return }
         this.props.setGraphSelection({kind: "edge", source: edge.source, label: edge.label}) }}>
       <rect x={pos.x - screenSize.x / 2} y={pos.y - screenSize.y / 2} width={screenSize.x} height={screenSize.y} />
-      {this.renderGraphLabel(edge.labelText, pos.x, pos.y, edgeLabelIconSize)}
+      {this.renderGraphLabel(edge.labelText, pos.x, pos.y, edgeLabelIconSize, key)}
     </g> }
 
   renderEdges(nodeByID: Map<ID, GraphNode>) {

@@ -27,7 +27,7 @@ export function IdenticonComponent({guid, size = 16, x, y, className, style}: {g
     height={size}
     viewBox={`0 0 ${gridSize} ${gridSize}`}
     aria-label={guid}
-    style={{verticalAlign: "-3px", ...style}}>
+    style={style}>
     <rect className="identiconBackground" x={0} y={0} width={gridSize} height={gridSize} rx={0.45} fill="#fafafa" stroke="#b4b4b4" strokeWidth={0.25} />
     {identiconCells(hash).map((row, y) => row.map((filled, x) =>
       filled ? <rect key={`${x},${y}`} x={x} y={y} width={1} height={1} fill={color} /> : null))}

@@ -16,6 +16,7 @@ export function stringFromD(d: D, depth = 0): string {
     descend => stringFromD(descend.child, depth),
     supportsUnderselection => stringFromD(supportsUnderselection.child, depth),
     label => stringFromD(label.child, depth),
+    collapseToggle => "",
     button => `[${button.text}]`,
     placeholder => "[…]",
     stringEditor => stringEditor.string,
