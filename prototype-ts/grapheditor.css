@@ -41,9 +41,18 @@ span.hinted {
   line-height: 16px;
   background-color: transparent;
   border-radius: 3px;
+  margin: 0;
   padding: 0;
   box-sizing: content-box }
-textarea.i { resize: none; overflow: hidden; white-space: pre; width: 0; vertical-align: text-top }
+textarea.i {
+  field-sizing: content;
+  height: auto;
+  min-height: 16px;
+  min-width: 1ch;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  vertical-align: text-top }
 .string { color: #5b6fc9 }
 .number { color: #d85a4f }
 .boolean { color: #d85a4f }
