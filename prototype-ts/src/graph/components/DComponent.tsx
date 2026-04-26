@@ -13,6 +13,8 @@ import { StringEditorComponent } from "./StringEditorComponent"
 import { IdenticonComponent } from "./IdenticonComponent"
 import { ID } from "../model/ID"
 
+const indentWidth = 16
+
 function clickedIDFromD(d: D): Maybe<ID> {
   return d instanceof Label ? d.cursor.label
     : d instanceof Descend ? _get(d.cursor.parent, d.cursor.label)
@@ -43,7 +45,7 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
         ? [<DComponent key={`block${index}`} ref={addChild} d={d} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />]
         : [
           <br key={`br${index}`} />,
-          <span key={"span" + index} style={{width: 13*(this.props.depth+1)+"px", display: "inline-block"}} />,
+          <span key={"span" + index} style={{width: indentWidth * (this.props.depth + 1) + "px", display: "inline-block"}} />,
           <DComponent key={`d${index}`} ref={addChild} d={d} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />])}</span>,
       line => <span>{line.children.map((d, index) => <DComponent ref={addChild} key={index} d={d} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />)}</span>,
       dText => <span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dText.string}</span>,
@@ -54,11 +56,11 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
           dList.children.map(child => <DComponent ref={addChild} d={child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />) }
           <span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(dList.children.length)) }}> {dList.closing}</span></span>
         : <span><span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dList.opening}</span><span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(0)) }}> </span>{join(intersperse(
-          dList.children.map(child => [<br />, <span style={{width: 13*(this.props.depth+1)+"px", display: "inline-block"}} />, <DComponent ref={addChild} d={child} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />]),
+          dList.children.map(child => [<br />, <span style={{width: indentWidth * (this.props.depth + 1) + "px", display: "inline-block"}} />, <DComponent ref={addChild} d={child} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />]),
           i => [<span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(i)) }}>{dList.separator}</span>]))}
           <span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(dList.children.length)) }}> {dList.closing}</span></span>,
       descend => {
-        let classNames = maybeMap([[descend.selectionState === SelectionState.Selected, "selected"], [descend.unmatching, "unmatching"], [descend.selectionState === SelectionState.Hinted, "hinted"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)
+        let classNames = ["descend", ...maybeMap([[descend.selectionState === SelectionState.Selected, "selected"], [descend.unmatching, "unmatching"], [descend.selectionState === SelectionState.Hinted, "hinted"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
         return <span className={classNames.join(" ")}><DComponent ref={addChild} d={descend.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /></span> },
       supportsUnderselection => <DComponent ref={addChild} d={supportsUnderselection.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       label => <DComponent ref={addChild} d={label.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,

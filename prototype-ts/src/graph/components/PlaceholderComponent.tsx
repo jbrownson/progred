@@ -87,7 +87,7 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
         this.tab(e)
         break }}
   render() {
-    return <div ref={div => { this.div = div }} className="entrylist" style={this.props.selectedState.placeholderState.entryListAbove ? {bottom: 17} : {}}><ul>{
+    return <div ref={div => { this.div = div }} className="entrylist" style={this.props.selectedState.placeholderState.entryListAbove ? {bottom: "100%"} : {}}><ul>{
       this.props.entries.map(({a: {string, disambiguation, matching, action, external}, matches}, i) =>
         <li
           key={i}

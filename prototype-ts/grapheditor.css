@@ -1,5 +1,17 @@
-* { font-family: sans-serif; font-weight: 500 }
-body { background-color: white; color: #555; font-size: 100%; white-space: nowrap; overflow: hidden; margin: 0 }
+:root {
+  --editor-font-size: 13px;
+  --editor-line-height: 1.45 }
+* {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 400 }
+body {
+  background-color: #fbfbfa;
+  color: #3f454d;
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
+  white-space: nowrap;
+  overflow: hidden;
+  margin: 0 }
 #root { width: 100%; height: 100% }
 .scrollparent { padding: 0px; width: 100%; height: 100%; overflow: scroll }
 unselectable {
@@ -11,35 +23,54 @@ unselectable {
   display: inline-block }
 .uneditable { color: #aaa }
 span.unmatching { border-bottom: 1px solid red }
-.selected { outline: black solid 1px }
-.hinted { outline: #ccc dotted 1px }
-.i { height: 16px; border: none; outline: none; color: inherit; font: inherit; background-color: transparent; padding: 0; box-sizing: content-box }
+span.descend {
+  border-radius: 3px;
+  box-decoration-break: clone }
+span.selected {
+  outline: 4px solid #dbeaff;
+  outline-offset: 0 }
+span.hinted {
+  outline: 3px solid #edf5ff;
+  outline-offset: 0 }
+.i {
+  height: 16px;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  line-height: 16px;
+  background-color: transparent;
+  border-radius: 3px;
+  padding: 0;
+  box-sizing: content-box }
 textarea.i { resize: none; overflow: hidden; white-space: pre; width: 0; vertical-align: text-top }
-.string { color: #808dd3 }
-.number { color: #f66153 }
-.boolean { color: #f66153 }
+.string { color: #5b6fc9 }
+.number { color: #d85a4f }
+.boolean { color: #d85a4f }
 .edgefield { display: inline-block }
 .entrylist {
   position: absolute;
   background: white;
   z-index: 1;
-  outline: 1px solid #555;
-  overflow: scroll;
+  border: 1px solid #d7d9de;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  overflow: auto;
   max-height: 200px;
   min-width: 100px }
 .entrylist > ul { list-style-type: none; margin: 0; padding: 0 }
-.entrylist > ul > li { list-style-type: none; margin: 0; white-space: nowrap; color: #aaa }
-.entrylist > ul > li.selected { background-color: #eee }
-.entrylist > ul > li > span.matching { color: black }
+.entrylist > ul > li { list-style-type: none; margin: 0; padding: 3px 8px; white-space: nowrap; color: #98a0aa }
+.entrylist > ul > li.selected { background-color: rgba(10, 132, 255, 0.13) }
+.entrylist > ul > li > span.matching { color: #20242a }
 .entrylist > ul > li.unmatching > span.matching { color: #888 }
 .entrylist > ul > li.unmatching { color: #bbb }
 .entrylist > ul > li.external { font-style: italic }
 .disambiguation::before { content: " (" }
 .disambiguation::after { content: ")" }
-.disambiguation { color: #ccc }
-.doc, .views { padding: 8px }
-.separator { width: 0px; border-left: 1px #555 solid }
-.sidebar { height: 100%; background-color: #f2f2f2 }
+.disambiguation { color: #b7bcc4 }
+.doc, .views { padding: 12px }
+.separator { width: 0px; border-left: 1px #d0d3d8 solid }
+.sidebar { height: 100%; background-color: #f4f5f6 }
 .rightPanel { vertical-align: top }
 .graphPanel { border-bottom: 1px #bbb solid; box-sizing: border-box; background: #fafafa }
 .graphView { width: 100%; height: 100%; display: block; touch-action: none }
@@ -48,7 +79,7 @@ textarea.i { resize: none; overflow: hidden; white-space: pre; width: 0; vertica
 .graphArrow { fill: none; stroke: #888; stroke-width: 1.5px; stroke-linecap: round; stroke-linejoin: round }
 .graphEdgeLabel { cursor: default }
 .graphEdgeLabel > rect { fill: #fafafa; stroke: none }
-.graphEdgeLabel text, .graphNode text { fill: #555; text-anchor: middle; user-select: none }
+.graphEdgeLabel text, .graphNode text { fill: #555; font-family: sans-serif; font-weight: 500; text-anchor: middle; user-select: none }
 .graphEdgeLabel .graphLabelType, .graphNode .graphLabelType { fill: #999; opacity: 0.72 }
 .graphNode { cursor: grab }
 .graphNode:active { cursor: grabbing }

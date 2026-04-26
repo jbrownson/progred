@@ -29,9 +29,9 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
       onKeyDown={e => this.onKeyDown(e)}
       ref={input => { this.textArea = input }} /> }
   resizeTextArea() { if (this.textArea) {
-    const sizeBuffer = 2
+    const widthBuffer = 2
     this.textArea.style.width = this.textArea.style.height = "0"
-    this.textArea.style.width = `${this.textArea.scrollWidth + sizeBuffer}px`
-    this.textArea.style.height = `${this.textArea.scrollHeight + sizeBuffer}px` }}
+    this.textArea.style.width = `${this.textArea.scrollWidth + widthBuffer}px`
+    this.textArea.style.height = `${this.textArea.scrollHeight}px` }}
   componentDidMount() { this.resizeTextArea(); this.focusIfSelected() }
   componentDidUpdate() { this.resizeTextArea(); this.focusIfSelected() } }
