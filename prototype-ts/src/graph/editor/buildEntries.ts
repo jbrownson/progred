@@ -62,11 +62,15 @@ function dataEntries(loadedNamedThings: LoadedNamedThing[], cursorType: Maybe<Ty
 function compareEntries(lhs: Entry, rhs: Entry): number {
   return lexCompare(lhs, rhs, (lhs, rhs) => +rhs.matching - +lhs.matching, (lhs, rhs) => +lhs.magic - +rhs.magic) }
 
-export function buildEntries(type: Maybe<Type>, action: (id: () => ID) => void): (needle: string) => { a: Entry, matches: Match[] }[] {
-  function _defaultFilter(needle: string, entries: Entry[]) {
-    return sortFilter(defaultFilter<Entry>(), ({a:lhs}, {a:rhs}) => compareEntries(lhs, rhs))(entries, entry => entry.string, needle).accepted }
-  let _loadedNamedThings = loadedNamedThings().sort((loadedNamedThing0, loadedNamedThing1) => loadedNamedThing0.name.localeCompare(loadedNamedThing1.name))
-  let newDataEntries = [newRawNodeEntry(type, action), ...newEntries(_loadedNamedThings, type, action), ...dataEntries(_loadedNamedThings, type, action)]
+function buildEntriesFrom(type: Maybe<Type>, action: (id: () => ID) => void, entries: Entry[]): (needle: string) => { a: Entry, matches: Match[] }[] {
   let typeMatchesNumber = maybe(type, () => true, type => typeIsOrHasAtomicType(type, numberAtomicType))
   let typeMatchesString = maybe(type, () => true, type => typeIsOrHasAtomicType(type, stringAtomicType))
-  return needle => _defaultFilter(needle, [...newDataEntries, ...numberMagicEntry(needle, typeMatchesNumber, action), ...stringMagicEntry(needle, typeMatchesString, action)]) }
+  return needle => sortFilter(defaultFilter<Entry>(), ({a:lhs}, {a:rhs}) => compareEntries(lhs, rhs))([...entries, ...numberMagicEntry(needle, typeMatchesNumber, action), ...stringMagicEntry(needle, typeMatchesString, action)], entry => entry.string, needle).accepted }
+
+export function buildEntries(type: Maybe<Type>, action: (id: () => ID) => void): (needle: string) => { a: Entry, matches: Match[] }[] {
+  let _loadedNamedThings = loadedNamedThings().sort((loadedNamedThing0, loadedNamedThing1) => loadedNamedThing0.name.localeCompare(loadedNamedThing1.name))
+  return buildEntriesFrom(type, action, [newRawNodeEntry(type, action), ...newEntries(_loadedNamedThings, type, action), ...dataEntries(_loadedNamedThings, type, action)]) }
+
+export function buildEdgeLabelEntries(action: (id: () => ID) => void): (needle: string) => { a: Entry, matches: Match[] }[] {
+  let _loadedNamedThings = loadedNamedThings().sort((loadedNamedThing0, loadedNamedThing1) => loadedNamedThing0.name.localeCompare(loadedNamedThing1.name))
+  return buildEntriesFrom(nothing, action, [newRawNodeEntry(nothing, action), ...dataEntries(_loadedNamedThings, nothing, action)]) }
