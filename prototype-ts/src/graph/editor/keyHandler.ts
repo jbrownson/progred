@@ -103,11 +103,12 @@ export function arrowNavKeyHandler(e: KeyboardEvent, rootDescend: Descend, views
   return false }
 
 export function doTab(shift: boolean, rootDescend: Descend, viewsDescend: Maybe<Descend>) {
-  environment().selection = mapMaybe(
-    maybe(bindMaybe(environment().selection, selection => descendFromCursor(rootDescend, viewsDescend, selection.cursor)),
+  const selection = environment().selection
+  environment().selection = fromMaybe(mapMaybe(
+    maybe(bindMaybe(selection, selection => descendFromCursor(rootDescend, viewsDescend, selection.cursor)),
       () => findTabStop(rootDescend, shift ? -1 : 1),
       descend => findNextTabStop(descend, shift ? -1 : 1) ),
-    tabStop => ({cursor: tabStop.cursor}) )}
+    tabStop => ({cursor: tabStop.cursor}) ), () => selection) }
 
 export function navKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
