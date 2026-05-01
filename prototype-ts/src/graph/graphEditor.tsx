@@ -392,7 +392,7 @@ export class RootComponent extends React.Component<{}, {}> {
     let hasSidebar = this.showGraph || viewsDescend !== nothing
     return <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}}>
       <div ref={leftPanel => { this.leftPanel = leftPanel }} className={hasSidebar ? "leftPanel" : ""}
-        style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "scroll"}}
+        style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "auto"}}
         onScroll={() => { if (this.rootDComponent) this.rootDComponent.onScroll() }} >
         <div className="doc"><DComponent
           ref={dComponent => { this.rootDComponent = dComponent }}
@@ -412,7 +412,7 @@ export class RootComponent extends React.Component<{}, {}> {
                   chooseID={id => this.runE(() => chooseIDForSelection(id))} />
               </div>)}
             {maybe(this.viewsDescend, () => null, viewsDescend =>
-              <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewsPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "scroll"}}
+              <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewsPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "auto"}}
                 onScroll={() => {if (this.viewsDComponent) this.viewsDComponent.onScroll()}} >
                 <div className="views"><DComponent
                   ref={dComponent => { this.viewsDComponent = dComponent }}

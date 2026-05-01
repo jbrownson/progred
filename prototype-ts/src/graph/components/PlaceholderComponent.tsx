@@ -21,13 +21,13 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
     let newItemSelection = Math.max(0, itemSelection - 1)
     this.props.selectedState.placeholderState.itemSelection = newItemSelection
     let li = this.li(newItemSelection)
-    makeElementVisible(li, (li.parentNode as HTMLElement).parentNode as HTMLElement)
+    makeElementVisible(li, li.parentNode as HTMLElement)
     this.forceUpdate() }
   down() {
     let newItemSelection = maybe(this.props.selectedState.placeholderState.itemSelection, () => 0, selection => Math.min(this.props.entries.length - 1, selection + 1))
     this.props.selectedState.placeholderState.itemSelection = newItemSelection
     let li = this.li(newItemSelection)
-    makeElementVisible(li, (li.parentNode as HTMLElement).parentNode as HTMLElement)
+    makeElementVisible(li, li.parentNode as HTMLElement)
     this.forceUpdate() }
   commitActionIfSomethingToCommit() {
     let value = this.props.selectedState.placeholderState.value
@@ -45,7 +45,7 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
       this.props.selectedState.placeholderState.itemSelection = nothing
       mapMaybe(this.props.entries[0], first => {
         let li = this.li(0)
-        makeElementVisible(li, (li.parentNode as HTMLElement).parentNode as HTMLElement)})
+        makeElementVisible(li, li.parentNode as HTMLElement)})
       this.forceUpdate() }) }
   commit() { mapMaybe(this.commitAction(), commitAction => this.props.runE(commitAction)) }
   commitAction() {

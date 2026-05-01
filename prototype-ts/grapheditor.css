@@ -14,7 +14,7 @@ body {
   overflow: hidden;
   margin: 0 }
 #root { width: 100%; height: 100% }
-.scrollparent { padding: 0px; width: 100%; height: 100%; overflow: scroll }
+.scrollparent { padding: 0px; width: 100%; height: 100%; overflow: auto }
 unselectable {
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -103,10 +103,14 @@ textarea.i {
   border: 1px solid #d7d9de;
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-  overflow: auto;
-  max-height: 200px;
+  overflow: hidden;
   min-width: 100px }
-.entrylist > ul { list-style-type: none; margin: 0; padding: 0 }
+.entrylist > ul {
+  list-style-type: none;
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+  padding: 3px 0 }
 .entrylist > ul > li { list-style-type: none; margin: 0; padding: 3px 8px; white-space: nowrap; color: #98a0aa }
 .entrylist > ul > li.selected { background-color: rgba(10, 132, 255, 0.13) }
 .entrylist > ul > li > span.matching { color: #20242a }
