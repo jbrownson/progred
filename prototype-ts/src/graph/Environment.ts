@@ -26,9 +26,10 @@ export function environment() { return unsafeUnwrapMaybe(_environment) }
 export function withEnvironment<A>(newEnvironment: Environment, f: () => A) {
   let oldEnvironment = _environment
   _environment = newEnvironment
-  let a = f()
-  _environment = oldEnvironment
-  return a }
+  try {
+    return f()
+  } finally {
+    _environment = oldEnvironment }}
 
 export const enum SourceType {
   DocumentType,

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron"
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu } from "electron"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
@@ -129,6 +129,24 @@ ipcMain.handle("dialog:save-file", async (_event, { contents, filters }: { conte
 
 ipcMain.handle("file:write", async (_event, { path: filePath, contents }: { path: string, contents: string }) => {
   await writeFile(filePath, contents)
+})
+
+ipcMain.on("clipboard:write-text", (event, { format, text }: { format: string, text: string }) => {
+  clipboard.writeBuffer(format, Buffer.from(text))
+  event.returnValue = undefined
+})
+
+ipcMain.on("clipboard:read-text", (event, format: string) => {
+  const buffer = clipboard.readBuffer(format)
+  event.returnValue = buffer.length === 0 ? undefined : buffer.toString()
+})
+
+ipcMain.on("clipboard:available-formats", event => {
+  event.returnValue = clipboard.availableFormats()
+})
+
+ipcMain.on("clipboard:read-plain-text", event => {
+  event.returnValue = clipboard.readText()
 })
 
 ipcMain.on("menu:send-action-to-first-responder", (_event, action: string) => {

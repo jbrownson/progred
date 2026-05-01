@@ -1,4 +1,4 @@
-import { clipboard, contextBridge, ipcRenderer } from "electron"
+import { contextBridge, ipcRenderer } from "electron"
 
 type FileFilter = { name: string, extensions: string[] }
 type OpenFileResult = { path: string, contents: string }
@@ -18,17 +18,16 @@ const progred = {
     ipcRenderer.invoke("file:write", { path, contents }),
 
   writeClipboardText: (format: string, text: string) => {
-    clipboard.writeBuffer(format, Buffer.from(text))
+    ipcRenderer.sendSync("clipboard:write-text", { format, text })
   },
 
   readClipboardText: (format: string): string | undefined => {
-    const buffer = clipboard.readBuffer(format)
-    return buffer.length === 0 ? undefined : buffer.toString()
+    return ipcRenderer.sendSync("clipboard:read-text", format)
   },
 
-  availableClipboardFormats: (): string[] => clipboard.availableFormats(),
+  availableClipboardFormats: (): string[] => ipcRenderer.sendSync("clipboard:available-formats"),
 
-  readPlainText: (): string => clipboard.readText(),
+  readPlainText: (): string => ipcRenderer.sendSync("clipboard:read-plain-text"),
 
   runJavascript: (javascript: string, sandboxObject: Record<string, unknown> = {}): unknown =>
     runInContext(javascript, sandboxObject),

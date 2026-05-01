@@ -264,12 +264,9 @@ function _copy() {
   bindMaybe(environment().selection, selection =>
     bindMaybe(guidFromID(selection.cursor.parent), parent =>
       mapMaybe(_get(parent, selection.cursor.label), id => {
-        try {
-          const clip = {
-            structure: clipboardStringForStructure(selection.cursor),
-            id: clipboardStringForID(id) }
-          progred.writeClipboardText(clipboardFormat, JSON.stringify(clip)) }
-        catch(e) {} })))}
+        progred.writeClipboardText(clipboardFormat, JSON.stringify({
+          structure: clipboardStringForStructure(selection.cursor),
+          id: clipboardStringForID(id) })) })))}
 
 function _pasteID() {
   maybe2(environment().selection, idFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
@@ -346,10 +343,12 @@ export class RootComponent extends React.Component<{}, {}> {
   runWithCustomCallbacks<A>(f: () => A, eCallbacks: ECallbacks) {
     assert(!this.inRunE)
     this.inRunE = true
-    let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
-    this.forceUpdate() // TODO
-    this.inRunE = false
-    return a }
+    try {
+      let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
+      this.forceUpdate() // TODO
+      return a
+    } finally {
+      this.inRunE = false }}
   runE<A>(f: () => A) {
     let {undoRedoArray, eCallbacks} = undoRedoECallbacks()
     let a = this.runWithCustomCallbacks(f, eCallbacks)
