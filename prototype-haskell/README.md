@@ -32,13 +32,12 @@ Build a Tauri app bundle:
 make tauri-build
 ```
 
-The Makefile builds the Haskell/Wasm executable, copies `index.html`,
-`ghc_wasm_jsffi.js`, and `prototype-haskell-wasm.wasm` into `dist/`, and
-then serves or wraps that static directory.
+The Makefile builds the Haskell/Wasm executable, generates
+`ghc_wasm_jsffi.js`, copies the runtime files into `dist/`, and then
+serves or wraps that static directory.
 
 `ghc_wasm_jsffi.js` is the generated JSFFI import object for the current
-Haskell source. If the JSFFI declarations change, regenerate it with the
-GHC Wasm post-linker before running the app.
+Haskell source. It is generated as part of `make dist`.
 
 The native GTK and ImGui probes were removed. They proved basic native
 Haskell GUI viability, but the active question is now whether Haskell can

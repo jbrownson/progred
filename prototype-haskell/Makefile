@@ -5,20 +5,18 @@ WASM = prototype-haskell-wasm.wasm
 DIST = dist
 POST_LINK = $(shell $(WASM_GHC) --print-libdir)/post-link.mjs
 
-.PHONY: build link dist run serve tauri-dev tauri-build
+.PHONY: build dist run serve tauri-dev tauri-build
 
 build:
 	cabal build -w $(WASM_GHC) --with-hc-pkg=$(WASM_GHC_PKG)
 
-link: build
+dist: build
+	mkdir -p $(DIST)
 	@wasm=$$(find dist-newstyle/build/wasm32-wasi -type f -name "$(WASM)" | head -n 1); \
 	if [ -z "$$wasm" ]; then echo "Could not find built wasm output"; exit 1; fi; \
-	ln -sf "$$wasm" "$(WASM)"
-
-dist: link
-	mkdir -p $(DIST)
-	node "$(POST_LINK)" -i "$(WASM)" -o "$(DIST)/ghc_wasm_jsffi.js"
-	cp index.html $(WASM) $(DIST)/
+	node "$(POST_LINK)" -i "$$wasm" -o "$(DIST)/ghc_wasm_jsffi.js"; \
+	cp "$$wasm" "$(DIST)/$(WASM)"
+	cp index.html $(DIST)/
 
 run: dist serve
 
