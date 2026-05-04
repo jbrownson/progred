@@ -1,30 +1,31 @@
-# Why this prototype exists
+# Why This Prototype Exists
 
-Successor to `prototype-swift/`. Two triggers:
+This is the Haskell/Wasm exploration for Progred.
 
-1. **Focus pain wasn't really platform-specific.** AppKit was better than
-   egui or DOM, but still required a substantial refactor to take
-   navigation away from its key view loop (see `project_focus_refactor_plan`
-   in agent memory). Reframing: focus has been the breaking point on
-   *every* prototype, suggesting general-purpose UI frameworks are
-   structurally wrong for structured editors regardless of which one
-   you pick.
+The original Haskell spike had three render targets: GTK, ImGui, and
+Wasm/DOM. The native probes proved basic GUI viability but did not solve
+the product-shape questions: shareability, web/VSC extension potential,
+and escaping native toolkit focus behavior. The active path is now the
+Wasm/DOM target.
 
-2. **The hosted-language story.** The CAD/CAM tool wants an embedded
-   scripting language with a real type system. Haskell wins that category
-   cleanly — there are no better options. GHC's API gives a clean
-   self-hosting embedding story.
+The two reasons to keep investigating Haskell:
 
-Plus: personal preference. The user genuinely loves Haskell and had been
-avoiding it only out of concern that others wouldn't.
+1. **Hosted language story.** Progred needs user-defined projections,
+   edits, and semantics in a hosted language with a real type system.
+   Haskell is the best fit, and the GHC API is the strongest self-hosting
+   compiler API available.
 
-Render targets being evaluated:
+2. **DOM distribution story.** GHC's Wasm backend plus JSFFI already lets
+   Haskell code call into the browser. The newer `ghc-in-browser` work
+   suggests that GHC-as-a-library in the browser may also be possible
+   with a packaged runtime/filesystem, so the old assumption that the GHC
+   API cannot participate in a browser build needs to be revisited.
 
-- **gtk/** — native via gi-gtk (GTK4 bindings). GHC API works.
-- **wasm/** — browser via GHC's WASM backend + JSFFI for DOM access. GHC
-  API does NOT work here (compiler isn't compiled to wasm32-wasi), so the
-  embedded-language story would need a custom interpreter.
-- **imgui/** — native via dear-imgui + SDL2. Reference point only; no
-  built-in focus model to fight, ironically a strength here.
+The near-term question is narrow: can a Haskell/Wasm core drive enough
+DOM interaction to handle Progred's graph/editor model, focus-sensitive
+text input, and projection mechanics without recreating the problems we
+hit in other GUI frameworks?
 
-Final platform decision pending.
+If that works, the next question is whether an in-browser GHC service can
+typecheck/evaluate user projection definitions with an app-owned package
+set.

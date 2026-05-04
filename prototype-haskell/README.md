@@ -1,41 +1,32 @@
 # prototype-haskell
 
-Two parallel prototypes exploring rendering platforms for the
-CAD/CAM substrate. Engine code (model, embedded language, geometry)
-will eventually be shared; for now each is a separate cabal project
-with its own minimal hello world.
+Haskell/Wasm prototype for Progred.
 
-## imgui/
-
-Native ImGui via `dear-imgui` + SDL2 + OpenGL3. Immediate-mode —
-redraw everything every frame.
-
-```sh
-brew install sdl2
-cd imgui
-cabal run prototype-haskell-imgui
-```
-
-## wasm/
-
-Haskell compiled to WASM via the GHC WASM backend, talking to the
-DOM through JSFFI. The HTML host (`index.html`) loads the `.wasm`
-output and wires up a click handler.
+The current direction is Haskell compiled to Wasm via GHC's Wasm
+backend, talking to the DOM through JSFFI. The HTML host (`index.html`)
+loads the `.wasm` output and wires up a click handler.
 
 Requires the WASM-targeted GHC cross-compiler:
 
 ```sh
 ghcup config add-release-channel cross
-ghcup install ghc 9.10 --target wasm32-wasi
-cd wasm
-wasm32-wasi-cabal build
-# Copy/symlink the produced .wasm next to index.html, then
-# serve the directory with any static server:
+ghcup install ghc 9.12 --target wasm32-wasi
+cabal build -w wasm32-wasi-ghc --with-hc-pkg=wasm32-wasi-ghc-pkg
+```
+
+The checked-in `index.html` expects `prototype-haskell-wasm.wasm` next
+to it. Copy or symlink the built wasm output into this directory, then
+serve the directory with any static server:
+
+```sh
 python3 -m http.server 8000
 ```
 
-## tauri/
+`ghc_wasm_jsffi.js` is the generated JSFFI import object for the current
+Haskell source. If the JSFFI declarations change, regenerate it with the
+GHC Wasm post-linker.
 
-Not started yet. Plan: wrap the wasm/ frontend in a Tauri shell
-for desktop distribution. Adds Rust + tauri-cli prerequisites; the
-WASM bundle is the same.
+The native GTK and ImGui probes were removed. They proved basic native
+Haskell GUI viability, but the active question is now whether Haskell can
+own the model/projection logic while the DOM remains the rendering and
+distribution substrate.
