@@ -1,6 +1,5 @@
 PORT ?= 8000
 WASM_GHC ?= wasm32-wasi-ghc
-WASM_GHC_PKG ?= wasm32-wasi-ghc-pkg
 WASM = prototype-haskell-wasm.wasm
 DIST = dist
 POST_LINK = $(shell $(WASM_GHC) --print-libdir)/post-link.mjs
@@ -8,7 +7,7 @@ POST_LINK = $(shell $(WASM_GHC) --print-libdir)/post-link.mjs
 .PHONY: build dist run serve tauri-dev tauri-build
 
 build:
-	cabal build -w $(WASM_GHC) --with-hc-pkg=$(WASM_GHC_PKG)
+	cabal build
 
 dist: build
 	mkdir -p $(DIST)
