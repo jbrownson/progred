@@ -11,20 +11,34 @@ Requires the WASM-targeted GHC cross-compiler:
 ```sh
 ghcup config add-release-channel cross
 ghcup install ghc 9.12 --target wasm32-wasi
-cabal build -w wasm32-wasi-ghc --with-hc-pkg=wasm32-wasi-ghc-pkg
 ```
 
-The checked-in `index.html` expects `prototype-haskell-wasm.wasm` next
-to it. Copy or symlink the built wasm output into this directory, then
-serve the directory with any static server:
+Run in a browser:
 
 ```sh
-python3 -m http.server 8000
+make run
 ```
+
+Run in Tauri:
+
+```sh
+cargo install tauri-cli --locked
+make tauri-dev
+```
+
+Build a Tauri app bundle:
+
+```sh
+make tauri-build
+```
+
+The Makefile builds the Haskell/Wasm executable, copies `index.html`,
+`ghc_wasm_jsffi.js`, and `prototype-haskell-wasm.wasm` into `dist/`, and
+then serves or wraps that static directory.
 
 `ghc_wasm_jsffi.js` is the generated JSFFI import object for the current
 Haskell source. If the JSFFI declarations change, regenerate it with the
-GHC Wasm post-linker.
+GHC Wasm post-linker before running the app.
 
 The native GTK and ImGui probes were removed. They proved basic native
 Haskell GUI viability, but the active question is now whether Haskell can

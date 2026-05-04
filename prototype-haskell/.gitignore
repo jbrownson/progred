@@ -1,4 +1,7 @@
 dist-newstyle/
+dist/
+src-tauri/gen/
+src-tauri/target/
 .ghc.environment.*
 *.hi
 *.o

@@ -42,10 +42,11 @@
 
       wasi.initialize(inst);
       inst.exports.hs_init(0, 0);
+      await inst.exports.start();
 
       let n = 0;
-      document.getElementById("go").addEventListener("click", () => {
-        inst.exports.onClick(++n);
+      document.getElementById("go").addEventListener("click", async () => {
+        await inst.exports.onClick(++n);
       });
     </script>
   </body>
