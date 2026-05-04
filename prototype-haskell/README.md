@@ -46,11 +46,11 @@ serves or wraps that static directory.
 `ghc_wasm_jsffi.js` is the generated JSFFI import object for the current
 Haskell source. It is generated as part of `make dist`.
 
-Editor note: `Progred.Platform` is selected by Cabal from either
-`platform/stub/` or `platform/wasm/`. Native HLS sees undefined stubs;
-the real app bundle is still built with the Wasm GHC toolchain and the
-JSFFI implementation. Wasm-only JS exports live in
-`platform/wasm/Progred/Wasm/Exports.hs`.
+Editor note: the only target-specific code lives under `platform/`.
+`Progred.Platform` is selected by Cabal from either `platform/stub/` or
+`platform/wasm/`. Native HLS sees undefined stubs; the real app bundle is
+still built with the Wasm GHC toolchain and the JSFFI implementation.
+Wasm-only JS exports live in `platform/wasm/Progred/Wasm/Exports.hs`.
 
 The native GTK and ImGui probes were removed. They proved basic native
 Haskell GUI viability, but the active question is now whether Haskell can

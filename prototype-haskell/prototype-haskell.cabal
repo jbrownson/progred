@@ -8,23 +8,14 @@ common warnings
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
                -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
 
-library
-  import:           warnings
-  exposed-modules:  Progred.App
-  hs-source-dirs:   src
-  default-language: GHC2021
-  build-depends:
-    , base >= 4.18 && < 4.23
-
 executable prototype-haskell
   import:           warnings
   main-is:          Main.hs
   other-modules:    Progred.Platform
-  hs-source-dirs:   app
+  hs-source-dirs:   src
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
-    , prototype-haskell
 
   if os(wasi)
     hs-source-dirs: platform/wasm
