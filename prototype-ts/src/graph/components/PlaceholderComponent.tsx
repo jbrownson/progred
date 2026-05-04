@@ -43,7 +43,11 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
         let {rootDescend, viewsDescend} = createD()
         doTab(shift, rootDescend, viewsDescend) })})}
   tab(e: React.KeyboardEvent<HTMLInputElement>) { this.commitAndAdvance(e, e.shiftKey) }
-  commit(e: React.KeyboardEvent<HTMLInputElement>) { this.commitAndAdvance(e, false) }
+  commit(e: React.KeyboardEvent<HTMLInputElement>) {
+    mapMaybe(this.commitAction(), action => {
+      e.preventDefault()
+      e.stopPropagation()
+      this.props.runE(action) })}
   commitAction() {
     return maybe(this.props.selectedState.placeholderState.itemSelection,
       () => mapMaybe(this.props.entries[0], first => first.a.action),
