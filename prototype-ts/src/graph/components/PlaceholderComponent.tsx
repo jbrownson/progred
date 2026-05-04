@@ -13,7 +13,7 @@ import { doTab } from "../editor/keyHandler"
 import { appendToListCursor, insertAfterListElemCursor, selectionCursorBindMaybe, setCursorToEmptyList } from "../editor/listCursorActions"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
-class EntryList extends React.Component<{placeholder: Placeholder, selectedState: PlaceholderSelectedState, entries: {a: Entry, matches: Match[]}[], runE: (f: () => void) => void}, {}> {
+class EntryList extends React.Component<{placeholder: Placeholder, selectedState: PlaceholderSelectedState, entries: {a: Entry, matches: Match[]}[], runE: (f: () => void) => void, close: () => void}, {}> {
   div: HTMLElement | null
   lis = new Map<number, HTMLElement>()
   li(index: number): HTMLElement { return this.lis.get(index) as HTMLElement }
@@ -34,29 +34,29 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
     return (value !== nothing && value !== "") || this.props.selectedState.placeholderState.itemSelection !== nothing
       ? this.commitAction()
       : nothing }
-  tab(e: React.KeyboardEvent<HTMLInputElement>) {
-    mapMaybe(this.commitActionIfSomethingToCommit(), () => {
-      mapMaybe(this.commitAction(), action => {
-        e.preventDefault()
-        e.stopPropagation()
-        this.props.runE(() => { action(); let {rootDescend, viewsDescend} = createD(); doTab(e.shiftKey, rootDescend, viewsDescend) }) })})}
-  deselect() {
-    mapMaybe(this.props.selectedState.placeholderState.itemSelection, is => {
-      this.props.selectedState.placeholderState.itemSelection = nothing
-      mapMaybe(this.props.entries[0], first => {
-        let li = this.li(0)
-        makeElementVisible(li, li.parentNode as HTMLElement)})
-      this.forceUpdate() }) }
-  commit() { mapMaybe(this.commitAction(), commitAction => this.props.runE(commitAction)) }
+  commitAndAdvance(e: React.KeyboardEvent<HTMLInputElement>, shift: boolean) {
+    mapMaybe(this.commitAction(), action => {
+      e.preventDefault()
+      e.stopPropagation()
+      this.props.runE(() => {
+        action()
+        let {rootDescend, viewsDescend} = createD()
+        doTab(shift, rootDescend, viewsDescend) })})}
+  tab(e: React.KeyboardEvent<HTMLInputElement>) { this.commitAndAdvance(e, e.shiftKey) }
+  commit(e: React.KeyboardEvent<HTMLInputElement>) { this.commitAndAdvance(e, false) }
   commitAction() {
     return maybe(this.props.selectedState.placeholderState.itemSelection,
       () => mapMaybe(this.props.entries[0], first => first.a.action),
       i => mapMaybe(this.props.entries[i], entry => entry.a.action) )}
   onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     switch (e.key) {
-      case "ArrowUp": bindMaybe(this.props.selectedState.placeholderState.itemSelection, itemSelection => { if (itemSelection > 0) { e.preventDefault(); e.stopPropagation(); this.up(itemSelection) } }); break
+      case "ArrowUp":
+        e.preventDefault()
+        e.stopPropagation()
+        maybe(this.props.selectedState.placeholderState.itemSelection, () => { if (this.props.entries.length > 0) this.up(0) }, itemSelection => { if (itemSelection > 0) this.up(itemSelection) })
+        break
       case "ArrowDown": e.preventDefault(); e.stopPropagation(); this.down(); break
-      case "Enter": e.preventDefault(); e.stopPropagation(); this.commit(); break
+      case "Enter": this.commit(e); break
       case "[":
         let value = this.props.selectedState.placeholderState.value
         if (value === nothing || value === "") {
@@ -69,10 +69,9 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
                 cursor => environment().selection = {cursor} )})))}
         break
       case "Escape":
-        mapMaybe(this.props.selectedState.placeholderState.itemSelection, () => {
-          e.preventDefault()
-          e.stopPropagation()
-          this.deselect() })
+        e.preventDefault()
+        e.stopPropagation()
+        this.props.close()
         break
       case ",":
         if (!e.shiftKey || e.ctrlKey || e.altKey || e.metaKey)
@@ -117,6 +116,14 @@ function renderMatches(string: string, matches: Match[]) {
 export class PlaceholderComponent extends React.Component<{placeholder: Placeholder, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
   entryList: EntryList | null
   input: HTMLInputElement | null
+  open(selectedState: PlaceholderSelectedState) {
+    selectedState.placeholderState.completionOpen = true
+    this.forceUpdate() }
+  close(selectedState: PlaceholderSelectedState) {
+    selectedState.placeholderState.completionOpen = false
+    selectedState.placeholderState.value = ""
+    selectedState.placeholderState.itemSelection = nothing
+    this.forceUpdate() }
   updateEntryListAbove() {
     if (this.input && this.entryList && this.entryList.div) {
       let scrollParent = this.props.scrollParent()
@@ -146,10 +153,42 @@ export class PlaceholderComponent extends React.Component<{placeholder: Placehol
           onBlur={e => handleFocusEvent(() => this.props.runE(() => { e.currentTarget.value = ""; environment().selection = nothing }))}
           onClick={e => e.stopPropagation()}
           onKeyDown={e => {
-            if (this.entryList && !((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0)) {
+            if ((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0) return
+            if (selectedState.placeholderState.completionOpen && this.entryList) {
               stopPropagationForTextInputs(e)
-              this.entryList.onKeyDown(e) }}}
-          onChange={e => { if (this.input) { selectedState.placeholderState.value = this.input.value; selectedState.placeholderState.itemSelection = nothing; this.forceUpdate() } } } />
-      <EntryList ref={entryList => { this.entryList = entryList }} placeholder={this.props.placeholder} selectedState={selectedState} entries={selectedState.entries(fromMaybe(selectedState.placeholderState.value, () => ""))} runE={this.props.runE} /></span> )}
+              this.entryList.onKeyDown(e) }
+            else {
+              switch (e.key) {
+                case "Enter":
+                  e.preventDefault()
+                  e.stopPropagation()
+                  this.open(selectedState)
+                  break
+                case "[":
+                  this.props.runE(() => selectionCursorBindMaybe(cursor =>
+                    mapMaybe(setCursorToEmptyList(cursor), cursor => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      maybe(appendToListCursor(cursor),
+                        () => environment().selection = {cursor},
+                        cursor => environment().selection = {cursor} )})))
+                  break
+                case ",":
+                  if (!e.shiftKey || e.ctrlKey || e.altKey || e.metaKey)
+                    this.props.runE(() => {
+                      mapMaybe(selectionCursorBindMaybe(cursor => insertAfterListElemCursor(cursor)), cursor => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        environment().selection = {cursor} })})
+                  break
+                case "Escape":
+                  e.preventDefault()
+                  e.stopPropagation()
+                  this.props.runE(() => environment().selection = nothing)
+                  break
+                default:
+                  stopPropagationForTextInputs(e) }}}}
+          onChange={e => { if (this.input) { selectedState.placeholderState.value = this.input.value; selectedState.placeholderState.itemSelection = nothing; selectedState.placeholderState.completionOpen = true; this.forceUpdate() } } } />
+      {selectedState.placeholderState.completionOpen ? <EntryList ref={entryList => { this.entryList = entryList }} placeholder={this.props.placeholder} selectedState={selectedState} entries={selectedState.entries(fromMaybe(selectedState.placeholderState.value, () => ""))} runE={this.props.runE} close={() => this.close(selectedState)} /> : null}</span> )}
   componentDidMount() { this.focusIfSelected(); this.updateEntryListAbove() }
   componentDidUpdate() { this.focusIfSelected(); this.updateEntryListAbove() }}

@@ -230,7 +230,7 @@ let redoStack: UndoRedo[][] = []
 let sparseSpanningTree = new SparseSpanningTree(nothing, new Map([[rootField.id, new SparseSpanningTree], [viewsField.id, new SparseSpanningTree]]))
 let guidRootViews = new GUIDRootViews(generateGUID())
 let guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
-let selection: {selection: Maybe<_Selection>} = {selection: nothing}
+let selection: {selection: Maybe<_Selection>} = {selection: {cursor: new Cursor(nothing, guidRootViews.id, rootField.id, sparseSpanningTree.map.get(rootField.id))}}
 let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 

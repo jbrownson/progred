@@ -70,11 +70,11 @@ function goDown(d: D): Maybe<Descend> {
 function getSibling(d: D, n: number): Maybe<D> {
   return bindMaybe(d.parent, parent => bindMaybe(parent.children.findIndex(child => child === d), index => parent.children[index + n])) }
 
-function goLeftRight(d: D, n: number): Maybe<Descend> {
+function goSibling(d: D, n: number): Maybe<Descend> {
   return altMaybe(
-    bindMaybe(getSibling(d, n), rightSibling =>
-      rightSibling instanceof Descend ? rightSibling : altMaybe(goDown(rightSibling), () => goLeftRight(rightSibling, n)) ),
-    () => bindMaybe(d.parent, parent => goLeftRight(parent, n)) )}
+    bindMaybe(getSibling(d, n), sibling =>
+      sibling instanceof Descend ? sibling : altMaybe(goDown(sibling), () => goSibling(sibling, n)) ),
+    () => bindMaybe(d.parent, parent => goSibling(parent, n)) )}
 
 function selectDescend(descend: Descend) { environment().selection = {cursor: descend.cursor} }
 
@@ -87,28 +87,32 @@ export function arrowNavKeyHandler(e: KeyboardEvent, rootDescend: Descend, views
   switch (e.key) {
     case "ArrowLeft":
       e.preventDefault()
-      return runE(() => keyboardNav(d => goLeftRight(d, -1), rootDescend, viewsDescend))
+      return runE(() => booleanFromMaybe(bindMaybe(environment().selection, selection =>
+        mapMaybe(bindMaybe(descendFromCursor(rootDescend, viewsDescend, selection.cursor), parentDescend), selectDescend) )))
     case "ArrowRight":
-      e.preventDefault()
-      return runE(() => keyboardNav(d => goLeftRight(d, 1), rootDescend, viewsDescend))
-    case "ArrowDown":
       e.preventDefault()
       return runE(() => maybe(environment().selection,
         () => { selectDescend(rootDescend); return true },
         () => booleanFromMaybe(keyboardNav(goDown, rootDescend, viewsDescend)) ))
+    case "ArrowDown":
+      e.preventDefault()
+      return runE(() => maybe(environment().selection,
+        () => { selectDescend(rootDescend); return true },
+        () => keyboardNav(d => goSibling(d, 1), rootDescend, viewsDescend) ))
     case "ArrowUp":
       e.preventDefault()
-      return runE(() => booleanFromMaybe(bindMaybe(environment().selection, selection =>
-        mapMaybe(bindMaybe(descendFromCursor(rootDescend, viewsDescend, selection.cursor), parentDescend), selectDescend) )))}
+      return runE(() => keyboardNav(d => goSibling(d, -1), rootDescend, viewsDescend))}
   return false }
 
-export function doTab(shift: boolean, rootDescend: Descend, viewsDescend: Maybe<Descend>) {
+export function doTab(shift: boolean, rootDescend: Descend, viewsDescend: Maybe<Descend>): boolean {
   const selection = environment().selection
-  environment().selection = fromMaybe(mapMaybe(
+  const nextSelection = mapMaybe(
     maybe(bindMaybe(selection, selection => descendFromCursor(rootDescend, viewsDescend, selection.cursor)),
       () => findTabStop(rootDescend, shift ? -1 : 1),
       descend => findNextTabStop(descend, shift ? -1 : 1) ),
-    tabStop => ({cursor: tabStop.cursor}) ), () => selection) }
+    tabStop => ({cursor: tabStop.cursor}) )
+  environment().selection = fromMaybe(nextSelection, () => selection)
+  return nextSelection !== nothing }
 
 export function navKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {

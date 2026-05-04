@@ -82,7 +82,7 @@ export class Button {
   get children() { return [] as D[] }
   constructor(public text: string, public action: () => void) {} }
 
-export type PlaceholderState = {value?: string, itemSelection?: number, entryListAbove?: boolean}
+export type PlaceholderState = {value?: string, itemSelection?: number, entryListAbove?: boolean, completionOpen?: boolean}
 export type PlaceholderSelectedState = {entries: (needle: string) => {a: Entry, matches: Match[]}[], placeholderState: PlaceholderState}
 export class Placeholder {
   parent: Maybe<D>

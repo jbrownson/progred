@@ -20,6 +20,10 @@ function clickedIDFromD(d: D): Maybe<ID> {
     : d instanceof Descend ? _get(d.cursor.parent, d.cursor.label)
     : bindMaybe(d.parent, clickedIDFromD) }
 
+function isSingleLine(d: D): boolean {
+  return matchD(d, block => false, line => !line.children.find(child => !isSingleLine(child)), dText => true, dIdenticon => true, dList => dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child)),
+    descend => isSingleLine(descend.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
+
 export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
   children: (DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent)[]
   onScroll() { this.children.forEach(child => child.onScroll()) }
@@ -54,7 +58,7 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
         let collapseToggle = dList.collapseToggle ? <DComponent ref={addChild} d={dList.collapseToggle} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /> : null
         return dList.collapseToggle && dList.collapseToggle.collapsed
           ? <span>{collapseToggle}<span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dList.opening}</span><span className="collapsedListContents">...</span><span>{dList.closing}</span></span>
-          : dList.children.length <= 1
+          : dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child))
           // TOOD probably something to factor out of these two clauses
           ? <span>{collapseToggle}<span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dList.opening}</span><span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(0)) }}> </span>{
             dList.children.map(child => <DComponent ref={addChild} d={child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />) }

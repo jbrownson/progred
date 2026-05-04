@@ -216,7 +216,7 @@ export class GraphViewComponent extends React.Component<{snapshot: GraphViewSnap
       e.preventDefault()
       const cursor = this.pointer(e)
       const graphPos = this.toGraph(cursor)
-      this.zoom = Math.max(0.1, Math.min(5, this.zoom * Math.exp(-e.deltaY * 0.002)))
+      this.zoom = Math.max(0.1, Math.min(5, this.zoom * Math.exp(-e.deltaY * 0.004)))
       this.pan = add(this.pan, sub(cursor, this.toScreen(graphPos))) }
     else {
       this.pan = add(this.pan, {x: -e.deltaX, y: -e.deltaY}) }
