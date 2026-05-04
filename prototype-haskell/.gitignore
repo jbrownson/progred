@@ -1,5 +1,6 @@
 dist-newstyle/
 dist/
+ghc_wasm_jsffi.js
 src-tauri/gen/
 src-tauri/target/
 .ghc.environment.*

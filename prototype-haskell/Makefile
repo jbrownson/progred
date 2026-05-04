@@ -2,7 +2,6 @@ PORT ?= 8000
 WASM_GHC ?= wasm32-wasi-ghc
 WASM_GHC_PKG ?= wasm32-wasi-ghc-pkg
 WASM = prototype-haskell-wasm.wasm
-JSFFI = ghc_wasm_jsffi.js
 DIST = dist
 POST_LINK = $(shell $(WASM_GHC) --print-libdir)/post-link.mjs
 
@@ -15,11 +14,11 @@ link: build
 	@wasm=$$(find dist-newstyle/build/wasm32-wasi -type f -name "$(WASM)" | head -n 1); \
 	if [ -z "$$wasm" ]; then echo "Could not find built wasm output"; exit 1; fi; \
 	ln -sf "$$wasm" "$(WASM)"
-	node "$(POST_LINK)" -i "$(WASM)" -o "$(JSFFI)"
 
 dist: link
 	mkdir -p $(DIST)
-	cp index.html $(JSFFI) $(WASM) $(DIST)/
+	node "$(POST_LINK)" -i "$(WASM)" -o "$(DIST)/ghc_wasm_jsffi.js"
+	cp index.html $(WASM) $(DIST)/
 
 run: dist serve
 
