@@ -1,0 +1,8 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:prototype-haskell"
+    - path: "./app"
+      component: "exe:prototype-haskell"
+    - path: "./platform/stub"
+      component: "exe:prototype-haskell"

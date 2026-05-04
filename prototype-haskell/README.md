@@ -6,15 +6,19 @@ The current direction is Haskell compiled to Wasm via GHC's Wasm
 backend, talking to the DOM through JSFFI. The HTML host (`index.html`)
 loads the `.wasm` output and wires up a click handler.
 
-Requires the WASM-targeted GHC cross-compiler:
+Requires a native GHC for editor/typechecking and the WASM-targeted GHC
+cross-compiler for the app bundle:
 
 ```sh
+ghcup install ghc 9.12.2
 ghcup config add-release-channel cross
 ghcup install ghc 9.12 --target wasm32-wasi
 ```
 
-`cabal.project` selects `wasm32-wasi-ghc`, so `cabal build` and the
-Makefile both use the Wasm toolchain by default.
+The default `cabal.project` selects native `ghc-9.12.2` so editor
+tooling can typecheck the Haskell code. `cabal-wasm.project` selects
+`wasm32-wasi-ghc` for the real app bundle, and the Makefile uses that
+project file when building the Wasm executable.
 
 Run in a browser:
 
@@ -42,9 +46,11 @@ serves or wraps that static directory.
 `ghc_wasm_jsffi.js` is the generated JSFFI import object for the current
 Haskell source. It is generated as part of `make dist`.
 
-Editor note: Haskell language servers installed for native GHC may not
-work against this prototype yet. The source depends on the Wasm GHC
-toolchain, including JSFFI and `base` from the Wasm compiler.
+Editor note: `Progred.Platform` is selected by Cabal from either
+`platform/stub/` or `platform/wasm/`. Native HLS sees undefined stubs;
+the real app bundle is still built with the Wasm GHC toolchain and the
+JSFFI implementation. Wasm-only JS exports live in
+`platform/wasm/Progred/Wasm/Exports.hs`.
 
 The native GTK and ImGui probes were removed. They proved basic native
 Haskell GUI viability, but the active question is now whether Haskell can

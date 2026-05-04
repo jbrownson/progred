@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>prototype-haskell-wasm</title>
+    <title>prototype-haskell</title>
     <style>
       body { font: 14px -apple-system, system-ui, sans-serif; padding: 24px; }
       #root { font-family: ui-monospace, Menlo, monospace; padding: 12px; background: #f4f4f4; border-radius: 4px; }
@@ -28,7 +28,7 @@
       ];
       const wasi = new WASI(args, env, fds);
 
-      const wasm = await WebAssembly.compileStreaming(fetch("./prototype-haskell-wasm.wasm"));
+      const wasm = await WebAssembly.compileStreaming(fetch("./prototype-haskell.wasm"));
 
       // ghc_wasm_jsffi(__exports) returns the JSFFI import object;
       // __exports is filled in after instantiation. Two-step dance so
