@@ -3,6 +3,7 @@
 module Progred.Platform
   ( logClick
   , setRoot
+  , setRootHtml
   ) where
 
 import Data.Word (Word32)
@@ -13,6 +14,9 @@ import GHC.Wasm.Prim (JSString (JSString), JSVal, toJSString)
 foreign import javascript unsafe "document.getElementById('root').textContent = $1"
   jsSetRoot :: JSVal -> IO ()
 
+foreign import javascript unsafe "document.getElementById('root').innerHTML = $1"
+  jsSetRootHtml :: JSVal -> IO ()
+
 foreign import javascript unsafe "console.log('clicked', $1)"
   logClick :: Word32 -> IO ()
 
@@ -20,3 +24,8 @@ setRoot :: String -> IO ()
 setRoot s =
   case toJSString s of
     JSString jsString -> jsSetRoot jsString
+
+setRootHtml :: String -> IO ()
+setRootHtml s =
+  case toJSString s of
+    JSString jsString -> jsSetRootHtml jsString

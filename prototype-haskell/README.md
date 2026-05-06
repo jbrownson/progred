@@ -2,6 +2,16 @@
 
 Haskell/Wasm prototype for Progred.
 
+Status: this is currently parked as a runnable Haskell spike, not the
+mainline prototype. It proves a small loop where Haskell owns a `Gid`
+model, projects it to a lightweight `View`, renders HTML, and sends that
+to the DOM through JSFFI. That is useful research, but it is not yet a
+strong reason to abandon the TypeScript prototype; TypeScript still has
+the more practical DOM/Electron path and can host JavaScript/TypeScript
+directly. The next Haskell step would be adding Haskell-owned app state
+and delegated DOM events, still with full DOM replacement, before doing a
+proper Purview-style incremental render port.
+
 The current direction is Haskell compiled to Wasm via GHC's Wasm
 backend, talking to the DOM through JSFFI. The HTML host (`index.html`)
 loads the `.wasm` output and wires up a click handler.
