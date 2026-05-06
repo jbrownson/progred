@@ -96,10 +96,11 @@ function createWindow() {
   })
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL
+  const rendererHtml = process.env.PROGRED_RENDERER_HTML ?? "grapheditor.html"
   if (devServerUrl) {
-    browserWindow.loadURL(devServerUrl)
+    browserWindow.loadURL(new URL(rendererHtml, devServerUrl).toString())
   } else {
-    browserWindow.loadFile(path.join(__dirname, "renderer", "grapheditor.html"))
+    browserWindow.loadFile(path.join(__dirname, "renderer", rendererHtml))
   }
 }
 

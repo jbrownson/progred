@@ -9,7 +9,7 @@ export default defineConfig({
     outDir: "build/renderer",
     emptyOutDir: true,
     rollupOptions: {
-      input: "grapheditor.html",
+      input: ["index.html", "grapheditor.html", "focus-lab.html"],
     },
   },
 })
