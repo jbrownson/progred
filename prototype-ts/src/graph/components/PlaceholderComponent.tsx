@@ -34,20 +34,14 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
     return (value !== nothing && value !== "") || this.props.selectedState.placeholderState.itemSelection !== nothing
       ? this.commitAction()
       : nothing }
-  commitAndAdvance(e: React.KeyboardEvent<HTMLInputElement>, shift: boolean) {
+  commitAndAdvance(e: React.KeyboardEvent<HTMLInputElement>) {
     mapMaybe(this.commitAction(), action => {
       e.preventDefault()
       e.stopPropagation()
       this.props.runE(() => {
         action()
         let {rootDescend, viewsDescend} = createD()
-        doTab(shift, rootDescend, viewsDescend) })})}
-  tab(e: React.KeyboardEvent<HTMLInputElement>) { this.commitAndAdvance(e, e.shiftKey) }
-  commit(e: React.KeyboardEvent<HTMLInputElement>) {
-    mapMaybe(this.commitAction(), action => {
-      e.preventDefault()
-      e.stopPropagation()
-      this.props.runE(action) })}
+        doTab(false, rootDescend, viewsDescend) })})}
   commitAction() {
     return maybe(this.props.selectedState.placeholderState.itemSelection,
       () => mapMaybe(this.props.entries[0], first => first.a.action),
@@ -60,7 +54,7 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
         maybe(this.props.selectedState.placeholderState.itemSelection, () => { if (this.props.entries.length > 0) this.up(0) }, itemSelection => { if (itemSelection > 0) this.up(itemSelection) })
         break
       case "ArrowDown": e.preventDefault(); e.stopPropagation(); this.down(); break
-      case "Enter": this.commit(e); break
+      case "Enter": this.commitAndAdvance(e); break
       case "[":
         let value = this.props.selectedState.placeholderState.value
         if (value === nothing || value === "") {
@@ -87,7 +81,7 @@ class EntryList extends React.Component<{placeholder: Placeholder, selectedState
               mapMaybe(this.commitActionIfSomethingToCommit(), () => mapMaybe(this.commitAction(), action => action())) })})
         break
       case "Tab":
-        this.tab(e)
+        this.commitAndAdvance(e)
         break }}
   render() {
     return <div ref={div => { this.div = div }} className="entrylist" style={this.props.selectedState.placeholderState.entryListAbove ? {bottom: "100%"} : {}}><ul>{
