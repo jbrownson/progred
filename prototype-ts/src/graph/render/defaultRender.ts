@@ -3,13 +3,13 @@ import { buildEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import { cursorHasCycle } from "../cursor/cursorHasCycle"
-import { Block, CollapseToggle, D, DIdenticon, DList, DText, Label, Line, matchD, NumberEditor, Placeholder, StringEditor, SupportsUnderselection } from "./D"
+import { Block, CollapseToggle, D, DIdenticon, DList, DText, GuidEditor, Label, Line, matchD, NumberEditor, Placeholder, StringEditor, SupportsUnderselection } from "./D"
 import { _get, edges, environment, set, Source, SourceID, SourceType } from "../Environment"
 import { Ctor, ctorField, EmptyList, Field, GUIDNonemptyList, HasID, headField, List, listFromID, matchList, nameField, NonemptyList, tailField } from "../graph"
 import { GUID, guidFromID, ID, matchID, numberFromNID } from "../model/ID"
 import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
-import { selectionIfSelected } from "../editor/selectionIfSelected"
+import { selectionIfSelected, selectionStateFromCursor } from "../editor/selectionIfSelected"
 import { getCollapsed, setCollapsed } from "../editor/setCollapsed"
 import { typeFromCursor } from "../cursor/typeFromCursor"
 import { selectedMissingLabels } from "./selectedMissingLabels"
@@ -33,7 +33,7 @@ function renderNothing(cursor: Cursor): D {
 
 function isSingleLine(d: D): boolean {
   return matchD(d, block => false, line => !booleanFromMaybe(line.children.find(child => !isSingleLine(child))), dText => true, dIdenticon => true, dList => dList.children.length > 1 || !dList.children.find(child => !isSingleLine(child)),
-    descend => isSingleLine(descend.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true )}
+    descend => isSingleLine(descend.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true )}
 
 function renderIDLabel(id: ID): D {
   return matchID<D>(id,
@@ -72,7 +72,9 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
     : []
   let fieldDs = collapsed ? [] : [...labels.map(label => renderField(cursor, guid, label)), ...pendingEdgeLabelDs]
   const d = new Line(
-    fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
+    new GuidEditor(cursor, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
+      selectionStateFromCursor(cursor),
+      maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel)),
     ...nameDs,
     ...(hasName || labels.length > 0 || pendingEdgeLabelDs.length > 0 ? [new CollapseToggle(collapsed, () => setCollapsed(cursor, !collapsed))] : []),
     ...fieldDs )

@@ -33,6 +33,7 @@ span.selected {
 span.hinted {
   outline: 3px solid #edf5ff;
   outline-offset: 0 }
+.guidEditor:focus { outline: none }
 .i {
   height: 16px;
   border: none;

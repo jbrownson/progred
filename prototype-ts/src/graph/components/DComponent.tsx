@@ -4,7 +4,7 @@ import { bindMaybe, mapMaybe, maybe, maybeMap, Maybe, nothing } from "../../lib/
 import { chooseIDForSelection } from "../editor/chooseIDForSelection"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { cursorFromD } from "../cursor/cursorFromD"
-import { Block, D, Descend, Label, matchD } from "../render/D"
+import { Block, D, Descend, GuidEditor, Label, matchD } from "../render/D"
 import { _get, environment } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderComponent } from "./PlaceholderComponent"
@@ -12,6 +12,8 @@ import { SelectionState } from "../editor/selectionIfSelected"
 import { StringEditorComponent } from "./StringEditorComponent"
 import { IdenticonComponent } from "./IdenticonComponent"
 import { ID } from "../model/ID"
+import { cursorsEqual } from "../cursor/Cursor"
+import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 
 const indentWidth = 16
 
@@ -22,14 +24,14 @@ function clickedIDFromD(d: D): Maybe<ID> {
 
 function isSingleLine(d: D): boolean {
   return matchD(d, block => false, line => !line.children.find(child => !isSingleLine(child)), dText => true, dIdenticon => true, dList => dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child)),
-    descend => isSingleLine(descend.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
+    descend => isSingleLine(descend.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
 
 export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
-  children: (DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent)[]
+  children: (DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent)[]
   onScroll() { this.children.forEach(child => child.onScroll()) }
   render() {
     this.children = []
-    let addChild = (child: DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent | null) => { if (child) this.children.push(child) }
+    let addChild = (child: DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent | null) => { if (child) this.children.push(child) }
     let chooseID = () => maybe(clickedIDFromD(this.props.d), () => false, chooseIDForSelection)
     let keepFocusForChooseID = (e: React.MouseEvent) => {
       if (chooseIDModifier(e)) {
@@ -70,6 +72,7 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
       descend => {
         let classNames = ["descend", ...maybeMap([[descend.selectionState === SelectionState.Selected, "selected"], [descend.unmatching, "unmatching"], [descend.selectionState === SelectionState.Hinted, "hinted"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
         return <span className={classNames.join(" ")}><DComponent ref={addChild} d={descend.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /></span> },
+      guidEditor => <GuidEditorComponent ref={addChild} guidEditor={guidEditor} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       supportsUnderselection => <DComponent ref={addChild} d={supportsUnderselection.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       label => <span className="edgeLabel"><DComponent ref={addChild} d={label.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /></span>,
       collapseToggle => <span className="collapseToggle" onClick={e => { e.stopPropagation(); this.props.runE(collapseToggle.action) }}>{collapseToggle.collapsed ? "▸" : "▾"}</span>,
@@ -77,3 +80,30 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
       placeholder => <PlaceholderComponent ref={addChild} placeholder={placeholder} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       stringEditor => <StringEditorComponent ref={addChild} stringEditor={stringEditor} runE={this.props.runE} />,
       numberEditor => <NumberEditorComponent ref={addChild} numberEditor={numberEditor} runE={this.props.runE} /> )}}
+
+class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
+  span: HTMLSpanElement | null
+  child: Maybe<DComponent> = nothing
+  onScroll() { if (this.child) this.child.onScroll() }
+  focusIfSelected() {
+    if (this.span) {
+      (this.props.guidEditor.selectionState === SelectionState.Selected && this.props.guidEditor.focusWhenSelected ? focus : blur)(this.span) }}
+  render() {
+    return <span
+      className="guidEditor"
+      tabIndex={0}
+      onMouseDown={e => { if (!(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault() }}
+      onClick={e => { e.stopPropagation(); this.props.runE(() => environment().selection = {cursor: this.props.guidEditor.cursor}) }}
+      onFocus={e => handleFocusEvent(() => this.props.runE(() => environment().selection = {cursor: this.props.guidEditor.cursor}))}
+      onBlur={e => handleFocusEvent(() => this.props.runE(() => {
+        if (environment().selection && cursorsEqual(environment().selection.cursor, this.props.guidEditor.cursor)) environment().selection = nothing }))}
+      ref={span => { this.span = span }} >
+      <DComponent
+        ref={dComponent => { this.child = dComponent || nothing }}
+        d={this.props.guidEditor.child}
+        depth={this.props.depth}
+        scrollParent={this.props.scrollParent}
+        runE={this.props.runE} />
+    </span> }
+  componentDidMount() { this.focusIfSelected() }
+  componentDidUpdate() { this.focusIfSelected() } }

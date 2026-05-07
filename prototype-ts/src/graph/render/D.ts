@@ -10,16 +10,16 @@ import { alwaysFail, Render } from "./R"
 import { SelectionState, selectionStateFromCursor } from "../editor/selectionIfSelected"
 import { GUID } from "../model/ID"
 
-export type D = Block | Line | DText | DIdenticon | DList | Descend | SupportsUnderselection | Label | CollapseToggle | Button | Placeholder | StringEditor | NumberEditor
+export type D = Block | Line | DText | DIdenticon | DList | Descend | GuidEditor | SupportsUnderselection | Label | CollapseToggle | Button | Placeholder | StringEditor | NumberEditor
 
 export function matchD<A>(d: D, blockF: (block: Block) => A, lineF: (line: Line) => A, dTextF: (dText: DText) => A, dIdenticonF: (dIdenticon: DIdenticon) => A, dListF: (dList: DList) => A,
-    descendF: (descend: Descend) => A, supportsUnderselectionF: (supportsUnderselection: SupportsUnderselection) => A, labelF: (label: Label) => A, collapseToggleF: (collapseToggle: CollapseToggle) => A, buttonF: (button: Button) => A, placeholderF: (placeholder: Placeholder) => A,
+    descendF: (descend: Descend) => A, guidEditorF: (guidEditor: GuidEditor) => A, supportsUnderselectionF: (supportsUnderselection: SupportsUnderselection) => A, labelF: (label: Label) => A, collapseToggleF: (collapseToggle: CollapseToggle) => A, buttonF: (button: Button) => A, placeholderF: (placeholder: Placeholder) => A,
     stringEditorF: (stringEditor: StringEditor) => A, numberEditorF: (numberEditor: NumberEditor) => A): A {
   return d instanceof Block ? blockF(d) : d instanceof Line ? lineF(d) : d instanceof DText ? dTextF(d) : d instanceof DIdenticon ? dIdenticonF(d) : d instanceof DList ? dListF(d) : d instanceof Descend ? descendF(d) :
-    d instanceof SupportsUnderselection ? supportsUnderselectionF(d) : d instanceof Label ? labelF(d) : d instanceof CollapseToggle ? collapseToggleF(d) : d instanceof Button ? buttonF(d) : d instanceof Placeholder ? placeholderF(d) : d instanceof StringEditor ? stringEditorF(d) : numberEditorF(d) }
+    d instanceof GuidEditor ? guidEditorF(d) : d instanceof SupportsUnderselection ? supportsUnderselectionF(d) : d instanceof Label ? labelF(d) : d instanceof CollapseToggle ? collapseToggleF(d) : d instanceof Button ? buttonF(d) : d instanceof Placeholder ? placeholderF(d) : d instanceof StringEditor ? stringEditorF(d) : numberEditorF(d) }
 
 export function isD<A>(a: A): Maybe<D> {
-  return a instanceof Block || a instanceof Line || a instanceof DText || a instanceof DIdenticon || a instanceof DList || a instanceof Descend || a instanceof SupportsUnderselection || a instanceof Label || a instanceof CollapseToggle || a instanceof Button || a instanceof Placeholder || a instanceof StringEditor || a instanceof NumberEditor ? a : nothing }
+  return a instanceof Block || a instanceof Line || a instanceof DText || a instanceof DIdenticon || a instanceof DList || a instanceof Descend || a instanceof GuidEditor || a instanceof SupportsUnderselection || a instanceof Label || a instanceof CollapseToggle || a instanceof Button || a instanceof Placeholder || a instanceof StringEditor || a instanceof NumberEditor ? a : nothing }
 
 export class Block {
   block() {} // These are a workaround this problem: https://github.com/Microsoft/TypeScript/issues/15615
@@ -57,6 +57,12 @@ export class Descend {
   parent: Maybe<D>
   get children() { return [this.child] }
   constructor(public cursor: Cursor, public child: D, public selectionState: Maybe<SelectionState>, public unmatching: boolean) { assert(child.parent === nothing); child.parent = this } }
+
+export class GuidEditor {
+  guidEditor() {}
+  parent: Maybe<D>
+  get children() { return [this.child] }
+  constructor(public cursor: Cursor, public child: D, public selectionState: Maybe<SelectionState>, public focusWhenSelected: boolean) { assert(child.parent === nothing); child.parent = this } }
 
 export class SupportsUnderselection {
   supportsUnderselection() {}
