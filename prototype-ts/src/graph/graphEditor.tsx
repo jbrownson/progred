@@ -13,6 +13,7 @@ import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { deleteSelection } from "./editor/deleteSelection"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
+import { editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
@@ -261,11 +262,11 @@ function actionIfTextInput(action: string) {
   return false }
 
 function _copy() {
-  bindMaybe(environment().selection, selection =>
-    bindMaybe(guidFromID(selection.cursor.parent), parent =>
-      mapMaybe(_get(parent, selection.cursor.label), id => {
+  bindMaybe(bindMaybe(editorCommandsForActiveElement(), commands => commands.copyCursor), cursor =>
+    bindMaybe(guidFromID(cursor.parent), parent =>
+      mapMaybe(_get(parent, cursor.label), id => {
         progred.writeClipboardText(clipboardFormat, JSON.stringify({
-          structure: clipboardStringForStructure(selection.cursor),
+          structure: clipboardStringForStructure(cursor),
           id: clipboardStringForID(id) })) })))}
 
 function _pasteID() {
@@ -295,7 +296,7 @@ function idFromClipboardText(text: Maybe<string>): Maybe<ID> {
       switch (json.type) {
         case "guid": return jsonString
         case "number": let number = Number(jsonString); return !Number.isNaN(number) ? nidFromNumber(number) : nothing
-        case "string": sidFromString(jsonString) }})}
+        case "string": return sidFromString(jsonString) }})}
   catch(e) {}
   return nothing }
 

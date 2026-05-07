@@ -1,6 +1,9 @@
 import { Maybe, nothing } from "../../lib/Maybe"
+import type { Cursor } from "../cursor/Cursor"
 
-export type EditorCommands = {}
+export type EditorCommands = {
+  copyCursor?: Cursor
+}
 
 const editorCommandsKey = Symbol("editorCommands")
 
