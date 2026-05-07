@@ -9,6 +9,7 @@ import { rootField, viewsField } from "../graph"
 import { alwaysFail, Render } from "./R"
 import { SelectionState, selectionStateFromCursor } from "../editor/selectionIfSelected"
 import { GUID } from "../model/ID"
+import type { EditorCommands } from "../editor/EditorCommands"
 
 export type D = Block | Line | DText | DIdenticon | DList | Descend | GuidEditor | SupportsUnderselection | Label | CollapseToggle | Button | Placeholder | StringEditor | NumberEditor
 
@@ -62,7 +63,7 @@ export class GuidEditor {
   guidEditor() {}
   parent: Maybe<D>
   get children() { return [this.child] }
-  constructor(public cursor: Cursor, public child: D, public selectionState: Maybe<SelectionState>, public focusWhenSelected: boolean) { assert(child.parent === nothing); child.parent = this } }
+  constructor(public cursor: Cursor, public child: D, public selectionState: Maybe<SelectionState>, public focusWhenSelected: boolean, public editorCommands: EditorCommands) { assert(child.parent === nothing); child.parent = this } }
 
 export class SupportsUnderselection {
   supportsUnderselection() {}
@@ -99,14 +100,14 @@ export type StringEditorSelectedState = {writable: boolean}
 export class StringEditor {
   parent: Maybe<D>
   get children() { return [] as D[] }
-  constructor(public string: string, public stringEditorSelectedState: Maybe<StringEditorSelectedState>) {} }
+  constructor(public string: string, public stringEditorSelectedState: Maybe<StringEditorSelectedState>, public editorCommands: EditorCommands) {} }
 
 export type NumberEditorState = {value?: string}
 export type NumberEditorSelectedState = {writable: boolean, numberEditorState: NumberEditorState}
 export class NumberEditor {
   parent: Maybe<D>
   get children() { return [] as D[] }
-  constructor(public number: number, public numberEditorSelectedState: Maybe<NumberEditorSelectedState>) {} }
+  constructor(public number: number, public numberEditorSelectedState: Maybe<NumberEditorSelectedState>, public editorCommands: EditorCommands) {} }
 
 export function createD(r: Render = alwaysFail) {
   let rootCursor = new Cursor(nothing, environment().rootViews.id, rootField.id, environment().sparseSpanningTree.map.get(rootField.id))

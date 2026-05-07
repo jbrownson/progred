@@ -5,6 +5,7 @@ import { cursorFromD } from "../cursor/cursorFromD"
 import { StringEditor } from "../render/D"
 import { environment, set } from "../Environment"
 import { guidFromID, sidFromString } from "../model/ID"
+import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
@@ -13,6 +14,8 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
   onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (!((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0)) stopPropagationForTextInputs(e) }
   focusIfSelected() { if (this.textArea) (this.props.stringEditor.stringEditorSelectedState ? focus : blur)(this.textArea) }
+  attachEditorCommands() {
+    if (this.textArea) attachEditorCommands(this.textArea, this.props.stringEditor.editorCommands) }
   onScroll() { noop() }
   render() {
     return <textarea
@@ -28,5 +31,6 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
       onClick={e => e.stopPropagation() }
       onKeyDown={e => this.onKeyDown(e)}
       ref={input => { this.textArea = input }} /> }
-  componentDidMount() { this.focusIfSelected() }
-  componentDidUpdate() { this.focusIfSelected() } }
+  componentDidMount() { this.focusIfSelected(); this.attachEditorCommands() }
+  componentDidUpdate() { this.focusIfSelected(); this.attachEditorCommands() }
+  componentWillUnmount() { if (this.textArea) detachEditorCommands(this.textArea) } }

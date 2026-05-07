@@ -13,6 +13,7 @@ import { StringEditorComponent } from "./StringEditorComponent"
 import { IdenticonComponent } from "./IdenticonComponent"
 import { ID } from "../model/ID"
 import { cursorsEqual } from "../cursor/Cursor"
+import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 
 const indentWidth = 16
@@ -88,6 +89,8 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, depth
   focusIfSelected() {
     if (this.span) {
       (this.props.guidEditor.selectionState === SelectionState.Selected && this.props.guidEditor.focusWhenSelected ? focus : blur)(this.span) }}
+  attachEditorCommands() {
+    if (this.span) attachEditorCommands(this.span, this.props.guidEditor.editorCommands) }
   render() {
     return <span
       className="guidEditor"
@@ -105,5 +108,6 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, depth
         scrollParent={this.props.scrollParent}
         runE={this.props.runE} />
     </span> }
-  componentDidMount() { this.focusIfSelected() }
-  componentDidUpdate() { this.focusIfSelected() } }
+  componentDidMount() { this.focusIfSelected(); this.attachEditorCommands() }
+  componentDidUpdate() { this.focusIfSelected(); this.attachEditorCommands() }
+  componentWillUnmount() { if (this.span) detachEditorCommands(this.span) } }

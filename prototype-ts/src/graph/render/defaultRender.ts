@@ -74,7 +74,8 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
   const d = new Line(
     new GuidEditor(cursor, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
       selectionStateFromCursor(cursor),
-      maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel)),
+      maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel),
+      {}),
     ...nameDs,
     ...(hasName || labels.length > 0 || pendingEdgeLabelDs.length > 0 ? [new CollapseToggle(collapsed, () => setCollapsed(cursor, !collapsed))] : []),
     ...fieldDs )
@@ -107,6 +108,6 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 
 export function renderNumber(cursor: Cursor, number: number, source: Source): D {
-  return new NumberEditor(number, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), numberEditorState: selection}))) }
+  return new NumberEditor(number, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), numberEditorState: selection})), {}) }
 export function renderString(cursor: Cursor, string: string, source: Source): D {
-  return new StringEditor(string, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), stringEditorState: selection}))) }
+  return new StringEditor(string, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), stringEditorState: selection})), {}) }
