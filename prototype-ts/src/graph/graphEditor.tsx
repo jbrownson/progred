@@ -12,12 +12,13 @@ import { DComponent } from "./components/DComponent"
 import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { deleteSelection } from "./editor/deleteSelection"
+import { clipboardFormat, clipboardStringForID, clipboardStringForStructure, idFromClipboardText, plainTextFormat, structureIDFromClipboardText } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
-import { generateGUID, guidFromID, ID, matchID, nidFromNumber, sidFromString } from "./model/ID"
+import { generateGUID, guidFromID, ID, sidFromString } from "./model/ID"
 import { jsonFromBradParams } from "./transforms/jsonFromBradParams"
 import { jsonFromString } from "./transforms/jsonFromString"
 import { composedKeyHandler, defaultKeyHandler, KeyHandler } from "./editor/keyHandler"
@@ -33,12 +34,9 @@ import { setCollapsed } from "./editor/setCollapsed"
 import { SparseSpanningTree } from "./SparseSpanningTree"
 import { stringFromD } from "./transforms/stringFromD"
 import { stringFromJSON } from "./transforms/stringFromJSON"
-import { idFromStructure, structureForCursor } from "./structureForID"
 import { UndoRedo } from "./editor/UndoRedo"
 
 const progredFileFilters = [{name: "progred", extensions: ["progred"]}]
-const clipboardFormat = "progred_custom_clipboard_format"
-const plainTextFormat = "text/plain"
 const progred = window.progred
 
 function handleMenuAction(action: string) {
@@ -266,7 +264,7 @@ function _copy() {
     bindMaybe(guidFromID(cursor.parent), parent =>
       mapMaybe(_get(parent, cursor.label), id => {
         progred.writeClipboardText(clipboardFormat, JSON.stringify({
-          structure: clipboardStringForStructure(cursor),
+          structure: clipboardStringForStructure(cursor, rootComponent.rootDescend, rootComponent.viewsDescend),
           id: clipboardStringForID(id) })) })))}
 
 function _pasteID() {
@@ -280,34 +278,6 @@ function _pasteStructure() {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
       bindMaybe(environment().selection, selection => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, sidFromString(progred.readPlainText())))) },
       (selection, id) => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, id)) )}
-
-function structureIDFromClipboardText(text: Maybe<string>): Maybe<ID> {
-  try {
-    let json = JSON.parse(fromMaybe(text, () => ""))
-    return idFromStructure(JSON.parse(json.structure)) }
-  catch(e) {}
-  return nothing }
-
-function idFromClipboardText(text: Maybe<string>): Maybe<ID> {
-  try {
-    let json = JSON.parse(JSON.parse(fromMaybe(text, () => "")).id)
-    return bindMaybe(json.string, jsonString => {
-      if (typeof jsonString !== "string") return nothing
-      switch (json.type) {
-        case "guid": return jsonString
-        case "number": let number = Number(jsonString); return !Number.isNaN(number) ? nidFromNumber(number) : nothing
-        case "string": return sidFromString(jsonString) }})}
-  catch(e) {}
-  return nothing }
-
-function clipboardStringForID(id: ID): string {
-  return JSON.stringify(matchID<{type: string, string: string}>(id,
-    guid => ({type: "guid", string: guid}),
-    (sid, s) => ({type: "string", string: s}),
-    nid => ({type: "number", string: String(nid)}) ))}
-
-function clipboardStringForStructure(cursor: Cursor): string {
-  return JSON.stringify(structureForCursor(cursor, rootComponent.rootDescend, rootComponent.viewsDescend)) }
 
 function _save(filename: string) {
   let e = environment()
