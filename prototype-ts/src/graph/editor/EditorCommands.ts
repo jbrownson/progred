@@ -1,8 +1,9 @@
 import { Maybe, nothing } from "../../lib/Maybe"
-import type { Cursor } from "../cursor/Cursor"
+import type { ID } from "../model/ID"
+import type { CopyResult } from "./Copy"
 
 export type EditorCommands = {
-  copyCursor?: Cursor
+  copy?: () => {referenceID: ID, copyResult: CopyResult}
 }
 
 const editorCommandsKey = Symbol("editorCommands")

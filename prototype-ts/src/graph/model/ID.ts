@@ -22,3 +22,4 @@ export function nidFromNumber(number: number) { return number }
 export function numberFromNID(nid: NID) { return nid }
 export function numberFromID(id: ID) { return typeof id === "number" ? id : nothing }
 export function guidFromID(id: ID): Maybe<GUID> { return typeof id === 'string' && !id.startsWith('sid:') ? id : nothing } // TODO actually check
+export function idFromJSON(json: unknown): Maybe<ID> { return typeof json === "number" || typeof json === "string" ? json : nothing } // TODO actually check GUIDs

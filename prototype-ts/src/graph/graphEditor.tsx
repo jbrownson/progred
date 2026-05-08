@@ -12,7 +12,7 @@ import { DComponent } from "./components/DComponent"
 import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { deleteSelection } from "./editor/deleteSelection"
-import { clipboardFormat, clipboardStringForID, clipboardStringForStructure, idFromClipboardText, plainTextFormat, structureIDFromClipboardText } from "./editor/Clipboard"
+import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
@@ -260,12 +260,10 @@ function actionIfTextInput(action: string) {
   return false }
 
 function _copy() {
-  bindMaybe(bindMaybe(editorCommandsForActiveElement(), commands => commands.copyCursor), cursor =>
-    bindMaybe(guidFromID(cursor.parent), parent =>
-      mapMaybe(_get(parent, cursor.label), id => {
-        progred.writeClipboardText(clipboardFormat, JSON.stringify({
-          structure: clipboardStringForStructure(cursor, rootComponent.rootDescend, rootComponent.viewsDescend),
-          id: clipboardStringForID(id) })) })))}
+  bindMaybe(editorCommandsForActiveElement(), commands =>
+    mapMaybe(commands.copy, copy => {
+      const {referenceID, copyResult} = copy()
+      progred.writeClipboardText(clipboardFormat, clipboardStringForCopyResult(referenceID, copyResult)) }))}
 
 function _pasteID() {
   maybe2(environment().selection, idFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
@@ -274,7 +272,7 @@ function _pasteID() {
     (selection, id) => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, id)) )}
 
 function _pasteStructure() {
-  maybe2(environment().selection, structureIDFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
+  maybe2(environment().selection, copyIDFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
       bindMaybe(environment().selection, selection => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, sidFromString(progred.readPlainText())))) },
       (selection, id) => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, id)) )}

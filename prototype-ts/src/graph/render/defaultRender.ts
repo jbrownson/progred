@@ -6,7 +6,7 @@ import { cursorHasCycle } from "../cursor/cursorHasCycle"
 import { Block, CollapseToggle, D, DIdenticon, DList, DText, GuidEditor, Label, Line, matchD, NumberEditor, Placeholder, StringEditor, SupportsUnderselection } from "./D"
 import { _get, edges, environment, set, Source, SourceID, SourceType } from "../Environment"
 import { Ctor, ctorField, EmptyList, Field, GUIDNonemptyList, HasID, headField, List, listFromID, matchList, nameField, NonemptyList, tailField } from "../graph"
-import { GUID, guidFromID, ID, matchID, numberFromNID } from "../model/ID"
+import { GUID, guidFromID, ID, matchID, numberFromNID, SID } from "../model/ID"
 import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
 import { selectionIfSelected, selectionStateFromCursor } from "../editor/selectionIfSelected"
@@ -14,6 +14,7 @@ import { getCollapsed, setCollapsed } from "../editor/setCollapsed"
 import { typeFromCursor } from "../cursor/typeFromCursor"
 import { selectedMissingLabels } from "./selectedMissingLabels"
 import { pendingEdgeLabel } from "./pendingEdgeLabel"
+import { copyResultForID } from "../editor/Copy"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>) => D): (cursor: Cursor, id: Maybe<SourceID>) => D {
   return (cursor, sourceID) => fromMaybe(render(cursor, sourceID), () => defaultRender(cursor, sourceID)) }
@@ -21,7 +22,7 @@ export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceI
 function _defaultRender(cursor: Cursor, sourceID: Maybe<SourceID>): D {
   return maybe(sourceID, () => renderNothing(cursor), sourceID => matchID(sourceID.id,
     guid => renderGUID(cursor, guid, sourceID.source),
-    (sid, string) => renderString(cursor, string, sourceID.source),
+    (sid, string) => renderString(cursor, sid, string, sourceID.source),
     number => renderNumber(cursor, number, sourceID.source) ))}
 
 export const defaultRender = tryFirst(renderList(), _defaultRender)
@@ -72,10 +73,10 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
     : []
   let fieldDs = collapsed ? [] : [...labels.map(label => renderField(cursor, guid, label)), ...pendingEdgeLabelDs]
   const d = new Line(
-    new GuidEditor(cursor, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
+    new GuidEditor(cursor, guid, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
       selectionStateFromCursor(cursor),
       maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel),
-      {copyCursor: cursor}),
+      {copy: () => ({referenceID: guid, copyResult: copyResultForID(guid)})}),
     ...nameDs,
     ...(hasName || labels.length > 0 || pendingEdgeLabelDs.length > 0 ? [new CollapseToggle(collapsed, () => setCollapsed(cursor, !collapsed))] : []),
     ...fieldDs )
@@ -108,6 +109,6 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 
 export function renderNumber(cursor: Cursor, number: number, source: Source): D {
-  return new NumberEditor(number, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), numberEditorState: selection})), {copyCursor: cursor}) }
-export function renderString(cursor: Cursor, string: string, source: Source): D {
-  return new StringEditor(string, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), stringEditorState: selection})), {copyCursor: cursor}) }
+  return new NumberEditor(number, number, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), numberEditorState: selection})), {copy: () => ({referenceID: number, copyResult: copyResultForID(number)})}) }
+export function renderString(cursor: Cursor, sid: SID, string: string, source: Source): D {
+  return new StringEditor(sid, string, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), stringEditorState: selection})), {copy: () => ({referenceID: sid, copyResult: copyResultForID(sid)})}) }
