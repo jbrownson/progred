@@ -8,7 +8,7 @@ import type { CopyResult } from "../editor/Copy"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, fieldCtor, GUIDApp, GUIDDescend, GUIDLine, GUIDRenderCtor, headField, nameField, rootField, tailField, viewsField } from "../graph"
+import { appCtor, checkString, ctorCtor, ctorField, fieldCtor, GUIDApp, GUIDDescend, GUIDField, GUIDLine, GUIDRenderCtor, headField, nameField, rootField, tailField, viewsField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DComponent } from "./DComponent"
 import { createD, Descend } from "../render/D"
@@ -18,6 +18,8 @@ import { renderFromRender } from "../render/renderFromRender"
 import { Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { SparseSpanningTree } from "../SparseSpanningTree"
+import { defaultKeyHandler } from "../editor/keyHandler"
+import { MapIDMap } from "../model/MapIDMap"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -35,8 +37,13 @@ function input(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   element.dispatchEvent(new Event("input", {bubbles: true}))
 }
 
-function keyDown(element: Element, key: string) {
-  element.dispatchEvent(new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true}))
+function keyDown(element: Element, key: string, options: KeyboardEventInit = {}) {
+  element.dispatchEvent(new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true, ...options}))
+}
+
+function click(element: Element, options: MouseEventInit = {}) {
+  element.dispatchEvent(new MouseEvent("mousedown", {bubbles: true, cancelable: true, ...options}))
+  element.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, ...options}))
 }
 
 class EditorHarness {
@@ -47,6 +54,7 @@ class EditorHarness {
   constructor(public environment: Environment) {
     document.body.appendChild(this.container)
     this.root = createRoot(this.container)
+    rootCursor(environment)
     act(() => this.render())
   }
 
@@ -69,7 +77,13 @@ class EditorHarness {
   }
 
   textInput() {
-    const input = this.container.querySelector("input[type=text], textarea") as HTMLInputElement | HTMLTextAreaElement | null
+    const activeElement = document.activeElement
+    const activeInput = activeElement instanceof HTMLInputElement && activeElement.type === "text" || activeElement instanceof HTMLTextAreaElement
+      ? activeElement as HTMLInputElement | HTMLTextAreaElement
+      : null
+    const input = activeInput && this.container.contains(activeInput)
+      ? activeInput
+      : this.container.querySelector("input[type=text], textarea") as HTMLInputElement | HTMLTextAreaElement | null
     expect(input).not.toBe(null)
     return input!
   }
@@ -84,6 +98,25 @@ class EditorHarness {
   key(key: string) {
     const textInput = this.textInput()
     this.run(() => keyDown(textInput, key))
+  }
+
+  globalKey(key: string, options: KeyboardEventInit = {}) {
+    const event = new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true, ...options})
+    withEnvironment(this.environment, () => act(() =>
+      defaultKeyHandler(event, this.rootDescend, undefined, f => {
+        const result = f()
+        this.render()
+        return result })))
+  }
+
+  click(element: Element, options: MouseEventInit = {}) {
+    this.run(() => click(element, options))
+  }
+
+  first(selector: string) {
+    const element = this.container.querySelector(selector)
+    expect(element).not.toBe(null)
+    return element!
   }
 
   get(parent: ID, label: ID) {
@@ -232,6 +265,192 @@ describe("DComponent editor integration", () => {
 
     expect(copy?.referenceID).toBe("guid-node")
     expect(copy?.copyResult.root).not.toBe("guid-node")
+
+    harness.unmount()
+  })
+
+  it("copies the focused string editor through editor commands", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("copy me"))
+    environment.selection = {cursor: rootCursor(environment)}
+    const harness = new EditorHarness(environment)
+
+    let copy: {referenceID: ID, copyResult: CopyResult} | undefined
+    harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
+
+    expect(copy?.referenceID).toBe(sidFromString("copy me"))
+    expect(copy?.copyResult.root).toBe(sidFromString("copy me"))
+    expect(copy?.copyResult.guidMap.map.size).toBe(0)
+
+    harness.unmount()
+  })
+
+  it("copies the focused number editor through editor commands", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, 7)
+    environment.selection = {cursor: rootCursor(environment)}
+    const harness = new EditorHarness(environment)
+
+    let copy: {referenceID: ID, copyResult: CopyResult} | undefined
+    harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
+
+    expect(copy?.referenceID).toBe(7)
+    expect(copy?.copyResult.root).toBe(7)
+    expect(copy?.copyResult.guidMap.map.size).toBe(0)
+
+    harness.unmount()
+  })
+
+  it("does not expose copy from a focused placeholder", () => {
+    const harness = rootHarness()
+
+    let hasCopy = true
+    harness.run(() => { hasCopy = editorCommandsForActiveElement()?.copy !== undefined })
+
+    expect(hasCopy).toBe(false)
+
+    harness.unmount()
+  })
+
+  it("pastes a reference into the focused string editor", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("old"))
+    environment.selection = {cursor: rootCursor(environment)}
+    const harness = new EditorHarness(environment)
+
+    harness.run(() => { commitIDToActiveElement("guid-pasted") })
+
+    expect(harness.get(environment.rootViews.id, rootField.id)).toBe("guid-pasted")
+
+    harness.unmount()
+  })
+
+  it("pastes a reference into the focused number editor", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, 1)
+    environment.selection = {cursor: rootCursor(environment)}
+    const harness = new EditorHarness(environment)
+
+    harness.run(() => { commitIDToActiveElement("guid-pasted") })
+
+    expect(harness.get(environment.rootViews.id, rootField.id)).toBe("guid-pasted")
+
+    harness.unmount()
+  })
+
+  it("commits a placeholder with Tab", () => {
+    const harness = rootHarness()
+    const textInput = harness.textInput()
+
+    harness.run(() => {
+      input(textInput, "hello")
+      keyDown(textInput, "Tab") })
+
+    expect(stringFromID(harness.get(harness.environment.rootViews.id, rootField.id)!)).toBe("hello")
+
+    harness.unmount()
+  })
+
+  it("inserts a list item with the global comma key and commits it", () => {
+    const harness = rootHarness()
+
+    harness.key("[")
+    harness.typeAndEnter("first")
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    harness.globalKey(",", {metaKey: true})
+    const inserted = harness.environment.selection?.cursor.parent
+    harness.typeAndEnter("second")
+
+    expect(stringFromID(harness.get(list!, headField.id)!)).toBe("first")
+    expect(stringFromID(harness.get(inserted!, headField.id)!)).toBe("second")
+    expect(harness.get(list!, tailField.id)).toBe(inserted)
+
+    harness.unmount()
+  })
+
+  it("deletes a selected edge with the global Delete key", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("delete me"))
+    environment.selection = {cursor: rootCursor(environment)}
+    const harness = new EditorHarness(environment)
+
+    harness.globalKey("Delete")
+
+    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
+
+    harness.unmount()
+  })
+
+  it("selects a guid editor by mouse click", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, "guid-node")
+    environment.selection = undefined
+    const harness = new EditorHarness(environment)
+
+    harness.click(harness.first(".guidEditor"))
+
+    expect(harness.environment.selection?.cursor.parent).toBe(environment.rootViews.id)
+    expect(harness.environment.selection?.cursor.label).toBe(rootField.id)
+
+    harness.unmount()
+  })
+
+  it("chooses an existing rendered node by alt-clicking into a focused placeholder", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const parent = "guid-parent"
+    const target = "guid-target"
+    const existingLabel = sidFromString("existing")
+    const missingLabel = sidFromString("missing")
+    environment.guidMap.set(environment.rootViews.id, rootField.id, parent)
+    environment.guidMap.set(parent, existingLabel, target)
+    environment.selection = {cursor: _childCursor(rootCursor(environment), parent, missingLabel)}
+    const harness = new EditorHarness(environment)
+
+    const identicons = harness.container.querySelectorAll(".identicon")
+    expect(identicons.length).toBeGreaterThan(1)
+    harness.click(identicons[1], {altKey: true})
+
+    expect(harness.get(parent, missingLabel)).toBe(target)
+
+    harness.unmount()
+  })
+
+  it("renders and edits unknown fields alongside generated custom renders", () => {
+    const appRender = renderIfApp(name => name)
+    const environment = makeTestEnvironment({defaultRender: tryFirst(appRender, defaultRender)})
+    const {app, extraField} = withEnvironment(environment, () => {
+      const app = GUIDApp.new()
+      const extraField = GUIDField.new().setName("Extra")
+      return {app, extraField} })
+    environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
+    environment.guidMap.set(app.id, extraField.id, sidFromString("old"))
+    environment.selection = {cursor: _childCursor(rootCursor(environment), app.id, extraField.id)}
+    const harness = new EditorHarness(environment)
+
+    expect(harness.container.textContent).toContain("Extra")
+    harness.run(() => input(harness.textInput(), "new"))
+
+    expect(stringFromID(harness.get(app.id, extraField.id)!)).toBe("new")
+
+    harness.unmount()
+  })
+
+  it("does not edit read-only library string editors", () => {
+    const libRoot = "guid-lib-root"
+    const environment = makeTestEnvironment({
+      libraries: new Map([[
+        "library",
+        {
+          idMap: new MapIDMap(new Map([[libRoot, new Map([[nameField.id, sidFromString("old")]])]])),
+          root: libRoot }]]),
+      defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, libRoot)
+    environment.selection = {cursor: _childCursor(rootCursor(environment), libRoot, nameField.id)}
+    const harness = new EditorHarness(environment)
+
+    harness.run(() => input(harness.textInput(), "new"))
+
+    expect(stringFromID(harness.get(libRoot, nameField.id)!)).toBe("old")
 
     harness.unmount()
   })
