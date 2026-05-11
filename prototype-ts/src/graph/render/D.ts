@@ -46,10 +46,14 @@ export class DIdenticon {
   get children() { return [] as D[] }
   constructor(public guid: GUID, public size = 16) {} }
 
+export type ListInsertionPoint = {
+  entries: (needle: string) => {a: Entry, matches: Match[]}[],
+  editorCommands: EditorCommands }
+
 export class DList {
   dList() {}
   parent: Maybe<D>
-  constructor(public opening: string, public children: D[], public closing: string, public separator: string, public clickBefore: (i: number) => void, public collapseToggle: Maybe<CollapseToggle> = nothing) {
+  constructor(public opening: string, public children: D[], public closing: string, public separator: string, public collapseToggle: Maybe<CollapseToggle> = nothing, public insertionPoints: ListInsertionPoint[] = []) {
     children.map(child => { assert(child.parent === nothing); child.parent = this })
     mapMaybe(collapseToggle, collapseToggle => { assert(collapseToggle.parent === nothing); collapseToggle.parent = this }) }}
 

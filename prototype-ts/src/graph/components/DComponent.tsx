@@ -7,6 +7,7 @@ import { Block, D, Descend, GuidEditor, Label, matchD } from "../render/D"
 import { _get, environment } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderEditorComponent } from "./PlaceholderEditorComponent"
+import { ListInsertionEditorComponent } from "./ListInsertionEditorComponent"
 import { SelectionState } from "../editor/selectionIfSelected"
 import { StringEditorComponent } from "./StringEditorComponent"
 import { IdenticonComponent } from "./IdenticonComponent"
@@ -17,6 +18,9 @@ import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 
 const indentWidth = 16
 
+type DComponentChild = DComponent | PlaceholderEditorComponent | ListInsertionEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent
+type DComponentState = {activeListInsertion?: number}
+
 function clickedIDFromD(d: D): Maybe<ID> {
   return d instanceof Label ? d.cursor.label
     : d instanceof Descend ? _get(d.cursor.parent, d.cursor.label)
@@ -26,12 +30,13 @@ function isSingleLine(d: D): boolean {
   return matchD(d, block => false, line => !line.children.find(child => !isSingleLine(child)), dText => true, dIdenticon => true, dList => dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child)),
     descend => isSingleLine(descend.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
 
-export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
-  children: (DComponent | PlaceholderEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent)[]
+export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, DComponentState> {
+  state: DComponentState = {}
+  children: DComponentChild[]
   onScroll() { this.children.forEach(child => child.onScroll()) }
   render() {
     this.children = []
-    let addChild = (child: DComponent | PlaceholderEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent | null) => { if (child) this.children.push(child) }
+    let addChild = (child: DComponentChild | null) => { if (child) this.children.push(child) }
     let chooseID = () => maybe(clickedIDFromD(this.props.d), () => false, commitIDToActiveElement)
     let keepFocusForChooseID = (e: React.MouseEvent) => {
       if (chooseIDModifier(e)) {
@@ -58,17 +63,43 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
       dIdenticon => <span className="identicon" onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}><IdenticonComponent guid={dIdenticon.guid} size={dIdenticon.size} /></span>,
       dList => {
         let collapseToggle = dList.collapseToggle ? <DComponent ref={addChild} d={dList.collapseToggle} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /> : null
-        return dList.collapseToggle && dList.collapseToggle.collapsed
-          ? <span>{collapseToggle}<span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dList.opening}</span><span className="collapsedListContents">...</span><span>{dList.closing}</span></span>
-          : dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child))
-          // TOOD probably something to factor out of these two clauses
-          ? <span>{collapseToggle}<span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dList.opening}</span><span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(0)) }}> </span>{
-            dList.children.map(child => <DComponent ref={addChild} d={child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />) }
-            <span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(dList.children.length)) }}> {dList.closing}</span></span>
-          : <span>{collapseToggle}<span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dList.opening}</span><span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(0)) }}> </span>{join(intersperse(
-            dList.children.map(child => [<br />, <span style={{width: indentWidth * (this.props.depth + 1) + "px", display: "inline-block"}} />, <DComponent ref={addChild} d={child} depth={this.props.depth + 1} scrollParent={this.props.scrollParent} runE={this.props.runE} />]),
-            i => [<span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(i)) }}>{dList.separator}</span>]))}
-            <span onClick={e => { e.stopPropagation(); this.props.runE(() => dList.clickBefore(dList.children.length)) }}> {dList.closing}</span></span> },
+        let opening = <span onMouseDown={keepFocusForChooseID} onClick={selectOrChooseID}>{dList.opening}</span>
+        let closing = <span>{dList.closing}</span>
+        let singleLine = dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child))
+        let activeListInsertion = this.state.activeListInsertion !== undefined && dList.insertionPoints[this.state.activeListInsertion] ? this.state.activeListInsertion : undefined
+        let setActiveListInsertion = (i: number, active: boolean) => this.setState(({activeListInsertion}) => ({activeListInsertion: active ? i : activeListInsertion === i ? undefined : activeListInsertion}))
+        let insertionPoint = (i: number, label: string) => dList.insertionPoints[i]
+          ? <ListInsertionEditorComponent key={`insertion${i}`} ref={addChild} insertionPoint={dList.insertionPoints[i]} label={label} active={activeListInsertion === i} setActive={active => setActiveListInsertion(i, active)} scrollParent={this.props.scrollParent} runE={this.props.runE} />
+          : <span key={`insertion${i}`}>{label}</span>
+        let child = (d: D, i: number, depth: number) => <DComponent key={`child${i}`} ref={addChild} d={d} depth={depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />
+        let activeItems = (depth: number) => {
+          let items: React.ReactNode[] = []
+          for (let i = 0; i <= dList.children.length; i++) {
+            if (activeListInsertion === i) items.push(insertionPoint(i, ""))
+            if (i < dList.children.length) items.push(child(dList.children[i], i, depth)) }
+          return items }
+        let content = dList.collapseToggle && dList.collapseToggle.collapsed
+          ? [<span key="collapsed" className="collapsedListContents">...</span>]
+          : activeListInsertion !== undefined && singleLine
+          ? [<span key="leading"> </span>, ...join(intersperse(activeItems(this.props.depth).map(item => [item]), i => [<span key={`separator${i}`}>{dList.separator} </span>])), <span key="trailing"> </span>]
+          : activeListInsertion !== undefined
+          ? join(activeItems(this.props.depth + 1).map((item, i, items) => [
+              <br key={`br${i}`} />,
+              <span key={`indent${i}`} style={{width: indentWidth * (this.props.depth + 1) + "px", display: "inline-block"}} />,
+              item,
+              i + 1 < items.length ? <span key={`separator${i}`}>{dList.separator}</span> : null]))
+          : singleLine
+          ? [insertionPoint(0, " "), ...concatMap(dList.children, (d, i) => [
+            child(d, i, this.props.depth),
+            insertionPoint(i + 1, " ")])]
+          : [insertionPoint(0, " "), ...join(intersperse(
+            dList.children.map((d, i) => [
+              <br key={`br${i}`} />,
+              <span key={`indent${i}`} style={{width: indentWidth * (this.props.depth + 1) + "px", display: "inline-block"}} />,
+              child(d, i, this.props.depth + 1),
+              i === dList.children.length - 1 ? insertionPoint(dList.children.length, " ") : null]),
+            i => [insertionPoint(i, dList.separator)]))]
+        return <span>{collapseToggle}{opening}{content}{closing}</span> },
       descend => {
         let classNames = ["descend", ...maybeMap([[descend.unmatching, "unmatching"], [descend.selectionState === SelectionState.Hinted, "hinted"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
         return <span className={classNames.join(" ")}><DComponent ref={addChild} d={descend.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /></span> },

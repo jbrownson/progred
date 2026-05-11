@@ -29,6 +29,6 @@ describe("stringFromD", () => {
   })
 
   it("renders multiline lists with separators", () => {
-    expect(stringFromD(new DList("[", [new DText("a"), new DText("b")], "]", ",", () => {}))).toBe("[\n  a,\n  b ]")
+    expect(stringFromD(new DList("[", [new DText("a"), new DText("b")], "]", ","))).toBe("[\n  a,\n  b ]")
   })
 })

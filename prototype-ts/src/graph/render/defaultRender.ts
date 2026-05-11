@@ -3,7 +3,7 @@ import { buildEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import { cursorHasCycle } from "../cursor/cursorHasCycle"
-import { Block, CollapseToggle, D, DIdenticon, DList, DText, GuidEditor, Label, Line, matchD, NumberEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
+import { Block, CollapseToggle, D, DIdenticon, DList, DText, GuidEditor, Label, Line, ListInsertionPoint, matchD, NumberEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
 import { _get, edges, environment, set, Source, SourceID, SourceType } from "../Environment"
 import { Ctor, ctorField, EmptyList, Field, GUIDNonemptyList, HasID, headField, List, listFromID, matchList, nameField, NonemptyList, tailField } from "../graph"
 import { GUID, guidFromID, ID, matchID, numberFromNID, SID } from "../model/ID"
@@ -11,7 +11,7 @@ import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
 import { selectionIfSelected, selectionStateFromCursor } from "../editor/selectionIfSelected"
 import { getCollapsed, setCollapsed } from "../editor/setCollapsed"
-import { typeFromCursor } from "../cursor/typeFromCursor"
+import { typeFromCursor, typeFromListElementCursor } from "../cursor/typeFromCursor"
 import { selectedMissingLabels } from "./selectedMissingLabels"
 import { pendingEdgeLabel } from "./pendingEdgeLabel"
 import { copyResultForID } from "../editor/Copy"
@@ -118,12 +118,18 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
     let list = listFromID(sourceID.id, id => ({id}))
     let collapsed = fromMaybe(getCollapsed(listCursor), () => cursorHasCycle(listCursor))
     let collapseToggle = bindMaybe(list, list => list instanceof NonemptyList ? new CollapseToggle(collapsed, () => setCollapsed(listCursor, !collapsed)) : nothing)
-    if (collapsed && collapseToggle) return renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, [], closing, separator, () => {}, collapseToggle))
+    if (collapsed && collapseToggle) return renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, [], closing, separator, collapseToggle))
     let cursors = bindMaybe(list, list => cursorsFromList(listCursor, list))
-    return mapMaybe(cursors, ({emptyList, emptyListCursor, nonemptys}) => renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, nonemptys.map(({cursor, list}, i) => descend(cursor, list.id, headField.id, r)), closing, separator, i => i === nonemptys.length
-      // TODO factor something out of the next two lines
-      ? mapMaybe(guidFromID(emptyListCursor.parent), guid => { let newList = GUIDNonemptyList.new(id => ({id})).setTail(emptyList); set(guid, emptyListCursor.label, newList.id); environment().selection = {cursor: _childCursor(emptyListCursor, newList.id, headField.id)} })
-      : bindMaybe(nonemptys[i], ({list, cursor}) => mapMaybe(guidFromID(cursor.parent), guid => { let newList = GUIDNonemptyList.new(id => ({id})).setTail(list); set(guid, cursor.label, newList.id); environment().selection = {cursor: _childCursor(cursor, newList.id, headField.id)} })), collapseToggle )) )})}
+    let insertionPoint = (cursor: Cursor, oldTail: List<HasID>): ListInsertionPoint => {
+      let insert = (id: ID) => mapMaybe(guidFromID(cursor.parent), guid => {
+        let newList = GUIDNonemptyList.new(id => ({id})).setHead({id}).setTail(oldTail)
+        set(guid, cursor.label, newList.id)
+        environment().selection = {cursor: _childCursor(cursor, newList.id, headField.id)} })
+      return {
+        entries: buildEntries(typeFromListElementCursor(cursor), id => insert(id())),
+        editorCommands: {commit: id => mapMaybe(id, insert)} }}
+    return mapMaybe(cursors, ({emptyList, emptyListCursor, nonemptys}) => renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, nonemptys.map(({cursor, list}, i) => descend(cursor, list.id, headField.id, r)), closing, separator, collapseToggle,
+      [...nonemptys.map(({cursor, list}) => insertionPoint(cursor, list)), insertionPoint(emptyListCursor, emptyList)] )) )})}
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 

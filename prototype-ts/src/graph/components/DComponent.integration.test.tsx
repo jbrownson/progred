@@ -8,8 +8,8 @@ import type { CopyResult } from "../editor/Copy"
 import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
-import { _get, Environment, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, rootField, statementsField, tailField, viewsField } from "../graph"
+import { _get, Environment, set, withEnvironment } from "../Environment"
+import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, rootField, statementsField, tailField, viewsField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DComponent } from "./DComponent"
 import { createD, Descend } from "../render/D"
@@ -194,6 +194,15 @@ function rootHarness(render?: Render) {
   const environment = makeTestEnvironment({defaultRender: render ? tryFirst(render, defaultRender) : defaultRender})
   environment.selection = {cursor: rootCursor(environment)}
   return new EditorHarness(environment)
+}
+
+function emptyListHarness() {
+  const environment = makeTestEnvironment({defaultRender})
+  let list: GUIDEmptyList
+  withEnvironment(environment, () => {
+    list = GUIDEmptyList.new()
+    set(environment.rootViews.id, rootField.id, list.id) })
+  return {harness: new EditorHarness(environment), list: list!}
 }
 
 function copyActive(harness: EditorHarness) {
@@ -390,6 +399,71 @@ describe("DComponent editor integration", () => {
 
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
     expect(stringFromID(harness.get(list!, headField.id)!)).toBe("hello")
+
+    harness.unmount()
+  })
+
+  it("focuses a list insertion point without editing the graph", () => {
+    const {harness, list} = emptyListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+
+    expect(harness.get(harness.environment.rootViews.id, rootField.id)).toBe(list.id)
+    expect(harness.get(list.id, ctorField.id)).toBe(emptyListCtor.id)
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.unmount()
+  })
+
+  it("commits a list insertion point without a placeholder edit", () => {
+    const {harness} = emptyListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.typeAndEnter("hello")
+
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(list).not.toBe(undefined)
+    expect(listStrings(harness, list!)).toEqual(["hello"])
+    expect(harness.environment.selection?.cursor.parent).toBe(list)
+    expect(harness.environment.selection?.cursor.label).toBe(headField.id)
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.unmount()
+  })
+
+  it("commits a list insertion point by clicking a completion entry", () => {
+    const {harness} = emptyListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.run(() => input(harness.textInput(), "hello"))
+    harness.click(harness.first(".entrylist li"))
+
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(list).not.toBe(undefined)
+    expect(listStrings(harness, list!)).toEqual(["hello"])
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.unmount()
+  })
+
+  it("renders separators around active list insertion points", () => {
+    const {harness} = emptyListHarness()
+    const commaCount = () => harness.container.textContent!.split(",").length - 1
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.typeAndEnter("first")
+    harness.click(harness.container.querySelectorAll(".listInsertionPoint")[1])
+    harness.typeAndEnter("second")
+    expect(commaCount()).toBe(1)
+
+    harness.click(harness.container.querySelectorAll(".listInsertionPoint")[1])
+
+    expect(commaCount()).toBe(2)
+    expect(document.activeElement).toBe(harness.container.querySelector("input[placeholder=item]"))
+    harness.typeAndEnter("zero")
+
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(listStrings(harness, list!)).toEqual(["first", "zero", "second"])
 
     harness.unmount()
   })

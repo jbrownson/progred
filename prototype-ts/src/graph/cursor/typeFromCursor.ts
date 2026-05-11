@@ -15,3 +15,9 @@ function listNestedType(cursor: Maybe<Cursor>): Maybe<Type> {
       : bindMaybe(Field.fromID(cursor.label), field => field.type)) }
 
 export function typeFromCursor(cursor: Cursor): Maybe<Type> { return listNestedType(cursor) }
+
+export function typeFromListElementCursor(cursor: Cursor): Maybe<Type> {
+  return bindMaybe(listNestedType(findListStart(cursor)), type =>
+    type instanceof ListType
+      ? type.type
+      : nothing) }

@@ -101,6 +101,22 @@ textarea.i {
   stroke: none }
 .edgeLabel .identicon > svg rect:not(.identiconBackground) { opacity: 0.9 }
 .edgefield { display: inline-block }
+.listInsertionPoint {
+  cursor: text;
+  display: inline-block;
+  height: calc(var(--editor-font-size) * var(--editor-line-height));
+  line-height: calc(var(--editor-font-size) * var(--editor-line-height));
+  min-width: 0.5ch;
+  position: relative;
+  vertical-align: top;
+  outline: none }
+.listInsertionPointHitbox {
+  bottom: 0;
+  left: 50%;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 4px }
 .entrylist {
   position: absolute;
   background: white;

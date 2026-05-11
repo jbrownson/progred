@@ -67,7 +67,7 @@ describe("renderList", () => {
     })
   })
 
-  it("clickBefore appends to the empty tail and selects the new head", () => {
+  it("insertion points append to the empty tail and select the new head", () => {
     withTestEnvironment(environment => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
@@ -75,7 +75,7 @@ describe("renderList", () => {
       const d = renderList()(c, {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
       const dList = findD(d!, (d): d is DList => d instanceof DList)
 
-      dList?.clickBefore(1)
+      dList?.insertionPoints[1].editorCommands.commit?.(sidFromString("b"))
 
       const newTail = environment.selection?.cursor.parent
       expect(environment.selection?.cursor.label).toBe(headField.id)
