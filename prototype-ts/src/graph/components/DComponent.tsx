@@ -7,7 +7,7 @@ import { cursorFromD } from "../cursor/cursorFromD"
 import { Block, D, Descend, GuidEditor, Label, matchD } from "../render/D"
 import { _get, environment } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
-import { PlaceholderComponent } from "./PlaceholderComponent"
+import { PlaceholderEditorComponent } from "./PlaceholderEditorComponent"
 import { SelectionState } from "../editor/selectionIfSelected"
 import { StringEditorComponent } from "./StringEditorComponent"
 import { IdenticonComponent } from "./IdenticonComponent"
@@ -28,11 +28,11 @@ function isSingleLine(d: D): boolean {
     descend => isSingleLine(descend.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
 
 export class DComponent extends React.Component<{d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
-  children: (DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent)[]
+  children: (DComponent | PlaceholderEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent)[]
   onScroll() { this.children.forEach(child => child.onScroll()) }
   render() {
     this.children = []
-    let addChild = (child: DComponent | PlaceholderComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent | null) => { if (child) this.children.push(child) }
+    let addChild = (child: DComponent | PlaceholderEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent | null) => { if (child) this.children.push(child) }
     let chooseID = () => maybe(clickedIDFromD(this.props.d), () => false, chooseIDForSelection)
     let keepFocusForChooseID = (e: React.MouseEvent) => {
       if (chooseIDModifier(e)) {
@@ -78,7 +78,7 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
       label => <span className="edgeLabel"><DComponent ref={addChild} d={label.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} /></span>,
       collapseToggle => <span className="collapseToggle" onClick={e => { e.stopPropagation(); this.props.runE(collapseToggle.action) }}>{collapseToggle.collapsed ? "▸" : "▾"}</span>,
       button => <input type="button" value={button.text} onClick={e => { e.stopPropagation(); this.props.runE(button.action) }} />,
-      placeholder => <PlaceholderComponent ref={addChild} placeholder={placeholder} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
+      placeholderEditor => <PlaceholderEditorComponent ref={addChild} placeholderEditor={placeholderEditor} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       stringEditor => <StringEditorComponent ref={addChild} stringEditor={stringEditor} runE={this.props.runE} />,
       numberEditor => <NumberEditorComponent ref={addChild} numberEditor={numberEditor} runE={this.props.runE} /> )}}
 
@@ -97,9 +97,9 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, depth
       tabIndex={0}
       onMouseDown={e => { if (!(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault() }}
       onClick={e => { e.stopPropagation(); this.props.runE(() => environment().selection = {cursor: this.props.guidEditor.cursor}) }}
-      onFocus={e => handleFocusEvent(() => this.props.runE(() => environment().selection = {cursor: this.props.guidEditor.cursor}))}
-      onBlur={e => handleFocusEvent(() => this.props.runE(() => {
-        if (environment().selection && cursorsEqual(environment().selection.cursor, this.props.guidEditor.cursor)) environment().selection = nothing }))}
+      onFocus={e => { if (e.target === e.currentTarget) handleFocusEvent(() => this.props.runE(() => environment().selection = {cursor: this.props.guidEditor.cursor})) }}
+      onBlur={e => { if (e.target === e.currentTarget) handleFocusEvent(() => this.props.runE(() => {
+        if (environment().selection && cursorsEqual(environment().selection.cursor, this.props.guidEditor.cursor)) environment().selection = nothing })) }}
       ref={span => { this.span = span }} >
       <DComponent
         ref={dComponent => { this.child = dComponent || nothing }}

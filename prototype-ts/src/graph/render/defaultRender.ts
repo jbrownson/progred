@@ -3,7 +3,7 @@ import { buildEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import { cursorHasCycle } from "../cursor/cursorHasCycle"
-import { Block, CollapseToggle, D, DIdenticon, DList, DText, GuidEditor, Label, Line, matchD, NumberEditor, Placeholder, StringEditor, SupportsUnderselection } from "./D"
+import { Block, CollapseToggle, D, DIdenticon, DList, DText, GuidEditor, Label, Line, matchD, NumberEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
 import { _get, edges, environment, set, Source, SourceID, SourceType } from "../Environment"
 import { Ctor, ctorField, EmptyList, Field, GUIDNonemptyList, HasID, headField, List, listFromID, matchList, nameField, NonemptyList, tailField } from "../graph"
 import { GUID, guidFromID, ID, matchID, numberFromNID, SID } from "../model/ID"
@@ -15,6 +15,7 @@ import { typeFromCursor } from "../cursor/typeFromCursor"
 import { selectedMissingLabels } from "./selectedMissingLabels"
 import { pendingEdgeLabel } from "./pendingEdgeLabel"
 import { copyResultForID } from "../editor/Copy"
+import type { EditorCommands } from "../editor/EditorCommands"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>) => D): (cursor: Cursor, id: Maybe<SourceID>) => D {
   return (cursor, sourceID) => fromMaybe(render(cursor, sourceID), () => defaultRender(cursor, sourceID)) }
@@ -29,8 +30,23 @@ export const defaultRender = tryFirst(renderList(), _defaultRender)
 
 function renderNothing(cursor: Cursor): D {
   let selectedState = bindMaybe(selectionIfSelected(cursor), selection =>
-    ({entries: buildEntries(typeFromCursor(cursor), id => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id()))), placeholderState: selection}) )
-  return new Placeholder(fromMaybe(bindMaybe(Field.fromID(cursor.label), field => field.name), () => "[unnamed]"), selectedState) }
+    ({entries: buildEntries(typeFromCursor(cursor), id => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id()))), editorState: selection}) )
+  return new PlaceholderEditor(fromMaybe(bindMaybe(Field.fromID(cursor.label), field => field.name), () => "[unnamed]"), selectedState, commitIDCommands(cursor)) }
+
+export function commitIDCommands(cursor: Cursor): EditorCommands {
+  return {
+    commitID: id => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id)) }}
+
+export function editorCommands(cursor: Cursor, id: ID): EditorCommands {
+  return {
+    ...commitIDCommands(cursor),
+    copy: () => ({referenceID: id, copyResult: copyResultForID(id)}) }}
+
+export function renderDocumentGuidEditor(cursor: Cursor, sourceID: SourceID, d: D): D {
+  let guid = guidFromID(sourceID.id)
+  return sourceID.source.source === SourceType.DocumentType && guid !== undefined
+    ? new SupportsUnderselection(new GuidEditor(cursor, guid, d, selectionStateFromCursor(cursor), maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel), editorCommands(cursor, guid)))
+    : d }
 
 function isSingleLine(d: D): boolean {
   return matchD(d, block => false, line => !booleanFromMaybe(line.children.find(child => !isSingleLine(child))), dText => true, dIdenticon => true, dList => dList.children.length > 1 || !dList.children.find(child => !isSingleLine(child)),
@@ -76,7 +92,7 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
     new GuidEditor(cursor, guid, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
       selectionStateFromCursor(cursor),
       maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel),
-      {copy: () => ({referenceID: guid, copyResult: copyResultForID(guid)})}),
+      editorCommands(cursor, guid)),
     ...nameDs,
     ...(hasName || labels.length > 0 || pendingEdgeLabelDs.length > 0 ? [new CollapseToggle(collapsed, () => setCollapsed(cursor, !collapsed))] : []),
     ...fieldDs )
@@ -95,20 +111,20 @@ export function renderListParens(separator = ",", r = alwaysFail) { return rende
 export function renderListCurly(separator = ",", r = alwaysFail) { return renderList("{", "}", separator, r) }
 
 export function renderList(opening = "[", closing = "]", separator = ",", r = alwaysFail): (listCursor: Cursor, sourceID: Maybe<SourceID>) => Maybe<D> {
-  return (listCursor, sourceID) => {
-    let list = bindMaybe(sourceID, sourceID => listFromID(sourceID.id, id => ({id})))
+  return (listCursor, sourceID) => bindMaybe(sourceID, sourceID => {
+    let list = listFromID(sourceID.id, id => ({id}))
     let collapsed = fromMaybe(getCollapsed(listCursor), () => cursorHasCycle(listCursor))
     let collapseToggle = bindMaybe(list, list => list instanceof NonemptyList ? new CollapseToggle(collapsed, () => setCollapsed(listCursor, !collapsed)) : nothing)
-    if (collapsed && collapseToggle) return new DList(opening, [], closing, separator, () => {}, collapseToggle)
+    if (collapsed && collapseToggle) return renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, [], closing, separator, () => {}, collapseToggle))
     let cursors = bindMaybe(list, list => cursorsFromList(listCursor, list))
-    return mapMaybe(cursors, ({emptyList, emptyListCursor, nonemptys}) => new DList(opening, nonemptys.map(({cursor, list}, i) => descend(cursor, list.id, headField.id, r)), closing, separator, i => i === nonemptys.length
+    return mapMaybe(cursors, ({emptyList, emptyListCursor, nonemptys}) => renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, nonemptys.map(({cursor, list}, i) => descend(cursor, list.id, headField.id, r)), closing, separator, i => i === nonemptys.length
       // TODO factor something out of the next two lines
       ? mapMaybe(guidFromID(emptyListCursor.parent), guid => { let newList = GUIDNonemptyList.new(id => ({id})).setTail(emptyList); set(guid, emptyListCursor.label, newList.id); environment().selection = {cursor: _childCursor(emptyListCursor, newList.id, headField.id)} })
-      : bindMaybe(nonemptys[i], ({list, cursor}) => mapMaybe(guidFromID(cursor.parent), guid => { let newList = GUIDNonemptyList.new(id => ({id})).setTail(list); set(guid, cursor.label, newList.id); environment().selection = {cursor: _childCursor(cursor, newList.id, headField.id)} })), collapseToggle ))}}
+      : bindMaybe(nonemptys[i], ({list, cursor}) => mapMaybe(guidFromID(cursor.parent), guid => { let newList = GUIDNonemptyList.new(id => ({id})).setTail(list); set(guid, cursor.label, newList.id); environment().selection = {cursor: _childCursor(cursor, newList.id, headField.id)} })), collapseToggle )) )})}
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 
 export function renderNumber(cursor: Cursor, number: number, source: Source): D {
-  return new NumberEditor(number, number, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), numberEditorState: selection})), {copy: () => ({referenceID: number, copyResult: copyResultForID(number)})}) }
+  return new NumberEditor(number, number, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), numberEditorState: selection})), editorCommands(cursor, number)) }
 export function renderString(cursor: Cursor, sid: SID, string: string, source: Source): D {
-  return new StringEditor(sid, string, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), stringEditorState: selection})), {copy: () => ({referenceID: sid, copyResult: copyResultForID(sid)})}) }
+  return new StringEditor(sid, string, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), stringEditorState: selection})), editorCommands(cursor, sid)) }

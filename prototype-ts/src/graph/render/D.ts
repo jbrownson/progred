@@ -11,16 +11,16 @@ import { SelectionState, selectionStateFromCursor } from "../editor/selectionIfS
 import { GUID, NID, SID } from "../model/ID"
 import type { EditorCommands } from "../editor/EditorCommands"
 
-export type D = Block | Line | DText | DIdenticon | DList | Descend | GuidEditor | SupportsUnderselection | Label | CollapseToggle | Button | Placeholder | StringEditor | NumberEditor
+export type D = Block | Line | DText | DIdenticon | DList | Descend | GuidEditor | SupportsUnderselection | Label | CollapseToggle | Button | PlaceholderEditor | StringEditor | NumberEditor
 
 export function matchD<A>(d: D, blockF: (block: Block) => A, lineF: (line: Line) => A, dTextF: (dText: DText) => A, dIdenticonF: (dIdenticon: DIdenticon) => A, dListF: (dList: DList) => A,
-    descendF: (descend: Descend) => A, guidEditorF: (guidEditor: GuidEditor) => A, supportsUnderselectionF: (supportsUnderselection: SupportsUnderselection) => A, labelF: (label: Label) => A, collapseToggleF: (collapseToggle: CollapseToggle) => A, buttonF: (button: Button) => A, placeholderF: (placeholder: Placeholder) => A,
+    descendF: (descend: Descend) => A, guidEditorF: (guidEditor: GuidEditor) => A, supportsUnderselectionF: (supportsUnderselection: SupportsUnderselection) => A, labelF: (label: Label) => A, collapseToggleF: (collapseToggle: CollapseToggle) => A, buttonF: (button: Button) => A, placeholderEditorF: (placeholderEditor: PlaceholderEditor) => A,
     stringEditorF: (stringEditor: StringEditor) => A, numberEditorF: (numberEditor: NumberEditor) => A): A {
   return d instanceof Block ? blockF(d) : d instanceof Line ? lineF(d) : d instanceof DText ? dTextF(d) : d instanceof DIdenticon ? dIdenticonF(d) : d instanceof DList ? dListF(d) : d instanceof Descend ? descendF(d) :
-    d instanceof GuidEditor ? guidEditorF(d) : d instanceof SupportsUnderselection ? supportsUnderselectionF(d) : d instanceof Label ? labelF(d) : d instanceof CollapseToggle ? collapseToggleF(d) : d instanceof Button ? buttonF(d) : d instanceof Placeholder ? placeholderF(d) : d instanceof StringEditor ? stringEditorF(d) : numberEditorF(d) }
+    d instanceof GuidEditor ? guidEditorF(d) : d instanceof SupportsUnderselection ? supportsUnderselectionF(d) : d instanceof Label ? labelF(d) : d instanceof CollapseToggle ? collapseToggleF(d) : d instanceof Button ? buttonF(d) : d instanceof PlaceholderEditor ? placeholderEditorF(d) : d instanceof StringEditor ? stringEditorF(d) : numberEditorF(d) }
 
 export function isD<A>(a: A): Maybe<D> {
-  return a instanceof Block || a instanceof Line || a instanceof DText || a instanceof DIdenticon || a instanceof DList || a instanceof Descend || a instanceof GuidEditor || a instanceof SupportsUnderselection || a instanceof Label || a instanceof CollapseToggle || a instanceof Button || a instanceof Placeholder || a instanceof StringEditor || a instanceof NumberEditor ? a : nothing }
+  return a instanceof Block || a instanceof Line || a instanceof DText || a instanceof DIdenticon || a instanceof DList || a instanceof Descend || a instanceof GuidEditor || a instanceof SupportsUnderselection || a instanceof Label || a instanceof CollapseToggle || a instanceof Button || a instanceof PlaceholderEditor || a instanceof StringEditor || a instanceof NumberEditor ? a : nothing }
 
 export class Block {
   block() {} // These are a workaround this problem: https://github.com/Microsoft/TypeScript/issues/15615
@@ -89,12 +89,12 @@ export class Button {
   get children() { return [] as D[] }
   constructor(public text: string, public action: () => void) {} }
 
-export type PlaceholderState = {value?: string, itemSelection?: number, entryListAbove?: boolean, completionOpen?: boolean}
-export type PlaceholderSelectedState = {entries: (needle: string) => {a: Entry, matches: Match[]}[], placeholderState: PlaceholderState}
-export class Placeholder {
+export type PlaceholderEditorState = {value?: string, itemSelection?: number, entryListAbove?: boolean, completionOpen?: boolean}
+export type PlaceholderEditorSelectedState = {entries: (needle: string) => {a: Entry, matches: Match[]}[], editorState: PlaceholderEditorState}
+export class PlaceholderEditor {
   parent: Maybe<D>
   get children() { return [] as D[] }
-  constructor(public name: string, public selectedState: Maybe<PlaceholderSelectedState>) {} }
+  constructor(public name: string, public selectedState: Maybe<PlaceholderEditorSelectedState>, public editorCommands: EditorCommands) {} }
 
 export type StringEditorSelectedState = {writable: boolean}
 export class StringEditor {

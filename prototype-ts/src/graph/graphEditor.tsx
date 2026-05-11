@@ -2,7 +2,7 @@ import * as React from "react"
 import { createRoot } from "react-dom/client"
 import { groupBy } from "../lib/Array"
 import { assert } from "../lib/assert"
-import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybe2, maybeToArray, nothing } from "../lib/Maybe"
+import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
 import { chooseIDForSelection } from "./editor/chooseIDForSelection"
 import { Cursor } from "./cursor/Cursor"
@@ -265,17 +265,20 @@ function _copy() {
       const {referenceID, copyResult} = copy()
       progred.writeClipboardText(clipboardFormat, clipboardStringForCopyResult(referenceID, copyResult)) }))}
 
+function commitIDToActiveElement(id: ID) {
+  bindMaybe(editorCommandsForActiveElement(), commands => mapMaybe(commands.commitID, commitID => commitID(id)))}
+
 function _pasteID() {
-  maybe2(environment().selection, idFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
+  maybe(idFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
-      bindMaybe(environment().selection, selection => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, sidFromString(progred.readPlainText())))) },
-    (selection, id) => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, id)) )}
+      commitIDToActiveElement(sidFromString(progred.readPlainText())) },
+    commitIDToActiveElement) }
 
 function _pasteStructure() {
-  maybe2(environment().selection, copyIDFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
+  maybe(copyIDFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
-      bindMaybe(environment().selection, selection => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, sidFromString(progred.readPlainText())))) },
-      (selection, id) => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, id)) )}
+      commitIDToActiveElement(sidFromString(progred.readPlainText())) },
+      commitIDToActiveElement) }
 
 function _save(filename: string) {
   let e = environment()

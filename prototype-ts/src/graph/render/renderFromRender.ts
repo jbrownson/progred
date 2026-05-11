@@ -2,7 +2,7 @@ import { bindMaybe, guardMaybe, mapMaybe, Maybe, maybeMap, sequenceMaybe } from 
 import { childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import { Block, D, DText, Label, Line } from "./D"
-import { renderList } from "./defaultRender"
+import { renderDocumentGuidEditor, renderList } from "./defaultRender"
 import { _get, SourceID } from "../Environment"
 import * as G from "../graph"
 import { descend, dispatch, Render } from "./R"
@@ -21,7 +21,7 @@ function dConstructorFromD(d: G.D): Maybe<(cursor: Cursor, sourceID: SourceID) =
 export function renderFromRender(render: G.Render): Maybe<Render> {
   return G.matchRender(render,
     renderCtor => bindMaybe(bindMaybe(renderCtor.d, dConstructorFromD), dConstructor => mapMaybe(renderCtor.forCtor, ctor => (cursor: Cursor, sourceID: Maybe<SourceID>) =>
-      bindMaybe(sourceID, sourceID => bindMaybe(guardMaybe(_get(sourceID.id, G.ctorField.id) === ctor.id), x => dConstructor(cursor, sourceID))) )),
+      bindMaybe(sourceID, sourceID => bindMaybe(guardMaybe(_get(sourceID.id, G.ctorField.id) === ctor.id), x => mapMaybe(dConstructor(cursor, sourceID), d => renderDocumentGuidEditor(cursor, sourceID, d)))) )),
     _renderList => renderList(_renderList.opening, _renderList.closing, _renderList.separator, bindMaybe(_renderList.contextRender, renderFromRender)),
     _renderNameShallow => mapMaybe(_renderNameShallow.forCtor, renderNameShallow),
     _dispatch => mapMaybe(_dispatch.renders, renders => dispatch(...maybeMap(renders, renderFromRender))) )}

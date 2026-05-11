@@ -4,6 +4,7 @@ import type { CopyResult } from "./Copy"
 
 export type EditorCommands = {
   copy?: () => {referenceID: ID, copyResult: CopyResult}
+  commitID?: (id: ID) => void
 }
 
 const editorCommandsKey = Symbol("editorCommands")

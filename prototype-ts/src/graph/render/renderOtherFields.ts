@@ -1,9 +1,9 @@
 import { setDifference } from "../../lib/Array"
 import { Maybe, maybe } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
-import { D, Line, SupportsUnderselection } from "./D"
-import { renderField } from "./defaultRender"
-import { edges, SourceID, SourceType } from "../Environment"
+import { D, Line } from "./D"
+import { renderDocumentGuidEditor, renderField } from "./defaultRender"
+import { edges, SourceID } from "../Environment"
 import { ctorField, Field } from "../graph"
 import { guidFromID } from "../model/ID"
 import { pendingEdgeLabel } from "./pendingEdgeLabel"
@@ -21,6 +21,4 @@ export function renderOtherFields(cursor: Cursor, sourceID: Maybe<SourceID>, d: 
     const dWithOtherFields = unknownIds.length > 0 || pendingEdgeLabelDs.length > 0
       ? new Line(d, ...unknownIds.map(unknownId => renderField(cursor, sourceID.id, unknownId)), ...pendingEdgeLabelDs)
       : d
-    return sourceID.source.source === SourceType.DocumentType && guid !== undefined
-      ? new SupportsUnderselection(dWithOtherFields)
-      : dWithOtherFields })}
+    return renderDocumentGuidEditor(cursor, sourceID, dWithOtherFields) })}
