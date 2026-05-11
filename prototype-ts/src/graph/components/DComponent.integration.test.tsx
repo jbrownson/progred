@@ -1,7 +1,7 @@
 import * as React from "react"
 import { act } from "react"
 import { createRoot, Root } from "react-dom/client"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import type { CopyResult } from "../editor/Copy"
@@ -9,8 +9,8 @@ import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, GUIDApp, GUIDDescend, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, rootField, statementsField, tailField, viewsField } from "../graph"
-import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
+import { appCtor, checkNumber, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, GUIDApp, GUIDBinaryInline, GUIDConditional, GUIDDescend, GUIDDifference, GUIDEvaluate, GUIDField, GUIDFunctionCall, GUIDFunctionDeclaration, GUIDJavaScriptProgram, GUIDLessThanOrEqualTo, GUIDLine, GUIDParameter, GUIDProduct, GUIDRenderCtor, GUIDReturn, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, rootField, statementsField, tailField, viewsField } from "../graph"
+import { GUID, ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DComponent } from "./DComponent"
 import { createD, Descend } from "../render/D"
 import { defaultRender, tryFirst } from "../render/defaultRender"
@@ -22,6 +22,8 @@ import { SparseSpanningTree } from "../SparseSpanningTree"
 import { defaultKeyHandler } from "../editor/keyHandler"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
+import { libraries } from "../libraries/libraries"
+import { renders } from "../render/renders"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -200,6 +202,56 @@ function pasteStructureIntoActive(harness: EditorHarness, copy: {referenceID: ID
     expect(id).not.toBe(undefined)
     expect(commitIDToActiveElement(id!)).toBe(true)
     return id! })
+}
+
+function withJavascriptHost<A>(f: (javascriptCalls: string[]) => A): A {
+  const oldProgred = window.progred
+  const javascriptCalls: string[] = []
+  const log = vi.spyOn(console, "log").mockImplementation(() => {})
+  window.progred = {
+    runJavascript: (javascript: string, sandboxObject: Record<string, unknown> = {}) => {
+      javascriptCalls.push(javascript)
+      return Function("sandbox", "javascript", "with (sandbox) { return eval(javascript) }")(sandboxObject, javascript) },
+  } as typeof window.progred
+  try {
+    return f(javascriptCalls)
+  } finally {
+    if (oldProgred) window.progred = oldProgred
+    else delete (window as unknown as {progred?: typeof window.progred}).progred
+    log.mockRestore() }}
+
+function factorialProgram(programID: GUID) {
+  const program = new GUIDJavaScriptProgram(programID)
+  const n = GUIDParameter.new().setName("n")
+  const factorial = GUIDFunctionDeclaration.new()
+    .setName("factorial")
+    .setParameters([n])
+  const baseCase = GUIDBinaryInline.new()
+    .setLeft(n)
+    .setBinaryOperator(GUIDLessThanOrEqualTo.new())
+    .setRight(checkNumber(1)!)
+  const recursiveArgument = GUIDBinaryInline.new()
+    .setLeft(n)
+    .setBinaryOperator(GUIDDifference.new())
+    .setRight(checkNumber(1)!)
+  const recursiveCall = GUIDFunctionCall.new()
+    .setFunction(factorial)
+    .setArguments([recursiveArgument])
+  const recursiveProduct = GUIDBinaryInline.new()
+    .setLeft(n)
+    .setBinaryOperator(GUIDProduct.new())
+    .setRight(recursiveCall)
+  const returnStatement = GUIDReturn.new()
+    .setExpression(GUIDConditional.new()
+      .setCondition(baseCase)
+      .setTrueExpression(checkNumber(1)!)
+      .setFalseExpression(recursiveProduct))
+  factorial.setStatements([returnStatement])
+  const topCall = GUIDFunctionCall.new()
+    .setFunction(factorial)
+    .setArguments([checkNumber(5)!])
+  program.setStatements([factorial, topCall])
+  return program
 }
 
 function testLibrary() {
@@ -901,4 +953,28 @@ describe("DComponent editor integration", () => {
 
     harness.unmount()
   })
+
+  it("creates an Evaluate shell and renders a factorial program result", () => withJavascriptHost(javascriptCalls => {
+    const environment = makeTestEnvironment({libraries, defaultRender: tryFirst(renders, defaultRender)})
+    environment.selection = {cursor: rootCursor(environment)}
+    const harness = new EditorHarness(environment)
+
+    harness.typeAndEnter("new Evaluate")
+    const evaluate = harness.get(environment.rootViews.id, rootField.id)
+    expect(evaluate).not.toBe(undefined)
+    expect(harness.get(evaluate!, ctorField.id)).toBe(evaluateCtor.id)
+
+    harness.typeAndEnter("new JavaScriptProgram")
+    const javascriptProgram = harness.get(evaluate!, javascriptProgramField.id)
+    expect(javascriptProgram).not.toBe(undefined)
+    expect(harness.get(javascriptProgram!, ctorField.id)).toBe(javascriptProgramCtor.id)
+
+    harness.runEdit(() => factorialProgram(javascriptProgram as GUID))
+
+    expect(javascriptCalls[javascriptCalls.length - 1]).toContain("function factorial")
+    expect(javascriptCalls[javascriptCalls.length - 1]).toContain("factorial(5)")
+    expect(harness.container.textContent).toContain("120")
+
+    harness.unmount()
+  }))
 })

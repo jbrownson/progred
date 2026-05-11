@@ -5,8 +5,9 @@ export function progredDataPlugin(): Plugin {
   return {
     name: "progred-data",
     async load(id) {
-      if (!id.endsWith(".progred")) return null
-      return `export default ${await readFile(id, "utf8")}`
+      const [file] = id.split("?")
+      if (!file.endsWith(".progred")) return null
+      return `export default ${await readFile(file, "utf8")}`
     },
   }
 }
