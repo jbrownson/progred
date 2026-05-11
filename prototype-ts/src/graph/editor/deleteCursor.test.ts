@@ -5,27 +5,20 @@ import { MapIDMap } from "../model/MapIDMap"
 import { sidFromString } from "../model/ID"
 import { SparseSpanningTree } from "../SparseSpanningTree"
 import { withTestEnvironment } from "../testHelpers"
-import { deleteCursor, deleteSelection } from "./deleteSelection"
+import { deleteCursor } from "./deleteCursor"
 
 function cursor() {
   return new Cursor(undefined, "guid-node", sidFromString("label"), new SparseSpanningTree())
 }
 
-describe("deleteSelection", () => {
+describe("deleteCursor", () => {
   it("deletes document edges at the selected cursor", () => {
     withTestEnvironment(environment => {
       const c = cursor()
       environment.guidMap.set("guid-node", c.label, "guid-target")
-      environment.selection = {cursor: c}
 
-      expect(deleteSelection()).toBe(true)
+      expect(deleteCursor(c)).toBe(true)
       expect(_get("guid-node", c.label)).toBe(undefined)
-    })
-  })
-
-  it("does nothing without a selection", () => {
-    withTestEnvironment(() => {
-      expect(deleteSelection()).toBe(false)
     })
   })
 

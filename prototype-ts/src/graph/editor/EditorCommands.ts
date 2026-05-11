@@ -1,14 +1,12 @@
 import { Maybe, maybe, nothing } from "../../lib/Maybe"
-import type { Descend } from "../render/D"
 import type { ID } from "../model/ID"
 import type { CopyResult } from "./Copy"
 
-export type DeleteDirection = "forward" | "backward"
+export type Commit = (id: Maybe<ID>) => void
 
 export type EditorCommands = {
   copy?: () => {referenceID: ID, copyResult: CopyResult}
-  commitID?: (id: ID) => void
-  delete?: (rootDescend: Descend, viewsDescend: Maybe<Descend>, direction: DeleteDirection) => boolean
+  commit?: Commit
 }
 
 const editorCommandsKey = Symbol("editorCommands")
@@ -28,12 +26,10 @@ export function editorCommandsForActiveElement(): Maybe<EditorCommands> {
   return element instanceof HTMLElement ? (element as EditorCommandsElement)[editorCommandsKey] : nothing
 }
 
-export function commitIDToActiveElement(id: ID): boolean {
+export function commitToActiveElement(id: Maybe<ID>): boolean {
   return maybe(editorCommandsForActiveElement(), () => false, commands =>
-    maybe(commands.commitID, () => false, commitID => {
-      commitID(id)
+    maybe(commands.commit, () => false, commit => {
+      commit(id)
       return true })) }
 
-export function deleteActiveElement(rootDescend: Descend, viewsDescend: Maybe<Descend>, direction: DeleteDirection): boolean {
-  return maybe(editorCommandsForActiveElement(), () => false, commands =>
-    maybe(commands.delete, () => false, delete_ => delete_(rootDescend, viewsDescend, direction))) }
+export function commitIDToActiveElement(id: ID): boolean { return commitToActiveElement(id) }

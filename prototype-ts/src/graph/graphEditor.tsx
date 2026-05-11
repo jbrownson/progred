@@ -12,7 +12,7 @@ import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
-import { commitIDToActiveElement, deleteActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
+import { commitIDToActiveElement, commitToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
@@ -81,7 +81,7 @@ function handleMenuAction(action: string) {
       break
     case "cut":
       if (actionIfTextInputWithSelection("cut:")) return
-      rootComponent.runE(() => { _copy(); deleteActiveElement(rootComponent.rootDescend, rootComponent.viewsDescend, "forward"); environment().selection = nothing })
+      rootComponent.runE(() => { _copy(); commitToActiveElement(nothing); environment().selection = nothing })
       break
     case "copy":
       if (actionIfTextInputWithSelection("copy:")) return
@@ -178,7 +178,7 @@ function startNewEdge() {
 function deleteActiveSelection(): boolean {
   return graphHighlight !== nothing
     ? deleteGraphSelection()
-    : deleteActiveElement(rootComponent.rootDescend, rootComponent.viewsDescend, "forward") }
+    : commitToActiveElement(nothing) }
 
 function deleteGraphSelection(): boolean {
   return maybe(graphHighlight, () => false, graphSelection => {

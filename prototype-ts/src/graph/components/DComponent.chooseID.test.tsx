@@ -22,7 +22,7 @@ afterEach(() => {
 function focusedInput(committed: ID[]) {
   let input = document.createElement("input")
   document.body.appendChild(input)
-  attachEditorCommands(input, {commitID: id => committed.push(id)})
+  attachEditorCommands(input, {commit: id => { if (id !== undefined) committed.push(id) }})
   input.focus()
 }
 

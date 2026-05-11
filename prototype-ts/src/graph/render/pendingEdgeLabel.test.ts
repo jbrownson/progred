@@ -42,7 +42,7 @@ describe("pendingEdgeLabel", () => {
       environment.selection = {cursor: c, pendingEdgeLabel: true}
       const placeholder = (((pendingEdgeLabel(c, "guid-parent")[0] as Block).children[0] as Line).children[0] as PlaceholderEditor)
 
-      placeholder.editorCommands.commitID?.(sidFromString("label"))
+      placeholder.editorCommands.commit?.(sidFromString("label"))
 
       expect(environment.selection?.pendingEdgeLabel).toBe(undefined)
       expect(environment.selection?.cursor.parentCursor).toBe(c)

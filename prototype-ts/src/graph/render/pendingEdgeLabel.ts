@@ -1,4 +1,4 @@
-import { maybe } from "../../lib/Maybe"
+import { mapMaybe, maybe } from "../../lib/Maybe"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import { buildEdgeLabelEntries } from "../editor/buildEntries"
@@ -15,6 +15,6 @@ export function pendingEdgeLabel(cursor: Cursor, guid: GUID): D[] {
           entries: buildEdgeLabelEntries(id => {
             environment().selection = {cursor: _childCursor(cursor, guid, id())} }),
           editorState: selection },
-          {commitID: id => environment().selection = {cursor: _childCursor(cursor, guid, id)}}),
+          {commit: id => mapMaybe(id, id => environment().selection = {cursor: _childCursor(cursor, guid, id)})}),
         new DText(" →"))) ]
       : []) }

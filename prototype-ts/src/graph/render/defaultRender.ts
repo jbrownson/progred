@@ -16,7 +16,7 @@ import { selectedMissingLabels } from "./selectedMissingLabels"
 import { pendingEdgeLabel } from "./pendingEdgeLabel"
 import { copyResultForID } from "../editor/Copy"
 import type { EditorCommands } from "../editor/EditorCommands"
-import { deleteCursorAndSelect } from "../editor/deleteSelection"
+import { deleteCursor } from "../editor/deleteCursor"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>) => D): (cursor: Cursor, id: Maybe<SourceID>) => D {
   return (cursor, sourceID) => fromMaybe(render(cursor, sourceID), () => defaultRender(cursor, sourceID)) }
@@ -31,17 +31,18 @@ export const defaultRender = tryFirst(renderList(), _defaultRender)
 
 function renderNothing(cursor: Cursor): D {
   let selectedState = bindMaybe(selectionIfSelected(cursor), selection =>
-    ({entries: buildEntries(typeFromCursor(cursor), id => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id()))), editorState: selection}) )
-  return new PlaceholderEditor(fromMaybe(bindMaybe(Field.fromID(cursor.label), field => field.name), () => "[unnamed]"), selectedState, commitIDCommands(cursor)) }
+    ({entries: buildEntries(typeFromCursor(cursor), id => commitCommands(cursor).commit?.(id())), editorState: selection}) )
+  return new PlaceholderEditor(fromMaybe(bindMaybe(Field.fromID(cursor.label), field => field.name), () => "[unnamed]"), selectedState, commitCommands(cursor)) }
 
-export function commitIDCommands(cursor: Cursor): EditorCommands {
+export function commitCommands(cursor: Cursor): EditorCommands {
   return {
-    commitID: id => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id)),
-    delete: (rootDescend, viewsDescend, direction) => deleteCursorAndSelect(cursor, rootDescend, viewsDescend, direction) }}
+    commit: id => {
+      maybe(id, () => { deleteCursor(cursor) }, id => {
+        mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id)) }) }}}
 
 export function editorCommands(cursor: Cursor, id: ID): EditorCommands {
   return {
-    ...commitIDCommands(cursor),
+    ...commitCommands(cursor),
     copy: () => ({referenceID: id, copyResult: copyResultForID(id)}) }}
 
 export function renderDocumentGuidEditor(cursor: Cursor, sourceID: SourceID, d: D): D {

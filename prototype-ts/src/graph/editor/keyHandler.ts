@@ -4,7 +4,7 @@ import { descendFromCursor } from "../cursor/descendFromCursor"
 import { _get, environment } from "../Environment"
 import { findNextTabStop, findTabStop } from "./findNextTabStop"
 import { matchID } from "../model/ID"
-import { editorCommandsForActiveElement } from "./EditorCommands"
+import { commitToActiveElement } from "./EditorCommands"
 import { appendToListCursor, insertAfterListElemCursor, selectionCursorBindMaybe } from "./listCursorActions"
 
 export type KeyHandler = (e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A) => boolean
@@ -17,17 +17,19 @@ export function composedKeyHandler(...keyHandlers: KeyHandler[]): KeyHandler {
 export function deleteKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
     case "Delete":
-      return runE(() => maybe(editorCommandsForActiveElement(), () => false, commands =>
-        maybe(commands.delete, () => false, delete_ => {
+      return runE(() => {
+        let committed = commitToActiveElement(nothing)
+        if (committed) {
           e.stopPropagation()
-          e.preventDefault()
-          return delete_(rootDescend, viewsDescend, "forward") })))
+          e.preventDefault() }
+        return committed })
     case "Backspace":
-      return runE(() => maybe(editorCommandsForActiveElement(), () => false, commands =>
-        maybe(commands.delete, () => false, delete_ => {
+      return runE(() => {
+        let committed = commitToActiveElement(nothing)
+        if (committed) {
           e.stopPropagation()
-          e.preventDefault()
-          return delete_(rootDescend, viewsDescend, "backward") })))}
+          e.preventDefault() }
+        return committed })}
   return false }
 
 function parentDescend(d: D): Maybe<Descend> {

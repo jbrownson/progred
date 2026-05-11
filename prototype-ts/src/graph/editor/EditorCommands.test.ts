@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest"
 import type { ID } from "../model/ID"
-import { attachEditorCommands, commitIDToActiveElement, detachEditorCommands, editorCommandsForActiveElement } from "./EditorCommands"
+import { attachEditorCommands, commitIDToActiveElement, commitToActiveElement, detachEditorCommands, editorCommandsForActiveElement } from "./EditorCommands"
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -12,7 +12,7 @@ describe("EditorCommands", () => {
     document.body.appendChild(input)
 
     let committed: ID[] = []
-    attachEditorCommands(input, {commitID: id => committed.push(id)})
+    attachEditorCommands(input, {commit: id => { if (id !== undefined) committed.push(id) }})
     input.focus()
 
     expect(editorCommandsForActiveElement()).not.toBe(undefined)
@@ -35,12 +35,24 @@ describe("EditorCommands", () => {
     document.body.appendChild(input)
 
     let committed: ID[] = []
-    attachEditorCommands(input, {commitID: id => committed.push(id)})
+    attachEditorCommands(input, {commit: id => { if (id !== undefined) committed.push(id) }})
     input.focus()
     detachEditorCommands(input)
 
     expect(editorCommandsForActiveElement()).toBe(undefined)
     expect(commitIDToActiveElement("guid-target")).toBe(false)
     expect(committed).toEqual([])
+  })
+
+  it("commits undefined through the active element", () => {
+    let input = document.createElement("input")
+    document.body.appendChild(input)
+
+    let committed: (ID | undefined)[] = []
+    attachEditorCommands(input, {commit: id => committed.push(id)})
+    input.focus()
+
+    expect(commitToActiveElement(undefined)).toBe(true)
+    expect(committed).toEqual([undefined])
   })
 })

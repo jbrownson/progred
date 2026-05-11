@@ -150,7 +150,7 @@ export class PlaceholderEditorComponent extends React.Component<{placeholderEdit
           onPaste={e => {
             let s = e.clipboardData.getData("text/plain")
             if (s.indexOf("\n") >= 0)
-              this.props.runE(() => mapMaybe(this.props.placeholderEditor.editorCommands.commitID, commitID => commitID(sidFromString(s)))) }}
+              this.props.runE(() => mapMaybe(this.props.placeholderEditor.editorCommands.commit, commit => commit(sidFromString(s)))) }}
           onBlur={e => handleFocusEvent(() => this.props.runE(() => { e.currentTarget.value = ""; environment().selection = nothing }))}
           onClick={e => e.stopPropagation()}
           onKeyDown={e => {

@@ -6,7 +6,7 @@ import { sidFromString } from "../model/ID"
 import { SparseSpanningTree } from "../SparseSpanningTree"
 import { withTestEnvironment } from "../testHelpers"
 import { D, DIdenticon, DText, GuidEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
-import { commitIDCommands, defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
+import { commitCommands, defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
 
 function cursor() {
   return new Cursor(undefined, "guid-holder", sidFromString("root"), new SparseSpanningTree())
@@ -26,7 +26,7 @@ describe("defaultRender", () => {
 
       expect(d).toBeInstanceOf(PlaceholderEditor)
       expect((d as PlaceholderEditor).selectedState).not.toBe(undefined)
-      ;(d as PlaceholderEditor).editorCommands.commitID?.("guid-target")
+      ;(d as PlaceholderEditor).editorCommands.commit?.("guid-target")
       expect(environment.guidMap.get("guid-holder", sidFromString("root"))).toBe("guid-target")
     })
   })
@@ -54,7 +54,7 @@ describe("defaultRender", () => {
     withTestEnvironment(environment => {
       const c = cursor()
 
-      commitIDCommands(c).commitID?.("guid-target")
+      commitCommands(c).commit?.("guid-target")
 
       expect(environment.guidMap.get("guid-holder", sidFromString("root"))).toBe("guid-target")
     })
