@@ -30,6 +30,10 @@ span.descend {
 span.selected {
   outline: 4px solid #dbeaff;
   outline-offset: 0 }
+span.descend:has(.guidEditor:focus):not(:has(span.descend .guidEditor:focus)),
+span.descend:has(.i:focus):not(:has(span.descend .i:focus)) {
+  outline: 4px solid #dbeaff;
+  outline-offset: 0 }
 span.hinted {
   outline: 3px solid #edf5ff;
   outline-offset: 0 }
