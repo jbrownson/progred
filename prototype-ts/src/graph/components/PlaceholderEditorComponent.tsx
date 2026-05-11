@@ -110,7 +110,7 @@ function renderMatches(string: string, matches: Match[]) {
       ...match.length > 0 ? [{string: string.slice(match.start, match.start + match.length), matching: true}] : [] ]}),
     {index: 0, strings: new Array<{string: string, matching: boolean}>()} )
   return [...strings, ...index < string.length ? [{string: string.slice(index), matching: false}] : []]
-    .map(({string, matching}) => <span className={matching ? "matching" : ""}>{string}</span>) }
+    .map(({string, matching}, index) => <span key={index} className={matching ? "matching" : ""}>{string}</span>) }
 
 export class PlaceholderEditorComponent extends React.Component<{placeholderEditor: PlaceholderEditor, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
   entryList: EntryList | null
