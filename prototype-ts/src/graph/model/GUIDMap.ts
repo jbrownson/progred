@@ -6,8 +6,7 @@ export class GUIDMap {
   edges(guid: GUID): Maybe<Map<ID, ID>> { return this.map.get(guid) }
   get(guid: GUID, label: ID): Maybe<ID> {
     const edges = this.map.get(guid)
-    if (edges !== undefined)
-      edges.get(label)
+    if (edges !== undefined) return edges.get(label)
     return undefined }
   set(guid: GUID, label: ID, to: ID) { maybe(this.map.get(guid), () => { this.map.set(guid, new Map([[label, to]])) }, edges => {edges.set(label, to)}) }
   delete(guid: GUID, label: ID) { mapMaybe(this.map.get(guid), edges => {edges.delete(label); if (edges.size === 0) this.map.delete(guid) }) } }
