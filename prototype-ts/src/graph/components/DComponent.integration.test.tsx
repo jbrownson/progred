@@ -9,8 +9,8 @@ import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, withEnvironment } from "../Environment"
-import { appCtor, checkNumber, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, GUIDApp, GUIDBinaryInline, GUIDConditional, GUIDDescend, GUIDDifference, GUIDEvaluate, GUIDField, GUIDFunctionCall, GUIDFunctionDeclaration, GUIDJavaScriptProgram, GUIDLessThanOrEqualTo, GUIDLine, GUIDParameter, GUIDProduct, GUIDRenderCtor, GUIDReturn, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, rootField, statementsField, tailField, viewsField } from "../graph"
-import { GUID, ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
+import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, GUIDApp, GUIDDescend, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, rootField, statementsField, tailField, viewsField } from "../graph"
+import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DComponent } from "./DComponent"
 import { createD, Descend } from "../render/D"
 import { defaultRender, tryFirst } from "../render/defaultRender"
@@ -156,6 +156,13 @@ class EditorHarness {
         return result })))
   }
 
+  arrowLeftUntil(parent: ID, label: ID) {
+    for (let i = 0; i < 30 && (this.environment.selection?.cursor.parent !== parent || this.environment.selection?.cursor.label !== label); i++)
+      this.globalKey("ArrowLeft")
+    expect(this.environment.selection?.cursor.parent).toBe(parent)
+    expect(this.environment.selection?.cursor.label).toBe(label)
+  }
+
   click(element: Element, options: MouseEventInit = {}) {
     this.run(() => click(element, options))
   }
@@ -219,40 +226,6 @@ function withJavascriptHost<A>(f: (javascriptCalls: string[]) => A): A {
     if (oldProgred) window.progred = oldProgred
     else delete (window as unknown as {progred?: typeof window.progred}).progred
     log.mockRestore() }}
-
-function factorialProgram(programID: GUID) {
-  const program = new GUIDJavaScriptProgram(programID)
-  const n = GUIDParameter.new().setName("n")
-  const factorial = GUIDFunctionDeclaration.new()
-    .setName("factorial")
-    .setParameters([n])
-  const baseCase = GUIDBinaryInline.new()
-    .setLeft(n)
-    .setBinaryOperator(GUIDLessThanOrEqualTo.new())
-    .setRight(checkNumber(1)!)
-  const recursiveArgument = GUIDBinaryInline.new()
-    .setLeft(n)
-    .setBinaryOperator(GUIDDifference.new())
-    .setRight(checkNumber(1)!)
-  const recursiveCall = GUIDFunctionCall.new()
-    .setFunction(factorial)
-    .setArguments([recursiveArgument])
-  const recursiveProduct = GUIDBinaryInline.new()
-    .setLeft(n)
-    .setBinaryOperator(GUIDProduct.new())
-    .setRight(recursiveCall)
-  const returnStatement = GUIDReturn.new()
-    .setExpression(GUIDConditional.new()
-      .setCondition(baseCase)
-      .setTrueExpression(checkNumber(1)!)
-      .setFalseExpression(recursiveProduct))
-  factorial.setStatements([returnStatement])
-  const topCall = GUIDFunctionCall.new()
-    .setFunction(factorial)
-    .setArguments([checkNumber(5)!])
-  program.setStatements([factorial, topCall])
-  return program
-}
 
 function testLibrary() {
   const evaluateFields = "guid-test-evaluate-fields"
@@ -954,7 +927,7 @@ describe("DComponent editor integration", () => {
     harness.unmount()
   })
 
-  it("creates an Evaluate shell and renders a factorial program result", () => withJavascriptHost(javascriptCalls => {
+  it("enters and evaluates a factorial program through editor interactions", () => withJavascriptHost(javascriptCalls => {
     const environment = makeTestEnvironment({libraries, defaultRender: tryFirst(renders, defaultRender)})
     environment.selection = {cursor: rootCursor(environment)}
     const harness = new EditorHarness(environment)
@@ -969,7 +942,69 @@ describe("DComponent editor integration", () => {
     expect(javascriptProgram).not.toBe(undefined)
     expect(harness.get(javascriptProgram!, ctorField.id)).toBe(javascriptProgramCtor.id)
 
-    harness.runEdit(() => factorialProgram(javascriptProgram as GUID))
+    harness.key("[")
+    const topStatements = harness.get(javascriptProgram!, statementsField.id)
+    expect(topStatements).not.toBe(undefined)
+
+    harness.typeAndEnter("new Function Declaration")
+    const factorial = harness.get(topStatements!, headField.id)
+    expect(factorial).not.toBe(undefined)
+    expect(harness.get(factorial!, ctorField.id)).toBe(functionDeclarationCtor.id)
+
+    harness.typeAndEnter("factorial")
+    expect(stringFromID(harness.get(factorial!, nameField.id)!)).toBe("factorial")
+
+    harness.key("[")
+    const parameters = harness.get(factorial!, parametersField.id)
+    expect(parameters).not.toBe(undefined)
+
+    harness.typeAndEnter("new Parameter")
+    const n = harness.get(parameters!, headField.id)
+    expect(n).not.toBe(undefined)
+
+    harness.typeAndEnter("n")
+    expect(stringFromID(harness.get(n!, nameField.id)!)).toBe("n")
+
+    harness.key("[")
+    const bodyStatements = harness.get(factorial!, statementsField.id)
+    expect(bodyStatements).not.toBe(undefined)
+
+    harness.typeAndEnter("new Return")
+    const returnStatement = harness.get(bodyStatements!, headField.id)
+    expect(returnStatement).not.toBe(undefined)
+
+    harness.typeAndEnter("new Conditional")
+    harness.typeAndEnter("new Binary Inline")
+    harness.typeAndEnter("n")
+    harness.typeAndEnter("new Less Than or Equal To")
+    harness.typeAndEnter("1")
+    harness.typeAndEnter("1")
+    harness.typeAndEnter("new Binary Inline")
+    harness.typeAndEnter("n")
+    harness.typeAndEnter("new Product")
+    harness.typeAndEnter("new Function Call")
+    harness.typeAndEnter("factorial")
+    harness.key("[")
+    const recursiveArguments = harness.environment.selection?.cursor.parent
+    expect(recursiveArguments).not.toBe(undefined)
+
+    harness.typeAndEnter("new Binary Inline")
+    harness.typeAndEnter("n")
+    harness.typeAndEnter("new Difference")
+    harness.typeAndEnter("1")
+
+    harness.arrowLeftUntil(topStatements!, headField.id)
+    harness.globalKey(",", {metaKey: true})
+    const topCallList = harness.environment.selection?.cursor.parent
+    expect(topCallList).not.toBe(undefined)
+
+    harness.typeAndEnter("new Function Call")
+    const topCall = harness.get(topCallList!, headField.id)
+    expect(topCall).not.toBe(undefined)
+
+    harness.typeAndEnter("factorial")
+    harness.key("[")
+    harness.typeAndEnter("5")
 
     expect(javascriptCalls[javascriptCalls.length - 1]).toContain("function factorial")
     expect(javascriptCalls[javascriptCalls.length - 1]).toContain("factorial(5)")
