@@ -10,10 +10,9 @@ import { descendFromCursor } from "./cursor/descendFromCursor"
 import { DComponent } from "./components/DComponent"
 import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
-import { deleteSelection } from "./editor/deleteSelection"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
-import { commitIDToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
+import { commitIDToActiveElement, deleteActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
@@ -82,7 +81,7 @@ function handleMenuAction(action: string) {
       break
     case "cut":
       if (actionIfTextInputWithSelection("cut:")) return
-      rootComponent.runE(() => { _copy(); deleteSelection(); environment().selection = nothing })
+      rootComponent.runE(() => { _copy(); deleteActiveElement(rootComponent.rootDescend, rootComponent.viewsDescend, "forward"); environment().selection = nothing })
       break
     case "copy":
       if (actionIfTextInputWithSelection("copy:")) return
@@ -179,7 +178,7 @@ function startNewEdge() {
 function deleteActiveSelection(): boolean {
   return graphHighlight !== nothing
     ? deleteGraphSelection()
-    : deleteSelection() }
+    : deleteActiveElement(rootComponent.rootDescend, rootComponent.viewsDescend, "forward") }
 
 function deleteGraphSelection(): boolean {
   return maybe(graphHighlight, () => false, graphSelection => {

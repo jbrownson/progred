@@ -794,6 +794,24 @@ describe("DComponent editor integration", () => {
     harness.unmount()
   })
 
+  it("deletes the focused editor instead of a stale logical selection", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const node = "guid-node"
+    const childLabel = sidFromString("child")
+    environment.guidMap.set(environment.rootViews.id, rootField.id, node)
+    environment.guidMap.set(node, childLabel, sidFromString("keep me"))
+    environment.selection = {cursor: rootCursor(environment)}
+    const harness = new EditorHarness(environment)
+
+    harness.run(() => { environment.selection = {cursor: _childCursor(rootCursor(environment), node, childLabel)} })
+    harness.globalKey("Delete")
+
+    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
+    expect(stringFromID(harness.get(node, childLabel)!)).toBe("keep me")
+
+    harness.unmount()
+  })
+
   it("undoes and redoes a pasted structure copy as one edit", () => {
     const environment = makeTestEnvironment({defaultRender})
     const original = "guid-original"

@@ -16,6 +16,7 @@ import { selectedMissingLabels } from "./selectedMissingLabels"
 import { pendingEdgeLabel } from "./pendingEdgeLabel"
 import { copyResultForID } from "../editor/Copy"
 import type { EditorCommands } from "../editor/EditorCommands"
+import { deleteCursorAndSelect } from "../editor/deleteSelection"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>) => D): (cursor: Cursor, id: Maybe<SourceID>) => D {
   return (cursor, sourceID) => fromMaybe(render(cursor, sourceID), () => defaultRender(cursor, sourceID)) }
@@ -35,7 +36,8 @@ function renderNothing(cursor: Cursor): D {
 
 export function commitIDCommands(cursor: Cursor): EditorCommands {
   return {
-    commitID: id => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id)) }}
+    commitID: id => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, id)),
+    delete: (rootDescend, viewsDescend, direction) => deleteCursorAndSelect(cursor, rootDescend, viewsDescend, direction) }}
 
 export function editorCommands(cursor: Cursor, id: ID): EditorCommands {
   return {

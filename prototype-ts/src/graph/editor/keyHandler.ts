@@ -1,12 +1,10 @@
 import { altMaybe, bindMaybe, booleanFromMaybe, firstMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
-import { cursorFromD } from "../cursor/cursorFromD"
-import { createD, D, Descend } from "../render/D"
-import { deleteCursor } from "./deleteSelection"
+import { D, Descend } from "../render/D"
 import { descendFromCursor } from "../cursor/descendFromCursor"
 import { _get, environment } from "../Environment"
 import { findNextTabStop, findTabStop } from "./findNextTabStop"
 import { matchID } from "../model/ID"
+import { editorCommandsForActiveElement } from "./EditorCommands"
 import { appendToListCursor, insertAfterListElemCursor, selectionCursorBindMaybe } from "./listCursorActions"
 
 export type KeyHandler = (e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A) => boolean
@@ -16,49 +14,20 @@ function untilTrue(...fs: (() => boolean)[]): boolean { return fs.length > 0 && 
 export function composedKeyHandler(...keyHandlers: KeyHandler[]): KeyHandler {
   return (e, rootDescend, viewsDescend, runE) => untilTrue(...keyHandlers.map(keyHandler => () => keyHandler(e, rootDescend, viewsDescend, runE))) }
 
-function siblingIndex(d: D): Maybe<number> { return bindMaybe(d.parent, parent => parent.children.findIndex(child => child === d)) }
-function parentCursorAndDSiblingIndex(cursor: Cursor, rootDescend: Descend, viewsDescend: Maybe<Descend>) : Maybe<{parentCursor: Cursor, dSiblingIndex: number}> {
-  return bindMaybe(descendFromCursor(rootDescend, viewsDescend, cursor), descend =>
-    bindMaybe(siblingIndex(descend), dSiblingIndex =>
-      bindMaybe(bindMaybe(parentDescend(descend), pDescend => cursorFromD(pDescend)), parentCursor => ({parentCursor, dSiblingIndex})))) }
-function parentCursorAndDSiblingIndexToCursor(pcds: {parentCursor: Cursor, dSiblingIndex: number}, rootDescend: Descend, viewsDescend: Maybe<Descend>, dSiblingOffset: number): Maybe<Cursor> {
-  const {parentCursor, dSiblingIndex} = pcds
-  const pDescend = descendFromCursor(rootDescend, viewsDescend, parentCursor)
-  const siblingDescend = bindMaybe(pDescend, goDown)
-  const newDescend = fromMaybe(
-    bindMaybe(dSiblingIndex, sIndex =>
-      bindMaybe(siblingDescend, d =>
-        altMaybe(getSibling(d, sIndex + dSiblingOffset), () => getSibling(d, sIndex)))),
-    () => fromMaybe(pDescend, () => rootDescend))
-  return cursorFromD(newDescend) }
-
 export function deleteKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
     case "Delete":
-      return runE(() => booleanFromMaybe(selectionCursorBindMaybe(cursor => {
-        e.stopPropagation()
-        e.preventDefault()
-        const parentCursorAndSIndexDesired = parentCursorAndDSiblingIndex(cursor, rootDescend, viewsDescend)
-        if (deleteCursor(cursor)) {
-          const {rootDescend, viewsDescend} = createD()
-          const parentCursorAndSIndex = mapMaybe(parentCursorAndSIndexDesired, ({parentCursor, dSiblingIndex}) => ({parentCursor, dSiblingIndex: dSiblingIndex - 1}))
-          environment().selection = altMaybe(bindMaybe(parentCursorAndSIndex, parentCursorAndSIndex =>
-              mapMaybe(parentCursorAndDSiblingIndexToCursor(parentCursorAndSIndex, rootDescend, viewsDescend, 1), cursor => ({cursor}))),
-            () => mapMaybe(cursorFromD(rootDescend), cursor => ({cursor})))
-          return true }
-        return false })))
+      return runE(() => maybe(editorCommandsForActiveElement(), () => false, commands =>
+        maybe(commands.delete, () => false, delete_ => {
+          e.stopPropagation()
+          e.preventDefault()
+          return delete_(rootDescend, viewsDescend, "forward") })))
     case "Backspace":
-      return runE(() => booleanFromMaybe(selectionCursorBindMaybe(cursor => {
-        e.stopPropagation()
-        e.preventDefault()
-        const parentCursorAndSIndex = parentCursorAndDSiblingIndex(cursor, rootDescend, viewsDescend)
-        if (deleteCursor(cursor)) {
-          let {rootDescend, viewsDescend} = createD()
-          environment().selection = altMaybe(bindMaybe(parentCursorAndSIndex, parentCursorAndSIndex =>
-              mapMaybe(parentCursorAndDSiblingIndexToCursor(parentCursorAndSIndex, rootDescend, viewsDescend, -1), cursor => ({cursor}))),
-            () => mapMaybe(cursorFromD(rootDescend), cursor => ({cursor})))
-          return true }
-        return false })))}
+      return runE(() => maybe(editorCommandsForActiveElement(), () => false, commands =>
+        maybe(commands.delete, () => false, delete_ => {
+          e.stopPropagation()
+          e.preventDefault()
+          return delete_(rootDescend, viewsDescend, "backward") })))}
   return false }
 
 function parentDescend(d: D): Maybe<Descend> {
