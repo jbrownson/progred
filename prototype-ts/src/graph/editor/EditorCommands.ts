@@ -1,4 +1,4 @@
-import { Maybe, nothing } from "../../lib/Maybe"
+import { Maybe, maybe, nothing } from "../../lib/Maybe"
 import type { ID } from "../model/ID"
 import type { CopyResult } from "./Copy"
 
@@ -23,3 +23,9 @@ export function editorCommandsForActiveElement(): Maybe<EditorCommands> {
   let element = document.activeElement
   return element instanceof HTMLElement ? (element as EditorCommandsElement)[editorCommandsKey] : nothing
 }
+
+export function commitIDToActiveElement(id: ID): boolean {
+  return maybe(editorCommandsForActiveElement(), () => false, commands =>
+    maybe(commands.commitID, () => false, commitID => {
+      commitID(id)
+      return true })) }

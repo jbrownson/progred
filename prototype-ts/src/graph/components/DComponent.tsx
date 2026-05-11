@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { concatMap, intersperse, join } from "../../lib/Array"
 import { bindMaybe, mapMaybe, maybe, maybeMap, Maybe, nothing } from "../../lib/Maybe"
-import { chooseIDForSelection } from "../editor/chooseIDForSelection"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { cursorFromD } from "../cursor/cursorFromD"
 import { Block, D, Descend, GuidEditor, Label, matchD } from "../render/D"
@@ -13,7 +12,7 @@ import { StringEditorComponent } from "./StringEditorComponent"
 import { IdenticonComponent } from "./IdenticonComponent"
 import { ID } from "../model/ID"
 import { cursorsEqual } from "../cursor/Cursor"
-import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
+import { attachEditorCommands, commitIDToActiveElement, detachEditorCommands } from "../editor/EditorCommands"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 
 const indentWidth = 16
@@ -33,7 +32,7 @@ export class DComponent extends React.Component<{d: D, depth: number, scrollPare
   render() {
     this.children = []
     let addChild = (child: DComponent | PlaceholderEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent | null) => { if (child) this.children.push(child) }
-    let chooseID = () => maybe(clickedIDFromD(this.props.d), () => false, chooseIDForSelection)
+    let chooseID = () => maybe(clickedIDFromD(this.props.d), () => false, commitIDToActiveElement)
     let keepFocusForChooseID = (e: React.MouseEvent) => {
       if (chooseIDModifier(e)) {
         // Prevent the pending placeholder input from blurring before the click chooses an ID.

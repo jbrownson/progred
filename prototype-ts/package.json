@@ -6,6 +6,8 @@
   "scripts": {
     "build": "vite build --config vite/renderer.config.ts && vite build --config vite/main.config.ts && vite build --config vite/preload.config.ts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "npm run build && electron .",
     "gen": "vite build --config vite/generator.config.ts && node build/generator.cjs",
     "dist": "electron-packager ."
@@ -18,8 +20,10 @@
     "@vitejs/plugin-react": "^6.0.1",
     "electron": "^41.3.0",
     "electron-packager": "^17.1.2",
+    "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
   },
   "dependencies": {
     "react": "^19.2.5",

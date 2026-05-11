@@ -4,7 +4,6 @@ import { groupBy } from "../lib/Array"
 import { assert } from "../lib/assert"
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
-import { chooseIDForSelection } from "./editor/chooseIDForSelection"
 import { Cursor } from "./cursor/Cursor"
 import { createD, Descend, supportsUnderselection } from "./render/D"
 import { descendFromCursor } from "./cursor/descendFromCursor"
@@ -14,7 +13,7 @@ import { defaultRender, tryFirst } from "./render/defaultRender"
 import { deleteSelection } from "./editor/deleteSelection"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
-import { editorCommandsForActiveElement } from "./editor/EditorCommands"
+import { commitIDToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
@@ -265,20 +264,17 @@ function _copy() {
       const {referenceID, copyResult} = copy()
       progred.writeClipboardText(clipboardFormat, clipboardStringForCopyResult(referenceID, copyResult)) }))}
 
-function commitIDToActiveElement(id: ID) {
-  bindMaybe(editorCommandsForActiveElement(), commands => mapMaybe(commands.commitID, commitID => commitID(id)))}
-
 function _pasteID() {
   maybe(idFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
       commitIDToActiveElement(sidFromString(progred.readPlainText())) },
-    commitIDToActiveElement) }
+    id => { commitIDToActiveElement(id) }) }
 
 function _pasteStructure() {
   maybe(copyIDFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
       commitIDToActiveElement(sidFromString(progred.readPlainText())) },
-      commitIDToActiveElement) }
+      id => { commitIDToActiveElement(id) }) }
 
 function _save(filename: string) {
   let e = environment()
@@ -380,7 +376,7 @@ export class RootComponent extends React.Component<{}, {}> {
                 <GraphViewComponent
                   snapshot={graphSnapshot}
                   setGraphSelection={selection => this.setGraphSelection(selection)}
-                  chooseID={id => this.runE(() => chooseIDForSelection(id))} />
+                  chooseID={id => this.runE(() => commitIDToActiveElement(id))} />
               </div>)}
             {maybe(this.viewsDescend, () => null, viewsDescend =>
               <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewsPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "auto"}}
