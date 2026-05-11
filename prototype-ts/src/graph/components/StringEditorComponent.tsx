@@ -1,10 +1,10 @@
 import * as React from "react"
-import { bindMaybe, mapMaybe, nothing } from "../../lib/Maybe"
+import { mapMaybe, nothing } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
 import { cursorFromD } from "../cursor/cursorFromD"
 import { StringEditor } from "../render/D"
-import { environment, set } from "../Environment"
-import { guidFromID, sidFromString } from "../model/ID"
+import { environment } from "../Environment"
+import { sidFromString } from "../model/ID"
 import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
@@ -24,7 +24,7 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
       wrap="off"
       spellCheck={false}
       onChange={e => { if (this.props.stringEditor.stringEditorSelectedState && this.props.stringEditor.stringEditorSelectedState.writable)
-        this.props.runE(() => bindMaybe(cursorFromD(this.props.stringEditor), cursor => mapMaybe(guidFromID(cursor.parent), guid => {if (this.textArea) set(guid, cursor.label, sidFromString(this.textArea.value))})))}}
+        this.props.runE(() => mapMaybe(this.props.stringEditor.editorCommands.commit, commit => { if (this.textArea) commit(sidFromString(this.textArea.value)) }))}}
       value={this.props.stringEditor.string}
       onFocus={e => handleFocusEvent(() => this.props.runE(() => mapMaybe(cursorFromD(this.props.stringEditor), cursor => environment().selection = {cursor})))}
       onBlur={e => handleFocusEvent(() => this.props.runE(() => environment().selection = nothing))}

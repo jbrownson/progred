@@ -1,11 +1,11 @@
 import * as React from 'react'
 import { getTextWidth } from "../../lib/getTextWidth"
-import { bindMaybe, fromMaybe, mapMaybe, maybe, nothing } from "../../lib/Maybe"
+import { fromMaybe, mapMaybe, maybe, nothing } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
 import { cursorFromD } from "../cursor/cursorFromD"
 import { NumberEditor } from "../render/D"
-import { environment, set } from "../Environment"
-import { guidFromID, nidFromNumber } from "../model/ID"
+import { environment } from "../Environment"
+import { nidFromNumber } from "../model/ID"
 import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
@@ -21,7 +21,7 @@ export class NumberEditorComponent extends React.Component<{numberEditor: Number
         this.commit(e.currentTarget.value) }}}
     commit(value: string) {
       let number = +value
-      if (!isNaN(number)) this.props.runE(() => bindMaybe(cursorFromD(this.props.numberEditor), cursor => mapMaybe(guidFromID(cursor.parent), guid => set(guid, cursor.label, nidFromNumber(number))))) }
+      if (!isNaN(number)) this.props.runE(() => mapMaybe(this.props.numberEditor.editorCommands.commit, commit => commit(nidFromNumber(number)))) }
   focusIfSelected() { if (this.input) maybe(this.props.numberEditor.numberEditorSelectedState, () => blur, () => focus)(this.input) }
   attachEditorCommands() {
     if (this.input) attachEditorCommands(this.input, this.props.numberEditor.editorCommands) }
