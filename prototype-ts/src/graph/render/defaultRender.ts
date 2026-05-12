@@ -9,7 +9,7 @@ import { Ctor, ctorField, EmptyList, Field, GUIDNonemptyList, HasID, headField, 
 import { GUID, guidFromID, ID, matchID, numberFromNID, SID } from "../model/ID"
 import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
-import { selectionIfSelected, selectionStateFromCursor } from "../editor/selectionIfSelected"
+import { selectionIfSelected } from "../editor/selectionIfSelected"
 import { getCollapsed, setCollapsed } from "../editor/setCollapsed"
 import { typeFromCursor, typeFromListElementCursor } from "../cursor/typeFromCursor"
 import { selectedMissingLabels } from "./selectedMissingLabels"
@@ -48,7 +48,7 @@ export function editorCommands(cursor: Cursor, id: ID): EditorCommands {
 export function renderDocumentGuidEditor(cursor: Cursor, sourceID: SourceID, d: D): D {
   let guid = guidFromID(sourceID.id)
   return sourceID.source.source === SourceType.DocumentType && guid !== undefined
-    ? new SupportsUnderselection(new GuidEditor(cursor, guid, d, selectionStateFromCursor(cursor), maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel), editorCommands(cursor, guid)))
+    ? new SupportsUnderselection(new GuidEditor(cursor, guid, d, maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel), editorCommands(cursor, guid)))
     : d }
 
 function isSingleLine(d: D): boolean {
@@ -93,7 +93,6 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
   let fieldDs = collapsed ? [] : [...labels.map(label => renderField(cursor, guid, label)), ...pendingEdgeLabelDs]
   const d = new Line(
     new GuidEditor(cursor, guid, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
-      selectionStateFromCursor(cursor),
       maybe(selectionIfSelected(cursor), () => false, selection => !selection.pendingEdgeLabel),
       editorCommands(cursor, guid)),
     ...nameDs,
@@ -134,6 +133,6 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 
 export function renderNumber(cursor: Cursor, number: number, source: Source): D {
-  return new NumberEditor(number, number, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), numberEditorState: selection})), editorCommands(cursor, number)) }
+  return new NumberEditor(number, number, sourceIsWritable(source), editorCommands(cursor, number)) }
 export function renderString(cursor: Cursor, sid: SID, string: string, source: Source): D {
-  return new StringEditor(sid, string, mapMaybe(selectionIfSelected(cursor), selection => ({writable: sourceIsWritable(source), stringEditorState: selection})), editorCommands(cursor, sid)) }
+  return new StringEditor(sid, string, sourceIsWritable(source), editorCommands(cursor, sid)) }

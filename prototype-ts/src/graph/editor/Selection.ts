@@ -1,8 +1,8 @@
 import { Cursor } from "../cursor/Cursor"
 import { cursorsEqual } from "../cursor/Cursor"
-import { NumberEditorState, PlaceholderEditorState } from "../render/D"
+import { PlaceholderEditorState } from "../render/D"
 
-export type _Selection = { cursor: Cursor, pendingEdgeLabel?: true } & NumberEditorState & PlaceholderEditorState
+export type _Selection = { cursor: Cursor, pendingEdgeLabel?: true } & PlaceholderEditorState
 
 export function selectionsEqual(lhs: _Selection, rhs: _Selection): boolean {
   return cursorsEqual(lhs.cursor, rhs.cursor) &&

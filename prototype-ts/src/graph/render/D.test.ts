@@ -30,7 +30,7 @@ describe("D", () => {
     const c = cursor()
     const child = new DText("x")
     const label = new Label(c, child)
-    const guidEditor = new GuidEditor(c, "guid-root", new DText("node"), undefined, false, {})
+    const guidEditor = new GuidEditor(c, "guid-root", new DText("node"), false, {})
 
     expect(label.children).toEqual([child])
     expect(guidEditor.children.length).toBe(1)

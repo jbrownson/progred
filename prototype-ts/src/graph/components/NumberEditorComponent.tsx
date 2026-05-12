@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { getTextWidth } from "../../lib/getTextWidth"
-import { fromMaybe, mapMaybe, maybe, nothing } from "../../lib/Maybe"
+import { fromMaybe, mapMaybe, nothing } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
 import { cursorFromD } from "../cursor/cursorFromD"
 import { NumberEditor } from "../render/D"
@@ -8,10 +8,13 @@ import { environment } from "../Environment"
 import { nidFromNumber } from "../model/ID"
 import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
 import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
-import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
+import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
-export class NumberEditorComponent extends React.Component<{numberEditor: NumberEditor, runE: (f: () => void) => void}, {}> {
+type NumberEditorComponentState = {value?: string}
+
+export class NumberEditorComponent extends React.Component<{numberEditor: NumberEditor, runE: (f: () => void) => void}, NumberEditorComponentState> {
+  state: NumberEditorComponentState = {}
   input: HTMLInputElement | null
   onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0)) {
@@ -22,28 +25,27 @@ export class NumberEditorComponent extends React.Component<{numberEditor: Number
         this.commit(e.currentTarget.value) }}}
     commit(value: string) {
       let number = +value
-      if (!isNaN(number)) this.props.runE(() => mapMaybe(this.props.numberEditor.editorCommands.commit, commit => commit(nidFromNumber(number)))) }
-  focusIfSelected() { if (this.input) maybe(this.props.numberEditor.numberEditorSelectedState, () => blur, () => focus)(this.input) }
+      if (!isNaN(number) && this.props.numberEditor.writable) {
+        this.setState({value: undefined})
+        this.props.runE(() => mapMaybe(this.props.numberEditor.editorCommands.commit, commit => commit(nidFromNumber(number)))) }}
   attachEditorCommands() {
     if (this.input) {
       attachEditorCommands(this.input, this.props.numberEditor.editorCommands)
-      mapMaybe(cursorFromD(this.props.numberEditor), cursor => attachEditorFocus(this.input!, cursor)) }}
+      mapMaybe(cursorFromD(this.props.numberEditor), cursor => attachEditorFocus(this.input!, {cursor})) }}
   onScroll() { noop() }
   render() {
-    const value = maybe(this.props.numberEditor.numberEditorSelectedState, () => "" + this.props.numberEditor.number, ({numberEditorState}) => fromMaybe(numberEditorState.value, () => `${this.props.numberEditor.number}`))
+    const value = fromMaybe(this.state.value, () => `${this.props.numberEditor.number}`)
     return <input
       className={"number i"}
       type="text"
       style={{width: getTextWidth(value) + "px"}}
-      onChange={e => { if (this.input) { let input = this.input; mapMaybe(this.props.numberEditor.numberEditorSelectedState, numberEditorSelectedState => {
-        if (numberEditorSelectedState.writable)
-          this.props.runE(() => numberEditorSelectedState.numberEditorState.value = input.value) })}}}
+      onChange={e => { if (this.input && this.props.numberEditor.writable) this.setState({value: this.input.value}) }}
       onFocus={e => handleFocusEvent(() => this.props.runE(() => mapMaybe(cursorFromD(this.props.numberEditor), cursor => environment().selection = {cursor})))}
-      onBlur={e => handleFocusEvent(() => this.props.runE(() => environment().selection = nothing))}
+      onBlur={e => handleFocusEvent(() => { this.setState({value: undefined}); this.props.runE(() => environment().selection = nothing) })}
       value={value}
       onClick={e => e.stopPropagation()}
       onKeyDown={e => this.onKeyDown(e) }
       ref={input => { this.input = input }} /> }
-  componentDidMount() { this.focusIfSelected(); this.attachEditorCommands() }
-  componentDidUpdate() { this.focusIfSelected(); this.attachEditorCommands() }
+  componentDidMount() { this.attachEditorCommands() }
+  componentDidUpdate() { this.attachEditorCommands() }
   componentWillUnmount() { if (this.input) { detachEditorCommands(this.input); detachEditorFocus(this.input) } } }

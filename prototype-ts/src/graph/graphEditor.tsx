@@ -13,6 +13,7 @@ import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { commitIDToActiveElement, commitToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
+import { focusEditorForCursor } from "./editor/EditorFocus"
 import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
@@ -345,6 +346,10 @@ export class RootComponent extends React.Component<{}, {}> {
     graphHighlight = nextGraphSelection
     if (graphHighlight !== nothing) selection.selection = nothing
     this.forceUpdate() }
+  focusSelection() {
+    mapMaybe(selection.selection, selection => {
+      for (let root of [this.leftPanel, this.rightPanel])
+        if (root && focusEditorForCursor(root, selection.cursor)) return {} }) }
   render() {
     let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       bindMaybe(bindMaybe(environment().rootViews.root, ({id}) => Module.fromID(id)), renderFromModule) )
@@ -389,8 +394,8 @@ export class RootComponent extends React.Component<{}, {}> {
           </div></div>
         : null}</div> }
   onScroll() { if(this.rootDComponent) this.rootDComponent.onScroll(); if (this.viewsDComponent) this.viewsDComponent.onScroll() }
-  componentDidMount() { this.onScroll(); this.updateMenuState() }
-  componentDidUpdate() { this.onScroll(); this.updateMenuState() } }
+  componentDidMount() { this.onScroll(); this.focusSelection(); this.updateMenuState() }
+  componentDidUpdate() { this.onScroll(); this.focusSelection(); this.updateMenuState() } }
 
 window.onclick = () => { if (rootComponent) rootComponent.runE(() => environment().selection = nothing) }
 window.onkeydown = e => { if (rootComponent) keyHandler(e, rootComponent.rootDescend, rootComponent.viewsDescend, f => rootComponent.runE(f)) }

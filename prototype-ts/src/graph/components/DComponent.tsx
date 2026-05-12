@@ -15,7 +15,7 @@ import { ID } from "../model/ID"
 import { cursorsEqual } from "../cursor/Cursor"
 import { attachEditorCommands, commitIDToActiveElement, detachEditorCommands } from "../editor/EditorCommands"
 import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
-import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
+import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 
 const indentWidth = 16
 
@@ -117,13 +117,10 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, depth
   span: HTMLSpanElement | null
   child: Maybe<DComponent> = nothing
   onScroll() { if (this.child) this.child.onScroll() }
-  focusIfSelected() {
-    if (this.span) {
-      (this.props.guidEditor.selectionState === SelectionState.Selected && this.props.guidEditor.focusWhenSelected ? focus : blur)(this.span) }}
   attachEditorCommands() {
     if (this.span) {
       attachEditorCommands(this.span, this.props.guidEditor.editorCommands)
-      attachEditorFocus(this.span, this.props.guidEditor.cursor) }}
+      attachEditorFocus(this.span, {cursor: this.props.guidEditor.cursor, focusWhenSelected: this.props.guidEditor.focusWhenSelected}) }}
   render() {
     return <span
       className="guidEditor"
@@ -141,6 +138,6 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, depth
         scrollParent={this.props.scrollParent}
         runE={this.props.runE} />
     </span> }
-  componentDidMount() { this.focusIfSelected(); this.attachEditorCommands() }
-  componentDidUpdate() { this.focusIfSelected(); this.attachEditorCommands() }
+  componentDidMount() { this.attachEditorCommands() }
+  componentDidUpdate() { this.attachEditorCommands() }
   componentWillUnmount() { if (this.span) { detachEditorCommands(this.span); detachEditorFocus(this.span) } } }

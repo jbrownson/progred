@@ -1,7 +1,9 @@
 import * as React from "react"
 import { act } from "react"
+import { flushSync } from "react-dom"
 import { createRoot, Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { mapMaybe } from "../../lib/Maybe"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import type { CopyResult } from "../editor/Copy"
@@ -20,6 +22,7 @@ import { Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { SparseSpanningTree } from "../SparseSpanningTree"
 import { defaultKeyHandler } from "../editor/keyHandler"
+import { focusEditorForCursor } from "../editor/EditorFocus"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
 import { libraries } from "../libraries/libraries"
@@ -68,13 +71,14 @@ class EditorHarness {
     withEnvironment(this.environment, () => {
       const {rootDescend} = createD()
       this.rootDescend = rootDescend
-      this.root.render(<DComponent
-        d={rootDescend}
-        depth={0}
-        scrollParent={() => this.container}
-        runE={f => {
-          this.runWithUndoCallbacks(f)
-          this.render() }} />)
+      flushSync(() => this.root.render(<DComponent
+          d={rootDescend}
+          depth={0}
+          scrollParent={() => this.container}
+          runE={f => {
+            this.runWithUndoCallbacks(f)
+            this.render() }} />))
+      mapMaybe(this.environment.selection, selection => focusEditorForCursor(this.container, selection.cursor))
     })
   }
 

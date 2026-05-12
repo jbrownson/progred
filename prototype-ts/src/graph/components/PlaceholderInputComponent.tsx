@@ -98,7 +98,7 @@ export class PlaceholderInputComponent extends React.Component<{selectedState: P
   attachEditorCommands() {
     if (this.input) {
       attachEditorCommands(this.input, this.props.editorCommands)
-      maybe(this.props.cursor, () => detachEditorFocus(this.input!), cursor => attachEditorFocus(this.input!, cursor)) }}
+      maybe(this.props.cursor, () => detachEditorFocus(this.input!), cursor => attachEditorFocus(this.input!, {cursor})) }}
   updateEntryListAbove() {
     if (this.input && this.entryList && this.entryList.div) {
       let scrollParent = this.props.scrollParent()

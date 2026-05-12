@@ -19,9 +19,9 @@ describe("stringFromD", () => {
   })
 
   it("prints editor wrappers as their contents", () => {
-    expect(stringFromD(new GuidEditor(cursor(), "guid-node", new DText("Node"), undefined, false, {}))).toBe("Node")
-    expect(stringFromD(new StringEditor(sidFromString("hello"), "hello", undefined, {}))).toBe("hello")
-    expect(stringFromD(new NumberEditor(42, 42, undefined, {}))).toBe("42")
+    expect(stringFromD(new GuidEditor(cursor(), "guid-node", new DText("Node"), false, {}))).toBe("Node")
+    expect(stringFromD(new StringEditor(sidFromString("hello"), "hello", true, {}))).toBe("hello")
+    expect(stringFromD(new NumberEditor(42, 42, true, {}))).toBe("42")
   })
 
   it("does not add an extra blank line for nested blocks", () => {

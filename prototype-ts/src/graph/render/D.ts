@@ -67,7 +67,7 @@ export class GuidEditor {
   guidEditor() {}
   parent: Maybe<D>
   get children() { return [this.child] }
-  constructor(public cursor: Cursor, public id: GUID, public child: D, public selectionState: Maybe<SelectionState>, public focusWhenSelected: boolean, public editorCommands: EditorCommands) { assert(child.parent === nothing); child.parent = this } }
+  constructor(public cursor: Cursor, public id: GUID, public child: D, public focusWhenSelected: boolean, public editorCommands: EditorCommands) { assert(child.parent === nothing); child.parent = this } }
 
 export class SupportsUnderselection {
   supportsUnderselection() {}
@@ -100,18 +100,15 @@ export class PlaceholderEditor {
   get children() { return [] as D[] }
   constructor(public name: string, public selectedState: Maybe<PlaceholderEditorSelectedState>, public editorCommands: EditorCommands) {} }
 
-export type StringEditorSelectedState = {writable: boolean}
 export class StringEditor {
   parent: Maybe<D>
   get children() { return [] as D[] }
-  constructor(public id: SID, public string: string, public stringEditorSelectedState: Maybe<StringEditorSelectedState>, public editorCommands: EditorCommands) {} }
+  constructor(public id: SID, public string: string, public writable: boolean, public editorCommands: EditorCommands) {} }
 
-export type NumberEditorState = {value?: string}
-export type NumberEditorSelectedState = {writable: boolean, numberEditorState: NumberEditorState}
 export class NumberEditor {
   parent: Maybe<D>
   get children() { return [] as D[] }
-  constructor(public id: NID, public number: number, public numberEditorSelectedState: Maybe<NumberEditorSelectedState>, public editorCommands: EditorCommands) {} }
+  constructor(public id: NID, public number: number, public writable: boolean, public editorCommands: EditorCommands) {} }
 
 export function createD(r: Render = alwaysFail) {
   let rootCursor = new Cursor(nothing, environment().rootViews.id, rootField.id, environment().sparseSpanningTree.map.get(rootField.id))
