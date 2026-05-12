@@ -5,6 +5,7 @@ import { _get, environment } from "../Environment"
 import { findNextTabStop, findTabStop } from "./findNextTabStop"
 import { matchID } from "../model/ID"
 import { commitToActiveElement } from "./EditorCommands"
+import { activeSelectionCursor } from "./EditorFocus"
 import { appendToListCursor, insertAfterListElemCursor, selectionCursorBindMaybe } from "./listCursorActions"
 
 export type KeyHandler = (e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A) => boolean
@@ -51,23 +52,22 @@ function selectDescend(descend: Descend) { environment().selection = {cursor: de
 
 // TODO makeElementVisible
 function keyboardNav(f: (descend: Descend) => Maybe<Descend>, rootDescend: Descend, viewsDescend: Maybe<Descend>): boolean {
-  let env = environment()
-  return booleanFromMaybe(mapMaybe(bindMaybe(bindMaybe(env.selection, selection => descendFromCursor(rootDescend, viewsDescend, selection.cursor)), f), d => { selectDescend(d); return {} })) }
+  return booleanFromMaybe(mapMaybe(bindMaybe(bindMaybe(activeSelectionCursor(), cursor => descendFromCursor(rootDescend, viewsDescend, cursor)), f), d => { selectDescend(d); return {} })) }
 
 export function arrowNavKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
     case "ArrowLeft":
       e.preventDefault()
-      return runE(() => booleanFromMaybe(bindMaybe(environment().selection, selection =>
-        mapMaybe(bindMaybe(descendFromCursor(rootDescend, viewsDescend, selection.cursor), parentDescend), selectDescend) )))
+      return runE(() => booleanFromMaybe(bindMaybe(activeSelectionCursor(), cursor =>
+        mapMaybe(bindMaybe(descendFromCursor(rootDescend, viewsDescend, cursor), parentDescend), selectDescend) )))
     case "ArrowRight":
       e.preventDefault()
-      return runE(() => maybe(environment().selection,
+      return runE(() => maybe(activeSelectionCursor(),
         () => { selectDescend(rootDescend); return true },
         () => booleanFromMaybe(keyboardNav(goDown, rootDescend, viewsDescend)) ))
     case "ArrowDown":
       e.preventDefault()
-      return runE(() => maybe(environment().selection,
+      return runE(() => maybe(activeSelectionCursor(),
         () => { selectDescend(rootDescend); return true },
         () => keyboardNav(d => goSibling(d, 1), rootDescend, viewsDescend) ))
     case "ArrowUp":
@@ -76,13 +76,13 @@ export function arrowNavKeyHandler(e: KeyboardEvent, rootDescend: Descend, views
   return false }
 
 export function doTab(shift: boolean, rootDescend: Descend, viewsDescend: Maybe<Descend>): boolean {
-  const selection = environment().selection
+  const selection = activeSelectionCursor()
   const nextSelection = mapMaybe(
-    maybe(bindMaybe(selection, selection => descendFromCursor(rootDescend, viewsDescend, selection.cursor)),
+    maybe(bindMaybe(selection, cursor => descendFromCursor(rootDescend, viewsDescend, cursor)),
       () => findTabStop(rootDescend, shift ? -1 : 1),
       descend => findNextTabStop(descend, shift ? -1 : 1) ),
     tabStop => ({cursor: tabStop.cursor}) )
-  environment().selection = fromMaybe(nextSelection, () => selection)
+  environment().selection = fromMaybe(nextSelection, () => mapMaybe(selection, cursor => ({cursor})))
   return nextSelection !== nothing }
 
 export function navKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {

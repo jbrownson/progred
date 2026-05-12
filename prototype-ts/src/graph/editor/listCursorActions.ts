@@ -4,6 +4,7 @@ import { Cursor } from "../cursor/Cursor"
 import { _delete, _get, documentSourceFromSource, environment, get, set, Source, SourceType } from "../Environment"
 import { ctorField, emptyListCtor, GUIDEmptyList, GUIDNonemptyList, headField, listFromID, nonemptyListCtor, tailField } from "../graph"
 import { guidFromID } from "../model/ID"
+import { activeSelectionCursor } from "./EditorFocus"
 
 function doAppend(cursor: Cursor): Maybe<Cursor> {
   return bindMaybe(bindMaybe(_get(cursor.parent, cursor.label), tailID => listFromID(tailID, id => ({id}))), oldTail =>
@@ -58,5 +59,4 @@ export function deleteListElemCursor(cursor: Cursor): boolean {
   return false }
 
 export function selectionCursorBindMaybe<A>(f: (cursor: Cursor) => Maybe<A>): Maybe<A> {
-  let env = environment()
-  return bindMaybe(env.selection, selection => f(selection.cursor)) }
+  return bindMaybe(activeSelectionCursor(), f) }

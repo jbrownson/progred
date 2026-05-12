@@ -2,6 +2,7 @@ import * as React from "react"
 import { getTextWidth } from "../../lib/getTextWidth"
 import { makeElementVisible } from "../../lib/makeElementVisible"
 import { fromMaybe, mapMaybe, maybe, nothing } from "../../lib/Maybe"
+import { Cursor } from "../cursor/Cursor"
 import { PlaceholderEditorSelectedState } from "../render/D"
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
@@ -9,6 +10,7 @@ import { sidFromString } from "../model/ID"
 import { focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { attachEditorCommands, detachEditorCommands, EditorCommands } from "../editor/EditorCommands"
+import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
 
 class EntryList extends React.Component<{selectedState: PlaceholderEditorSelectedState, entries: {a: Entry, matches: Match[]}[], close: () => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
   div: HTMLElement | null
@@ -85,7 +87,7 @@ function renderMatches(string: string, matches: Match[]) {
   return [...strings, ...index < string.length ? [{string: string.slice(index), matching: false}] : []]
     .map(({string, matching}, index) => <span key={index} className={matching ? "matching" : ""}>{string}</span>) }
 
-export class PlaceholderInputComponent extends React.Component<{selectedState: PlaceholderEditorSelectedState, placeholder: string, editorCommands: EditorCommands, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
+export class PlaceholderInputComponent extends React.Component<{selectedState: PlaceholderEditorSelectedState, placeholder: string, editorCommands: EditorCommands, cursor?: Cursor, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
   entryList: EntryList | null
   input: HTMLInputElement | null
   open() {
@@ -94,7 +96,9 @@ export class PlaceholderInputComponent extends React.Component<{selectedState: P
   onScroll() { this.updateEntryListAbove() }
   focusIfSelected() { if (this.input) focus(this.input) }
   attachEditorCommands() {
-    if (this.input) attachEditorCommands(this.input, this.props.editorCommands) }
+    if (this.input) {
+      attachEditorCommands(this.input, this.props.editorCommands)
+      maybe(this.props.cursor, () => detachEditorFocus(this.input!), cursor => attachEditorFocus(this.input!, cursor)) }}
   updateEntryListAbove() {
     if (this.input && this.entryList && this.entryList.div) {
       let scrollParent = this.props.scrollParent()
@@ -106,7 +110,7 @@ export class PlaceholderInputComponent extends React.Component<{selectedState: P
   render() {
     return <span className="edgefield" style={{position: "relative"}}>
       <input
-        ref={input => { if (this.input && this.input !== input) detachEditorCommands(this.input); this.input = input }}
+        ref={input => { if (this.input && this.input !== input) { detachEditorCommands(this.input); detachEditorFocus(this.input) } this.input = input }}
         className="i edgefield"
         style={{width: getTextWidth(this.props.selectedState.editorState.value || this.props.placeholder) + "px"}}
         type="text"
@@ -141,4 +145,4 @@ export class PlaceholderInputComponent extends React.Component<{selectedState: P
       {this.props.selectedState.editorState.completionOpen ? <EntryList ref={entryList => { this.entryList = entryList }} selectedState={this.props.selectedState} entries={this.props.selectedState.entries(fromMaybe(this.props.selectedState.editorState.value, () => ""))} close={this.props.closeCompletion} commit={this.props.commit} keyDown={this.props.entryListKeyDown} /> : null}</span> }
   componentDidMount() { this.focusIfSelected(); this.attachEditorCommands(); this.updateEntryListAbove() }
   componentDidUpdate() { this.focusIfSelected(); this.attachEditorCommands(); this.updateEntryListAbove() }
-  componentWillUnmount() { if (this.input) detachEditorCommands(this.input) } }
+  componentWillUnmount() { if (this.input) { detachEditorCommands(this.input); detachEditorFocus(this.input) } } }

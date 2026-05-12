@@ -7,6 +7,7 @@ import { NumberEditor } from "../render/D"
 import { environment } from "../Environment"
 import { nidFromNumber } from "../model/ID"
 import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
+import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
@@ -24,7 +25,9 @@ export class NumberEditorComponent extends React.Component<{numberEditor: Number
       if (!isNaN(number)) this.props.runE(() => mapMaybe(this.props.numberEditor.editorCommands.commit, commit => commit(nidFromNumber(number)))) }
   focusIfSelected() { if (this.input) maybe(this.props.numberEditor.numberEditorSelectedState, () => blur, () => focus)(this.input) }
   attachEditorCommands() {
-    if (this.input) attachEditorCommands(this.input, this.props.numberEditor.editorCommands) }
+    if (this.input) {
+      attachEditorCommands(this.input, this.props.numberEditor.editorCommands)
+      mapMaybe(cursorFromD(this.props.numberEditor), cursor => attachEditorFocus(this.input!, cursor)) }}
   onScroll() { noop() }
   render() {
     const value = maybe(this.props.numberEditor.numberEditorSelectedState, () => "" + this.props.numberEditor.number, ({numberEditorState}) => fromMaybe(numberEditorState.value, () => `${this.props.numberEditor.number}`))
@@ -43,4 +46,4 @@ export class NumberEditorComponent extends React.Component<{numberEditor: Number
       ref={input => { this.input = input }} /> }
   componentDidMount() { this.focusIfSelected(); this.attachEditorCommands() }
   componentDidUpdate() { this.focusIfSelected(); this.attachEditorCommands() }
-  componentWillUnmount() { if (this.input) detachEditorCommands(this.input) } }
+  componentWillUnmount() { if (this.input) { detachEditorCommands(this.input); detachEditorFocus(this.input) } } }

@@ -6,6 +6,7 @@ import { StringEditor } from "../render/D"
 import { environment } from "../Environment"
 import { sidFromString } from "../model/ID"
 import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
+import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
 import { blur, focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
@@ -15,7 +16,9 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
     if (!((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0)) stopPropagationForTextInputs(e) }
   focusIfSelected() { if (this.textArea) (this.props.stringEditor.stringEditorSelectedState ? focus : blur)(this.textArea) }
   attachEditorCommands() {
-    if (this.textArea) attachEditorCommands(this.textArea, this.props.stringEditor.editorCommands) }
+    if (this.textArea) {
+      attachEditorCommands(this.textArea, this.props.stringEditor.editorCommands)
+      mapMaybe(cursorFromD(this.props.stringEditor), cursor => attachEditorFocus(this.textArea!, cursor)) }}
   onScroll() { noop() }
   render() {
     return <textarea
@@ -33,4 +36,4 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
       ref={input => { this.textArea = input }} /> }
   componentDidMount() { this.focusIfSelected(); this.attachEditorCommands() }
   componentDidUpdate() { this.focusIfSelected(); this.attachEditorCommands() }
-  componentWillUnmount() { if (this.textArea) detachEditorCommands(this.textArea) } }
+  componentWillUnmount() { if (this.textArea) { detachEditorCommands(this.textArea); detachEditorFocus(this.textArea) } } }

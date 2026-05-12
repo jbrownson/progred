@@ -25,6 +25,7 @@ export class PlaceholderEditorComponent extends React.Component<{placeholderEdit
         selectedState={selectedState}
         placeholder={this.props.placeholderEditor.name}
         editorCommands={this.props.placeholderEditor.editorCommands}
+        cursor={cursorFromD(this.props.placeholderEditor)}
         scrollParent={this.props.scrollParent}
         runE={this.props.runE}
         closeCompletion={() => this.close(selectedState)}

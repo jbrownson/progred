@@ -1003,6 +1003,27 @@ describe("DComponent editor integration", () => {
     harness.unmount()
   })
 
+  it("navigates from the focused editor instead of stale logical selection", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const root = "guid-root"
+    const firstLabel = sidFromString("first")
+    const secondLabel = sidFromString("second")
+    environment.guidMap.set(environment.rootViews.id, rootField.id, root)
+    environment.guidMap.set(root, firstLabel, sidFromString("First"))
+    environment.guidMap.set(root, secondLabel, sidFromString("Second"))
+    environment.selection = {cursor: _childCursor(rootCursor(environment), root, firstLabel)}
+    const harness = new EditorHarness(environment)
+
+    expect(document.activeElement).toBe(harness.textInput())
+    harness.run(() => { environment.selection = {cursor: rootCursor(environment)} })
+    harness.globalKey("ArrowDown")
+
+    expect(environment.selection?.cursor.parent).toBe(root)
+    expect(environment.selection?.cursor.label).toBe(secondLabel)
+
+    harness.unmount()
+  })
+
   it("defaults cycles collapsed and toggles them without changing selection", () => {
     const environment = makeTestEnvironment({defaultRender})
     const root = "guid-cycle-root"
@@ -1046,6 +1067,23 @@ describe("DComponent editor integration", () => {
 
     expect(stringFromID(harness.get(list!, headField.id)!)).toBe("first")
     expect(stringFromID(harness.get(inserted!, headField.id)!)).toBe("second")
+    expect(harness.get(list!, tailField.id)).toBe(inserted)
+
+    harness.unmount()
+  })
+
+  it("inserts after the focused list item instead of stale logical selection", () => {
+    const harness = rootHarness()
+
+    harness.key("[")
+    harness.typeAndEnter("first")
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    harness.run(() => { harness.environment.selection = {cursor: rootCursor(harness.environment)} })
+    harness.globalKey(",", {metaKey: true})
+    const inserted = harness.environment.selection?.cursor.parent
+    harness.typeAndEnter("second")
+
+    expect(listStrings(harness, list!)).toEqual(["first", "second"])
     expect(harness.get(list!, tailField.id)).toBe(inserted)
 
     harness.unmount()
