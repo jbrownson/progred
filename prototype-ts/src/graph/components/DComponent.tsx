@@ -19,7 +19,7 @@ import { focus } from "../editor/ignoreFocusEvents"
 import { buildEdgeLabelEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
 import { edgeContextFromEdge } from "../editor/edgeContextFromCursor"
-import { typeFromCursor } from "../cursor/typeFromCursor"
+import { typeFromEdge } from "../typeFromEdge"
 import { renderField } from "../render/defaultRender"
 
 const indentWidth = 16
@@ -155,8 +155,7 @@ class SupportsUnderselectionComponent extends React.Component<{supportsUndersele
     this.setState({pendingEdgeLabel: false, missingLabel: label, focusMissingLabel: true}) }
   missingField(label: ID) {
     const {cursor, id} = this.props.supportsUnderselection
-    const missingCursor = _childCursor(cursor, id, label)
-    const edgeContext = edgeContextFromEdge({parent: id, label}, typeFromCursor(missingCursor))
+    const edgeContext = edgeContextFromEdge({parent: id, label}, typeFromEdge({parent: id, label}))
     return renderField(cursor, id, label, {
       ...edgeContext,
       commit: id => {

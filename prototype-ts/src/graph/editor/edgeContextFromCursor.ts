@@ -5,7 +5,7 @@ import { EdgeRef } from "../model/EdgeRef"
 import { setOrDelete } from "../Environment"
 import { guidFromID } from "../model/ID"
 import { EdgeContext } from "./EditorCommands"
-import { typeFromCursor } from "../cursor/typeFromCursor"
+import { typeFromEdge } from "../typeFromEdge"
 
 export function edgeContextFromEdge(edge: EdgeRef, expectedType: Maybe<Type>): EdgeContext {
   return {
@@ -13,4 +13,4 @@ export function edgeContextFromEdge(edge: EdgeRef, expectedType: Maybe<Type>): E
     expectedType } }
 
 export function edgeContextFromCursor(cursor: Cursor): EdgeContext {
-  return edgeContextFromEdge(cursor, typeFromCursor(cursor)) }
+  return edgeContextFromEdge(cursor, typeFromEdge(cursor)) }
