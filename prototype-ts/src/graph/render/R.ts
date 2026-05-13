@@ -7,7 +7,7 @@ import { ID } from "../model/ID"
 import { typeFromCursor } from "../cursor/typeFromCursor"
 import { typeMatches } from "../typeMatches"
 import { EdgeContext } from "../editor/EditorCommands"
-import { edgeContextFromCursor } from "../editor/edgeContextFromCursor"
+import { edgeContextFromEdge } from "../editor/edgeContextFromCursor"
 
 export type Render = (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext) => Maybe<D>
 
@@ -21,8 +21,8 @@ export type Depedencies = Map/*TODO not actually Map*/<Change, Map<D, () => D>>
 export function descend(cursor: Cursor, id: ID, label: ID, render = alwaysFail, edgeContext?: EdgeContext): D {
   let newCursor = _childCursor(cursor, id, label)
   let newSourceID = get(id, label)
-  let newEdgeContext = fromMaybe(edgeContext, () => edgeContextFromCursor(newCursor))
-  let expectedType = fromMaybe(newEdgeContext.expectedType, () => typeFromCursor(newCursor))
+  let expectedType = fromMaybe(edgeContext?.expectedType, () => typeFromCursor(newCursor))
+  let newEdgeContext = fromMaybe(edgeContext, () => edgeContextFromEdge({parent: id, label}, expectedType))
   return new Descend(newCursor, fromMaybe(render(newCursor, newSourceID, newEdgeContext), () => environment().defaultRender(newCursor, newSourceID, newEdgeContext)),
     fromMaybe(bindMaybe(newSourceID, newSourceID => bindMaybe(expectedType, type => mapMaybe(typeMatches(newSourceID.id, type), typeMatches => !typeMatches))), () => false),
     newEdgeContext) }

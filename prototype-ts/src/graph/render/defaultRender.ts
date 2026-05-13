@@ -12,7 +12,7 @@ import { alwaysFail, descend, Render } from "./R"
 import { getCollapsed, setCollapsed } from "../editor/setCollapsed"
 import { copyResultForID } from "../editor/Copy"
 import type { EdgeContext, EditorCommands, EditorKeyDownEvent } from "../editor/EditorCommands"
-import { edgeContextFromCursor } from "../editor/edgeContextFromCursor"
+import { edgeContextFromCursor, edgeContextFromEdge } from "../editor/edgeContextFromCursor"
 import { requestFocusForCursor } from "../editor/EditorFocus"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext) => D): (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext) => D {
@@ -103,7 +103,7 @@ function cursorsFromList<A extends HasID>(cursor: Cursor, edgeContext: EdgeConte
   return matchList(list,
     nonemptyList => bindMaybe(nonemptyList.tail, tail => {
       let tailCursor = _childCursor(cursor, nonemptyList.id, tailField.id)
-      return mapMaybe(cursorsFromList(tailCursor, {...edgeContextFromCursor(tailCursor), expectedType: edgeContext.expectedType}, tail, visited), ({nonemptys, emptyListCursor, emptyListEdgeContext, emptyList}) =>
+      return mapMaybe(cursorsFromList(tailCursor, edgeContextFromEdge({parent: nonemptyList.id, label: tailField.id}, edgeContext.expectedType), tail, visited), ({nonemptys, emptyListCursor, emptyListEdgeContext, emptyList}) =>
         ({nonemptys: [{cursor, edgeContext, list: nonemptyList}, ...nonemptys], emptyListCursor, emptyListEdgeContext, emptyList}) )}),
     emptyList => ({nonemptys: [], emptyListCursor: cursor, emptyListEdgeContext: edgeContext, emptyList}) )}
 
@@ -135,7 +135,7 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
         () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => commit(tail.id))),
         id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) )
       let tailCursor = _childCursor(cursor, list.id, tailField.id)
-      let insertAfter = bindMaybe(list.tail, tail => insertionPoint(tailCursor, {...edgeContextFromCursor(tailCursor), expectedType: listEdgeContext.expectedType}, tail))
+      let insertAfter = bindMaybe(list.tail, tail => insertionPoint(tailCursor, edgeContextFromEdge({parent: list.id, label: tailField.id}, listEdgeContext.expectedType), tail))
       let requireMeta = maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
       let keyDown = (e: EditorKeyDownEvent) => e.key === "," && (e.metaKey || !requireMeta)
           ? mapMaybe(insertAfter, insertAfter => () => {
