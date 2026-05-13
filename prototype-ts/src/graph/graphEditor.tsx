@@ -295,92 +295,116 @@ function loadJson(json: string) {
     workspace = newWorkspace(_root)
     rootComponent.forceUpdate() })}
 
-export class RootComponent extends React.Component<{}, {}> {
-  rootDescend: D
-  viewDescend: Maybe<D>
-  showGraph = false
-  inRunE = false
-  leftPanel: HTMLElement | null
-  rightPanel: HTMLElement | null
-  initialFocusConsumed = false
-  runWithCustomCallbacks<A>(f: () => A, eCallbacks: ECallbacks) {
-    assert(!this.inRunE)
-    this.inRunE = true
+export type RootComponent = {
+  showGraph: boolean
+  initialFocusConsumed: boolean
+  forceUpdate: () => void
+  runWithCustomCallbacks: <A>(f: () => A, eCallbacks: ECallbacks) => A
+  runE: <A>(f: () => A) => A
+  updateMenuState: () => void
+}
+
+const RootComponentView = React.forwardRef<RootComponent>(function RootComponentView(_, ref) {
+  const [, forceUpdate] = React.useReducer(n => n + 1, 0)
+  const showGraph = React.useRef(false)
+  const inRunE = React.useRef(false)
+  const leftPanel = React.useRef<HTMLElement | null>(null)
+  const rightPanel = React.useRef<HTMLElement | null>(null)
+  const initialFocusConsumed = React.useRef(false)
+
+  function runWithCustomCallbacks<A>(f: () => A, eCallbacks: ECallbacks) {
+    assert(!inRunE.current)
+    inRunE.current = true
     try {
       let a = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
-      this.forceUpdate() // TODO
+      forceUpdate()
       return a
     } finally {
-      this.inRunE = false }}
-  runE<A>(f: () => A) {
+      inRunE.current = false }}
+
+  function runE<A>(f: () => A) {
     let {undoRedoArray, eCallbacks} = undoRedoECallbacks()
-    let a = this.runWithCustomCallbacks(f, eCallbacks)
+    let a = runWithCustomCallbacks(f, eCallbacks)
     if (undoRedoArray.length > 0) {
       undoStack.push(undoRedoArray)
       redoStack = [] }
     return a }
-  activeEditorSupportsUnderselection(): boolean {
+
+  function activeEditorSupportsUnderselection(): boolean {
     return editorCommandsForActiveElement()?.newEdge !== undefined }
-  updateMenuState() {
-    progred.setMenuItemEnabled("new-edge", this.activeEditorSupportsUnderselection())
+
+  function updateMenuState() {
+    progred.setMenuItemEnabled("new-edge", activeEditorSupportsUnderselection())
     progred.setMenuItemEnabled("delete", editorCommandsForActiveElement()?.commit !== undefined || graphHighlight !== nothing)
-    progred.setMenuItemChecked("show-graph", this.showGraph) }
-  setGraphSelection(nextGraphSelection: Maybe<GraphSelection>) {
+    progred.setMenuItemChecked("show-graph", showGraph.current) }
+
+  function setGraphSelection(nextGraphSelection: Maybe<GraphSelection>) {
     graphHighlight = nextGraphSelection
-    this.forceUpdate() }
-  focusSelection() {
-    for (let root of [this.leftPanel, this.rightPanel])
+    forceUpdate() }
+
+  function focusSelection() {
+    for (let root of [leftPanel.current, rightPanel.current])
       if (root && focusPendingEditor(root)) return
-    if (this.initialFocusConsumed) return
+    if (initialFocusConsumed.current) return
     mapMaybe(initialFocusCursor, cursor => {
-      for (let root of [this.leftPanel, this.rightPanel])
+      for (let root of [leftPanel.current, rightPanel.current])
         if (root && focusEditorForCursor(root, cursor)) {
-          this.initialFocusConsumed = true
+          initialFocusConsumed.current = true
           return {} } }) }
-  render() {
-    let documentRender = withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
-      bindMaybe(bindMaybe(environment().workspace.root, Module.fromID), renderFromModule) )
-    let {rootDescend, viewDescend} = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
-    let graphSnapshot = this.showGraph
-      ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
-        buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
-      : nothing
-    this.rootDescend = rootDescend
-    this.viewDescend = viewDescend
-    let hasSidebar = this.showGraph || viewDescend !== nothing
-    return <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}}>
-        <div ref={leftPanel => { this.leftPanel = leftPanel }} className={hasSidebar ? "leftPanel" : ""}
-        style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "auto"}}
-        onScroll={() => notifyScrollListeners()} >
-        <div className="doc"><ProjectionRoot
-          d={this.rootDescend}
-          depth={0}
-          scrollParent={() => this.leftPanel}
-          runE={f => this.runE(f)} /></div></div>
-      {hasSidebar
-        ? <div className="sidebar" style={{width: "40%", height: "100%", display: "inline-block"}}>
-          <div className="separator" style={{height: "100%", display: "inline-block"}} />
-          <div className="rightPanel" style={{width: "100%", height: "100%", display: "inline-block"}}>
-            {maybe(graphSnapshot, () => null, graphSnapshot =>
-              <div className="graphPanel" style={{height: viewDescend === nothing ? "100%" : "50%"}}>
-                <GraphViewComponent
-                  snapshot={graphSnapshot}
-                  setGraphSelection={selection => this.setGraphSelection(selection)}
-                  chooseID={id => this.runE(() => commitIDToActiveElement(id))} />
-              </div>)}
-            {maybe(this.viewDescend, () => null, viewDescend =>
-              <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "auto"}}
-                onScroll={() => notifyScrollListeners()} >
-                <div className="view"><ProjectionRoot
-                  d={viewDescend}
-                  depth={0}
-                  scrollParent={() => this.rightPanel}
-                  runE={f => this.runE(f)} /></div></div>)}
-          </div></div>
-        : null}</div> }
-  onScroll() { notifyScrollListeners() }
-  componentDidMount() { this.onScroll(); this.focusSelection(); this.updateMenuState() }
-  componentDidUpdate() { this.onScroll(); this.focusSelection(); this.updateMenuState() } }
+
+  React.useImperativeHandle(ref, () => ({
+    get showGraph() { return showGraph.current },
+    set showGraph(value) { showGraph.current = value },
+    get initialFocusConsumed() { return initialFocusConsumed.current },
+    set initialFocusConsumed(value) { initialFocusConsumed.current = value },
+    forceUpdate,
+    runWithCustomCallbacks,
+    runE,
+    updateMenuState }))
+
+  React.useLayoutEffect(() => {
+    notifyScrollListeners()
+    focusSelection()
+    updateMenuState() })
+
+  let documentRender = withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+    bindMaybe(bindMaybe(environment().workspace.root, Module.fromID), renderFromModule) )
+  let {rootDescend, viewDescend} = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
+  let graphSnapshot = showGraph.current
+    ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+      buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
+    : nothing
+  let hasSidebar = showGraph.current || viewDescend !== nothing
+  return <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}}>
+      <div ref={element => { leftPanel.current = element }} className={hasSidebar ? "leftPanel" : ""}
+      style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "auto"}}
+      onScroll={() => notifyScrollListeners()} >
+      <div className="doc"><ProjectionRoot
+        d={rootDescend}
+        depth={0}
+        scrollParent={() => leftPanel.current}
+        runE={f => runE(f)} /></div></div>
+    {hasSidebar
+      ? <div className="sidebar" style={{width: "40%", height: "100%", display: "inline-block"}}>
+        <div className="separator" style={{height: "100%", display: "inline-block"}} />
+        <div className="rightPanel" style={{width: "100%", height: "100%", display: "inline-block"}}>
+          {maybe(graphSnapshot, () => null, graphSnapshot =>
+            <div className="graphPanel" style={{height: viewDescend === nothing ? "100%" : "50%"}}>
+              <GraphViewComponent
+                snapshot={graphSnapshot}
+                setGraphSelection={selection => setGraphSelection(selection)}
+                chooseID={id => runE(() => commitIDToActiveElement(id))} />
+            </div>)}
+          {maybe(viewDescend, () => null, viewDescend =>
+            <div ref={element => { rightPanel.current = element }} className="viewPanel" style={{height: showGraph.current ? "50%" : "100%", overflow: "auto"}}
+              onScroll={() => notifyScrollListeners()} >
+              <div className="view"><ProjectionRoot
+                d={viewDescend}
+                depth={0}
+                scrollParent={() => rightPanel.current}
+                runE={f => runE(f)} /></div></div>)}
+        </div></div>
+      : null}</div> })
 
 window.onclick = () => { if (rootComponent) rootComponent.updateMenuState() }
 window.addEventListener("focusin", () => { if (rootComponent) { rootComponent.forceUpdate(); rootComponent.updateMenuState() } })
@@ -390,4 +414,4 @@ progred.onMenuAction(action => { if (rootComponent) handleMenuAction(action) })
 
 export let rootComponent: RootComponent
 createRoot(document.getElementById('root') as HTMLElement)
-  .render(<RootComponent ref={component => { if (component) rootComponent = component }} />)
+  .render(<RootComponentView ref={component => { if (component) rootComponent = component }} />)
