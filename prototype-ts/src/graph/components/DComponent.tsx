@@ -3,7 +3,7 @@ import { concatMap, intersperse, join } from "../../lib/Array"
 import { bindMaybe, mapMaybe, maybe, maybeMap, Maybe, nothing } from "../../lib/Maybe"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { cursorFromD, descendFromD } from "../cursor/cursorFromD"
-import { Block, D, Descend, GuidEditor, Label, matchD, PlaceholderEditorActiveState, PlaceholderEditorState, SupportsUnderselection } from "../render/D"
+import { Block, Collapsible, D, Descend, GuidEditor, Label, matchD, PlaceholderEditorActiveState, PlaceholderEditorState, SupportsUnderselection } from "../render/D"
 import { _get } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderEditorComponent } from "./PlaceholderEditorComponent"
@@ -24,7 +24,7 @@ import { renderField } from "../render/defaultRender"
 
 const indentWidth = 16
 
-type DComponentChild = DComponent | PlaceholderEditorComponent | ListInsertionEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent | SupportsUnderselectionComponent
+type DComponentChild = DComponent | CollapsibleComponent | PlaceholderEditorComponent | ListInsertionEditorComponent | StringEditorComponent | NumberEditorComponent | GuidEditorComponent | SupportsUnderselectionComponent
 type DComponentState = {activeListInsertion?: number}
 type DComponentProps = {d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, edgeContext?: EdgeContext, editorCommands?: EditorCommands}
 
@@ -46,7 +46,7 @@ function clickedIDFromD(d: D): Maybe<ID> {
 
 function isSingleLine(d: D): boolean {
   return matchD(d, block => false, line => !line.children.find(child => !isSingleLine(child)), dText => true, dIdenticon => true, dList => dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child)),
-    descend => isSingleLine(descend.child), editorBehavior => isSingleLine(editorBehavior.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
+    descend => isSingleLine(descend.child), editorBehavior => isSingleLine(editorBehavior.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapsible => collapsible.singleLine, collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
 
 export class DComponent extends React.Component<DComponentProps, DComponentState> {
   state: DComponentState = {}
@@ -124,11 +124,27 @@ export class DComponent extends React.Component<DComponentProps, DComponentState
       guidEditor => <GuidEditorComponent ref={addChild} guidEditor={guidEditor} editorCommands={activeEditorCommands(this.props.edgeContext, this.props.editorCommands, guidEditor.editorCommands)} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       supportsUnderselection => <SupportsUnderselectionComponent ref={addChild} supportsUnderselection={supportsUnderselection} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={this.props.editorCommands} />,
       label => <span className="edgeLabel"><DComponent ref={addChild} d={label.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={this.props.editorCommands} /></span>,
-      collapseToggle => <span className="collapseToggle" onClick={e => { e.stopPropagation(); this.props.runE(collapseToggle.action) }}>{collapseToggle.collapsed ? "▸" : "▾"}</span>,
+      collapsible => <CollapsibleComponent ref={addChild} collapsible={collapsible} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={this.props.editorCommands} />,
+      collapseToggle => <span className="collapseToggle" onClick={e => { e.stopPropagation(); collapseToggle.action() }}>{collapseToggle.collapsed ? "▸" : "▾"}</span>,
       button => <input type="button" value={button.text} onClick={e => { e.stopPropagation(); this.props.runE(button.action) }} />,
       placeholderEditor => <PlaceholderEditorComponent ref={addChild} placeholderEditor={placeholderEditor} editorCommands={activeEditorCommands(this.props.edgeContext, this.props.editorCommands, placeholderEditor.editorCommands)} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       stringEditor => <StringEditorComponent ref={addChild} stringEditor={stringEditor} editorCommands={activeEditorCommands(this.props.edgeContext, this.props.editorCommands, stringEditor.editorCommands)} runE={this.props.runE} />,
       numberEditor => <NumberEditorComponent ref={addChild} numberEditor={numberEditor} editorCommands={activeEditorCommands(this.props.edgeContext, this.props.editorCommands, numberEditor.editorCommands)} runE={this.props.runE} /> )}}
+
+class CollapsibleComponent extends React.Component<{collapsible: Collapsible, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, edgeContext?: EdgeContext, editorCommands?: EditorCommands}, {collapsed: boolean}> {
+  state = {collapsed: this.props.collapsible.defaultCollapsed}
+  child: Maybe<DComponent> = nothing
+  onScroll() { if (this.child) this.child.onScroll() }
+  render() {
+    let editorCommands = mergeEditorCommands(this.props.editorCommands, {collapse: () => this.setState({collapsed: true})})
+    return <DComponent
+      ref={dComponent => { this.child = dComponent || nothing }}
+      d={this.props.collapsible.child(this.state.collapsed, collapsed => this.setState({collapsed}))}
+      depth={this.props.depth}
+      scrollParent={this.props.scrollParent}
+      runE={this.props.runE}
+      edgeContext={this.props.edgeContext}
+      editorCommands={editorCommands} /> }}
 
 type SupportsUnderselectionComponentState = {pendingEdgeLabel: boolean, missingLabel?: ID, focusMissingLabel?: boolean}
 

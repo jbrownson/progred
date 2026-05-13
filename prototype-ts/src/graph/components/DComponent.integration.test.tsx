@@ -20,7 +20,6 @@ import { renderIfApp } from "../renderIfs"
 import { renderFromRender } from "../render/renderFromRender"
 import { Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { defaultKeyHandler } from "../editor/keyHandler"
 import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor } from "../editor/EditorFocus"
 import { MapIDMap } from "../model/MapIDMap"
@@ -209,11 +208,7 @@ class EditorHarness {
 }
 
 function rootCursor(environment: Environment) {
-  if (!environment.sparseSpanningTree.map.has(rootField.id))
-    environment.sparseSpanningTree.map.set(rootField.id, new SparseSpanningTree())
-  if (!environment.sparseSpanningTree.map.has(viewsField.id))
-    environment.sparseSpanningTree.map.set(viewsField.id, new SparseSpanningTree())
-  return new Cursor(undefined, environment.rootViews.id, rootField.id, environment.sparseSpanningTree.map.get(rootField.id))
+  return new Cursor(undefined, environment.rootViews.id, rootField.id)
 }
 
 function rootHarness(render?: Render) {

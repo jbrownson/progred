@@ -6,7 +6,6 @@ import { ctorField, GUIDRootViews, nameField } from "./graph"
 import { GUIDMap } from "./model/GUIDMap"
 import { GUID, guidFromID, ID, stringFromID } from "./model/ID"
 import { IDMap } from "./model/IDMap"
-import { SparseSpanningTree } from "./SparseSpanningTree"
 import type { EdgeContext } from "./editor/EditorCommands"
 
 export class Environment {
@@ -14,7 +13,6 @@ export class Environment {
     public libraries: Map<string, {idMap: IDMap, root: ID}>,
     public guidMap: GUIDMap,
     public rootViews: GUIDRootViews /* TODO this should exist outside the GUIDMap or something */,
-    public sparseSpanningTree: SparseSpanningTree,
     public defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext) => D,
     public callbacks: ECallbacks ) {} }
 

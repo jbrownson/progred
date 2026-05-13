@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { Cursor } from "../cursor/Cursor"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { sidFromString } from "../model/ID"
 import { Descend, DText } from "../render/D"
 import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestNextTabStopFromCursor } from "./EditorFocus"
@@ -10,7 +9,7 @@ afterEach(() => {
 })
 
 function cursor(label: string) {
-  return new Cursor(undefined, "guid-parent", sidFromString(label), new SparseSpanningTree())
+  return new Cursor(undefined, "guid-parent", sidFromString(label))
 }
 
 function editor(cursor: Cursor, tabStop = false) {

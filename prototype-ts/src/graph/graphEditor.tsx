@@ -27,8 +27,6 @@ import { renderFromLibraries, renderFromModule } from "./render/renderFromLibrar
 import { renders } from "./render/renders"
 import { save } from "./model/save"
 import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSnapshot"
-import { setCollapsed } from "./editor/setCollapsed"
-import { SparseSpanningTree } from "./SparseSpanningTree"
 import { stringFromD } from "./transforms/stringFromD"
 import { stringFromJSON } from "./transforms/stringFromJSON"
 import { UndoRedo } from "./editor/UndoRedo"
@@ -98,7 +96,7 @@ function handleMenuAction(action: string) {
       break
     case "select-all":
       if (!actionIfTextInput("selectAll:"))
-        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().rootViews.id, rootField.id, environment().sparseSpanningTree)))
+        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().rootViews.id, rootField.id)))
       break
     case "console-log-selection":
       rootComponent.runE(() => mapMaybe(activeID(), logID))
@@ -108,7 +106,7 @@ function handleMenuAction(action: string) {
       rootComponent.forceUpdate()
       break
     case "collapse":
-      rootComponent.runE(() => mapMaybe(activeCursor(), cursor => setCollapsed(cursor, true)))
+      mapMaybe(editorCommandsForActiveElement()?.collapse, collapse => collapse())
       break
     case "transform-brad-params-string":
       transform(id => bindMaybe(BradParams.fromID(id), bradParams => bindMaybe(jsonFromBradParams(bradParams), stringFromJSON)))
@@ -227,14 +225,13 @@ function transform(f: (id: ID) => Maybe<HasID>) {
 
 let undoStack: UndoRedo[][] = []
 let redoStack: UndoRedo[][] = []
-let sparseSpanningTree = new SparseSpanningTree(nothing, new Map([[rootField.id, new SparseSpanningTree], [viewsField.id, new SparseSpanningTree]]))
 let guidRootViews = new GUIDRootViews(generateGUID())
 let guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
-let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, guidRootViews.id, rootField.id, sparseSpanningTree.map.get(rootField.id))
+let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, guidRootViews.id, rootField.id)
 let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 
-let libraryRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
+let libraryRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
 
 function actionIfTextInputWithSelection(action: string) {
   if (document.activeElement) {
@@ -316,7 +313,7 @@ export class RootComponent extends React.Component<{}, {}> {
     assert(!this.inRunE)
     this.inRunE = true
     try {
-      let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
+      let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
       this.forceUpdate() // TODO
       return a
     } finally {
@@ -347,11 +344,11 @@ export class RootComponent extends React.Component<{}, {}> {
           this.initialFocusConsumed = true
           return {} } }) }
   render() {
-    let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+    let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       bindMaybe(bindMaybe(environment().rootViews.root, ({id}) => Module.fromID(id)), renderFromModule) )
-    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createD)
+    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createD)
     let graphSnapshot = this.showGraph
-      ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+      ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, defaultRender, readOnlyECallbacks().eCallbacks), () =>
         buildGraphViewSnapshot(guidMap, guidRootViews, activeEdge(), graphHighlight))
       : nothing
     this.rootDescend = rootDescend

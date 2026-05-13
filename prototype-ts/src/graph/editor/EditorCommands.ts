@@ -22,6 +22,7 @@ export type EditorKeyDownEvent = {
 export type EditorCommands = {
   copy?: () => {referenceID: ID, copyResult: CopyResult}
   commit?: Commit
+  collapse?: () => void
   newEdge?: () => void
   keyDown?: (e: EditorKeyDownEvent) => Maybe<() => void>
 }

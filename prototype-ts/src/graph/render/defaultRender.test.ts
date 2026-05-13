@@ -3,13 +3,12 @@ import { Cursor } from "../cursor/Cursor"
 import { SourceType } from "../Environment"
 import { nameField } from "../graph"
 import { sidFromString } from "../model/ID"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { withTestEnvironment } from "../testHelpers"
 import { D, DIdenticon, DText, GuidEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
 import { defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
 
 function cursor() {
-  return new Cursor(undefined, "guid-holder", sidFromString("root"), new SparseSpanningTree())
+  return new Cursor(undefined, "guid-holder", sidFromString("root"))
 }
 
 function hasD(d: D, f: (d: D) => boolean): boolean {

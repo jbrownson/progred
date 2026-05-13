@@ -10,7 +10,6 @@ import type { ID } from "../model/ID"
 import { GUIDMap } from "../model/GUIDMap"
 import { Cursor } from "../cursor/Cursor"
 import { DText, Descend, Label } from "../render/D"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { DComponent } from "./DComponent"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
@@ -46,7 +45,7 @@ describe("DComponent choose ID", () => {
     document.body.appendChild(container)
     let root = createRoot(container)
     let labelID = "guid-label"
-    let cursor = new Cursor(undefined, "guid-parent", labelID, new SparseSpanningTree())
+    let cursor = new Cursor(undefined, "guid-parent", labelID)
 
     act(() => root.render(
       <DComponent
@@ -76,12 +75,11 @@ describe("DComponent choose ID", () => {
       new Map(),
       new GUIDMap(new Map([[parent, new Map([[label, target]])]])),
       new GUIDRootViews("guid-root"),
-      new SparseSpanningTree(),
       () => new DText(""),
       noopECallbacks)
 
     withEnvironment(environment, () => {
-      let cursor = new Cursor(undefined, parent, label, new SparseSpanningTree())
+      let cursor = new Cursor(undefined, parent, label)
       act(() => root.render(
         <DComponent
           d={new Descend(cursor, new DText("node"), false)}

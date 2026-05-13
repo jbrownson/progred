@@ -18,6 +18,7 @@ export function stringFromD(d: D, depth = 0): string {
     guidEditor => stringFromD(guidEditor.child, depth),
     supportsUnderselection => stringFromD(supportsUnderselection.child, depth),
     label => stringFromD(label.child, depth),
+    collapsible => stringFromD(collapsible.child(collapsible.defaultCollapsed, () => {}), depth),
     collapseToggle => "",
     button => `[${button.text}]`,
     placeholder => "[…]",

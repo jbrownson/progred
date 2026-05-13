@@ -3,13 +3,12 @@ import { buildEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import { cursorHasCycle } from "../cursor/cursorHasCycle"
-import { Block, CollapseToggle, D, DIdenticon, DList, DText, EditorBehavior, GuidEditor, Label, Line, ListInsertionPoint, matchD, NumberEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
+import { Block, Collapsible, CollapseToggle, D, DIdenticon, DList, DText, EditorBehavior, GuidEditor, Label, Line, ListInsertionPoint, matchD, NumberEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
 import { _get, edges, environment, set, Source, SourceID, SourceType } from "../Environment"
 import { Ctor, ctorField, EmptyList, GUIDEmptyList, Field, GUIDNonemptyList, HasID, headField, List, listFromID, ListType, matchList, nameField, NonemptyList, tailField } from "../graph"
 import { GUID, guidFromID, ID, matchID, numberFromNID, SID } from "../model/ID"
 import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
-import { getCollapsed, setCollapsed } from "../editor/setCollapsed"
 import { copyResultForID } from "../editor/Copy"
 import type { EdgeContext, EditorCommands, EditorKeyDownEvent } from "../editor/EditorCommands"
 import { edgeContextFromCursor, edgeContextFromEdge } from "../editor/edgeContextFromCursor"
@@ -52,7 +51,7 @@ export function renderDocumentGuidEditor(cursor: Cursor, sourceID: SourceID, d: 
 
 function isSingleLine(d: D): boolean {
   return matchD(d, block => false, line => !booleanFromMaybe(line.children.find(child => !isSingleLine(child))), dText => true, dIdenticon => true, dList => dList.children.length > 1 || !dList.children.find(child => !isSingleLine(child)),
-    descend => isSingleLine(descend.child), editorBehavior => isSingleLine(editorBehavior.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true )}
+    descend => isSingleLine(descend.child), editorBehavior => isSingleLine(editorBehavior.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapsible => collapsible.singleLine, collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true )}
 
 function renderIDLabel(id: ID): D {
   return matchID<D>(id,
@@ -62,11 +61,7 @@ function renderIDLabel(id: ID): D {
 
 export function renderField(cursor: Cursor, id: ID, label: ID, edgeContext?: EdgeContext): D {
   let childD = descend(cursor, id, label, alwaysFail, edgeContext)
-  let labelD = new Label(
-    new Cursor(
-      cursor, id, label,
-      bindMaybe(cursor.sparseSpanningTree, sparseSpanningTree =>
-        sparseSpanningTree.map.get(label) )), new Line(renderIDLabel(label), new DText(" →")) )
+  let labelD = new Label(new Cursor(cursor, id, label), new Line(renderIDLabel(label), new DText(" →")) )
   return isSingleLine(childD)
     ? new Block(new Line(labelD, new DText(" "), childD))
     : new Block(labelD, new Block(childD)) }
@@ -81,21 +76,23 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
   let labels = [
     ...ctorFields.filter(field => field.id !== nameField.id && field.id !== ctorField.id).map(field => field.id),
     ...extraLabels.filter(label => label !== nameField.id && label !== ctorField.id) ]
-  let collapsed = fromMaybe(getCollapsed(cursor), () => cursorHasCycle(cursor))
-  let nameDs = hasName
-    ? collapsed
-      ? maybe(bindMaybe(_get(guid, nameField.id), stringFromID), () => [], name => [new DText(" "), new DText(name)])
-      : [new DText(" "), descend(cursor, guid, nameField.id)]
-    : []
-  let fieldDs = collapsed ? [] : labels.map(label => renderField(cursor, guid, label))
-  const d = new Line(
-    new GuidEditor(cursor, guid, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
-      true,
-      editorCommands(cursor, guid)),
-    ...nameDs,
-    ...(hasName || labels.length > 0 ? [new CollapseToggle(collapsed, () => setCollapsed(cursor, !collapsed))] : []),
-    ...fieldDs )
-  return writable ? new SupportsUnderselection(cursor, guid, d) : d }
+  let defaultCollapsed = cursorHasCycle(cursor)
+  let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
+    let nameDs = hasName
+      ? collapsed
+        ? maybe(bindMaybe(_get(guid, nameField.id), stringFromID), () => [], name => [new DText(" "), new DText(name)])
+        : [new DText(" "), descend(cursor, guid, nameField.id)]
+      : []
+    let fieldDs = collapsed ? [] : labels.map(label => renderField(cursor, guid, label))
+    const d = new Line(
+      new GuidEditor(cursor, guid, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => new DText(name))), () => new DIdenticon(guid)),
+        true,
+        editorCommands(cursor, guid)),
+      ...nameDs,
+      ...(hasName || labels.length > 0 ? [new CollapseToggle(collapsed, () => setCollapsed(!collapsed))] : []),
+      ...fieldDs )
+    return writable ? new SupportsUnderselection(cursor, guid, d) : d }
+  return defaultCollapsed || hasName || labels.length > 0 ? new Collapsible(defaultCollapsed, defaultCollapsed || labels.length === 0, render) : render(false, () => {}) }
 
 function cursorsFromList<A extends HasID>(cursor: Cursor, edgeContext: EdgeContext, list: List<A>, visited = new Set<ID>()): Maybe<{nonemptys: {cursor: Cursor, edgeContext: EdgeContext, list: NonemptyList<A>}[], emptyListCursor: Cursor, emptyListEdgeContext: EdgeContext, emptyList: EmptyList}> {
   if (visited.has(list.id)) return nothing
@@ -116,36 +113,38 @@ export function renderListCurly(separator = ",", r = alwaysFail) { return render
 export function renderList(opening = "[", closing = "]", separator = ",", r = alwaysFail): Render {
   return (listCursor, sourceID, listEdgeContext) => bindMaybe(sourceID, sourceID => {
     listEdgeContext = fromMaybe(listEdgeContext, () => edgeContextFromCursor(listCursor))
-    let list = listFromID(sourceID.id, id => ({id}))
-    let collapsed = fromMaybe(getCollapsed(listCursor), () => cursorHasCycle(listCursor))
-    let collapseToggle = bindMaybe(list, list => list instanceof NonemptyList ? new CollapseToggle(collapsed, () => setCollapsed(listCursor, !collapsed)) : nothing)
-    if (collapsed && collapseToggle) return renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, [], closing, separator, collapseToggle))
-    let cursors = bindMaybe(list, list => cursorsFromList(listCursor, listEdgeContext, list))
-    let insertionPoint = (cursor: Cursor, edgeContext: EdgeContext, oldTail: List<HasID>): ListInsertionPoint => {
-      let insert = (id: Maybe<ID>) => mapMaybe(edgeContext.commit, commit => {
-        let newList = GUIDNonemptyList.new(id => ({id})).setTail(oldTail)
-        mapMaybe(id, id => newList.setHead({id}))
-        commit(newList.id)
-        requestFocusForCursor(_childCursor(cursor, newList.id, headField.id)) })
-      return {
-        entries: buildEntries(listElementType(edgeContext), id => insert(id())),
-        editorCommands: {commit: insert} }}
-    let listItem = (cursor: Cursor, listEdgeContext: EdgeContext, list: NonemptyList<HasID>) => {
-      let commit = (id: Maybe<ID>) => maybe(id,
-        () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => commit(tail.id))),
-        id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) )
-      let tailCursor = _childCursor(cursor, list.id, tailField.id)
-      let insertAfter = bindMaybe(list.tail, tail => insertionPoint(tailCursor, edgeContextFromEdge({parent: list.id, label: tailField.id}, listEdgeContext.expectedType), tail))
-      let requireMeta = maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
-      let keyDown = (e: EditorKeyDownEvent) => e.key === "," && (e.metaKey || !requireMeta)
-          ? mapMaybe(insertAfter, insertAfter => () => {
-            e.preventDefault()
-            e.stopPropagation()
-            mapMaybe(insertAfter.editorCommands.commit, commit => commit(nothing)) })
-          : nothing
-      return new EditorBehavior({keyDown}, descend(cursor, list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)})) }
-    return mapMaybe(cursors, ({emptyList, emptyListCursor, emptyListEdgeContext, nonemptys}) => renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, nonemptys.map(({cursor, edgeContext, list}) => listItem(cursor, edgeContext, list)), closing, separator, collapseToggle,
-      [...nonemptys.map(({cursor, edgeContext, list}) => insertionPoint(cursor, edgeContext, list)), insertionPoint(emptyListCursor, emptyListEdgeContext, emptyList)] )) )})}
+    return bindMaybe(listFromID(sourceID.id, id => ({id})), list =>
+      mapMaybe(cursorsFromList(listCursor, listEdgeContext, list), ({nonemptys, emptyListCursor, emptyListEdgeContext, emptyList}) => {
+        let defaultCollapsed = cursorHasCycle(listCursor)
+        let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
+          let collapseToggle = list instanceof NonemptyList ? new CollapseToggle(collapsed, () => setCollapsed(!collapsed)) : nothing
+          if (collapsed && collapseToggle) return renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, [], closing, separator, collapseToggle))
+          let insertionPoint = (cursor: Cursor, edgeContext: EdgeContext, oldTail: List<HasID>): ListInsertionPoint => {
+            let insert = (id: Maybe<ID>) => mapMaybe(edgeContext.commit, commit => {
+              let newList = GUIDNonemptyList.new(id => ({id})).setTail(oldTail)
+              mapMaybe(id, id => newList.setHead({id}))
+              commit(newList.id)
+              requestFocusForCursor(_childCursor(cursor, newList.id, headField.id)) })
+            return {
+              entries: buildEntries(listElementType(edgeContext), id => insert(id())),
+              editorCommands: {commit: insert} }}
+          let listItem = (cursor: Cursor, listEdgeContext: EdgeContext, list: NonemptyList<HasID>) => {
+            let commit = (id: Maybe<ID>) => maybe(id,
+              () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => commit(tail.id))),
+              id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) )
+            let tailCursor = _childCursor(cursor, list.id, tailField.id)
+            let insertAfter = bindMaybe(list.tail, tail => insertionPoint(tailCursor, edgeContextFromEdge({parent: list.id, label: tailField.id}, listEdgeContext.expectedType), tail))
+            let requireMeta = maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
+            let keyDown = (e: EditorKeyDownEvent) => e.key === "," && (e.metaKey || !requireMeta)
+                ? mapMaybe(insertAfter, insertAfter => () => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  mapMaybe(insertAfter.editorCommands.commit, commit => commit(nothing)) })
+                : nothing
+            return new EditorBehavior({keyDown}, descend(cursor, list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)})) }
+          return renderDocumentGuidEditor(listCursor, sourceID, new DList(opening, nonemptys.map(({cursor, edgeContext, list}) => listItem(cursor, edgeContext, list)), closing, separator, collapseToggle,
+            [...nonemptys.map(({cursor, edgeContext, list}) => insertionPoint(cursor, edgeContext, list)), insertionPoint(emptyListCursor, emptyListEdgeContext, emptyList)] )) }
+        return defaultCollapsed || list instanceof NonemptyList ? new Collapsible(defaultCollapsed, defaultCollapsed, render) : render(false, () => {}) }))})}
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import { Descend, DText, Label, Line } from "../render/D"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { childCursor, _childCursor } from "./childCursor"
 import { Cursor, cursorsEqual } from "./Cursor"
 import { cursorFromD } from "./cursorFromD"
@@ -9,7 +8,7 @@ import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 
 function rootCursor() {
-  return new Cursor(undefined, "guid-root", sidFromString("root"), new SparseSpanningTree())
+  return new Cursor(undefined, "guid-root", sidFromString("root"))
 }
 
 describe("Cursor", () => {

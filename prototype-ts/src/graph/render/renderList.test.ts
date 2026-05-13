@@ -3,13 +3,12 @@ import { Cursor } from "../cursor/Cursor"
 import { SourceType } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, headField, tailField } from "../graph"
 import { sidFromString } from "../model/ID"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { withTestEnvironment } from "../testHelpers"
-import { D, DList, DText, GuidEditor, SupportsUnderselection } from "./D"
+import { Collapsible, D, DList, DText, GuidEditor, SupportsUnderselection } from "./D"
 import { renderList } from "./defaultRender"
 
 function cursor() {
-  return new Cursor(undefined, "guid-holder", sidFromString("list"), new SparseSpanningTree())
+  return new Cursor(undefined, "guid-holder", sidFromString("list"))
 }
 
 function findD<A extends D>(d: D, f: (d: D) => d is A): A | undefined {
@@ -23,7 +22,7 @@ describe("renderList", () => {
       const d = renderList()(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
       const dList = findD(d!, (d): d is DList => d instanceof DList)
 
-      expect(d).toBeInstanceOf(SupportsUnderselection)
+      expect(findD(d!, (d): d is SupportsUnderselection => d instanceof SupportsUnderselection)).not.toBe(undefined)
       expect(findD(d!, (d): d is GuidEditor => d instanceof GuidEditor)?.id).toBe(list.id)
       expect(dList?.opening).toBe("[")
       expect(dList?.children).toEqual([])
@@ -52,18 +51,18 @@ describe("renderList", () => {
     })
   })
 
-  it("renders collapsed nonempty lists without item children", () => {
+  it("renders nonempty lists through local collapsible state", () => {
     withTestEnvironment(() => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
-      const c = cursor()
-      c.sparseSpanningTree!.collapsed = true
 
-      const d = renderList()(c, {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const dList = findD(d!, (d): d is DList => d instanceof DList)
+      const d = renderList()(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
+      const collapsible = findD(d!, (d): d is Collapsible => d instanceof Collapsible)
+      const collapsedDList = findD(collapsible!.child(true, () => {}), (d): d is DList => d instanceof DList)
 
-      expect(dList?.children).toEqual([])
-      expect(dList?.collapseToggle?.collapsed).toBe(true)
+      expect(collapsible?.defaultCollapsed).toBe(false)
+      expect(collapsedDList?.children).toEqual([])
+      expect(collapsedDList?.collapseToggle?.collapsed).toBe(true)
     })
   })
 

@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { Cursor } from "../cursor/Cursor"
 import { sidFromString } from "../model/ID"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { Block, Descend, DText, GuidEditor, Label, Line, SupportsUnderselection, supportsUnderselection } from "./D"
 
 function cursor() {
-  return new Cursor(undefined, "guid-root", sidFromString("root"), new SparseSpanningTree())
+  return new Cursor(undefined, "guid-root", sidFromString("root"))
 }
 
 describe("D", () => {
