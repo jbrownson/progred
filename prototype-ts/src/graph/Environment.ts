@@ -2,11 +2,12 @@ import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing, unsafe
 import { Cursor } from "./cursor/Cursor"
 import { D } from "./render/Projection"
 import { ECallbacks } from "./editor/ECallbacks"
-import { ctorField, nameField, rootField, viewsField } from "./graph"
+import { ctorField, nameField } from "./graph"
 import { GUIDMap } from "./model/GUIDMap"
 import { GUID, guidFromID, ID, stringFromID } from "./model/ID"
 import { IDMap } from "./model/IDMap"
 import type { EdgeContext } from "./editor/EditorCommands"
+import { workspaceRootField, workspaceViewField } from "./workspace"
 
 export type Workspace = {
   id: GUID
@@ -63,8 +64,8 @@ export function edges(id: ID): Maybe<{edges: Map<ID, ID>, source: Source}> {
   e.callbacks.onEdges(id)
   if (id === e.workspace.id) {
     let edges = new Map<ID, ID>()
-    mapMaybe(e.workspace.root, root => edges.set(rootField.id, root))
-    mapMaybe(e.workspace.view, view => edges.set(viewsField.id, view))
+    mapMaybe(e.workspace.root, root => edges.set(workspaceRootField.id, root))
+    mapMaybe(e.workspace.view, view => edges.set(workspaceViewField.id, view))
     return edges.size > 0 ? {edges, source: {source: SourceType.DocumentType, guid: e.workspace.id}} : nothing }
   return altMaybe(
     bindMaybe(guidFromID(id), guid => mapMaybe(e.guidMap.edges(guid), edges => ({edges, source: {source: SourceType.DocumentType, guid} as Source}))),
@@ -75,24 +76,24 @@ export function edges(id: ID): Maybe<{edges: Map<ID, ID>, source: Source}> {
 
 function workspaceGet(label: ID): Maybe<ID> {
   let e = environment()
-  return label === rootField.id ? e.workspace.root : label === viewsField.id ? e.workspace.view : nothing }
+  return label === workspaceRootField.id ? e.workspace.root : label === workspaceViewField.id ? e.workspace.view : nothing }
 
 function workspaceSet(label: ID, to: ID): boolean {
   let e = environment()
-  if (label === rootField.id) {
+  if (label === workspaceRootField.id) {
     e.workspace.root = to
     return true }
-  if (label === viewsField.id) {
+  if (label === workspaceViewField.id) {
     e.workspace.view = to
     return true }
   return false }
 
 function workspaceDelete(label: ID): boolean {
   let e = environment()
-  if (label === rootField.id) {
+  if (label === workspaceRootField.id) {
     e.workspace.root = nothing
     return true }
-  if (label === viewsField.id) {
+  if (label === workspaceViewField.id) {
     e.workspace.view = nothing
     return true }
   return false }

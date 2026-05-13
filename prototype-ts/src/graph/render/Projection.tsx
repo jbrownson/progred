@@ -5,7 +5,6 @@ import { Cursor } from "../cursor/Cursor"
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
 import { _get, Environment, environment, get, setOrDelete, SourceID, SourceType, withEnvironment } from "../Environment"
-import { rootField, viewsField } from "../graph"
 import { GUID, ID, NID, SID } from "../model/ID"
 import type { EdgeContext, EditorCommands } from "../editor/EditorCommands"
 import { attachEditorCommands, commitIDToActiveElement, detachEditorCommands, editorKeyDownAction } from "../editor/EditorCommands"
@@ -24,6 +23,7 @@ import { PlaceholderInputComponent } from "../components/PlaceholderInputCompone
 import { StringEditorComponent } from "../components/StringEditorComponent"
 import { alwaysFail, Render } from "./R"
 import { tryFirst } from "./defaultRender"
+import { workspaceRootField, workspaceViewField } from "../workspace"
 
 const indentWidth = 16
 
@@ -398,17 +398,17 @@ function NumberEditorProjectionComponent(props: {numberEditor: NumberEditor}) {
 }
 
 export function createProjection(r: Render = alwaysFail) {
-  let rootCursor = new Cursor(nothing, environment().workspace.id, rootField.id)
+  let rootCursor = new Cursor(nothing, environment().workspace.id, workspaceRootField.id)
   let rootEdgeContext = {
-    commit: (id: Maybe<ID>) => setOrDelete(environment().workspace.id, rootField.id, id),
+    commit: (id: Maybe<ID>) => setOrDelete(environment().workspace.id, workspaceRootField.id, id),
     expectedType: nothing }
   let rootSourceID = mapMaybe(environment().workspace.root, id =>
     ({id, source: {source: SourceType.DocumentType as SourceType.DocumentType, guid: environment().workspace.id}}))
   let rootDescend = descendElement(rootCursor, tryFirst(r, environment().defaultRender)(rootCursor, rootSourceID, rootEdgeContext), false, rootEdgeContext)
-  let viewsCursor = new Cursor(nothing, environment().workspace.id, viewsField.id)
-  let viewsDescend = mapMaybe(get(environment().workspace.id, viewsField.id), viewsSourceID =>
-    descendElement(viewsCursor, environment().defaultRender(viewsCursor, viewsSourceID, edgeContextFromCursor(viewsCursor)), false, edgeContextFromCursor(viewsCursor)))
-  return {rootDescend, viewsDescend} }
+  let viewCursor = new Cursor(nothing, environment().workspace.id, workspaceViewField.id)
+  let viewDescend = mapMaybe(get(environment().workspace.id, workspaceViewField.id), viewSourceID =>
+    descendElement(viewCursor, environment().defaultRender(viewCursor, viewSourceID, edgeContextFromCursor(viewCursor)), false, edgeContextFromCursor(viewCursor)))
+  return {rootDescend, viewDescend} }
 
 export function ProjectionRoot(props: {d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, edgeContext?: EdgeContext, editorCommands?: EditorCommands}) {
   return <ProjectionContext.Provider value={{

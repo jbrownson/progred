@@ -11,7 +11,7 @@ import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, set, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, rootField, statementsField, tailField, viewsField } from "../graph"
+import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { createProjection, D, ProjectionRoot } from "../render/Projection"
 import { defaultRender, tryFirst } from "../render/defaultRender"
@@ -26,6 +26,7 @@ import type { UndoRedo } from "../editor/UndoRedo"
 import { libraries } from "../libraries/libraries"
 import { renders } from "../render/renders"
 import { renderFromLibraries } from "../render/renderFromLibraries"
+import { workspaceRootField } from "../workspace"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -208,7 +209,7 @@ class EditorHarness {
 }
 
 function rootCursor(environment: Environment) {
-  return new Cursor(undefined, environment.workspace.id, rootField.id)
+  return new Cursor(undefined, environment.workspace.id, workspaceRootField.id)
 }
 
 function rootHarness(render?: Render) {
@@ -221,7 +222,7 @@ function emptyListHarness() {
   let list: GUIDEmptyList
   withEnvironment(environment, () => {
     list = GUIDEmptyList.new()
-    set(environment.workspace.id, rootField.id, list.id) })
+    set(environment.workspace.id, workspaceRootField.id, list.id) })
   return {harness: new EditorHarness(environment), list: list!}
 }
 
@@ -236,7 +237,7 @@ function emptyAppListHarness() {
   let list: GUIDEmptyList
   withEnvironment(environment, () => {
     list = GUIDEmptyList.new()
-    set(environment.workspace.id, rootField.id, list.id) })
+    set(environment.workspace.id, workspaceRootField.id, list.id) })
   return {harness: new EditorHarness(environment), list: list!}
 }
 
@@ -372,7 +373,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.typeAndEnter("random node")
 
-    const root = harness.get(harness.environment.workspace.id, rootField.id)
+    const root = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(root).not.toBe(undefined)
     expect(sidFromID(root!)).toBe(undefined)
 
@@ -387,7 +388,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".uneditable"))
     harness.typeAndEnter("hello")
 
-    expect(stringFromID(harness.get(environment.workspace.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(environment.workspace.id, workspaceRootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
@@ -410,7 +411,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.typeAndEnter("hello")
 
-    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, workspaceRootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
@@ -422,7 +423,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.run(() => input(harness.textInput(), "new"))
 
-    expect(stringFromID(harness.get(environment.workspace.id, rootField.id)!)).toBe("new")
+    expect(stringFromID(harness.get(environment.workspace.id, workspaceRootField.id)!)).toBe("new")
 
     harness.unmount()
   })
@@ -437,7 +438,7 @@ describe("ProjectionRoot editor integration", () => {
       input(textInput, "42")
       keyDown(textInput, "Enter") })
 
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe(42)
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(42)
 
     harness.unmount()
   })
@@ -447,7 +448,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(list).not.toBe(undefined)
     expect(harness.get(list!, headField.id)).toBe(undefined)
     expect(harness.get(list!, tailField.id)).not.toBe(undefined)
@@ -462,7 +463,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("hello")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(stringFromID(harness.get(list!, headField.id)!)).toBe("hello")
 
     harness.unmount()
@@ -473,7 +474,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.click(harness.first(".listInsertionPoint"))
 
-    expect(harness.get(harness.environment.workspace.id, rootField.id)).toBe(list.id)
+    expect(harness.get(harness.environment.workspace.id, workspaceRootField.id)).toBe(list.id)
     expect(harness.get(list.id, ctorField.id)).toBe(emptyListCtor.id)
     expect(document.activeElement).toBe(harness.textInput())
 
@@ -486,7 +487,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".listInsertionPoint"))
     harness.typeAndEnter("hello")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(list).not.toBe(undefined)
     expect(listStrings(harness, list!)).toEqual(["hello"])
     harness.expectActive(list!, headField.id)
@@ -503,7 +504,7 @@ describe("ProjectionRoot editor integration", () => {
     expect(document.activeElement).toBe(harness.textInput())
     harness.typeAndEnter("hello")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(list).not.toBe(undefined)
     expect(listStrings(harness, list!)).toEqual(["hello"])
     expect(harness.container.textContent).not.toBe("")
@@ -517,7 +518,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".listInsertionPoint"))
     harness.typeAndEnter("new Return")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(list).not.toBe(undefined)
     const head = harness.get(list!, headField.id)
     expect(head).not.toBe(undefined)
@@ -534,7 +535,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.activeKey(",")
     harness.typeAndEnter("new Return")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(list).not.toBe(undefined)
     const head = harness.get(list!, headField.id)
     expect(head).not.toBe(undefined)
@@ -550,7 +551,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".listInsertionPoint"))
     harness.typeAndEnter("return")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(list).not.toBe(undefined)
     const head = harness.get(list!, headField.id)
     expect(head).not.toBe(undefined)
@@ -568,7 +569,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("new Return")
 
-    const evaluate = harness.get(environment.workspace.id, rootField.id)
+    const evaluate = harness.get(environment.workspace.id, workspaceRootField.id)
     const javascriptProgram = harness.get(evaluate!, javascriptProgramField.id)
     const statements = harness.get(javascriptProgram!, statementsField.id)
     const statement = harness.get(statements!, headField.id)
@@ -586,7 +587,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.run(() => input(harness.textInput(), "hello"))
     harness.click(harness.first(".entrylist li"))
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(list).not.toBe(undefined)
     expect(listStrings(harness, list!)).toEqual(["hello"])
     expect(document.activeElement).toBe(harness.textInput())
@@ -610,7 +611,7 @@ describe("ProjectionRoot editor integration", () => {
     expect(document.activeElement).toBe(harness.container.querySelector("input[placeholder=item]"))
     harness.typeAndEnter("zero")
 
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(listStrings(harness, list!)).toEqual(["first", "zero", "second"])
 
     harness.unmount()
@@ -621,7 +622,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.key(",", {metaKey: true})
     harness.typeAndEnter("third")
     harness.globalKey("ArrowUp")
@@ -638,7 +639,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("random node")
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.activeKey(",")
 
     expect(listLength(harness, list!)).toBe(1)
@@ -656,7 +657,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(harness.run(() => focusEditorForCursor(harness.container, _childCursor(rootCursor(harness.environment), list!, headField.id)))).toBe(true)
     expect(document.activeElement).toBe(harness.container.querySelector("textarea"))
     const stringEditor = document.activeElement
@@ -673,7 +674,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("third")
     harness.globalKey("ArrowUp")
@@ -693,7 +694,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.activeKey(",", {metaKey: true})
     expect(listLength(harness, list!)).toBe(1)
     expect(document.activeElement).toBe(harness.textInput())
@@ -761,7 +762,7 @@ describe("ProjectionRoot editor integration", () => {
       expect(pastedID).not.toBe(undefined)
       commitIDToActiveElement(pastedID!) })
 
-    expect(harness.get(harness.environment.workspace.id, rootField.id)).toBe("guid-pasted")
+    expect(harness.get(harness.environment.workspace.id, workspaceRootField.id)).toBe("guid-pasted")
 
     harness.unmount()
   })
@@ -927,7 +928,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new JavaScriptProgram")
-    const javascriptProgram = harness.get(environment.workspace.id, rootField.id)
+    const javascriptProgram = harness.get(environment.workspace.id, workspaceRootField.id)
     harness.key("[")
     const statements = harness.get(javascriptProgram!, statementsField.id)
     harness.typeAndEnter("new Function Declaration")
@@ -952,7 +953,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new JavaScriptProgram")
-    const javascriptProgram = harness.get(environment.workspace.id, rootField.id)
+    const javascriptProgram = harness.get(environment.workspace.id, workspaceRootField.id)
     harness.key("[")
     const statements = harness.get(javascriptProgram!, statementsField.id)
     harness.typeAndEnter("new Function Declaration")
@@ -1000,7 +1001,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe("guid-pasted")
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe("guid-pasted")
 
     harness.unmount()
   })
@@ -1012,7 +1013,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe("guid-pasted")
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe("guid-pasted")
 
     harness.unmount()
   })
@@ -1021,13 +1022,13 @@ describe("ProjectionRoot editor integration", () => {
     const harness = rootHarness()
 
     harness.typeAndEnter("hello")
-    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, workspaceRootField.id)!)).toBe("hello")
 
     harness.undo()
-    expect(harness.get(harness.environment.workspace.id, rootField.id)).toBe(undefined)
+    expect(harness.get(harness.environment.workspace.id, workspaceRootField.id)).toBe(undefined)
 
     harness.redo()
-    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, workspaceRootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
@@ -1038,13 +1039,13 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Delete")
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(undefined)
 
     harness.undo()
-    expect(stringFromID(harness.get(environment.workspace.id, rootField.id)!)).toBe("delete me")
+    expect(stringFromID(harness.get(environment.workspace.id, workspaceRootField.id)!)).toBe("delete me")
 
     harness.redo()
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(undefined)
 
     harness.unmount()
   })
@@ -1059,7 +1060,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.globalKey("Delete")
 
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(undefined)
     expect(stringFromID(harness.get(node, childLabel)!)).toBe("keep me")
 
     harness.unmount()
@@ -1100,7 +1101,7 @@ describe("ProjectionRoot editor integration", () => {
       input(textInput, "hello")
       keyDown(textInput, "Tab") })
 
-    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, workspaceRootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
@@ -1112,7 +1113,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.globalKey("Tab")
 
-    harness.expectActive(environment.workspace.id, rootField.id)
+    harness.expectActive(environment.workspace.id, workspaceRootField.id)
     expect(document.activeElement).toBe(harness.textInput())
 
     harness.unmount()
@@ -1124,7 +1125,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.key("Enter")
     harness.click(harness.first(".entrylist li"))
 
-    const root = harness.get(harness.environment.workspace.id, rootField.id)
+    const root = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(root).not.toBe(undefined)
     expect(sidFromID(root!)).toBe(undefined)
 
@@ -1155,7 +1156,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment)
 
     harness.globalKey("ArrowRight")
-    harness.expectActive(environment.workspace.id, rootField.id)
+    harness.expectActive(environment.workspace.id, workspaceRootField.id)
 
     harness.globalKey("ArrowRight")
     harness.expectActive(root, firstLabel)
@@ -1167,7 +1168,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.expectActive(root, firstLabel)
 
     harness.globalKey("ArrowLeft")
-    harness.expectActive(environment.workspace.id, rootField.id)
+    harness.expectActive(environment.workspace.id, workspaceRootField.id)
 
     harness.unmount()
   })
@@ -1205,7 +1206,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.click(collapsed[0])
 
-    harness.expectActive(environment.workspace.id, rootField.id)
+    harness.expectActive(environment.workspace.id, workspaceRootField.id)
     expect(Array.from(harness.container.querySelectorAll(".collapseToggle")).filter(toggle => toggle.textContent === "▾").length).toBeGreaterThan(expandedBefore)
 
     harness.unmount()
@@ -1226,7 +1227,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.activeKey(",", {metaKey: true})
     expect(listLength(harness, list!)).toBe(1)
     harness.typeAndEnter("second")
@@ -1244,7 +1245,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.workspace.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.activeKey(",", {metaKey: true})
     expect(listLength(harness, list!)).toBe(1)
     harness.typeAndEnter("second")
@@ -1263,7 +1264,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.globalKey("Delete")
 
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(undefined)
 
     harness.unmount()
   })
@@ -1275,7 +1276,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.globalKey("Backspace")
 
-    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(undefined)
 
     harness.unmount()
   })
@@ -1287,7 +1288,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.click(harness.first(".guidEditor"))
 
-    harness.expectActive(environment.workspace.id, rootField.id)
+    harness.expectActive(environment.workspace.id, workspaceRootField.id)
 
     harness.unmount()
   })
@@ -1303,7 +1304,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(guidEditor)
 
     expect(document.activeElement).toBe(guidEditor)
-    harness.expectActive(environment.workspace.id, rootField.id)
+    harness.expectActive(environment.workspace.id, workspaceRootField.id)
 
     harness.unmount()
   })
@@ -1412,7 +1413,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new Evaluate")
-    const evaluate = harness.get(environment.workspace.id, rootField.id)
+    const evaluate = harness.get(environment.workspace.id, workspaceRootField.id)
     expect(evaluate).not.toBe(undefined)
     expect(harness.get(evaluate!, ctorField.id)).toBe(evaluateCtor.id)
     harness.expectActive(evaluate!, javascriptProgramField.id)
@@ -1441,7 +1442,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new Evaluate")
-    const evaluate = harness.get(environment.workspace.id, rootField.id)
+    const evaluate = harness.get(environment.workspace.id, workspaceRootField.id)
     expect(evaluate).not.toBe(undefined)
     expect(harness.get(evaluate!, ctorField.id)).toBe(evaluateCtor.id)
 

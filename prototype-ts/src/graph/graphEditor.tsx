@@ -12,7 +12,7 @@ import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undo
 import { commitIDToActiveElement, commitToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor, requestFocusForCursor } from "./editor/EditorFocus"
 import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, Workspace, withEnvironment } from "./Environment"
-import { BradParams, ctorField, HasID, jsonFromID, Module, rootField, viewsField } from "./graph"
+import { BradParams, ctorField, HasID, jsonFromID, Module } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
 import { EdgeRef } from "./model/EdgeRef"
 import { generateGUID, guidFromID, ID, sidFromString } from "./model/ID"
@@ -29,6 +29,7 @@ import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSna
 import { stringFromJSON } from "./transforms/stringFromJSON"
 import { UndoRedo } from "./editor/UndoRedo"
 import { notifyScrollListeners } from "./editor/ScrollListeners"
+import { workspaceRootField, workspaceViewField } from "./workspace"
 
 const progredFileFilters = [{name: "progred", extensions: ["progred"]}]
 const progred = window.progred
@@ -92,7 +93,7 @@ function handleMenuAction(action: string) {
       break
     case "select-all":
       if (!actionIfTextInput("selectAll:"))
-        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().workspace.id, rootField.id)))
+        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().workspace.id, workspaceRootField.id)))
       break
     case "console-log-selection":
       rootComponent.runE(() => mapMaybe(activeID(), logID))
@@ -154,7 +155,7 @@ function saveCurrentAs() {
   rootComponent.runE(_saveAs)
 }
 
-function view(id: Maybe<ID>) { mapMaybe(id, id => set(environment().workspace.id, viewsField.id, id)) }
+function view(id: Maybe<ID>) { mapMaybe(id, id => set(environment().workspace.id, workspaceViewField.id, id)) }
 
 function activeCursor(): Maybe<Cursor> { return editorFocusForActiveElement()?.cursor }
 
@@ -167,7 +168,7 @@ function activeID(): Maybe<ID> {
 function newNode() {
   const id = generateGUID()
   if (!commitIDToActiveElement(id))
-    set(environment().workspace.id, rootField.id, id) }
+    set(environment().workspace.id, workspaceRootField.id, id) }
 
 function startNewEdge() {
   mapMaybe(editorCommandsForActiveElement(), commands => mapMaybe(commands.newEdge, newEdge => newEdge())) }
@@ -224,7 +225,7 @@ let redoStack: UndoRedo[][] = []
 function newWorkspace(root: Maybe<ID> = nothing, view: Maybe<ID> = nothing): Workspace { return {id: generateGUID(), root, view} }
 let workspace = newWorkspace()
 let guidMap = new GUIDMap()
-let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, workspace.id, rootField.id)
+let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, workspace.id, workspaceRootField.id)
 let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 
@@ -296,7 +297,7 @@ function loadJson(json: string) {
 
 export class RootComponent extends React.Component<{}, {}> {
   rootDescend: D
-  viewsDescend: Maybe<D>
+  viewDescend: Maybe<D>
   showGraph = false
   inRunE = false
   leftPanel: HTMLElement | null
@@ -339,14 +340,14 @@ export class RootComponent extends React.Component<{}, {}> {
   render() {
     let documentRender = withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       bindMaybe(bindMaybe(environment().workspace.root, Module.fromID), renderFromModule) )
-    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
+    let {rootDescend, viewDescend} = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
     let graphSnapshot = this.showGraph
       ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
         buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
       : nothing
     this.rootDescend = rootDescend
-    this.viewsDescend = viewsDescend
-    let hasSidebar = this.showGraph || viewsDescend !== nothing
+    this.viewDescend = viewDescend
+    let hasSidebar = this.showGraph || viewDescend !== nothing
     return <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}}>
         <div ref={leftPanel => { this.leftPanel = leftPanel }} className={hasSidebar ? "leftPanel" : ""}
         style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "auto"}}
@@ -361,17 +362,17 @@ export class RootComponent extends React.Component<{}, {}> {
           <div className="separator" style={{height: "100%", display: "inline-block"}} />
           <div className="rightPanel" style={{width: "100%", height: "100%", display: "inline-block"}}>
             {maybe(graphSnapshot, () => null, graphSnapshot =>
-              <div className="graphPanel" style={{height: viewsDescend === nothing ? "100%" : "50%"}}>
+              <div className="graphPanel" style={{height: viewDescend === nothing ? "100%" : "50%"}}>
                 <GraphViewComponent
                   snapshot={graphSnapshot}
                   setGraphSelection={selection => this.setGraphSelection(selection)}
                   chooseID={id => this.runE(() => commitIDToActiveElement(id))} />
               </div>)}
-            {maybe(this.viewsDescend, () => null, viewsDescend =>
-              <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewsPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "auto"}}
+            {maybe(this.viewDescend, () => null, viewDescend =>
+              <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "auto"}}
                 onScroll={() => notifyScrollListeners()} >
-                <div className="views"><ProjectionRoot
-                  d={viewsDescend}
+                <div className="view"><ProjectionRoot
+                  d={viewDescend}
                   depth={0}
                   scrollParent={() => this.rightPanel}
                   runE={f => this.runE(f)} /></div></div>)}

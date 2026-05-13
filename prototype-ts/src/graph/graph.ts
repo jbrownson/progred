@@ -784,19 +784,6 @@ export class GUIDReturn extends Return {
   get guidReturn() { return this }
   setExpression(x: Maybe<Expression>) { return _set(this, expressionField, getID, x) } }
 
-export class RootViews {
-  constructor(public readonly id: ID) {}
-  static fromID(id: ID) { return checkCtor(id, rootViewsCtor) ? new RootViews(id) : nothing }
-  get guidRootViews() { return mapMaybe(guidFromID(this.id), guid => new GUIDRootViews(guid)) }
-  get root(): Maybe<HasID> { return get(this, rootField, id => ({id})) }
-  get views(): Maybe<HasID[]> { return getList(this, viewsField, id => ({id})) } }
-export class GUIDRootViews extends RootViews {
-  constructor(public readonly id: GUID) { super(id) }
-  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, rootViewsCtor.id); return new GUIDRootViews(guid) }
-  get guidRootViews() { return this }
-  setRoot(x: Maybe<HasID>) { return _set(this, rootField, getID, x) }
-  setViews(x: Maybe<HasID[]>) { return setList(this, viewsField, getID, x) } }
-
 export class StrictEquals {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, strictEqualsCtor) ? new StrictEquals(id) : nothing }
@@ -1043,7 +1030,6 @@ export const
   renderCtorsField = new GUIDField("bc20a35da250d825fc8af115d52f879f"),
   rendersField = new GUIDField("abb3a705a157db4b6f2b0ae1a75f6439"),
   rightField = new GUIDField("12c8dcfc40feb95766d8810013c47ed5"),
-  rootField = new GUIDField("8621e90c49184656ae024c94fbabd439"),
   separatorField = new GUIDField("ce030d314931a9df1ba07c298b0cad90"),
   sha1Field = new GUIDField("b008bca2b15f47feebd5c6ee7e7afae7"),
   statementsField = new GUIDField("b00e2d33c8ef3a0188a9bab0bacea20a"),
@@ -1056,7 +1042,6 @@ export const
   typeField = new GUIDField("223a9b55b8a1413497879a52e5dea939"),
   urlField = new GUIDField("6b251d45b58e759904a6dc7caab743a8"),
   valueField = new GUIDField("a417f1b7167cee31537cf561bc7396ad"),
-  viewsField = new GUIDField("8d27c204f7294593b2f9f3c3af4a477d"),
   weightField = new GUIDField("7bce82bcee93437a748dcd693caa2cc0"),
   widthField = new GUIDField("7e36f32e37b80f495dbba6bb75ec2ec5"),
   algebraicTypeCtor = new GUIDCtor("ba181d67665d4e57b9fa1694dbdacbca"),
@@ -1120,7 +1105,6 @@ export const
   renderListCtor = new GUIDCtor("bfe62ce7b212eb753823b3a5f244c404"),
   renderNameShallowCtor = new GUIDCtor("bcb942240e9f0e111b0cf985360c5188"),
   returnCtor = new GUIDCtor("bba85fdde889e435725b437d82d41596"),
-  rootViewsCtor = new GUIDCtor("9949c2dded2a41aaaeb349b968975fde"),
   strictEqualsCtor = new GUIDCtor("9e7e02107fb914004fd34a5867652c5c"),
   strictNotEqualsCtor = new GUIDCtor("c57de19bbff6519003d2959e8f3d0123"),
   sumCtor = new GUIDCtor("66a2a6cacfd8f5bcddb200964e936457"),
@@ -1135,7 +1119,6 @@ export const
   jsonAlgebraicType = new GUIDAlgebraicType("52120b6d534a2fffe968f0c055df6ca8"),
   listAlgebraicType = new GUIDAlgebraicType("e06b24ad99bf4e14a368aaf93bfb143b"),
   renderAlgebraicType = new GUIDAlgebraicType("86a592afa6af938c63acde8fcc753aba"),
-  rootViewsAlgebraicType = new GUIDAlgebraicType("bb04aa07996b4db5b9ddfae2287c2901"),
   statementAlgebraicType = new GUIDAlgebraicType("1f0ef6c04ffe3cddcb354d92492e0bbd"),
   typeAlgebraicType = new GUIDAlgebraicType("17458686b71245d092a8c930140c32c5"),
   weightedEntryAlgebraicType = new GUIDAlgebraicType("9ce59e032d7570cd200f1b30589d0c15"),

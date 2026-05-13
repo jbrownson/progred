@@ -141,7 +141,7 @@ textarea.i {
 .disambiguation::before { content: " (" }
 .disambiguation::after { content: ")" }
 .disambiguation { color: #b7bcc4 }
-.doc, .views { padding: 12px }
+.doc, .view { padding: 12px }
 .separator { width: 0px; border-left: 1px #d0d3d8 solid }
 .sidebar { height: 100%; background-color: #f4f5f6 }
 .rightPanel { vertical-align: top }
