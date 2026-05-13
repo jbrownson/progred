@@ -18,7 +18,7 @@ export function validateCursor(cursor: Cursor) {
     cursor.parentCursor,
     () => {
       let e = environment()
-      assert(cursor.parent === e.rootViews.id) },
+      assert(cursor.parent === e.workspace.id) },
     (parentCursor) => {
     if (!validateCursorImpl(parentCursor, cursor.parent)) {
       console.log("============ INVALID CURSOR ============")

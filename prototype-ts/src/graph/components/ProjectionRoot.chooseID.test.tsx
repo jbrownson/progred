@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from "vitest"
 import { noopECallbacks } from "../editor/ECallbacks"
 import { attachEditorCommands } from "../editor/EditorCommands"
 import { Environment, withEnvironment } from "../Environment"
-import { GUIDRootViews } from "../graph"
 import type { ID } from "../model/ID"
 import { GUIDMap } from "../model/GUIDMap"
 import { Cursor } from "../cursor/Cursor"
@@ -73,7 +72,7 @@ describe("ProjectionRoot choose ID", () => {
     let environment = new Environment(
       new Map(),
       new GUIDMap(new Map([[parent, new Map([[label, target]])]])),
-      new GUIDRootViews("guid-root"),
+      {id: "guid-workspace", root: undefined, view: undefined},
       () => dText(""),
       noopECallbacks)
 

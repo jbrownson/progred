@@ -11,8 +11,8 @@ import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText,
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { commitIDToActiveElement, commitToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor, requestFocusForCursor } from "./editor/EditorFocus"
-import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, withEnvironment } from "./Environment"
-import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
+import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, Workspace, withEnvironment } from "./Environment"
+import { BradParams, ctorField, HasID, jsonFromID, Module, rootField, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
 import { EdgeRef } from "./model/EdgeRef"
 import { generateGUID, guidFromID, ID, sidFromString } from "./model/ID"
@@ -38,8 +38,8 @@ function handleMenuAction(action: string) {
     case "new":
       undoStack = []
       redoStack = []
-      guidRootViews = new GUIDRootViews(generateGUID())
-      guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
+      workspace = newWorkspace()
+      guidMap = new GUIDMap()
       initialFocusCursor = nothing
       rootComponent.initialFocusConsumed = false
       graphHighlight = nothing
@@ -92,7 +92,7 @@ function handleMenuAction(action: string) {
       break
     case "select-all":
       if (!actionIfTextInput("selectAll:"))
-        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().rootViews.id, rootField.id)))
+        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().workspace.id, rootField.id)))
       break
     case "console-log-selection":
       rootComponent.runE(() => mapMaybe(activeID(), logID))
@@ -154,7 +154,7 @@ function saveCurrentAs() {
   rootComponent.runE(_saveAs)
 }
 
-function view(id: Maybe<ID>) { let views = fromMaybe(environment().rootViews.views, () => []); environment().rootViews.setViews(maybe(id, () => views, id => [...views, {id}])) }
+function view(id: Maybe<ID>) { mapMaybe(id, id => set(environment().workspace.id, viewsField.id, id)) }
 
 function activeCursor(): Maybe<Cursor> { return editorFocusForActiveElement()?.cursor }
 
@@ -167,7 +167,7 @@ function activeID(): Maybe<ID> {
 function newNode() {
   const id = generateGUID()
   if (!commitIDToActiveElement(id))
-    set(environment().rootViews.id, rootField.id, id) }
+    set(environment().workspace.id, rootField.id, id) }
 
 function startNewEdge() {
   mapMaybe(editorCommandsForActiveElement(), commands => mapMaybe(commands.newEdge, newEdge => newEdge())) }
@@ -221,13 +221,14 @@ function transform(f: (id: ID) => Maybe<HasID>) {
 
 let undoStack: UndoRedo[][] = []
 let redoStack: UndoRedo[][] = []
-let guidRootViews = new GUIDRootViews(generateGUID())
-let guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
-let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, guidRootViews.id, rootField.id)
+function newWorkspace(root: Maybe<ID> = nothing, view: Maybe<ID> = nothing): Workspace { return {id: generateGUID(), root, view} }
+let workspace = newWorkspace()
+let guidMap = new GUIDMap()
+let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, workspace.id, rootField.id)
 let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 
-let libraryRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
+let libraryRender = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
 
 function actionIfTextInputWithSelection(action: string) {
   if (document.activeElement) {
@@ -273,11 +274,11 @@ function _pasteStructure() {
 
 function _save(filename: string) {
   let e = environment()
-  void progred.writeFile(filename, JSON.stringify(save({root: mapMaybe(e.rootViews.root, x => x.id), guidMap: maybe(e.rootViews.root, () => new GUIDMap, root => garbageCollectGUIDMap(e.guidMap, root.id))}), undefined, 2)) }
+  void progred.writeFile(filename, JSON.stringify(save({root: e.workspace.root, guidMap: maybe(e.workspace.root, () => new GUIDMap, root => garbageCollectGUIDMap(e.guidMap, root))}), undefined, 2)) }
 
 function _saveAs() {
   let e = environment()
-  const contents = JSON.stringify(save({root: mapMaybe(e.rootViews.root, x => x.id), guidMap: maybe(e.rootViews.root, () => new GUIDMap, root => garbageCollectGUIDMap(e.guidMap, root.id))}), undefined, 2)
+  const contents = JSON.stringify(save({root: e.workspace.root, guidMap: maybe(e.workspace.root, () => new GUIDMap, root => garbageCollectGUIDMap(e.guidMap, root))}), undefined, 2)
   void progred.saveFileAs(contents, progredFileFilters).then(_filename => {
     if (_filename) filename = _filename
   }) }
@@ -290,9 +291,7 @@ function loadJson(json: string) {
     initialFocusCursor = nothing
     rootComponent.initialFocusConsumed = false
     graphHighlight = nothing
-    guidRootViews = new GUIDRootViews(generateGUID())
-    guidMap.set(guidRootViews.id, ctorField.id, rootViewsCtor.id)
-    mapMaybe(_root, _root => guidMap.set(guidRootViews.id, rootField.id, _root))
+    workspace = newWorkspace(_root)
     rootComponent.forceUpdate() })}
 
 export class RootComponent extends React.Component<{}, {}> {
@@ -307,7 +306,7 @@ export class RootComponent extends React.Component<{}, {}> {
     assert(!this.inRunE)
     this.inRunE = true
     try {
-      let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
+      let a = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
       this.forceUpdate() // TODO
       return a
     } finally {
@@ -338,12 +337,12 @@ export class RootComponent extends React.Component<{}, {}> {
           this.initialFocusConsumed = true
           return {} } }) }
   render() {
-    let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, defaultRender, readOnlyECallbacks().eCallbacks), () =>
-      bindMaybe(bindMaybe(environment().rootViews.root, ({id}) => Module.fromID(id)), renderFromModule) )
-    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
+    let documentRender = withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+      bindMaybe(bindMaybe(environment().workspace.root, Module.fromID), renderFromModule) )
+    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
     let graphSnapshot = this.showGraph
-      ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, defaultRender, readOnlyECallbacks().eCallbacks), () =>
-        buildGraphViewSnapshot(guidMap, guidRootViews, activeEdge(), graphHighlight))
+      ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+        buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
       : nothing
     this.rootDescend = rootDescend
     this.viewsDescend = viewsDescend

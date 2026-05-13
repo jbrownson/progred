@@ -23,7 +23,7 @@ describe("buildEntries", () => {
       [ctor, new Map([[ctorField.id, ctorCtor.id], [nameField.id, sidFromString("Widget")]])]]))
 
     withTestEnvironment(environment => {
-      environment.rootViews.setRoot({id: ctor})
+      environment.workspace.root = ctor
       let created: ID = "guid-unset"
       const entry = buildEntries(undefined, id => { created = id() })("new Widget").find(({a}) => a.string === "new Widget")?.a
 
@@ -46,12 +46,11 @@ describe("buildEntries", () => {
     const root = "guid-root"
     const named = "guid-named"
     const guidMap = new GUIDMap(new Map([
-      ["guid-root-views", new Map()],
       [root, new Map([[sidFromString("child"), named]])],
       [named, new Map([[nameField.id, sidFromString("Named Thing")]])]]))
 
     withTestEnvironment(environment => {
-      environment.rootViews.setRoot({id: root})
+      environment.workspace.root = root
       const entry = buildEntries(undefined, () => {})("Named").find(({a}) => a.string === "Named Thing")?.a
 
       expect(entry?.external).toBe(false)

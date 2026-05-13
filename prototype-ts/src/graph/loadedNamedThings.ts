@@ -8,7 +8,7 @@ export type LoadedNamedThing = {name: string, id: ID, source: Source}
 
 export function loadedNamedThings(): LoadedNamedThing[] {
   return removeDupesBy([...join([
-    ...Array.from(environment().libraries.values()).map(({root}) => root), ...maybeToArray(mapMaybe(environment().rootViews.root, root => root.id))].map(namedThings)),
+    ...Array.from(environment().libraries.values()).map(({root}) => root), ...maybeToArray(environment().workspace.root)].map(namedThings)),
     ...Array.from(environment().libraries).map(([name, {root}]) => ({name, id: root, source: { source: SourceType.LibraryType } as Source}) )], ({id}) => id) }
 
 function namedThings(id: ID): LoadedNamedThing[] { return _namedThings(new Set([id]), new Set<ID>(), []) }

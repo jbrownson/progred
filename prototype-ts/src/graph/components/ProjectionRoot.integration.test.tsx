@@ -208,7 +208,7 @@ class EditorHarness {
 }
 
 function rootCursor(environment: Environment) {
-  return new Cursor(undefined, environment.rootViews.id, rootField.id)
+  return new Cursor(undefined, environment.workspace.id, rootField.id)
 }
 
 function rootHarness(render?: Render) {
@@ -221,7 +221,7 @@ function emptyListHarness() {
   let list: GUIDEmptyList
   withEnvironment(environment, () => {
     list = GUIDEmptyList.new()
-    set(environment.rootViews.id, rootField.id, list.id) })
+    set(environment.workspace.id, rootField.id, list.id) })
   return {harness: new EditorHarness(environment), list: list!}
 }
 
@@ -236,7 +236,7 @@ function emptyAppListHarness() {
   let list: GUIDEmptyList
   withEnvironment(environment, () => {
     list = GUIDEmptyList.new()
-    set(environment.rootViews.id, rootField.id, list.id) })
+    set(environment.workspace.id, rootField.id, list.id) })
   return {harness: new EditorHarness(environment), list: list!}
 }
 
@@ -372,7 +372,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.typeAndEnter("random node")
 
-    const root = harness.get(harness.environment.rootViews.id, rootField.id)
+    const root = harness.get(harness.environment.workspace.id, rootField.id)
     expect(root).not.toBe(undefined)
     expect(sidFromID(root!)).toBe(undefined)
 
@@ -387,7 +387,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".uneditable"))
     harness.typeAndEnter("hello")
 
-    expect(stringFromID(harness.get(environment.rootViews.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(environment.workspace.id, rootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
@@ -410,26 +410,26 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.typeAndEnter("hello")
 
-    expect(stringFromID(harness.get(harness.environment.rootViews.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
 
   it("edits an existing string through the textarea path", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("old"))
+    environment.workspace.root = sidFromString("old")
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.run(() => input(harness.textInput(), "new"))
 
-    expect(stringFromID(harness.get(environment.rootViews.id, rootField.id)!)).toBe("new")
+    expect(stringFromID(harness.get(environment.workspace.id, rootField.id)!)).toBe("new")
 
     harness.unmount()
   })
 
   it("edits an existing number through input and Enter", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, 1)
+    environment.workspace.root = 1
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     const textInput = harness.textInput()
@@ -437,7 +437,7 @@ describe("ProjectionRoot editor integration", () => {
       input(textInput, "42")
       keyDown(textInput, "Enter") })
 
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(42)
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe(42)
 
     harness.unmount()
   })
@@ -447,7 +447,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(list).not.toBe(undefined)
     expect(harness.get(list!, headField.id)).toBe(undefined)
     expect(harness.get(list!, tailField.id)).not.toBe(undefined)
@@ -462,7 +462,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("hello")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(stringFromID(harness.get(list!, headField.id)!)).toBe("hello")
 
     harness.unmount()
@@ -473,7 +473,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.click(harness.first(".listInsertionPoint"))
 
-    expect(harness.get(harness.environment.rootViews.id, rootField.id)).toBe(list.id)
+    expect(harness.get(harness.environment.workspace.id, rootField.id)).toBe(list.id)
     expect(harness.get(list.id, ctorField.id)).toBe(emptyListCtor.id)
     expect(document.activeElement).toBe(harness.textInput())
 
@@ -486,7 +486,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".listInsertionPoint"))
     harness.typeAndEnter("hello")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(list).not.toBe(undefined)
     expect(listStrings(harness, list!)).toEqual(["hello"])
     harness.expectActive(list!, headField.id)
@@ -503,7 +503,7 @@ describe("ProjectionRoot editor integration", () => {
     expect(document.activeElement).toBe(harness.textInput())
     harness.typeAndEnter("hello")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(list).not.toBe(undefined)
     expect(listStrings(harness, list!)).toEqual(["hello"])
     expect(harness.container.textContent).not.toBe("")
@@ -517,7 +517,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".listInsertionPoint"))
     harness.typeAndEnter("new Return")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(list).not.toBe(undefined)
     const head = harness.get(list!, headField.id)
     expect(head).not.toBe(undefined)
@@ -534,7 +534,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.activeKey(",")
     harness.typeAndEnter("new Return")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(list).not.toBe(undefined)
     const head = harness.get(list!, headField.id)
     expect(head).not.toBe(undefined)
@@ -550,7 +550,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.click(harness.first(".listInsertionPoint"))
     harness.typeAndEnter("return")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(list).not.toBe(undefined)
     const head = harness.get(list!, headField.id)
     expect(head).not.toBe(undefined)
@@ -568,7 +568,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("new Return")
 
-    const evaluate = harness.get(environment.rootViews.id, rootField.id)
+    const evaluate = harness.get(environment.workspace.id, rootField.id)
     const javascriptProgram = harness.get(evaluate!, javascriptProgramField.id)
     const statements = harness.get(javascriptProgram!, statementsField.id)
     const statement = harness.get(statements!, headField.id)
@@ -586,7 +586,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.run(() => input(harness.textInput(), "hello"))
     harness.click(harness.first(".entrylist li"))
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(list).not.toBe(undefined)
     expect(listStrings(harness, list!)).toEqual(["hello"])
     expect(document.activeElement).toBe(harness.textInput())
@@ -610,7 +610,7 @@ describe("ProjectionRoot editor integration", () => {
     expect(document.activeElement).toBe(harness.container.querySelector("input[placeholder=item]"))
     harness.typeAndEnter("zero")
 
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(listStrings(harness, list!)).toEqual(["first", "zero", "second"])
 
     harness.unmount()
@@ -621,7 +621,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     harness.key(",", {metaKey: true})
     harness.typeAndEnter("third")
     harness.globalKey("ArrowUp")
@@ -638,7 +638,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("random node")
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     harness.activeKey(",")
 
     expect(listLength(harness, list!)).toBe(1)
@@ -656,7 +656,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     expect(harness.run(() => focusEditorForCursor(harness.container, _childCursor(rootCursor(harness.environment), list!, headField.id)))).toBe(true)
     expect(document.activeElement).toBe(harness.container.querySelector("textarea"))
     const stringEditor = document.activeElement
@@ -673,7 +673,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("third")
     harness.globalKey("ArrowUp")
@@ -693,7 +693,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     harness.activeKey(",", {metaKey: true})
     expect(listLength(harness, list!)).toBe(1)
     expect(document.activeElement).toBe(harness.textInput())
@@ -715,7 +715,7 @@ describe("ProjectionRoot editor integration", () => {
   it("uses pending edge-label selection and then commits the target placeholder", () => {
     const environment = makeTestEnvironment({defaultRender})
     const node = "guid-node"
-    environment.guidMap.set(environment.rootViews.id, rootField.id, node)
+    environment.workspace.root = node
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     startNewEdgeFromActive(harness)
@@ -735,7 +735,7 @@ describe("ProjectionRoot editor integration", () => {
     const environment = makeTestEnvironment({defaultRender})
     const node = "guid-node"
     const field = "guid-field"
-    environment.guidMap.set(environment.rootViews.id, rootField.id, node)
+    environment.workspace.root = node
     environment.guidMap.set(node, sidFromString("available label"), field)
     environment.guidMap.set(field, nameField.id, sidFromString("Existing Label"))
     const harness = new EditorHarness(environment, rootCursor(environment))
@@ -761,14 +761,14 @@ describe("ProjectionRoot editor integration", () => {
       expect(pastedID).not.toBe(undefined)
       commitIDToActiveElement(pastedID!) })
 
-    expect(harness.get(harness.environment.rootViews.id, rootField.id)).toBe("guid-pasted")
+    expect(harness.get(harness.environment.workspace.id, rootField.id)).toBe("guid-pasted")
 
     harness.unmount()
   })
 
   it("copies the focused guid editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, "guid-node")
+    environment.workspace.root = "guid-node"
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
@@ -782,7 +782,7 @@ describe("ProjectionRoot editor integration", () => {
 
   it("copies the focused string editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("copy me"))
+    environment.workspace.root = sidFromString("copy me")
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
@@ -797,7 +797,7 @@ describe("ProjectionRoot editor integration", () => {
 
   it("keeps editor commands attached across projection rerenders", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("copy me"))
+    environment.workspace.root = sidFromString("copy me")
     const harness = new EditorHarness(environment, rootCursor(environment))
     const activeElement = document.activeElement
 
@@ -811,7 +811,7 @@ describe("ProjectionRoot editor integration", () => {
 
   it("copies the focused number editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, 7)
+    environment.workspace.root = 7
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
@@ -831,7 +831,7 @@ describe("ProjectionRoot editor integration", () => {
     const childLabel = sidFromString("child")
     const childNameLabel = sidFromString("name")
     const copyLabel = sidFromString("copy")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, original)
+    environment.workspace.root = original
     environment.guidMap.set(original, childLabel, child)
     environment.guidMap.set(child, childNameLabel, sidFromString("Child"))
     const harness = new EditorHarness(environment, rootCursor(environment))
@@ -856,7 +856,7 @@ describe("ProjectionRoot editor integration", () => {
     const original = "guid-cycle"
     const selfLabel = sidFromString("self")
     const copyLabel = sidFromString("copy")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, original)
+    environment.workspace.root = original
     environment.guidMap.set(original, selfLabel, original)
     const harness = new EditorHarness(environment, rootCursor(environment))
     const copy = copyActive(harness)
@@ -878,7 +878,7 @@ describe("ProjectionRoot editor integration", () => {
     const firstLabel = sidFromString("first")
     const secondLabel = sidFromString("second")
     const copyLabel = sidFromString("copy")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, original)
+    environment.workspace.root = original
     environment.guidMap.set(original, firstLabel, shared)
     environment.guidMap.set(original, secondLabel, shared)
     const harness = new EditorHarness(environment, rootCursor(environment))
@@ -901,7 +901,7 @@ describe("ProjectionRoot editor integration", () => {
     const label = "guid-label"
     const labelName = sidFromString("displayName")
     const copyLabel = sidFromString("copy")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, original)
+    environment.workspace.root = original
     environment.guidMap.set(original, label, target)
     environment.guidMap.set(label, labelName, sidFromString("Label"))
     const harness = new EditorHarness(environment, rootCursor(environment))
@@ -927,7 +927,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new JavaScriptProgram")
-    const javascriptProgram = harness.get(environment.rootViews.id, rootField.id)
+    const javascriptProgram = harness.get(environment.workspace.id, rootField.id)
     harness.key("[")
     const statements = harness.get(javascriptProgram!, statementsField.id)
     harness.typeAndEnter("new Function Declaration")
@@ -952,7 +952,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new JavaScriptProgram")
-    const javascriptProgram = harness.get(environment.rootViews.id, rootField.id)
+    const javascriptProgram = harness.get(environment.workspace.id, rootField.id)
     harness.key("[")
     const statements = harness.get(javascriptProgram!, statementsField.id)
     harness.typeAndEnter("new Function Declaration")
@@ -995,24 +995,24 @@ describe("ProjectionRoot editor integration", () => {
 
   it("pastes a reference into the focused string editor", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("old"))
+    environment.workspace.root = sidFromString("old")
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe("guid-pasted")
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe("guid-pasted")
 
     harness.unmount()
   })
 
   it("pastes a reference into the focused number editor", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, 1)
+    environment.workspace.root = 1
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe("guid-pasted")
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe("guid-pasted")
 
     harness.unmount()
   })
@@ -1021,30 +1021,30 @@ describe("ProjectionRoot editor integration", () => {
     const harness = rootHarness()
 
     harness.typeAndEnter("hello")
-    expect(stringFromID(harness.get(harness.environment.rootViews.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
 
     harness.undo()
-    expect(harness.get(harness.environment.rootViews.id, rootField.id)).toBe(undefined)
+    expect(harness.get(harness.environment.workspace.id, rootField.id)).toBe(undefined)
 
     harness.redo()
-    expect(stringFromID(harness.get(harness.environment.rootViews.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
 
   it("undoes and redoes deleting a selected edge", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("delete me"))
+    environment.workspace.root = sidFromString("delete me")
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Delete")
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
 
     harness.undo()
-    expect(stringFromID(harness.get(environment.rootViews.id, rootField.id)!)).toBe("delete me")
+    expect(stringFromID(harness.get(environment.workspace.id, rootField.id)!)).toBe("delete me")
 
     harness.redo()
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
 
     harness.unmount()
   })
@@ -1053,13 +1053,13 @@ describe("ProjectionRoot editor integration", () => {
     const environment = makeTestEnvironment({defaultRender})
     const node = "guid-node"
     const childLabel = sidFromString("child")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, node)
+    environment.workspace.root = node
     environment.guidMap.set(node, childLabel, sidFromString("keep me"))
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Delete")
 
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
     expect(stringFromID(harness.get(node, childLabel)!)).toBe("keep me")
 
     harness.unmount()
@@ -1071,7 +1071,7 @@ describe("ProjectionRoot editor integration", () => {
     const child = "guid-child"
     const childLabel = sidFromString("child")
     const copyLabel = sidFromString("copy")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, original)
+    environment.workspace.root = original
     environment.guidMap.set(original, childLabel, child)
     const harness = new EditorHarness(environment, rootCursor(environment))
     const copy = copyActive(harness)
@@ -1100,19 +1100,19 @@ describe("ProjectionRoot editor integration", () => {
       input(textInput, "hello")
       keyDown(textInput, "Tab") })
 
-    expect(stringFromID(harness.get(harness.environment.rootViews.id, rootField.id)!)).toBe("hello")
+    expect(stringFromID(harness.get(harness.environment.workspace.id, rootField.id)!)).toBe("hello")
 
     harness.unmount()
   })
 
   it("keeps selection when Tab has no placeholder to move to", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("only"))
+    environment.workspace.root = sidFromString("only")
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Tab")
 
-    harness.expectActive(environment.rootViews.id, rootField.id)
+    harness.expectActive(environment.workspace.id, rootField.id)
     expect(document.activeElement).toBe(harness.textInput())
 
     harness.unmount()
@@ -1124,7 +1124,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.key("Enter")
     harness.click(harness.first(".entrylist li"))
 
-    const root = harness.get(harness.environment.rootViews.id, rootField.id)
+    const root = harness.get(harness.environment.workspace.id, rootField.id)
     expect(root).not.toBe(undefined)
     expect(sidFromID(root!)).toBe(undefined)
 
@@ -1149,13 +1149,13 @@ describe("ProjectionRoot editor integration", () => {
     const root = "guid-root"
     const firstLabel = sidFromString("first")
     const secondLabel = sidFromString("second")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, root)
+    environment.workspace.root = root
     environment.guidMap.set(root, firstLabel, sidFromString("First"))
     environment.guidMap.set(root, secondLabel, sidFromString("Second"))
     const harness = new EditorHarness(environment)
 
     harness.globalKey("ArrowRight")
-    harness.expectActive(environment.rootViews.id, rootField.id)
+    harness.expectActive(environment.workspace.id, rootField.id)
 
     harness.globalKey("ArrowRight")
     harness.expectActive(root, firstLabel)
@@ -1167,7 +1167,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.expectActive(root, firstLabel)
 
     harness.globalKey("ArrowLeft")
-    harness.expectActive(environment.rootViews.id, rootField.id)
+    harness.expectActive(environment.workspace.id, rootField.id)
 
     harness.unmount()
   })
@@ -1177,7 +1177,7 @@ describe("ProjectionRoot editor integration", () => {
     const root = "guid-root"
     const firstLabel = sidFromString("first")
     const secondLabel = sidFromString("second")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, root)
+    environment.workspace.root = root
     environment.guidMap.set(root, firstLabel, sidFromString("First"))
     environment.guidMap.set(root, secondLabel, sidFromString("Second"))
     const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), root, firstLabel))
@@ -1195,7 +1195,7 @@ describe("ProjectionRoot editor integration", () => {
   it("defaults cycles collapsed and toggles them without changing selection", () => {
     const environment = makeTestEnvironment({defaultRender})
     const root = "guid-cycle-root"
-    environment.guidMap.set(environment.rootViews.id, rootField.id, root)
+    environment.workspace.root = root
     environment.guidMap.set(root, nameField.id, sidFromString("Cycle"))
     environment.guidMap.set(root, sidFromString("self"), root)
     const harness = new EditorHarness(environment, rootCursor(environment))
@@ -1205,7 +1205,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.click(collapsed[0])
 
-    harness.expectActive(environment.rootViews.id, rootField.id)
+    harness.expectActive(environment.workspace.id, rootField.id)
     expect(Array.from(harness.container.querySelectorAll(".collapseToggle")).filter(toggle => toggle.textContent === "▾").length).toBeGreaterThan(expandedBefore)
 
     harness.unmount()
@@ -1226,7 +1226,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     harness.activeKey(",", {metaKey: true})
     expect(listLength(harness, list!)).toBe(1)
     harness.typeAndEnter("second")
@@ -1244,7 +1244,7 @@ describe("ProjectionRoot editor integration", () => {
 
     harness.key("[")
     harness.typeAndEnter("first")
-    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    const list = harness.get(harness.environment.workspace.id, rootField.id)
     harness.activeKey(",", {metaKey: true})
     expect(listLength(harness, list!)).toBe(1)
     harness.typeAndEnter("second")
@@ -1258,36 +1258,36 @@ describe("ProjectionRoot editor integration", () => {
 
   it("deletes a selected edge with the global Delete key", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("delete me"))
+    environment.workspace.root = sidFromString("delete me")
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Delete")
 
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
 
     harness.unmount()
   })
 
   it("deletes a selected edge with the global Backspace key", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("delete me"))
+    environment.workspace.root = sidFromString("delete me")
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Backspace")
 
-    expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
+    expect(harness.get(environment.workspace.id, rootField.id)).toBe(undefined)
 
     harness.unmount()
   })
 
   it("selects a guid editor by mouse click", () => {
     const environment = makeTestEnvironment({defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, "guid-node")
+    environment.workspace.root = "guid-node"
     const harness = new EditorHarness(environment)
 
     harness.click(harness.first(".guidEditor"))
 
-    harness.expectActive(environment.rootViews.id, rootField.id)
+    harness.expectActive(environment.workspace.id, rootField.id)
 
     harness.unmount()
   })
@@ -1296,14 +1296,14 @@ describe("ProjectionRoot editor integration", () => {
     const appRender = renderIfApp(name => name)
     const environment = makeTestEnvironment({defaultRender: tryFirst(appRender, defaultRender)})
     const app = withEnvironment(environment, () => GUIDApp.new().setName("Widget"))
-    environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
+    environment.workspace.root = app.id
     const harness = new EditorHarness(environment)
     const guidEditor = harness.first(".guidEditor")
 
     harness.click(guidEditor)
 
     expect(document.activeElement).toBe(guidEditor)
-    harness.expectActive(environment.rootViews.id, rootField.id)
+    harness.expectActive(environment.workspace.id, rootField.id)
 
     harness.unmount()
   })
@@ -1314,7 +1314,7 @@ describe("ProjectionRoot editor integration", () => {
     const target = "guid-target"
     const existingLabel = sidFromString("existing")
     const missingLabel = sidFromString("missing")
-    environment.guidMap.set(environment.rootViews.id, rootField.id, parent)
+    environment.workspace.root = parent
     environment.guidMap.set(parent, existingLabel, target)
     const harness = new EditorHarness(environment, rootCursor(environment))
 
@@ -1336,7 +1336,7 @@ describe("ProjectionRoot editor integration", () => {
       const app = GUIDApp.new()
       const extraField = GUIDField.new().setName("Extra")
       return {app, extraField} })
-    environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
+    environment.workspace.root = app.id
     environment.guidMap.set(app.id, extraField.id, sidFromString("old"))
     const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, extraField.id))
 
@@ -1357,7 +1357,7 @@ describe("ProjectionRoot editor integration", () => {
           idMap: new MapIDMap(new Map([[libRoot, new Map([[nameField.id, sidFromString("old")]])]])),
           root: libRoot }]]),
       defaultRender})
-    environment.guidMap.set(environment.rootViews.id, rootField.id, libRoot)
+    environment.workspace.root = libRoot
     const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), libRoot, nameField.id))
 
     harness.run(() => input(harness.textInput(), "new"))
@@ -1371,7 +1371,7 @@ describe("ProjectionRoot editor integration", () => {
     const appRender = renderIfApp(name => name)
     const environment = makeTestEnvironment({defaultRender: tryFirst(appRender, defaultRender)})
     const app = withEnvironment(environment, () => GUIDApp.new())
-    environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
+    environment.workspace.root = app.id
     const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, nameField.id))
 
     harness.typeAndEnter("Widget")
@@ -1397,7 +1397,7 @@ describe("ProjectionRoot editor integration", () => {
       expect(render).not.toBe(undefined)
       return {app: GUIDApp.new(), render: render!} })
     environment.defaultRender = tryFirst(render, defaultRender)
-    environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
+    environment.workspace.root = app.id
     const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, nameField.id))
 
     harness.typeAndEnter("Templated")
@@ -1412,7 +1412,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new Evaluate")
-    const evaluate = harness.get(environment.rootViews.id, rootField.id)
+    const evaluate = harness.get(environment.workspace.id, rootField.id)
     expect(evaluate).not.toBe(undefined)
     expect(harness.get(evaluate!, ctorField.id)).toBe(evaluateCtor.id)
     harness.expectActive(evaluate!, javascriptProgramField.id)
@@ -1441,7 +1441,7 @@ describe("ProjectionRoot editor integration", () => {
     const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new Evaluate")
-    const evaluate = harness.get(environment.rootViews.id, rootField.id)
+    const evaluate = harness.get(environment.workspace.id, rootField.id)
     expect(evaluate).not.toBe(undefined)
     expect(harness.get(evaluate!, ctorField.id)).toBe(evaluateCtor.id)
 

@@ -1,6 +1,6 @@
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { _get } from "../Environment"
-import { ctorField, fieldCtor, GUIDRootViews, nameField } from "../graph"
+import { ctorField, fieldCtor, nameField } from "../graph"
 import { EdgeRef } from "../model/EdgeRef"
 import { GUIDMap } from "../model/GUIDMap"
 import { GUID, guidFromID, ID, matchID, numberFromNID, stringFromID } from "../model/ID"
@@ -55,14 +55,12 @@ function selectedEdgeFromActiveEdge(activeEdge: Maybe<EdgeRef>): Maybe<SelectedG
 function selectedEdgeFromGraphSelection(graphSelection: Maybe<GraphSelection>): Maybe<SelectedGraphEdgeID> {
   return bindMaybe(graphSelection, graphSelection => graphSelection.kind === "edge" ? {source: graphSelection.source, label: graphSelection.label} : nothing) }
 
-export function buildGraphViewSnapshot(guidMap: GUIDMap, rootViews: GUIDRootViews, activeEdge: Maybe<EdgeRef>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
+export function buildGraphViewSnapshot(guidMap: GUIDMap, rootID: Maybe<ID>, activeEdge: Maybe<EdgeRef>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
   let ids = new Set<ID>()
-  let rootID = mapMaybe(rootViews.root, root => root.id)
   mapMaybe(rootID, id => ids.add(id))
 
   let edges: GraphEdge[] = []
   for (let [source, sourceEdges] of guidMap.map) {
-    if (source === rootViews.id) continue
     ids.add(source)
     for (let [label, target] of sourceEdges) {
       ids.add(target)

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { _delete, _get, get, set, setOrDelete, SourceType } from "./Environment"
+import { rootField, viewsField } from "./graph"
 import { MapIDMap } from "./model/MapIDMap"
 import { sidFromString } from "./model/ID"
 import { withTestEnvironment } from "./testHelpers"
@@ -60,6 +61,21 @@ describe("Environment", () => {
 
       setOrDelete("guid-node", sidFromString("label"), undefined)
       expect(_get("guid-node", sidFromString("label"))).toBe(undefined)
+    })
+  })
+
+  it("stores workspace root and view outside the document graph", () => {
+    withTestEnvironment(environment => {
+      set(environment.workspace.id, rootField.id, "guid-root")
+      set(environment.workspace.id, viewsField.id, "guid-view")
+
+      expect(_get(environment.workspace.id, rootField.id)).toBe("guid-root")
+      expect(_get(environment.workspace.id, viewsField.id)).toBe("guid-view")
+      expect(environment.guidMap.edges(environment.workspace.id)).toBe(undefined)
+
+      _delete(environment.workspace.id, viewsField.id)
+
+      expect(_get(environment.workspace.id, viewsField.id)).toBe(undefined)
     })
   })
 })
