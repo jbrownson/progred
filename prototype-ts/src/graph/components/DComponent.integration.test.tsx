@@ -11,14 +11,14 @@ import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, set, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, rootField, statementsField, tailField, viewsField } from "../graph"
+import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, rootField, statementsField, tailField, viewsField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DComponent } from "./DComponent"
 import { createD, Descend } from "../render/D"
 import { defaultRender, tryFirst } from "../render/defaultRender"
 import { renderIfApp } from "../renderIfs"
 import { renderFromRender } from "../render/renderFromRender"
-import { Render } from "../render/R"
+import { dispatch, Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { defaultKeyHandler } from "../editor/keyHandler"
 import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor } from "../editor/EditorFocus"
@@ -26,6 +26,7 @@ import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
 import { libraries } from "../libraries/libraries"
 import { renders } from "../render/renders"
+import { renderFromLibraries } from "../render/renderFromLibraries"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -218,6 +219,21 @@ function rootHarness(render?: Render) {
 
 function emptyListHarness() {
   const environment = makeTestEnvironment({defaultRender})
+  let list: GUIDEmptyList
+  withEnvironment(environment, () => {
+    list = GUIDEmptyList.new()
+    set(environment.rootViews.id, rootField.id, list.id) })
+  return {harness: new EditorHarness(environment), list: list!}
+}
+
+function appLikeEnvironment() {
+  const environment = makeTestEnvironment({libraries, defaultRender})
+  environment.defaultRender = withEnvironment(environment, () => tryFirst(dispatch(renders, renderFromLibraries(libraries)), defaultRender))
+  return environment
+}
+
+function emptyAppListHarness() {
+  const environment = appLikeEnvironment()
   let list: GUIDEmptyList
   withEnvironment(environment, () => {
     list = GUIDEmptyList.new()
@@ -479,6 +495,90 @@ describe("DComponent editor integration", () => {
 
     harness.unmount()
   })
+
+  it("opens an empty list insertion point with comma when the list is focused", () => {
+    const {harness} = emptyListHarness()
+
+    harness.click(harness.first(".guidEditor"))
+    harness.activeKey(",")
+    expect(document.activeElement).toBe(harness.textInput())
+    harness.typeAndEnter("hello")
+
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(list).not.toBe(undefined)
+    expect(listStrings(harness, list!)).toEqual(["hello"])
+    expect(harness.container.textContent).not.toBe("")
+
+    harness.unmount()
+  })
+
+  it("commits a structured item through an empty list insertion point", () => {
+    const {harness} = emptyAppListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.typeAndEnter("new Return")
+
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(list).not.toBe(undefined)
+    const head = harness.get(list!, headField.id)
+    expect(head).not.toBe(undefined)
+    expect(harness.get(head!, ctorField.id)).toBe(returnCtor.id)
+    expect(harness.container.textContent).not.toBe("")
+
+    harness.unmount()
+  })
+
+  it("commits a structured item through an empty list insertion point opened with comma", () => {
+    const {harness} = emptyAppListHarness()
+
+    harness.click(harness.first(".guidEditor"))
+    harness.activeKey(",")
+    harness.typeAndEnter("new Return")
+
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(list).not.toBe(undefined)
+    const head = harness.get(list!, headField.id)
+    expect(head).not.toBe(undefined)
+    expect(harness.get(head!, ctorField.id)).toBe(returnCtor.id)
+    expect(harness.container.textContent).not.toBe("")
+
+    harness.unmount()
+  })
+
+  it("does not blank when committing the return completion into an empty app list", () => {
+    const {harness} = emptyAppListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.typeAndEnter("return")
+
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(list).not.toBe(undefined)
+    const head = harness.get(list!, headField.id)
+    expect(head).not.toBe(undefined)
+    expect(harness.container.textContent).not.toBe("")
+
+    harness.unmount()
+  })
+
+  it("does not blank when committing Return into an Evaluate statements list", () => withJavascriptHost(() => {
+    const environment = appLikeEnvironment()
+    const harness = new EditorHarness(environment, rootCursor(environment))
+
+    harness.typeAndEnter("new Evaluate")
+    harness.typeAndEnter("new JavaScriptProgram")
+    harness.key("[")
+    harness.typeAndEnter("new Return")
+
+    const evaluate = harness.get(environment.rootViews.id, rootField.id)
+    const javascriptProgram = harness.get(evaluate!, javascriptProgramField.id)
+    const statements = harness.get(javascriptProgram!, statementsField.id)
+    const statement = harness.get(statements!, headField.id)
+    expect(statement).not.toBe(undefined)
+    expect(harness.get(statement!, ctorField.id)).toBe(returnCtor.id)
+    expect(harness.container.textContent).not.toBe("")
+
+    harness.unmount()
+  }))
 
   it("commits a list insertion point by clicking a completion entry", () => {
     const {harness} = emptyListHarness()
@@ -1360,8 +1460,11 @@ describe("DComponent editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("5")
 
-    expect(javascriptCalls[javascriptCalls.length - 1]).toContain("function factorial")
-    expect(javascriptCalls[javascriptCalls.length - 1]).toContain("factorial(5)")
+    const javascript = javascriptCalls[javascriptCalls.length - 1]
+    expect(javascript).toMatch(/function _[A-Za-z0-9_$]+\(_[A-Za-z0-9_$]+\)/)
+    expect(javascript).toMatch(/_[A-Za-z0-9_$]+\(5\)/)
+    expect(javascript).not.toContain("function factorial")
+    expect(javascript).not.toContain("factorial(5)")
     expect(harness.container.textContent).toContain("120")
 
     harness.unmount()

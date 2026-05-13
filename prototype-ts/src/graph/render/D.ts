@@ -3,7 +3,7 @@ import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
 import { tryFirst } from "./defaultRender"
 import { Entry } from "../editor/Entry"
-import { environment, get, SourceType } from "../Environment"
+import { Environment, environment, get, SourceType, withEnvironment } from "../Environment"
 import { Match } from "../editor/filters"
 import { rootField, viewsField } from "../graph"
 import { alwaysFail, Render } from "./R"
@@ -90,13 +90,16 @@ export class Label {
 export class Collapsible {
   collapsible() {}
   parent: Maybe<D>
+  environment: Environment
   get children() { return [this.child(this.defaultCollapsed, () => {})] }
   child(collapsed: boolean, setCollapsed: (collapsed: boolean) => void) {
-    let child = this.render(collapsed, setCollapsed)
-    assert(child.parent === nothing)
-    child.parent = this
-    return child }
-  constructor(public defaultCollapsed: boolean, public singleLine: boolean, public render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D) {} }
+    return withEnvironment(this.environment, () => {
+      let child = this.render(collapsed, setCollapsed)
+      assert(child.parent === nothing)
+      child.parent = this
+      return child }) }
+  constructor(public defaultCollapsed: boolean, public singleLine: boolean, public render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D) {
+    this.environment = environment() } }
 
 export class CollapseToggle {
   collapseToggle() {}

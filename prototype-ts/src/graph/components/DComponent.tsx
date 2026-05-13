@@ -1,9 +1,9 @@
 import * as React from 'react'
 import { concatMap, intersperse, join } from "../../lib/Array"
-import { bindMaybe, mapMaybe, maybe, maybeMap, Maybe, nothing } from "../../lib/Maybe"
+import { altMaybe, bindMaybe, mapMaybe, maybe, maybeMap, Maybe, nothing } from "../../lib/Maybe"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { cursorFromD, descendFromD } from "../cursor/cursorFromD"
-import { Block, Collapsible, D, Descend, GuidEditor, Label, matchD, PlaceholderEditorActiveState, PlaceholderEditorState, SupportsUnderselection } from "../render/D"
+import { Block, Collapsible, D, Descend, DList, GuidEditor, Label, matchD, PlaceholderEditorActiveState, PlaceholderEditorState, SupportsUnderselection } from "../render/D"
 import { _get } from "../Environment"
 import { NumberEditorComponent } from "./NumberEditorComponent"
 import { PlaceholderEditorComponent } from "./PlaceholderEditorComponent"
@@ -29,9 +29,13 @@ type DComponentState = {activeListInsertion?: number}
 type DComponentProps = {d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, edgeContext?: EdgeContext, editorCommands?: EditorCommands}
 
 function mergeEditorCommands(parentCommands: Maybe<EditorCommands>, childCommands: EditorCommands): EditorCommands {
+  let keyDown = parentCommands?.keyDown && childCommands.keyDown
+    ? e => altMaybe(childCommands.keyDown!(e), () => parentCommands.keyDown!(e))
+    : childCommands.keyDown || parentCommands?.keyDown
   return {
     ...parentCommands,
-    ...childCommands }}
+    ...childCommands,
+    ...(keyDown ? {keyDown} : {}) }}
 
 function activeEditorCommands(edgeContext: Maybe<EdgeContext>, inheritedCommands: Maybe<EditorCommands>, editorCommands: EditorCommands): EditorCommands {
   return {
@@ -52,6 +56,13 @@ export class DComponent extends React.Component<DComponentProps, DComponentState
   state: DComponentState = {}
   children: DComponentChild[]
   onScroll() { this.children.forEach(child => child.onScroll()) }
+  rootEditorCommands(): Maybe<EditorCommands> {
+    return this.props.d instanceof DList && this.props.d.insertionPoints.length > 0
+      ? {keyDown: e => e.key === "," ? () => {
+          e.preventDefault()
+          e.stopPropagation()
+          this.setState({activeListInsertion: 0}) } : nothing}
+      : nothing }
   render() {
     this.children = []
     let addChild = (child: DComponentChild | null) => { if (child) this.children.push(child) }
@@ -235,9 +246,10 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, edito
   span: HTMLSpanElement | null
   child: Maybe<DComponent> = nothing
   onScroll() { if (this.child) this.child.onScroll() }
+  editorCommands() { return maybe(this.child?.rootEditorCommands(), () => this.props.editorCommands, editorCommands => mergeEditorCommands(this.props.editorCommands, editorCommands)) }
   attachEditorCommands() {
     if (this.span) {
-      attachEditorCommands(this.span, this.props.editorCommands)
+      attachEditorCommands(this.span, this.editorCommands())
       attachEditorFocus(this.span, {cursor: this.props.guidEditor.cursor, descend: descendFromD(this.props.guidEditor), focusWhenSelected: this.props.guidEditor.focusWhenSelected}) }}
   render() {
     let childEditorCommands = {...this.props.editorCommands, commit: undefined}
@@ -246,7 +258,7 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, edito
       tabIndex={0}
       onMouseDown={e => { if (!(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault() }}
       onClick={e => { e.stopPropagation(); focus(e.currentTarget) }}
-      onKeyDown={e => mapMaybe(editorKeyDownAction(this.props.editorCommands, e), action => this.props.runE(action))}
+      onKeyDown={e => mapMaybe(editorKeyDownAction(this.editorCommands(), e), action => this.props.runE(action))}
       ref={span => { this.span = span }} >
       <DComponent
         ref={dComponent => { this.child = dComponent || nothing }}
