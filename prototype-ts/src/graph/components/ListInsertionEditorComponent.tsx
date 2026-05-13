@@ -1,6 +1,7 @@
 import * as React from "react"
 import { nothing } from "../../lib/Maybe"
-import type { ListInsertionPoint, PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/Projection"
+import type { PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/ProjectionEditors"
+import type { ListInsertionPoint } from "../render/ProjectionLayout"
 import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
 

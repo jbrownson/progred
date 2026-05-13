@@ -1,6 +1,6 @@
 import { bindMaybe, mapMaybe, Maybe } from "../lib/Maybe"
 import { Cursor } from "./cursor/Cursor"
-import { D } from "./render/Projection"
+import type { D } from "./render/ProjectionContext"
 import * as G from "./graph"
 import { descend, Render } from "./render/R"
 import { renderOtherFields } from "./render/renderOtherFields"

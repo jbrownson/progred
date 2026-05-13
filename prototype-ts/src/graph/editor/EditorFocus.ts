@@ -1,7 +1,7 @@
 import { altMaybe, bindMaybe, firstMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
 import { cursorsEqual } from "../cursor/Cursor"
-import type { EditorDescend } from "../render/Projection"
+import type { EditorDescend } from "../render/ProjectionContext"
 import { focus } from "./ignoreFocusEvents"
 
 const editorFocusKey = Symbol("editorFocus")

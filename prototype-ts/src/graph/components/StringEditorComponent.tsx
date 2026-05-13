@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Cursor } from "../cursor/Cursor"
-import type { EditorDescend, StringEditor } from "../render/Projection"
+import type { EditorDescend } from "../render/ProjectionContext"
+import type { StringEditor } from "../render/ProjectionEditors"
 import { sidFromString } from "../model/ID"
 import { editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"

@@ -1,7 +1,8 @@
 import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
-import { D, descendElement } from "./Projection"
+import type { D } from "./ProjectionContext"
+import { descendElement } from "./ProjectionEditors"
 import { environment, get, SourceID } from "../Environment"
 import { ID } from "../model/ID"
 import { typeFromEdge } from "../typeFromEdge"
@@ -14,9 +15,6 @@ export type Render = (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeCon
 export const alwaysFail: Render = () => nothing
 export function dispatch(...renders: Render[]): Render {
   return (cursor, id, edgeContext) => renders.length === 0 ? nothing : altMaybe(renders[0](cursor, id, edgeContext), () => dispatch(...renders.slice(1))(cursor, id, edgeContext)) }
-
-export type Change = undefined
-export type Depedencies = Map/*TODO not actually Map*/<Change, Map<D, () => D>>
 
 export function descend(cursor: Cursor, id: ID, label: ID, render = alwaysFail, edgeContext?: EdgeContext): D {
   let newCursor = _childCursor(cursor, id, label)

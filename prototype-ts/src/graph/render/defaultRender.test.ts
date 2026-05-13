@@ -5,7 +5,7 @@ import { SourceType } from "../Environment"
 import { nameField } from "../graph"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
-import { D, dText, projectionKind } from "./Projection"
+import { dText, projectionKind, type D } from "./Projection"
 import { defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
 
 function cursor() {

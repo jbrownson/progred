@@ -1,5 +1,6 @@
 import { bindMaybe, mapMaybe } from "../../lib/Maybe"
-import { button, dText, line } from "./Projection"
+import { button } from "./ProjectionControls"
+import { dText, line } from "./ProjectionLayout"
 import { LoadJSON, urlField } from "../graph"
 import { jsonFromJSON } from "../transforms/jsonFromJSON"
 import { renderDocumentGuidEditor } from "./defaultRender"

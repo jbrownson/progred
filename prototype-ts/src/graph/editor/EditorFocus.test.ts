@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { Cursor } from "../cursor/Cursor"
 import { sidFromString } from "../model/ID"
-import type { EditorDescend } from "../render/Projection"
+import type { EditorDescend } from "../render/ProjectionContext"
 import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestNextTabStopFromCursor } from "./EditorFocus"
 
 afterEach(() => {

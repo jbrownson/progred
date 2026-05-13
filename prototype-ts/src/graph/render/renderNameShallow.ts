@@ -1,5 +1,5 @@
 import { bindMaybe, fromMaybe, mapMaybe } from "../../lib/Maybe"
-import { dText } from "./Projection"
+import { dText } from "./ProjectionLayout"
 import { _get } from "../Environment"
 import { Ctor, nameField } from "../graph"
 import { stringFromID } from "../model/ID"

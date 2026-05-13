@@ -13,7 +13,7 @@ import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardT
 import { _get, Environment, set, withEnvironment } from "../Environment"
 import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
-import { createProjection, D, ProjectionRoot } from "../render/Projection"
+import { createProjection, ProjectionRoot, type D } from "../render/Projection"
 import { defaultRender, tryFirst } from "../render/defaultRender"
 import { renderIfApp } from "../renderIfs"
 import { renderFromRender } from "../render/renderFromRender"
