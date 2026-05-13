@@ -6,8 +6,8 @@ import { ctorField, GUIDRootViews, nameField } from "./graph"
 import { GUIDMap } from "./model/GUIDMap"
 import { GUID, guidFromID, ID, stringFromID } from "./model/ID"
 import { IDMap } from "./model/IDMap"
-import { _Selection } from "./editor/Selection"
 import { SparseSpanningTree } from "./SparseSpanningTree"
+import type { EdgeContext } from "./editor/EditorCommands"
 
 export class Environment {
   constructor(
@@ -15,11 +15,8 @@ export class Environment {
     public guidMap: GUIDMap,
     public rootViews: GUIDRootViews /* TODO this should exist outside the GUIDMap or something */,
     public sparseSpanningTree: SparseSpanningTree,
-    private _selection: {selection: Maybe<_Selection>},
-    public defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>) => D,
-    public callbacks: ECallbacks ) {}
-  get selection() { this.callbacks.onGetSelection(); return this._selection.selection }
-  set selection(selection: Maybe<_Selection>) { this.callbacks.willSetSelection(selection); this._selection.selection = selection } }
+    public defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext) => D,
+    public callbacks: ECallbacks ) {} }
 
 let _environment: Maybe<Environment> = nothing
 export function environment() { return unsafeUnwrapMaybe(_environment) }
@@ -85,7 +82,3 @@ export function getDebugID(id: ID): string {
   return [getDebugIDName(id), ...maybe(edges(id), () => [], ({edges}) => Array.from(edges).map(([k, v]) => `\t"label": "${getDebugIDName(k)}", "value": "${getDebugIDName(v)}"`))].join('\n') }
 
 export function logID(id: ID) { console.log(getDebugID(id)) }
-export function logSelection() {
-  let e = environment()
-  console.log(maybe(e.selection, () => "No Selection", selection =>
-    maybe(_get(selection.cursor.parent, selection.cursor.label), () => "Invalid Selection", getDebugID))) }

@@ -16,8 +16,8 @@ function tree() {
   const filled = new Cursor(root, "guid-root", sidFromString("filled"), new SparseSpanningTree())
   const missing = new Cursor(root, "guid-root", sidFromString("missing"), new SparseSpanningTree())
   const rootDescend = new Descend(root, new Line(
-    new Descend(filled, new DText("filled"), undefined, false),
-    new Descend(missing, new DText("missing"), undefined, false)), undefined, false)
+    new Descend(filled, new DText("filled"), false),
+    new Descend(missing, new DText("missing"), false)), false)
   return {root, filled, missing, rootDescend}
 }
 
@@ -43,16 +43,13 @@ describe("findNextTabStop", () => {
     })
   })
 
-  it("does not clear selection when tab has nowhere to go", () => {
+  it("returns false when tab has nowhere to go", () => {
     withTestEnvironment(environment => {
       const {root, filled, missing, rootDescend} = tree()
       environment.guidMap.set("guid-holder", root.label, "guid-root")
       environment.guidMap.set("guid-root", filled.label, "guid-filled")
       environment.guidMap.set("guid-root", missing.label, "guid-missing")
-      environment.selection = {cursor: filled}
-
       expect(doTab(false, rootDescend, undefined)).toBe(false)
-      expect(environment.selection?.cursor).toBe(filled)
     })
   })
 })

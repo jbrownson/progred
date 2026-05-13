@@ -6,7 +6,7 @@ import { sidFromString } from "../model/ID"
 import { SparseSpanningTree } from "../SparseSpanningTree"
 import { withTestEnvironment } from "../testHelpers"
 import { D, DIdenticon, DText, GuidEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
-import { commitCommands, defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
+import { defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
 
 function cursor() {
   return new Cursor(undefined, "guid-holder", sidFromString("root"), new SparseSpanningTree())
@@ -17,17 +17,15 @@ function hasD(d: D, f: (d: D) => boolean): boolean {
 }
 
 describe("defaultRender", () => {
-  it("renders missing edges as placeholders with commit commands", () => {
-    withTestEnvironment(environment => {
+  it("renders missing edges as placeholders", () => {
+    withTestEnvironment(() => {
       const c = cursor()
-      environment.selection = {cursor: c}
 
       const d = defaultRender(c, undefined)
 
       expect(d).toBeInstanceOf(PlaceholderEditor)
-      expect((d as PlaceholderEditor).selectedState).not.toBe(undefined)
-      ;(d as PlaceholderEditor).editorCommands.commit?.("guid-target")
-      expect(environment.guidMap.get("guid-holder", sidFromString("root"))).toBe("guid-target")
+      expect((d as PlaceholderEditor).activeState).toBe(undefined)
+      expect((d as PlaceholderEditor).entries("").length).toBeGreaterThan(0)
     })
   })
 
@@ -47,16 +45,6 @@ describe("defaultRender", () => {
       const d = renderDocumentGuidEditor(c, {id: "guid-node", source: {source: SourceType.LibraryType}}, new DText("node"))
 
       expect(d).toBeInstanceOf(DText)
-    })
-  })
-
-  it("commits IDs through cursor commands", () => {
-    withTestEnvironment(environment => {
-      const c = cursor()
-
-      commitCommands(c).commit?.("guid-target")
-
-      expect(environment.guidMap.get("guid-holder", sidFromString("root"))).toBe("guid-target")
     })
   })
 

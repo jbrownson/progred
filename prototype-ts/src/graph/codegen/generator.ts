@@ -12,7 +12,7 @@ import { libraries } from "../libraries/libraries"
 import { SparseSpanningTree } from "../SparseSpanningTree"
 import { typescriptFromCtorOrAlgebraicTypes } from "./typescriptFromAlgebraicTypes"
 
-withEnvironment(new Environment(libraries, new GUIDMap, new GUIDRootViews(""), new SparseSpanningTree, {selection: nothing}, defaultRender, noopECallbacks), () => {
+withEnvironment(new Environment(libraries, new GUIDMap, new GUIDRootViews(""), new SparseSpanningTree, defaultRender, noopECallbacks), () => {
   let unsortedCtorOrAlgebraicTypes = concatMap(Array.from(libraries.values()), ({root}) => unsafeUnwrapMaybe(unsafeUnwrapMaybe(Module.fromID(root)).ctorOrAlgebraicTypes))
   let algebraicTypes = maybeMap(unsortedCtorOrAlgebraicTypes, algebraicTypeFromCtorOrAlgebraicType).sort((a, b) => unsafeUnwrapMaybe(a.name).localeCompare(unsafeUnwrapMaybe(b.name)))
   let {ctors, atomics} = algebraicTypes.map(algebraicType => ctorsAtomicsFromCtorOrAlgebraicTypes(unsafeUnwrapMaybe(algebraicType.ctorOrAlgebraicTypes)))

@@ -39,7 +39,7 @@ describe("renderList", () => {
       const dList = findD(d!, (d): d is DList => d instanceof DList)
 
       expect(dList?.children.length).toBe(1)
-      expect(dList?.children[0].children[0]?.constructor.name).toBe("DText")
+      expect(findD(dList!.children[0], (d): d is DText => d instanceof DText)?.string).toBe("item")
     })
   })
 
@@ -67,7 +67,7 @@ describe("renderList", () => {
     })
   })
 
-  it("insertion points append to the empty tail and select the new head", () => {
+  it("insertion points append to the empty tail", () => {
     withTestEnvironment(environment => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
@@ -77,9 +77,9 @@ describe("renderList", () => {
 
       dList?.insertionPoints[1].editorCommands.commit?.(sidFromString("b"))
 
-      const newTail = environment.selection?.cursor.parent
-      expect(environment.selection?.cursor.label).toBe(headField.id)
+      const newTail = environment.guidMap.get(list.id, tailField.id)
       expect(newTail).not.toBe(undefined)
+      expect(environment.guidMap.get(newTail as string, headField.id)).toBe(sidFromString("b"))
       expect(environment.guidMap.get(newTail as string, tailField.id)).toBe(empty.id)
     })
   })

@@ -14,6 +14,7 @@ export function stringFromD(d: D, depth = 0): string {
         ? `${dList.opening}${stringFromD(dList.children[0], depth)}${dList.closing}`
         : `${dList.opening}${dList.children.map(child => `\n${indent(depth)}${stringFromD(child, depth + 1)}`).join(dList.separator)} ${dList.closing}`,
     descend => stringFromD(descend.child, depth),
+    editorBehavior => stringFromD(editorBehavior.child, depth),
     guidEditor => stringFromD(guidEditor.child, depth),
     supportsUnderselection => stringFromD(supportsUnderselection.child, depth),
     label => stringFromD(label.child, depth),

@@ -1,23 +1,23 @@
 import * as React from "react"
-import { mapMaybe, nothing } from "../../lib/Maybe"
+import { mapMaybe } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
-import { cursorFromD } from "../cursor/cursorFromD"
+import { cursorFromD, descendFromD } from "../cursor/cursorFromD"
 import { StringEditor } from "../render/D"
-import { environment } from "../Environment"
 import { sidFromString } from "../model/ID"
-import { attachEditorCommands, detachEditorCommands } from "../editor/EditorCommands"
+import { attachEditorCommands, detachEditorCommands, editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
-import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
-export class StringEditorComponent extends React.Component<{stringEditor: StringEditor, runE: (f: () => void) => void}, {}> {
+export class StringEditorComponent extends React.Component<{stringEditor: StringEditor, editorCommands: EditorCommands, runE: (f: () => void) => void}, {}> {
   textArea: HTMLTextAreaElement | null
   onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    let keyDownAction = editorKeyDownAction(this.props.editorCommands, e)
+    if (keyDownAction) { this.props.runE(keyDownAction); return }
     if (!((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0)) stopPropagationForTextInputs(e) }
   attachEditorCommands() {
     if (this.textArea) {
-      attachEditorCommands(this.textArea, this.props.stringEditor.editorCommands)
-      mapMaybe(cursorFromD(this.props.stringEditor), cursor => attachEditorFocus(this.textArea!, {cursor})) }}
+      attachEditorCommands(this.textArea, this.props.editorCommands)
+      mapMaybe(cursorFromD(this.props.stringEditor), cursor => attachEditorFocus(this.textArea!, {cursor, descend: descendFromD(this.props.stringEditor)})) }}
   onScroll() { noop() }
   render() {
     return <textarea
@@ -26,10 +26,8 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
       wrap="off"
       spellCheck={false}
       onChange={e => { if (this.props.stringEditor.writable)
-        this.props.runE(() => mapMaybe(this.props.stringEditor.editorCommands.commit, commit => { if (this.textArea) commit(sidFromString(this.textArea.value)) }))}}
+        this.props.runE(() => mapMaybe(this.props.editorCommands.commit, commit => { if (this.textArea) commit(sidFromString(this.textArea.value)) }))}}
       value={this.props.stringEditor.string}
-      onFocus={e => handleFocusEvent(() => this.props.runE(() => mapMaybe(cursorFromD(this.props.stringEditor), cursor => environment().selection = {cursor})))}
-      onBlur={e => handleFocusEvent(() => this.props.runE(() => environment().selection = nothing))}
       onClick={e => e.stopPropagation() }
       onKeyDown={e => this.onKeyDown(e)}
       ref={input => { this.textArea = input }} /> }

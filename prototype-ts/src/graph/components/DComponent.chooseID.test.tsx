@@ -77,7 +77,6 @@ describe("DComponent choose ID", () => {
       new GUIDMap(new Map([[parent, new Map([[label, target]])]])),
       new GUIDRootViews("guid-root"),
       new SparseSpanningTree(),
-      {selection: undefined},
       () => new DText(""),
       noopECallbacks)
 
@@ -85,7 +84,7 @@ describe("DComponent choose ID", () => {
       let cursor = new Cursor(undefined, parent, label, new SparseSpanningTree())
       act(() => root.render(
         <DComponent
-          d={new Descend(cursor, new DText("node"), undefined, false)}
+          d={new Descend(cursor, new DText("node"), false)}
           depth={0}
           scrollParent={() => null}
           runE={f => { f() }} />))

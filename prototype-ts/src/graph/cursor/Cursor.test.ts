@@ -49,7 +49,7 @@ describe("Cursor", () => {
   it("finds the nearest cursor-bearing D node", () => {
     const cursor = rootCursor()
     const dText = new DText("x")
-    const descend = new Descend(cursor, new Line(new Label(cursor, dText)), undefined, false)
+    const descend = new Descend(cursor, new Line(new Label(cursor, dText)), false)
 
     expect(cursorFromD(dText)).toBe(cursor)
     expect(cursorFromD(descend)).toBe(cursor)
@@ -58,8 +58,8 @@ describe("Cursor", () => {
   it("finds a descend by cursor through a D tree", () => {
     const root = rootCursor()
     const childCursor = _childCursor(root, "guid-child", sidFromString("child"))
-    const childDescend = new Descend(childCursor, new DText("child"), undefined, false)
-    const rootDescend = new Descend(root, new Block(childDescend), undefined, false)
+    const childDescend = new Descend(childCursor, new DText("child"), false)
+    const rootDescend = new Descend(root, new Block(childDescend), false)
 
     expect(descendFromCursor(rootDescend, undefined, childCursor)).toBe(childDescend)
     expect(descendFromCursor(rootDescend, undefined, _childCursor(root, "guid-other", sidFromString("other")))).toBe(undefined)

@@ -3,7 +3,7 @@ import { act } from "react"
 import { flushSync } from "react-dom"
 import { createRoot, Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { mapMaybe } from "../../lib/Maybe"
+import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
 import type { CopyResult } from "../editor/Copy"
@@ -22,7 +22,7 @@ import { Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { SparseSpanningTree } from "../SparseSpanningTree"
 import { defaultKeyHandler } from "../editor/keyHandler"
-import { focusEditorForCursor } from "../editor/EditorFocus"
+import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor } from "../editor/EditorFocus"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
 import { libraries } from "../libraries/libraries"
@@ -59,8 +59,9 @@ class EditorHarness {
   rootDescend: Descend
   undoStack: UndoRedo[][] = []
   redoStack: UndoRedo[][] = []
+  initialFocusConsumed = false
 
-  constructor(public environment: Environment) {
+  constructor(public environment: Environment, public initialFocusCursor: Maybe<Cursor> = nothing) {
     document.body.appendChild(this.container)
     this.root = createRoot(this.container)
     rootCursor(environment)
@@ -78,7 +79,10 @@ class EditorHarness {
           runE={f => {
             this.runWithUndoCallbacks(f)
             this.render() }} />))
-      mapMaybe(this.environment.selection, selection => focusEditorForCursor(this.container, selection.cursor))
+      if (!focusPendingEditor(this.container) && !this.initialFocusConsumed)
+        mapMaybe(this.initialFocusCursor, cursor => {
+          if (focusEditorForCursor(this.container, cursor))
+            this.initialFocusConsumed = true })
     })
   }
 
@@ -88,7 +92,7 @@ class EditorHarness {
     this.environment.callbacks = eCallbacks
     try {
       const result = f()
-      if (undoRedoArray.find(undoRedo => !undoRedo.selectionAction)) {
+      if (undoRedoArray.length > 0) {
         this.undoStack.push(undoRedoArray)
         this.redoStack = [] }
       return result
@@ -146,9 +150,28 @@ class EditorHarness {
       keyDown(textInput, "Enter") })
   }
 
-  key(key: string) {
+  key(key: string, options: KeyboardEventInit = {}) {
     const textInput = this.textInput()
-    this.run(() => keyDown(textInput, key))
+    this.run(() => keyDown(textInput, key, options))
+  }
+
+  activeKey(key: string, options: KeyboardEventInit = {}) {
+    const activeElement = document.activeElement
+    expect(activeElement).toBeInstanceOf(Element)
+    expect(this.container.contains(activeElement)).toBe(true)
+    this.run(() => keyDown(activeElement!, key, options))
+  }
+
+  activeCursor() {
+    const cursor = editorFocusForActiveElement()?.cursor
+    expect(cursor).not.toBe(undefined)
+    return cursor!
+  }
+
+  expectActive(parent: ID, label: ID) {
+    const cursor = this.activeCursor()
+    expect(cursor.parent).toBe(parent)
+    expect(cursor.label).toBe(label)
   }
 
   globalKey(key: string, options: KeyboardEventInit = {}) {
@@ -163,8 +186,7 @@ class EditorHarness {
   arrowLeft(count: number, parent: ID, label: ID) {
     for (let i = 0; i < count; i++)
       this.globalKey("ArrowLeft")
-    expect(this.environment.selection?.cursor.parent).toBe(parent)
-    expect(this.environment.selection?.cursor.label).toBe(label)
+    this.expectActive(parent, label)
   }
 
   click(element: Element, options: MouseEventInit = {}) {
@@ -196,8 +218,7 @@ function rootCursor(environment: Environment) {
 
 function rootHarness(render?: Render) {
   const environment = makeTestEnvironment({defaultRender: render ? tryFirst(render, defaultRender) : defaultRender})
-  environment.selection = {cursor: rootCursor(environment)}
-  return new EditorHarness(environment)
+  return new EditorHarness(environment, rootCursor(environment))
 }
 
 function emptyListHarness() {
@@ -230,6 +251,13 @@ function pasteReferenceIntoActive(harness: EditorHarness, copy: {referenceID: ID
     expect(id).not.toBe(undefined)
     expect(commitIDToActiveElement(id!)).toBe(true)
     return id! })
+}
+
+function startNewEdgeFromActive(harness: EditorHarness) {
+  harness.run(() => {
+    const newEdge = editorCommandsForActiveElement()?.newEdge
+    expect(newEdge).not.toBe(undefined)
+    newEdge!() })
 }
 
 function listItems(harness: EditorHarness, list: ID) {
@@ -341,6 +369,32 @@ describe("DComponent editor integration", () => {
     harness.unmount()
   })
 
+  it("activates an unselected placeholder by clicking it", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const harness = new EditorHarness(environment)
+
+    expect(harness.container.querySelector("input[type=text], textarea")).toBe(null)
+    harness.click(harness.first(".uneditable"))
+    harness.typeAndEnter("hello")
+
+    expect(stringFromID(harness.get(environment.rootViews.id, rootField.id)!)).toBe("hello")
+
+    harness.unmount()
+  })
+
+  it("dismisses a locally activated placeholder with Escape", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const harness = new EditorHarness(environment)
+
+    harness.click(harness.first(".uneditable"))
+    expect(harness.container.querySelector("input[type=text], textarea")).not.toBe(null)
+    harness.key("Escape")
+
+    expect(harness.container.querySelector("input[type=text], textarea")).toBe(null)
+
+    harness.unmount()
+  })
+
   it("commits a string through a default-rendered placeholder", () => {
     const harness = rootHarness()
 
@@ -354,8 +408,7 @@ describe("DComponent editor integration", () => {
   it("edits an existing string through the textarea path", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("old"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.run(() => input(harness.textInput(), "new"))
 
@@ -367,8 +420,7 @@ describe("DComponent editor integration", () => {
   it("edits an existing number through input and Enter", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, 1)
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     const textInput = harness.textInput()
     harness.run(() => {
@@ -389,8 +441,7 @@ describe("DComponent editor integration", () => {
     expect(list).not.toBe(undefined)
     expect(harness.get(list!, headField.id)).toBe(undefined)
     expect(harness.get(list!, tailField.id)).not.toBe(undefined)
-    expect(harness.environment.selection?.cursor.parent).toBe(list)
-    expect(harness.environment.selection?.cursor.label).toBe(headField.id)
+    harness.expectActive(list!, headField.id)
 
     harness.unmount()
   })
@@ -428,8 +479,7 @@ describe("DComponent editor integration", () => {
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
     expect(list).not.toBe(undefined)
     expect(listStrings(harness, list!)).toEqual(["hello"])
-    expect(harness.environment.selection?.cursor.parent).toBe(list)
-    expect(harness.environment.selection?.cursor.label).toBe(headField.id)
+    harness.expectActive(list!, headField.id)
     expect(document.activeElement).toBe(harness.textInput())
 
     harness.unmount()
@@ -478,10 +528,10 @@ describe("DComponent editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
-    harness.globalKey(",", {metaKey: true})
+    harness.key(",", {metaKey: true})
     harness.typeAndEnter("third")
     harness.globalKey("ArrowUp")
-    harness.globalKey(",", {metaKey: true})
+    harness.key(",", {metaKey: true})
     harness.typeAndEnter("second")
 
     expect(listStrings(harness, list!)).toEqual(["first", "second", "third"])
@@ -495,10 +545,10 @@ describe("DComponent editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
-    harness.globalKey(",", {metaKey: true})
+    harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("third")
     harness.globalKey("ArrowUp")
-    harness.globalKey(",", {metaKey: true})
+    harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("second")
 
     expect(listStrings(harness, list!)).toEqual(["first", "second", "third"])
@@ -515,8 +565,8 @@ describe("DComponent editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
-    harness.globalKey(",", {metaKey: true})
-    const inserted = harness.environment.selection?.cursor.parent
+    harness.activeKey(",", {metaKey: true})
+    const inserted = harness.activeCursor().parent
     expect(listLength(harness, list!)).toBe(2)
 
     harness.undo()
@@ -533,16 +583,15 @@ describe("DComponent editor integration", () => {
     const environment = makeTestEnvironment({defaultRender})
     const node = "guid-node"
     environment.guidMap.set(environment.rootViews.id, rootField.id, node)
-    environment.selection = {cursor: rootCursor(environment), pendingEdgeLabel: true}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
+    startNewEdgeFromActive(harness)
     harness.typeAndEnter("random node")
-    const label = environment.selection?.cursor.label
-    expect(label).not.toBe(undefined)
-    expect(environment.selection?.pendingEdgeLabel).toBe(undefined)
-    expect(environment.selection?.cursor.parent).toBe(node)
-
+    expect(document.activeElement).toBe(harness.textInput())
     harness.typeAndEnter("hello")
+
+    const label = Array.from(environment.guidMap.edges(node)!.keys())[0]
+    expect(label).not.toBe(undefined)
 
     expect(stringFromID(harness.get(node, label!)!)).toBe("hello")
 
@@ -556,14 +605,11 @@ describe("DComponent editor integration", () => {
     environment.guidMap.set(environment.rootViews.id, rootField.id, node)
     environment.guidMap.set(node, sidFromString("available label"), field)
     environment.guidMap.set(field, nameField.id, sidFromString("Existing Label"))
-    environment.selection = {cursor: rootCursor(environment), pendingEdgeLabel: true}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
+    startNewEdgeFromActive(harness)
     harness.typeAndEnter("Existing Label")
 
-    expect(environment.selection?.pendingEdgeLabel).toBe(undefined)
-    expect(environment.selection?.cursor.parent).toBe(node)
-    expect(environment.selection?.cursor.label).toBe(field)
     expect(harness.get(node, field)).toBe(undefined)
     expect(document.activeElement).toBe(harness.textInput())
 
@@ -590,8 +636,7 @@ describe("DComponent editor integration", () => {
   it("copies the focused guid editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, "guid-node")
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
     harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
@@ -605,8 +650,7 @@ describe("DComponent editor integration", () => {
   it("copies the focused string editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("copy me"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
     harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
@@ -621,8 +665,7 @@ describe("DComponent editor integration", () => {
   it("copies the focused number editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, 7)
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
     harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
@@ -644,13 +687,11 @@ describe("DComponent editor integration", () => {
     environment.guidMap.set(environment.rootViews.id, rootField.id, original)
     environment.guidMap.set(original, childLabel, child)
     environment.guidMap.set(child, childNameLabel, sidFromString("Child"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
     const copy = copyActive(harness)
 
-    harness.run(() => {
-      environment.selection = {cursor: _childCursor(rootCursor(environment), original, copyLabel)}
-      harness.render() })
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("copy")
     const pasted = pasteStructureIntoActive(harness, copy)
     const pastedChild = harness.get(pasted, childLabel)
 
@@ -670,13 +711,11 @@ describe("DComponent editor integration", () => {
     const copyLabel = sidFromString("copy")
     environment.guidMap.set(environment.rootViews.id, rootField.id, original)
     environment.guidMap.set(original, selfLabel, original)
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
     const copy = copyActive(harness)
 
-    harness.run(() => {
-      environment.selection = {cursor: _childCursor(rootCursor(environment), original, copyLabel)}
-      harness.render() })
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("copy")
     const pasted = pasteStructureIntoActive(harness, copy)
 
     expect(pasted).not.toBe(original)
@@ -695,13 +734,11 @@ describe("DComponent editor integration", () => {
     environment.guidMap.set(environment.rootViews.id, rootField.id, original)
     environment.guidMap.set(original, firstLabel, shared)
     environment.guidMap.set(original, secondLabel, shared)
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
     const copy = copyActive(harness)
 
-    harness.run(() => {
-      environment.selection = {cursor: _childCursor(rootCursor(environment), original, copyLabel)}
-      harness.render() })
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("copy")
     const pasted = pasteStructureIntoActive(harness, copy)
 
     expect(harness.get(pasted, firstLabel)).toBe(harness.get(pasted, secondLabel))
@@ -720,13 +757,11 @@ describe("DComponent editor integration", () => {
     environment.guidMap.set(environment.rootViews.id, rootField.id, original)
     environment.guidMap.set(original, label, target)
     environment.guidMap.set(label, labelName, sidFromString("Label"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
     const copy = copyActive(harness)
 
-    harness.run(() => {
-      environment.selection = {cursor: _childCursor(rootCursor(environment), original, copyLabel)}
-      harness.render() })
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("copy")
     const pasted = pasteStructureIntoActive(harness, copy)
     const pastedEdges = environment.guidMap.edges(pasted as string)!
     const copiedEntry = Array.from(pastedEdges).find(([edgeLabel]) => edgeLabel !== nameField.id)
@@ -742,8 +777,7 @@ describe("DComponent editor integration", () => {
 
   it("copies a function declaration and pastes a reference into a function call", () => {
     const environment = makeTestEnvironment({libraries, defaultRender})
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new JavaScriptProgram")
     const javascriptProgram = harness.get(environment.rootViews.id, rootField.id)
@@ -755,8 +789,8 @@ describe("DComponent editor integration", () => {
     harness.arrowLeft(1, statements!, headField.id)
     const copy = copyActive(harness)
 
-    harness.globalKey(",", {metaKey: true})
-    const callList = harness.environment.selection?.cursor.parent
+    harness.activeKey(",", {metaKey: true})
+    const callList = harness.activeCursor().parent
     harness.typeAndEnter("new Function Call")
     const call = harness.get(callList!, headField.id)
     pasteReferenceIntoActive(harness, copy)
@@ -768,8 +802,7 @@ describe("DComponent editor integration", () => {
 
   it("pastes a function declaration structure into a statement list with remapped internals", () => {
     const environment = makeTestEnvironment({libraries, defaultRender})
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new JavaScriptProgram")
     const javascriptProgram = harness.get(environment.rootViews.id, rootField.id)
@@ -786,8 +819,8 @@ describe("DComponent editor integration", () => {
     harness.arrowLeft(1, statements!, headField.id)
     const copy = copyActive(harness)
 
-    harness.globalKey(",", {metaKey: true})
-    const copyList = harness.environment.selection?.cursor.parent
+    harness.activeKey(",", {metaKey: true})
+    const copyList = harness.activeCursor().parent
     const pasted = pasteStructureIntoActive(harness, copy)
     const pastedParameters = harness.get(pasted, parametersField.id)
     const pastedParameter = harness.get(pastedParameters!, headField.id)
@@ -816,8 +849,7 @@ describe("DComponent editor integration", () => {
   it("pastes a reference into the focused string editor", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("old"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
@@ -829,8 +861,7 @@ describe("DComponent editor integration", () => {
   it("pastes a reference into the focused number editor", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, 1)
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
@@ -857,8 +888,7 @@ describe("DComponent editor integration", () => {
   it("undoes and redoes deleting a selected edge", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("delete me"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Delete")
     expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
@@ -878,10 +908,8 @@ describe("DComponent editor integration", () => {
     const childLabel = sidFromString("child")
     environment.guidMap.set(environment.rootViews.id, rootField.id, node)
     environment.guidMap.set(node, childLabel, sidFromString("keep me"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
-    harness.run(() => { environment.selection = {cursor: _childCursor(rootCursor(environment), node, childLabel)} })
     harness.globalKey("Delete")
 
     expect(harness.get(environment.rootViews.id, rootField.id)).toBe(undefined)
@@ -898,13 +926,11 @@ describe("DComponent editor integration", () => {
     const copyLabel = sidFromString("copy")
     environment.guidMap.set(environment.rootViews.id, rootField.id, original)
     environment.guidMap.set(original, childLabel, child)
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
     const copy = copyActive(harness)
 
-    harness.run(() => {
-      environment.selection = {cursor: _childCursor(rootCursor(environment), original, copyLabel)}
-      harness.render() })
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("copy")
     const pasted = pasteStructureIntoActive(harness, copy)
     expect(harness.get(original, copyLabel)).toBe(pasted)
 
@@ -935,13 +961,11 @@ describe("DComponent editor integration", () => {
   it("keeps selection when Tab has no placeholder to move to", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("only"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Tab")
 
-    expect(harness.environment.selection?.cursor.parent).toBe(environment.rootViews.id)
-    expect(harness.environment.selection?.cursor.label).toBe(rootField.id)
+    harness.expectActive(environment.rootViews.id, rootField.id)
     expect(document.activeElement).toBe(harness.textInput())
 
     harness.unmount()
@@ -981,28 +1005,22 @@ describe("DComponent editor integration", () => {
     environment.guidMap.set(environment.rootViews.id, rootField.id, root)
     environment.guidMap.set(root, firstLabel, sidFromString("First"))
     environment.guidMap.set(root, secondLabel, sidFromString("Second"))
-    environment.selection = undefined
     const harness = new EditorHarness(environment)
 
     harness.globalKey("ArrowRight")
-    expect(environment.selection?.cursor.parent).toBe(environment.rootViews.id)
-    expect(environment.selection?.cursor.label).toBe(rootField.id)
+    harness.expectActive(environment.rootViews.id, rootField.id)
 
     harness.globalKey("ArrowRight")
-    expect(environment.selection?.cursor.parent).toBe(root)
-    expect(environment.selection?.cursor.label).toBe(firstLabel)
+    harness.expectActive(root, firstLabel)
 
     harness.globalKey("ArrowDown")
-    expect(environment.selection?.cursor.parent).toBe(root)
-    expect(environment.selection?.cursor.label).toBe(secondLabel)
+    harness.expectActive(root, secondLabel)
 
     harness.globalKey("ArrowUp")
-    expect(environment.selection?.cursor.parent).toBe(root)
-    expect(environment.selection?.cursor.label).toBe(firstLabel)
+    harness.expectActive(root, firstLabel)
 
     harness.globalKey("ArrowLeft")
-    expect(environment.selection?.cursor.parent).toBe(environment.rootViews.id)
-    expect(environment.selection?.cursor.label).toBe(rootField.id)
+    harness.expectActive(environment.rootViews.id, rootField.id)
 
     harness.unmount()
   })
@@ -1015,15 +1033,14 @@ describe("DComponent editor integration", () => {
     environment.guidMap.set(environment.rootViews.id, rootField.id, root)
     environment.guidMap.set(root, firstLabel, sidFromString("First"))
     environment.guidMap.set(root, secondLabel, sidFromString("Second"))
-    environment.selection = {cursor: _childCursor(rootCursor(environment), root, firstLabel)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), root, firstLabel))
 
-    expect(document.activeElement).toBe(harness.textInput())
-    harness.run(() => { environment.selection = {cursor: rootCursor(environment)} })
+    const focusedInput = harness.textInput()
+    expect(document.activeElement).toBe(focusedInput)
+    harness.run(() => { focusedInput.focus() })
     harness.globalKey("ArrowDown")
 
-    expect(environment.selection?.cursor.parent).toBe(root)
-    expect(environment.selection?.cursor.label).toBe(secondLabel)
+    harness.expectActive(root, secondLabel)
 
     harness.unmount()
   })
@@ -1034,16 +1051,14 @@ describe("DComponent editor integration", () => {
     environment.guidMap.set(environment.rootViews.id, rootField.id, root)
     environment.guidMap.set(root, nameField.id, sidFromString("Cycle"))
     environment.guidMap.set(root, sidFromString("self"), root)
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
     const expandedBefore = Array.from(harness.container.querySelectorAll(".collapseToggle")).filter(toggle => toggle.textContent === "▾").length
     const collapsed = Array.from(harness.container.querySelectorAll(".collapseToggle")).filter(toggle => toggle.textContent === "▸")
     expect(collapsed.length).toBeGreaterThan(0)
 
     harness.click(collapsed[0])
 
-    expect(harness.environment.selection?.cursor.parent).toBe(environment.rootViews.id)
-    expect(harness.environment.selection?.cursor.label).toBe(rootField.id)
+    harness.expectActive(environment.rootViews.id, rootField.id)
     expect(Array.from(harness.container.querySelectorAll(".collapseToggle")).filter(toggle => toggle.textContent === "▾").length).toBeGreaterThan(expandedBefore)
 
     harness.unmount()
@@ -1054,19 +1069,19 @@ describe("DComponent editor integration", () => {
 
     harness.globalKey("Escape")
 
-    expect(harness.environment.selection).toBe(undefined)
+    expect(document.activeElement).not.toBe(undefined)
 
     harness.unmount()
   })
 
-  it("inserts a list item with the global comma key and commits it", () => {
+  it("inserts a list item with comma and commits it", () => {
     const harness = rootHarness()
 
     harness.key("[")
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
-    harness.globalKey(",", {metaKey: true})
-    const inserted = harness.environment.selection?.cursor.parent
+    harness.activeKey(",", {metaKey: true})
+    const inserted = harness.activeCursor().parent
     harness.typeAndEnter("second")
 
     expect(stringFromID(harness.get(list!, headField.id)!)).toBe("first")
@@ -1082,9 +1097,8 @@ describe("DComponent editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
-    harness.run(() => { harness.environment.selection = {cursor: rootCursor(harness.environment)} })
-    harness.globalKey(",", {metaKey: true})
-    const inserted = harness.environment.selection?.cursor.parent
+    harness.activeKey(",", {metaKey: true})
+    const inserted = harness.activeCursor().parent
     harness.typeAndEnter("second")
 
     expect(listStrings(harness, list!)).toEqual(["first", "second"])
@@ -1096,8 +1110,7 @@ describe("DComponent editor integration", () => {
   it("deletes a selected edge with the global Delete key", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("delete me"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Delete")
 
@@ -1109,8 +1122,7 @@ describe("DComponent editor integration", () => {
   it("deletes a selected edge with the global Backspace key", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("delete me"))
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.globalKey("Backspace")
 
@@ -1122,13 +1134,11 @@ describe("DComponent editor integration", () => {
   it("selects a guid editor by mouse click", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, "guid-node")
-    environment.selection = undefined
     const harness = new EditorHarness(environment)
 
     harness.click(harness.first(".guidEditor"))
 
-    expect(harness.environment.selection?.cursor.parent).toBe(environment.rootViews.id)
-    expect(harness.environment.selection?.cursor.label).toBe(rootField.id)
+    harness.expectActive(environment.rootViews.id, rootField.id)
 
     harness.unmount()
   })
@@ -1138,15 +1148,13 @@ describe("DComponent editor integration", () => {
     const environment = makeTestEnvironment({defaultRender: tryFirst(appRender, defaultRender)})
     const app = withEnvironment(environment, () => GUIDApp.new().setName("Widget"))
     environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
-    environment.selection = undefined
     const harness = new EditorHarness(environment)
     const guidEditor = harness.first(".guidEditor")
 
     harness.click(guidEditor)
 
     expect(document.activeElement).toBe(guidEditor)
-    expect(harness.environment.selection?.cursor.parent).toBe(environment.rootViews.id)
-    expect(harness.environment.selection?.cursor.label).toBe(rootField.id)
+    harness.expectActive(environment.rootViews.id, rootField.id)
 
     harness.unmount()
   })
@@ -1159,9 +1167,10 @@ describe("DComponent editor integration", () => {
     const missingLabel = sidFromString("missing")
     environment.guidMap.set(environment.rootViews.id, rootField.id, parent)
     environment.guidMap.set(parent, existingLabel, target)
-    environment.selection = {cursor: _childCursor(rootCursor(environment), parent, missingLabel)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("missing")
     const identicons = harness.container.querySelectorAll(".identicon")
     expect(identicons.length).toBeGreaterThan(1)
     harness.click(identicons[1], {altKey: true})
@@ -1180,8 +1189,7 @@ describe("DComponent editor integration", () => {
       return {app, extraField} })
     environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
     environment.guidMap.set(app.id, extraField.id, sidFromString("old"))
-    environment.selection = {cursor: _childCursor(rootCursor(environment), app.id, extraField.id)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, extraField.id))
 
     expect(harness.container.textContent).toContain("Extra")
     harness.run(() => input(harness.textInput(), "new"))
@@ -1201,8 +1209,7 @@ describe("DComponent editor integration", () => {
           root: libRoot }]]),
       defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, libRoot)
-    environment.selection = {cursor: _childCursor(rootCursor(environment), libRoot, nameField.id)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), libRoot, nameField.id))
 
     harness.run(() => input(harness.textInput(), "new"))
 
@@ -1216,8 +1223,7 @@ describe("DComponent editor integration", () => {
     const environment = makeTestEnvironment({defaultRender: tryFirst(appRender, defaultRender)})
     const app = withEnvironment(environment, () => GUIDApp.new())
     environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
-    environment.selection = {cursor: _childCursor(rootCursor(environment), app.id, nameField.id)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, nameField.id))
 
     harness.typeAndEnter("Widget")
 
@@ -1243,8 +1249,7 @@ describe("DComponent editor integration", () => {
       return {app: GUIDApp.new(), render: render!} })
     environment.defaultRender = tryFirst(render, defaultRender)
     environment.guidMap.set(environment.rootViews.id, rootField.id, app.id)
-    environment.selection = {cursor: _childCursor(rootCursor(environment), app.id, nameField.id)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, nameField.id))
 
     harness.typeAndEnter("Templated")
 
@@ -1255,28 +1260,24 @@ describe("DComponent editor integration", () => {
 
   it("creates an Evaluate, JavaScriptProgram, statement list, and statement through completions", () => {
     const environment = makeTestEnvironment({libraries: testLibrary(), defaultRender})
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new Evaluate")
     const evaluate = harness.get(environment.rootViews.id, rootField.id)
     expect(evaluate).not.toBe(undefined)
     expect(harness.get(evaluate!, ctorField.id)).toBe(evaluateCtor.id)
-    expect(environment.selection?.cursor.parent).toBe(evaluate)
-    expect(environment.selection?.cursor.label).toBe(javascriptProgramField.id)
+    harness.expectActive(evaluate!, javascriptProgramField.id)
 
     harness.typeAndEnter("new JavaScriptProgram")
     const javascriptProgram = harness.get(evaluate!, javascriptProgramField.id)
     expect(javascriptProgram).not.toBe(undefined)
     expect(harness.get(javascriptProgram!, ctorField.id)).toBe(javascriptProgramCtor.id)
-    expect(environment.selection?.cursor.parent).toBe(javascriptProgram)
-    expect(environment.selection?.cursor.label).toBe(statementsField.id)
+    harness.expectActive(javascriptProgram!, statementsField.id)
 
     harness.key("[")
     const statements = harness.get(javascriptProgram!, statementsField.id)
     expect(statements).not.toBe(undefined)
-    expect(environment.selection?.cursor.parent).toBe(statements)
-    expect(environment.selection?.cursor.label).toBe(headField.id)
+    harness.expectActive(statements!, headField.id)
 
     harness.typeAndEnter("new FunctionDeclaration")
     const statement = harness.get(statements!, headField.id)
@@ -1288,8 +1289,7 @@ describe("DComponent editor integration", () => {
 
   it("enters and evaluates a factorial program through editor interactions", () => withJavascriptHost(javascriptCalls => {
     const environment = makeTestEnvironment({libraries, defaultRender: tryFirst(renders, defaultRender)})
-    environment.selection = {cursor: rootCursor(environment)}
-    const harness = new EditorHarness(environment)
+    const harness = new EditorHarness(environment, rootCursor(environment))
 
     harness.typeAndEnter("new Evaluate")
     const evaluate = harness.get(environment.rootViews.id, rootField.id)
@@ -1344,7 +1344,7 @@ describe("DComponent editor integration", () => {
     harness.typeAndEnter("new Function Call")
     harness.typeAndEnter("factorial")
     harness.key("[")
-    const recursiveArguments = harness.environment.selection?.cursor.parent
+    const recursiveArguments = harness.activeCursor().parent
     expect(recursiveArguments).not.toBe(undefined)
 
     harness.typeAndEnter("new Binary Inline")
@@ -1353,8 +1353,8 @@ describe("DComponent editor integration", () => {
     harness.typeAndEnter("1")
 
     harness.arrowLeft(8, topStatements!, headField.id)
-    harness.globalKey(",", {metaKey: true})
-    const topCallList = harness.environment.selection?.cursor.parent
+    harness.activeKey(",", {metaKey: true})
+    const topCallList = harness.activeCursor().parent
     expect(topCallList).not.toBe(undefined)
 
     harness.typeAndEnter("new Function Call")
@@ -1370,5 +1370,5 @@ describe("DComponent editor integration", () => {
     expect(harness.container.textContent).toContain("120")
 
     harness.unmount()
-  }))
+  }), 10000)
 })

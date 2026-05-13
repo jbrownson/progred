@@ -1,22 +1,19 @@
 import * as React from "react"
 import { nothing } from "../../lib/Maybe"
-import { ListInsertionPoint, PlaceholderEditorSelectedState, PlaceholderEditorState } from "../render/D"
+import { ListInsertionPoint, PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/D"
 import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
-import { environment } from "../Environment"
 
 export class ListInsertionEditorComponent extends React.Component<{insertionPoint: ListInsertionPoint, label: string, active: boolean, setActive: (active: boolean) => void, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
   placeholderInput: PlaceholderInputComponent | null
   editorState: PlaceholderEditorState = {}
-  selectedState(): PlaceholderEditorSelectedState { return {entries: this.props.insertionPoint.entries, editorState: this.editorState} }
+  activeState(): PlaceholderEditorActiveState { return {entries: this.props.insertionPoint.entries, editorState: this.editorState} }
   close() {
     this.editorState.completionOpen = false
     this.editorState.value = ""
     this.editorState.itemSelection = nothing
     this.forceUpdate() }
-  activate() { this.props.runE(() => {
-    environment().selection = nothing
-    this.props.setActive(true) }) }
+  activate() { this.props.setActive(true) }
   deactivate() {
     this.editorState.completionOpen = false
     this.editorState.value = ""
@@ -34,7 +31,7 @@ export class ListInsertionEditorComponent extends React.Component<{insertionPoin
       </span>
     return <PlaceholderInputComponent
       ref={placeholderInput => { this.placeholderInput = placeholderInput }}
-      selectedState={this.selectedState()}
+      activeState={this.activeState()}
       placeholder="item"
       editorCommands={this.props.insertionPoint.editorCommands}
       scrollParent={this.props.scrollParent}

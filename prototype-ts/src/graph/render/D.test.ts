@@ -21,9 +21,10 @@ describe("D", () => {
   })
 
   it("keeps underselection support inside a projection boundary", () => {
-    expect(supportsUnderselection(new SupportsUnderselection(new DText("x")))).toBe(true)
-    expect(supportsUnderselection(new Line(new SupportsUnderselection(new DText("x"))))).toBe(true)
-    expect(supportsUnderselection(new Descend(cursor(), new SupportsUnderselection(new DText("x")), undefined, false))).toBe(false)
+    const c = cursor()
+    expect(supportsUnderselection(new SupportsUnderselection(c, "guid-root", new DText("x")))).toBe(true)
+    expect(supportsUnderselection(new Line(new SupportsUnderselection(c, "guid-root", new DText("x"))))).toBe(true)
+    expect(supportsUnderselection(new Descend(c, new SupportsUnderselection(c, "guid-root", new DText("x")), false))).toBe(false)
   })
 
   it("exposes child lists consistently", () => {

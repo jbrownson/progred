@@ -1,5 +1,5 @@
 import { noopECallbacks } from "./editor/ECallbacks"
-import type { _Selection } from "./editor/Selection"
+import type { EdgeContext } from "./editor/EditorCommands"
 import { Environment, SourceID, withEnvironment } from "./Environment"
 import { GUIDRootViews } from "./graph"
 import type { ID } from "./model/ID"
@@ -15,8 +15,7 @@ type TestEnvironmentOptions = {
   guidMap?: GUIDMap
   rootViews?: GUIDRootViews
   sparseSpanningTree?: SparseSpanningTree
-  selection?: _Selection
-  defaultRender?: (cursor: Cursor, sourceID: Maybe<SourceID>) => D
+  defaultRender?: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext) => D
 }
 
 export function makeTestEnvironment(options: TestEnvironmentOptions = {}) {
@@ -25,7 +24,6 @@ export function makeTestEnvironment(options: TestEnvironmentOptions = {}) {
     options.guidMap || new GUIDMap(),
     options.rootViews || new GUIDRootViews("guid-root-views"),
     options.sparseSpanningTree || new SparseSpanningTree(),
-    {selection: options.selection},
     options.defaultRender || (() => new DText("")),
     noopECallbacks)
 }

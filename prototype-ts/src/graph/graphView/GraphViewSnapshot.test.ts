@@ -26,7 +26,7 @@ describe("GraphViewSnapshot", () => {
     }, {guidMap, rootViews})
   })
 
-  it("uses normal editor selection as secondary graph selection", () => {
+  it("uses focused editor cursor as secondary graph selection", () => {
     const rootViews = new GUIDRootViews("guid-root-views")
     const label = sidFromString("child")
     const guidMap = new GUIDMap(new Map([
@@ -35,7 +35,7 @@ describe("GraphViewSnapshot", () => {
     const cursor = new Cursor(undefined, "guid-root", label, new SparseSpanningTree())
 
     withTestEnvironment(() => {
-      const snapshot = buildGraphViewSnapshot(guidMap, rootViews, {cursor}, undefined)
+      const snapshot = buildGraphViewSnapshot(guidMap, rootViews, cursor, undefined)
 
       expect(snapshot.selectedNode).toEqual({id: "guid-child", strength: "secondary"})
       expect(snapshot.selectedEdge).toEqual({source: "guid-root", label, strength: "secondary"})

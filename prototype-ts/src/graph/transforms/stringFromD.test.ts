@@ -15,7 +15,7 @@ describe("stringFromD", () => {
   })
 
   it("prints placeholders and identicons explicitly", () => {
-    expect(stringFromD(new Line(new PlaceholderEditor("field", undefined, {}), new DText(" "), new DIdenticon("1234567890abcdef")))).toBe("[…] [12345678]")
+    expect(stringFromD(new Line(new PlaceholderEditor("field", () => [], undefined, {}), new DText(" "), new DIdenticon("1234567890abcdef")))).toBe("[…] [12345678]")
   })
 
   it("prints editor wrappers as their contents", () => {

@@ -1,12 +1,10 @@
-import { altMaybe, bindMaybe, booleanFromMaybe, firstMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
+import { altMaybe, bindMaybe, booleanFromMaybe, firstMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { D, Descend } from "../render/D"
+import { Cursor } from "../cursor/Cursor"
 import { descendFromCursor } from "../cursor/descendFromCursor"
-import { _get, environment } from "../Environment"
 import { findNextTabStop, findTabStop } from "./findNextTabStop"
-import { matchID } from "../model/ID"
-import { commitToActiveElement } from "./EditorCommands"
-import { activeSelectionCursor } from "./EditorFocus"
-import { appendToListCursor, insertAfterListElemCursor, selectionCursorBindMaybe } from "./listCursorActions"
+import { commitToActiveElement, editorCommandsForActiveElement, editorKeyDownAction } from "./EditorCommands"
+import { descendForActiveElement, focusEditorForDescend } from "./EditorFocus"
 
 export type KeyHandler = (e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A) => boolean
 
@@ -33,6 +31,12 @@ export function deleteKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDe
         return committed })}
   return false }
 
+export function activeEditorKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
+  let keyDownAction = editorKeyDownAction(editorCommandsForActiveElement(), e)
+  return maybe(keyDownAction, () => false, action => runE(() => {
+    action()
+    return true })) }
+
 function parentDescend(d: D): Maybe<Descend> {
   return bindMaybe(d.parent, parent => parent instanceof Descend ? parent : parentDescend(parent)) }
 
@@ -48,42 +52,49 @@ function goSibling(d: D, n: number): Maybe<Descend> {
       sibling instanceof Descend ? sibling : altMaybe(goDown(sibling), () => goSibling(sibling, n)) ),
     () => bindMaybe(d.parent, parent => goSibling(parent, n)) )}
 
-function selectDescend(descend: Descend) { environment().selection = {cursor: descend.cursor} }
+function dContains(d: D, target: D): boolean {
+  return d === target || booleanFromMaybe(d.children.find(child => dContains(child, target))) }
+
+function activeDescend(rootDescend: Descend, viewsDescend: Maybe<Descend>): Maybe<Descend> {
+  let descend = descendForActiveElement()
+  return descend && (dContains(rootDescend, descend) || maybe(viewsDescend, () => false, viewsDescend => dContains(viewsDescend, descend)))
+    ? descend
+    : nothing }
 
 // TODO makeElementVisible
 function keyboardNav(f: (descend: Descend) => Maybe<Descend>, rootDescend: Descend, viewsDescend: Maybe<Descend>): boolean {
-  return booleanFromMaybe(mapMaybe(bindMaybe(bindMaybe(activeSelectionCursor(), cursor => descendFromCursor(rootDescend, viewsDescend, cursor)), f), d => { selectDescend(d); return {} })) }
+  return booleanFromMaybe(mapMaybe(bindMaybe(activeDescend(rootDescend, viewsDescend), f), d => { focusEditorForDescend(d); return {} })) }
 
 export function arrowNavKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
     case "ArrowLeft":
       e.preventDefault()
-      return runE(() => booleanFromMaybe(bindMaybe(activeSelectionCursor(), cursor =>
-        mapMaybe(bindMaybe(descendFromCursor(rootDescend, viewsDescend, cursor), parentDescend), selectDescend) )))
+      return runE(() => booleanFromMaybe(mapMaybe(bindMaybe(activeDescend(rootDescend, viewsDescend), parentDescend), focusEditorForDescend) ))
     case "ArrowRight":
       e.preventDefault()
-      return runE(() => maybe(activeSelectionCursor(),
-        () => { selectDescend(rootDescend); return true },
+      return runE(() => maybe(activeDescend(rootDescend, viewsDescend),
+        () => focusEditorForDescend(rootDescend),
         () => booleanFromMaybe(keyboardNav(goDown, rootDescend, viewsDescend)) ))
     case "ArrowDown":
       e.preventDefault()
-      return runE(() => maybe(activeSelectionCursor(),
-        () => { selectDescend(rootDescend); return true },
+      return runE(() => maybe(activeDescend(rootDescend, viewsDescend),
+        () => focusEditorForDescend(rootDescend),
         () => keyboardNav(d => goSibling(d, 1), rootDescend, viewsDescend) ))
     case "ArrowUp":
       e.preventDefault()
       return runE(() => keyboardNav(d => goSibling(d, -1), rootDescend, viewsDescend))}
   return false }
 
-export function doTab(shift: boolean, rootDescend: Descend, viewsDescend: Maybe<Descend>): boolean {
-  const selection = activeSelectionCursor()
-  const nextSelection = mapMaybe(
-    maybe(bindMaybe(selection, cursor => descendFromCursor(rootDescend, viewsDescend, cursor)),
+export function doTab(shift: boolean, rootDescend: Descend, viewsDescend: Maybe<Descend>, cursor: Maybe<Cursor> = nothing): boolean {
+  const descend = altMaybe(activeDescend(rootDescend, viewsDescend), () => bindMaybe(cursor, cursor => descendFromCursor(rootDescend, viewsDescend, cursor)))
+  const nextDescend = maybe(
+    maybe(descend,
       () => findTabStop(rootDescend, shift ? -1 : 1),
       descend => findNextTabStop(descend, shift ? -1 : 1) ),
-    tabStop => ({cursor: tabStop.cursor}) )
-  environment().selection = fromMaybe(nextSelection, () => mapMaybe(selection, cursor => ({cursor})))
-  return nextSelection !== nothing }
+    () => nothing,
+    tabStop => tabStop)
+  mapMaybe(nextDescend, focusEditorForDescend)
+  return nextDescend !== nothing }
 
 export function navKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
@@ -93,25 +104,7 @@ export function navKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDesce
       return true }
     case "Escape": {
       e.preventDefault()
-      return runE(() => maybe(environment().selection, () => false, selection => { environment().selection = nothing; return true })) }}
+      return false }}
   return false }
 
-export function listKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
-  switch (e.key) {
-    case ",":
-      return runE(() => booleanFromMaybe(selectionCursorBindMaybe(cursor => {
-        let listInserter = (requireMeta: boolean) => () => (e.metaKey || !requireMeta)
-          ? altMaybe(
-            bindMaybe(insertAfterListElemCursor(cursor), cursor => {
-              e.preventDefault()
-              environment().selection = {cursor}
-              return {} }),
-            () => mapMaybe(appendToListCursor(cursor), cursor => {
-              e.preventDefault()
-              environment().selection = {cursor}
-              return {} }))
-          : nothing
-        return bindMaybe(_get(cursor.parent, cursor.label), id => matchID(id, listInserter(false), listInserter(true), listInserter(false))) })))}
-  return false }
-
-export let defaultKeyHandler: KeyHandler = composedKeyHandler(deleteKeyHandler, navKeyHandler, arrowNavKeyHandler, listKeyHandler)
+export let defaultKeyHandler: KeyHandler = composedKeyHandler(activeEditorKeyHandler, deleteKeyHandler, navKeyHandler, arrowNavKeyHandler)

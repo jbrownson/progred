@@ -5,20 +5,13 @@ import { D, Line } from "./D"
 import { renderDocumentGuidEditor, renderField } from "./defaultRender"
 import { edges, SourceID } from "../Environment"
 import { ctorField, Field } from "../graph"
-import { guidFromID } from "../model/ID"
-import { pendingEdgeLabel } from "./pendingEdgeLabel"
-import { selectedMissingLabels } from "./selectedMissingLabels"
 
 export function renderOtherFields(cursor: Cursor, sourceID: Maybe<SourceID>, d: D, knownFields: Field[]): D {
   return maybe(sourceID, () => d, sourceID => {
     const allIds = maybe(edges(sourceID.id), () => [], ({edges}) => Array.from(edges).map(x => x[0]))
     const knownIds = [...knownFields, ctorField].map(field => field.id)
-    const unknownIds = [
-      ...setDifference(allIds, knownIds),
-      ...selectedMissingLabels(cursor, sourceID.id, [...allIds, ...knownIds]) ]
-    const guid = guidFromID(sourceID.id)
-    const pendingEdgeLabelDs = maybe(guid, () => [], guid => pendingEdgeLabel(cursor, guid))
-    const dWithOtherFields = unknownIds.length > 0 || pendingEdgeLabelDs.length > 0
-      ? new Line(d, ...unknownIds.map(unknownId => renderField(cursor, sourceID.id, unknownId)), ...pendingEdgeLabelDs)
+    const unknownIds = setDifference(allIds, knownIds)
+    const dWithOtherFields = unknownIds.length > 0
+      ? new Line(d, ...unknownIds.map(unknownId => renderField(cursor, sourceID.id, unknownId)))
       : d
     return renderDocumentGuidEditor(cursor, sourceID, dWithOtherFields) })}

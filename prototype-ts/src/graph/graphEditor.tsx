@@ -1,11 +1,10 @@
 import * as React from "react"
 import { createRoot } from "react-dom/client"
-import { groupBy } from "../lib/Array"
 import { assert } from "../lib/assert"
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
 import { Cursor } from "./cursor/Cursor"
-import { createD, Descend, supportsUnderselection } from "./render/D"
+import { createD, Descend } from "./render/D"
 import { descendFromCursor } from "./cursor/descendFromCursor"
 import { DComponent } from "./components/DComponent"
 import { GraphViewComponent } from "./components/GraphViewComponent"
@@ -13,8 +12,8 @@ import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { commitIDToActiveElement, commitToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
-import { focusEditorForCursor } from "./editor/EditorFocus"
-import { _delete, _get, environment, Environment, get, guidFromSource, logSelection, set, withEnvironment } from "./Environment"
+import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor, requestFocusForCursor } from "./editor/EditorFocus"
+import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
 import { generateGUID, guidFromID, ID, sidFromString } from "./model/ID"
@@ -27,7 +26,6 @@ import { dispatch } from "./render/R"
 import { renderFromLibraries, renderFromModule } from "./render/renderFromLibraries"
 import { renders } from "./render/renders"
 import { save } from "./model/save"
-import { _Selection } from "./editor/Selection"
 import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSnapshot"
 import { setCollapsed } from "./editor/setCollapsed"
 import { SparseSpanningTree } from "./SparseSpanningTree"
@@ -45,16 +43,17 @@ function handleMenuAction(action: string) {
       redoStack = []
       guidRootViews = new GUIDRootViews(generateGUID())
       guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
-      selection = {selection: nothing}
+      initialFocusCursor = nothing
+      rootComponent.initialFocusConsumed = false
       graphHighlight = nothing
       filename = nothing
       rootComponent.forceUpdate()
       break
     case "new-view":
-      rootComponent.runE(() => view(mapMaybe(environment().selection, selection => _get(selection.cursor.parent, selection.cursor.label))))
+      rootComponent.runE(() => view(activeID()))
       break
     case "view-constructor":
-      rootComponent.runE(() => bindMaybe(environment().selection, selection => bindMaybe(_get(selection.cursor.parent, selection.cursor.label), id => mapMaybe(_get(id, ctorField.id), view))))
+      rootComponent.runE(() => bindMaybe(activeID(), id => mapMaybe(_get(id, ctorField.id), view)))
       break
     case "open":
       void openDocument()
@@ -82,7 +81,7 @@ function handleMenuAction(action: string) {
       break
     case "cut":
       if (actionIfTextInputWithSelection("cut:")) return
-      rootComponent.runE(() => { _copy(); commitToActiveElement(nothing); environment().selection = nothing })
+      rootComponent.runE(() => { _copy(); commitToActiveElement(nothing) })
       break
     case "copy":
       if (actionIfTextInputWithSelection("copy:")) return
@@ -99,17 +98,17 @@ function handleMenuAction(action: string) {
       break
     case "select-all":
       if (!actionIfTextInput("selectAll:"))
-        rootComponent.runE(() => environment().selection = {cursor: new Cursor(nothing, environment().rootViews.id, rootField.id, environment().sparseSpanningTree)})
+        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().rootViews.id, rootField.id, environment().sparseSpanningTree)))
       break
     case "console-log-selection":
-      rootComponent.runE(() => logSelection())
+      rootComponent.runE(() => mapMaybe(activeID(), logID))
       break
     case "toggle-graph":
       rootComponent.showGraph = !rootComponent.showGraph
       rootComponent.forceUpdate()
       break
     case "collapse":
-      rootComponent.runE(() => bindMaybe(environment().selection, selection => setCollapsed(selection.cursor, true)))
+      rootComponent.runE(() => mapMaybe(activeCursor(), cursor => setCollapsed(cursor, true)))
       break
     case "transform-brad-params-string":
       transform(id => bindMaybe(BradParams.fromID(id), bradParams => bindMaybe(jsonFromBradParams(bradParams), stringFromJSON)))
@@ -163,18 +162,18 @@ function saveCurrentAs() {
 
 function view(id: Maybe<ID>) { let views = fromMaybe(environment().rootViews.views, () => []); environment().rootViews.setViews(maybe(id, () => views, id => [...views, {id}])) }
 
+function activeCursor(): Maybe<Cursor> { return editorFocusForActiveElement()?.cursor }
+
+function activeID(): Maybe<ID> {
+  return bindMaybe(activeCursor(), cursor => _get(cursor.parent, cursor.label)) }
+
 function newNode() {
   const id = generateGUID()
-  maybe(environment().selection,
-    () => set(environment().rootViews.id, rootField.id, id),
-    selection => mapMaybe(guidFromID(selection.cursor.parent), parent => set(parent, selection.cursor.label, id))) }
+  if (!commitIDToActiveElement(id))
+    set(environment().rootViews.id, rootField.id, id) }
 
 function startNewEdge() {
-  mapMaybe(environment().selection, selection => {
-    if (rootComponent.selectionSupportsUnderselection()) {
-      environment().selection = {
-        cursor: selection.cursor,
-        pendingEdgeLabel: true }}}) }
+  mapMaybe(editorCommandsForActiveElement(), commands => mapMaybe(commands.newEdge, newEdge => newEdge())) }
 
 function deleteActiveSelection(): boolean {
   return graphHighlight !== nothing
@@ -205,7 +204,7 @@ function deleteGraphSelection(): boolean {
     return deleted }) }
 
 function clearGraphHighlightCallbacks(eCallbacks: ECallbacks): ECallbacks {
-  return composeECallbacks(eCallbacks, {...noopECallbacks, willSetSelection: () => { graphHighlight = nothing }}) }
+  return composeECallbacks(eCallbacks, {...noopECallbacks, willSet: () => { graphHighlight = nothing }, willDelete: () => { graphHighlight = nothing }}) }
 
 const graphKeyHandler: KeyHandler = (e, _rootDescend, _viewsDescend, runE) => {
   switch (e.key) {
@@ -220,19 +219,19 @@ const graphKeyHandler: KeyHandler = (e, _rootDescend, _viewsDescend, runE) => {
 const keyHandler = composedKeyHandler(graphKeyHandler, defaultKeyHandler)
 
 function transform(f: (id: ID) => Maybe<HasID>) {
-  rootComponent.runE(() => bindMaybe(environment().selection, selection => bindMaybe(get(selection.cursor.parent, selection.cursor.label), ({id, source}) =>
-    bindMaybe(guidFromSource(source), guid => bindMaybe(f(id), newID => set(guid, selection.cursor.label, newID.id))) )))}
+  rootComponent.runE(() => bindMaybe(activeCursor(), cursor => bindMaybe(get(cursor.parent, cursor.label), ({id, source}) =>
+    bindMaybe(guidFromSource(source), guid => bindMaybe(f(id), newID => set(guid, cursor.label, newID.id))) )))}
 
 let undoStack: UndoRedo[][] = []
 let redoStack: UndoRedo[][] = []
 let sparseSpanningTree = new SparseSpanningTree(nothing, new Map([[rootField.id, new SparseSpanningTree], [viewsField.id, new SparseSpanningTree]]))
 let guidRootViews = new GUIDRootViews(generateGUID())
 let guidMap = new GUIDMap(new Map([[guidRootViews.id, new Map([[ctorField.id, rootViewsCtor.id]])]]))
-let selection: {selection: Maybe<_Selection>} = {selection: {cursor: new Cursor(nothing, guidRootViews.id, rootField.id, sparseSpanningTree.map.get(rootField.id))}}
+let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, guidRootViews.id, rootField.id, sparseSpanningTree.map.get(rootField.id))
 let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 
-let libraryRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
+let libraryRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
 
 function actionIfTextInputWithSelection(action: string) {
   if (document.activeElement) {
@@ -292,7 +291,8 @@ function loadJson(json: string) {
     undoStack = []
     redoStack = []
     guidMap = _guidMap
-    selection = {selection: nothing}
+    initialFocusCursor = nothing
+    rootComponent.initialFocusConsumed = false
     graphHighlight = nothing
     guidRootViews = new GUIDRootViews(generateGUID())
     guidMap.set(guidRootViews.id, ctorField.id, rootViewsCtor.id)
@@ -308,11 +308,12 @@ export class RootComponent extends React.Component<{}, {}> {
   inRunE = false
   leftPanel: HTMLElement | null
   rightPanel: HTMLElement | null
+  initialFocusConsumed = false
   runWithCustomCallbacks<A>(f: () => A, eCallbacks: ECallbacks) {
     assert(!this.inRunE)
     this.inRunE = true
     try {
-      let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
+      let a = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, tryFirst(renders, defaultRender), clearGraphHighlightCallbacks(eCallbacks)), f)
       this.forceUpdate() // TODO
       return a
     } finally {
@@ -321,42 +322,34 @@ export class RootComponent extends React.Component<{}, {}> {
     let {undoRedoArray, eCallbacks} = undoRedoECallbacks()
     let a = this.runWithCustomCallbacks(f, eCallbacks)
     if (undoRedoArray.length > 0) {
-      const {trues, falses} = groupBy(undoRedoArray, undoRedo => undoRedo.selectionAction)
-      if (falses.length !== 0) {
-        undoStack.push(undoRedoArray) }
-      else {
-        const toInsert = trues[trues.length - 1]
-        if (undoStack.length > 0) {
-          let toModify = undoStack[undoStack.length - 1]
-          toModify.push(toInsert) }
-        if (redoStack.length > 0) {
-          const toModify = redoStack[redoStack.length - 1]
-          redoStack[redoStack.length - 1] = [new UndoRedo(toInsert.redo, toInsert.undo, true), ...toModify] }}}
+      undoStack.push(undoRedoArray)
+      redoStack = [] }
     return a }
-  selectionSupportsUnderselection(): boolean {
-    return fromMaybe(
-      bindMaybe(selection.selection, selection =>
-        mapMaybe(descendFromCursor(this.rootDescend, this.viewsDescend, selection.cursor), descend => supportsUnderselection(descend.child))),
-      () => false) }
+  activeEditorSupportsUnderselection(): boolean {
+    return editorCommandsForActiveElement()?.newEdge !== undefined }
   updateMenuState() {
-    progred.setMenuItemEnabled("new-edge", this.selectionSupportsUnderselection())
-    progred.setMenuItemEnabled("delete", selection.selection !== nothing || graphHighlight !== nothing)
+    progred.setMenuItemEnabled("new-edge", this.activeEditorSupportsUnderselection())
+    progred.setMenuItemEnabled("delete", editorCommandsForActiveElement()?.commit !== undefined || graphHighlight !== nothing)
     progred.setMenuItemChecked("show-graph", this.showGraph) }
   setGraphSelection(nextGraphSelection: Maybe<GraphSelection>) {
     graphHighlight = nextGraphSelection
-    if (graphHighlight !== nothing) selection.selection = nothing
     this.forceUpdate() }
   focusSelection() {
-    mapMaybe(selection.selection, selection => {
+    for (let root of [this.leftPanel, this.rightPanel])
+      if (root && focusPendingEditor(root)) return
+    if (this.initialFocusConsumed) return
+    mapMaybe(initialFocusCursor, cursor => {
       for (let root of [this.leftPanel, this.rightPanel])
-        if (root && focusEditorForCursor(root, selection.cursor)) return {} }) }
+        if (root && focusEditorForCursor(root, cursor)) {
+          this.initialFocusConsumed = true
+          return {} } }) }
   render() {
-    let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+    let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       bindMaybe(bindMaybe(environment().rootViews.root, ({id}) => Module.fromID(id)), renderFromModule) )
-    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createD)
+    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createD)
     let graphSnapshot = this.showGraph
-      ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, selection, defaultRender, readOnlyECallbacks().eCallbacks), () =>
-        buildGraphViewSnapshot(guidMap, guidRootViews, selection.selection, graphHighlight))
+      ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+        buildGraphViewSnapshot(guidMap, guidRootViews, editorFocusForActiveElement()?.cursor, graphHighlight))
       : nothing
     this.rootDescend = rootDescend
     this.viewsDescend = viewsDescend
@@ -397,7 +390,9 @@ export class RootComponent extends React.Component<{}, {}> {
   componentDidMount() { this.onScroll(); this.focusSelection(); this.updateMenuState() }
   componentDidUpdate() { this.onScroll(); this.focusSelection(); this.updateMenuState() } }
 
-window.onclick = () => { if (rootComponent) rootComponent.runE(() => environment().selection = nothing) }
+window.onclick = () => { if (rootComponent) rootComponent.updateMenuState() }
+window.addEventListener("focusin", () => { if (rootComponent) { rootComponent.forceUpdate(); rootComponent.updateMenuState() } })
+window.addEventListener("focusout", () => { if (rootComponent) rootComponent.updateMenuState() })
 window.onkeydown = e => { if (rootComponent) keyHandler(e, rootComponent.rootDescend, rootComponent.viewsDescend, f => rootComponent.runE(f)) }
 progred.onMenuAction(action => { if (rootComponent) handleMenuAction(action) })
 
