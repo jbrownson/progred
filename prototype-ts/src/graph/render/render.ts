@@ -1,5 +1,5 @@
 import { bindMaybe, Maybe, nothing } from "../../lib/Maybe"
-import { D } from "./D"
+import { D } from "./Projection"
 import { _get } from "../Environment"
 import { Ctor, ctorField, Field } from "../graph"
 import { ID } from "../model/ID"

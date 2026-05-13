@@ -1,14 +1,14 @@
 import { bindMaybe, mapMaybe } from "../../lib/Maybe"
-import { Button, DText, Line } from "./D"
+import { button, dText, line } from "./Projection"
 import { LoadJSON, urlField } from "../graph"
 import { jsonFromJSON } from "../transforms/jsonFromJSON"
 import { renderDocumentGuidEditor } from "./defaultRender"
 import { descend, Render } from "./R"
 
-export const renderLoadJSON: Render = (cursor, sourceID, edgeContext) => bindMaybe(sourceID, sourceID => mapMaybe(LoadJSON.fromID(sourceID.id), loadJSON => renderDocumentGuidEditor(cursor, sourceID, new Line(
+export const renderLoadJSON: Render = (cursor, sourceID, edgeContext) => bindMaybe(sourceID, sourceID => mapMaybe(LoadJSON.fromID(sourceID.id), loadJSON => renderDocumentGuidEditor(cursor, sourceID, line(
   descend(cursor, sourceID.id, urlField.id),
-  new DText(" "),
-  new Button("Load", () =>
+  dText(" "),
+  button("Load", () =>
     bindMaybe(loadJSON.url, jsonURL => mapMaybe(edgeContext?.commit, commit => {
       let request = new XMLHttpRequest()
       request.open('GET', jsonURL, false)

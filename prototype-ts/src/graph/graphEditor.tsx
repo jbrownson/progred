@@ -4,8 +4,7 @@ import { assert } from "../lib/assert"
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
 import { Cursor } from "./cursor/Cursor"
-import { createD, Descend } from "./render/D"
-import { DComponent } from "./components/DComponent"
+import { createProjection, D, ProjectionRoot } from "./render/Projection"
 import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
@@ -27,9 +26,9 @@ import { renderFromLibraries, renderFromModule } from "./render/renderFromLibrar
 import { renders } from "./render/renders"
 import { save } from "./model/save"
 import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSnapshot"
-import { stringFromD } from "./transforms/stringFromD"
 import { stringFromJSON } from "./transforms/stringFromJSON"
 import { UndoRedo } from "./editor/UndoRedo"
+import { notifyScrollListeners } from "./editor/ScrollListeners"
 
 const progredFileFilters = [{name: "progred", extensions: ["progred"]}]
 const progred = window.progred
@@ -61,9 +60,6 @@ function handleMenuAction(action: string) {
       break
     case "save-as":
       saveCurrentAs()
-      break
-    case "export-text":
-      void progred.saveFileAs(stringFromD(rootComponent.rootDescend))
       break
     case "undo":
       undo()
@@ -300,10 +296,8 @@ function loadJson(json: string) {
     rootComponent.forceUpdate() })}
 
 export class RootComponent extends React.Component<{}, {}> {
-  rootDComponent: DComponent | null
-  viewsDComponent: DComponent | null
-  rootDescend: Descend
-  viewsDescend: Maybe<Descend>
+  rootDescend: D
+  viewsDescend: Maybe<D>
   showGraph = false
   inRunE = false
   leftPanel: HTMLElement | null
@@ -346,7 +340,7 @@ export class RootComponent extends React.Component<{}, {}> {
   render() {
     let documentRender = withEnvironment(new Environment(libraries, guidMap, guidRootViews, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       bindMaybe(bindMaybe(environment().rootViews.root, ({id}) => Module.fromID(id)), renderFromModule) )
-    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createD)
+    let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
     let graphSnapshot = this.showGraph
       ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, defaultRender, readOnlyECallbacks().eCallbacks), () =>
         buildGraphViewSnapshot(guidMap, guidRootViews, activeEdge(), graphHighlight))
@@ -355,11 +349,10 @@ export class RootComponent extends React.Component<{}, {}> {
     this.viewsDescend = viewsDescend
     let hasSidebar = this.showGraph || viewsDescend !== nothing
     return <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}}>
-      <div ref={leftPanel => { this.leftPanel = leftPanel }} className={hasSidebar ? "leftPanel" : ""}
+        <div ref={leftPanel => { this.leftPanel = leftPanel }} className={hasSidebar ? "leftPanel" : ""}
         style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "auto"}}
-        onScroll={() => { if (this.rootDComponent) this.rootDComponent.onScroll() }} >
-        <div className="doc"><DComponent
-          ref={dComponent => { this.rootDComponent = dComponent }}
+        onScroll={() => notifyScrollListeners()} >
+        <div className="doc"><ProjectionRoot
           d={this.rootDescend}
           depth={0}
           scrollParent={() => this.leftPanel}
@@ -377,16 +370,15 @@ export class RootComponent extends React.Component<{}, {}> {
               </div>)}
             {maybe(this.viewsDescend, () => null, viewsDescend =>
               <div ref={rightPanel => { this.rightPanel = rightPanel }} className="viewsPanel" style={{height: this.showGraph ? "50%" : "100%", overflow: "auto"}}
-                onScroll={() => {if (this.viewsDComponent) this.viewsDComponent.onScroll()}} >
-                <div className="views"><DComponent
-                  ref={dComponent => { this.viewsDComponent = dComponent }}
+                onScroll={() => notifyScrollListeners()} >
+                <div className="views"><ProjectionRoot
                   d={viewsDescend}
                   depth={0}
                   scrollParent={() => this.rightPanel}
                   runE={f => this.runE(f)} /></div></div>)}
           </div></div>
         : null}</div> }
-  onScroll() { if(this.rootDComponent) this.rootDComponent.onScroll(); if (this.viewsDComponent) this.viewsDComponent.onScroll() }
+  onScroll() { notifyScrollListeners() }
   componentDidMount() { this.onScroll(); this.focusSelection(); this.updateMenuState() }
   componentDidUpdate() { this.onScroll(); this.focusSelection(); this.updateMenuState() } }
 

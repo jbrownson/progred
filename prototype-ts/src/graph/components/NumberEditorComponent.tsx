@@ -2,8 +2,8 @@ import * as React from 'react'
 import { getTextWidth } from "../../lib/getTextWidth"
 import { fromMaybe, mapMaybe } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
-import { cursorFromD, descendFromD } from "../cursor/cursorFromD"
-import { NumberEditor } from "../render/D"
+import { Cursor } from "../cursor/Cursor"
+import type { EditorDescend, NumberEditor } from "../render/Projection"
 import { nidFromNumber } from "../model/ID"
 import { attachEditorCommands, detachEditorCommands, editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
@@ -11,7 +11,7 @@ import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextIn
 
 type NumberEditorComponentState = {value?: string}
 
-export class NumberEditorComponent extends React.Component<{numberEditor: NumberEditor, editorCommands: EditorCommands, runE: (f: () => void) => void}, NumberEditorComponentState> {
+export class NumberEditorComponent extends React.Component<{numberEditor: NumberEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}, NumberEditorComponentState> {
   state: NumberEditorComponentState = {}
   input: HTMLInputElement | null
   onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -31,7 +31,7 @@ export class NumberEditorComponent extends React.Component<{numberEditor: Number
   attachEditorCommands() {
     if (this.input) {
       attachEditorCommands(this.input, this.props.editorCommands)
-      mapMaybe(cursorFromD(this.props.numberEditor), cursor => attachEditorFocus(this.input!, {cursor, descend: descendFromD(this.props.numberEditor)})) }}
+      mapMaybe(this.props.cursor, cursor => attachEditorFocus(this.input!, {cursor, descend: this.props.descend})) }}
   onScroll() { noop() }
   render() {
     const value = fromMaybe(this.state.value, () => `${this.props.numberEditor.number}`)

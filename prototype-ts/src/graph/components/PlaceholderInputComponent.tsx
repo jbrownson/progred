@@ -3,7 +3,7 @@ import { getTextWidth } from "../../lib/getTextWidth"
 import { makeElementVisible } from "../../lib/makeElementVisible"
 import { fromMaybe, mapMaybe, maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
-import { Descend, PlaceholderEditorActiveState } from "../render/D"
+import type { EditorDescend, PlaceholderEditorActiveState } from "../render/Projection"
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
 import { sidFromString } from "../model/ID"
@@ -11,6 +11,7 @@ import { focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { attachEditorCommands, detachEditorCommands, EditorCommands } from "../editor/EditorCommands"
 import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
+import { registerScrollListener } from "../editor/ScrollListeners"
 
 class EntryList extends React.Component<{activeState: PlaceholderEditorActiveState, entries: {a: Entry, matches: Match[]}[], close: () => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
   div: HTMLElement | null
@@ -87,9 +88,10 @@ function renderMatches(string: string, matches: Match[]) {
   return [...strings, ...index < string.length ? [{string: string.slice(index), matching: false}] : []]
     .map(({string, matching}, index) => <span key={index} className={matching ? "matching" : ""}>{string}</span>) }
 
-export class PlaceholderInputComponent extends React.Component<{activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, cursor?: Cursor, descend?: Descend, tabStop?: boolean, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
+export class PlaceholderInputComponent extends React.Component<{activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, tabStop?: boolean, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
   entryList: EntryList | null
   input: HTMLInputElement | null
+  unregisterScrollListener: (() => void) | undefined
   open() {
     this.props.activeState.editorState.completionOpen = true
     this.forceUpdate() }
@@ -143,6 +145,12 @@ export class PlaceholderInputComponent extends React.Component<{activeState: Pla
                 maybe(this.props.keyDown, () => stopPropagationForTextInputs(e), keyDown => keyDown(e)) }}}}
         onChange={e => { if (this.input) { this.props.activeState.editorState.value = this.input.value; this.props.activeState.editorState.itemSelection = nothing; this.props.activeState.editorState.completionOpen = true; this.forceUpdate() } }} />
       {this.props.activeState.editorState.completionOpen ? <EntryList ref={entryList => { this.entryList = entryList }} activeState={this.props.activeState} entries={this.props.activeState.entries(fromMaybe(this.props.activeState.editorState.value, () => ""))} close={this.props.closeCompletion} commit={this.props.commit} keyDown={this.props.entryListKeyDown} /> : null}</span> }
-  componentDidMount() { this.focusIfSelected(); this.attachEditorCommands(); this.updateEntryListAbove() }
+  componentDidMount() {
+    this.unregisterScrollListener = registerScrollListener(() => this.onScroll())
+    this.focusIfSelected()
+    this.attachEditorCommands()
+    this.updateEntryListAbove() }
   componentDidUpdate() { this.attachEditorCommands(); this.updateEntryListAbove() }
-  componentWillUnmount() { if (this.input) { detachEditorCommands(this.input); detachEditorFocus(this.input) } } }
+  componentWillUnmount() {
+    this.unregisterScrollListener?.()
+    if (this.input) { detachEditorCommands(this.input); detachEditorFocus(this.input) } } }

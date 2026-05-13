@@ -1,7 +1,7 @@
 import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
-import { D, Descend } from "./D"
+import { D, descendElement } from "./Projection"
 import { environment, get, SourceID } from "../Environment"
 import { ID } from "../model/ID"
 import { typeFromEdge } from "../typeFromEdge"
@@ -23,6 +23,6 @@ export function descend(cursor: Cursor, id: ID, label: ID, render = alwaysFail, 
   let newSourceID = get(id, label)
   let expectedType = fromMaybe(edgeContext?.expectedType, () => typeFromEdge({parent: id, label}))
   let newEdgeContext = fromMaybe(edgeContext, () => edgeContextFromEdge({parent: id, label}, expectedType))
-  return new Descend(newCursor, fromMaybe(render(newCursor, newSourceID, newEdgeContext), () => environment().defaultRender(newCursor, newSourceID, newEdgeContext)),
+  return descendElement(newCursor, fromMaybe(render(newCursor, newSourceID, newEdgeContext), () => environment().defaultRender(newCursor, newSourceID, newEdgeContext)),
     fromMaybe(bindMaybe(newSourceID, newSourceID => bindMaybe(expectedType, type => mapMaybe(typeMatches(newSourceID.id, type), typeMatches => !typeMatches))), () => false),
     newEdgeContext) }

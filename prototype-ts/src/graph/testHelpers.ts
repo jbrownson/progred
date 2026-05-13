@@ -5,7 +5,7 @@ import { GUIDRootViews } from "./graph"
 import type { ID } from "./model/ID"
 import type { IDMap } from "./model/IDMap"
 import { GUIDMap } from "./model/GUIDMap"
-import { D, DText } from "./render/D"
+import { D, dText } from "./render/Projection"
 import { Cursor } from "./cursor/Cursor"
 import type { Maybe } from "../lib/Maybe"
 
@@ -21,7 +21,7 @@ export function makeTestEnvironment(options: TestEnvironmentOptions = {}) {
     options.libraries || new Map(),
     options.guidMap || new GUIDMap(),
     options.rootViews || new GUIDRootViews("guid-root-views"),
-    options.defaultRender || (() => new DText("")),
+    options.defaultRender || (() => dText("")),
     noopECallbacks)
 }
 

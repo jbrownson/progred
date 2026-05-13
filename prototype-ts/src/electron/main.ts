@@ -34,8 +34,6 @@ function buildMainMenu() {
         { type: "separator" },
         { label: "Save", accelerator: "CmdOrCtrl+S", click: () => sendMenuAction("save") },
         { label: "Save As...", accelerator: "CmdOrCtrl+Shift+S", click: () => sendMenuAction("save-as") },
-        { type: "separator" },
-        { label: "Export Text...", accelerator: "CmdOrCtrl+Shift+T", click: () => sendMenuAction("export-text") },
       ],
     },
     {

@@ -1,7 +1,7 @@
 import { bindMaybe, guardMaybe, mapMaybe, Maybe, maybeMap, sequenceMaybe } from "../../lib/Maybe"
 import { childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
-import { Block, D, DText, Label, Line } from "./D"
+import { block as dBlock, D, dText, label as dLabel, line as dLine } from "./Projection"
 import { renderDocumentGuidEditor, renderList } from "./defaultRender"
 import { _get, SourceID } from "../Environment"
 import * as G from "../graph"
@@ -11,12 +11,12 @@ import { renderNameShallow } from "./renderNameShallow"
 function dConstructorFromD(d: G.D): Maybe<(cursor: Cursor, sourceID: SourceID) => Maybe<D>> {
   return G.matchD(d,
     block => bindMaybe(bindMaybe(block.children, children => sequenceMaybe(children.map(child => () => dConstructorFromD(child)))), childConstructors => (cursor: Cursor, sourceID: SourceID): Maybe<D> =>
-      mapMaybe(sequenceMaybe(childConstructors.map(childConstructor => () => childConstructor(cursor, sourceID))), children => new Block(...children)) ),
+      mapMaybe(sequenceMaybe(childConstructors.map(childConstructor => () => childConstructor(cursor, sourceID))), children => dBlock(...children)) ),
     line => bindMaybe(bindMaybe(line.children, children => sequenceMaybe(children.map(child => () => dConstructorFromD(child)))), childConstructors => (cursor: Cursor, sourceID: SourceID): Maybe<D> =>
-      mapMaybe(sequenceMaybe(childConstructors.map(childConstructor => () => childConstructor(cursor, sourceID))), children => new Line(...children)) ),
+      mapMaybe(sequenceMaybe(childConstructors.map(childConstructor => () => childConstructor(cursor, sourceID))), children => dLine(...children)) ),
     _descend => mapMaybe(_descend.field, field => (cursor: Cursor, sourceID: SourceID) => descend(cursor, sourceID.id, field.id, bindMaybe(_descend.contextRender, renderFromRender))),
-    label => bindMaybe(label.field, field => bindMaybe(bindMaybe(label.child, dConstructorFromD), childConstructor => (cursor: Cursor, sourceID: SourceID): Maybe<D> => bindMaybe(childConstructor(cursor, sourceID), child => mapMaybe(childCursor(cursor, field.id), _childCursor => new Label(_childCursor, child))))),
-    string => () => new DText(string) )}
+    label => bindMaybe(label.field, field => bindMaybe(bindMaybe(label.child, dConstructorFromD), childConstructor => (cursor: Cursor, sourceID: SourceID): Maybe<D> => bindMaybe(childConstructor(cursor, sourceID), child => mapMaybe(childCursor(cursor, field.id), _childCursor => dLabel(_childCursor, child))))),
+    string => () => dText(string) )}
 
 export function renderFromRender(render: G.Render): Maybe<Render> {
   return G.matchRender(render,

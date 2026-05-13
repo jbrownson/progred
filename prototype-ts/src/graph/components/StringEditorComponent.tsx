@@ -1,14 +1,14 @@
 import * as React from "react"
 import { mapMaybe } from "../../lib/Maybe"
 import { noop } from "../../lib/noop"
-import { cursorFromD, descendFromD } from "../cursor/cursorFromD"
-import { StringEditor } from "../render/D"
+import { Cursor } from "../cursor/Cursor"
+import type { EditorDescend, StringEditor } from "../render/Projection"
 import { sidFromString } from "../model/ID"
 import { attachEditorCommands, detachEditorCommands, editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 
-export class StringEditorComponent extends React.Component<{stringEditor: StringEditor, editorCommands: EditorCommands, runE: (f: () => void) => void}, {}> {
+export class StringEditorComponent extends React.Component<{stringEditor: StringEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}, {}> {
   textArea: HTMLTextAreaElement | null
   onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     let keyDownAction = editorKeyDownAction(this.props.editorCommands, e)
@@ -17,7 +17,7 @@ export class StringEditorComponent extends React.Component<{stringEditor: String
   attachEditorCommands() {
     if (this.textArea) {
       attachEditorCommands(this.textArea, this.props.editorCommands)
-      mapMaybe(cursorFromD(this.props.stringEditor), cursor => attachEditorFocus(this.textArea!, {cursor, descend: descendFromD(this.props.stringEditor)})) }}
+      mapMaybe(this.props.cursor, cursor => attachEditorFocus(this.textArea!, {cursor, descend: this.props.descend})) }}
   onScroll() { noop() }
   render() {
     return <textarea

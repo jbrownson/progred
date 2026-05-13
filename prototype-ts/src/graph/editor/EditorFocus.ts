@@ -1,7 +1,7 @@
 import { altMaybe, bindMaybe, firstMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
 import { cursorsEqual } from "../cursor/Cursor"
-import type { Descend } from "../render/D"
+import type { EditorDescend } from "../render/Projection"
 import { focus } from "./ignoreFocusEvents"
 
 const editorFocusKey = Symbol("editorFocus")
@@ -11,20 +11,20 @@ let pendingFocus: Maybe<PendingFocus> = nothing
 
 type EditorFocus = {
   cursor: Cursor
-  descend?: Descend
+  descend?: EditorDescend
   activate?: () => void
   focusWhenSelected?: boolean
   tabStop?: boolean
 }
 
 type EditorFocusElement = HTMLElement & {[editorFocusKey]?: EditorFocus}
-type EditorDescendElement = HTMLElement & {[editorDescendKey]?: Descend}
+type EditorDescendElement = HTMLElement & {[editorDescendKey]?: EditorDescend}
 
 function editorFocusForElement(element: Maybe<Element>): Maybe<EditorFocus> {
   return element instanceof HTMLElement ? (element as EditorFocusElement)[editorFocusKey] : nothing
 }
 
-function editorDescendForElement(element: Maybe<Element>): Maybe<Descend> {
+function editorDescendForElement(element: Maybe<Element>): Maybe<EditorDescend> {
   return element instanceof HTMLElement ? (element as EditorDescendElement)[editorDescendKey] : nothing
 }
 
@@ -43,7 +43,7 @@ function parentDescendElement(element: HTMLElement): Maybe<HTMLElement> {
     if (editorDescendForElement(parent) !== nothing) return parent
   return nothing }
 
-function descendElementForDescend(element: Element, descend: Descend): Maybe<HTMLElement> {
+function descendElementForDescend(element: Element, descend: EditorDescend): Maybe<HTMLElement> {
   for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement)
     if (editorDescendForElement(current) === descend) return current
   return nothing }
@@ -115,7 +115,7 @@ export function detachEditorFocus(element: HTMLElement) {
   delete (element as EditorFocusElement)[editorFocusKey]
 }
 
-export function attachEditorDescend(element: HTMLElement, descend: Descend) {
+export function attachEditorDescend(element: HTMLElement, descend: EditorDescend) {
   (element as EditorDescendElement)[editorDescendKey] = descend
 }
 

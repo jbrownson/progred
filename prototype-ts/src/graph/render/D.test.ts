@@ -1,39 +1,36 @@
 import { describe, expect, it } from "vitest"
 import { Cursor } from "../cursor/Cursor"
 import { sidFromString } from "../model/ID"
-import { Block, Descend, DText, GuidEditor, Label, Line, SupportsUnderselection, supportsUnderselection } from "./D"
+import { block, descendElement, dText, isSingleLine, label, line, projectionKind } from "./Projection"
+import { descend } from "./R"
+import { withTestEnvironment } from "../testHelpers"
 
 function cursor() {
   return new Cursor(undefined, "guid-root", sidFromString("root"))
 }
 
 describe("D", () => {
-  it("links children back to their parents", () => {
-    const lhs = new DText("lhs")
-    const rhs = new DText("rhs")
-    const line = new Line(lhs, rhs)
-    const block = new Block(line)
-
-    expect(lhs.parent).toBe(line)
-    expect(rhs.parent).toBe(line)
-    expect(line.parent).toBe(block)
+  it("marks line and block layout in React projection metadata", () => {
+    expect(isSingleLine(line(dText("lhs"), dText("rhs")))).toBe(true)
+    expect(isSingleLine(block(line(dText("lhs"), dText("rhs"))))).toBe(false)
   })
 
-  it("keeps underselection support inside a projection boundary", () => {
+  it("keeps projection kinds on wrappers", () => {
     const c = cursor()
-    expect(supportsUnderselection(new SupportsUnderselection(c, "guid-root", new DText("x")))).toBe(true)
-    expect(supportsUnderselection(new Line(new SupportsUnderselection(c, "guid-root", new DText("x"))))).toBe(true)
-    expect(supportsUnderselection(new Descend(c, new SupportsUnderselection(c, "guid-root", new DText("x")), false))).toBe(false)
+
+    expect(projectionKind(label(c, dText("x")))).toBe("label")
+    expect(projectionKind(descendElement(c, dText("x"), false))).toBe("descend")
   })
 
-  it("exposes child lists consistently", () => {
-    const c = cursor()
-    const child = new DText("x")
-    const label = new Label(c, child)
-    const guidEditor = new GuidEditor(c, "guid-root", new DText("node"), false, {})
+  it("renders descends immediately", () => {
+    withTestEnvironment(() => {
+      let renders = 0
+      const d = descend(cursor(), "guid-parent", sidFromString("child"), () => {
+        renders++
+        return dText("projected") })
 
-    expect(label.children).toEqual([child])
-    expect(guidEditor.children.length).toBe(1)
-    expect(new DText("leaf").children).toEqual([])
+      expect(projectionKind(d)).toBe("descend")
+      expect(renders).toBe(1)
+    })
   })
 })

@@ -1,8 +1,8 @@
 import { mapMaybe, maybeToArray } from "../../lib/Maybe"
-import { Block, DText, Line } from "./D"
+import { block, dText, line } from "./Projection"
 import { renderIfEvaluate } from "../renderIfs"
 import { runJavascript } from "../transforms/runJavascript"
 
-export const renderEvaluate = renderIfEvaluate((statements, evaluate) => new Line(new DText("Evaluate"), new Block(
+export const renderEvaluate = renderIfEvaluate((statements, evaluate) => line(dText("Evaluate"), block(
   statements,
-  ...maybeToArray(mapMaybe(evaluate.javascriptProgram, javascriptProgram => new DText(`${runJavascript(javascriptProgram)}`))) )))
+  ...maybeToArray(mapMaybe(evaluate.javascriptProgram, javascriptProgram => dText(`${runJavascript(javascriptProgram)}`))) )))

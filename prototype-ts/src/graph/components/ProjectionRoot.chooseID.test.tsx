@@ -9,8 +9,7 @@ import { GUIDRootViews } from "../graph"
 import type { ID } from "../model/ID"
 import { GUIDMap } from "../model/GUIDMap"
 import { Cursor } from "../cursor/Cursor"
-import { DText, Descend, Label } from "../render/D"
-import { DComponent } from "./DComponent"
+import { descendElement, dText, label, ProjectionRoot } from "../render/Projection"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -36,7 +35,7 @@ function textElement(container: HTMLElement, text: string) {
   return element as HTMLElement
 }
 
-describe("DComponent choose ID", () => {
+describe("ProjectionRoot choose ID", () => {
   it("chooses an edge label through the focused editor commands", () => {
     let committed: ID[] = []
     focusedInput(committed)
@@ -48,8 +47,8 @@ describe("DComponent choose ID", () => {
     let cursor = new Cursor(undefined, "guid-parent", labelID)
 
     act(() => root.render(
-      <DComponent
-        d={new Label(cursor, new DText("edge label"))}
+      <ProjectionRoot
+        d={label(cursor, dText("edge label"))}
         depth={0}
         scrollParent={() => null}
         runE={f => { f() }} />))
@@ -75,14 +74,14 @@ describe("DComponent choose ID", () => {
       new Map(),
       new GUIDMap(new Map([[parent, new Map([[label, target]])]])),
       new GUIDRootViews("guid-root"),
-      () => new DText(""),
+      () => dText(""),
       noopECallbacks)
 
     withEnvironment(environment, () => {
       let cursor = new Cursor(undefined, parent, label)
       act(() => root.render(
-        <DComponent
-          d={new Descend(cursor, new DText("node"), false)}
+        <ProjectionRoot
+          d={descendElement(cursor, dText("node"), false)}
           depth={0}
           scrollParent={() => null}
           runE={f => { f() }} />))

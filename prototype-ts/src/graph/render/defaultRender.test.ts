@@ -1,18 +1,29 @@
+import * as React from "react"
 import { describe, expect, it } from "vitest"
 import { Cursor } from "../cursor/Cursor"
 import { SourceType } from "../Environment"
 import { nameField } from "../graph"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
-import { D, DIdenticon, DText, GuidEditor, PlaceholderEditor, StringEditor, SupportsUnderselection } from "./D"
+import { D, dText, projectionKind } from "./Projection"
 import { defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
 
 function cursor() {
   return new Cursor(undefined, "guid-holder", sidFromString("root"))
 }
 
-function hasD(d: D, f: (d: D) => boolean): boolean {
-  return f(d) || d.children.some(child => hasD(child, f))
+function childDs(d: D): D[] {
+  const props = d.props as Record<string, unknown>
+  return [
+    ...projectionKind(d) === "collapsible" ? [(props.render as (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D)(false, () => {})] : [],
+    ...Object.values(props).flatMap(value =>
+    Array.isArray(value)
+      ? value.filter(React.isValidElement) as D[]
+      : React.isValidElement(value) ? [value as D] : [])]
+}
+
+function findD(d: D, f: (d: D) => boolean): D | undefined {
+  return f(d) ? d : childDs(d).map(child => findD(child, f)).find(d => d !== undefined)
 }
 
 describe("defaultRender", () => {
@@ -22,28 +33,28 @@ describe("defaultRender", () => {
 
       const d = defaultRender(c, undefined)
 
-      expect(d).toBeInstanceOf(PlaceholderEditor)
-      expect((d as PlaceholderEditor).activeState).toBe(undefined)
-      expect((d as PlaceholderEditor).entries("").length).toBeGreaterThan(0)
+      expect(projectionKind(d)).toBe("placeholderEditor")
+      expect((d.props as any).placeholderEditor.activeState).toBe(undefined)
+      expect((d.props as any).placeholderEditor.entries("").length).toBeGreaterThan(0)
     })
   })
 
   it("wraps writable document GUIDs in a GuidEditor and SupportsUnderselection", () => {
     withTestEnvironment(() => {
       const c = cursor()
-      const d = renderDocumentGuidEditor(c, {id: "guid-node", source: {source: SourceType.DocumentType, guid: "guid-node"}}, new DText("node"))
+      const d = renderDocumentGuidEditor(c, {id: "guid-node", source: {source: SourceType.DocumentType, guid: "guid-node"}}, dText("node"))
 
-      expect(d).toBeInstanceOf(SupportsUnderselection)
-      expect((d as SupportsUnderselection).child).toBeInstanceOf(GuidEditor)
+      expect(projectionKind(d)).toBe("supportsUnderselection")
+      expect(projectionKind((d.props as any).child)).toBe("guidEditor")
     })
   })
 
   it("does not wrap library GUIDs in document editor commands", () => {
     withTestEnvironment(() => {
       const c = cursor()
-      const d = renderDocumentGuidEditor(c, {id: "guid-node", source: {source: SourceType.LibraryType}}, new DText("node"))
+      const d = renderDocumentGuidEditor(c, {id: "guid-node", source: {source: SourceType.LibraryType}}, dText("node"))
 
-      expect(d).toBeInstanceOf(DText)
+      expect(projectionKind(d)).toBe("text")
     })
   })
 
@@ -55,7 +66,7 @@ describe("defaultRender", () => {
 
       const d = renderField(c, "guid-node", label)
 
-      expect(hasD(d, d => d instanceof DText && d.string === "Label")).toBe(true)
+      expect(findD(d, d => projectionKind(d) === "text" && (d.props as any).string === "Label")).not.toBe(undefined)
     })
   })
 
@@ -65,7 +76,7 @@ describe("defaultRender", () => {
       const label = "guid-label"
       const d = renderField(c, "guid-node", label)
 
-      expect(hasD(d, d => d instanceof DIdenticon && d.guid === label)).toBe(true)
+      expect(findD(d, d => projectionKind(d) === "identicon" && (d.props as any).guid === label)).not.toBe(undefined)
     })
   })
 
@@ -73,8 +84,8 @@ describe("defaultRender", () => {
     withTestEnvironment(() => {
       const d = renderString(cursor(), sidFromString("hello"), "hello", {source: SourceType.DocumentType, guid: "guid-holder"})
 
-      expect(d).toBeInstanceOf(StringEditor)
-      expect((d as StringEditor).editorCommands.copy).not.toBe(undefined)
+      expect(projectionKind(d)).toBe("stringEditor")
+      expect((d.props as any).stringEditor.editorCommands.copy).not.toBe(undefined)
     })
   })
 })

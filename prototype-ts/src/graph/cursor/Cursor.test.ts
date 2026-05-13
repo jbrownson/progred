@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { Descend, DText, Label, Line } from "../render/D"
 import { childCursor, _childCursor } from "./childCursor"
 import { Cursor, cursorsEqual } from "./Cursor"
-import { cursorFromD } from "./cursorFromD"
 import { cursorHasCycle } from "./cursorHasCycle"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
@@ -43,14 +41,4 @@ describe("Cursor", () => {
     expect(cursorHasCycle(child)).toBe(false)
     expect(cursorHasCycle(cycle)).toBe(true)
   })
-
-  it("finds the nearest cursor-bearing D node", () => {
-    const cursor = rootCursor()
-    const dText = new DText("x")
-    const descend = new Descend(cursor, new Line(new Label(cursor, dText)), false)
-
-    expect(cursorFromD(dText)).toBe(cursor)
-    expect(cursorFromD(descend)).toBe(cursor)
-  })
-
 })

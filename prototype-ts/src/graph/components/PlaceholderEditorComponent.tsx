@@ -1,7 +1,7 @@
 import * as React from "react"
 import { mapMaybe, maybe, nothing } from "../../lib/Maybe"
-import { cursorFromD, descendFromD } from "../cursor/cursorFromD"
-import { PlaceholderEditor, PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/D"
+import { Cursor } from "../cursor/Cursor"
+import type { EditorDescend, PlaceholderEditor, PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/Projection"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
 import { attachEditorCommands, detachEditorCommands, editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
@@ -10,7 +10,7 @@ import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 
 type PlaceholderEditorComponentState = {active: boolean}
 
-export class PlaceholderEditorComponent extends React.Component<{placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, PlaceholderEditorComponentState> {
+export class PlaceholderEditorComponent extends React.Component<{placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, PlaceholderEditorComponentState> {
   state = {active: false}
   span: HTMLSpanElement | null
   placeholderInput: PlaceholderInputComponent | null
@@ -31,7 +31,7 @@ export class PlaceholderEditorComponent extends React.Component<{placeholderEdit
   attachInactiveEditor() {
     if (this.span) {
       attachEditorCommands(this.span, this.props.editorCommands)
-      mapMaybe(cursorFromD(this.props.placeholderEditor), cursor => attachEditorFocus(this.span!, {cursor, descend: descendFromD(this.props.placeholderEditor), activate: () => this.activate(), tabStop: true})) }}
+      mapMaybe(this.props.cursor, cursor => attachEditorFocus(this.span!, {cursor, descend: this.props.descend, activate: () => this.activate(), tabStop: true})) }}
   onScroll() { if (this.placeholderInput) this.placeholderInput.onScroll() }
   render() {
     return maybe(this.activeState(), () =>
@@ -57,8 +57,8 @@ export class PlaceholderEditorComponent extends React.Component<{placeholderEdit
         activeState={activeState}
         placeholder={this.props.placeholderEditor.name}
         editorCommands={this.props.editorCommands}
-        cursor={cursorFromD(this.props.placeholderEditor)}
-        descend={descendFromD(this.props.placeholderEditor)}
+        cursor={this.props.cursor}
+        descend={this.props.descend}
         tabStop={true}
         scrollParent={this.props.scrollParent}
         runE={this.props.runE}
@@ -69,9 +69,8 @@ export class PlaceholderEditorComponent extends React.Component<{placeholderEdit
           e.preventDefault()
           e.stopPropagation()
           this.props.runE(() => {
-            const cursor = cursorFromD(this.props.placeholderEditor)
             action()
-            mapMaybe(cursor, cursor => requestNextTabStopFromCursor(cursor)) })}}
+            mapMaybe(this.props.cursor, cursor => requestNextTabStopFromCursor(cursor)) })}}
         keyDown={runEditorKeyDown}
         entryListKeyDown={runEntryListKeyDown}
       /> })

@@ -1,4 +1,4 @@
-import { DText, Line } from "./D"
+import { dText, line } from "./Projection"
 import { renderListCurly, renderListParens } from "./defaultRender"
 import { algebraicTypeCtor, atomicTypeCtor, ctorCtor } from "../graph"
 import { dispatch } from "./R"
@@ -11,12 +11,12 @@ const renderAtomicTypeName = renderNameShallow(atomicTypeCtor)
 const renderCtorOrAlgebraicTypeName = dispatch(renderAlgebraicTypeName, renderCtorName, renderAtomicTypeName)
 
 const renderAlgebraicType = renderIfAlgebraicType((descendName, descendCtorOrAlgebraicTypes) =>
-  new Line(new DText("data "), descendName, new DText(" = "), descendCtorOrAlgebraicTypes), {ctorOrAlgebraicTypes: renderListParens(" |", dispatch(renderAlgebraicTypeName, renderAtomicTypeName))} )
+  line(dText("data "), descendName, dText(" = "), descendCtorOrAlgebraicTypes), {ctorOrAlgebraicTypes: renderListParens(" |", dispatch(renderAlgebraicTypeName, renderAtomicTypeName))} )
 
-function renderListType() { return renderIfListType(descendType => new Line(descendType, new DText("[]")), {type: renderCtorOrAlgebraicTypeName}) }
+function renderListType() { return renderIfListType(descendType => line(descendType, dText("[]")), {type: renderCtorOrAlgebraicTypeName}) }
 
-const renderCtor = renderIfCtor((descendName, descendFields) => new Line(descendName, new DText(" "), descendFields), {fields: renderListCurly()})
+const renderCtor = renderIfCtor((descendName, descendFields) => line(descendName, dText(" "), descendFields), {fields: renderListCurly()})
 
-function _renderField() { return renderIfField((descendName, descendType) => new Line(descendName, new DText(" ∷ "), descendType), {type: renderCtorOrAlgebraicTypeName}) }
+function _renderField() { return renderIfField((descendName, descendType) => line(descendName, dText(" ∷ "), descendType), {type: renderCtorOrAlgebraicTypeName}) }
 
 export const renderType = dispatch(renderAlgebraicType, renderListType(), renderCtor, _renderField())

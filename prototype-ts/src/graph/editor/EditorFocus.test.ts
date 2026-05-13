@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { Cursor } from "../cursor/Cursor"
 import { sidFromString } from "../model/ID"
-import { Descend, DText } from "../render/D"
+import type { EditorDescend } from "../render/Projection"
 import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestNextTabStopFromCursor } from "./EditorFocus"
 
 afterEach(() => {
@@ -14,7 +14,7 @@ function cursor(label: string) {
 
 function editor(cursor: Cursor, tabStop = false) {
   const span = document.createElement("span")
-  const descend = new Descend(cursor, new DText(String(cursor.label)), false)
+  const descend: EditorDescend = {cursor, edgeContext: {}, unmatching: false}
   span.tabIndex = 0
   attachEditorDescend(span, descend)
   attachEditorFocus(span, {cursor, descend, tabStop})

@@ -13,8 +13,7 @@ import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardT
 import { _get, Environment, set, withEnvironment } from "../Environment"
 import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, rootField, statementsField, tailField, viewsField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
-import { DComponent } from "./DComponent"
-import { createD, Descend } from "../render/D"
+import { createProjection, D, ProjectionRoot } from "../render/Projection"
 import { defaultRender, tryFirst } from "../render/defaultRender"
 import { renderIfApp } from "../renderIfs"
 import { renderFromRender } from "../render/renderFromRender"
@@ -56,7 +55,7 @@ function click(element: Element, options: MouseEventInit = {}) {
 class EditorHarness {
   container = document.createElement("div")
   root: Root
-  rootDescend: Descend
+  rootDescend: D
   undoStack: UndoRedo[][] = []
   redoStack: UndoRedo[][] = []
   initialFocusConsumed = false
@@ -70,9 +69,9 @@ class EditorHarness {
 
   render() {
     withEnvironment(this.environment, () => {
-      const {rootDescend} = createD()
+      const {rootDescend} = createProjection()
       this.rootDescend = rootDescend
-      flushSync(() => this.root.render(<DComponent
+      flushSync(() => this.root.render(<ProjectionRoot
           d={rootDescend}
           depth={0}
           scrollParent={() => this.container}
@@ -367,7 +366,7 @@ function testLibrary() {
       [functionDeclarationFields, new Map<ID, ID>([[ctorField.id, emptyListCtor.id]])] ])) }]])
 }
 
-describe("DComponent editor integration", () => {
+describe("ProjectionRoot editor integration", () => {
   it("commits a default-rendered root placeholder by typing and pressing Enter", () => {
     const harness = rootHarness()
 
