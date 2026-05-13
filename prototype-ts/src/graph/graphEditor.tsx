@@ -15,6 +15,7 @@ import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor, 
 import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, withEnvironment } from "./Environment"
 import { BradParams, ctorField, GUIDRootViews, HasID, jsonFromID, Module, rootField, rootViewsCtor, viewsField } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
+import { EdgeRef } from "./model/EdgeRef"
 import { generateGUID, guidFromID, ID, sidFromString } from "./model/ID"
 import { jsonFromBradParams } from "./transforms/jsonFromBradParams"
 import { jsonFromString } from "./transforms/jsonFromString"
@@ -163,8 +164,11 @@ function view(id: Maybe<ID>) { let views = fromMaybe(environment().rootViews.vie
 
 function activeCursor(): Maybe<Cursor> { return editorFocusForActiveElement()?.cursor }
 
+function activeEdge(): Maybe<EdgeRef> {
+  return mapMaybe(activeCursor(), cursor => ({parent: cursor.parent, label: cursor.label})) }
+
 function activeID(): Maybe<ID> {
-  return bindMaybe(activeCursor(), cursor => _get(cursor.parent, cursor.label)) }
+  return bindMaybe(activeEdge(), edge => _get(edge.parent, edge.label)) }
 
 function newNode() {
   const id = generateGUID()
@@ -218,8 +222,8 @@ const graphKeyHandler: KeyHandler = (e, _rootDescend, _viewsDescend, runE) => {
 const keyHandler = composedKeyHandler(graphKeyHandler, defaultKeyHandler)
 
 function transform(f: (id: ID) => Maybe<HasID>) {
-  rootComponent.runE(() => bindMaybe(activeCursor(), cursor => bindMaybe(get(cursor.parent, cursor.label), ({id, source}) =>
-    bindMaybe(guidFromSource(source), guid => bindMaybe(f(id), newID => set(guid, cursor.label, newID.id))) )))}
+  rootComponent.runE(() => bindMaybe(activeEdge(), edge => bindMaybe(get(edge.parent, edge.label), ({id, source}) =>
+    bindMaybe(guidFromSource(source), guid => bindMaybe(f(id), newID => set(guid, edge.label, newID.id))) )))}
 
 let undoStack: UndoRedo[][] = []
 let redoStack: UndoRedo[][] = []
@@ -348,7 +352,7 @@ export class RootComponent extends React.Component<{}, {}> {
     let {rootDescend, viewsDescend} = withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createD)
     let graphSnapshot = this.showGraph
       ? withEnvironment(new Environment(libraries, guidMap, guidRootViews, sparseSpanningTree, defaultRender, readOnlyECallbacks().eCallbacks), () =>
-        buildGraphViewSnapshot(guidMap, guidRootViews, editorFocusForActiveElement()?.cursor, graphHighlight))
+        buildGraphViewSnapshot(guidMap, guidRootViews, activeEdge(), graphHighlight))
       : nothing
     this.rootDescend = rootDescend
     this.viewsDescend = viewsDescend

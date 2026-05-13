@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { Cursor } from "../cursor/Cursor"
 import { rootField, nameField, ctorField, fieldCtor, GUIDRootViews } from "../graph"
 import { GUIDMap } from "../model/GUIDMap"
 import { sidFromString } from "../model/ID"
-import { SparseSpanningTree } from "../SparseSpanningTree"
 import { withTestEnvironment } from "../testHelpers"
 import { buildGraphViewSnapshot } from "./GraphViewSnapshot"
 
@@ -26,16 +24,15 @@ describe("GraphViewSnapshot", () => {
     }, {guidMap, rootViews})
   })
 
-  it("uses focused editor cursor as secondary graph selection", () => {
+  it("uses active editor edge as secondary graph selection", () => {
     const rootViews = new GUIDRootViews("guid-root-views")
     const label = sidFromString("child")
     const guidMap = new GUIDMap(new Map([
       [rootViews.id, new Map([[rootField.id, "guid-root"]])],
       ["guid-root", new Map([[label, "guid-child"]])]]))
-    const cursor = new Cursor(undefined, "guid-root", label, new SparseSpanningTree())
 
     withTestEnvironment(() => {
-      const snapshot = buildGraphViewSnapshot(guidMap, rootViews, cursor, undefined)
+      const snapshot = buildGraphViewSnapshot(guidMap, rootViews, {parent: "guid-root", label}, undefined)
 
       expect(snapshot.selectedNode).toEqual({id: "guid-child", strength: "secondary"})
       expect(snapshot.selectedEdge).toEqual({source: "guid-root", label, strength: "secondary"})

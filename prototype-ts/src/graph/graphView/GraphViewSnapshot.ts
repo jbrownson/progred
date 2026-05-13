@@ -1,7 +1,7 @@
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { _get } from "../Environment"
-import { Cursor } from "../cursor/Cursor"
 import { ctorField, fieldCtor, GUIDRootViews, nameField } from "../graph"
+import { EdgeRef } from "../model/EdgeRef"
 import { GUIDMap } from "../model/GUIDMap"
 import { GUID, guidFromID, ID, matchID, numberFromNID, stringFromID } from "../model/ID"
 
@@ -48,14 +48,14 @@ function selectedNodeFromGraphSelection(graphSelection: Maybe<GraphSelection>): 
       case "edge":
         return nothing }})}
 
-function selectedEdgeFromCursor(cursor: Maybe<Cursor>): Maybe<SelectedGraphEdgeID> {
-  return bindMaybe(cursor, cursor =>
-    mapMaybe(guidFromID(cursor.parent), source => ({source, label: cursor.label}))) }
+function selectedEdgeFromActiveEdge(activeEdge: Maybe<EdgeRef>): Maybe<SelectedGraphEdgeID> {
+  return bindMaybe(activeEdge, edge =>
+    mapMaybe(guidFromID(edge.parent), source => ({source, label: edge.label}))) }
 
 function selectedEdgeFromGraphSelection(graphSelection: Maybe<GraphSelection>): Maybe<SelectedGraphEdgeID> {
   return bindMaybe(graphSelection, graphSelection => graphSelection.kind === "edge" ? {source: graphSelection.source, label: graphSelection.label} : nothing) }
 
-export function buildGraphViewSnapshot(guidMap: GUIDMap, rootViews: GUIDRootViews, cursor: Maybe<Cursor>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
+export function buildGraphViewSnapshot(guidMap: GUIDMap, rootViews: GUIDRootViews, activeEdge: Maybe<EdgeRef>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
   let ids = new Set<ID>()
   let rootID = mapMaybe(rootViews.root, root => root.id)
   mapMaybe(rootID, id => ids.add(id))
@@ -68,16 +68,16 @@ export function buildGraphViewSnapshot(guidMap: GUIDMap, rootViews: GUIDRootView
       ids.add(target)
       edges.push({source, label, target, labelText: idDisplayLabel(label, true)}) }}
 
-  let cursorSelectedNode = bindMaybe(cursor, cursor => _get(cursor.parent, cursor.label))
+  let activeSelectedNode = bindMaybe(activeEdge, edge => _get(edge.parent, edge.label))
   let graphSelectedNode = selectedNodeFromGraphSelection(graphSelection)
-  let cursorSelectedEdge = selectedEdgeFromCursor(cursor)
+  let activeSelectedEdge = selectedEdgeFromActiveEdge(activeEdge)
   let graphSelectedEdge = selectedEdgeFromGraphSelection(graphSelection)
   return {
     nodes: Array.from(ids).map(id => ({id, label: idDisplayLabel(id), root: id === rootID})),
     edges,
     selectedNode: fromMaybe(
       mapMaybe(graphSelectedNode, id => ({id, strength: "primary" as GraphSelectionStrength})),
-      () => mapMaybe(cursorSelectedNode, id => ({id, strength: "secondary" as GraphSelectionStrength}))),
+      () => mapMaybe(activeSelectedNode, id => ({id, strength: "secondary" as GraphSelectionStrength}))),
     selectedEdge: fromMaybe(
       mapMaybe(graphSelectedEdge, edge => ({...edge, strength: "primary" as GraphSelectionStrength})),
-      () => mapMaybe(cursorSelectedEdge, edge => ({...edge, strength: "secondary" as GraphSelectionStrength}))) } }
+      () => mapMaybe(activeSelectedEdge, edge => ({...edge, strength: "secondary" as GraphSelectionStrength}))) } }
