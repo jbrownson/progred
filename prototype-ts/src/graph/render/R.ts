@@ -8,7 +8,7 @@ import { ID } from "../model/ID"
 import { typeFromEdge } from "../typeFromEdge"
 import { typeMatches } from "../typeMatches"
 import { EdgeContext } from "../editor/EditorCommands"
-import { edgeContextFromEdge } from "../editor/edgeContextFromCursor"
+import { edgeContextFromEdge } from "../editor/edgeContext"
 
 export type Render = (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext) => Maybe<D>
 

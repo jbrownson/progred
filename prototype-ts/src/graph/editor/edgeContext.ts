@@ -1,5 +1,4 @@
 import { mapMaybe, Maybe } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
 import { Field, Type } from "../graph"
 import { EdgeRef } from "../model/EdgeRef"
 import { setOrDelete } from "../Environment"
@@ -13,5 +12,6 @@ export function edgeContextFromEdge(edge: EdgeRef, expectedType: Maybe<Type>): E
     expectedType,
     fieldName: mapMaybe(Field.fromID(edge.label), field => field.name) } }
 
-export function edgeContextFromCursor(cursor: Cursor): EdgeContext {
-  return edgeContextFromEdge(cursor, typeFromEdge(cursor)) }
+export function edgeContextForEdge(edge: EdgeRef): EdgeContext {
+  return edgeContextFromEdge(edge, typeFromEdge(edge))
+}

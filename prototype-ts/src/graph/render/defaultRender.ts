@@ -14,14 +14,14 @@ import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
 import { copyResultForID } from "../editor/Copy"
 import type { EdgeContext, EditorCommands } from "../editor/EditorCommands"
-import { edgeContextFromCursor, edgeContextFromEdge } from "../editor/edgeContextFromCursor"
+import { edgeContextForEdge, edgeContextFromEdge } from "../editor/edgeContext"
 import { requestFocusForCursor, requestNextTabStopFromCursor } from "../editor/EditorFocus"
 
 export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext) => D): (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext) => D {
   return (cursor, sourceID, edgeContext) => fromMaybe(render(cursor, sourceID, edgeContext), () => defaultRender(cursor, sourceID, edgeContext)) }
 
 function _defaultRender(cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext): D {
-  edgeContext = fromMaybe(edgeContext, () => edgeContextFromCursor(cursor))
+  edgeContext = fromMaybe(edgeContext, () => edgeContextForEdge(cursor))
   return maybe(sourceID, () => renderNothing(cursor, edgeContext), sourceID => matchID(sourceID.id,
     guid => renderGUID(cursor, guid, sourceID.source),
     (sid, string) => renderString(cursor, sid, string, sourceID.source),
@@ -111,7 +111,7 @@ export function renderListCurly(separator = ",", r = alwaysFail) { return render
 
 export function renderList(opening = "[", closing = "]", separator = ",", r = alwaysFail): Render {
   return (listCursor, sourceID, listEdgeContext) => bindMaybe(sourceID, sourceID => {
-    listEdgeContext = fromMaybe(listEdgeContext, () => edgeContextFromCursor(listCursor))
+    listEdgeContext = fromMaybe(listEdgeContext, () => edgeContextForEdge(listCursor))
     return bindMaybe(listFromID(sourceID.id, id => ({id})), list =>
       mapMaybe(cursorsFromList(listCursor, listEdgeContext, list), ({nonemptys, emptyListCursor, emptyListEdgeContext, emptyList}) => {
         let defaultCollapsed = cursorHasCycle(listCursor)

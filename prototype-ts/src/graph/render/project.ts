@@ -1,7 +1,7 @@
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
 import { EdgeContext } from "../editor/EditorCommands"
-import { edgeContextFromCursor } from "../editor/edgeContextFromCursor"
+import { edgeContextForEdge } from "../editor/edgeContext"
 import { environment, get, setOrDelete, SourceType } from "../Environment"
 import { ID } from "../model/ID"
 import { workspaceRootField, workspaceViewField } from "../workspace"
@@ -20,7 +20,7 @@ export function createProjection(r: Render = alwaysFail) {
   let rootDescend = descendElement(rootCursor, tryFirst(r, environment().defaultRender)(rootCursor, rootSourceID, rootEdgeContext), false, rootEdgeContext)
   let viewCursor = new Cursor(nothing, environment().workspace.id, workspaceViewField.id)
   let viewDescend = mapMaybe(get(environment().workspace.id, workspaceViewField.id), viewSourceID => {
-    let viewEdgeContext = {...edgeContextFromCursor(viewCursor), fieldName: "view"}
+    let viewEdgeContext = {...edgeContextForEdge(viewCursor), fieldName: "view"}
     return descendElement(viewCursor, environment().defaultRender(viewCursor, viewSourceID, viewEdgeContext), false, viewEdgeContext) })
   return {rootDescend, viewDescend}
 }
