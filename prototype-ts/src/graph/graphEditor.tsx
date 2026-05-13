@@ -5,7 +5,6 @@ import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } f
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
 import { Cursor } from "./cursor/Cursor"
 import { createD, Descend } from "./render/D"
-import { descendFromCursor } from "./cursor/descendFromCursor"
 import { DComponent } from "./components/DComponent"
 import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"

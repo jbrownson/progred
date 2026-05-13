@@ -87,7 +87,7 @@ function renderMatches(string: string, matches: Match[]) {
   return [...strings, ...index < string.length ? [{string: string.slice(index), matching: false}] : []]
     .map(({string, matching}, index) => <span key={index} className={matching ? "matching" : ""}>{string}</span>) }
 
-export class PlaceholderInputComponent extends React.Component<{activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, cursor?: Cursor, descend?: Descend, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
+export class PlaceholderInputComponent extends React.Component<{activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, cursor?: Cursor, descend?: Descend, tabStop?: boolean, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}, {}> {
   entryList: EntryList | null
   input: HTMLInputElement | null
   open() {
@@ -98,7 +98,7 @@ export class PlaceholderInputComponent extends React.Component<{activeState: Pla
   attachEditorCommands() {
     if (this.input) {
       attachEditorCommands(this.input, this.props.editorCommands)
-      maybe(this.props.cursor, () => detachEditorFocus(this.input!), cursor => attachEditorFocus(this.input!, {cursor, descend: this.props.descend})) }}
+      maybe(this.props.cursor, () => detachEditorFocus(this.input!), cursor => attachEditorFocus(this.input!, {cursor, descend: this.props.descend, tabStop: this.props.tabStop})) }}
   updateEntryListAbove() {
     if (this.input && this.entryList && this.entryList.div) {
       let scrollParent = this.props.scrollParent()

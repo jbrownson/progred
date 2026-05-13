@@ -14,7 +14,7 @@ import { IdenticonComponent } from "./IdenticonComponent"
 import { ID } from "../model/ID"
 import { attachEditorCommands, commitIDToActiveElement, detachEditorCommands, editorKeyDownAction } from "../editor/EditorCommands"
 import type { EdgeContext, EditorCommands } from "../editor/EditorCommands"
-import { attachEditorFocus, detachEditorFocus, focusEditorForCursor } from "../editor/EditorFocus"
+import { attachEditorDescend, attachEditorFocus, detachEditorFocus, focusEditorForCursor } from "../editor/EditorFocus"
 import { focus } from "../editor/ignoreFocusEvents"
 import { buildEdgeLabelEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
@@ -118,7 +118,7 @@ export class DComponent extends React.Component<DComponentProps, DComponentState
         return <span>{collapseToggle}{opening}{content}{closing}</span> },
       descend => {
         let classNames = ["descend", ...maybeMap([[descend.unmatching, "unmatching"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
-        return <span className={classNames.join(" ")}><DComponent ref={addChild} d={descend.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={descend.edgeContext} editorCommands={this.props.editorCommands} /></span> },
+        return <span className={classNames.join(" ")} ref={span => { if (span) attachEditorDescend(span, descend) }}><DComponent ref={addChild} d={descend.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={descend.edgeContext} editorCommands={this.props.editorCommands} /></span> },
       editorBehavior => <DComponent ref={addChild} d={editorBehavior.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={mergeEditorCommands(this.props.editorCommands, editorBehavior.editorCommands)} />,
       guidEditor => <GuidEditorComponent ref={addChild} guidEditor={guidEditor} editorCommands={activeEditorCommands(this.props.edgeContext, this.props.editorCommands, guidEditor.editorCommands)} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       supportsUnderselection => <SupportsUnderselectionComponent ref={addChild} supportsUnderselection={supportsUnderselection} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={this.props.editorCommands} />,

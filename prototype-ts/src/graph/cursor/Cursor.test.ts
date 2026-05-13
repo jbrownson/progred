@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { Block, Descend, DText, Label, Line } from "../render/D"
+import { Descend, DText, Label, Line } from "../render/D"
 import { SparseSpanningTree } from "../SparseSpanningTree"
 import { childCursor, _childCursor } from "./childCursor"
 import { Cursor, cursorsEqual } from "./Cursor"
 import { cursorFromD } from "./cursorFromD"
 import { cursorHasCycle } from "./cursorHasCycle"
-import { descendFromCursor } from "./descendFromCursor"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 
@@ -55,13 +54,4 @@ describe("Cursor", () => {
     expect(cursorFromD(descend)).toBe(cursor)
   })
 
-  it("finds a descend by cursor through a D tree", () => {
-    const root = rootCursor()
-    const childCursor = _childCursor(root, "guid-child", sidFromString("child"))
-    const childDescend = new Descend(childCursor, new DText("child"), false)
-    const rootDescend = new Descend(root, new Block(childDescend), false)
-
-    expect(descendFromCursor(rootDescend, undefined, childCursor)).toBe(childDescend)
-    expect(descendFromCursor(rootDescend, undefined, _childCursor(root, "guid-other", sidFromString("other")))).toBe(undefined)
-  })
 })
