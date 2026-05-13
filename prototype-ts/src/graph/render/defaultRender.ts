@@ -43,10 +43,10 @@ function placeholderEditorCommands(cursor: Cursor): EditorCommands {
     commit(newList.id)
     requestFocusForCursor(_childCursor(cursor, newList.id, headField.id)) }) : nothing} }
 
-export function renderDocumentGuidEditor(cursor: Cursor, sourceID: SourceID, d: D): D {
+export function renderDocumentGuidEditor(cursor: Cursor, sourceID: SourceID, d: D, rootEditorCommands: EditorCommands = {}): D {
   let guid = guidFromID(sourceID.id)
   return sourceID.source.source === SourceType.DocumentType && guid !== undefined
-    ? supportsUnderselection(cursor, guid, guidEditor(cursor, guid, d, true, editorCommands(cursor, guid)), missingLabel => renderField(cursor, guid, missingLabel))
+    ? supportsUnderselection(cursor, guid, guidEditor(cursor, guid, d, true, editorCommands(cursor, guid), rootEditorCommands), missingLabel => renderField(cursor, guid, missingLabel))
     : d }
 
 function renderIDLabel(id: ID): D {
@@ -135,8 +135,17 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
             ...nonemptys.map(({cursor, edgeContext, list}, i) => insertionPoint(cursor, edgeContext, list, i !== 0 && requiresMetaAfter(nonemptys[i - 1].list))),
             insertionPoint(emptyListCursor, emptyListEdgeContext, emptyList, maybe(nonemptys[nonemptys.length - 1], () => false, ({list}) => requiresMetaAfter(list))) ]
           return renderDocumentGuidEditor(listCursor, sourceID, dList(opening, nonemptys.map(({cursor, edgeContext, list}) => listItem(cursor, edgeContext, list)), closing, separator, toggle,
-            insertionPoints)) }
+            insertionPoints), listRootEditorCommands()) }
         return defaultCollapsed || list instanceof NonemptyList ? collapsible(defaultCollapsed, defaultCollapsed, render) : render(false, () => {}) }))})}
+
+function listRootEditorCommands(): EditorCommands {
+  return {keyDown: e => e.key === "," ? () => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.target instanceof HTMLElement) {
+      const insertionPoint = e.target.querySelector("[data-list-insertion-index='0']")
+      if (insertionPoint instanceof HTMLElement) insertionPoint.focus() }} : nothing}
+}
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 

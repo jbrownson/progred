@@ -795,6 +795,20 @@ describe("ProjectionRoot editor integration", () => {
     harness.unmount()
   })
 
+  it("keeps editor commands attached across projection rerenders", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    environment.guidMap.set(environment.rootViews.id, rootField.id, sidFromString("copy me"))
+    const harness = new EditorHarness(environment, rootCursor(environment))
+    const activeElement = document.activeElement
+
+    harness.render()
+
+    expect(document.activeElement).toBe(activeElement)
+    expect(editorCommandsForActiveElement()?.copy?.().referenceID).toBe(sidFromString("copy me"))
+
+    harness.unmount()
+  })
+
   it("copies the focused number editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.guidMap.set(environment.rootViews.id, rootField.id, 7)

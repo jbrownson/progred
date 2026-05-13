@@ -4,45 +4,44 @@ import type { ListInsertionPoint, PlaceholderEditorActiveState, PlaceholderEdito
 import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
 
-export class ListInsertionEditorComponent extends React.Component<{insertionPoint: ListInsertionPoint, label: string, active: boolean, setActive: (active: boolean) => void, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, {}> {
-  placeholderInput: PlaceholderInputComponent | null
-  editorState: PlaceholderEditorState = {}
-  activeState(): PlaceholderEditorActiveState { return {entries: this.props.insertionPoint.entries, editorState: this.editorState} }
-  close() {
-    this.editorState.completionOpen = false
-    this.editorState.value = ""
-    this.editorState.itemSelection = nothing
-    this.forceUpdate() }
-  activate() { this.props.setActive(true) }
-  deactivate() {
-    this.editorState.completionOpen = false
-    this.editorState.value = ""
-    this.editorState.itemSelection = nothing
-    this.props.setActive(false) }
-  onScroll() { if (this.placeholderInput) this.placeholderInput.onScroll() }
-  render() {
-    if (!this.props.active) return <span
-      className="listInsertionPoint"
-      tabIndex={0}
-      onFocus={e => handleFocusEvent(() => this.activate())}
-      onMouseDown={e => e.stopPropagation()}
-      onClick={e => { e.stopPropagation(); this.activate() }}>
-        {this.props.label}<span className="listInsertionPointHitbox" />
-      </span>
-    return <PlaceholderInputComponent
-      ref={placeholderInput => { this.placeholderInput = placeholderInput }}
-      activeState={this.activeState()}
-      placeholder="item"
-      editorCommands={this.props.insertionPoint.editorCommands}
-      scrollParent={this.props.scrollParent}
-      runE={this.props.runE}
-      closeCompletion={() => this.close()}
-      cancel={() => this.deactivate()}
-      blur={() => this.deactivate()}
-      commit={(action, e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        this.props.runE(() => {
-          this.deactivate()
-          action() })}}
-    /> } }
+export function ListInsertionEditorComponent(props: {insertionIndex: number, insertionPoint: ListInsertionPoint, label: string, active: boolean, setActive: (active: boolean) => void, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}) {
+  const editorState = React.useRef<PlaceholderEditorState>({})
+  const [, forceUpdate] = React.useReducer(n => n + 1, 0)
+  const clearEditorState = () => {
+    editorState.current.completionOpen = false
+    editorState.current.value = ""
+    editorState.current.itemSelection = nothing }
+  const activeState: PlaceholderEditorActiveState = {entries: props.insertionPoint.entries, editorState: editorState.current}
+  if (!props.active) return <span
+    className="listInsertionPoint"
+    data-list-insertion-index={props.insertionIndex}
+    tabIndex={0}
+    onFocus={() => handleFocusEvent(() => props.setActive(true))}
+    onMouseDown={e => e.stopPropagation()}
+    onClick={e => { e.stopPropagation(); props.setActive(true) }}>
+      {props.label}<span className="listInsertionPointHitbox" />
+    </span>
+  return <PlaceholderInputComponent
+    activeState={activeState}
+    placeholder="item"
+    editorCommands={props.insertionPoint.editorCommands}
+    scrollParent={props.scrollParent}
+    runE={props.runE}
+    closeCompletion={() => {
+      clearEditorState()
+      forceUpdate() }}
+    cancel={() => {
+      clearEditorState()
+      props.setActive(false) }}
+    blur={() => {
+      clearEditorState()
+      props.setActive(false) }}
+    commit={(action, e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      props.runE(() => {
+        clearEditorState()
+        props.setActive(false)
+        action() })}}
+  />
+}

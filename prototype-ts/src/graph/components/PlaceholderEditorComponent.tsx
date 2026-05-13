@@ -4,78 +4,64 @@ import { Cursor } from "../cursor/Cursor"
 import type { EditorDescend, PlaceholderEditor, PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/Projection"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
-import { attachEditorCommands, detachEditorCommands, editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
-import { attachEditorFocus, detachEditorFocus, requestNextTabStopFromCursor } from "../editor/EditorFocus"
+import { editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
+import { requestNextTabStopFromCursor } from "../editor/EditorFocus"
 import { handleFocusEvent } from "../editor/ignoreFocusEvents"
+import { useEditorAttachment } from "./useEditorAttachment"
 
-type PlaceholderEditorComponentState = {active: boolean}
-
-export class PlaceholderEditorComponent extends React.Component<{placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}, PlaceholderEditorComponentState> {
-  state = {active: false}
-  span: HTMLSpanElement | null
-  placeholderInput: PlaceholderInputComponent | null
-  editorState: PlaceholderEditorState = {}
-  close(activeState: PlaceholderEditorActiveState) {
+export function PlaceholderEditorComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}) {
+  const [active, setActive] = React.useState(false)
+  const span = React.useRef<HTMLSpanElement | null>(null)
+  const editorState = React.useRef<PlaceholderEditorState>({})
+  const [, forceUpdate] = React.useReducer(n => n + 1, 0)
+  const activate = () => setActive(true)
+  const close = (activeState: PlaceholderEditorActiveState) => {
     activeState.editorState.completionOpen = false
     activeState.editorState.value = ""
     activeState.editorState.itemSelection = nothing
-    this.forceUpdate() }
-  activeState() {
-    return this.props.placeholderEditor.activeState || (this.state.active ? {entries: this.props.placeholderEditor.entries, editorState: this.editorState} : nothing) }
-  activate() { this.setState({active: true}) }
-  selectAndActivate() { this.activate() }
-  deactivate(e?: React.FocusEvent<HTMLInputElement>) {
+    forceUpdate() }
+  const deactivate = (e?: React.FocusEvent<HTMLInputElement>) => {
     if (e) e.currentTarget.value = ""
-    this.editorState = {}
-    this.setState({active: false}) }
-  attachInactiveEditor() {
-    if (this.span) {
-      attachEditorCommands(this.span, this.props.editorCommands)
-      mapMaybe(this.props.cursor, cursor => attachEditorFocus(this.span!, {cursor, descend: this.props.descend, activate: () => this.activate(), tabStop: true})) }}
-  onScroll() { if (this.placeholderInput) this.placeholderInput.onScroll() }
-  render() {
-    return maybe(this.activeState(), () =>
-      <span
-        className="uneditable"
-        tabIndex={0}
-        onFocus={() => handleFocusEvent(() => this.props.runE(() => this.selectAndActivate()))}
-        onMouseDown={e => e.stopPropagation()}
-        onClick={e => { e.stopPropagation(); this.props.runE(() => this.selectAndActivate()) }}
-        ref={span => { if (this.span && this.span !== span) { detachEditorCommands(this.span); detachEditorFocus(this.span) } this.span = span }} >
-        {this.props.placeholderEditor.name}
-      </span>,
-    activeState => {
-      let runEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => maybe(editorKeyDownAction(this.props.editorCommands, e),
-        () => stopPropagationForTextInputs(e),
-        action => this.props.runE(action))
-      let runEntryListKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => mapMaybe(editorKeyDownAction(this.props.editorCommands, e), action =>
-        this.props.runE(() => {
-          commitActionIfSomethingToCommit()
-          action() }))
-      return <PlaceholderInputComponent
-        ref={placeholderInput => { this.placeholderInput = placeholderInput }}
-        activeState={activeState}
-        placeholder={this.props.placeholderEditor.name}
-        editorCommands={this.props.editorCommands}
-        cursor={this.props.cursor}
-        descend={this.props.descend}
-        tabStop={true}
-        scrollParent={this.props.scrollParent}
-        runE={this.props.runE}
-        closeCompletion={() => this.close(activeState)}
-        cancel={() => this.props.runE(() => this.deactivate())}
-        blur={e => this.props.runE(() => this.deactivate(e))}
-        commit={(action, e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          this.props.runE(() => {
-            action()
-            mapMaybe(this.props.cursor, cursor => requestNextTabStopFromCursor(cursor)) })}}
-        keyDown={runEditorKeyDown}
-        entryListKeyDown={runEntryListKeyDown}
-      /> })
-  }
-  componentDidMount() { this.attachInactiveEditor() }
-  componentDidUpdate() { this.attachInactiveEditor() }
-  componentWillUnmount() { if (this.span) { detachEditorCommands(this.span); detachEditorFocus(this.span) } }
+    editorState.current = {}
+    setActive(false) }
+  useEditorAttachment(span, props.editorCommands, {cursor: props.cursor, descend: props.descend, activate, tabStop: true})
+  return maybe(props.placeholderEditor.activeState || (active ? {entries: props.placeholderEditor.entries, editorState: editorState.current} : nothing), () =>
+    <span
+      className="uneditable"
+      tabIndex={0}
+      onFocus={() => handleFocusEvent(() => props.runE(activate))}
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => { e.stopPropagation(); props.runE(activate) }}
+      ref={span} >
+      {props.placeholderEditor.name}
+    </span>,
+  activeState => {
+    let runEditorKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => maybe(editorKeyDownAction(props.editorCommands, e),
+      () => stopPropagationForTextInputs(e),
+      action => props.runE(action))
+    let runEntryListKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => mapMaybe(editorKeyDownAction(props.editorCommands, e), action =>
+      props.runE(() => {
+        commitActionIfSomethingToCommit()
+        action() }))
+    return <PlaceholderInputComponent
+      activeState={activeState}
+      placeholder={props.placeholderEditor.name}
+      editorCommands={props.editorCommands}
+      cursor={props.cursor}
+      descend={props.descend}
+      tabStop={true}
+      scrollParent={props.scrollParent}
+      runE={props.runE}
+      closeCompletion={() => close(activeState)}
+      cancel={() => props.runE(() => deactivate())}
+      blur={e => props.runE(() => deactivate(e))}
+      commit={(action, e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        props.runE(() => {
+          action()
+          mapMaybe(props.cursor, cursor => requestNextTabStopFromCursor(cursor)) })}}
+      keyDown={runEditorKeyDown}
+      entryListKeyDown={runEntryListKeyDown}
+    /> })
 }

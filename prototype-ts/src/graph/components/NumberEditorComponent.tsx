@@ -1,50 +1,40 @@
 import * as React from 'react'
 import { getTextWidth } from "../../lib/getTextWidth"
-import { fromMaybe, mapMaybe } from "../../lib/Maybe"
-import { noop } from "../../lib/noop"
+import { fromMaybe } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
 import type { EditorDescend, NumberEditor } from "../render/Projection"
 import { nidFromNumber } from "../model/ID"
-import { attachEditorCommands, detachEditorCommands, editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
-import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
+import { editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
+import { useEditorAttachment } from "./useEditorAttachment"
 
-type NumberEditorComponentState = {value?: string}
-
-export class NumberEditorComponent extends React.Component<{numberEditor: NumberEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}, NumberEditorComponentState> {
-  state: NumberEditorComponentState = {}
-  input: HTMLInputElement | null
-  onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    let keyDownAction = editorKeyDownAction(this.props.editorCommands, e)
-    if (keyDownAction) { this.props.runE(keyDownAction); return }
+export function NumberEditorComponent(props: {numberEditor: NumberEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}) {
+  const [editedValue, setEditedValue] = React.useState<string | undefined>(undefined)
+  const input = React.useRef<HTMLInputElement | null>(null)
+  useEditorAttachment(input, props.editorCommands, {cursor: props.cursor, descend: props.descend})
+  let commit = (value: string) => {
+    let number = +value
+    if (!isNaN(number) && props.numberEditor.writable) {
+      setEditedValue(undefined)
+      props.runE(() => props.editorCommands.commit?.(nidFromNumber(number))) }}
+  let onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    let keyDownAction = editorKeyDownAction(props.editorCommands, e)
+    if (keyDownAction) { props.runE(keyDownAction); return }
     if (!((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0)) {
       stopPropagationForTextInputs(e)
       if (e.key === "Enter") {
         e.preventDefault()
         e.stopPropagation()
-        this.commit(e.currentTarget.value) }}}
-    commit(value: string) {
-      let number = +value
-      if (!isNaN(number) && this.props.numberEditor.writable) {
-        this.setState({value: undefined})
-        this.props.runE(() => mapMaybe(this.props.editorCommands.commit, commit => commit(nidFromNumber(number)))) }}
-  attachEditorCommands() {
-    if (this.input) {
-      attachEditorCommands(this.input, this.props.editorCommands)
-      mapMaybe(this.props.cursor, cursor => attachEditorFocus(this.input!, {cursor, descend: this.props.descend})) }}
-  onScroll() { noop() }
-  render() {
-    const value = fromMaybe(this.state.value, () => `${this.props.numberEditor.number}`)
-    return <input
-      className={"number i"}
-      type="text"
-      style={{width: getTextWidth(value) + "px"}}
-      onChange={e => { if (this.input && this.props.numberEditor.writable) this.setState({value: this.input.value}) }}
-      onBlur={() => this.setState({value: undefined})}
-      value={value}
-      onClick={e => e.stopPropagation()}
-      onKeyDown={e => this.onKeyDown(e) }
-      ref={input => { this.input = input }} /> }
-  componentDidMount() { this.attachEditorCommands() }
-  componentDidUpdate() { this.attachEditorCommands() }
-  componentWillUnmount() { if (this.input) { detachEditorCommands(this.input); detachEditorFocus(this.input) } } }
+        commit(e.currentTarget.value) }}}
+  const value = fromMaybe(editedValue, () => `${props.numberEditor.number}`)
+  return <input
+    className={"number i"}
+    type="text"
+    style={{width: getTextWidth(value) + "px"}}
+    onChange={e => { if (props.numberEditor.writable) setEditedValue(e.currentTarget.value) }}
+    onBlur={() => setEditedValue(undefined)}
+    value={value}
+    onClick={e => e.stopPropagation()}
+    onKeyDown={onKeyDown}
+    ref={input} />
+}

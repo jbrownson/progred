@@ -47,7 +47,6 @@ type ProjectionContextValue = {
   chooseID?: () => Maybe<ID>
   focusCursor?: Cursor
   descend?: EditorDescend
-  registerRootEditorCommands?: (commands: Maybe<EditorCommands>) => void
 }
 
 const ProjectionContext = React.createContext<ProjectionContextValue>({
@@ -96,11 +95,11 @@ export function block(...children: D[]): D {
 function BlockComponent(props: {children: D[]}) {
   const context = React.useContext(ProjectionContext)
   return <span>{concatMap(props.children, (d, index) => isBlock(d)
-    ? [<ProjectionScope key={`block${index}`} context={childContext(context, {depth: context.depth + 1, registerRootEditorCommands: undefined})}>{d}</ProjectionScope>]
+    ? [<ProjectionScope key={`block${index}`} context={childContext(context, {depth: context.depth + 1})}>{d}</ProjectionScope>]
     : [
       <br key={`br${index}`} />,
       <span key={`indent${index}`} style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />,
-      <ProjectionScope key={`d${index}`} context={childContext(context, {depth: context.depth + 1, registerRootEditorCommands: undefined})}>{d}</ProjectionScope>])}</span>
+      <ProjectionScope key={`d${index}`} context={childContext(context, {depth: context.depth + 1})}>{d}</ProjectionScope>])}</span>
 }
 
 export function line(...children: D[]): D {
@@ -108,9 +107,7 @@ export function line(...children: D[]): D {
 }
 
 function LineComponent(props: {children: D[]}) {
-  const context = React.useContext(ProjectionContext)
-  return <span>{props.children.map((d, index) =>
-    <ProjectionScope key={index} context={childContext(context, {registerRootEditorCommands: undefined})}>{d}</ProjectionScope>)}</span>
+  return <span>{props.children.map((d, index) => <React.Fragment key={index}>{d}</React.Fragment>)}</span>
 }
 
 export function dText(string: string): D {
@@ -158,17 +155,11 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
   const [activeListInsertion, setActiveListInsertionState] = React.useState<number | undefined>(undefined)
   const activeInsertion = activeListInsertion !== undefined && props.insertionPoints[activeListInsertion] ? activeListInsertion : undefined
   const setActiveListInsertion = (i: number, active: boolean) => setActiveListInsertionState(activeListInsertion => active ? i : activeListInsertion === i ? undefined : activeListInsertion)
-  context.registerRootEditorCommands?.(props.insertionPoints.length > 0
-    ? {keyDown: e => e.key === "," ? () => {
-        e.preventDefault()
-        e.stopPropagation()
-        setActiveListInsertion(0, true) } : nothing}
-    : nothing)
   let opening = <span onMouseDown={e => keepFocusForChooseID(e)} onClick={e => selectOrChooseID(e, context)}>{props.opening}</span>
   let closing = <span>{props.closing}</span>
   let singleLine = props.children.length <= 1 && !props.children.find(child => !isSingleLine(child))
   let insertionPoint = (i: number, label: string) => props.insertionPoints[i]
-    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} scrollParent={context.scrollParent} runE={context.runE} />
+    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionIndex={i} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} scrollParent={context.scrollParent} runE={context.runE} />
     : <span key={`insertion${i}`}>{label}</span>
   let child = (d: D, i: number, depth: number) => {
     let insertionIndex = i + 1
@@ -178,7 +169,7 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
           e.stopPropagation()
           setActiveListInsertion(insertionIndex, true) } : nothing})
       : context.editorCommands
-    return <ProjectionScope key={`child${i}`} context={childContext(context, {depth, editorCommands, registerRootEditorCommands: undefined})}>{d}</ProjectionScope> }
+    return <ProjectionScope key={`child${i}`} context={childContext(context, {depth, editorCommands})}>{d}</ProjectionScope> }
   let activeItems = (depth: number) => {
     let items: React.ReactNode[] = []
     for (let i = 0; i <= props.children.length; i++) {
@@ -222,43 +213,41 @@ function DescendComponent(props: {cursor: Cursor, child: D, unmatching: boolean,
       edgeContext: props.edgeContext,
       chooseID: () => _get(props.cursor.parent, props.cursor.label),
       focusCursor: props.cursor,
-      descend,
-      registerRootEditorCommands: undefined })}>{props.child}</ProjectionScope>
+      descend
+    })}>{props.child}</ProjectionScope>
   </span>
 }
 
-export function guidEditor(cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands): D {
-  return projectionElement(GuidEditorComponent, {cursor, id, child, focusWhenSelected, editorCommands}, "guidEditor", isSingleLine(child))
+export function guidEditor(cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands = {}): D {
+  return projectionElement(GuidEditorComponent, {cursor, id, child, focusWhenSelected, editorCommands, rootEditorCommands}, "guidEditor", isSingleLine(child))
 }
 
-class GuidEditorComponent extends React.Component<{cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands}, {}> {
-  static contextType = ProjectionContext
-  declare context: React.ContextType<typeof ProjectionContext>
-  span: HTMLSpanElement | null
-  rootEditorCommands: Maybe<EditorCommands> = nothing
-  editorCommands() { return maybe(this.rootEditorCommands, () => activeEditorCommands(this.context.edgeContext, this.context.editorCommands, this.props.editorCommands), editorCommands => mergeEditorCommands(activeEditorCommands(this.context.edgeContext, this.context.editorCommands, this.props.editorCommands), editorCommands)) }
-  attachEditorCommands() {
-    if (this.span) {
-      attachEditorCommands(this.span, this.editorCommands())
-      attachEditorFocus(this.span, {cursor: this.props.cursor, descend: this.context.descend, focusWhenSelected: this.props.focusWhenSelected}) }}
-  render() {
-    this.rootEditorCommands = nothing
-    let childEditorCommands = {...activeEditorCommands(this.context.edgeContext, this.context.editorCommands, this.props.editorCommands), commit: undefined}
-    return <span
-      className="guidEditor"
-      tabIndex={0}
-      onMouseDown={e => { if (!(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault() }}
-      onClick={e => { e.stopPropagation(); focus(e.currentTarget) }}
-      onKeyDown={e => { if (e.target === e.currentTarget) mapMaybe(editorKeyDownAction(this.editorCommands(), e), action => this.context.runE(action)) }}
-      ref={span => { this.span = span }} >
-      <ProjectionScope context={childContext(this.context, {
-        edgeContext: undefined,
-        editorCommands: childEditorCommands,
-        registerRootEditorCommands: commands => { this.rootEditorCommands = commands } })}>{this.props.child}</ProjectionScope>
-    </span> }
-  componentDidMount() { this.attachEditorCommands() }
-  componentDidUpdate() { this.attachEditorCommands() }
-  componentWillUnmount() { if (this.span) { detachEditorCommands(this.span); detachEditorFocus(this.span) } } }
+function GuidEditorComponent(props: {cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands}) {
+  const context = React.useContext(ProjectionContext)
+  const span = React.useRef<HTMLSpanElement | null>(null)
+  const editorCommands = () => mergeEditorCommands(activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands), props.rootEditorCommands)
+  let childEditorCommands = {...activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands), commit: undefined}
+  React.useLayoutEffect(() => {
+    let element = span.current
+    if (!element) return
+    attachEditorCommands(element, editorCommands())
+    attachEditorFocus(element, {cursor: props.cursor, descend: context.descend, focusWhenSelected: props.focusWhenSelected})
+    return () => {
+      detachEditorCommands(element)
+      detachEditorFocus(element) }
+  })
+  return <span
+    className="guidEditor"
+    tabIndex={0}
+    onMouseDown={e => { if (!(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault() }}
+    onClick={e => { e.stopPropagation(); focus(e.currentTarget) }}
+    onKeyDown={e => { if (e.target === e.currentTarget) mapMaybe(editorKeyDownAction(editorCommands(), e), action => context.runE(action)) }}
+    ref={span} >
+    <ProjectionScope context={childContext(context, {
+      edgeContext: undefined,
+      editorCommands: childEditorCommands })}>{props.child}</ProjectionScope>
+  </span>
+}
 
 export function supportsUnderselection(cursor: Cursor, id: ID, child: D, missingField: (label: ID) => D): D {
   return projectionElement(SupportsUnderselectionComponent, {cursor, id, child, missingField, environment: environment()}, "supportsUnderselection", isSingleLine(child))
@@ -266,62 +255,59 @@ export function supportsUnderselection(cursor: Cursor, id: ID, child: D, missing
 
 type SupportsUnderselectionComponentState = {pendingEdgeLabel: boolean, missingLabel?: ID, focusMissingLabel?: boolean}
 
-class SupportsUnderselectionComponent extends React.Component<{cursor: Cursor, id: ID, child: D, missingField: (label: ID) => D, environment: Environment}, SupportsUnderselectionComponentState> {
-  static contextType = ProjectionContext
-  declare context: React.ContextType<typeof ProjectionContext>
-  state: SupportsUnderselectionComponentState = {pendingEdgeLabel: false}
-  span: HTMLSpanElement | null
-  pendingInput: PlaceholderInputComponent | null
-  labelEditorState = {} as PlaceholderEditorState
-  activeState(): PlaceholderEditorActiveState {
-    return {
-      entries: buildEdgeLabelEntries(id => this.chooseLabel(id())),
-      editorState: this.labelEditorState }}
-  startNewEdge() {
-    this.labelEditorState = {}
-    this.setState({pendingEdgeLabel: true, missingLabel: undefined, focusMissingLabel: false}) }
-  chooseLabel(label: ID) {
-    this.labelEditorState = {}
-    this.setState({pendingEdgeLabel: false, missingLabel: label, focusMissingLabel: true}) }
-  render() {
-    let editorCommands = mergeEditorCommands(this.context.editorCommands, {newEdge: () => this.startNewEdge()})
-    return <span ref={span => { this.span = span }}>
-      <ProjectionScope context={childContext(this.context, {editorCommands})}>{this.props.child}</ProjectionScope>
-      {this.state.pendingEdgeLabel
-        ? <span>
-          <br />
-          <span style={{width: indentWidth * (this.context.depth + 1) + "px", display: "inline-block"}} />
-          <PlaceholderInputComponent
-            ref={pendingInput => { this.pendingInput = pendingInput }}
-            activeState={this.activeState()}
-            placeholder="label"
-            editorCommands={{commit: id => mapMaybe(id, id => this.chooseLabel(id))}}
-            cursor={this.props.cursor}
-            descend={this.context.descend}
-            scrollParent={this.context.scrollParent}
-            runE={this.context.runE}
-            closeCompletion={() => {
-              this.labelEditorState.completionOpen = false
-              this.labelEditorState.value = ""
-              this.labelEditorState.itemSelection = nothing
-              this.forceUpdate() }}
-            cancel={() => this.setState({pendingEdgeLabel: false})}
-            blur={() => this.setState({pendingEdgeLabel: false})}
-            commit={(action, e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              action() }} />
-          <span> →</span>
-        </span>
-        : null}
-      {mapMaybe(this.state.missingLabel, label =>
-        <ProjectionScope key="missingLabel" context={this.context}>{withEnvironment(this.props.environment, () => this.props.missingField(label))}</ProjectionScope>)}
-    </span> }
-  componentDidUpdate() {
-    if (this.state.focusMissingLabel && this.span)
-      mapMaybe(this.state.missingLabel, label => {
-        focusEditorForCursor(this.span!, _childCursor(this.props.cursor, this.props.id, label))
-        this.setState({focusMissingLabel: false}) }) }}
+function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: D, missingField: (label: ID) => D, environment: Environment}) {
+  const context = React.useContext(ProjectionContext)
+  const [state, setState] = React.useState<SupportsUnderselectionComponentState>({pendingEdgeLabel: false})
+  const [, forceUpdate] = React.useReducer(n => n + 1, 0)
+  const span = React.useRef<HTMLSpanElement | null>(null)
+  const labelEditorState = React.useRef<PlaceholderEditorState>({})
+  const chooseLabel = (label: ID) => {
+    labelEditorState.current = {}
+    setState({pendingEdgeLabel: false, missingLabel: label, focusMissingLabel: true}) }
+  const activeState = (): PlaceholderEditorActiveState => ({
+    entries: buildEdgeLabelEntries(id => chooseLabel(id())),
+    editorState: labelEditorState.current })
+  const startNewEdge = () => {
+    labelEditorState.current = {}
+    setState({pendingEdgeLabel: true, missingLabel: undefined, focusMissingLabel: false}) }
+  let editorCommands = mergeEditorCommands(context.editorCommands, {newEdge: startNewEdge})
+  React.useLayoutEffect(() => {
+    if (state.focusMissingLabel && span.current)
+      mapMaybe(state.missingLabel, label => {
+        focusEditorForCursor(span.current!, _childCursor(props.cursor, props.id, label))
+        setState(state => ({...state, focusMissingLabel: false})) }) })
+  return <span ref={span}>
+    <ProjectionScope context={childContext(context, {editorCommands})}>{props.child}</ProjectionScope>
+    {state.pendingEdgeLabel
+      ? <span>
+        <br />
+        <span style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />
+        <PlaceholderInputComponent
+          activeState={activeState()}
+          placeholder="label"
+          editorCommands={{commit: id => mapMaybe(id, id => chooseLabel(id))}}
+          cursor={props.cursor}
+          descend={context.descend}
+          scrollParent={context.scrollParent}
+          runE={context.runE}
+          closeCompletion={() => {
+            labelEditorState.current.completionOpen = false
+            labelEditorState.current.value = ""
+            labelEditorState.current.itemSelection = nothing
+            forceUpdate() }}
+          cancel={() => setState({pendingEdgeLabel: false})}
+          blur={() => setState({pendingEdgeLabel: false})}
+          commit={(action, e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            action() }} />
+        <span> →</span>
+      </span>
+      : null}
+    {mapMaybe(state.missingLabel, label =>
+      <ProjectionScope key="missingLabel" context={context}>{withEnvironment(props.environment, () => props.missingField(label))}</ProjectionScope>)}
+  </span>
+}
 
 export function label(cursor: Cursor, child: D): D {
   return projectionElement(LabelComponent, {cursor, child}, "label", isSingleLine(child))
@@ -331,8 +317,7 @@ function LabelComponent(props: {cursor: Cursor, child: D}) {
   const context = React.useContext(ProjectionContext)
   return <span className="edgeLabel"><ProjectionScope context={childContext(context, {
     chooseID: () => props.cursor.label,
-    focusCursor: props.cursor,
-    registerRootEditorCommands: undefined })}>{props.child}</ProjectionScope></span>
+    focusCursor: props.cursor })}>{props.child}</ProjectionScope></span>
 }
 
 export function collapsible(defaultCollapsed: boolean, singleLine: boolean, render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D): D {
