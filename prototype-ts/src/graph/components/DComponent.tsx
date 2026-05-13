@@ -50,7 +50,7 @@ function clickedIDFromD(d: D): Maybe<ID> {
 
 function isSingleLine(d: D): boolean {
   return matchD(d, block => false, line => !line.children.find(child => !isSingleLine(child)), dText => true, dIdenticon => true, dList => dList.children.length <= 1 && !dList.children.find(child => !isSingleLine(child)),
-    descend => isSingleLine(descend.child), editorBehavior => isSingleLine(editorBehavior.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapsible => collapsible.singleLine, collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
+    descend => isSingleLine(descend.child), guidEditor => isSingleLine(guidEditor.child), supportsUnderselection => isSingleLine(supportsUnderselection.child), label => isSingleLine(label.child), collapsible => collapsible.singleLine, collapseToggle => true, button => true, placeholder => true, stringEditor => true, numberEditor => true) }
 
 export class DComponent extends React.Component<DComponentProps, DComponentState> {
   state: DComponentState = {}
@@ -99,7 +99,15 @@ export class DComponent extends React.Component<DComponentProps, DComponentState
         let insertionPoint = (i: number, label: string) => dList.insertionPoints[i]
           ? <ListInsertionEditorComponent key={`insertion${i}`} ref={addChild} insertionPoint={dList.insertionPoints[i]} label={label} active={activeListInsertion === i} setActive={active => setActiveListInsertion(i, active)} scrollParent={this.props.scrollParent} runE={this.props.runE} />
           : <span key={`insertion${i}`}>{label}</span>
-        let child = (d: D, i: number, depth: number) => <DComponent key={`child${i}`} ref={addChild} d={d} depth={depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={this.props.editorCommands} />
+        let child = (d: D, i: number, depth: number) => {
+          let insertionIndex = i + 1
+          let editorCommands = dList.insertionPoints[insertionIndex]
+            ? mergeEditorCommands(this.props.editorCommands, {keyDown: e => e.key === "," && (e.metaKey || !dList.insertionPoints[insertionIndex].requiresMeta) ? () => {
+                e.preventDefault()
+                e.stopPropagation()
+                setActiveListInsertion(insertionIndex, true) } : nothing})
+            : this.props.editorCommands
+          return <DComponent key={`child${i}`} ref={addChild} d={d} depth={depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={editorCommands} /> }
         let activeItems = (depth: number) => {
           let items: React.ReactNode[] = []
           for (let i = 0; i <= dList.children.length; i++) {
@@ -131,7 +139,6 @@ export class DComponent extends React.Component<DComponentProps, DComponentState
       descend => {
         let classNames = ["descend", ...maybeMap([[descend.unmatching, "unmatching"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
         return <span className={classNames.join(" ")} ref={span => { if (span) attachEditorDescend(span, descend) }}><DComponent ref={addChild} d={descend.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={descend.edgeContext} editorCommands={this.props.editorCommands} /></span> },
-      editorBehavior => <DComponent ref={addChild} d={editorBehavior.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={mergeEditorCommands(this.props.editorCommands, editorBehavior.editorCommands)} />,
       guidEditor => <GuidEditorComponent ref={addChild} guidEditor={guidEditor} editorCommands={activeEditorCommands(this.props.edgeContext, this.props.editorCommands, guidEditor.editorCommands)} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} />,
       supportsUnderselection => <SupportsUnderselectionComponent ref={addChild} supportsUnderselection={supportsUnderselection} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={this.props.editorCommands} />,
       label => <span className="edgeLabel"><DComponent ref={addChild} d={label.child} depth={this.props.depth} scrollParent={this.props.scrollParent} runE={this.props.runE} edgeContext={this.props.edgeContext} editorCommands={this.props.editorCommands} /></span>,
@@ -258,7 +265,7 @@ class GuidEditorComponent extends React.Component<{guidEditor: GuidEditor, edito
       tabIndex={0}
       onMouseDown={e => { if (!(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) e.preventDefault() }}
       onClick={e => { e.stopPropagation(); focus(e.currentTarget) }}
-      onKeyDown={e => mapMaybe(editorKeyDownAction(this.editorCommands(), e), action => this.props.runE(action))}
+      onKeyDown={e => { if (e.target === e.currentTarget) mapMaybe(editorKeyDownAction(this.editorCommands(), e), action => this.props.runE(action)) }}
       ref={span => { this.span = span }} >
       <DComponent
         ref={dComponent => { this.child = dComponent || nothing }}

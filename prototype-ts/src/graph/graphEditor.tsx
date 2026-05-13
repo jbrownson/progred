@@ -207,7 +207,7 @@ function deleteGraphSelection(): boolean {
 function clearGraphHighlightCallbacks(eCallbacks: ECallbacks): ECallbacks {
   return composeECallbacks(eCallbacks, {...noopECallbacks, willSet: () => { graphHighlight = nothing }, willDelete: () => { graphHighlight = nothing }}) }
 
-const graphKeyHandler: KeyHandler = (e, _rootDescend, _viewsDescend, runE) => {
+const graphKeyHandler: KeyHandler = (e, runE) => {
   switch (e.key) {
     case "Delete":
     case "Backspace":
@@ -393,7 +393,7 @@ export class RootComponent extends React.Component<{}, {}> {
 window.onclick = () => { if (rootComponent) rootComponent.updateMenuState() }
 window.addEventListener("focusin", () => { if (rootComponent) { rootComponent.forceUpdate(); rootComponent.updateMenuState() } })
 window.addEventListener("focusout", () => { if (rootComponent) rootComponent.updateMenuState() })
-window.onkeydown = e => { if (rootComponent) keyHandler(e, rootComponent.rootDescend, rootComponent.viewsDescend, f => rootComponent.runE(f)) }
+window.onkeydown = e => { if (rootComponent) keyHandler(e, f => rootComponent.runE(f)) }
 progred.onMenuAction(action => { if (rootComponent) handleMenuAction(action) })
 
 export let rootComponent: RootComponent

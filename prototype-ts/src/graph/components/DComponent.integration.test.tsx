@@ -177,7 +177,7 @@ class EditorHarness {
   globalKey(key: string, options: KeyboardEventInit = {}) {
     const event = new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true, ...options})
     withEnvironment(this.environment, () => act(() =>
-      defaultKeyHandler(event, this.rootDescend, undefined, f => {
+      defaultKeyHandler(event, f => {
         const result = this.runWithUndoCallbacks(f)
         this.render()
         return result })))
@@ -634,6 +634,41 @@ describe("DComponent editor integration", () => {
     harness.unmount()
   })
 
+  it("uses comma without meta for list insertion after a GUID item", () => {
+    const harness = rootHarness()
+
+    harness.key("[")
+    harness.typeAndEnter("random node")
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    harness.activeKey(",")
+
+    expect(listLength(harness, list!)).toBe(1)
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.typeAndEnter("second")
+
+    expect(listLength(harness, list!)).toBe(2)
+
+    harness.unmount()
+  })
+
+  it("does not use comma without meta for list insertion after a string item", () => {
+    const harness = rootHarness()
+
+    harness.key("[")
+    harness.typeAndEnter("first")
+    const list = harness.get(harness.environment.rootViews.id, rootField.id)
+    expect(harness.run(() => focusEditorForCursor(harness.container, _childCursor(rootCursor(harness.environment), list!, headField.id)))).toBe(true)
+    expect(document.activeElement).toBe(harness.container.querySelector("textarea"))
+    const stringEditor = document.activeElement
+    harness.activeKey(",")
+
+    expect(listLength(harness, list!)).toBe(1)
+    expect(document.activeElement).toBe(stringEditor)
+
+    harness.unmount()
+  })
+
   it("deletes a middle list item with the global Delete key", () => {
     const harness = rootHarness()
 
@@ -654,14 +689,18 @@ describe("DComponent editor integration", () => {
     harness.unmount()
   })
 
-  it("undoes and redoes inserting an empty list item", () => {
+  it("does not edit a list until an insertion point is committed", () => {
     const harness = rootHarness()
 
     harness.key("[")
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
     harness.activeKey(",", {metaKey: true})
-    const inserted = harness.activeCursor().parent
+    expect(listLength(harness, list!)).toBe(1)
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.typeAndEnter("second")
+    const inserted = harness.get(list!, tailField.id)
     expect(listLength(harness, list!)).toBe(2)
 
     harness.undo()
@@ -885,8 +924,8 @@ describe("DComponent editor integration", () => {
     const copy = copyActive(harness)
 
     harness.activeKey(",", {metaKey: true})
-    const callList = harness.activeCursor().parent
     harness.typeAndEnter("new Function Call")
+    const callList = harness.get(statements!, tailField.id)
     const call = harness.get(callList!, headField.id)
     pasteReferenceIntoActive(harness, copy)
 
@@ -915,8 +954,8 @@ describe("DComponent editor integration", () => {
     const copy = copyActive(harness)
 
     harness.activeKey(",", {metaKey: true})
-    const copyList = harness.activeCursor().parent
     const pasted = pasteStructureIntoActive(harness, copy)
+    const copyList = harness.get(statements!, tailField.id)
     const pastedParameters = harness.get(pasted, parametersField.id)
     const pastedParameter = harness.get(pastedParameters!, headField.id)
 
@@ -1176,8 +1215,9 @@ describe("DComponent editor integration", () => {
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
     harness.activeKey(",", {metaKey: true})
-    const inserted = harness.activeCursor().parent
+    expect(listLength(harness, list!)).toBe(1)
     harness.typeAndEnter("second")
+    const inserted = harness.get(list!, tailField.id)
 
     expect(stringFromID(harness.get(list!, headField.id)!)).toBe("first")
     expect(stringFromID(harness.get(inserted!, headField.id)!)).toBe("second")
@@ -1193,8 +1233,9 @@ describe("DComponent editor integration", () => {
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.rootViews.id, rootField.id)
     harness.activeKey(",", {metaKey: true})
-    const inserted = harness.activeCursor().parent
+    expect(listLength(harness, list!)).toBe(1)
     harness.typeAndEnter("second")
+    const inserted = harness.get(list!, tailField.id)
 
     expect(listStrings(harness, list!)).toEqual(["first", "second"])
     expect(harness.get(list!, tailField.id)).toBe(inserted)
@@ -1449,10 +1490,9 @@ describe("DComponent editor integration", () => {
 
     harness.arrowLeft(8, topStatements!, headField.id)
     harness.activeKey(",", {metaKey: true})
-    const topCallList = harness.activeCursor().parent
-    expect(topCallList).not.toBe(undefined)
-
     harness.typeAndEnter("new Function Call")
+    const topCallList = harness.get(topStatements!, tailField.id)
+    expect(topCallList).not.toBe(undefined)
     const topCall = harness.get(topCallList!, headField.id)
     expect(topCall).not.toBe(undefined)
 

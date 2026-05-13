@@ -39,6 +39,7 @@ describe("renderList", () => {
 
       expect(dList?.children.length).toBe(1)
       expect(findD(dList!.children[0], (d): d is DText => d instanceof DText)?.string).toBe("item")
+      expect(dList?.insertionPoints[1].requiresMeta).toBe(true)
     })
   })
 

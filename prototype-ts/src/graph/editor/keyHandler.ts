@@ -1,16 +1,15 @@
-import { maybe, Maybe, nothing } from "../../lib/Maybe"
-import { Descend } from "../render/D"
+import { maybe, nothing } from "../../lib/Maybe"
 import { commitToActiveElement, editorCommandsForActiveElement, editorKeyDownAction } from "./EditorCommands"
 import { focusChildEditor, focusFirstEditor, focusNextTabStop, focusParentEditor, focusSiblingEditor } from "./EditorFocus"
 
-export type KeyHandler = (e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A) => boolean
+export type KeyHandler = (e: KeyboardEvent, runE: <A>(f: () => A) => A) => boolean
 
 function untilTrue(...fs: (() => boolean)[]): boolean { return fs.length > 0 && (fs[0]() || untilTrue(...fs.slice(1))) }
 
 export function composedKeyHandler(...keyHandlers: KeyHandler[]): KeyHandler {
-  return (e, rootDescend, viewsDescend, runE) => untilTrue(...keyHandlers.map(keyHandler => () => keyHandler(e, rootDescend, viewsDescend, runE))) }
+  return (e, runE) => untilTrue(...keyHandlers.map(keyHandler => () => keyHandler(e, runE))) }
 
-export function deleteKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
+export function deleteKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
     case "Delete":
       return runE(() => {
@@ -28,13 +27,13 @@ export function deleteKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDe
         return committed })}
   return false }
 
-export function activeEditorKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
+export function activeEditorKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): boolean {
   let keyDownAction = editorKeyDownAction(editorCommandsForActiveElement(), e)
   return maybe(keyDownAction, () => false, action => runE(() => {
     action()
     return true })) }
 
-export function arrowNavKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
+export function arrowNavKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
     case "ArrowLeft":
       e.preventDefault()
@@ -50,7 +49,7 @@ export function arrowNavKeyHandler(e: KeyboardEvent, rootDescend: Descend, views
       return runE(() => focusSiblingEditor(-1))}
   return false }
 
-export function navKeyHandler(e: KeyboardEvent, rootDescend: Descend, viewsDescend: Maybe<Descend>, runE: <A>(f: () => A) => A): boolean {
+export function navKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): boolean {
   switch (e.key) {
     case "Tab": {
       e.preventDefault()
