@@ -7,6 +7,7 @@ export type Commit = (id: Maybe<ID>) => void
 export type EdgeContext = {
   commit?: Commit
   expectedType?: Maybe<Type>
+  fieldName?: Maybe<string>
 }
 export type EditorKeyDownEvent = {
   key: string,

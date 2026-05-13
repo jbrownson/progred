@@ -39,6 +39,14 @@ describe("defaultRender", () => {
     })
   })
 
+  it("uses the edge context field name for placeholder labels", () => {
+    withTestEnvironment(() => {
+      const d = defaultRender(cursor(), undefined, {fieldName: "root"})
+
+      expect((d.props as any).placeholderEditor.name).toBe("root")
+    })
+  })
+
   it("wraps writable document GUIDs in a GuidEditor and SupportsUnderselection", () => {
     withTestEnvironment(() => {
       const c = cursor()

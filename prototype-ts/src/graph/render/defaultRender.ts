@@ -8,7 +8,7 @@ import { block, dIdenticon, dList, dText, line, type ListInsertionPoint } from "
 import { collapsible, collapseToggle } from "./ProjectionControls"
 import { guidEditor, label as dLabel, numberEditor, placeholderEditor, stringEditor, supportsUnderselection } from "./ProjectionEditors"
 import { _get, edges, environment, set, Source, SourceID, SourceType } from "../Environment"
-import { Ctor, ctorField, EmptyList, GUIDEmptyList, Field, GUIDNonemptyList, HasID, headField, List, listFromID, ListType, matchList, nameField, NonemptyList, tailField } from "../graph"
+import { Ctor, ctorField, EmptyList, GUIDEmptyList, GUIDNonemptyList, HasID, headField, List, listFromID, ListType, matchList, nameField, NonemptyList, tailField } from "../graph"
 import { GUID, guidFromID, ID, matchID, numberFromNID, SID } from "../model/ID"
 import { stringFromID } from "../model/ID"
 import { alwaysFail, descend, Render } from "./R"
@@ -31,7 +31,7 @@ export const defaultRender = tryFirst(renderList(), _defaultRender)
 
 function renderNothing(cursor: Cursor, edgeContext: EdgeContext): D {
   let entries = buildEntries(edgeContext.expectedType, id => mapMaybe(edgeContext.commit, commit => commit(id())))
-  return placeholderEditor(fromMaybe(bindMaybe(Field.fromID(cursor.label), field => field.name), () => "[unnamed]"), entries, nothing, placeholderEditorCommands(cursor)) }
+  return placeholderEditor(fromMaybe(edgeContext.fieldName, () => "[unnamed]"), entries, nothing, placeholderEditorCommands(cursor)) }
 
 export function editorCommands(cursor: Cursor, id: ID): EditorCommands {
   return {
