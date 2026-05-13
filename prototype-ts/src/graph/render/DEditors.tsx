@@ -14,33 +14,33 @@ import { NumberEditorComponent } from "../components/NumberEditorComponent"
 import { PlaceholderEditorComponent } from "../components/PlaceholderEditorComponent"
 import { PlaceholderInputComponent } from "../components/PlaceholderInputComponent"
 import { StringEditorComponent } from "../components/StringEditorComponent"
-import { activeEditorCommands, childContext, D, isSingleLine, mergeEditorCommands, ProjectionContext, projectionElement, ProjectionScope } from "./ProjectionContext"
-import { indentWidth } from "./ProjectionLayout"
+import { activeEditorCommands, childContext, D, isSingleLine, mergeEditorCommands, DContext, dElement, DScope } from "./DContext"
+import { indentWidth } from "./DLayout"
 
 export function descendElement(cursor: Cursor, child: D, unmatching: boolean, edgeContext: EdgeContext = {}): D {
-  return projectionElement(DescendComponent, {cursor, child, unmatching, edgeContext}, "descend", isSingleLine(child))
+  return dElement(DescendComponent, {cursor, child, unmatching, edgeContext}, "descend", isSingleLine(child))
 }
 
 function DescendComponent(props: {cursor: Cursor, child: D, unmatching: boolean, edgeContext: EdgeContext}) {
-  const context = React.useContext(ProjectionContext)
+  const context = React.useContext(DContext)
   const descend = React.useMemo(() => ({cursor: props.cursor, edgeContext: props.edgeContext, unmatching: props.unmatching}), [props.cursor, props.edgeContext, props.unmatching])
   let classNames = ["descend", ...maybeMap([[props.unmatching, "unmatching"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
   return <span className={classNames.join(" ")} ref={span => { if (span) attachEditorDescend(span, descend) }}>
-    <ProjectionScope context={childContext(context, {
+    <DScope context={childContext(context, {
       edgeContext: props.edgeContext,
       chooseID: () => _get(props.cursor.parent, props.cursor.label),
       focusCursor: props.cursor,
       descend
-    })}>{props.child}</ProjectionScope>
+    })}>{props.child}</DScope>
   </span>
 }
 
 export function guidEditor(cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands = {}): D {
-  return projectionElement(GuidEditorComponent, {cursor, id, child, focusWhenSelected, editorCommands, rootEditorCommands}, "guidEditor", isSingleLine(child))
+  return dElement(GuidEditorComponent, {cursor, id, child, focusWhenSelected, editorCommands, rootEditorCommands}, "guidEditor", isSingleLine(child))
 }
 
 function GuidEditorComponent(props: {cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands}) {
-  const context = React.useContext(ProjectionContext)
+  const context = React.useContext(DContext)
   const span = React.useRef<HTMLSpanElement | null>(null)
   const editorCommands = () => mergeEditorCommands(activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands), props.rootEditorCommands)
   let childEditorCommands = {...activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands), commit: undefined}
@@ -60,9 +60,9 @@ function GuidEditorComponent(props: {cursor: Cursor, id: GUID, child: D, focusWh
     onClick={e => { e.stopPropagation(); focus(e.currentTarget) }}
     onKeyDown={e => { if (e.target === e.currentTarget) mapMaybe(editorKeyDownAction(editorCommands(), e), action => context.runE(action)) }}
     ref={span} >
-    <ProjectionScope context={childContext(context, {
+    <DScope context={childContext(context, {
       edgeContext: undefined,
-      editorCommands: childEditorCommands })}>{props.child}</ProjectionScope>
+      editorCommands: childEditorCommands })}>{props.child}</DScope>
   </span>
 }
 
@@ -70,11 +70,11 @@ export type PlaceholderEditorState = {value?: string, itemSelection?: number, en
 export type PlaceholderEditorActiveState = {entries: (needle: string) => {a: Entry, matches: Match[]}[], editorState: PlaceholderEditorState}
 export type PlaceholderEditor = {name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>, editorCommands: EditorCommands}
 export function placeholderEditor(name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>, editorCommands: EditorCommands): D {
-  return projectionElement(PlaceholderEditorProjectionComponent, {placeholderEditor: {name, entries, activeState, editorCommands}}, "placeholderEditor", true)
+  return dElement(PlaceholderEditorDComponent, {placeholderEditor: {name, entries, activeState, editorCommands}}, "placeholderEditor", true)
 }
 
-function PlaceholderEditorProjectionComponent(props: {placeholderEditor: PlaceholderEditor}) {
-  const context = React.useContext(ProjectionContext)
+function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEditor}) {
+  const context = React.useContext(DContext)
   return <PlaceholderEditorComponent
     placeholderEditor={props.placeholderEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.placeholderEditor.editorCommands)}
@@ -86,11 +86,11 @@ function PlaceholderEditorProjectionComponent(props: {placeholderEditor: Placeho
 
 export type StringEditor = {id: SID, string: string, writable: boolean, editorCommands: EditorCommands}
 export function stringEditor(id: SID, string: string, writable: boolean, editorCommands: EditorCommands): D {
-  return projectionElement(StringEditorProjectionComponent, {stringEditor: {id, string, writable, editorCommands}}, "stringEditor", true)
+  return dElement(StringEditorDComponent, {stringEditor: {id, string, writable, editorCommands}}, "stringEditor", true)
 }
 
-function StringEditorProjectionComponent(props: {stringEditor: StringEditor}) {
-  const context = React.useContext(ProjectionContext)
+function StringEditorDComponent(props: {stringEditor: StringEditor}) {
+  const context = React.useContext(DContext)
   return <StringEditorComponent
     stringEditor={props.stringEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.stringEditor.editorCommands)}
@@ -101,11 +101,11 @@ function StringEditorProjectionComponent(props: {stringEditor: StringEditor}) {
 
 export type NumberEditor = {id: NID, number: number, writable: boolean, editorCommands: EditorCommands}
 export function numberEditor(id: NID, number: number, writable: boolean, editorCommands: EditorCommands): D {
-  return projectionElement(NumberEditorProjectionComponent, {numberEditor: {id, number, writable, editorCommands}}, "numberEditor", true)
+  return dElement(NumberEditorDComponent, {numberEditor: {id, number, writable, editorCommands}}, "numberEditor", true)
 }
 
-function NumberEditorProjectionComponent(props: {numberEditor: NumberEditor}) {
-  const context = React.useContext(ProjectionContext)
+function NumberEditorDComponent(props: {numberEditor: NumberEditor}) {
+  const context = React.useContext(DContext)
   return <NumberEditorComponent
     numberEditor={props.numberEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.numberEditor.editorCommands)}
@@ -115,13 +115,13 @@ function NumberEditorProjectionComponent(props: {numberEditor: NumberEditor}) {
 }
 
 export function supportsUnderselection(cursor: Cursor, id: ID, child: D, missingField: (label: ID) => D): D {
-  return projectionElement(SupportsUnderselectionComponent, {cursor, id, child, missingField, environment: environment()}, "supportsUnderselection", isSingleLine(child))
+  return dElement(SupportsUnderselectionComponent, {cursor, id, child, missingField, environment: environment()}, "supportsUnderselection", isSingleLine(child))
 }
 
 type SupportsUnderselectionComponentState = {pendingEdgeLabel: boolean, missingLabel?: ID, focusMissingLabel?: boolean}
 
 function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: D, missingField: (label: ID) => D, environment: Environment}) {
-  const context = React.useContext(ProjectionContext)
+  const context = React.useContext(DContext)
   const [state, setState] = React.useState<SupportsUnderselectionComponentState>({pendingEdgeLabel: false})
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
   const span = React.useRef<HTMLSpanElement | null>(null)
@@ -142,7 +142,7 @@ function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: 
         focusEditorForCursor(span.current!, _childCursor(props.cursor, props.id, label))
         setState(state => ({...state, focusMissingLabel: false})) }) })
   return <span ref={span}>
-    <ProjectionScope context={childContext(context, {editorCommands})}>{props.child}</ProjectionScope>
+    <DScope context={childContext(context, {editorCommands})}>{props.child}</DScope>
     {state.pendingEdgeLabel
       ? <span>
         <br />
@@ -170,17 +170,17 @@ function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: 
       </span>
       : null}
     {mapMaybe(state.missingLabel, label =>
-      <ProjectionScope key="missingLabel" context={context}>{withEnvironment(props.environment, () => props.missingField(label))}</ProjectionScope>)}
+      <DScope key="missingLabel" context={context}>{withEnvironment(props.environment, () => props.missingField(label))}</DScope>)}
   </span>
 }
 
 export function label(cursor: Cursor, child: D): D {
-  return projectionElement(LabelComponent, {cursor, child}, "label", isSingleLine(child))
+  return dElement(LabelComponent, {cursor, child}, "label", isSingleLine(child))
 }
 
 function LabelComponent(props: {cursor: Cursor, child: D}) {
-  const context = React.useContext(ProjectionContext)
-  return <span className="edgeLabel"><ProjectionScope context={childContext(context, {
+  const context = React.useContext(DContext)
+  return <span className="edgeLabel"><DScope context={childContext(context, {
     chooseID: () => props.cursor.label,
-    focusCursor: props.cursor })}>{props.child}</ProjectionScope></span>
+    focusCursor: props.cursor })}>{props.child}</DScope></span>
 }

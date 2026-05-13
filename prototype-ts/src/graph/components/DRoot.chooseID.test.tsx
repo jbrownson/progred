@@ -8,7 +8,7 @@ import { Environment, withEnvironment } from "../Environment"
 import type { ID } from "../model/ID"
 import { GUIDMap } from "../model/GUIDMap"
 import { Cursor } from "../cursor/Cursor"
-import { descendElement, dText, label, ProjectionRoot } from "../render/Projection"
+import { descendElement, dText, label, DRoot } from "../render/D"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -34,7 +34,7 @@ function textElement(container: HTMLElement, text: string) {
   return element as HTMLElement
 }
 
-describe("ProjectionRoot choose ID", () => {
+describe("DRoot choose ID", () => {
   it("chooses an edge label through the focused editor commands", () => {
     let committed: ID[] = []
     focusedInput(committed)
@@ -46,7 +46,7 @@ describe("ProjectionRoot choose ID", () => {
     let cursor = new Cursor(undefined, "guid-parent", labelID)
 
     act(() => root.render(
-      <ProjectionRoot
+      <DRoot
         d={label(cursor, dText("edge label"))}
         depth={0}
         scrollParent={() => null}
@@ -79,7 +79,7 @@ describe("ProjectionRoot choose ID", () => {
     withEnvironment(environment, () => {
       let cursor = new Cursor(undefined, parent, label)
       act(() => root.render(
-        <ProjectionRoot
+        <DRoot
           d={descendElement(cursor, dText("node"), false)}
           depth={0}
           scrollParent={() => null}

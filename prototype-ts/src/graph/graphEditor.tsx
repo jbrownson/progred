@@ -4,8 +4,9 @@ import { assert } from "../lib/assert"
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
 import { Cursor } from "./cursor/Cursor"
-import type { D } from "./render/ProjectionContext"
-import { createProjection, ProjectionRoot } from "./render/ProjectionRoot"
+import type { D } from "./render/D"
+import { DRoot } from "./render/DRoot"
+import { createProjection } from "./render/project"
 import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
@@ -380,7 +381,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
       <div ref={element => { leftPanel.current = element }} className={hasSidebar ? "leftPanel" : ""}
       style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "auto"}}
       onScroll={() => notifyScrollListeners()} >
-      <div className="doc"><ProjectionRoot
+      <div className="doc"><DRoot
         d={rootDescend}
         depth={0}
         scrollParent={() => leftPanel.current}
@@ -399,7 +400,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
           {maybe(viewDescend, () => null, viewDescend =>
             <div ref={element => { rightPanel.current = element }} className="viewPanel" style={{height: showGraph.current ? "50%" : "100%", overflow: "auto"}}
               onScroll={() => notifyScrollListeners()} >
-              <div className="view"><ProjectionRoot
+              <div className="view"><DRoot
                 d={viewDescend}
                 depth={0}
                 scrollParent={() => rightPanel.current}

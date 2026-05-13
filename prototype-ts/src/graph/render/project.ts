@@ -1,14 +1,12 @@
-import * as React from "react"
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
-import { EdgeContext, EditorCommands } from "../editor/EditorCommands"
+import { EdgeContext } from "../editor/EditorCommands"
 import { edgeContextFromCursor } from "../editor/edgeContextFromCursor"
 import { environment, get, setOrDelete, SourceType } from "../Environment"
 import { ID } from "../model/ID"
 import { workspaceRootField, workspaceViewField } from "../workspace"
 import { defaultRender, tryFirst } from "./defaultRender"
-import { descendElement } from "./ProjectionEditors"
-import { D, ProjectionContext } from "./ProjectionContext"
+import { descendElement } from "./DEditors"
 import { alwaysFail, Render } from "./R"
 
 export function createProjection(r: Render = alwaysFail) {
@@ -25,14 +23,4 @@ export function createProjection(r: Render = alwaysFail) {
     let viewEdgeContext = {...edgeContextFromCursor(viewCursor), fieldName: "view"}
     return descendElement(viewCursor, environment().defaultRender(viewCursor, viewSourceID, viewEdgeContext), false, viewEdgeContext) })
   return {rootDescend, viewDescend}
-}
-
-export function ProjectionRoot(props: {d: D, depth: number, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, edgeContext?: EdgeContext, editorCommands?: EditorCommands}) {
-  return <ProjectionContext.Provider value={{
-    depth: props.depth,
-    scrollParent: props.scrollParent,
-    runE: props.runE,
-    edgeContext: props.edgeContext,
-    editorCommands: props.editorCommands
-  }}>{props.d}</ProjectionContext.Provider>
 }

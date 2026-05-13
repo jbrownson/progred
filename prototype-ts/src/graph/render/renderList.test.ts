@@ -5,7 +5,7 @@ import { SourceType } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, headField, tailField } from "../graph"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
-import { dText, projectionKind, type D } from "./Projection"
+import { dText, dKind, type D } from "./D"
 import { renderList } from "./defaultRender"
 
 function cursor() {
@@ -15,7 +15,7 @@ function cursor() {
 function childDs(d: D): D[] {
   const props = d.props as Record<string, unknown>
   return [
-    ...projectionKind(d) === "collapsible" ? [(props.render as (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D)(false, () => {})] : [],
+    ...dKind(d) === "collapsible" ? [(props.render as (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D)(false, () => {})] : [],
     ...Object.values(props).flatMap(value =>
     Array.isArray(value)
       ? value.filter(React.isValidElement) as D[]
@@ -31,10 +31,10 @@ describe("renderList", () => {
     withTestEnvironment(() => {
       const list = GUIDEmptyList.new()
       const d = renderList()(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const listD = findD(d!, d => projectionKind(d) === "list")
+      const listD = findD(d!, d => dKind(d) === "list")
 
-      expect(findD(d!, d => projectionKind(d) === "supportsUnderselection")).not.toBe(undefined)
-      expect((findD(d!, d => projectionKind(d) === "guidEditor")?.props as any)?.id).toBe(list.id)
+      expect(findD(d!, d => dKind(d) === "supportsUnderselection")).not.toBe(undefined)
+      expect((findD(d!, d => dKind(d) === "guidEditor")?.props as any)?.id).toBe(list.id)
       expect((listD?.props as any)?.opening).toBe("[")
       expect((listD?.props as any)?.children).toEqual([])
       expect((listD?.props as any)?.closing).toBe("]")
@@ -46,11 +46,11 @@ describe("renderList", () => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
       const d = renderList("[", "]", ",", () => dText("item"))(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const listD = findD(d!, d => projectionKind(d) === "list")
+      const listD = findD(d!, d => dKind(d) === "list")
       const children = (listD?.props as any)?.children as D[]
 
       expect(children.length).toBe(1)
-      expect((findD(children[0], d => projectionKind(d) === "text")?.props as any)?.string).toBe("item")
+      expect((findD(children[0], d => dKind(d) === "text")?.props as any)?.string).toBe("item")
       expect((listD?.props as any)?.insertionPoints[1].requiresMeta).toBe(true)
     })
   })
@@ -70,8 +70,8 @@ describe("renderList", () => {
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
 
       const d = renderList()(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const collapsible = findD(d!, d => projectionKind(d) === "collapsible")
-      const collapsedList = findD((collapsible!.props as any).render(true, () => {}), d => projectionKind(d) === "list")
+      const collapsible = findD(d!, d => dKind(d) === "collapsible")
+      const collapsedList = findD((collapsible!.props as any).render(true, () => {}), d => dKind(d) === "list")
 
       expect((collapsible?.props as any)?.defaultCollapsed).toBe(false)
       expect((collapsedList?.props as any)?.children).toEqual([])
@@ -85,7 +85,7 @@ describe("renderList", () => {
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
       const c = cursor()
       const d = renderList()(c, {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const listD = findD(d!, d => projectionKind(d) === "list")
+      const listD = findD(d!, d => dKind(d) === "list")
 
       ;(listD?.props as any)?.insertionPoints[1].editorCommands.commit?.(sidFromString("b"))
 

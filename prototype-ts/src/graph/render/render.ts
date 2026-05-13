@@ -1,5 +1,5 @@
 import { bindMaybe, Maybe, nothing } from "../../lib/Maybe"
-import type { D } from "./ProjectionContext"
+import type { D } from "./DContext"
 import { _get } from "../Environment"
 import { Ctor, ctorField } from "../graph"
 import { ID } from "../model/ID"

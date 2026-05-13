@@ -4,8 +4,8 @@ import { Environment, SourceID, Workspace, withEnvironment } from "./Environment
 import type { GUID, ID } from "./model/ID"
 import type { IDMap } from "./model/IDMap"
 import { GUIDMap } from "./model/GUIDMap"
-import type { D } from "./render/ProjectionContext"
-import { dText } from "./render/ProjectionLayout"
+import type { D } from "./render/D"
+import { dText } from "./render/DLayout"
 import { Cursor } from "./cursor/Cursor"
 import type { Maybe } from "../lib/Maybe"
 

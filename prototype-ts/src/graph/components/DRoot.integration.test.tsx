@@ -13,7 +13,8 @@ import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardT
 import { _get, Environment, set, withEnvironment } from "../Environment"
 import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
-import { createProjection, ProjectionRoot, type D } from "../render/Projection"
+import { DRoot, type D } from "../render/D"
+import { createProjection } from "../render/project"
 import { defaultRender, tryFirst } from "../render/defaultRender"
 import { renderIfApp } from "../renderIfs"
 import { renderFromRender } from "../render/renderFromRender"
@@ -72,7 +73,7 @@ class EditorHarness {
     withEnvironment(this.environment, () => {
       const {rootDescend} = createProjection()
       this.rootDescend = rootDescend
-      flushSync(() => this.root.render(<ProjectionRoot
+      flushSync(() => this.root.render(<DRoot
           d={rootDescend}
           depth={0}
           scrollParent={() => this.container}
@@ -367,7 +368,7 @@ function testLibrary() {
       [functionDeclarationFields, new Map<ID, ID>([[ctorField.id, emptyListCtor.id]])] ])) }]])
 }
 
-describe("ProjectionRoot editor integration", () => {
+describe("DRoot editor integration", () => {
   it("commits a default-rendered root placeholder by typing and pressing Enter", () => {
     const harness = rootHarness()
 
@@ -796,7 +797,7 @@ describe("ProjectionRoot editor integration", () => {
     harness.unmount()
   })
 
-  it("keeps editor commands attached across projection rerenders", () => {
+  it("keeps editor commands attached across D rerenders", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("copy me")
     const harness = new EditorHarness(environment, rootCursor(environment))

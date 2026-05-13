@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { Cursor } from "../cursor/Cursor"
 import { sidFromString } from "../model/ID"
-import { block, descendElement, dText, isSingleLine, label, line, projectionKind } from "./Projection"
+import { block, descendElement, dText, isSingleLine, label, line, dKind } from "./D"
 import { descend } from "./R"
 import { withTestEnvironment } from "../testHelpers"
 
@@ -10,16 +10,16 @@ function cursor() {
 }
 
 describe("D", () => {
-  it("marks line and block layout in React projection metadata", () => {
+  it("marks line and block layout in React D metadata", () => {
     expect(isSingleLine(line(dText("lhs"), dText("rhs")))).toBe(true)
     expect(isSingleLine(block(line(dText("lhs"), dText("rhs"))))).toBe(false)
   })
 
-  it("keeps projection kinds on wrappers", () => {
+  it("keeps D kinds on wrappers", () => {
     const c = cursor()
 
-    expect(projectionKind(label(c, dText("x")))).toBe("label")
-    expect(projectionKind(descendElement(c, dText("x"), false))).toBe("descend")
+    expect(dKind(label(c, dText("x")))).toBe("label")
+    expect(dKind(descendElement(c, dText("x"), false))).toBe("descend")
   })
 
   it("renders descends immediately", () => {
@@ -29,7 +29,7 @@ describe("D", () => {
         renders++
         return dText("projected") })
 
-      expect(projectionKind(d)).toBe("descend")
+      expect(dKind(d)).toBe("descend")
       expect(renders).toBe(1)
     })
   })

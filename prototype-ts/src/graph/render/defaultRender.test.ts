@@ -5,7 +5,7 @@ import { SourceType } from "../Environment"
 import { nameField } from "../graph"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
-import { dText, projectionKind, type D } from "./Projection"
+import { dText, dKind, type D } from "./D"
 import { defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
 
 function cursor() {
@@ -15,7 +15,7 @@ function cursor() {
 function childDs(d: D): D[] {
   const props = d.props as Record<string, unknown>
   return [
-    ...projectionKind(d) === "collapsible" ? [(props.render as (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D)(false, () => {})] : [],
+    ...dKind(d) === "collapsible" ? [(props.render as (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D)(false, () => {})] : [],
     ...Object.values(props).flatMap(value =>
     Array.isArray(value)
       ? value.filter(React.isValidElement) as D[]
@@ -33,7 +33,7 @@ describe("defaultRender", () => {
 
       const d = defaultRender(c, undefined)
 
-      expect(projectionKind(d)).toBe("placeholderEditor")
+      expect(dKind(d)).toBe("placeholderEditor")
       expect((d.props as any).placeholderEditor.activeState).toBe(undefined)
       expect((d.props as any).placeholderEditor.entries("").length).toBeGreaterThan(0)
     })
@@ -52,8 +52,8 @@ describe("defaultRender", () => {
       const c = cursor()
       const d = renderDocumentGuidEditor(c, {id: "guid-node", source: {source: SourceType.DocumentType, guid: "guid-node"}}, dText("node"))
 
-      expect(projectionKind(d)).toBe("supportsUnderselection")
-      expect(projectionKind((d.props as any).child)).toBe("guidEditor")
+      expect(dKind(d)).toBe("supportsUnderselection")
+      expect(dKind((d.props as any).child)).toBe("guidEditor")
     })
   })
 
@@ -62,7 +62,7 @@ describe("defaultRender", () => {
       const c = cursor()
       const d = renderDocumentGuidEditor(c, {id: "guid-node", source: {source: SourceType.LibraryType}}, dText("node"))
 
-      expect(projectionKind(d)).toBe("text")
+      expect(dKind(d)).toBe("text")
     })
   })
 
@@ -74,7 +74,7 @@ describe("defaultRender", () => {
 
       const d = renderField(c, "guid-node", label)
 
-      expect(findD(d, d => projectionKind(d) === "text" && (d.props as any).string === "Label")).not.toBe(undefined)
+      expect(findD(d, d => dKind(d) === "text" && (d.props as any).string === "Label")).not.toBe(undefined)
     })
   })
 
@@ -84,7 +84,7 @@ describe("defaultRender", () => {
       const label = "guid-label"
       const d = renderField(c, "guid-node", label)
 
-      expect(findD(d, d => projectionKind(d) === "identicon" && (d.props as any).guid === label)).not.toBe(undefined)
+      expect(findD(d, d => dKind(d) === "identicon" && (d.props as any).guid === label)).not.toBe(undefined)
     })
   })
 
@@ -92,7 +92,7 @@ describe("defaultRender", () => {
     withTestEnvironment(() => {
       const d = renderString(cursor(), sidFromString("hello"), "hello", {source: SourceType.DocumentType, guid: "guid-holder"})
 
-      expect(projectionKind(d)).toBe("stringEditor")
+      expect(dKind(d)).toBe("stringEditor")
       expect((d.props as any).stringEditor.editorCommands.copy).not.toBe(undefined)
     })
   })

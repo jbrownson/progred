@@ -3,7 +3,7 @@ import { mapMaybe } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
 import { attachEditorCommands, detachEditorCommands, EditorCommands } from "../editor/EditorCommands"
 import { attachEditorFocus, detachEditorFocus } from "../editor/EditorFocus"
-import type { EditorDescend } from "../render/ProjectionContext"
+import type { EditorDescend } from "../render/DContext"
 
 export function useEditorAttachment<A extends HTMLElement>(
   ref: React.RefObject<A | null>,

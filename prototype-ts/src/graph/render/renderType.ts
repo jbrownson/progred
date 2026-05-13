@@ -1,4 +1,4 @@
-import { dText, line } from "./ProjectionLayout"
+import { dText, line } from "./DLayout"
 import { renderListCurly, renderListParens } from "./defaultRender"
 import { algebraicTypeCtor, atomicTypeCtor, ctorCtor } from "../graph"
 import { dispatch } from "./R"
