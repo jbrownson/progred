@@ -399,9 +399,12 @@ function NumberEditorProjectionComponent(props: {numberEditor: NumberEditor}) {
 
 export function createProjection(r: Render = alwaysFail) {
   let rootCursor = new Cursor(nothing, environment().rootViews.id, rootField.id)
+  let rootEdgeContext = {
+    commit: (id: Maybe<ID>) => environment().rootViews.setRoot(mapMaybe(id, id => ({id}))),
+    expectedType: nothing }
   let rootSourceID = mapMaybe(environment().rootViews.root, ({id}) =>
     ({id, source: {source: SourceType.DocumentType as SourceType.DocumentType, guid: environment().rootViews.id}}))
-  let rootDescend = descendElement(rootCursor, tryFirst(r, environment().defaultRender)(rootCursor, rootSourceID, edgeContextFromCursor(rootCursor)), false, edgeContextFromCursor(rootCursor))
+  let rootDescend = descendElement(rootCursor, tryFirst(r, environment().defaultRender)(rootCursor, rootSourceID, rootEdgeContext), false, rootEdgeContext)
   let viewsCursor = new Cursor(nothing, environment().rootViews.id, viewsField.id)
   let viewsDescend = mapMaybe(get(environment().rootViews.id, viewsField.id), viewsSourceID =>
     descendElement(viewsCursor, environment().defaultRender(viewsCursor, viewsSourceID, edgeContextFromCursor(viewsCursor)), false, edgeContextFromCursor(viewsCursor)))
