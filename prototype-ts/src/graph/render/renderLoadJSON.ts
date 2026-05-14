@@ -14,6 +14,8 @@ export const renderLoadJSON: Render = (cursor, sourceID, edgeContext) => bindMay
       let request = new XMLHttpRequest()
       request.open('GET', jsonURL, false)
       request.onload = () => {
-        if (request.status >= 200 && request.status < 400)
-          mapMaybe(jsonFromJSON(JSON.parse(request.responseText)), json => commit(json.id)) }
+        if (request.status >= 200 && request.status < 400) {
+          try {
+            mapMaybe(jsonFromJSON(JSON.parse(request.responseText)), json => commit(json.id))
+          } catch {} }}
       request.send() })))))))

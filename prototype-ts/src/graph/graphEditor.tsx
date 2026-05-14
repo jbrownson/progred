@@ -287,7 +287,8 @@ function _saveAs() {
   }) }
 
 function loadJson(json: string) {
-  mapMaybe(mapMaybe(JSON.parse(json), load), ({guidMap: _guidMap, root: _root}) => {
+  try {
+    let {guidMap: _guidMap, root: _root} = load(JSON.parse(json))
     undoStack = []
     redoStack = []
     guidMap = _guidMap
@@ -295,7 +296,8 @@ function loadJson(json: string) {
     rootComponent.initialFocusConsumed = false
     graphHighlight = nothing
     workspace = newWorkspace(_root)
-    rootComponent.forceUpdate() })}
+    rootComponent.forceUpdate()
+  } catch {}}
 
 export type RootComponent = {
   showGraph: boolean

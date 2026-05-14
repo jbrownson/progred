@@ -1,7 +1,7 @@
 import * as React from "react"
 import { altMaybe, Maybe } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
-import { EdgeContext, EditorCommands } from "../editor/EditorCommands"
+import { EdgeContext, EditorCommands, EditorKeyDownEvent } from "../editor/EditorCommands"
 import { ID } from "../model/ID"
 
 export type DKind = "block" | "line" | "text" | "identicon" | "list" | "descend" | "guidEditor" | "supportsUnderselection" | "label" | "collapsible" | "collapseToggle" | "button" | "placeholderEditor" | "stringEditor" | "numberEditor"
@@ -32,7 +32,7 @@ export const DContext = React.createContext<DContextValue>({
 })
 
 export function dElement<P>(component: React.ComponentType<P>, props: P, kind: DKind, singleLine: boolean): D {
-  return React.createElement(component, {...props, dKind: kind, dSingleLine: singleLine} as P & DProps) as D
+  return React.createElement(component as React.ComponentType<P & DProps>, {...props, dKind: kind, dSingleLine: singleLine} as P & DProps) as unknown as D
 }
 
 export function dKind(d: D): DKind { return d.props.dKind }
@@ -43,7 +43,7 @@ export function isBlock(d: D): boolean { return dKind(d) === "block" }
 
 export function mergeEditorCommands(parentCommands: Maybe<EditorCommands>, childCommands: EditorCommands): EditorCommands {
   let keyDown = parentCommands?.keyDown && childCommands.keyDown
-    ? e => altMaybe(childCommands.keyDown!(e), () => parentCommands.keyDown!(e))
+    ? (e: EditorKeyDownEvent) => altMaybe(childCommands.keyDown!(e), () => parentCommands.keyDown!(e))
     : childCommands.keyDown || parentCommands?.keyDown
   return {
     ...parentCommands,

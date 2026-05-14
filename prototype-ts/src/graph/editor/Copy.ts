@@ -59,10 +59,13 @@ function remappedID(id: ID, remap: Map<GUID, GUID>): ID {
   return matchID<ID>(id, guid => remap.get(guid) || guid, sid => sid, nid => nid) }
 
 export function idFromCopyJSON(json: SerializedGraph): Maybe<ID> {
-  return bindMaybe(mapMaybe(json, load), ({root, guidMap}) => {
+  try {
+    let {root, guidMap} = load(json)
     const remap = new Map<GUID, GUID>()
     Array.from(guidMap.map.keys()).forEach(guid => remap.set(guid, generateGUID()))
     Array.from(guidMap.map).forEach(([guid, edges]) =>
       Array.from(edges).forEach(([label, to]) =>
         set(remap.get(guid) as GUID, remappedID(label, remap), remappedID(to, remap))))
-    return mapMaybe(root, root => remappedID(root, remap)) }) }
+    return mapMaybe(root, root => remappedID(root, remap))
+  } catch {
+    return undefined }}

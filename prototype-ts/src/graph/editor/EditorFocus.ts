@@ -44,7 +44,7 @@ function parentDescendElement(element: HTMLElement): Maybe<HTMLElement> {
   return nothing }
 
 function descendElementForDescend(element: Element, descend: EditorDescend): Maybe<HTMLElement> {
-  for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement)
+  for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement || nothing)
     if (editorDescendForElement(current) === descend) return current
   return nothing }
 
@@ -120,7 +120,7 @@ export function attachEditorDescend(element: HTMLElement, descend: EditorDescend
 }
 
 export function editorFocusForActiveElement(): Maybe<EditorFocus> {
-  return editorFocusForElement(document.activeElement)
+  return editorFocusForElement(document.activeElement || nothing)
 }
 
 export function focusEditorForCursor(root: HTMLElement, cursor: Cursor): boolean {

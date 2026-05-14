@@ -15,7 +15,7 @@ export type EditorKeyDownEvent = {
   ctrlKey: boolean,
   altKey: boolean,
   shiftKey: boolean,
-  target: EventTarget,
+  target: EventTarget | null,
   preventDefault: () => void,
   stopPropagation: () => void,
   commit?: Commit }
@@ -34,7 +34,7 @@ type KeyDownEvent = {
   ctrlKey: boolean,
   altKey: boolean,
   shiftKey: boolean,
-  target: EventTarget,
+  target: EventTarget | null,
   preventDefault: () => void,
   stopPropagation: () => void }
 

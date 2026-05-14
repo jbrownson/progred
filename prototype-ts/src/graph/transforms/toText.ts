@@ -15,7 +15,7 @@ function fFromD(d: D, toText: () => ToText): Maybe<(id: ID, depth: number) => Ma
     line => mapMaybe(bindMaybe(line.children, children => sequenceMaybe(children.map(child => () => fFromD(child, toText)))), x =>
       (id: ID, depth: number) => mapMaybe(sequenceMaybe(x.map(x => () => x(id, depth))), x => x.join('')) ),
     descend => {
-      let contextToText = mapMaybe(descend.contextRender, render => toTextFromRender(render, toText))
+      let contextToText = bindMaybe(descend.contextRender, render => toTextFromRender(render, toText))
       return bindMaybe(descend.field, field => (id: ID, depth: number): Maybe<string> =>
         bindMaybe(_get(id, field.id), newID => altMaybe(bindMaybe(contextToText, contextToText => contextToText(newID, depth)), () => toText()(newID, depth))) )},
     label => bindMaybe(label.child, child => fFromD(child, toText)),
@@ -34,7 +34,7 @@ function toTextFromRender(render: Render, toText: () => ToText): Maybe<ToText> {
       let opening = fromMaybe(renderList.opening, () => "[")
       let closing = fromMaybe(renderList.closing, () => "]")
       let separator = fromMaybe(renderList.separator, () => ",")
-      let contextToText = mapMaybe(renderList.contextRender, render => toTextFromRender(render, toText))
+      let contextToText = bindMaybe(renderList.contextRender, render => toTextFromRender(render, toText))
       return (id: ID, depth: number): Maybe<string> => {
         let array = bindMaybe(listFromID(id, id => ({id})), arrayFromList)
         let x = bindMaybe(array, array => sequenceMaybe(array.map(({id}) => () => altMaybe(

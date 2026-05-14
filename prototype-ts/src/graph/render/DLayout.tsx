@@ -71,11 +71,11 @@ export type ListInsertionPoint = {
   editorCommands: EditorCommands
   requiresMeta?: boolean }
 
-export function dList(opening: string, children: D[], closing: string, separator: string, collapseToggle: Maybe<D> = nothing, insertionPoints: ListInsertionPoint[] = []): D {
-  return dElement(ListComponent, {opening, children, closing, separator, collapseToggle, insertionPoints}, "list", children.length <= 1 && !children.find(child => !isSingleLine(child)))
+export function dList(opening: string, children: D[], closing: string, separator: string, collapseToggle: Maybe<D> = nothing, insertionPoints: ListInsertionPoint[] = [], collapsed = false): D {
+  return dElement(ListComponent, {opening, children, closing, separator, collapseToggle, insertionPoints, collapsed}, "list", children.length <= 1 && !children.find(child => !isSingleLine(child)))
 }
 
-function ListComponent(props: {opening: string, children: D[], closing: string, separator: string, collapseToggle: Maybe<D>, insertionPoints: ListInsertionPoint[]}) {
+function ListComponent(props: {opening: string, children: D[], closing: string, separator: string, collapseToggle: Maybe<D>, insertionPoints: ListInsertionPoint[], collapsed: boolean}) {
   const context = React.useContext(DContext)
   const [activeListInsertion, setActiveListInsertionState] = React.useState<number | undefined>(undefined)
   const activeInsertion = activeListInsertion !== undefined && props.insertionPoints[activeListInsertion] ? activeListInsertion : undefined
@@ -101,7 +101,7 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
       if (activeInsertion === i) items.push(insertionPoint(i, ""))
       if (i < props.children.length) items.push(child(props.children[i], i, depth)) }
     return items }
-  let content = props.collapseToggle && (props.collapseToggle.props as unknown as {collapsed: boolean}).collapsed
+  let content = props.collapsed
     ? [<span key="collapsed" className="collapsedListContents">...</span>]
     : activeInsertion !== undefined && singleLine
     ? [<span key="leading"> </span>, ...join(intersperse(activeItems(context.depth).map(item => [item]), i => [<span key={`separator${i}`}>{props.separator} </span>])), <span key="trailing"> </span>]

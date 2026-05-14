@@ -57,7 +57,7 @@ function click(element: Element, options: MouseEventInit = {}) {
 class EditorHarness {
   container = document.createElement("div")
   root: Root
-  rootDescend: D
+  rootDescend!: D
   undoStack: UndoRedo[][] = []
   redoStack: UndoRedo[][] = []
   initialFocusConsumed = false

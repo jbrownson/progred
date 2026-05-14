@@ -10,7 +10,7 @@ import { LoadedNamedThing, loadedNamedThings } from "../loadedNamedThings"
 import { algebraicTypeHasCtor, typeIsOrHasAtomicType, typeMatches } from "../typeMatches"
 
 function entryForID(name: string, id: ID, source: Source, cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry {
-  let matching = fromMaybe(mapMaybe(cursorType, cursorType => typeMatches(id, cursorType)), () => true)
+  let matching = fromMaybe(bindMaybe(cursorType, cursorType => typeMatches(id, cursorType)), () => true)
   return {
     string: name,
     disambiguation: bindMaybe(bindMaybe(_get(id, ctorField.id), Ctor.fromID), ctor => ctor.name),

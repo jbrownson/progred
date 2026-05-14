@@ -15,27 +15,14 @@ body {
   margin: 0 }
 #root { width: 100%; height: 100% }
 .scrollparent { padding: 0px; width: 100%; height: 100%; overflow: auto }
-unselectable {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  -o-user-select: none;
-  user-select: none;
-  display: inline-block }
 .uneditable { color: #aaa }
 span.unmatching { border-bottom: 1px solid red }
 span.descend {
   border-radius: 3px;
   box-decoration-break: clone }
-span.selected {
-  outline: 4px solid #dbeaff;
-  outline-offset: 0 }
 span.descend:has(.guidEditor:focus):not(:has(span.descend .guidEditor:focus)),
 span.descend:has(.i:focus):not(:has(span.descend .i:focus)) {
   outline: 4px solid #dbeaff;
-  outline-offset: 0 }
-span.hinted {
-  outline: 3px solid #edf5ff;
   outline-offset: 0 }
 .guidEditor:focus { outline: none }
 .i {

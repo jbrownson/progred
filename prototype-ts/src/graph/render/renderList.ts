@@ -49,13 +49,13 @@ export function renderListCurly(separator = ",", r = alwaysFail) { return render
 
 export function renderList(opening = "[", closing = "]", separator = ",", r = alwaysFail): Render {
   return (listCursor, sourceID, listEdgeContext) => bindMaybe(sourceID, sourceID => {
-    listEdgeContext = fromMaybe(listEdgeContext, () => edgeContextForEdge(listCursor))
+    const edgeContext = fromMaybe(listEdgeContext, () => edgeContextForEdge(listCursor))
     return bindMaybe(listFromID(sourceID.id, id => ({id})), list =>
-      mapMaybe(listProjectionFromList(listCursor, listEdgeContext, list), ({items, emptyTailCursor, emptyTailEdgeContext, emptyTail}) => {
+      mapMaybe(listProjectionFromList(listCursor, edgeContext, list), ({items, emptyTailCursor, emptyTailEdgeContext, emptyTail}) => {
         let defaultCollapsed = cursorHasCycle(listCursor)
         let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
           let toggle = list instanceof NonemptyList ? collapseToggle(collapsed, () => setCollapsed(!collapsed)) : nothing
-          if (collapsed && toggle) return renderDocumentGuidEditor(listCursor, sourceID, dList(opening, [], closing, separator, toggle))
+          if (collapsed && toggle) return renderDocumentGuidEditor(listCursor, sourceID, dList(opening, [], closing, separator, toggle, [], collapsed))
           let insertionPoint = (cursor: Cursor, edgeContext: EdgeContext, oldTail: List<HasID>, requiresMeta = false): ListInsertionPoint => {
             let insert = (id: Maybe<ID>) => mapMaybe(edgeContext.commit, commit => {
               let newList = GUIDNonemptyList.new(id => ({id})).setTail(oldTail)
@@ -76,7 +76,7 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
             ...items.map(({cursor, edgeContext, list}, i) => insertionPoint(cursor, edgeContext, list, i !== 0 && requiresMetaAfter(items[i - 1].list))),
             insertionPoint(emptyTailCursor, emptyTailEdgeContext, emptyTail, maybe(items[items.length - 1], () => false, ({list}) => requiresMetaAfter(list))) ]
           return renderDocumentGuidEditor(listCursor, sourceID, dList(opening, items.map(({cursor, edgeContext, list}) => listItem(cursor, edgeContext, list)), closing, separator, toggle,
-            insertionPoints), listRootEditorCommands()) }
+            insertionPoints, collapsed), listRootEditorCommands()) }
         return defaultCollapsed || list instanceof NonemptyList ? collapsible(defaultCollapsed, defaultCollapsed, render) : render(false, () => {}) }))})}
 
 function listRootEditorCommands(): EditorCommands {

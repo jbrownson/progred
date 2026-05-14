@@ -29,6 +29,7 @@ const EntryList = React.forwardRef<EntryListHandle, EntryListProps>(function Ent
     makeElementVisible(selectedLI, selectedLI.parentNode as HTMLElement)
     forceUpdate() }
   const down = () => {
+    if (props.entries.length === 0) return
     let newItemSelection = maybe(props.activeState.editorState.itemSelection, () => 0, selection => Math.min(props.entries.length - 1, selection + 1))
     props.activeState.editorState.itemSelection = newItemSelection
     let selectedLI = li(newItemSelection)
