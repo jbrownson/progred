@@ -49,7 +49,6 @@ describe("DRoot choose ID", () => {
       <DRoot
         d={label(cursor, dText("edge label"))}
         depth={0}
-        scrollParent={() => null}
         runE={f => { f() }} />))
 
     act(() => clickAlt(textElement(container, "edge label")))
@@ -82,7 +81,6 @@ describe("DRoot choose ID", () => {
         <DRoot
           d={descendElement(cursor, dText("node"), false)}
           depth={0}
-          scrollParent={() => null}
           runE={f => { f() }} />))
 
       act(() => clickAlt(textElement(container, "node"))) })

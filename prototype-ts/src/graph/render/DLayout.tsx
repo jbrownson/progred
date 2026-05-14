@@ -84,7 +84,7 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
   let closing = <span>{props.closing}</span>
   let singleLine = props.children.length <= 1 && !props.children.find(child => !isSingleLine(child))
   let insertionPoint = (i: number, label: string) => props.insertionPoints[i]
-    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionIndex={i} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} scrollParent={context.scrollParent} runE={context.runE} />
+    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} runE={context.runE} />
     : <span key={`insertion${i}`}>{label}</span>
   let child = (d: D, i: number, depth: number) => {
     let insertionIndex = i + 1

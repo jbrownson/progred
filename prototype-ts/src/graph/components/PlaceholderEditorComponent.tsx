@@ -10,7 +10,7 @@ import { requestNextTabStopFromCursor } from "../editor/EditorFocus"
 import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { useEditorAttachment } from "./useEditorAttachment"
 
-export function PlaceholderEditorComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void}) {
+export function PlaceholderEditorComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const [active, setActive] = React.useState(false)
   const span = React.useRef<HTMLSpanElement | null>(null)
   const editorState = React.useRef<PlaceholderEditorState>({})
@@ -51,7 +51,6 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
       cursor={props.cursor}
       descend={props.descend}
       tabStop={true}
-      scrollParent={props.scrollParent}
       runE={props.runE}
       closeCompletion={() => close(activeState)}
       cancel={() => props.runE(() => deactivate())}

@@ -44,6 +44,7 @@ async function typeAndEnter(root: HTMLElement, value: string) {
 }
 
 function installProgred() {
+  let menuAction: ((action: string) => void) | undefined
   window.progred = {
     openFile: async () => undefined,
     saveFileAs: async () => undefined,
@@ -57,8 +58,24 @@ function installProgred() {
     sendActionToFirstResponder: () => {},
     setMenuItemEnabled: () => {},
     setMenuItemChecked: () => {},
-    onMenuAction: () => () => {},
+    onMenuAction: callback => {
+      menuAction = callback
+      return () => { if (menuAction === callback) menuAction = undefined }},
   }
+  return {
+    menuAction: (action: string) => {
+      expect(menuAction).not.toBe(undefined)
+      menuAction!(action) }}
+}
+
+async function launchEditor() {
+  document.body.innerHTML = `<div id="root"></div>`
+  const progred = installProgred()
+  await act(async () => {
+    await import("./graphEditor")
+    await Promise.resolve()
+  })
+  return {root: document.getElementById("root")!, progred}
 }
 
 describe("graphEditor integration", () => {
@@ -69,14 +86,7 @@ describe("graphEditor integration", () => {
   })
 
   it("does not blank the app when inserting into a root empty list", async () => {
-    document.body.innerHTML = `<div id="root"></div>`
-    installProgred()
-
-    await act(async () => {
-      await import("./graphEditor")
-      await Promise.resolve()
-    })
-    const root = document.getElementById("root")!
+    const {root} = await launchEditor()
 
     await typeAndEnter(root, "new Empty List")
     expect(root.textContent).not.toBe("")
@@ -86,5 +96,30 @@ describe("graphEditor integration", () => {
     await typeAndEnter(root, "hello")
 
     expect(root.textContent).not.toBe("")
+  })
+
+  it("opens the active node in the view panel", async () => {
+    const {root, progred} = await launchEditor()
+
+    await typeAndEnter(root, "new Module")
+    await actEvent(() => click(root.querySelector(".guidEditor")!))
+    await actEvent(() => progred.menuAction("new-view"))
+
+    const viewPanel = root.querySelector(".viewPanel")
+    expect(viewPanel).not.toBe(null)
+    expect(viewPanel!.textContent).toContain("Module")
+  })
+
+  it("opens the active node constructor in the view panel", async () => {
+    const {root, progred} = await launchEditor()
+
+    await typeAndEnter(root, "new Module")
+    await actEvent(() => click(root.querySelector(".guidEditor")!))
+    await actEvent(() => progred.menuAction("view-constructor"))
+
+    const viewPanel = root.querySelector(".viewPanel")
+    expect(viewPanel).not.toBe(null)
+    expect(viewPanel!.textContent).toContain("Ctor")
+    expect(viewPanel!.textContent).toContain("Module")
   })
 })

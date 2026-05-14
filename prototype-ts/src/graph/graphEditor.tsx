@@ -386,7 +386,6 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
       <div className="doc"><DRoot
         d={rootDescend}
         depth={0}
-        scrollParent={() => leftPanel.current}
         runE={f => runE(f)} /></div></div>
     {hasSidebar
       ? <div className="sidebar" style={{width: "40%", height: "100%", display: "inline-block"}}>
@@ -405,7 +404,6 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
               <div className="view"><DRoot
                 d={viewDescend}
                 depth={0}
-                scrollParent={() => rightPanel.current}
                 runE={f => runE(f)} /></div></div>)}
         </div></div>
       : null}</div> })

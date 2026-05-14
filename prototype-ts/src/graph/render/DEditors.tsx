@@ -80,7 +80,6 @@ function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEdito
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.placeholderEditor.editorCommands)}
     cursor={context.focusCursor}
     descend={context.descend}
-    scrollParent={context.scrollParent}
     runE={context.runE} />
 }
 
@@ -153,7 +152,6 @@ function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: 
           editorCommands={{commit: id => mapMaybe(id, id => chooseLabel(id))}}
           cursor={props.cursor}
           descend={context.descend}
-          scrollParent={context.scrollParent}
           runE={context.runE}
           closeCompletion={() => {
             labelEditorState.current.completionOpen = false

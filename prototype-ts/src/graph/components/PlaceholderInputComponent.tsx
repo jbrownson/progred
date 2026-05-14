@@ -97,19 +97,17 @@ function renderMatches(string: string, matches: Match[]) {
   return [...strings, ...index < string.length ? [{string: string.slice(index), matching: false}] : []]
     .map(({string, matching}, index) => <span key={index} className={matching ? "matching" : ""}>{string}</span>) }
 
-export function PlaceholderInputComponent(props: {activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, tabStop?: boolean, scrollParent: () => HTMLElement | null, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}) {
+export function PlaceholderInputComponent(props: {activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, tabStop?: boolean, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}) {
   const entryList = React.useRef<EntryListHandle | null>(null)
   const input = React.useRef<HTMLInputElement | null>(null)
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
   useEditorAttachment(input, props.editorCommands, {cursor: props.cursor, descend: props.descend, tabStop: props.tabStop})
   const updateEntryListAbove = () => {
     if (input.current && entryList.current && entryList.current.div) {
-      let scrollParent = props.scrollParent()
-      if (scrollParent) {
-        const entryListAbove = input.current.getBoundingClientRect().bottom + entryList.current.div.clientHeight > scrollParent.clientTop + scrollParent.clientHeight
-        if (entryListAbove !== props.activeState.editorState.entryListAbove) {
-          props.activeState.editorState.entryListAbove = entryListAbove
-          entryList.current.forceUpdate() }}}}
+      const entryListAbove = input.current.getBoundingClientRect().bottom + entryList.current.div.clientHeight > window.innerHeight
+      if (entryListAbove !== props.activeState.editorState.entryListAbove) {
+        props.activeState.editorState.entryListAbove = entryListAbove
+        entryList.current.forceUpdate() }}}
   React.useEffect(() => registerScrollListener(updateEntryListAbove))
   React.useLayoutEffect(() => { if (input.current) focus(input.current) }, [])
   React.useLayoutEffect(() => updateEntryListAbove())

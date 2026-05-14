@@ -76,7 +76,6 @@ class EditorHarness {
       flushSync(() => this.root.render(<DRoot
           d={rootDescend}
           depth={0}
-          scrollParent={() => this.container}
           runE={f => {
             this.runWithUndoCallbacks(f)
             this.render() }} />))

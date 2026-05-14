@@ -84,6 +84,6 @@ function listRootEditorCommands(): EditorCommands {
     e.preventDefault()
     e.stopPropagation()
     if (e.target instanceof HTMLElement) {
-      const insertionPoint = e.target.querySelector("[data-list-insertion-index='0']")
+      const insertionPoint = e.target.querySelector(".listInsertionPoint")
       if (insertionPoint instanceof HTMLElement) insertionPoint.focus() }} : nothing}
 }

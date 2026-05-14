@@ -16,7 +16,6 @@ export type EditorDescend = {
 
 export type DContextValue = {
   depth: number
-  scrollParent: () => HTMLElement | null
   runE: (f: () => void) => void
   edgeContext?: EdgeContext
   editorCommands?: EditorCommands
@@ -27,7 +26,6 @@ export type DContextValue = {
 
 export const DContext = React.createContext<DContextValue>({
   depth: 0,
-  scrollParent: () => null,
   runE: f => f()
 })
 
