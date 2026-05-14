@@ -1,8 +1,8 @@
 import { altMaybe, bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing, unsafeUnwrapMaybe } from "../lib/Maybe"
-import { Cursor } from "./cursor/Cursor"
 import type { D } from "./render/D"
 import { ECallbacks } from "./editor/ECallbacks"
 import { ctorField, nameField } from "./graph"
+import { Edge } from "./model/Edge"
 import { GUIDMap } from "./model/GUIDMap"
 import { GUID, guidFromID, ID, stringFromID } from "./model/ID"
 import { IDMap } from "./model/IDMap"
@@ -21,7 +21,7 @@ export class Environment {
     public libraries: Map<string, {idMap: IDMap, root: ID}>,
     public guidMap: GUIDMap,
     public workspace: Workspace,
-    public defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext, cyclePath?: CyclePath) => D,
+    public defaultRender: (edge: Edge, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext, cyclePath?: CyclePath) => D,
     public callbacks: ECallbacks ) {} }
 
 let _environment: Maybe<Environment> = nothing

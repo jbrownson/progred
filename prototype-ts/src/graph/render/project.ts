@@ -1,5 +1,4 @@
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
 import { EdgeContext } from "../editor/EditorCommands"
 import { edgeContextForEdge } from "../editor/edgeContext"
 import { environment, get, setOrDelete, SourceType } from "../Environment"
@@ -11,17 +10,17 @@ import { alwaysFail, Render } from "./R"
 import { emptyCyclePath } from "./CyclePath"
 
 export function createProjection(r: Render = alwaysFail) {
-  let rootCursor = new Cursor(nothing, environment().workspace.id, workspaceRootField.id)
+  let rootEdge = {parent: environment().workspace.id, label: workspaceRootField.id}
   let rootEdgeContext: EdgeContext = {
     commit: (id: Maybe<ID>) => setOrDelete(environment().workspace.id, workspaceRootField.id, id),
     expectedType: nothing,
     fieldName: "root" }
   let rootSourceID = mapMaybe(environment().workspace.root, id =>
     ({id, source: {source: SourceType.DocumentType as SourceType.DocumentType, guid: environment().workspace.id}}))
-  let rootDescend = descendElement(rootCursor, tryFirst(r, environment().defaultRender)(rootCursor, rootSourceID, rootEdgeContext, emptyCyclePath()), false, rootEdgeContext)
-  let viewCursor = new Cursor(nothing, environment().workspace.id, workspaceViewField.id)
+  let rootDescend = descendElement(rootEdge, tryFirst(r, environment().defaultRender)(rootEdge, rootSourceID, rootEdgeContext, emptyCyclePath()), false, rootEdgeContext)
+  let viewEdge = {parent: environment().workspace.id, label: workspaceViewField.id}
   let viewDescend = mapMaybe(get(environment().workspace.id, workspaceViewField.id), viewSourceID => {
-    let viewEdgeContext = {...edgeContextForEdge(viewCursor), fieldName: "view"}
-    return descendElement(viewCursor, environment().defaultRender(viewCursor, viewSourceID, viewEdgeContext, emptyCyclePath()), false, viewEdgeContext) })
+    let viewEdgeContext = {...edgeContextForEdge(viewEdge), fieldName: "view"}
+    return descendElement(viewEdge, environment().defaultRender(viewEdge, viewSourceID, viewEdgeContext, emptyCyclePath()), false, viewEdgeContext) })
   return {rootDescend, viewDescend}
 }

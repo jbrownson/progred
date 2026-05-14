@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { getTextWidth } from "../../lib/getTextWidth"
 import { fromMaybe } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
+import { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
 import type { NumberEditor } from "../render/DEditors"
 import { nidFromNumber } from "../model/ID"
@@ -9,10 +9,10 @@ import { editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { useEditorAttachment } from "./useEditorAttachment"
 
-export function NumberEditorComponent(props: {numberEditor: NumberEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}) {
+export function NumberEditorComponent(props: {numberEditor: NumberEditor, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const [editedValue, setEditedValue] = React.useState<string | undefined>(undefined)
   const input = React.useRef<HTMLInputElement | null>(null)
-  useEditorAttachment(input, props.editorCommands, {cursor: props.cursor, descend: props.descend})
+  useEditorAttachment(input, props.editorCommands, {edge: props.edge, descend: props.descend})
   let commit = (value: string) => {
     let number = +value
     if (!isNaN(number) && props.numberEditor.writable) {

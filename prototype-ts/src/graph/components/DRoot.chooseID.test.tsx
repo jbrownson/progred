@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it } from "vitest"
 import { noopECallbacks } from "../editor/ECallbacks"
 import { attachEditorCommands } from "../editor/EditorCommands"
 import { Environment, withEnvironment } from "../Environment"
+import type { Edge } from "../model/Edge"
 import type { ID } from "../model/ID"
 import { GUIDMap } from "../model/GUIDMap"
-import { Cursor } from "../cursor/Cursor"
 import { descendElement, dText, label, DRoot } from "../render/D"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
@@ -34,6 +34,10 @@ function textElement(container: HTMLElement, text: string) {
   return element as HTMLElement
 }
 
+function edge(parent: ID, label: ID): Edge {
+  return {parent, label}
+}
+
 describe("DRoot choose ID", () => {
   it("chooses an edge label through the focused editor commands", () => {
     let committed: ID[] = []
@@ -43,11 +47,10 @@ describe("DRoot choose ID", () => {
     document.body.appendChild(container)
     let root = createRoot(container)
     let labelID = "guid-label"
-    let cursor = new Cursor(undefined, "guid-parent", labelID)
 
     act(() => root.render(
       <DRoot
-        d={label(cursor, dText("edge label"))}
+        d={label(edge("guid-parent", labelID), dText("edge label"))}
         depth={0}
         runE={f => { f() }} />))
 
@@ -76,10 +79,9 @@ describe("DRoot choose ID", () => {
       noopECallbacks)
 
     withEnvironment(environment, () => {
-      let cursor = new Cursor(undefined, parent, label)
       act(() => root.render(
         <DRoot
-          d={descendElement(cursor, dText("node"), false)}
+          d={descendElement(edge(parent, label), dText("node"), false)}
           depth={0}
           runE={f => { f() }} />))
 

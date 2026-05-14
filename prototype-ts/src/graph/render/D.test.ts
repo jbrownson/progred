@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { Cursor } from "../cursor/Cursor"
+import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
 import { block, descendElement, dText, isSingleLine, label, line, dKind } from "./D"
 import { descend } from "./R"
 import { withTestEnvironment } from "../testHelpers"
 
-function cursor() {
-  return new Cursor(undefined, "guid-root", sidFromString("root"))
+function edge(): Edge {
+  return {parent: "guid-root", label: sidFromString("root")}
 }
 
 describe("D", () => {
@@ -16,16 +16,16 @@ describe("D", () => {
   })
 
   it("keeps D kinds on wrappers", () => {
-    const c = cursor()
+    const e = edge()
 
-    expect(dKind(label(c, dText("x")))).toBe("label")
-    expect(dKind(descendElement(c, dText("x"), false))).toBe("descend")
+    expect(dKind(label(e, dText("x")))).toBe("label")
+    expect(dKind(descendElement(e, dText("x"), false))).toBe("descend")
   })
 
   it("renders descends immediately", () => {
     withTestEnvironment(() => {
       let renders = 0
-      const d = descend(cursor(), "guid-parent", sidFromString("child"), () => {
+      const d = descend("guid-parent", sidFromString("child"), () => {
         renders++
         return dText("projected") })
 

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { altMaybe, Maybe } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
 import { EdgeContext, EditorCommands, EditorKeyDownEvent } from "../editor/EditorCommands"
+import { Edge } from "../model/Edge"
 import { ID } from "../model/ID"
 
 export type DKind = "block" | "line" | "text" | "identicon" | "list" | "descend" | "guidEditor" | "supportsUnderselection" | "label" | "collapsible" | "collapseToggle" | "button" | "placeholderEditor" | "stringEditor" | "numberEditor"
@@ -9,7 +9,7 @@ type DProps = {dKind: DKind, dSingleLine: boolean} & Record<string, any>
 export type D = React.ReactElement<DProps>
 
 export type EditorDescend = {
-  cursor: Cursor
+  edge: Edge
   edgeContext: EdgeContext
   unmatching: boolean
 }
@@ -20,7 +20,6 @@ export type DContextValue = {
   edgeContext?: EdgeContext
   editorCommands?: EditorCommands
   chooseID?: () => Maybe<ID>
-  focusCursor?: Cursor
   descend?: EditorDescend
 }
 

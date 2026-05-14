@@ -1,7 +1,7 @@
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { _get } from "../Environment"
 import { ctorField, fieldCtor, nameField } from "../graph"
-import { EdgeRef } from "../model/EdgeRef"
+import { Edge } from "../model/Edge"
 import { GUIDMap } from "../model/GUIDMap"
 import { GUID, guidFromID, ID, matchID, numberFromNID, stringFromID } from "../model/ID"
 
@@ -48,14 +48,14 @@ function selectedNodeFromGraphSelection(graphSelection: Maybe<GraphSelection>): 
       case "edge":
         return nothing }})}
 
-function selectedEdgeFromActiveEdge(activeEdge: Maybe<EdgeRef>): Maybe<SelectedGraphEdgeID> {
+function selectedEdgeFromActiveEdge(activeEdge: Maybe<Edge>): Maybe<SelectedGraphEdgeID> {
   return bindMaybe(activeEdge, edge =>
     mapMaybe(guidFromID(edge.parent), source => ({source, label: edge.label}))) }
 
 function selectedEdgeFromGraphSelection(graphSelection: Maybe<GraphSelection>): Maybe<SelectedGraphEdgeID> {
   return bindMaybe(graphSelection, graphSelection => graphSelection.kind === "edge" ? {source: graphSelection.source, label: graphSelection.label} : nothing) }
 
-export function buildGraphViewSnapshot(guidMap: GUIDMap, rootID: Maybe<ID>, activeEdge: Maybe<EdgeRef>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
+export function buildGraphViewSnapshot(guidMap: GUIDMap, rootID: Maybe<ID>, activeEdge: Maybe<Edge>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
   let ids = new Set<ID>()
   mapMaybe(rootID, id => ids.add(id))
 

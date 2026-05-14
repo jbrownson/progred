@@ -1,16 +1,18 @@
-import { altMaybe, bindMaybe, firstMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
-import { cursorsEqual } from "../cursor/Cursor"
+import { altMaybe, bindMaybe, firstMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
+import { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
 import { focus } from "./ignoreFocusEvents"
 
 const editorFocusKey = Symbol("editorFocus")
 const editorDescendKey = Symbol("editorDescend")
-type PendingFocus = {kind: "cursor", cursor: Cursor} | {kind: "nextTabStopFromCursor", cursor: Cursor, shift: boolean}
+type PendingFocus =
+  | {kind: "first"}
+  | {kind: "nextTabStopFromDescendPath", path: number[], shift: boolean}
+  | {kind: "nextTabStopFromDescendChildPath", path: number[], index: number}
 let pendingFocus: Maybe<PendingFocus> = nothing
 
 type EditorFocus = {
-  cursor: Cursor
+  edge?: Edge
   descend?: EditorDescend
   activate?: () => void
   focusWhenSelected?: boolean
@@ -51,14 +53,22 @@ function descendElementForDescend(element: Element, descend: EditorDescend): May
 function childDescendElements(element: Maybe<HTMLElement>): HTMLElement[] {
   return editorDescendElements(element || document).filter(descendElement => parentDescendElement(descendElement) === element) }
 
+function rootDescendElements(root: ParentNode): HTMLElement[] {
+  return editorDescendElements(root).filter(descendElement => maybe(parentDescendElement(descendElement), () => true, parent => !(root instanceof Node && root.contains(parent)))) }
+
+function childDescendElementsIn(root: ParentNode, element: Maybe<HTMLElement>): HTMLElement[] {
+  return maybe(element, () => rootDescendElements(root), childDescendElements) }
+
 function activeEditorDescendElement() {
   let activeDescend = editorFocusForActiveElement()?.descend
-  return activeDescend && document.activeElement ? descendElementForDescend(document.activeElement, activeDescend) : nothing }
+  return activeDescend && document.activeElement
+    ? descendElementForDescend(document.activeElement, activeDescend)
+    : document.activeElement instanceof HTMLElement ? parentDescendElement(document.activeElement) : nothing }
 
 function focusEditorForDescendElement(descendElement: Maybe<HTMLElement>): boolean {
   return maybe(descendElement, () => false, descendElement => maybe(editorDescendForElement(descendElement), () => false, descend => {
     let element = editorFocusElements(descendElement).find(element => editorFocusForElement(element)?.descend === descend)
-    return element ? focusElement(element) : focusEditorForCursor(descendElement, descend.cursor) })) }
+    return element ? focusElement(element) : maybe(editorFocusElements(descendElement)[0], () => false, focusElement) })) }
 
 function focusElement(element: HTMLElement): boolean {
   let editorFocus = editorFocusForElement(element)
@@ -101,11 +111,29 @@ function firstTabStop(n: number): Maybe<HTMLElement> {
 function nextTabStop(descendElement: Maybe<HTMLElement>, n: number): Maybe<HTMLElement> {
   return maybe(descendElement, () => firstTabStop(n), descendElement => altMaybe(tabStopDownChildren(descendElement, n), () => tabStopUp(descendElement, n))) }
 
-function descendElementForCursor(root: ParentNode, cursor: Cursor): Maybe<HTMLElement> {
-  return editorDescendElements(root).find(descendElement => maybe(editorDescendForElement(descendElement), () => false, descend => cursorsEqual(descend.cursor, cursor))) }
+function editorDescendPath(descendElement: HTMLElement): Maybe<number[]> {
+  let parent = parentDescendElement(descendElement)
+  let index = childDescendElements(parent).findIndex(child => child === descendElement)
+  if (index < 0) return nothing
+  return maybe(parent, () => [index], parent => mapMaybe(editorDescendPath(parent), path => [...path, index])) }
 
-function editorElementForCursor(root: ParentNode, cursor: Cursor): Maybe<HTMLElement> {
-  return editorFocusElements(root).find(element => maybe(editorFocusForElement(element), () => false, editorFocus => cursorsEqual(editorFocus.cursor, cursor))) }
+function descendElementFromPath(root: ParentNode, path: number[]): Maybe<HTMLElement> {
+  let descendElement: Maybe<HTMLElement> = nothing
+  for (let index of path) {
+    let children = childDescendElementsIn(root, descendElement)
+    let next = children[index]
+    if (!next) return nothing
+    descendElement = next }
+  return descendElement }
+
+function editorElementForElement(element: Element): Maybe<HTMLElement> {
+  for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement || nothing)
+    if (editorFocusForElement(current) !== nothing) return current
+  return nothing }
+
+function nextEditorElementAfter(element: Element): Maybe<HTMLElement> {
+  return editorFocusElements(document).find(editor =>
+    element.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING) }
 
 export function attachEditorFocus(element: HTMLElement, focus: EditorFocus) {
   (element as EditorFocusElement)[editorFocusKey] = focus
@@ -123,26 +151,48 @@ export function editorFocusForActiveElement(): Maybe<EditorFocus> {
   return editorFocusForElement(document.activeElement || nothing)
 }
 
-export function focusEditorForCursor(root: HTMLElement, cursor: Cursor): boolean {
-  return maybe(editorElementForCursor(root, cursor), () => false, focusElement)
+export function focusEditorFromElement(element: Element): boolean {
+  return maybe(editorElementForElement(element), () => maybe(nextEditorElementAfter(element), () => false, focusElement), focusElement)
 }
 
-export function requestFocusForCursor(cursor: Cursor) {
-  pendingFocus = {kind: "cursor", cursor}
+export function requestFocusFirstEditor() {
+  pendingFocus = {kind: "first"}
 }
 
-export function requestNextTabStopFromCursor(cursor: Cursor, shift = false) {
-  pendingFocus = {kind: "nextTabStopFromCursor", cursor, shift}
+export function requestNextTabStopFromActiveElement(shift = false) {
+  pendingFocus = maybe(activeEditorDescendElement(),
+    (): PendingFocus => ({kind: "first"}),
+    descendElement => maybe(editorDescendPath(descendElement),
+      (): PendingFocus => ({kind: "first"}),
+      (path): PendingFocus => ({kind: "nextTabStopFromDescendPath", path, shift}))) }
+
+export function requestNextTabStopFromDescendChildFromActiveElement(index: number) {
+  pendingFocus = maybe(activeEditorDescendElement(),
+    (): PendingFocus => ({kind: "first"}),
+    descendElement => maybe(editorDescendPath(descendElement),
+      (): PendingFocus => ({kind: "first"}),
+      (path): PendingFocus => ({kind: "nextTabStopFromDescendChildPath", path, index}))) }
+
+export function focusFirstEditor(root: ParentNode = document): boolean {
+  return focusEditorForDescendElement(rootDescendElements(root)[0])
+}
+
+function focusDescendChild(descendElement: HTMLElement, index: number): boolean {
+  return focusEditorForDescendElement(childDescendElements(descendElement)[index])
 }
 
 export function focusPendingEditor(root: HTMLElement): boolean {
   return maybe(pendingFocus, () => false, pendingFocus => {
     switch (pendingFocus.kind) {
-      case "cursor":
-        return focusEditorForCursor(root, pendingFocus.cursor)
-      case "nextTabStopFromCursor":
-        return maybe(descendElementForCursor(root, pendingFocus.cursor), () => false, descendElement =>
-          focusEditorForDescendElement(altMaybe(nextTabStop(descendElement, pendingFocus.shift ? -1 : 1), () => descendElement))) }})
+      case "first":
+        return focusFirstEditor(root)
+      case "nextTabStopFromDescendPath":
+        return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
+          focusEditorForDescendElement(altMaybe(nextTabStop(descendElement, pendingFocus.shift ? -1 : 1), () => descendElement)))
+      case "nextTabStopFromDescendChildPath":
+        return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
+          maybe(childDescendElements(descendElement)[pendingFocus.index], () => false, child =>
+            focusEditorForDescendElement(altMaybe(nextTabStop(child, 1), () => child)))) }})
 }
 
 export function focusParentEditor(): boolean {
@@ -155,10 +205,6 @@ export function focusChildEditor(): boolean {
 
 export function focusSiblingEditor(n: number): boolean {
   return focusEditorForDescendElement(bindMaybe(activeEditorDescendElement(), descendElement => siblingOrAncestorSibling(descendElement, n)))
-}
-
-export function focusFirstEditor(): boolean {
-  return focusEditorForDescendElement(childDescendElements(nothing)[0])
 }
 
 export function focusNextTabStop(shift: boolean): boolean {

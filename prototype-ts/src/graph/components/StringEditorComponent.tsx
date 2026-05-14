@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Cursor } from "../cursor/Cursor"
+import { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
 import type { StringEditor } from "../render/DEditors"
 import { sidFromString } from "../model/ID"
@@ -7,9 +7,9 @@ import { editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { useEditorAttachment } from "./useEditorAttachment"
 
-export function StringEditorComponent(props: {stringEditor: StringEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}) {
+export function StringEditorComponent(props: {stringEditor: StringEditor, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const textArea = React.useRef<HTMLTextAreaElement | null>(null)
-  useEditorAttachment(textArea, props.editorCommands, {cursor: props.cursor, descend: props.descend})
+  useEditorAttachment(textArea, props.editorCommands, {edge: props.edge, descend: props.descend})
   let onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     let keyDownAction = editorKeyDownAction(props.editorCommands, e)
     if (keyDownAction) { props.runE(keyDownAction); return }

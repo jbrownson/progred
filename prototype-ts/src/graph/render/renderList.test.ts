@@ -1,17 +1,17 @@
 import * as React from "react"
 import { describe, expect, it } from "vitest"
 import { mapMaybe } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
 import { SourceType } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, headField, tailField } from "../graph"
+import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 import { emptyCyclePath, stepCyclePath } from "./CyclePath"
 import { dText, dKind, type D } from "./D"
 import { renderList } from "./renderList"
 
-function cursor() {
-  return new Cursor(undefined, "guid-holder", sidFromString("list"))
+function edge(): Edge {
+  return {parent: "guid-holder", label: sidFromString("list")}
 }
 
 function childDs(d: D): D[] {
@@ -32,7 +32,7 @@ describe("renderList", () => {
   it("renders empty lists as empty D lists wrapped in document editor structure", () => {
     withTestEnvironment(() => {
       const list = GUIDEmptyList.new()
-      const d = renderList()(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
+      const d = renderList()(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
       const listD = findD(d!, d => dKind(d) === "list")
 
       expect(findD(d!, d => dKind(d) === "supportsUnderselection")).not.toBe(undefined)
@@ -47,7 +47,7 @@ describe("renderList", () => {
     withTestEnvironment(() => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
-      const d = renderList("[", "]", ",", () => dText("item"))(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
+      const d = renderList("[", "]", ",", () => dText("item"))(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
       const listD = findD(d!, d => dKind(d) === "list")
       const children = (listD?.props as any)?.children as D[]
 
@@ -62,7 +62,7 @@ describe("renderList", () => {
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")})
       list.setTail(list)
 
-      expect(renderList()(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})).toBe(undefined)
+      expect(renderList()(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})).toBe(undefined)
     })
   })
 
@@ -71,7 +71,7 @@ describe("renderList", () => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
 
-      const d = renderList()(cursor(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
+      const d = renderList()(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
       const collapsible = findD(d!, d => dKind(d) === "collapsible")
       const collapsedList = findD((collapsible!.props as any).render(true, () => {}), d => dKind(d) === "list")
 
@@ -89,8 +89,8 @@ describe("renderList", () => {
       const third = GUIDNonemptyList.new(id => ({id})).setHead({id: second.id}).setTail(empty)
       first.setTail(second)
       second.setTail(third)
-      const d = renderList("[", "]", ",", (cursor, sourceID, edgeContext, cyclePath) =>
-        mapMaybe(sourceID, sourceID => dText(stepCyclePath(cyclePath || emptyCyclePath(), sourceID.id).hasCycle ? "cycle" : "not")))(cursor(), {id: first.id, source: {source: SourceType.DocumentType, guid: first.id}})
+      const d = renderList("[", "]", ",", (edge, sourceID, edgeContext, cyclePath) =>
+        mapMaybe(sourceID, sourceID => dText(stepCyclePath(cyclePath || emptyCyclePath(), sourceID.id).hasCycle ? "cycle" : "not")))(edge(), {id: first.id, source: {source: SourceType.DocumentType, guid: first.id}})
       const listD = findD(d!, d => dKind(d) === "list")
       const children = (listD?.props as any)?.children as D[]
 
@@ -102,8 +102,7 @@ describe("renderList", () => {
     withTestEnvironment(environment => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
-      const c = cursor()
-      const d = renderList()(c, {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
+      const d = renderList()(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
       const listD = findD(d!, d => dKind(d) === "list")
 
       ;(listD?.props as any)?.insertionPoints[1].editorCommands.commit?.(sidFromString("b"))

@@ -247,10 +247,10 @@ export function GraphViewComponent(props: GraphViewProps) {
     e.stopPropagation()
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
-      const cursor = pointer(e)
-      const graphPos = toGraph(cursor)
+      const pointerPosition = pointer(e)
+      const graphPos = toGraph(pointerPosition)
       zoom.current = Math.max(0.1, Math.min(5, zoom.current * Math.exp(-e.deltaY * 0.004)))
-      pan.current = add(pan.current, sub(cursor, toScreen(graphPos))) }
+      pan.current = add(pan.current, sub(pointerPosition, toScreen(graphPos))) }
     else {
       pan.current = add(pan.current, {x: -e.deltaX, y: -e.deltaY}) }
     forceUpdate() }

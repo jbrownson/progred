@@ -4,14 +4,12 @@ import { flushSync } from "react-dom"
 import { createRoot, Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { mapMaybe, Maybe, nothing } from "../../lib/Maybe"
-import { _childCursor } from "../cursor/childCursor"
-import { Cursor } from "../cursor/Cursor"
 import type { CopyResult } from "../editor/Copy"
 import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, set, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
+import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLabel, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DRoot, type D } from "../render/D"
 import { createProjection } from "../render/project"
@@ -21,7 +19,7 @@ import { renderFromRender } from "../render/renderFromRender"
 import { dispatch, Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { defaultKeyHandler } from "../editor/keyHandler"
-import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor } from "../editor/EditorFocus"
+import { editorFocusForActiveElement, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
 import { libraries } from "../libraries/libraries"
@@ -62,10 +60,9 @@ class EditorHarness {
   redoStack: UndoRedo[][] = []
   initialFocusConsumed = false
 
-  constructor(public environment: Environment, public initialFocusCursor: Maybe<Cursor> = nothing) {
+  constructor(public environment: Environment, public initialFocus = false) {
     document.body.appendChild(this.container)
     this.root = createRoot(this.container)
-    rootCursor(environment)
     act(() => this.render())
   }
 
@@ -80,9 +77,8 @@ class EditorHarness {
             this.runWithUndoCallbacks(f)
             this.render() }} />))
       if (!focusPendingEditor(this.container) && !this.initialFocusConsumed)
-        mapMaybe(this.initialFocusCursor, cursor => {
-          if (focusEditorForCursor(this.container, cursor))
-            this.initialFocusConsumed = true })
+        if (this.initialFocus && focusFirstEditor(this.container))
+          this.initialFocusConsumed = true
     })
   }
 
@@ -162,16 +158,16 @@ class EditorHarness {
     this.run(() => keyDown(activeElement!, key, options))
   }
 
-  activeCursor() {
-    const cursor = editorFocusForActiveElement()?.cursor
-    expect(cursor).not.toBe(undefined)
-    return cursor!
+  activeEdge() {
+    const edge = editorFocusForActiveElement()?.edge
+    expect(edge).not.toBe(undefined)
+    return edge!
   }
 
   expectActive(parent: ID, label: ID) {
-    const cursor = this.activeCursor()
-    expect(cursor.parent).toBe(parent)
-    expect(cursor.label).toBe(label)
+    const edge = this.activeEdge()
+    expect(edge.parent).toBe(parent)
+    expect(edge.label).toBe(label)
   }
 
   globalKey(key: string, options: KeyboardEventInit = {}) {
@@ -208,13 +204,9 @@ class EditorHarness {
   }
 }
 
-function rootCursor(environment: Environment) {
-  return new Cursor(undefined, environment.workspace.id, workspaceRootField.id)
-}
-
 function rootHarness(render?: Render) {
   const environment = makeTestEnvironment({defaultRender: render ? tryFirst(render, defaultRender) : defaultRender})
-  return new EditorHarness(environment, rootCursor(environment))
+  return new EditorHarness(environment, true)
 }
 
 function emptyListHarness() {
@@ -419,7 +411,7 @@ describe("DRoot editor integration", () => {
   it("edits an existing string through the textarea path", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("old")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.run(() => input(harness.textInput(), "new"))
 
@@ -431,7 +423,7 @@ describe("DRoot editor integration", () => {
   it("edits an existing number through input and Enter", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = 1
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     const textInput = harness.textInput()
     harness.run(() => {
@@ -562,7 +554,7 @@ describe("DRoot editor integration", () => {
 
   it("does not blank when committing Return into an Evaluate statements list", () => withJavascriptHost(() => {
     const environment = appLikeEnvironment()
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.typeAndEnter("new Evaluate")
     harness.typeAndEnter("new JavaScriptProgram")
@@ -658,7 +650,6 @@ describe("DRoot editor integration", () => {
     harness.key("[")
     harness.typeAndEnter("first")
     const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
-    expect(harness.run(() => focusEditorForCursor(harness.container, _childCursor(rootCursor(harness.environment), list!, headField.id)))).toBe(true)
     expect(document.activeElement).toBe(harness.container.querySelector("textarea"))
     const stringEditor = document.activeElement
     harness.activeKey(",")
@@ -717,7 +708,7 @@ describe("DRoot editor integration", () => {
     const environment = makeTestEnvironment({defaultRender})
     const node = "guid-node"
     environment.workspace.root = node
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     startNewEdgeFromActive(harness)
     harness.typeAndEnter("random node")
@@ -739,7 +730,7 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = node
     environment.guidMap.set(node, sidFromString("available label"), field)
     environment.guidMap.set(field, nameField.id, sidFromString("Existing Label"))
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     startNewEdgeFromActive(harness)
     harness.typeAndEnter("Existing Label")
@@ -770,7 +761,7 @@ describe("DRoot editor integration", () => {
   it("copies the focused guid editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = "guid-node"
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
     harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
@@ -784,7 +775,7 @@ describe("DRoot editor integration", () => {
   it("copies the focused string editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("copy me")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
     harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
@@ -799,7 +790,7 @@ describe("DRoot editor integration", () => {
   it("keeps editor commands attached across D rerenders", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("copy me")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
     const activeElement = document.activeElement
 
     harness.render()
@@ -813,7 +804,7 @@ describe("DRoot editor integration", () => {
   it("copies the focused number editor through editor commands", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = 7
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     let copy: {referenceID: ID, copyResult: CopyResult} | undefined
     harness.run(() => { copy = editorCommandsForActiveElement()?.copy?.() })
@@ -835,7 +826,7 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = original
     environment.guidMap.set(original, childLabel, child)
     environment.guidMap.set(child, childNameLabel, sidFromString("Child"))
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
     const copy = copyActive(harness)
 
     startNewEdgeFromActive(harness)
@@ -859,7 +850,7 @@ describe("DRoot editor integration", () => {
     const copyLabel = sidFromString("copy")
     environment.workspace.root = original
     environment.guidMap.set(original, selfLabel, original)
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
     const copy = copyActive(harness)
 
     startNewEdgeFromActive(harness)
@@ -882,7 +873,7 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = original
     environment.guidMap.set(original, firstLabel, shared)
     environment.guidMap.set(original, secondLabel, shared)
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
     const copy = copyActive(harness)
 
     startNewEdgeFromActive(harness)
@@ -905,7 +896,7 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = original
     environment.guidMap.set(original, label, target)
     environment.guidMap.set(label, labelName, sidFromString("Label"))
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
     const copy = copyActive(harness)
 
     startNewEdgeFromActive(harness)
@@ -925,7 +916,7 @@ describe("DRoot editor integration", () => {
 
   it("copies a function declaration and pastes a reference into a function call", () => {
     const environment = makeTestEnvironment({libraries, defaultRender})
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.typeAndEnter("new JavaScriptProgram")
     const javascriptProgram = harness.get(environment.workspace.id, workspaceRootField.id)
@@ -950,7 +941,7 @@ describe("DRoot editor integration", () => {
 
   it("pastes a function declaration structure into a statement list with remapped internals", () => {
     const environment = makeTestEnvironment({libraries, defaultRender})
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.typeAndEnter("new JavaScriptProgram")
     const javascriptProgram = harness.get(environment.workspace.id, workspaceRootField.id)
@@ -997,7 +988,7 @@ describe("DRoot editor integration", () => {
   it("pastes a reference into the focused string editor", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("old")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
@@ -1009,7 +1000,7 @@ describe("DRoot editor integration", () => {
   it("pastes a reference into the focused number editor", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = 1
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.run(() => { commitIDToActiveElement("guid-pasted") })
 
@@ -1036,7 +1027,7 @@ describe("DRoot editor integration", () => {
   it("undoes and redoes deleting a selected edge", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("delete me")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.globalKey("Delete")
     expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(undefined)
@@ -1056,7 +1047,7 @@ describe("DRoot editor integration", () => {
     const childLabel = sidFromString("child")
     environment.workspace.root = node
     environment.guidMap.set(node, childLabel, sidFromString("keep me"))
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.globalKey("Delete")
 
@@ -1074,7 +1065,7 @@ describe("DRoot editor integration", () => {
     const copyLabel = sidFromString("copy")
     environment.workspace.root = original
     environment.guidMap.set(original, childLabel, child)
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
     const copy = copyActive(harness)
 
     startNewEdgeFromActive(harness)
@@ -1109,7 +1100,7 @@ describe("DRoot editor integration", () => {
   it("keeps selection when Tab has no placeholder to move to", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("only")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.globalKey("Tab")
 
@@ -1181,8 +1172,9 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = root
     environment.guidMap.set(root, firstLabel, sidFromString("First"))
     environment.guidMap.set(root, secondLabel, sidFromString("Second"))
-    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), root, firstLabel))
+    const harness = new EditorHarness(environment, true)
 
+    harness.globalKey("ArrowRight")
     const focusedInput = harness.textInput()
     expect(document.activeElement).toBe(focusedInput)
     harness.run(() => { focusedInput.focus() })
@@ -1199,7 +1191,7 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = root
     environment.guidMap.set(root, nameField.id, sidFromString("Cycle"))
     environment.guidMap.set(root, sidFromString("self"), root)
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
     const expandedBefore = Array.from(harness.container.querySelectorAll(".collapseToggle")).filter(toggle => toggle.textContent === "▾").length
     const collapsed = Array.from(harness.container.querySelectorAll(".collapseToggle")).filter(toggle => toggle.textContent === "▸")
     expect(collapsed.length).toBeGreaterThan(0)
@@ -1260,7 +1252,7 @@ describe("DRoot editor integration", () => {
   it("deletes a selected edge with the global Delete key", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("delete me")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.globalKey("Delete")
 
@@ -1272,7 +1264,7 @@ describe("DRoot editor integration", () => {
   it("deletes a selected edge with the global Backspace key", () => {
     const environment = makeTestEnvironment({defaultRender})
     environment.workspace.root = sidFromString("delete me")
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.globalKey("Backspace")
 
@@ -1317,7 +1309,7 @@ describe("DRoot editor integration", () => {
     const missingLabel = sidFromString("missing")
     environment.workspace.root = parent
     environment.guidMap.set(parent, existingLabel, target)
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     startNewEdgeFromActive(harness)
     harness.typeAndEnter("missing")
@@ -1339,7 +1331,7 @@ describe("DRoot editor integration", () => {
       return {app, extraField} })
     environment.workspace.root = app.id
     environment.guidMap.set(app.id, extraField.id, sidFromString("old"))
-    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, extraField.id))
+    const harness = new EditorHarness(environment, true)
 
     expect(harness.container.textContent).toContain("Extra")
     harness.run(() => input(harness.textInput(), "new"))
@@ -1359,7 +1351,7 @@ describe("DRoot editor integration", () => {
           root: libRoot }]]),
       defaultRender})
     environment.workspace.root = libRoot
-    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), libRoot, nameField.id))
+    const harness = new EditorHarness(environment, true)
 
     harness.run(() => input(harness.textInput(), "new"))
 
@@ -1373,8 +1365,9 @@ describe("DRoot editor integration", () => {
     const environment = makeTestEnvironment({defaultRender: tryFirst(appRender, defaultRender)})
     const app = withEnvironment(environment, () => GUIDApp.new())
     environment.workspace.root = app.id
-    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, nameField.id))
+    const harness = new EditorHarness(environment, true)
 
+    harness.globalKey("ArrowRight")
     harness.typeAndEnter("Widget")
 
     expect(stringFromID(harness.get(app.id, nameField.id)!)).toBe("Widget")
@@ -1399,8 +1392,9 @@ describe("DRoot editor integration", () => {
       return {app: GUIDApp.new(), render: render!} })
     environment.defaultRender = tryFirst(render, defaultRender)
     environment.workspace.root = app.id
-    const harness = new EditorHarness(environment, _childCursor(rootCursor(environment), app.id, nameField.id))
+    const harness = new EditorHarness(environment, true)
 
+    harness.globalKey("ArrowRight")
     harness.typeAndEnter("Templated")
 
     expect(stringFromID(harness.get(app.id, nameField.id)!)).toBe("Templated")
@@ -1408,9 +1402,34 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
+  it("renders labels in in-document render templates against the rendered node", () => {
+    const environment = makeTestEnvironment()
+    const {app, render} = withEnvironment(environment, () => {
+      environment.guidMap.set(appCtor.id, ctorField.id, ctorCtor.id)
+      environment.guidMap.set(nameField.id, ctorField.id, fieldCtor.id)
+      const template = GUIDRenderCtor.new()
+      const line = GUIDLine.new()
+      const label = GUIDLabel.new()
+      label.setField(nameField)
+      label.setChild(checkString(sidFromString("Name"))!)
+      line.setChildren([label])
+      template.setForCtor(appCtor)
+      template.setD(line)
+      const render = renderFromRender(template)
+      expect(render).not.toBe(undefined)
+      return {app: GUIDApp.new(), render: render!} })
+    environment.defaultRender = tryFirst(render, defaultRender)
+    environment.workspace.root = app.id
+    const harness = new EditorHarness(environment, true)
+
+    expect(harness.container.textContent).toContain("Name")
+
+    harness.unmount()
+  })
+
   it("creates an Evaluate, JavaScriptProgram, statement list, and statement through completions", () => {
     const environment = makeTestEnvironment({libraries: testLibrary(), defaultRender})
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.typeAndEnter("new Evaluate")
     const evaluate = harness.get(environment.workspace.id, workspaceRootField.id)
@@ -1439,7 +1458,7 @@ describe("DRoot editor integration", () => {
 
   it("enters and evaluates a factorial program through editor interactions", () => withJavascriptHost(javascriptCalls => {
     const environment = makeTestEnvironment({libraries, defaultRender: tryFirst(renders, defaultRender)})
-    const harness = new EditorHarness(environment, rootCursor(environment))
+    const harness = new EditorHarness(environment, true)
 
     harness.typeAndEnter("new Evaluate")
     const evaluate = harness.get(environment.workspace.id, workspaceRootField.id)
@@ -1494,7 +1513,7 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("new Function Call")
     harness.typeAndEnter("factorial")
     harness.key("[")
-    const recursiveArguments = harness.activeCursor().parent
+    const recursiveArguments = harness.activeEdge().parent
     expect(recursiveArguments).not.toBe(undefined)
 
     harness.typeAndEnter("new Binary Inline")

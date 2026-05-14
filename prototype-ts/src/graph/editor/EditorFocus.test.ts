@@ -1,31 +1,31 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { Cursor } from "../cursor/Cursor"
 import { sidFromString } from "../model/ID"
+import type { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
-import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestNextTabStopFromCursor } from "./EditorFocus"
+import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestNextTabStopFromActiveElement } from "./EditorFocus"
 
 afterEach(() => {
   document.body.replaceChildren()
 })
 
-function cursor(label: string) {
-  return new Cursor(undefined, "guid-parent", sidFromString(label))
+function edge(label: string): Edge {
+  return {parent: "guid-parent", label: sidFromString(label)}
 }
 
-function editor(cursor: Cursor, tabStop = false) {
+function editor(edge: Edge, tabStop = false) {
   const span = document.createElement("span")
-  const descend: EditorDescend = {cursor, edgeContext: {}, unmatching: false}
+  const descend: EditorDescend = {edge, edgeContext: {}, unmatching: false}
   span.tabIndex = 0
   attachEditorDescend(span, descend)
-  attachEditorFocus(span, {cursor, descend, tabStop})
+  attachEditorFocus(span, {edge, descend, tabStop})
   return span
 }
 
 describe("EditorFocus", () => {
   it("tabs to placeholder-like tab stops in DOM tree order", () => {
-    const root = editor(cursor("root"))
-    const filled = editor(cursor("filled"))
-    const missing = editor(cursor("missing"), true)
+    const root = editor(edge("root"))
+    const filled = editor(edge("filled"))
+    const missing = editor(edge("missing"), true)
     document.body.appendChild(root)
     root.append(filled, missing)
 
@@ -36,8 +36,8 @@ describe("EditorFocus", () => {
   })
 
   it("searches child tab stops before earlier siblings when reverse-tabbing", () => {
-    const root = editor(cursor("root"))
-    const missing = editor(cursor("missing"), true)
+    const root = editor(edge("root"))
+    const missing = editor(edge("missing"), true)
     document.body.appendChild(root)
     root.appendChild(missing)
 
@@ -47,9 +47,9 @@ describe("EditorFocus", () => {
   })
 
   it("walks parent, child, and sibling editor focus nodes", () => {
-    const root = editor(cursor("root"))
-    const first = editor(cursor("first"))
-    const second = editor(cursor("second"))
+    const root = editor(edge("root"))
+    const first = editor(edge("first"))
+    const second = editor(edge("second"))
     document.body.appendChild(root)
     root.append(first, second)
 
@@ -62,13 +62,12 @@ describe("EditorFocus", () => {
     expect(document.activeElement).toBe(root)
   })
 
-  it("can defer tab navigation until after the target cursor is rendered", () => {
-    const rootCursor = cursor("root")
-    const missing = editor(cursor("missing"), true)
-    requestNextTabStopFromCursor(rootCursor)
-
-    const root = editor(rootCursor)
+  it("can defer tab navigation from the active editor until after rerender", () => {
+    const missing = editor(edge("missing"), true)
+    const root = editor(edge("root"))
     document.body.appendChild(root)
+    root.focus()
+    requestNextTabStopFromActiveElement()
     root.appendChild(missing)
 
     expect(focusPendingEditor(document.body)).toBe(true)

@@ -1,11 +1,11 @@
 import * as React from "react"
 import { concatMap, intersperse, join } from "../../lib/Array"
-import { mapMaybe, maybe, Maybe, nothing } from "../../lib/Maybe"
+import { maybe, Maybe, nothing } from "../../lib/Maybe"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { commitIDToActiveElement, EditorCommands } from "../editor/EditorCommands"
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
-import { focusEditorForCursor } from "../editor/EditorFocus"
+import { focusEditorFromElement } from "../editor/EditorFocus"
 import { IdenticonComponent } from "../components/IdenticonComponent"
 import { ListInsertionEditorComponent } from "../components/ListInsertionEditorComponent"
 import { GUID } from "../model/ID"
@@ -64,7 +64,7 @@ function selectOrChooseID(e: React.MouseEvent, context: React.ContextType<typeof
     e.preventDefault()
     context.runE(() => maybe(context.chooseID?.(), () => false, commitIDToActiveElement))
     return }
-  mapMaybe(context.focusCursor, cursor => focusEditorForCursor(document.body, cursor)) }
+  focusEditorFromElement(e.currentTarget) }
 
 export type ListInsertionPoint = {
   entries: (needle: string) => {a: Entry, matches: Match[]}[]
@@ -84,7 +84,7 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
   let closing = <span>{props.closing}</span>
   let singleLine = props.children.length <= 1 && !props.children.find(child => !isSingleLine(child))
   let insertionPoint = (i: number, label: string) => props.insertionPoints[i]
-    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} runE={context.runE} />
+    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} insertionIndex={i} descend={context.descend} runE={context.runE} />
     : <span key={`insertion${i}`}>{label}</span>
   let child = (d: D, i: number, depth: number) => {
     let insertionIndex = i + 1

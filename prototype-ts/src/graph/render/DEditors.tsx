@@ -1,14 +1,13 @@
 import * as React from "react"
 import { mapMaybe, maybeMap, Maybe, nothing } from "../../lib/Maybe"
-import { _childCursor } from "../cursor/childCursor"
-import { Cursor } from "../cursor/Cursor"
 import { buildEdgeLabelEntries } from "../editor/buildEntries"
 import { attachEditorCommands, detachEditorCommands, EdgeContext, EditorCommands, editorKeyDownAction } from "../editor/EditorCommands"
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
-import { attachEditorDescend, attachEditorFocus, detachEditorFocus, focusEditorForCursor } from "../editor/EditorFocus"
+import { attachEditorDescend, attachEditorFocus, detachEditorFocus, focusFirstEditor } from "../editor/EditorFocus"
 import { focus } from "../editor/ignoreFocusEvents"
 import { _get, Environment, environment, withEnvironment } from "../Environment"
+import { Edge } from "../model/Edge"
 import { GUID, ID } from "../model/ID"
 import { NumberEditorComponent } from "../components/NumberEditorComponent"
 import { PlaceholderEditorComponent } from "../components/PlaceholderEditorComponent"
@@ -17,29 +16,28 @@ import { StringEditorComponent } from "../components/StringEditorComponent"
 import { activeEditorCommands, childContext, D, isSingleLine, mergeEditorCommands, DContext, dElement, DScope } from "./DContext"
 import { indentWidth } from "./DLayout"
 
-export function descendElement(cursor: Cursor, child: D, unmatching: boolean, edgeContext: EdgeContext = {}): D {
-  return dElement(DescendComponent, {cursor, child, unmatching, edgeContext}, "descend", isSingleLine(child))
+export function descendElement(edge: Edge, child: D, unmatching: boolean, edgeContext: EdgeContext = {}): D {
+  return dElement(DescendComponent, {edge, child, unmatching, edgeContext}, "descend", isSingleLine(child))
 }
 
-function DescendComponent(props: {cursor: Cursor, child: D, unmatching: boolean, edgeContext: EdgeContext}) {
+function DescendComponent(props: {edge: Edge, child: D, unmatching: boolean, edgeContext: EdgeContext}) {
   const context = React.useContext(DContext)
-  const descend = React.useMemo(() => ({cursor: props.cursor, edgeContext: props.edgeContext, unmatching: props.unmatching}), [props.cursor, props.edgeContext, props.unmatching])
+  const descend = React.useMemo(() => ({edge: props.edge, edgeContext: props.edgeContext, unmatching: props.unmatching}), [props.edge, props.edgeContext, props.unmatching])
   let classNames = ["descend", ...maybeMap([[props.unmatching, "unmatching"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
   return <span className={classNames.join(" ")} ref={span => { if (span) attachEditorDescend(span, descend) }}>
     <DScope context={childContext(context, {
       edgeContext: props.edgeContext,
-      chooseID: () => _get(props.cursor.parent, props.cursor.label),
-      focusCursor: props.cursor,
+      chooseID: () => _get(props.edge.parent, props.edge.label),
       descend
     })}>{props.child}</DScope>
   </span>
 }
 
-export function guidEditor(cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands = {}): D {
-  return dElement(GuidEditorComponent, {cursor, id, child, focusWhenSelected, editorCommands, rootEditorCommands}, "guidEditor", isSingleLine(child))
+export function guidEditor(edge: Edge, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands = {}): D {
+  return dElement(GuidEditorComponent, {edge, id, child, focusWhenSelected, editorCommands, rootEditorCommands}, "guidEditor", isSingleLine(child))
 }
 
-function GuidEditorComponent(props: {cursor: Cursor, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands}) {
+function GuidEditorComponent(props: {edge: Edge, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands}) {
   const context = React.useContext(DContext)
   const span = React.useRef<HTMLSpanElement | null>(null)
   const editorCommands = () => mergeEditorCommands(activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands), props.rootEditorCommands)
@@ -48,7 +46,7 @@ function GuidEditorComponent(props: {cursor: Cursor, id: GUID, child: D, focusWh
     let element = span.current
     if (!element) return
     attachEditorCommands(element, editorCommands())
-    attachEditorFocus(element, {cursor: props.cursor, descend: context.descend, focusWhenSelected: props.focusWhenSelected})
+    attachEditorFocus(element, {edge: props.edge, descend: context.descend, focusWhenSelected: props.focusWhenSelected})
     return () => {
       detachEditorCommands(element)
       detachEditorFocus(element) }
@@ -78,7 +76,7 @@ function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEdito
   return <PlaceholderEditorComponent
     placeholderEditor={props.placeholderEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
-    cursor={context.focusCursor}
+    edge={context.descend?.edge}
     descend={context.descend}
     runE={context.runE} />
 }
@@ -93,7 +91,7 @@ function StringEditorDComponent(props: {stringEditor: StringEditor, editorComman
   return <StringEditorComponent
     stringEditor={props.stringEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
-    cursor={context.focusCursor}
+    edge={context.descend?.edge}
     descend={context.descend}
     runE={context.runE} />
 }
@@ -108,22 +106,22 @@ function NumberEditorDComponent(props: {numberEditor: NumberEditor, editorComman
   return <NumberEditorComponent
     numberEditor={props.numberEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
-    cursor={context.focusCursor}
+    edge={context.descend?.edge}
     descend={context.descend}
     runE={context.runE} />
 }
 
-export function supportsUnderselection(cursor: Cursor, id: ID, child: D, missingField: (label: ID) => D): D {
-  return dElement(SupportsUnderselectionComponent, {cursor, id, child, missingField, environment: environment()}, "supportsUnderselection", isSingleLine(child))
+export function supportsUnderselection(edge: Edge, id: ID, child: D, missingField: (label: ID) => D): D {
+  return dElement(SupportsUnderselectionComponent, {edge, id, child, missingField, environment: environment()}, "supportsUnderselection", isSingleLine(child))
 }
 
 type SupportsUnderselectionComponentState = {pendingEdgeLabel: boolean, missingLabel?: ID, focusMissingLabel?: boolean}
 
-function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: D, missingField: (label: ID) => D, environment: Environment}) {
+function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, missingField: (label: ID) => D, environment: Environment}) {
   const context = React.useContext(DContext)
   const [state, setState] = React.useState<SupportsUnderselectionComponentState>({pendingEdgeLabel: false})
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
-  const span = React.useRef<HTMLSpanElement | null>(null)
+  const missingFieldSpan = React.useRef<HTMLSpanElement | null>(null)
   const labelEditorState = React.useRef<PlaceholderEditorState>({})
   const chooseLabel = (label: ID) => {
     labelEditorState.current = {}
@@ -136,11 +134,9 @@ function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: 
     setState({pendingEdgeLabel: true, missingLabel: undefined, focusMissingLabel: false}) }
   let editorCommands = mergeEditorCommands(context.editorCommands, {newEdge: startNewEdge})
   React.useLayoutEffect(() => {
-    if (state.focusMissingLabel && span.current)
-      mapMaybe(state.missingLabel, label => {
-        focusEditorForCursor(span.current!, _childCursor(props.cursor, props.id, label))
-        setState(state => ({...state, focusMissingLabel: false})) }) })
-  return <span ref={span}>
+    if (state.focusMissingLabel && missingFieldSpan.current && focusFirstEditor(missingFieldSpan.current))
+      setState(state => ({...state, focusMissingLabel: false})) })
+  return <span>
     <DScope context={childContext(context, {editorCommands})}>{props.child}</DScope>
     {state.pendingEdgeLabel
       ? <span>
@@ -150,7 +146,6 @@ function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: 
           activeState={activeState()}
           placeholder="label"
           editorCommands={{commit: id => mapMaybe(id, id => chooseLabel(id))}}
-          cursor={props.cursor}
           descend={context.descend}
           runE={context.runE}
           closeCompletion={() => {
@@ -168,17 +163,16 @@ function SupportsUnderselectionComponent(props: {cursor: Cursor, id: ID, child: 
       </span>
       : null}
     {mapMaybe(state.missingLabel, label =>
-      <DScope key="missingLabel" context={context}>{withEnvironment(props.environment, () => props.missingField(label))}</DScope>)}
+      <span key="missingLabel" ref={missingFieldSpan}><DScope context={context}>{withEnvironment(props.environment, () => props.missingField(label))}</DScope></span>)}
   </span>
 }
 
-export function label(cursor: Cursor, child: D): D {
-  return dElement(LabelComponent, {cursor, child}, "label", isSingleLine(child))
+export function label(edge: Edge, child: D): D {
+  return dElement(LabelComponent, {edge, child}, "label", isSingleLine(child))
 }
 
-function LabelComponent(props: {cursor: Cursor, child: D}) {
+function LabelComponent(props: {edge: Edge, child: D}) {
   const context = React.useContext(DContext)
   return <span className="edgeLabel"><DScope context={childContext(context, {
-    chooseID: () => props.cursor.label,
-    focusCursor: props.cursor })}>{props.child}</DScope></span>
+    chooseID: () => props.edge.label })}>{props.child}</DScope></span>
 }

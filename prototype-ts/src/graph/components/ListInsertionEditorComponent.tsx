@@ -1,11 +1,13 @@
 import * as React from "react"
 import { nothing } from "../../lib/Maybe"
 import type { PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/DEditors"
+import type { EditorDescend } from "../render/DContext"
 import type { ListInsertionPoint } from "../render/DLayout"
 import { handleFocusEvent } from "../editor/ignoreFocusEvents"
+import { requestNextTabStopFromDescendChildFromActiveElement } from "../editor/EditorFocus"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
 
-export function ListInsertionEditorComponent(props: {insertionPoint: ListInsertionPoint, label: string, active: boolean, setActive: (active: boolean) => void, runE: (f: () => void) => void}) {
+export function ListInsertionEditorComponent(props: {insertionPoint: ListInsertionPoint, label: string, active: boolean, setActive: (active: boolean) => void, insertionIndex: number, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const editorState = React.useRef<PlaceholderEditorState>({})
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
   const clearEditorState = () => {
@@ -25,6 +27,7 @@ export function ListInsertionEditorComponent(props: {insertionPoint: ListInserti
     activeState={activeState}
     placeholder="item"
     editorCommands={props.insertionPoint.editorCommands}
+    descend={props.descend}
     runE={props.runE}
     closeCompletion={() => {
       clearEditorState()
@@ -39,6 +42,7 @@ export function ListInsertionEditorComponent(props: {insertionPoint: ListInserti
       e.preventDefault()
       e.stopPropagation()
       props.runE(() => {
+        requestNextTabStopFromDescendChildFromActiveElement(props.insertionIndex)
         clearEditorState()
         props.setActive(false)
         action() })}}

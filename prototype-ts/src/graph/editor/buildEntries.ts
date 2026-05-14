@@ -9,8 +9,8 @@ import { generateGUID, ID, nidFromNumber, sidFromString } from "../model/ID"
 import { LoadedNamedThing, loadedNamedThings } from "../loadedNamedThings"
 import { algebraicTypeHasCtor, typeIsOrHasAtomicType, typeMatches } from "../typeMatches"
 
-function entryForID(name: string, id: ID, source: Source, cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry {
-  let matching = fromMaybe(bindMaybe(cursorType, cursorType => typeMatches(id, cursorType)), () => true)
+function entryForID(name: string, id: ID, source: Source, expectedType: Maybe<Type>, action: (id: () => ID) => void): Entry {
+  let matching = fromMaybe(bindMaybe(expectedType, expectedType => typeMatches(id, expectedType)), () => true)
   return {
     string: name,
     disambiguation: bindMaybe(bindMaybe(_get(id, ctorField.id), Ctor.fromID), ctor => ctor.name),
@@ -19,11 +19,11 @@ function entryForID(name: string, id: ID, source: Source, cursorType: Maybe<Type
     external: fromMaybe(mapMaybe(source, source => source.source === SourceType.LibraryType), () => true),
     magic: false }}
 
-function newEntryForData(name: string, id: ID, cursorType: Maybe<Type>, action: (id: () => ID) => void): Maybe<Entry> {
+function newEntryForData(name: string, id: ID, expectedType: Maybe<Type>, action: (id: () => ID) => void): Maybe<Entry> {
   return bindMaybe(Ctor.fromID(id), ctor => ({
     string: `new ${fromMaybe(ctor.name, () => "[unnamed]")}`,
     action: () => action(() => { let guid = generateGUID(); set(guid, ctorField.id, ctor.id); return guid }),
-    matching: fromMaybe(mapMaybe(cursorType, type => matchType(type,
+    matching: fromMaybe(mapMaybe(expectedType, type => matchType(type,
       algebraicType => algebraicTypeHasCtor(algebraicType, ctor),
       listType => ctor.id === nonemptyListCtor.id || ctor.id === emptyListCtor.id,
       _ctor => ctor.id === _ctor.id,
@@ -45,19 +45,19 @@ function stringMagicEntry(searchString: string, typeMatchesString: boolean, acti
     matching: typeMatchesString,
     external: true, magic: true }]}
 
-function newRawNodeEntry(cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry {
+function newRawNodeEntry(expectedType: Maybe<Type>, action: (id: () => ID) => void): Entry {
   return {
     string: "random node",
     action: () => action(() => generateGUID()),
-    matching: cursorType === nothing,
+    matching: expectedType === nothing,
     external: false,
     magic: false }}
 
-function newEntries(loadedNamedThings: LoadedNamedThing[], cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry[] {
-  return join(loadedNamedThings.map(({name, id, source}) => maybeToArray(newEntryForData(name, id, cursorType, action)))) }
+function newEntries(loadedNamedThings: LoadedNamedThing[], expectedType: Maybe<Type>, action: (id: () => ID) => void): Entry[] {
+  return join(loadedNamedThings.map(({name, id, source}) => maybeToArray(newEntryForData(name, id, expectedType, action)))) }
 
-function dataEntries(loadedNamedThings: LoadedNamedThing[], cursorType: Maybe<Type>, action: (id: () => ID) => void): Entry[] {
-  return loadedNamedThings.map(({name, id, source}) => entryForID(name, id, source, cursorType, action)) }
+function dataEntries(loadedNamedThings: LoadedNamedThing[], expectedType: Maybe<Type>, action: (id: () => ID) => void): Entry[] {
+  return loadedNamedThings.map(({name, id, source}) => entryForID(name, id, source, expectedType, action)) }
 
 function compareEntries(lhs: Entry, rhs: Entry): number {
   return lexCompare(lhs, rhs, (lhs, rhs) => +rhs.matching - +lhs.matching, (lhs, rhs) => +lhs.magic - +rhs.magic) }

@@ -1,16 +1,16 @@
 import * as React from "react"
 import { mapMaybe, maybe, nothing } from "../../lib/Maybe"
-import { Cursor } from "../cursor/Cursor"
+import { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
 import type { PlaceholderEditor, PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/DEditors"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
 import { editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
-import { requestNextTabStopFromCursor } from "../editor/EditorFocus"
+import { requestNextTabStopFromActiveElement } from "../editor/EditorFocus"
 import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { useEditorAttachment } from "./useEditorAttachment"
 
-export function PlaceholderEditorComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, cursor?: Cursor, descend?: EditorDescend, runE: (f: () => void) => void}) {
+export function PlaceholderEditorComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const [active, setActive] = React.useState(false)
   const span = React.useRef<HTMLSpanElement | null>(null)
   const editorState = React.useRef<PlaceholderEditorState>({})
@@ -25,7 +25,7 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
     if (e) e.currentTarget.value = ""
     editorState.current = {}
     setActive(false) }
-  useEditorAttachment(span, props.editorCommands, {cursor: props.cursor, descend: props.descend, activate, tabStop: true})
+  useEditorAttachment(span, props.editorCommands, {edge: props.edge, descend: props.descend, activate, tabStop: true})
   return maybe(props.placeholderEditor.activeState || (active ? {entries: props.placeholderEditor.entries, editorState: editorState.current} : nothing), () =>
     <span
       className="uneditable"
@@ -48,7 +48,7 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
       activeState={activeState}
       placeholder={props.placeholderEditor.name}
       editorCommands={props.editorCommands}
-      cursor={props.cursor}
+      edge={props.edge}
       descend={props.descend}
       tabStop={true}
       runE={props.runE}
@@ -59,8 +59,8 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
         e.preventDefault()
         e.stopPropagation()
         props.runE(() => {
-          action()
-          mapMaybe(props.cursor, cursor => requestNextTabStopFromCursor(cursor)) })}}
+          requestNextTabStopFromActiveElement()
+          action() })}}
       keyDown={runEditorKeyDown}
       entryListKeyDown={runEntryListKeyDown}
     /> })

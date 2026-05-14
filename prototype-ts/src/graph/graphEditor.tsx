@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client"
 import { assert } from "../lib/assert"
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } from "../lib/Maybe"
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
-import { Cursor } from "./cursor/Cursor"
 import type { D } from "./render/D"
 import { DRoot } from "./render/DRoot"
 import { createProjection } from "./render/project"
@@ -12,11 +11,11 @@ import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { commitIDToActiveElement, commitToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
-import { editorFocusForActiveElement, focusEditorForCursor, focusPendingEditor, requestFocusForCursor } from "./editor/EditorFocus"
+import { editorFocusForActiveElement, focusFirstEditor, focusPendingEditor, requestFocusFirstEditor } from "./editor/EditorFocus"
 import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, Workspace, withEnvironment } from "./Environment"
 import { BradParams, ctorField, HasID, jsonFromID, Module } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
-import { EdgeRef } from "./model/EdgeRef"
+import { Edge } from "./model/Edge"
 import { generateGUID, guidFromID, ID, sidFromString } from "./model/ID"
 import { jsonFromBradParams } from "./transforms/jsonFromBradParams"
 import { jsonFromString } from "./transforms/jsonFromString"
@@ -43,7 +42,7 @@ function handleMenuAction(action: string) {
       redoStack = []
       workspace = newWorkspace()
       guidMap = new GUIDMap()
-      initialFocusCursor = nothing
+      initialFocusRequested = false
       rootComponent.initialFocusConsumed = false
       graphHighlight = nothing
       filename = nothing
@@ -95,7 +94,7 @@ function handleMenuAction(action: string) {
       break
     case "select-all":
       if (!actionIfTextInput("selectAll:"))
-        rootComponent.runE(() => requestFocusForCursor(new Cursor(nothing, environment().workspace.id, workspaceRootField.id)))
+        rootComponent.runE(requestFocusFirstEditor)
       break
     case "console-log-selection":
       rootComponent.runE(() => mapMaybe(activeID(), logID))
@@ -159,10 +158,8 @@ function saveCurrentAs() {
 
 function view(id: Maybe<ID>) { mapMaybe(id, id => set(environment().workspace.id, workspaceViewField.id, id)) }
 
-function activeCursor(): Maybe<Cursor> { return editorFocusForActiveElement()?.cursor }
-
-function activeEdge(): Maybe<EdgeRef> {
-  return mapMaybe(activeCursor(), cursor => ({parent: cursor.parent, label: cursor.label})) }
+function activeEdge(): Maybe<Edge> {
+  return editorFocusForActiveElement()?.edge }
 
 function activeID(): Maybe<ID> {
   return bindMaybe(activeEdge(), edge => _get(edge.parent, edge.label)) }
@@ -227,7 +224,7 @@ let redoStack: UndoRedo[][] = []
 function newWorkspace(root: Maybe<ID> = nothing, view: Maybe<ID> = nothing): Workspace { return {id: generateGUID(), root, view} }
 let workspace = newWorkspace()
 let guidMap = new GUIDMap()
-let initialFocusCursor: Maybe<Cursor> = new Cursor(nothing, workspace.id, workspaceRootField.id)
+let initialFocusRequested = true
 let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 
@@ -292,7 +289,7 @@ function loadJson(json: string) {
     undoStack = []
     redoStack = []
     guidMap = _guidMap
-    initialFocusCursor = nothing
+    initialFocusRequested = false
     rootComponent.initialFocusConsumed = false
     graphHighlight = nothing
     workspace = newWorkspace(_root)
@@ -350,11 +347,11 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
     for (let root of [leftPanel.current, rightPanel.current])
       if (root && focusPendingEditor(root)) return
     if (initialFocusConsumed.current) return
-    mapMaybe(initialFocusCursor, cursor => {
+    if (initialFocusRequested)
       for (let root of [leftPanel.current, rightPanel.current])
-        if (root && focusEditorForCursor(root, cursor)) {
+        if (root && focusFirstEditor(root)) {
           initialFocusConsumed.current = true
-          return {} } }) }
+          return } }
 
   React.useImperativeHandle(ref, () => ({
     get showGraph() { return showGraph.current },
