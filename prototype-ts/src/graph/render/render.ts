@@ -6,7 +6,7 @@ import { ID } from "../model/ID"
 import { Render } from "./R"
 
 export function render0(ctor: Ctor, f: (id: ID) => D): Render {
-  return (cursor, sourceID, edgeContext) => renderByCtor(ctor, id => f(id) )(cursor, sourceID, edgeContext) }
+  return (cursor, sourceID, edgeContext, cyclePath) => renderByCtor(ctor, id => f(id) )(cursor, sourceID, edgeContext, cyclePath) }
 
 export function renderByCtor(ctor: Ctor, f: (id: ID) => Maybe<D>): Render {
   return (cursor, sourceID) => bindMaybe(sourceID, sourceID => bindMaybe(_get(sourceID.id, ctorField.id), ctorID => ctorID === ctor.id ? f(sourceID.id) : nothing)) }

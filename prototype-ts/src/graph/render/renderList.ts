@@ -2,7 +2,6 @@ import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib
 import { buildEntries } from "../editor/buildEntries"
 import { _childCursor } from "../cursor/childCursor"
 import { Cursor } from "../cursor/Cursor"
-import { cursorHasCycle } from "../cursor/cursorHasCycle"
 import { set } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, HasID, headField, EmptyList, List, listFromID, ListType, matchList, NonemptyList, tailField } from "../graph"
 import type { EdgeContext, EditorCommands } from "../editor/EditorCommands"
@@ -13,8 +12,9 @@ import { collapsible, collapseToggle } from "./DControls"
 import { dList, type ListInsertionPoint } from "./DLayout"
 import { alwaysFail, descend, Render } from "./R"
 import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
+import { emptyCyclePath, stepCyclePath, type CyclePath } from "./CyclePath"
 
-type ListProjectionItem<A extends HasID> = {cursor: Cursor, edgeContext: EdgeContext, list: NonemptyList<A>}
+type ListProjectionItem<A extends HasID> = {cursor: Cursor, edgeContext: EdgeContext, cyclePath: CyclePath, list: NonemptyList<A>}
 type ListProjection<A extends HasID> = {
   items: ListProjectionItem<A>[]
   emptyTailCursor: Cursor
@@ -22,14 +22,15 @@ type ListProjection<A extends HasID> = {
   emptyTail: EmptyList
 }
 
-function listProjectionFromList<A extends HasID>(cursor: Cursor, edgeContext: EdgeContext, list: List<A>, visited = new Set<ID>()): Maybe<ListProjection<A>> {
+function listProjectionFromList<A extends HasID>(cursor: Cursor, edgeContext: EdgeContext, cyclePath: CyclePath, list: List<A>, visited = new Set<ID>()): Maybe<ListProjection<A>> {
   if (visited.has(list.id)) return nothing
   visited.add(list.id)
+  let tailCyclePath = stepCyclePath(cyclePath, list.id).path
   return matchList(list,
     nonemptyList => bindMaybe(nonemptyList.tail, tail => {
       let tailCursor = _childCursor(cursor, nonemptyList.id, tailField.id)
-      return mapMaybe(listProjectionFromList(tailCursor, edgeContextFromEdge({parent: nonemptyList.id, label: tailField.id}, edgeContext.expectedType), tail, visited), ({items, emptyTailCursor, emptyTailEdgeContext, emptyTail}) =>
-        ({items: [{cursor, edgeContext, list: nonemptyList}, ...items], emptyTailCursor, emptyTailEdgeContext, emptyTail}) )}),
+      return mapMaybe(listProjectionFromList(tailCursor, edgeContextFromEdge({parent: nonemptyList.id, label: tailField.id}, edgeContext.expectedType), tailCyclePath, tail, visited), ({items, emptyTailCursor, emptyTailEdgeContext, emptyTail}) =>
+        ({items: [{cursor, edgeContext, cyclePath, list: nonemptyList}, ...items], emptyTailCursor, emptyTailEdgeContext, emptyTail}) )}),
     emptyList => ({items: [], emptyTailCursor: cursor, emptyTailEdgeContext: edgeContext, emptyTail: emptyList}) )}
 
 function listElementType(edgeContext: EdgeContext) {
@@ -48,11 +49,12 @@ export function renderListParens(separator = ",", r = alwaysFail) { return rende
 export function renderListCurly(separator = ",", r = alwaysFail) { return renderList("{", "}", separator, r) }
 
 export function renderList(opening = "[", closing = "]", separator = ",", r = alwaysFail): Render {
-  return (listCursor, sourceID, listEdgeContext) => bindMaybe(sourceID, sourceID => {
+  return (listCursor, sourceID, listEdgeContext, cyclePath = emptyCyclePath()) => bindMaybe(sourceID, sourceID => {
     const edgeContext = fromMaybe(listEdgeContext, () => edgeContextForEdge(listCursor))
     return bindMaybe(listFromID(sourceID.id, id => ({id})), list =>
-      mapMaybe(listProjectionFromList(listCursor, edgeContext, list), ({items, emptyTailCursor, emptyTailEdgeContext, emptyTail}) => {
-        let defaultCollapsed = cursorHasCycle(listCursor)
+      mapMaybe(listProjectionFromList(listCursor, edgeContext, cyclePath, list), ({items, emptyTailCursor, emptyTailEdgeContext, emptyTail}) => {
+        let cycleStep = stepCyclePath(cyclePath, sourceID.id)
+        let defaultCollapsed = cycleStep.hasCycle
         let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
           let toggle = list instanceof NonemptyList ? collapseToggle(collapsed, () => setCollapsed(!collapsed)) : nothing
           if (collapsed && toggle) return renderDocumentGuidEditor(listCursor, sourceID, dList(opening, [], closing, separator, toggle, [], collapsed))
@@ -66,16 +68,16 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
               entries: buildEntries(listElementType(edgeContext), id => insert(id())),
               editorCommands: {commit: insert},
               requiresMeta }}
-          let listItem = (cursor: Cursor, listEdgeContext: EdgeContext, list: NonemptyList<HasID>) => {
+          let listItem = (cursor: Cursor, listEdgeContext: EdgeContext, cyclePath: CyclePath, list: NonemptyList<HasID>) => {
             let commit = (id: Maybe<ID>) => maybe(id,
               () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => commit(tail.id))),
               id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) )
-            return descend(cursor, list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)}) }
+            return descend(cursor, list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)}, cyclePath) }
           let requiresMetaAfter = (list: NonemptyList<HasID>) => maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
           let insertionPoints = [
             ...items.map(({cursor, edgeContext, list}, i) => insertionPoint(cursor, edgeContext, list, i !== 0 && requiresMetaAfter(items[i - 1].list))),
             insertionPoint(emptyTailCursor, emptyTailEdgeContext, emptyTail, maybe(items[items.length - 1], () => false, ({list}) => requiresMetaAfter(list))) ]
-          return renderDocumentGuidEditor(listCursor, sourceID, dList(opening, items.map(({cursor, edgeContext, list}) => listItem(cursor, edgeContext, list)), closing, separator, toggle,
+          return renderDocumentGuidEditor(listCursor, sourceID, dList(opening, items.map(({cursor, edgeContext, cyclePath, list}) => listItem(cursor, edgeContext, cyclePath, list)), closing, separator, toggle,
             insertionPoints, collapsed), listRootEditorCommands()) }
         return defaultCollapsed || list instanceof NonemptyList ? collapsible(defaultCollapsed, defaultCollapsed, render) : render(false, () => {}) }))})}
 

@@ -9,4 +9,4 @@ import type { Render } from "./R"
 
 export function renderNameShallow(ctor: Ctor): Render {
   let render = render0(ctor, id => dText(fromMaybe(bindMaybe(_get(id, nameField.id), stringFromID), () => "[unnamed]")))
-  return (cursor, sourceID, edgeContext) => bindMaybe(render(cursor, sourceID, edgeContext), d => mapMaybe(sourceID, sourceID => renderDocumentGuidEditor(cursor, sourceID, d))) }
+  return (cursor, sourceID, edgeContext, cyclePath) => bindMaybe(render(cursor, sourceID, edgeContext, cyclePath), d => mapMaybe(sourceID, sourceID => renderDocumentGuidEditor(cursor, sourceID, d))) }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { childCursor, _childCursor } from "./childCursor"
 import { Cursor, cursorsEqual } from "./Cursor"
-import { cursorHasCycle } from "./cursorHasCycle"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 
@@ -32,13 +31,4 @@ describe("Cursor", () => {
     })
   })
 
-  it("detects repeated edges in a cursor path as cycles", () => {
-    const root = rootCursor()
-    const child = _childCursor(root, "guid-child", sidFromString("child"))
-    const cycle = _childCursor(child, "guid-child", sidFromString("child"))
-
-    expect(cursorHasCycle(root)).toBe(false)
-    expect(cursorHasCycle(child)).toBe(false)
-    expect(cursorHasCycle(cycle)).toBe(true)
-  })
 })

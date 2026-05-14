@@ -6,8 +6,8 @@ import { jsonFromJSON } from "../transforms/jsonFromJSON"
 import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
 import { descend, Render } from "./R"
 
-export const renderLoadJSON: Render = (cursor, sourceID, edgeContext) => bindMaybe(sourceID, sourceID => mapMaybe(LoadJSON.fromID(sourceID.id), loadJSON => renderDocumentGuidEditor(cursor, sourceID, line(
-  descend(cursor, sourceID.id, urlField.id),
+export const renderLoadJSON: Render = (cursor, sourceID, edgeContext, cyclePath) => bindMaybe(sourceID, sourceID => mapMaybe(LoadJSON.fromID(sourceID.id), loadJSON => renderDocumentGuidEditor(cursor, sourceID, line(
+  descend(cursor, sourceID.id, urlField.id, undefined, undefined, cyclePath),
   dText(" "),
   button("Load", () =>
     bindMaybe(loadJSON.url, jsonURL => mapMaybe(edgeContext?.commit, commit => {

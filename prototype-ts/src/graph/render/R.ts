@@ -9,18 +9,20 @@ import { typeFromEdge } from "../typeFromEdge"
 import { typeMatches } from "../typeMatches"
 import { EdgeContext } from "../editor/EditorCommands"
 import { edgeContextFromEdge } from "../editor/edgeContext"
+import { emptyCyclePath, stepCyclePath, type CyclePath } from "./CyclePath"
 
-export type Render = (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext) => Maybe<D>
+export type Render = (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext, cyclePath?: CyclePath) => Maybe<D>
 
 export const alwaysFail: Render = () => nothing
 export function dispatch(...renders: Render[]): Render {
-  return (cursor, id, edgeContext) => renders.length === 0 ? nothing : altMaybe(renders[0](cursor, id, edgeContext), () => dispatch(...renders.slice(1))(cursor, id, edgeContext)) }
+  return (cursor, id, edgeContext, cyclePath) => renders.length === 0 ? nothing : altMaybe(renders[0](cursor, id, edgeContext, cyclePath), () => dispatch(...renders.slice(1))(cursor, id, edgeContext, cyclePath)) }
 
-export function descend(cursor: Cursor, id: ID, label: ID, render = alwaysFail, edgeContext?: EdgeContext): D {
+export function descend(cursor: Cursor, id: ID, label: ID, render = alwaysFail, edgeContext?: EdgeContext, cyclePath: CyclePath = emptyCyclePath()): D {
   let newCursor = _childCursor(cursor, id, label)
   let newSourceID = get(id, label)
   let expectedType = fromMaybe(edgeContext?.expectedType, () => typeFromEdge({parent: id, label}))
   let newEdgeContext = fromMaybe(edgeContext, () => edgeContextFromEdge({parent: id, label}, expectedType))
-  return descendElement(newCursor, fromMaybe(render(newCursor, newSourceID, newEdgeContext), () => environment().defaultRender(newCursor, newSourceID, newEdgeContext)),
+  let childCyclePath = stepCyclePath(cyclePath, id).path
+  return descendElement(newCursor, fromMaybe(render(newCursor, newSourceID, newEdgeContext, childCyclePath), () => environment().defaultRender(newCursor, newSourceID, newEdgeContext, childCyclePath)),
     fromMaybe(bindMaybe(newSourceID, newSourceID => bindMaybe(expectedType, type => mapMaybe(typeMatches(newSourceID.id, type), typeMatches => !typeMatches))), () => false),
     newEdgeContext) }

@@ -9,6 +9,7 @@ import { block, dIdenticon, dText, line } from "./DLayout"
 import { label as dLabel } from "./DEditors"
 import { isSingleLine, type D } from "./DContext"
 import { alwaysFail, descend } from "./R"
+import { emptyCyclePath, type CyclePath } from "./CyclePath"
 
 function renderIDLabel(id: ID): D {
   return matchID<D>(id,
@@ -16,8 +17,8 @@ function renderIDLabel(id: ID): D {
     (sid, string) => dText(`"${string}"`),
     nid => dText(`${numberFromNID(nid)}`)) }
 
-export function renderField(cursor: Cursor, id: ID, label: ID, edgeContext?: EdgeContext): D {
-  let childD = descend(cursor, id, label, alwaysFail, edgeContext)
+export function renderField(cursor: Cursor, id: ID, label: ID, edgeContext?: EdgeContext, cyclePath: CyclePath = emptyCyclePath()): D {
+  let childD = descend(cursor, id, label, alwaysFail, edgeContext, cyclePath)
   let labelD = dLabel(new Cursor(cursor, id, label), line(renderIDLabel(label), dText(" →")) )
   return isSingleLine(childD)
     ? block(line(labelD, dText(" "), childD))

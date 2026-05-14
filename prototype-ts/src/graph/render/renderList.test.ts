@@ -1,10 +1,12 @@
 import * as React from "react"
 import { describe, expect, it } from "vitest"
+import { mapMaybe } from "../../lib/Maybe"
 import { Cursor } from "../cursor/Cursor"
 import { SourceType } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, headField, tailField } from "../graph"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
+import { emptyCyclePath, stepCyclePath } from "./CyclePath"
 import { dText, dKind, type D } from "./D"
 import { renderList } from "./renderList"
 
@@ -76,6 +78,23 @@ describe("renderList", () => {
       expect((collapsible?.props as any)?.defaultCollapsed).toBe(false)
       expect((collapsedList?.props as any)?.children).toEqual([])
       expect(((collapsedList?.props as any)?.collapseToggle.props as any).collapsed).toBe(true)
+    })
+  })
+
+  it("renders list heads with a cycle path through the list spine", () => {
+    withTestEnvironment(() => {
+      const empty = GUIDEmptyList.new()
+      const first = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")})
+      const second = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("b")})
+      const third = GUIDNonemptyList.new(id => ({id})).setHead({id: second.id}).setTail(empty)
+      first.setTail(second)
+      second.setTail(third)
+      const d = renderList("[", "]", ",", (cursor, sourceID, edgeContext, cyclePath) =>
+        mapMaybe(sourceID, sourceID => dText(stepCyclePath(cyclePath || emptyCyclePath(), sourceID.id).hasCycle ? "cycle" : "not")))(cursor(), {id: first.id, source: {source: SourceType.DocumentType, guid: first.id}})
+      const listD = findD(d!, d => dKind(d) === "list")
+      const children = (listD?.props as any)?.children as D[]
+
+      expect(children.map(child => (findD(child, d => dKind(d) === "text")?.props as any)?.string)).toEqual(["not", "not", "cycle"])
     })
   })
 

@@ -1,7 +1,6 @@
 import { bindMaybe, booleanFromMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { buildEntries } from "../editor/buildEntries"
 import { Cursor } from "../cursor/Cursor"
-import { cursorHasCycle } from "../cursor/cursorHasCycle"
 import { type D } from "./DContext"
 import { dIdenticon, dText, line } from "./DLayout"
 import { collapsible, collapseToggle } from "./DControls"
@@ -16,14 +15,15 @@ import { edgeContextForEdge } from "../editor/edgeContext"
 import { editorCommands } from "./renderDocumentGuidEditor"
 import { renderField } from "./renderField"
 import { listCreationEditorCommands, renderList } from "./renderList"
+import { emptyCyclePath, stepCyclePath, type CyclePath } from "./CyclePath"
 
-export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext) => D): (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext) => D {
-  return (cursor, sourceID, edgeContext) => fromMaybe(render(cursor, sourceID, edgeContext), () => defaultRender(cursor, sourceID, edgeContext)) }
+export function tryFirst(render: Render, defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext, cyclePath?: CyclePath) => D): (cursor: Cursor, id: Maybe<SourceID>, edgeContext?: EdgeContext, cyclePath?: CyclePath) => D {
+  return (cursor, sourceID, edgeContext, cyclePath = emptyCyclePath()) => fromMaybe(render(cursor, sourceID, edgeContext, cyclePath), () => defaultRender(cursor, sourceID, edgeContext, cyclePath)) }
 
-function _defaultRender(cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext): D {
+function _defaultRender(cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext, cyclePath: CyclePath = emptyCyclePath()): D {
   edgeContext = fromMaybe(edgeContext, () => edgeContextForEdge(cursor))
   return maybe(sourceID, () => renderNothing(cursor, edgeContext), sourceID => matchID(sourceID.id,
-    guid => renderGUID(cursor, guid, sourceID.source),
+    guid => renderGUID(cursor, guid, sourceID.source, cyclePath),
     (sid, string) => renderString(cursor, sid, string, sourceID.source),
     number => renderNumber(cursor, number, sourceID.source) ))}
 
@@ -33,7 +33,7 @@ function renderNothing(cursor: Cursor, edgeContext: EdgeContext): D {
   let entries = buildEntries(edgeContext.expectedType, id => mapMaybe(edgeContext.commit, commit => commit(id())))
   return placeholderEditor(fromMaybe(edgeContext.fieldName, () => "[unnamed]"), entries, nothing, listCreationEditorCommands(cursor)) }
 
-function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
+function renderGUID(cursor: Cursor, guid: GUID, source: Source, cyclePath: CyclePath): D {
   let ctor = bindMaybe(_get(guid, ctorField.id), Ctor.fromID)
   let ctorFields = fromMaybe(bindMaybe(ctor, ctor => ctor.fields), () => [])
   let guidEdges = edges(guid)
@@ -43,14 +43,15 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
   let labels = [
     ...ctorFields.filter(field => field.id !== nameField.id && field.id !== ctorField.id).map(field => field.id),
     ...extraLabels.filter(label => label !== nameField.id && label !== ctorField.id) ]
-  let defaultCollapsed = cursorHasCycle(cursor)
+  let cycleStep = stepCyclePath(cyclePath, guid)
+  let defaultCollapsed = cycleStep.hasCycle
   let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
     let nameDs = hasName
       ? collapsed
         ? maybe(bindMaybe(_get(guid, nameField.id), stringFromID), () => [], name => [dText(" "), dText(name)])
-        : [dText(" "), descend(cursor, guid, nameField.id)]
+        : [dText(" "), descend(cursor, guid, nameField.id, undefined, undefined, cyclePath)]
       : []
-    let fieldDs = collapsed ? [] : labels.map(label => renderField(cursor, guid, label))
+    let fieldDs = collapsed ? [] : labels.map(label => renderField(cursor, guid, label, undefined, cyclePath))
     const d = line(
       guidEditor(cursor, guid, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => dText(name))), () => dIdenticon(guid)),
         true,
@@ -58,7 +59,7 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
       ...nameDs,
       ...(hasName || labels.length > 0 ? [collapseToggle(collapsed, () => setCollapsed(!collapsed))] : []),
       ...fieldDs )
-    return writable ? supportsUnderselection(cursor, guid, d, missingLabel => renderField(cursor, guid, missingLabel)) : d }
+    return writable ? supportsUnderselection(cursor, guid, d, missingLabel => renderField(cursor, guid, missingLabel, undefined, cyclePath)) : d }
   return defaultCollapsed || hasName || labels.length > 0 ? collapsible(defaultCollapsed, defaultCollapsed || labels.length === 0, render) : render(false, () => {}) }
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }

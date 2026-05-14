@@ -7,6 +7,7 @@ import { GUIDMap } from "./model/GUIDMap"
 import { GUID, guidFromID, ID, stringFromID } from "./model/ID"
 import { IDMap } from "./model/IDMap"
 import type { EdgeContext } from "./editor/EditorCommands"
+import type { CyclePath } from "./render/CyclePath"
 import { workspaceRootField, workspaceViewField } from "./workspace"
 
 export type Workspace = {
@@ -20,7 +21,7 @@ export class Environment {
     public libraries: Map<string, {idMap: IDMap, root: ID}>,
     public guidMap: GUIDMap,
     public workspace: Workspace,
-    public defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext) => D,
+    public defaultRender: (cursor: Cursor, sourceID: Maybe<SourceID>, edgeContext?: EdgeContext, cyclePath?: CyclePath) => D,
     public callbacks: ECallbacks ) {} }
 
 let _environment: Maybe<Environment> = nothing
