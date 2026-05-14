@@ -7,6 +7,7 @@ const editorFocusKey = Symbol("editorFocus")
 const editorDescendKey = Symbol("editorDescend")
 type PendingFocus =
   | {kind: "first"}
+  | {kind: "parentDescendPath", path: number[]}
   | {kind: "nextTabStopFromDescendPath", path: number[], shift: boolean}
   | {kind: "nextTabStopFromDescendChildPath", path: number[], index: number}
 let pendingFocus: Maybe<PendingFocus> = nothing
@@ -159,6 +160,13 @@ export function requestFocusFirstEditor() {
   pendingFocus = {kind: "first"}
 }
 
+export function requestFocusParentFromActiveElement() {
+  pendingFocus = maybe(bindMaybe(activeEditorDescendElement(), parentDescendElement),
+    (): PendingFocus => ({kind: "first"}),
+    parent => maybe(editorDescendPath(parent),
+      (): PendingFocus => ({kind: "first"}),
+      (path): PendingFocus => ({kind: "parentDescendPath", path}))) }
+
 export function requestNextTabStopFromActiveElement(shift = false) {
   pendingFocus = maybe(activeEditorDescendElement(),
     (): PendingFocus => ({kind: "first"}),
@@ -186,6 +194,8 @@ export function focusPendingEditor(root: HTMLElement): boolean {
     switch (pendingFocus.kind) {
       case "first":
         return focusFirstEditor(root)
+      case "parentDescendPath":
+        return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), focusEditorForDescendElement)
       case "nextTabStopFromDescendPath":
         return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
           focusEditorForDescendElement(altMaybe(nextTabStop(descendElement, pendingFocus.shift ? -1 : 1), () => descendElement)))

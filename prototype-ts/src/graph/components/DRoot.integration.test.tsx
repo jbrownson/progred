@@ -680,6 +680,20 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
+  it("focuses the list after deleting its only item", () => {
+    const harness = rootHarness()
+
+    harness.key("[")
+    harness.typeAndEnter("only")
+    harness.globalKey("Delete")
+
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
+    expect(harness.get(list!, ctorField.id)).toBe(emptyListCtor.id)
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+
+    harness.unmount()
+  })
+
   it("does not edit a list until an insertion point is committed", () => {
     const harness = rootHarness()
 

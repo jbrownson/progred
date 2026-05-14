@@ -4,7 +4,7 @@ import { set } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, HasID, headField, EmptyList, List, listFromID, ListType, matchList, NonemptyList, tailField } from "../graph"
 import type { EdgeContext, EditorCommands } from "../editor/EditorCommands"
 import { edgeContextForEdge, edgeContextFromEdge } from "../editor/edgeContext"
-import { requestNextTabStopFromActiveElement } from "../editor/EditorFocus"
+import { requestFocusParentFromActiveElement, requestNextTabStopFromActiveElement } from "../editor/EditorFocus"
 import { Edge } from "../model/Edge"
 import { guidFromID, ID, matchID } from "../model/ID"
 import { collapsible, collapseToggle } from "./DControls"
@@ -68,7 +68,9 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
               requiresMeta }}
           let listItem = (listEdgeContext: EdgeContext, cyclePath: CyclePath, list: NonemptyList<HasID>) => {
             let commit = (id: Maybe<ID>) => maybe(id,
-              () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => commit(tail.id))),
+              () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => {
+                requestFocusParentFromActiveElement()
+                commit(tail.id) })),
               id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) )
             return descend(list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)}, cyclePath) }
           let requiresMetaAfter = (list: NonemptyList<HasID>) => maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
