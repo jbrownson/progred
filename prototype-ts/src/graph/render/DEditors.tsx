@@ -68,46 +68,46 @@ function GuidEditorComponent(props: {cursor: Cursor, id: GUID, child: D, focusWh
 
 export type PlaceholderEditorState = {value?: string, itemSelection?: number, entryListAbove?: boolean, completionOpen?: boolean}
 export type PlaceholderEditorActiveState = {entries: (needle: string) => {a: Entry, matches: Match[]}[], editorState: PlaceholderEditorState}
-export type PlaceholderEditor = {name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>, editorCommands: EditorCommands}
+export type PlaceholderEditor = {name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>}
 export function placeholderEditor(name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>, editorCommands: EditorCommands): D {
-  return dElement(PlaceholderEditorDComponent, {placeholderEditor: {name, entries, activeState, editorCommands}}, "placeholderEditor", true)
+  return dElement(PlaceholderEditorDComponent, {placeholderEditor: {name, entries, activeState}, editorCommands}, "placeholderEditor", true)
 }
 
-function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEditor}) {
+function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands}) {
   const context = React.useContext(DContext)
   return <PlaceholderEditorComponent
     placeholderEditor={props.placeholderEditor}
-    editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.placeholderEditor.editorCommands)}
+    editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
     cursor={context.focusCursor}
     descend={context.descend}
     runE={context.runE} />
 }
 
-export type StringEditor = {string: string, writable: boolean, editorCommands: EditorCommands}
+export type StringEditor = {string: string, writable: boolean}
 export function stringEditor(string: string, writable: boolean, editorCommands: EditorCommands): D {
-  return dElement(StringEditorDComponent, {stringEditor: {string, writable, editorCommands}}, "stringEditor", true)
+  return dElement(StringEditorDComponent, {stringEditor: {string, writable}, editorCommands}, "stringEditor", true)
 }
 
-function StringEditorDComponent(props: {stringEditor: StringEditor}) {
+function StringEditorDComponent(props: {stringEditor: StringEditor, editorCommands: EditorCommands}) {
   const context = React.useContext(DContext)
   return <StringEditorComponent
     stringEditor={props.stringEditor}
-    editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.stringEditor.editorCommands)}
+    editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
     cursor={context.focusCursor}
     descend={context.descend}
     runE={context.runE} />
 }
 
-export type NumberEditor = {number: number, writable: boolean, editorCommands: EditorCommands}
+export type NumberEditor = {number: number, writable: boolean}
 export function numberEditor(number: number, writable: boolean, editorCommands: EditorCommands): D {
-  return dElement(NumberEditorDComponent, {numberEditor: {number, writable, editorCommands}}, "numberEditor", true)
+  return dElement(NumberEditorDComponent, {numberEditor: {number, writable}, editorCommands}, "numberEditor", true)
 }
 
-function NumberEditorDComponent(props: {numberEditor: NumberEditor}) {
+function NumberEditorDComponent(props: {numberEditor: NumberEditor, editorCommands: EditorCommands}) {
   const context = React.useContext(DContext)
   return <NumberEditorComponent
     numberEditor={props.numberEditor}
-    editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.numberEditor.editorCommands)}
+    editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
     cursor={context.focusCursor}
     descend={context.descend}
     runE={context.runE} />

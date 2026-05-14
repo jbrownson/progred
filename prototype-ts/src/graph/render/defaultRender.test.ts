@@ -95,7 +95,7 @@ describe("defaultRender", () => {
       const d = renderString(cursor(), sidFromString("hello"), "hello", {source: SourceType.DocumentType, guid: "guid-holder"})
 
       expect(dKind(d)).toBe("stringEditor")
-      expect((d.props as any).stringEditor.editorCommands.copy).not.toBe(undefined)
+      expect((d.props as any).editorCommands.copy).not.toBe(undefined)
     })
   })
 })
