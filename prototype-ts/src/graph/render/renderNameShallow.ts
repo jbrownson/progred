@@ -3,7 +3,7 @@ import { dText } from "./DLayout"
 import { _get } from "../Environment"
 import { Ctor, nameField } from "../graph"
 import { stringFromID } from "../model/ID"
-import { renderDocumentGuidEditor } from "./defaultRender"
+import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
 import { render0 } from "./render"
 
 export function renderNameShallow(ctor: Ctor) {

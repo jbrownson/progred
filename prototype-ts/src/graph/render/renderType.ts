@@ -1,5 +1,5 @@
 import { dText, line } from "./DLayout"
-import { renderListCurly, renderListParens } from "./defaultRender"
+import { renderListCurly, renderListParens } from "./renderList"
 import { algebraicTypeCtor, atomicTypeCtor, ctorCtor } from "../graph"
 import { dispatch } from "./R"
 import { renderIfAlgebraicType, renderIfCtor, renderIfField, renderIfListType } from "../renderIfs"

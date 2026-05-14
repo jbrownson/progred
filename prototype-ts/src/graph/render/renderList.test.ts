@@ -6,7 +6,7 @@ import { GUIDEmptyList, GUIDNonemptyList, headField, tailField } from "../graph"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 import { dText, dKind, type D } from "./D"
-import { renderList } from "./defaultRender"
+import { renderList } from "./renderList"
 
 function cursor() {
   return new Cursor(undefined, "guid-holder", sidFromString("list"))

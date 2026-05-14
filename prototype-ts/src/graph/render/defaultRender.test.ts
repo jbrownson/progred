@@ -6,7 +6,9 @@ import { nameField } from "../graph"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 import { dText, dKind, type D } from "./D"
-import { defaultRender, renderDocumentGuidEditor, renderField, renderString } from "./defaultRender"
+import { defaultRender, renderString } from "./defaultRender"
+import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
+import { renderField } from "./renderField"
 
 function cursor() {
   return new Cursor(undefined, "guid-holder", sidFromString("root"))
