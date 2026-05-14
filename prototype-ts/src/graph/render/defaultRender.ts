@@ -64,6 +64,6 @@ function renderGUID(cursor: Cursor, guid: GUID, source: Source): D {
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 
 export function renderNumber(cursor: Cursor, number: number, source: Source): D {
-  return numberEditor(number, number, sourceIsWritable(source), editorCommands(cursor, number)) }
+  return numberEditor(number, sourceIsWritable(source), editorCommands(cursor, number)) }
 export function renderString(cursor: Cursor, sid: SID, string: string, source: Source): D {
-  return stringEditor(sid, string, sourceIsWritable(source), editorCommands(cursor, sid)) }
+  return stringEditor(string, sourceIsWritable(source), editorCommands(cursor, sid)) }

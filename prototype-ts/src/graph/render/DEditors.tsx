@@ -9,7 +9,7 @@ import { Match } from "../editor/filters"
 import { attachEditorDescend, attachEditorFocus, detachEditorFocus, focusEditorForCursor } from "../editor/EditorFocus"
 import { focus } from "../editor/ignoreFocusEvents"
 import { _get, Environment, environment, withEnvironment } from "../Environment"
-import { GUID, ID, NID, SID } from "../model/ID"
+import { GUID, ID } from "../model/ID"
 import { NumberEditorComponent } from "../components/NumberEditorComponent"
 import { PlaceholderEditorComponent } from "../components/PlaceholderEditorComponent"
 import { PlaceholderInputComponent } from "../components/PlaceholderInputComponent"
@@ -83,9 +83,9 @@ function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEdito
     runE={context.runE} />
 }
 
-export type StringEditor = {id: SID, string: string, writable: boolean, editorCommands: EditorCommands}
-export function stringEditor(id: SID, string: string, writable: boolean, editorCommands: EditorCommands): D {
-  return dElement(StringEditorDComponent, {stringEditor: {id, string, writable, editorCommands}}, "stringEditor", true)
+export type StringEditor = {string: string, writable: boolean, editorCommands: EditorCommands}
+export function stringEditor(string: string, writable: boolean, editorCommands: EditorCommands): D {
+  return dElement(StringEditorDComponent, {stringEditor: {string, writable, editorCommands}}, "stringEditor", true)
 }
 
 function StringEditorDComponent(props: {stringEditor: StringEditor}) {
@@ -98,9 +98,9 @@ function StringEditorDComponent(props: {stringEditor: StringEditor}) {
     runE={context.runE} />
 }
 
-export type NumberEditor = {id: NID, number: number, writable: boolean, editorCommands: EditorCommands}
-export function numberEditor(id: NID, number: number, writable: boolean, editorCommands: EditorCommands): D {
-  return dElement(NumberEditorDComponent, {numberEditor: {id, number, writable, editorCommands}}, "numberEditor", true)
+export type NumberEditor = {number: number, writable: boolean, editorCommands: EditorCommands}
+export function numberEditor(number: number, writable: boolean, editorCommands: EditorCommands): D {
+  return dElement(NumberEditorDComponent, {numberEditor: {number, writable, editorCommands}}, "numberEditor", true)
 }
 
 function NumberEditorDComponent(props: {numberEditor: NumberEditor}) {
