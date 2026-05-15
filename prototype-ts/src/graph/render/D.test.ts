@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
-import { block, descendElement, dText, isSingleLine, label, line, dKind } from "./D"
+import { block, descendElement, dList, dText, isSingleLine, label, line, dKind } from "./D"
 import { descend } from "./R"
 import { withTestEnvironment } from "../testHelpers"
 
@@ -13,6 +13,13 @@ describe("D", () => {
   it("marks line and block layout in React D metadata", () => {
     expect(isSingleLine(line(dText("lhs"), dText("rhs")))).toBe(true)
     expect(isSingleLine(block(line(dText("lhs"), dText("rhs"))))).toBe(false)
+  })
+
+  it("marks list layout in React D metadata", () => {
+    expect(isSingleLine(dList("[", [], "]", ","))).toBe(true)
+    expect(isSingleLine(dList("[", [dText("x")], "]", ","))).toBe(true)
+    expect(isSingleLine(dList("[", [dText("x"), dText("y")], "]", ","))).toBe(false)
+    expect(isSingleLine(dList("[", [block(dText("x"))], "]", ","))).toBe(false)
   })
 
   it("keeps D kinds on wrappers", () => {

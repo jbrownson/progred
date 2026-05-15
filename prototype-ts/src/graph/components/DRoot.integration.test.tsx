@@ -523,6 +523,59 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
+  const activeListInsertionIsMultiline = (harness: EditorHarness) => {
+    const placeholder = harness.textInput().parentElement
+    return placeholder?.previousSibling instanceof HTMLSpanElement && placeholder.previousSibling.previousSibling instanceof HTMLBRElement
+  }
+
+  const renderedRootListIsMultiline = (harness: EditorHarness) => harness.container.querySelector("br") !== null
+
+  it("keeps an active empty-list insertion point inline", () => {
+    const {harness} = emptyListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+
+    expect(activeListInsertionIsMultiline(harness)).toBe(false)
+
+    harness.unmount()
+  })
+
+  it("renders an active list insertion point multiline when it would add a second item", () => {
+    const {harness} = emptyListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.typeAndEnter("first")
+    harness.click(harness.container.querySelectorAll(".listInsertionPoint")[1])
+
+    expect(activeListInsertionIsMultiline(harness)).toBe(true)
+
+    harness.unmount()
+  })
+
+  it("keeps a committed one-item list inline", () => {
+    const {harness} = emptyListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.typeAndEnter("first")
+
+    expect(renderedRootListIsMultiline(harness)).toBe(false)
+
+    harness.unmount()
+  })
+
+  it("renders a committed two-item list multiline", () => {
+    const {harness} = emptyListHarness()
+
+    harness.click(harness.first(".listInsertionPoint"))
+    harness.typeAndEnter("first")
+    harness.click(harness.container.querySelectorAll(".listInsertionPoint")[1])
+    harness.typeAndEnter("second")
+
+    expect(renderedRootListIsMultiline(harness)).toBe(true)
+
+    harness.unmount()
+  })
+
   it("commits a list insertion point without a placeholder edit", () => {
     const {harness} = emptyListHarness()
 

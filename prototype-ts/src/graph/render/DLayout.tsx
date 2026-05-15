@@ -82,7 +82,6 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
   const setActiveListInsertion = (i: number, active: boolean) => setActiveListInsertionState(activeListInsertion => active ? i : activeListInsertion === i ? undefined : activeListInsertion)
   let opening = <span onMouseDown={e => keepFocusForChooseID(e)} onClick={e => selectOrChooseID(e, context)}>{props.opening}</span>
   let closing = <span>{props.closing}</span>
-  let singleLine = props.children.length <= 1 && !props.children.find(child => !isSingleLine(child))
   let insertionPoint = (i: number, label: string) => props.insertionPoints[i]
     ? <ListInsertionEditorComponent key={`insertion${i}`} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} insertionIndex={i} descend={context.descend} runE={context.runE} />
     : <span key={`insertion${i}`}>{label}</span>
@@ -95,33 +94,38 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
           setActiveListInsertion(insertionIndex, true) } : nothing})
       : context.editorCommands
     return <DScope key={`child${i}`} context={childContext(context, {depth, editorCommands})}>{d}</DScope> }
-  let activeItems = (depth: number) => {
+  let active = activeInsertion !== undefined
+  let itemCount = props.children.length + (active ? 1 : 0)
+  let singleLine = itemCount <= 1 && !props.children.find(child => !isSingleLine(child))
+  let listItems = (depth: number) => {
     let items: React.ReactNode[] = []
     for (let i = 0; i <= props.children.length; i++) {
       if (activeInsertion === i) items.push(insertionPoint(i, ""))
       if (i < props.children.length) items.push(child(props.children[i], i, depth)) }
     return items }
+  let inlineItems = (items: React.ReactNode[]) => [<span key="leading"> </span>, ...join(intersperse(items.map(item => [item]), i => [<span key={`separator${i}`}>{props.separator} </span>])), <span key="trailing"> </span>]
+  let multilineItems = (items: React.ReactNode[]) => join(items.map((item, i, items) => [
+    <br key={`br${i}`} />,
+    <span key={`indent${i}`} style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />,
+    item,
+    i + 1 < items.length ? <span key={`separator${i}`}>{props.separator}</span> : null]))
+  let inactiveInline = () => [insertionPoint(0, " "), ...concatMap(props.children, (d, i) => [
+    child(d, i, context.depth),
+    insertionPoint(i + 1, " ")])]
+  let inactiveMultiline = () => [insertionPoint(0, " "), ...join(intersperse(
+    props.children.map((d, i) => [
+      <br key={`br${i}`} />,
+      <span key={`indent${i}`} style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />,
+      child(d, i, context.depth + 1),
+      i === props.children.length - 1 ? insertionPoint(props.children.length, " ") : null]),
+    i => [insertionPoint(i, props.separator)]))]
   let content = props.collapsed
     ? [<span key="collapsed" className="collapsedListContents">...</span>]
-    : activeInsertion !== undefined && singleLine
-    ? [<span key="leading"> </span>, ...join(intersperse(activeItems(context.depth).map(item => [item]), i => [<span key={`separator${i}`}>{props.separator} </span>])), <span key="trailing"> </span>]
-    : activeInsertion !== undefined
-    ? join(activeItems(context.depth + 1).map((item, i, items) => [
-        <br key={`br${i}`} />,
-        <span key={`indent${i}`} style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />,
-        item,
-        i + 1 < items.length ? <span key={`separator${i}`}>{props.separator}</span> : null]))
+    : active
+    ? singleLine ? inlineItems(listItems(context.depth)) : multilineItems(listItems(context.depth + 1))
     : singleLine
-    ? [insertionPoint(0, " "), ...concatMap(props.children, (d, i) => [
-      child(d, i, context.depth),
-      insertionPoint(i + 1, " ")])]
-    : [insertionPoint(0, " "), ...join(intersperse(
-      props.children.map((d, i) => [
-        <br key={`br${i}`} />,
-        <span key={`indent${i}`} style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />,
-        child(d, i, context.depth + 1),
-        i === props.children.length - 1 ? insertionPoint(props.children.length, " ") : null]),
-      i => [insertionPoint(i, props.separator)]))]
+    ? inactiveInline()
+    : inactiveMultiline()
   return <span>{props.collapseToggle}{opening}{content}{closing}</span>
 }
 
