@@ -1,7 +1,7 @@
 import { altMaybe, bindMaybe, firstMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
-import { focus } from "./ignoreFocusEvents"
+import { focus } from "./domFocus"
 
 const editorFocusKey = Symbol("editorFocus")
 const editorDescendKey = Symbol("editorDescend")
@@ -15,7 +15,6 @@ let pendingFocus: Maybe<PendingFocus> = nothing
 type EditorFocus = {
   edge?: Edge
   descend?: EditorDescend
-  activate?: () => void
   focusWhenSelected?: boolean
   tabStop?: boolean
 }
@@ -76,7 +75,6 @@ function focusElement(element: HTMLElement): boolean {
   return maybe(editorFocus, () => false, editorFocus => {
     pendingFocus = nothing
     focus(element)
-    editorFocus.activate?.()
     return true }) }
 
 function sibling(descendElement: HTMLElement, n: number): Maybe<HTMLElement> {

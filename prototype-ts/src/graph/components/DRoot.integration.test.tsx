@@ -385,6 +385,18 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
+  it("activates an unselected placeholder by focusing it with keyboard navigation", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const harness = new EditorHarness(environment)
+
+    expect(harness.container.querySelector("input[type=text], textarea")).toBe(null)
+    harness.globalKey("ArrowRight")
+
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.unmount()
+  })
+
   it("dismisses a locally activated placeholder with Escape", () => {
     const environment = makeTestEnvironment({defaultRender})
     const harness = new EditorHarness(environment)
@@ -714,6 +726,21 @@ describe("DRoot editor integration", () => {
     harness.redo()
     expect(listLength(harness, list!)).toBe(2)
     expect(harness.get(list!, tailField.id)).toBe(inserted)
+
+    harness.unmount()
+  })
+
+  it("closes a list insertion placeholder when arrow navigation moves focus away", () => {
+    const harness = rootHarness()
+
+    harness.key("[")
+    harness.typeAndEnter("first")
+    harness.activeKey(",", {metaKey: true})
+    expect(harness.container.querySelector("input[placeholder=item]")).not.toBe(null)
+
+    harness.globalKey("ArrowRight")
+
+    expect(harness.container.querySelector("input[placeholder=item]")).toBe(null)
 
     harness.unmount()
   })

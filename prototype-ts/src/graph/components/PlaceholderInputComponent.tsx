@@ -8,7 +8,7 @@ import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
 import { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
-import { focus, handleFocusEvent } from "../editor/ignoreFocusEvents"
+import { focus } from "../editor/domFocus"
 import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextInputs"
 import { EditorCommands } from "../editor/EditorCommands"
 import { registerScrollListener } from "../editor/ScrollListeners"
@@ -97,7 +97,7 @@ function renderMatches(string: string, matches: Match[]) {
   return [...strings, ...index < string.length ? [{string: string.slice(index), matching: false}] : []]
     .map(({string, matching}, index) => <span key={index} className={matching ? "matching" : ""}>{string}</span>) }
 
-export function PlaceholderInputComponent(props: {activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, tabStop?: boolean, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: (e: React.FocusEvent<HTMLInputElement>) => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}) {
+export function PlaceholderInputComponent(props: {activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, tabStop?: boolean, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: () => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}) {
   const entryList = React.useRef<EntryListHandle | null>(null)
   const input = React.useRef<HTMLInputElement | null>(null)
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
@@ -123,7 +123,7 @@ export function PlaceholderInputComponent(props: {activeState: PlaceholderEditor
         let s = e.clipboardData.getData("text/plain")
         if (s.indexOf("\n") >= 0)
           props.runE(() => props.editorCommands.commit?.(sidFromString(s))) }}
-      onBlur={e => handleFocusEvent(() => props.blur(e))}
+      onBlur={() => props.blur()}
       onClick={e => e.stopPropagation()}
       onKeyDown={e => {
         if ((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0) return

@@ -5,7 +5,7 @@ import { attachEditorCommands, detachEditorCommands, EdgeContext, EditorCommands
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
 import { attachEditorDescend, attachEditorFocus, detachEditorFocus, focusFirstEditor } from "../editor/EditorFocus"
-import { focus } from "../editor/ignoreFocusEvents"
+import { focus } from "../editor/domFocus"
 import { _get, Environment, environment, withEnvironment } from "../Environment"
 import { Edge } from "../model/Edge"
 import { GUID, ID } from "../model/ID"

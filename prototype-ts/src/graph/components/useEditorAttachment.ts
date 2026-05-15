@@ -7,7 +7,7 @@ import type { EditorDescend } from "../render/DContext"
 export function useEditorAttachment<A extends HTMLElement>(
   ref: React.RefObject<A | null>,
   commands: EditorCommands,
-  focus: {edge?: Edge, descend?: EditorDescend, activate?: () => void, focusWhenSelected?: boolean, tabStop?: boolean} = {}) {
+  focus: {edge?: Edge, descend?: EditorDescend, focusWhenSelected?: boolean, tabStop?: boolean} = {}) {
   React.useLayoutEffect(() => {
     let element = ref.current
     if (!element) return
@@ -15,7 +15,6 @@ export function useEditorAttachment<A extends HTMLElement>(
     attachEditorFocus(element, {
       edge: focus.edge,
       descend: focus.descend,
-      activate: focus.activate,
       focusWhenSelected: focus.focusWhenSelected,
       tabStop: focus.tabStop })
     return () => {

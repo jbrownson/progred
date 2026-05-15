@@ -3,7 +3,6 @@ import { nothing } from "../../lib/Maybe"
 import type { PlaceholderEditorActiveState, PlaceholderEditorState } from "../render/DEditors"
 import type { EditorDescend } from "../render/DContext"
 import type { ListInsertionPoint } from "../render/DLayout"
-import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { requestNextTabStopFromDescendChildFromActiveElement } from "../editor/EditorFocus"
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
 
@@ -18,7 +17,7 @@ export function ListInsertionEditorComponent(props: {insertionPoint: ListInserti
   if (!props.active) return <span
     className="listInsertionPoint"
     tabIndex={0}
-    onFocus={() => handleFocusEvent(() => props.setActive(true))}
+    onFocus={() => props.setActive(true)}
     onMouseDown={e => e.stopPropagation()}
     onClick={e => { e.stopPropagation(); props.setActive(true) }}>
       {props.label}<span className="listInsertionPointHitbox" />

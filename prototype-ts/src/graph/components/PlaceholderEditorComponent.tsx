@@ -7,7 +7,6 @@ import { stopPropagationForTextInputs } from "../editor/stopPropagationForTextIn
 import { PlaceholderInputComponent } from "./PlaceholderInputComponent"
 import { editorKeyDownAction, EditorCommands } from "../editor/EditorCommands"
 import { requestNextTabStopFromActiveElement } from "../editor/EditorFocus"
-import { handleFocusEvent } from "../editor/ignoreFocusEvents"
 import { useEditorAttachment } from "./useEditorAttachment"
 
 export function PlaceholderEditorComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, runE: (f: () => void) => void}) {
@@ -21,16 +20,15 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
     activeState.editorState.value = ""
     activeState.editorState.itemSelection = nothing
     forceUpdate() }
-  const deactivate = (e?: React.FocusEvent<HTMLInputElement>) => {
-    if (e) e.currentTarget.value = ""
+  const deactivate = () => {
     editorState.current = {}
     setActive(false) }
-  useEditorAttachment(span, props.editorCommands, {edge: props.edge, descend: props.descend, activate, tabStop: true})
+  useEditorAttachment(span, props.editorCommands, {edge: props.edge, descend: props.descend, tabStop: true})
   return maybe(props.placeholderEditor.activeState || (active ? {entries: props.placeholderEditor.entries, editorState: editorState.current} : nothing), () =>
     <span
       className="uneditable"
       tabIndex={0}
-      onFocus={() => handleFocusEvent(() => props.runE(activate))}
+      onFocus={() => props.runE(activate)}
       onMouseDown={e => e.stopPropagation()}
       onClick={e => { e.stopPropagation(); props.runE(activate) }}
       ref={span} >
@@ -54,7 +52,7 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
       runE={props.runE}
       closeCompletion={() => close(activeState)}
       cancel={() => props.runE(() => deactivate())}
-      blur={e => props.runE(() => deactivate(e))}
+      blur={() => props.runE(() => deactivate())}
       commit={(action, e) => {
         e.preventDefault()
         e.stopPropagation()
