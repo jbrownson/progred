@@ -33,27 +33,27 @@ export function activeEditorKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) =
     action()
     return true })) }
 
-export function arrowNavKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): boolean {
+export function arrowNavKeyHandler(e: KeyboardEvent): boolean {
   switch (e.key) {
     case "ArrowLeft":
       e.preventDefault()
-      return runE(focusParentEditor)
+      return focusParentEditor()
     case "ArrowRight":
       e.preventDefault()
-      return runE(() => focusChildEditor() || focusFirstEditor())
+      return focusChildEditor() || focusFirstEditor()
     case "ArrowDown":
       e.preventDefault()
-      return runE(() => focusSiblingEditor(1) || focusFirstEditor())
+      return focusSiblingEditor(1) || focusFirstEditor()
     case "ArrowUp":
       e.preventDefault()
-      return runE(() => focusSiblingEditor(-1))}
+      return focusSiblingEditor(-1)}
   return false }
 
-export function navKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): boolean {
+export function navKeyHandler(e: KeyboardEvent): boolean {
   switch (e.key) {
     case "Tab": {
       e.preventDefault()
-      runE(() => focusNextTabStop(e.shiftKey))
+      focusNextTabStop(e.shiftKey)
       return true }
     case "Escape": {
       e.preventDefault()

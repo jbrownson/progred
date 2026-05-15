@@ -45,6 +45,11 @@ function parentDescendElement(element: HTMLElement): Maybe<HTMLElement> {
     if (editorDescendForElement(parent) !== nothing) return parent
   return nothing }
 
+function ownEditorFocusElement(descendElement: HTMLElement): Maybe<HTMLElement> {
+  return editorFocusElements(descendElement).find(element =>
+    element === descendElement || (editorDescendForElement(element) === nothing && parentDescendElement(element) === descendElement))
+}
+
 function descendElementForDescend(element: Element, descend: EditorDescend): Maybe<HTMLElement> {
   for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement || nothing)
     if (editorDescendForElement(current) === descend) return current
@@ -67,8 +72,8 @@ function activeEditorDescendElement() {
 
 function focusEditorForDescendElement(descendElement: Maybe<HTMLElement>): boolean {
   return maybe(descendElement, () => false, descendElement => maybe(editorDescendForElement(descendElement), () => false, descend => {
-    let element = editorFocusElements(descendElement).find(element => editorFocusForElement(element)?.descend === descend)
-    return element ? focusElement(element) : maybe(editorFocusElements(descendElement)[0], () => false, focusElement) })) }
+    let element = ownEditorFocusElement(descendElement)
+    return maybe(element, () => false, focusElement) })) }
 
 function focusElement(element: HTMLElement): boolean {
   let editorFocus = editorFocusForElement(element)
@@ -87,10 +92,10 @@ function siblingOrAncestorSibling(descendElement: HTMLElement, n: number): Maybe
   return altMaybe(sibling(descendElement, n), () => bindMaybe(parentDescendElement(descendElement), parent => siblingOrAncestorSibling(parent, n))) }
 
 function descendHasTabStop(descendElement: HTMLElement): boolean {
-  return editorFocusElements(descendElement).some(element => {
+  return maybe(ownEditorFocusElement(descendElement), () => false, element => {
     let descend = editorDescendForElement(descendElement)
     let editorFocus = editorFocusForElement(element)
-    return editorFocus !== nothing && editorFocus.descend === descend && editorFocus.tabStop }) }
+    return editorFocus !== nothing && editorFocus.descend === descend && editorFocus.tabStop === true }) }
 
 function tabStopDown(descendElement: HTMLElement, n: number): Maybe<HTMLElement> {
   let children = childDescendElements(descendElement)

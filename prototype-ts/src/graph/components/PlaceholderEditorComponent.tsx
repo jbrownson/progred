@@ -28,9 +28,9 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
     <span
       className="uneditable"
       tabIndex={0}
-      onFocus={() => props.runE(activate)}
+      onFocus={() => activate()}
       onMouseDown={e => e.stopPropagation()}
-      onClick={e => { e.stopPropagation(); props.runE(activate) }}
+      onClick={e => { e.stopPropagation(); activate() }}
       ref={span} >
       {props.placeholderEditor.name}
     </span>,
@@ -51,8 +51,8 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
       tabStop={true}
       runE={props.runE}
       closeCompletion={() => close(activeState)}
-      cancel={() => props.runE(() => deactivate())}
-      blur={() => props.runE(() => deactivate())}
+      cancel={() => deactivate()}
+      blur={() => deactivate()}
       commit={(action, e) => {
         e.preventDefault()
         e.stopPropagation()

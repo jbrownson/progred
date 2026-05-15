@@ -14,7 +14,10 @@ function input(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
 }
 
 function keyDown(element: Element, key: string, options: KeyboardEventInit = {}) {
-  element.dispatchEvent(new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true, ...options}))
+  const event = new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true, ...options})
+  element.dispatchEvent(event)
+  if (!event.cancelBubble)
+    window.onkeydown?.(event)
 }
 
 function click(element: Element, options: MouseEventInit = {}) {
@@ -121,5 +124,19 @@ describe("graphEditor integration", () => {
     expect(viewPanel).not.toBe(null)
     expect(viewPanel!.textContent).toContain("Ctor")
     expect(viewPanel!.textContent).toContain("Module")
+  })
+
+  it("closes placeholder completion when arrow navigation leaves the text input", async () => {
+    const {root} = await launchEditor()
+
+    await typeAndEnter(root, "new Module")
+    const text = textInput(root)
+    await actEvent(() => input(text, "a"))
+    await actEvent(() => textInput(root).setSelectionRange(0, 0))
+    expect(root.querySelector(".entrylist")).not.toBe(null)
+
+    await actEvent(() => keyDown(text, "ArrowLeft"))
+
+    expect(root.querySelector(".entrylist")).toBe(null)
   })
 })

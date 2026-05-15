@@ -21,6 +21,13 @@ function editor(edge: Edge, tabStop = false) {
   return span
 }
 
+function descendOnly(edge: Edge) {
+  const span = document.createElement("span")
+  const descend: EditorDescend = {edge, edgeContext: {}, unmatching: false}
+  attachEditorDescend(span, descend)
+  return span
+}
+
 describe("EditorFocus", () => {
   it("tabs to placeholder-like tab stops in DOM tree order", () => {
     const root = editor(edge("root"))
@@ -60,6 +67,17 @@ describe("EditorFocus", () => {
     expect(document.activeElement).toBe(second)
     expect(focusParentEditor()).toBe(true)
     expect(document.activeElement).toBe(root)
+  })
+
+  it("does not focus a nested child editor when the parent descend has no editor of its own", () => {
+    const root = descendOnly(edge("root"))
+    const child = editor(edge("child"))
+    document.body.appendChild(root)
+    root.appendChild(child)
+
+    child.focus()
+    expect(focusParentEditor()).toBe(false)
+    expect(document.activeElement).toBe(child)
   })
 
   it("can defer tab navigation from the active editor until after rerender", () => {

@@ -158,6 +158,26 @@ class EditorHarness {
     this.run(() => keyDown(activeElement!, key, options))
   }
 
+  activeKeyThroughEditor(key: string, options: KeyboardEventInit = {}) {
+    const activeElement = document.activeElement
+    expect(activeElement).toBeInstanceOf(Element)
+    expect(this.container.contains(activeElement)).toBe(true)
+    const event = new KeyboardEvent("keydown", {key, bubbles: true, cancelable: true, ...options})
+    withEnvironment(this.environment, () => act(() => {
+      const keydown = (e: KeyboardEvent) => {
+        expect(defaultKeyHandler(e as KeyboardEvent, f => {
+          const result = this.runWithUndoCallbacks(f)
+          this.render()
+          return result })
+        ).toBe(true)
+      }
+      window.addEventListener("keydown", keydown)
+      try {
+        activeElement!.dispatchEvent(event)
+      } finally {
+        window.removeEventListener("keydown", keydown) }}))
+  }
+
   activeEdge() {
     const edge = editorFocusForActiveElement()?.edge
     expect(edge).not.toBe(undefined)
@@ -443,6 +463,24 @@ describe("DRoot editor integration", () => {
       keyDown(textInput, "Enter") })
 
     expect(harness.get(environment.workspace.id, workspaceRootField.id)).toBe(42)
+
+    harness.unmount()
+  })
+
+  it("closes a placeholder completion when arrow navigation moves focus away", () => {
+    const harness = new EditorHarness(appLikeEnvironment(), true)
+
+    harness.typeAndEnter("new Module")
+    const textInput = harness.textInput()
+    harness.run(() => input(textInput, "a"))
+    harness.run(() => harness.textInput().setSelectionRange(0, 0))
+    expect(harness.textInput().selectionStart).toBe(0)
+    expect(harness.container.querySelector(".entrylist")).not.toBe(null)
+
+    harness.activeKeyThroughEditor("ArrowLeft")
+
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+    expect(harness.container.querySelector(".entrylist")).toBe(null)
 
     harness.unmount()
   })
