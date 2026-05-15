@@ -437,6 +437,23 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
+  it("keeps an active placeholder mounted while the document loses focus", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const harness = new EditorHarness(environment)
+
+    harness.click(harness.first(".uneditable"))
+    const textInput = harness.textInput()
+    const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(false)
+    try {
+      harness.run(() => textInput.dispatchEvent(new FocusEvent("focusout", {bubbles: true, relatedTarget: null})))
+    } finally {
+      hasFocus.mockRestore() }
+
+    expect(harness.container.querySelector("input[type=text]")).toBe(textInput)
+
+    harness.unmount()
+  })
+
   it("commits a string through a default-rendered placeholder", () => {
     const harness = rootHarness()
 

@@ -97,6 +97,10 @@ function renderMatches(string: string, matches: Match[]) {
   return [...strings, ...index < string.length ? [{string: string.slice(index), matching: false}] : []]
     .map(({string, matching}, index) => <span key={index} className={matching ? "matching" : ""}>{string}</span>) }
 
+function blurMovedInsideDocument(e: React.FocusEvent<HTMLInputElement>): boolean {
+  return e.relatedTarget instanceof Node && document.contains(e.relatedTarget) || document.hasFocus()
+}
+
 export function PlaceholderInputComponent(props: {activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, tabStop?: boolean, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: () => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}) {
   const entryList = React.useRef<EntryListHandle | null>(null)
   const input = React.useRef<HTMLInputElement | null>(null)
@@ -123,7 +127,7 @@ export function PlaceholderInputComponent(props: {activeState: PlaceholderEditor
         let s = e.clipboardData.getData("text/plain")
         if (s.indexOf("\n") >= 0)
           props.runE(() => props.editorCommands.commit?.(sidFromString(s))) }}
-      onBlur={() => props.blur()}
+      onBlur={e => { if (blurMovedInsideDocument(e)) props.blur() }}
       onClick={e => e.stopPropagation()}
       onKeyDown={e => {
         if ((e.key === "Backspace" || e.key === "Delete") && e.currentTarget.value.length === 0) return
