@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { sidFromString } from "../model/ID"
 import type { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
-import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestNextTabStopFromActiveElement } from "./EditorFocus"
+import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestFocusActiveEditor, requestNextTabStopFromActiveElement } from "./EditorFocus"
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -90,5 +90,18 @@ describe("EditorFocus", () => {
 
     expect(focusPendingEditor(document.body)).toBe(true)
     expect(document.activeElement).toBe(missing)
+  })
+
+  it("can defer refocusing the active editor until after rerender", () => {
+    const oldRoot = editor(edge("root"))
+    document.body.appendChild(oldRoot)
+    oldRoot.focus()
+
+    expect(requestFocusActiveEditor()).toBe(true)
+    const newRoot = editor(edge("root"))
+    document.body.replaceChildren(newRoot)
+
+    expect(focusPendingEditor(document.body)).toBe(true)
+    expect(document.activeElement).toBe(newRoot)
   })
 })

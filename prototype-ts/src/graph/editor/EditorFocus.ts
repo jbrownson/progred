@@ -7,6 +7,7 @@ const editorFocusKey = Symbol("editorFocus")
 const editorDescendKey = Symbol("editorDescend")
 type PendingFocus =
   | {kind: "first"}
+  | {kind: "activeDescendPath", path: number[]}
   | {kind: "parentDescendPath", path: number[]}
   | {kind: "nextTabStopFromDescendPath", path: number[], shift: boolean}
   | {kind: "nextTabStopFromDescendChildPath", path: number[], index: number}
@@ -163,6 +164,16 @@ export function requestFocusFirstEditor() {
   pendingFocus = {kind: "first"}
 }
 
+export function requestFocusActiveEditor(): boolean {
+  return maybe(activeEditorDescendElement(), () => false, descendElement => maybe(editorDescendPath(descendElement), () => false, path => {
+    pendingFocus = {kind: "activeDescendPath", path}
+    return true }))
+}
+
+export function clearPendingFocus() {
+  pendingFocus = nothing
+}
+
 export function requestFocusParentFromActiveElement() {
   pendingFocus = maybe(bindMaybe(activeEditorDescendElement(), parentDescendElement),
     (): PendingFocus => ({kind: "first"}),
@@ -197,6 +208,8 @@ export function focusPendingEditor(root: HTMLElement): boolean {
     switch (pendingFocus.kind) {
       case "first":
         return focusFirstEditor(root)
+      case "activeDescendPath":
+        return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), focusEditorForDescendElement)
       case "parentDescendPath":
         return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), focusEditorForDescendElement)
       case "nextTabStopFromDescendPath":

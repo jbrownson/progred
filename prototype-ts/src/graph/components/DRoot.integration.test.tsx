@@ -9,7 +9,7 @@ import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, set, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLabel, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
+import { appCtor, checkString, ctorCtor, ctorField, dataField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLabel, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DRoot, type D } from "../render/D"
 import { createProjection } from "../render/project"
@@ -20,6 +20,7 @@ import { dispatch, Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { defaultKeyHandler } from "../editor/keyHandler"
 import { editorFocusForActiveElement, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
+import { commitToActiveElementWithRefocus, deleteActiveElementWithRefocus } from "../editor/commitWithFocus"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
 import { libraries } from "../libraries/libraries"
@@ -260,11 +261,17 @@ function copyActive(harness: EditorHarness) {
   return copy!
 }
 
+function cutActive(harness: EditorHarness) {
+  const copy = copyActive(harness)
+  harness.runEdit(() => expect(deleteActiveElementWithRefocus()).toBe(true))
+  return copy
+}
+
 function pasteStructureIntoActive(harness: EditorHarness, copy: {referenceID: ID, copyResult: CopyResult}) {
   return harness.runEdit(() => {
     const id = copyIDFromClipboardText(clipboardStringForCopyResult(copy.referenceID, copy.copyResult))
     expect(id).not.toBe(undefined)
-    expect(commitIDToActiveElement(id!)).toBe(true)
+    expect(commitToActiveElementWithRefocus(id!)).toBe(true)
     return id! })
 }
 
@@ -272,7 +279,7 @@ function pasteReferenceIntoActive(harness: EditorHarness, copy: {referenceID: ID
   return harness.runEdit(() => {
     const id = idFromClipboardText(clipboardStringForCopyResult(copy.referenceID, copy.copyResult))
     expect(id).not.toBe(undefined)
-    expect(commitIDToActiveElement(id!)).toBe(true)
+    expect(commitToActiveElementWithRefocus(id!)).toBe(true)
     return id! })
 }
 
@@ -1067,6 +1074,51 @@ describe("DRoot editor integration", () => {
     pasteReferenceIntoActive(harness, copy)
 
     expect(harness.get(call!, functionField.id)).toBe(factorial)
+    harness.expectActive(call!, functionField.id)
+
+    harness.unmount()
+  })
+
+  it("focuses the replacement placeholder after cutting a nested GUID", () => {
+    const environment = appLikeEnvironment()
+    const harness = new EditorHarness(environment, true)
+
+    harness.typeAndEnter("new Module")
+    const outer = harness.get(environment.workspace.id, workspaceRootField.id)
+    expect(outer).not.toBe(undefined)
+    harness.globalKey("ArrowDown")
+    harness.expectActive(outer!, dataField.id)
+    harness.typeAndEnter("new Module")
+    const inner = harness.get(outer!, dataField.id)
+    expect(inner).not.toBe(undefined)
+    harness.arrowLeft(1, outer!, dataField.id)
+    cutActive(harness)
+
+    expect(harness.get(outer!, dataField.id)).toBe(undefined)
+    harness.expectActive(outer!, dataField.id)
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.unmount()
+  })
+
+  it("focuses the replacement placeholder after deleting a nested GUID", () => {
+    const environment = appLikeEnvironment()
+    const harness = new EditorHarness(environment, true)
+
+    harness.typeAndEnter("new Module")
+    const outer = harness.get(environment.workspace.id, workspaceRootField.id)
+    expect(outer).not.toBe(undefined)
+    harness.globalKey("ArrowDown")
+    harness.expectActive(outer!, dataField.id)
+    harness.typeAndEnter("new Module")
+    const inner = harness.get(outer!, dataField.id)
+    expect(inner).not.toBe(undefined)
+    harness.arrowLeft(1, outer!, dataField.id)
+    harness.globalKey("Delete")
+
+    expect(harness.get(outer!, dataField.id)).toBe(undefined)
+    harness.expectActive(outer!, dataField.id)
+    expect(document.activeElement).toBe(harness.textInput())
 
     harness.unmount()
   })

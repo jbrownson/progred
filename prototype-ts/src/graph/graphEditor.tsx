@@ -10,7 +10,8 @@ import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
-import { commitIDToActiveElement, commitToActiveElement, editorCommandsForActiveElement } from "./editor/EditorCommands"
+import { editorCommandsForActiveElement } from "./editor/EditorCommands"
+import { commitToActiveElementWithRefocus, deleteActiveElementWithRefocus } from "./editor/commitWithFocus"
 import { editorFocusForActiveElement, focusFirstEditor, focusPendingEditor, requestFocusFirstEditor } from "./editor/EditorFocus"
 import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, Workspace, withEnvironment } from "./Environment"
 import { BradParams, ctorField, HasID, jsonFromID, Module } from "./graph"
@@ -77,7 +78,7 @@ function handleMenuAction(action: string) {
       break
     case "cut":
       if (actionIfTextInputWithSelection("cut:")) return
-      rootComponent.runE(() => { _copy(); commitToActiveElement(nothing) })
+      rootComponent.runE(() => { _copy(); deleteActiveElementWithRefocus() })
       break
     case "copy":
       if (actionIfTextInputWithSelection("copy:")) return
@@ -166,7 +167,7 @@ function activeID(): Maybe<ID> {
 
 function newNode() {
   const id = generateGUID()
-  if (!commitIDToActiveElement(id))
+  if (!commitToActiveElementWithRefocus(id))
     set(environment().workspace.id, workspaceRootField.id, id) }
 
 function startNewEdge() {
@@ -175,7 +176,7 @@ function startNewEdge() {
 function deleteActiveSelection(): boolean {
   return graphHighlight !== nothing
     ? deleteGraphSelection()
-    : commitToActiveElement(nothing) }
+    : deleteActiveElementWithRefocus() }
 
 function deleteGraphSelection(): boolean {
   return maybe(graphHighlight, () => false, graphSelection => {
@@ -263,14 +264,18 @@ function _copy() {
 function _pasteID() {
   maybe(idFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
-      commitIDToActiveElement(sidFromString(progred.readPlainText())) },
-    id => { commitIDToActiveElement(id) }) }
+      pasteID(sidFromString(progred.readPlainText())) },
+    pasteID) }
 
 function _pasteStructure() {
   maybe(copyIDFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
-      commitIDToActiveElement(sidFromString(progred.readPlainText())) },
-      id => { commitIDToActiveElement(id) }) }
+      pasteID(sidFromString(progred.readPlainText())) },
+      pasteID) }
+
+function pasteID(id: ID) {
+  commitToActiveElementWithRefocus(id)
+}
 
 function _save(filename: string) {
   let e = environment()
@@ -393,7 +398,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
               <GraphViewComponent
                 snapshot={graphSnapshot}
                 setGraphSelection={selection => setGraphSelection(selection)}
-                chooseID={id => runE(() => commitIDToActiveElement(id))} />
+                chooseID={id => runE(() => commitToActiveElementWithRefocus(id))} />
             </div>)}
           {maybe(viewDescend, () => null, viewDescend =>
             <div ref={element => { rightPanel.current = element }} className="viewPanel" style={{height: showGraph.current ? "50%" : "100%", overflow: "auto"}}

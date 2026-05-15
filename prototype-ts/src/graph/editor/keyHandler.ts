@@ -1,5 +1,6 @@
-import { maybe, nothing } from "../../lib/Maybe"
-import { commitToActiveElement, editorCommandsForActiveElement, editorKeyDownAction } from "./EditorCommands"
+import { maybe } from "../../lib/Maybe"
+import { editorCommandsForActiveElement, editorKeyDownAction } from "./EditorCommands"
+import { deleteActiveElementWithRefocus } from "./commitWithFocus"
 import { focusChildEditor, focusFirstEditor, focusNextTabStop, focusParentEditor, focusSiblingEditor } from "./EditorFocus"
 
 export type KeyHandler = (e: KeyboardEvent, runE: <A>(f: () => A) => A) => boolean
@@ -13,14 +14,14 @@ export function deleteKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): 
   switch (e.key) {
     case "Delete":
       return runE(() => {
-        let committed = commitToActiveElement(nothing)
+        let committed = deleteActiveElementWithRefocus()
         if (committed) {
           e.stopPropagation()
           e.preventDefault() }
         return committed })
     case "Backspace":
       return runE(() => {
-        let committed = commitToActiveElement(nothing)
+        let committed = deleteActiveElementWithRefocus()
         if (committed) {
           e.stopPropagation()
           e.preventDefault() }

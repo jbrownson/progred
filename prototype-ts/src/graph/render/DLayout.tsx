@@ -2,7 +2,8 @@ import * as React from "react"
 import { concatMap, intersperse, join } from "../../lib/Array"
 import { maybe, Maybe, nothing } from "../../lib/Maybe"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
-import { commitIDToActiveElement, EditorCommands } from "../editor/EditorCommands"
+import { commitToActiveElementWithRefocus } from "../editor/commitWithFocus"
+import { EditorCommands } from "../editor/EditorCommands"
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
 import { focusEditorFromElement } from "../editor/EditorFocus"
@@ -62,7 +63,7 @@ function selectOrChooseID(e: React.MouseEvent, context: React.ContextType<typeof
   e.stopPropagation()
   if (chooseIDModifier(e)) {
     e.preventDefault()
-    context.runE(() => maybe(context.chooseID?.(), () => false, commitIDToActiveElement))
+    context.runE(() => maybe(context.chooseID?.(), () => false, commitToActiveElementWithRefocus))
     return }
   focusEditorFromElement(e.currentTarget) }
 
