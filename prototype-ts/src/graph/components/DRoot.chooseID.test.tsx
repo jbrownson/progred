@@ -38,6 +38,10 @@ function edge(parent: ID, label: ID): Edge {
   return {parent, label}
 }
 
+function testEnvironment() {
+  return new Environment(new Map(), new GUIDMap(), {id: "guid-workspace", root: undefined, view: undefined}, () => dText(""), noopECallbacks)
+}
+
 describe("DRoot choose ID", () => {
   it("chooses an edge label through the focused editor commands", () => {
     let committed: ID[] = []
@@ -51,6 +55,7 @@ describe("DRoot choose ID", () => {
     act(() => root.render(
       <DRoot
         d={label(edge("guid-parent", labelID), dText("edge label"))}
+        environment={testEnvironment()}
         depth={0}
         runE={f => { f() }} />))
 
@@ -82,6 +87,7 @@ describe("DRoot choose ID", () => {
       act(() => root.render(
         <DRoot
           d={descendElement(edge(parent, label), dText("node"), false)}
+          environment={environment}
           depth={0}
           runE={f => { f() }} />))
 

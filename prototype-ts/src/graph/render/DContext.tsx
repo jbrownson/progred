@@ -1,6 +1,7 @@
 import * as React from "react"
 import { altMaybe, Maybe } from "../../lib/Maybe"
 import { EdgeContext, EditorCommands, EditorKeyDownEvent } from "../editor/EditorCommands"
+import type { Environment } from "../Environment"
 import { Edge } from "../model/Edge"
 import { ID } from "../model/ID"
 
@@ -15,6 +16,7 @@ export type EditorDescend = {
 }
 
 export type DContextValue = {
+  environment: Environment
   depth: number
   runE: (f: () => void) => void
   edgeContext?: EdgeContext
@@ -24,6 +26,7 @@ export type DContextValue = {
 }
 
 export const DContext = React.createContext<DContextValue>({
+  environment: undefined as unknown as Environment,
   depth: 0,
   runE: f => f()
 })

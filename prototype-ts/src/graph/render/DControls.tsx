@@ -1,16 +1,16 @@
 import * as React from "react"
-import { Environment, environment, withEnvironment } from "../Environment"
+import { withEnvironment } from "../Environment"
 import { childContext, D, mergeEditorCommands, DContext, dElement, DScope } from "./DContext"
 
 export function collapsible(defaultCollapsed: boolean, singleLine: boolean, render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D): D {
-  return dElement(CollapsibleComponent, {defaultCollapsed, render, environment: environment()}, "collapsible", singleLine)
+  return dElement(CollapsibleComponent, {defaultCollapsed, render}, "collapsible", singleLine)
 }
 
-function CollapsibleComponent(props: {defaultCollapsed: boolean, render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D, environment: Environment}) {
+function CollapsibleComponent(props: {defaultCollapsed: boolean, render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D}) {
   const [collapsed, setCollapsed] = React.useState(props.defaultCollapsed)
   const context = React.useContext(DContext)
   let editorCommands = mergeEditorCommands(context.editorCommands, {collapse: () => setCollapsed(true)})
-  return <DScope context={childContext(context, {editorCommands})}>{withEnvironment(props.environment, () => props.render(collapsed, setCollapsed))}</DScope>
+  return <DScope context={childContext(context, {editorCommands})}>{withEnvironment(context.environment, () => props.render(collapsed, setCollapsed))}</DScope>
 }
 
 export function collapseToggle(collapsed: boolean, action: () => void): D {

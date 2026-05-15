@@ -6,7 +6,7 @@ import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
 import { attachEditorDescend, attachEditorFocus, detachEditorFocus, focusFirstEditor } from "../editor/EditorFocus"
 import { focus } from "../editor/domFocus"
-import { _get, Environment, environment, withEnvironment } from "../Environment"
+import { _get, withEnvironment } from "../Environment"
 import { Edge } from "../model/Edge"
 import { GUID, ID } from "../model/ID"
 import { NumberEditorComponent } from "../components/NumberEditorComponent"
@@ -112,12 +112,12 @@ function NumberEditorDComponent(props: {numberEditor: NumberEditor, editorComman
 }
 
 export function supportsUnderselection(edge: Edge, id: ID, child: D, missingField: (label: ID) => D): D {
-  return dElement(SupportsUnderselectionComponent, {edge, id, child, missingField, environment: environment()}, "supportsUnderselection", isSingleLine(child))
+  return dElement(SupportsUnderselectionComponent, {edge, id, child, missingField}, "supportsUnderselection", isSingleLine(child))
 }
 
 type SupportsUnderselectionComponentState = {pendingEdgeLabel: boolean, missingLabel?: ID, focusMissingLabel?: boolean}
 
-function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, missingField: (label: ID) => D, environment: Environment}) {
+function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, missingField: (label: ID) => D}) {
   const context = React.useContext(DContext)
   const [state, setState] = React.useState<SupportsUnderselectionComponentState>({pendingEdgeLabel: false})
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
@@ -163,7 +163,7 @@ function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, m
       </span>
       : null}
     {mapMaybe(state.missingLabel, label =>
-      <span key="missingLabel" ref={missingFieldSpan}><DScope context={context}>{withEnvironment(props.environment, () => props.missingField(label))}</DScope></span>)}
+      <span key="missingLabel" ref={missingFieldSpan}><DScope context={context}>{withEnvironment(context.environment, () => props.missingField(label))}</DScope></span>)}
   </span>
 }
 

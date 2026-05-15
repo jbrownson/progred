@@ -73,6 +73,7 @@ class EditorHarness {
       this.rootDescend = rootDescend
       flushSync(() => this.root.render(<DRoot
           d={rootDescend}
+          environment={this.environment}
           depth={0}
           runE={f => {
             this.runWithUndoCallbacks(f)

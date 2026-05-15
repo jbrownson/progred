@@ -373,9 +373,11 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
     focusSelection()
     updateMenuState() })
 
-  let documentRender = withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+  let documentEnvironment = new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks)
+  let documentRender = withEnvironment(documentEnvironment, () =>
     bindMaybe(bindMaybe(environment().workspace.root, Module.fromID), renderFromModule) )
-  let {rootDescend, viewDescend} = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks), createProjection)
+  let projectionEnvironment = new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks)
+  let {rootDescend, viewDescend} = withEnvironment(projectionEnvironment, createProjection)
   let graphSnapshot = showGraph.current
     ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
       buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
@@ -387,6 +389,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
       onScroll={() => notifyScrollListeners()} >
       <div className="doc"><DRoot
         d={rootDescend}
+        environment={projectionEnvironment}
         depth={0}
         runE={f => runE(f)} /></div></div>
     {hasSidebar
@@ -405,6 +408,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
               onScroll={() => notifyScrollListeners()} >
               <div className="view"><DRoot
                 d={viewDescend}
+                environment={projectionEnvironment}
                 depth={0}
                 runE={f => runE(f)} /></div></div>)}
         </div></div>
