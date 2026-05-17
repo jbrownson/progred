@@ -215,7 +215,7 @@ describe("graphEditor integration", () => {
     await actEvent(() => textInput(root).setSelectionRange(0, 0))
     expect(root.querySelector(".entrylist")).not.toBe(null)
 
-    await actEvent(() => keyDown(text, "ArrowLeft"))
+    await actEvent(() => keyDown(text, "ArrowRight"))
 
     expect(root.querySelector(".entrylist")).toBe(null)
   })

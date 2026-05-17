@@ -1,7 +1,7 @@
-import { maybe } from "../../lib/Maybe"
+import { maybe, nothing } from "../../lib/Maybe"
 import { editorCommandsForActiveElement, editorKeyDownAction } from "./EditorCommands"
 import { deleteActiveElementWithRefocus } from "./commitWithFocus"
-import { focusChildEditor, focusFirstEditor, focusNextTabStop, focusParentEditor, focusSiblingEditor } from "./EditorFocus"
+import { clearParentNavigationMemory, editorFocusForActiveElement, focusChildEditor, focusFirstEditor, focusNextTabStop, focusParentEditor, focusSiblingEditor } from "./EditorFocus"
 
 export type KeyHandler = (e: KeyboardEvent, runE: <A>(f: () => A) => A) => boolean
 
@@ -16,6 +16,7 @@ export function deleteKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): 
       return runE(() => {
         let committed = deleteActiveElementWithRefocus()
         if (committed) {
+          clearParentNavigationMemory()
           e.stopPropagation()
           e.preventDefault() }
         return committed })
@@ -23,6 +24,7 @@ export function deleteKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): 
       return runE(() => {
         let committed = deleteActiveElementWithRefocus()
         if (committed) {
+          clearParentNavigationMemory()
           e.stopPropagation()
           e.preventDefault() }
         return committed })}
@@ -31,34 +33,47 @@ export function deleteKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): 
 export function activeEditorKeyHandler(e: KeyboardEvent, runE: <A>(f: () => A) => A): boolean {
   let keyDownAction = editorKeyDownAction(editorCommandsForActiveElement(), e)
   return maybe(keyDownAction, () => false, action => runE(() => {
+    clearParentNavigationMemory()
     action()
     return true })) }
 
+function focusFirstEditorIfNothingFocused(): boolean {
+  return editorFocusForActiveElement() === nothing && focusFirstEditor()
+}
+
 export function arrowNavKeyHandler(e: KeyboardEvent): boolean {
   switch (e.key) {
-    case "ArrowLeft":
-      e.preventDefault()
-      return focusParentEditor()
-    case "ArrowRight":
-      e.preventDefault()
-      return focusChildEditor() || focusFirstEditor()
-    case "ArrowDown":
-      e.preventDefault()
-      return focusSiblingEditor(1) || focusFirstEditor()
     case "ArrowUp":
       e.preventDefault()
-      return focusSiblingEditor(-1)}
+      focusParentEditor()
+      return true
+    case "ArrowDown":
+      e.preventDefault()
+      focusChildEditor() || focusFirstEditorIfNothingFocused()
+      return true
+    case "ArrowRight":
+      e.preventDefault()
+      focusSiblingEditor(1) || focusFirstEditorIfNothingFocused()
+      return true
+    case "ArrowLeft":
+      e.preventDefault()
+      focusSiblingEditor(-1)
+      return true}
   return false }
 
 export function navKeyHandler(e: KeyboardEvent): boolean {
   switch (e.key) {
     case "Tab": {
       e.preventDefault()
+      clearParentNavigationMemory()
       focusNextTabStop(e.shiftKey)
       return true }
     case "Escape": {
       e.preventDefault()
+      clearParentNavigationMemory()
       return false }}
   return false }
 
-export let defaultKeyHandler: KeyHandler = composedKeyHandler(activeEditorKeyHandler, deleteKeyHandler, navKeyHandler, arrowNavKeyHandler)
+export let defaultKeyHandler: KeyHandler = (e, runE) => {
+  if (e.key !== "ArrowUp" && e.key !== "ArrowDown") clearParentNavigationMemory()
+  return composedKeyHandler(activeEditorKeyHandler, deleteKeyHandler, navKeyHandler, arrowNavKeyHandler)(e, runE) }

@@ -201,9 +201,9 @@ class EditorHarness {
         return result })))
   }
 
-  arrowLeft(count: number, parent: ID, label: ID) {
+  arrowUp(count: number, parent: ID, label: ID) {
     for (let i = 0; i < count; i++)
-      this.globalKey("ArrowLeft")
+      this.globalKey("ArrowUp")
     this.expectActive(parent, label)
   }
 
@@ -418,9 +418,30 @@ describe("DRoot editor integration", () => {
     const harness = new EditorHarness(environment)
 
     expect(harness.container.querySelector("input[type=text], textarea")).toBe(null)
-    harness.globalKey("ArrowRight")
+    harness.globalKey("ArrowDown")
 
     expect(document.activeElement).toBe(harness.textInput())
+
+    harness.unmount()
+  })
+
+  it("does not jump to the first editor when arrow navigation has nowhere to go", () => {
+    const harness = rootHarness()
+    const activeElement = document.activeElement
+
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+    harness.globalKey("ArrowDown")
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+    expect(document.activeElement).toBe(activeElement)
+    harness.globalKey("ArrowUp")
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+    expect(document.activeElement).toBe(activeElement)
+    harness.globalKey("ArrowRight")
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+    expect(document.activeElement).toBe(activeElement)
+    harness.globalKey("ArrowLeft")
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+    expect(document.activeElement).toBe(activeElement)
 
     harness.unmount()
   })
@@ -496,15 +517,16 @@ describe("DRoot editor integration", () => {
     const harness = new EditorHarness(appLikeEnvironment(), true)
 
     harness.typeAndEnter("new Module")
+    const module = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     const textInput = harness.textInput()
     harness.run(() => input(textInput, "a"))
-    harness.run(() => harness.textInput().setSelectionRange(0, 0))
-    expect(harness.textInput().selectionStart).toBe(0)
+    harness.run(() => harness.textInput().setSelectionRange(1, 1))
+    expect(harness.textInput().selectionStart).toBe(1)
     expect(harness.container.querySelector(".entrylist")).not.toBe(null)
 
-    harness.activeKeyThroughEditor("ArrowLeft")
+    harness.activeKeyThroughEditor("ArrowRight")
 
-    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+    expect(editorFocusForActiveElement()?.edge?.parent).toBe(module)
     expect(harness.container.querySelector(".entrylist")).toBe(null)
 
     harness.unmount()
@@ -745,7 +767,7 @@ describe("DRoot editor integration", () => {
     const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.key(",", {metaKey: true})
     harness.typeAndEnter("third")
-    harness.globalKey("ArrowUp")
+    harness.globalKey("ArrowLeft")
     harness.key(",", {metaKey: true})
     harness.typeAndEnter("second")
 
@@ -796,7 +818,7 @@ describe("DRoot editor integration", () => {
     const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("third")
-    harness.globalKey("ArrowUp")
+    harness.globalKey("ArrowLeft")
     harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("second")
 
@@ -846,7 +868,7 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
-  it("closes a list insertion placeholder when arrow navigation moves focus away", () => {
+  it("keeps a list insertion placeholder open when arrow navigation has nowhere to go", () => {
     const harness = rootHarness()
 
     harness.key("[")
@@ -854,9 +876,9 @@ describe("DRoot editor integration", () => {
     harness.activeKey(",", {metaKey: true})
     expect(harness.container.querySelector("input[placeholder=item]")).not.toBe(null)
 
-    harness.globalKey("ArrowRight")
+    harness.globalKey("ArrowLeft")
 
-    expect(harness.container.querySelector("input[placeholder=item]")).toBe(null)
+    expect(harness.container.querySelector("input[placeholder=item]")).not.toBe(null)
 
     harness.unmount()
   })
@@ -1118,7 +1140,7 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("new Function Declaration")
     const factorial = harness.get(statements!, headField.id)
     harness.typeAndEnter("factorial")
-    harness.arrowLeft(1, statements!, headField.id)
+    harness.arrowUp(1, statements!, headField.id)
     const copy = copyActive(harness)
 
     harness.activeKey(",", {metaKey: true})
@@ -1140,12 +1162,12 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("new Module")
     const outer = harness.get(environment.workspace.id, workspaceRootField.id)
     expect(outer).not.toBe(undefined)
-    harness.globalKey("ArrowDown")
+    harness.globalKey("ArrowRight")
     harness.expectActive(outer!, dataField.id)
     harness.typeAndEnter("new Module")
     const inner = harness.get(outer!, dataField.id)
     expect(inner).not.toBe(undefined)
-    harness.arrowLeft(1, outer!, dataField.id)
+    harness.globalKey("ArrowUp")
     cutActive(harness)
 
     expect(harness.get(outer!, dataField.id)).toBe(undefined)
@@ -1162,12 +1184,12 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("new Module")
     const outer = harness.get(environment.workspace.id, workspaceRootField.id)
     expect(outer).not.toBe(undefined)
-    harness.globalKey("ArrowDown")
+    harness.globalKey("ArrowRight")
     harness.expectActive(outer!, dataField.id)
     harness.typeAndEnter("new Module")
     const inner = harness.get(outer!, dataField.id)
     expect(inner).not.toBe(undefined)
-    harness.arrowLeft(1, outer!, dataField.id)
+    harness.globalKey("ArrowUp")
     harness.globalKey("Delete")
 
     expect(harness.get(outer!, dataField.id)).toBe(undefined)
@@ -1193,7 +1215,7 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("new Parameter")
     const originalParameter = harness.get(originalParameters!, headField.id)
     harness.typeAndEnter("n")
-    harness.arrowLeft(1, statements!, headField.id)
+    harness.arrowUp(1, statements!, headField.id)
     const copy = copyActive(harness)
 
     harness.activeKey(",", {metaKey: true})
@@ -1384,20 +1406,38 @@ describe("DRoot editor integration", () => {
     environment.guidMap.set(root, secondLabel, sidFromString("Second"))
     const harness = new EditorHarness(environment)
 
-    harness.globalKey("ArrowRight")
+    harness.globalKey("ArrowDown")
     harness.expectActive(environment.workspace.id, workspaceRootField.id)
-
-    harness.globalKey("ArrowRight")
-    harness.expectActive(root, firstLabel)
 
     harness.globalKey("ArrowDown")
-    harness.expectActive(root, secondLabel)
-
-    harness.globalKey("ArrowUp")
     harness.expectActive(root, firstLabel)
 
+    harness.globalKey("ArrowRight")
+    harness.expectActive(root, secondLabel)
+
     harness.globalKey("ArrowLeft")
+    harness.expectActive(root, firstLabel)
+
+    harness.globalKey("ArrowUp")
     harness.expectActive(environment.workspace.id, workspaceRootField.id)
+
+    harness.unmount()
+  })
+
+  it("returns down to the child most recently exited by arrow navigation", () => {
+    const environment = appLikeEnvironment()
+    const harness = new EditorHarness(environment, true)
+
+    harness.typeAndEnter("new Module")
+    const module = harness.get(environment.workspace.id, workspaceRootField.id)
+    expect(module).not.toBe(undefined)
+    harness.globalKey("ArrowRight")
+    harness.expectActive(module!, dataField.id)
+
+    harness.globalKey("ArrowUp")
+    harness.expectActive(environment.workspace.id, workspaceRootField.id)
+    harness.globalKey("ArrowDown")
+    harness.expectActive(module!, dataField.id)
 
     harness.unmount()
   })
@@ -1412,11 +1452,11 @@ describe("DRoot editor integration", () => {
     environment.guidMap.set(root, secondLabel, sidFromString("Second"))
     const harness = new EditorHarness(environment, true)
 
-    harness.globalKey("ArrowRight")
+    harness.globalKey("ArrowDown")
     const focusedInput = harness.textInput()
     expect(document.activeElement).toBe(focusedInput)
     harness.run(() => { focusedInput.focus() })
-    harness.globalKey("ArrowDown")
+    harness.globalKey("ArrowRight")
 
     harness.expectActive(root, secondLabel)
 
@@ -1605,7 +1645,7 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = app.id
     const harness = new EditorHarness(environment, true)
 
-    harness.globalKey("ArrowRight")
+    harness.globalKey("ArrowDown")
     harness.typeAndEnter("Widget")
 
     expect(stringFromID(harness.get(app.id, nameField.id)!)).toBe("Widget")
@@ -1632,7 +1672,7 @@ describe("DRoot editor integration", () => {
     environment.workspace.root = app.id
     const harness = new EditorHarness(environment, true)
 
-    harness.globalKey("ArrowRight")
+    harness.globalKey("ArrowDown")
     harness.typeAndEnter("Templated")
 
     expect(stringFromID(harness.get(app.id, nameField.id)!)).toBe("Templated")
@@ -1759,7 +1799,7 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("new Difference")
     harness.typeAndEnter("1")
 
-    harness.arrowLeft(8, topStatements!, headField.id)
+    harness.arrowUp(8, topStatements!, headField.id)
     harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("new Function Call")
     const topCallList = harness.get(topStatements!, tailField.id)

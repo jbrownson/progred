@@ -12,6 +12,7 @@ type PendingFocus =
   | {kind: "nextTabStopFromDescendPath", path: number[], shift: boolean}
   | {kind: "nextTabStopFromDescendChildPath", path: number[], index: number}
 let pendingFocus: Maybe<PendingFocus> = nothing
+let parentNavigationStack: {parent: HTMLElement, child: HTMLElement}[] = []
 
 type EditorFocus = {
   edge?: Edge
@@ -80,6 +81,7 @@ function focusElement(element: HTMLElement): boolean {
   let editorFocus = editorFocusForElement(element)
   return maybe(editorFocus, () => false, editorFocus => {
     pendingFocus = nothing
+    parentNavigationStack = []
     focus(element)
     return true }) }
 
@@ -235,17 +237,46 @@ export function focusPendingEditor(root: HTMLElement): boolean {
 }
 
 export function focusParentEditor(): boolean {
-  return focusEditorForDescendElement(bindMaybe(activeEditorDescendElement(), parentDescendElement))
+  return maybe(activeEditorDescendElement(), () => false, child =>
+    maybe(parentDescendElement(child), () => false, parent => {
+      let stack = parentNavigationStack
+      let focused = focusEditorForDescendElement(parent)
+      if (focused) parentNavigationStack = [...stack, {parent, child}]
+      return focused })) }
+
+function previousChildOf(descendElement: HTMLElement): Maybe<HTMLElement> {
+  let navigation = parentNavigationStack[parentNavigationStack.length - 1]
+  return navigation
+    && navigation.parent === descendElement
+    && navigation.child.isConnected
+    && parentDescendElement(navigation.child) === descendElement
+    ? navigation.child
+    : nothing }
+
+function focusFirstOrPreviousChild(descendElement: HTMLElement): boolean {
+  let previousChild = previousChildOf(descendElement)
+  if (previousChild === nothing) {
+    parentNavigationStack = []
+    return focusEditorForDescendElement(firstChild(descendElement)) }
+  let stack = parentNavigationStack.slice(0, -1)
+  let focused = focusEditorForDescendElement(previousChild)
+  parentNavigationStack = focused ? stack : []
+  return focused }
+
+export function clearParentNavigationMemory() {
+  parentNavigationStack = []
 }
 
 export function focusChildEditor(): boolean {
-  return focusEditorForDescendElement(bindMaybe(activeEditorDescendElement(), firstChild))
+  return maybe(activeEditorDescendElement(), () => false, focusFirstOrPreviousChild)
 }
 
 export function focusSiblingEditor(n: number): boolean {
+  parentNavigationStack = []
   return focusEditorForDescendElement(bindMaybe(activeEditorDescendElement(), descendElement => siblingOrAncestorSibling(descendElement, n)))
 }
 
 export function focusNextTabStop(shift: boolean): boolean {
+  parentNavigationStack = []
   return focusEditorForDescendElement(nextTabStop(activeEditorDescendElement(), shift ? -1 : 1))
 }

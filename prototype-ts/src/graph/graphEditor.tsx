@@ -12,7 +12,7 @@ import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText,
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { commitToActiveElementWithRefocus, deleteActiveElementWithRefocus } from "./editor/commitWithFocus"
-import { editorFocusForActiveElement, focusFirstEditor, focusPendingEditor, requestFocusFirstEditor } from "./editor/EditorFocus"
+import { clearParentNavigationMemory, editorFocusForActiveElement, focusFirstEditor, focusPendingEditor, requestFocusFirstEditor } from "./editor/EditorFocus"
 import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, Workspace, withEnvironment } from "./Environment"
 import { BradParams, ctorField, HasID, jsonFromID, Module } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
@@ -421,7 +421,9 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
       : null}</div> })
 
 window.onclick = () => { if (rootComponent) rootComponent.updateMenuState() }
-window.addEventListener("focusin", () => { if (rootComponent) { rootComponent.forceUpdate(); rootComponent.updateMenuState() } })
+window.addEventListener("focusin", () => {
+  clearParentNavigationMemory()
+  if (rootComponent) { rootComponent.forceUpdate(); rootComponent.updateMenuState() } })
 window.addEventListener("focusout", () => { if (rootComponent) rootComponent.updateMenuState() })
 window.onkeydown = e => { if (rootComponent) keyHandler(e, f => rootComponent.runE(f)) }
 progred.onMenuAction(action => { if (rootComponent) handleMenuAction(action) })
