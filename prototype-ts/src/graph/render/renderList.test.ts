@@ -1,59 +1,52 @@
-import * as React from "react"
-import { describe, expect, it } from "vitest"
+import { act } from "react"
+import { afterEach, describe, expect, it } from "vitest"
 import { mapMaybe } from "../../lib/Maybe"
+import { commitIDToActiveElement } from "../editor/EditorCommands"
 import { SourceType } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, headField, tailField } from "../graph"
 import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 import { emptyCyclePath, stepCyclePath } from "./CyclePath"
-import { dText, dKind, type D } from "./D"
+import { dText } from "./D"
 import { renderList } from "./renderList"
+import { renderDForTest } from "./renderTestHelpers"
+
+afterEach(() => {
+  document.body.replaceChildren()
+})
 
 function edge(): Edge {
   return {parent: "guid-holder", label: sidFromString("list")}
 }
 
-function childDs(d: D): D[] {
-  const props = d.props as Record<string, unknown>
-  return [
-    ...dKind(d) === "collapsible" ? [(props.render as (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D)(false, () => {})] : [],
-    ...Object.values(props).flatMap(value =>
-    Array.isArray(value)
-      ? value.filter(React.isValidElement) as D[]
-      : React.isValidElement(value) ? [value as D] : [])]
-}
-
-function findD(d: D, f: (d: D) => boolean): D | undefined {
-  return f(d) ? d : childDs(d).map(child => findD(child, f)).find(d => d !== undefined)
-}
-
 describe("renderList", () => {
-  it("renders empty lists as empty D lists wrapped in document editor structure", () => {
-    withTestEnvironment(() => {
+  it("renders empty lists as editable list UI", () => {
+    withTestEnvironment(environment => {
       const list = GUIDEmptyList.new()
       const d = renderList()(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const listD = findD(d!, d => dKind(d) === "list")
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d!)
 
-      expect(findD(d!, d => dKind(d) === "supportsUnderselection")).not.toBe(undefined)
-      expect((findD(d!, d => dKind(d) === "guidEditor")?.props as any)?.id).toBe(list.id)
-      expect((listD?.props as any)?.opening).toBe("[")
-      expect((listD?.props as any)?.children).toEqual([])
-      expect((listD?.props as any)?.closing).toBe("]")
+      expect(container.querySelector(".guidEditor")).not.toBe(null)
+      expect(container.textContent).toContain("[")
+      expect(container.textContent).toContain("]")
+      expect(container.querySelectorAll(".listInsertionPoint")).toHaveLength(1)
+      unmount()
     })
   })
 
   it("renders nonempty list heads as children", () => {
-    withTestEnvironment(() => {
+    withTestEnvironment(environment => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
       const d = renderList("[", "]", ",", () => dText("item"))(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const listD = findD(d!, d => dKind(d) === "list")
-      const children = (listD?.props as any)?.children as D[]
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d!)
 
-      expect(children.length).toBe(1)
-      expect((findD(children[0], d => dKind(d) === "text")?.props as any)?.string).toBe("item")
-      expect((listD?.props as any)?.insertionPoints[1].requiresMeta).toBe(true)
+      expect(container.textContent).toContain("item")
+      expect(container.querySelectorAll(".listInsertionPoint")).toHaveLength(2)
+      unmount()
     })
   })
 
@@ -67,22 +60,26 @@ describe("renderList", () => {
   })
 
   it("renders nonempty lists through local collapsible state", () => {
-    withTestEnvironment(() => {
+    withTestEnvironment(environment => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
 
       const d = renderList()(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const collapsible = findD(d!, d => dKind(d) === "collapsible")
-      const collapsedList = findD((collapsible!.props as any).render(true, () => {}), d => dKind(d) === "list")
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d!)
+      const toggle = container.querySelector(".collapseToggle")
+      expect(toggle?.textContent).toBe("▾")
 
-      expect((collapsible?.props as any)?.defaultCollapsed).toBe(false)
-      expect((collapsedList?.props as any)?.children).toEqual([])
-      expect(((collapsedList?.props as any)?.collapseToggle.props as any).collapsed).toBe(true)
+      act(() => (toggle as HTMLElement).click())
+
+      expect(container.querySelector(".collapseToggle")?.textContent).toBe("▸")
+      expect(container.querySelector(".collapsedListContents")?.textContent).toBe("...")
+      unmount()
     })
   })
 
   it("renders list heads with a cycle path through the list spine", () => {
-    withTestEnvironment(() => {
+    withTestEnvironment(environment => {
       const empty = GUIDEmptyList.new()
       const first = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")})
       const second = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("b")})
@@ -91,10 +88,11 @@ describe("renderList", () => {
       second.setTail(third)
       const d = renderList("[", "]", ",", (edge, sourceID, edgeContext, cyclePath) =>
         mapMaybe(sourceID, sourceID => dText(stepCyclePath(cyclePath || emptyCyclePath(), sourceID.id).hasCycle ? "cycle" : "not")))(edge(), {id: first.id, source: {source: SourceType.DocumentType, guid: first.id}})
-      const listD = findD(d!, d => dKind(d) === "list")
-      const children = (listD?.props as any)?.children as D[]
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d!)
 
-      expect(children.map(child => (findD(child, d => dKind(d) === "text")?.props as any)?.string)).toEqual(["not", "not", "cycle"])
+      expect(container.textContent).toMatch(/not.*not.*cycle/)
+      unmount()
     })
   })
 
@@ -103,14 +101,18 @@ describe("renderList", () => {
       const empty = GUIDEmptyList.new()
       const list = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("a")}).setTail(empty)
       const d = renderList()(edge(), {id: list.id, source: {source: SourceType.DocumentType, guid: list.id}})
-      const listD = findD(d!, d => dKind(d) === "list")
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d!)
+      const insertionPoints = container.querySelectorAll(".listInsertionPoint")
 
-      ;(listD?.props as any)?.insertionPoints[1].editorCommands.commit?.(sidFromString("b"))
+      act(() => (insertionPoints[1] as HTMLElement).focus())
+      act(() => commitIDToActiveElement(sidFromString("b")))
 
       const newTail = environment.guidMap.get(list.id, tailField.id)
       expect(newTail).not.toBe(undefined)
       expect(environment.guidMap.get(newTail as string, headField.id)).toBe(sidFromString("b"))
       expect(environment.guidMap.get(newTail as string, tailField.id)).toBe(empty.id)
+      unmount()
     })
   })
 })

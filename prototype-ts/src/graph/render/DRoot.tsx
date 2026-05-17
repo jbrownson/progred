@@ -1,7 +1,7 @@
 import * as React from "react"
 import { EdgeContext, EditorCommands } from "../editor/EditorCommands"
 import type { Environment } from "../Environment"
-import { D, DContext } from "./DContext"
+import { D, DContext, renderD } from "./DContext"
 
 export function DRoot(props: {d: D, environment: Environment, depth: number, runE: (f: () => void) => void, edgeContext?: EdgeContext, editorCommands?: EditorCommands}) {
   return <DContext.Provider value={{
@@ -10,5 +10,5 @@ export function DRoot(props: {d: D, environment: Environment, depth: number, run
     runE: props.runE,
     edgeContext: props.edgeContext,
     editorCommands: props.editorCommands
-  }}>{props.d}</DContext.Provider>
+  }}>{renderD(props.d)}</DContext.Provider>
 }

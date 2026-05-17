@@ -1,28 +1,40 @@
 import { describe, expect, it } from "vitest"
+import type { Maybe } from "../../lib/Maybe"
+import type { Environment } from "../Environment"
 import { withTestEnvironment } from "../testHelpers"
-import { dKind } from "./D"
+import { dText } from "./D"
 import { createProjection } from "./project"
+
+function recordFieldNames(fieldNames: Maybe<string>[]): Environment["defaultRender"] {
+  return (_edge, _sourceID, edgeContext) => {
+    fieldNames.push(edgeContext?.fieldName)
+    return dText("") }
+}
 
 describe("createProjection", () => {
   it("creates a root descend with no workspace view", () => {
+    const fieldNames: Maybe<string>[] = []
+
     withTestEnvironment(() => {
       const {rootDescend, viewDescend} = createProjection()
 
-      expect(dKind(rootDescend)).toBe("descend")
-      expect(rootDescend.props.edgeContext.fieldName).toBe("root")
+      expect(rootDescend).not.toBe(undefined)
       expect(viewDescend).toBe(undefined)
-    }, {root: "guid-root"})
+    }, {root: "guid-root", defaultRender: recordFieldNames(fieldNames)})
+
+    expect(fieldNames).toEqual(["root"])
   })
 
   it("creates a view descend from the workspace view", () => {
+    const fieldNames: Maybe<string>[] = []
+
     withTestEnvironment(() => {
       const {rootDescend, viewDescend} = createProjection()
 
-      expect(dKind(rootDescend)).toBe("descend")
-      expect(rootDescend.props.edgeContext.fieldName).toBe("root")
+      expect(rootDescend).not.toBe(undefined)
       expect(viewDescend).not.toBe(undefined)
-      expect(dKind(viewDescend!)).toBe("descend")
-      expect(viewDescend!.props.edgeContext.fieldName).toBe("view")
-    }, {root: "guid-root", view: "guid-view"})
+    }, {root: "guid-root", view: "guid-view", defaultRender: recordFieldNames(fieldNames)})
+
+    expect(fieldNames).toEqual(["root", "view"])
   })
 })

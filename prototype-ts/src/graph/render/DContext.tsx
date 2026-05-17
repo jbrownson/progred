@@ -1,13 +1,15 @@
 import * as React from "react"
-import { altMaybe, Maybe } from "../../lib/Maybe"
+import { altMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { EdgeContext, EditorCommands, EditorKeyDownEvent } from "../editor/EditorCommands"
 import type { Environment } from "../Environment"
 import { Edge } from "../model/Edge"
 import { ID } from "../model/ID"
 
-export type DKind = "block" | "line" | "text" | "identicon" | "list" | "descend" | "guidEditor" | "supportsUnderselection" | "label" | "collapsible" | "collapseToggle" | "button" | "placeholderEditor" | "stringEditor" | "numberEditor"
-type DProps = {dKind: DKind, dSingleLine: boolean} & Record<string, any>
-export type D = React.ReactElement<DProps>
+export type D = {
+  singleLine: boolean
+  block: boolean
+  node: React.ReactElement
+}
 
 export type EditorDescend = {
   edge: Edge
@@ -25,21 +27,23 @@ export type DContextValue = {
   descend?: EditorDescend
 }
 
-export const DContext = React.createContext<DContextValue>({
-  environment: undefined as unknown as Environment,
-  depth: 0,
-  runE: f => f()
-})
+export const DContext = React.createContext<Maybe<DContextValue>>(nothing)
 
-export function dElement<P>(component: React.ComponentType<P>, props: P, kind: DKind, singleLine: boolean): D {
-  return React.createElement(component as React.ComponentType<P & DProps>, {...props, dKind: kind, dSingleLine: singleLine} as P & DProps) as unknown as D
+export function useDContext(): DContextValue {
+  const context = React.useContext(DContext)
+  if (context === nothing) throw new Error("DContext missing")
+  return context
 }
 
-export function dKind(d: D): DKind { return d.props.dKind }
+export function dElement<P extends {}>(component: React.ComponentType<P>, props: P, metadata: {singleLine: boolean, block?: boolean}): D {
+  return {singleLine: metadata.singleLine, block: metadata.block || false, node: React.createElement(component, props)}
+}
 
-export function isSingleLine(d: D): boolean { return d.props.dSingleLine }
+export function renderD(d: D): React.ReactElement { return d.node }
 
-export function isBlock(d: D): boolean { return dKind(d) === "block" }
+export function isSingleLine(d: D): boolean { return d.singleLine }
+
+export function isBlock(d: D): boolean { return d.block }
 
 export function mergeEditorCommands(parentCommands: Maybe<EditorCommands>, childCommands: EditorCommands): EditorCommands {
   let keyDown = parentCommands?.keyDown && childCommands.keyDown

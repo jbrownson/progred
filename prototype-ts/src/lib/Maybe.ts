@@ -43,6 +43,5 @@ export const unfold = <A, B>(_a: A, f: (a: A) => {a: Maybe<A>, b: B}): B[] => {
   return [b, ...maybe(a, () => [], a => unfold(a, f))] }
 export const guardMaybe = (boolean: boolean): Maybe<{}> => boolean ? {} : nothing // TODO use this in places where we're doing return {}
 export const maybeFromException = <A>(f: () => A): Maybe<A> => {
-  try { return f() } catch(e) {
-    console.log(e)
+  try { return f() } catch {
     return nothing }}

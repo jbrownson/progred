@@ -13,15 +13,15 @@ import { NumberEditorComponent } from "../components/NumberEditorComponent"
 import { PlaceholderEditorComponent } from "../components/PlaceholderEditorComponent"
 import { PlaceholderInputComponent } from "../components/PlaceholderInputComponent"
 import { StringEditorComponent } from "../components/StringEditorComponent"
-import { activeEditorCommands, childContext, D, isSingleLine, mergeEditorCommands, DContext, dElement, DScope } from "./DContext"
+import { activeEditorCommands, childContext, D, isSingleLine, mergeEditorCommands, dElement, DScope, renderD, useDContext } from "./DContext"
 import { indentWidth } from "./DLayout"
 
 export function descendElement(edge: Edge, child: D, unmatching: boolean, edgeContext: EdgeContext = {}): D {
-  return dElement(DescendComponent, {edge, child, unmatching, edgeContext}, "descend", isSingleLine(child))
+  return dElement(DescendComponent, {edge, child, unmatching, edgeContext}, {singleLine: isSingleLine(child)})
 }
 
 function DescendComponent(props: {edge: Edge, child: D, unmatching: boolean, edgeContext: EdgeContext}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   const descend = React.useMemo(() => ({edge: props.edge, edgeContext: props.edgeContext, unmatching: props.unmatching}), [props.edge, props.edgeContext, props.unmatching])
   let classNames = ["descend", ...maybeMap([[props.unmatching, "unmatching"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
   return <span className={classNames.join(" ")} ref={span => { if (span) attachEditorDescend(span, descend) }}>
@@ -29,16 +29,16 @@ function DescendComponent(props: {edge: Edge, child: D, unmatching: boolean, edg
       edgeContext: props.edgeContext,
       chooseID: () => _get(props.edge.parent, props.edge.label),
       descend
-    })}>{props.child}</DScope>
+    })}>{renderD(props.child)}</DScope>
   </span>
 }
 
 export function guidEditor(edge: Edge, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands = {}): D {
-  return dElement(GuidEditorComponent, {edge, id, child, focusWhenSelected, editorCommands, rootEditorCommands}, "guidEditor", isSingleLine(child))
+  return dElement(GuidEditorComponent, {edge, id, child, focusWhenSelected, editorCommands, rootEditorCommands}, {singleLine: isSingleLine(child)})
 }
 
 function GuidEditorComponent(props: {edge: Edge, id: GUID, child: D, focusWhenSelected: boolean, editorCommands: EditorCommands, rootEditorCommands: EditorCommands}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   const span = React.useRef<HTMLSpanElement | null>(null)
   const editorCommands = () => mergeEditorCommands(activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands), props.rootEditorCommands)
   let childEditorCommands = {...activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands), commit: undefined}
@@ -60,7 +60,7 @@ function GuidEditorComponent(props: {edge: Edge, id: GUID, child: D, focusWhenSe
     ref={span} >
     <DScope context={childContext(context, {
       edgeContext: undefined,
-      editorCommands: childEditorCommands })}>{props.child}</DScope>
+      editorCommands: childEditorCommands })}>{renderD(props.child)}</DScope>
   </span>
 }
 
@@ -68,11 +68,11 @@ export type PlaceholderEditorState = {value?: string, itemSelection?: number, en
 export type PlaceholderEditorActiveState = {entries: (needle: string) => {a: Entry, matches: Match[]}[], editorState: PlaceholderEditorState}
 export type PlaceholderEditor = {name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>}
 export function placeholderEditor(name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>, editorCommands: EditorCommands): D {
-  return dElement(PlaceholderEditorDComponent, {placeholderEditor: {name, entries, activeState}, editorCommands}, "placeholderEditor", true)
+  return dElement(PlaceholderEditorDComponent, {placeholderEditor: {name, entries, activeState}, editorCommands}, {singleLine: true})
 }
 
 function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   return <PlaceholderEditorComponent
     placeholderEditor={props.placeholderEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
@@ -83,11 +83,11 @@ function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEdito
 
 export type StringEditor = {string: string, writable: boolean}
 export function stringEditor(string: string, writable: boolean, editorCommands: EditorCommands): D {
-  return dElement(StringEditorDComponent, {stringEditor: {string, writable}, editorCommands}, "stringEditor", true)
+  return dElement(StringEditorDComponent, {stringEditor: {string, writable}, editorCommands}, {singleLine: true})
 }
 
 function StringEditorDComponent(props: {stringEditor: StringEditor, editorCommands: EditorCommands}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   return <StringEditorComponent
     stringEditor={props.stringEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
@@ -98,11 +98,11 @@ function StringEditorDComponent(props: {stringEditor: StringEditor, editorComman
 
 export type NumberEditor = {number: number, writable: boolean}
 export function numberEditor(number: number, writable: boolean, editorCommands: EditorCommands): D {
-  return dElement(NumberEditorDComponent, {numberEditor: {number, writable}, editorCommands}, "numberEditor", true)
+  return dElement(NumberEditorDComponent, {numberEditor: {number, writable}, editorCommands}, {singleLine: true})
 }
 
 function NumberEditorDComponent(props: {numberEditor: NumberEditor, editorCommands: EditorCommands}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   return <NumberEditorComponent
     numberEditor={props.numberEditor}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
@@ -112,13 +112,13 @@ function NumberEditorDComponent(props: {numberEditor: NumberEditor, editorComman
 }
 
 export function supportsUnderselection(edge: Edge, id: ID, child: D, missingField: (label: ID) => D): D {
-  return dElement(SupportsUnderselectionComponent, {edge, id, child, missingField}, "supportsUnderselection", isSingleLine(child))
+  return dElement(SupportsUnderselectionComponent, {edge, id, child, missingField}, {singleLine: isSingleLine(child)})
 }
 
 type SupportsUnderselectionComponentState = {pendingEdgeLabel: boolean, missingLabel?: ID, focusMissingLabel?: boolean}
 
 function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, missingField: (label: ID) => D}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   const [state, setState] = React.useState<SupportsUnderselectionComponentState>({pendingEdgeLabel: false})
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
   const missingFieldSpan = React.useRef<HTMLSpanElement | null>(null)
@@ -137,13 +137,13 @@ function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, m
     if (state.focusMissingLabel && missingFieldSpan.current && focusFirstEditor(missingFieldSpan.current))
       setState(state => ({...state, focusMissingLabel: false})) })
   return <span>
-    <DScope context={childContext(context, {editorCommands})}>{props.child}</DScope>
+    <DScope context={childContext(context, {editorCommands})}>{renderD(props.child)}</DScope>
     {state.pendingEdgeLabel
       ? <span>
         <br />
         <span style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />
         <PlaceholderInputComponent
-          activeState={activeState()}
+          activeState={withEnvironment(context.environment, activeState)}
           placeholder="label"
           editorCommands={{commit: id => mapMaybe(id, id => chooseLabel(id))}}
           descend={context.descend}
@@ -163,16 +163,16 @@ function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, m
       </span>
       : null}
     {mapMaybe(state.missingLabel, label =>
-      <span key="missingLabel" ref={missingFieldSpan}><DScope context={context}>{withEnvironment(context.environment, () => props.missingField(label))}</DScope></span>)}
+      <span key="missingLabel" ref={missingFieldSpan}><DScope context={context}>{renderD(withEnvironment(context.environment, () => props.missingField(label)))}</DScope></span>)}
   </span>
 }
 
 export function label(edge: Edge, child: D): D {
-  return dElement(LabelComponent, {edge, child}, "label", isSingleLine(child))
+  return dElement(LabelComponent, {edge, child}, {singleLine: isSingleLine(child)})
 }
 
 function LabelComponent(props: {edge: Edge, child: D}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   return <span className="edgeLabel"><DScope context={childContext(context, {
-    chooseID: () => props.edge.label })}>{props.child}</DScope></span>
+    chooseID: () => props.edge.label })}>{renderD(props.child)}</DScope></span>
 }

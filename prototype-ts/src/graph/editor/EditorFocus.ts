@@ -156,6 +156,10 @@ export function editorFocusForActiveElement(): Maybe<EditorFocus> {
   return editorFocusForElement(document.activeElement || nothing)
 }
 
+export function parentEditorDescendElement(element: Element): Maybe<HTMLElement> {
+  return element instanceof HTMLElement ? parentDescendElement(element) : nothing
+}
+
 export function focusEditorFromElement(element: Element): boolean {
   return maybe(editorElementForElement(element), () => maybe(nextEditorElementAfter(element), () => false, focusElement), focusElement)
 }

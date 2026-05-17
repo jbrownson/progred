@@ -1,32 +1,22 @@
 import { describe, expect, it } from "vitest"
-import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
-import { block, descendElement, dList, dText, isSingleLine, label, line, dKind } from "./D"
+import { block, dList, dText, isBlock, isSingleLine, line } from "./D"
 import { descend } from "./R"
 import { withTestEnvironment } from "../testHelpers"
 
-function edge(): Edge {
-  return {parent: "guid-root", label: sidFromString("root")}
-}
-
 describe("D", () => {
-  it("marks line and block layout in React D metadata", () => {
+  it("marks line and block layout in D metadata", () => {
     expect(isSingleLine(line(dText("lhs"), dText("rhs")))).toBe(true)
     expect(isSingleLine(block(line(dText("lhs"), dText("rhs"))))).toBe(false)
+    expect(isBlock(line(dText("lhs"), dText("rhs")))).toBe(false)
+    expect(isBlock(block(line(dText("lhs"), dText("rhs"))))).toBe(true)
   })
 
-  it("marks list layout in React D metadata", () => {
+  it("marks list layout in D metadata", () => {
     expect(isSingleLine(dList("[", [], "]", ","))).toBe(true)
     expect(isSingleLine(dList("[", [dText("x")], "]", ","))).toBe(true)
     expect(isSingleLine(dList("[", [dText("x"), dText("y")], "]", ","))).toBe(false)
     expect(isSingleLine(dList("[", [block(dText("x"))], "]", ","))).toBe(false)
-  })
-
-  it("keeps D kinds on wrappers", () => {
-    const e = edge()
-
-    expect(dKind(label(e, dText("x")))).toBe("label")
-    expect(dKind(descendElement(e, dText("x"), false))).toBe("descend")
   })
 
   it("renders descends immediately", () => {
@@ -36,7 +26,7 @@ describe("D", () => {
         renders++
         return dText("projected") })
 
-      expect(dKind(d)).toBe("descend")
+      expect(isSingleLine(d)).toBe(true)
       expect(renders).toBe(1)
     })
   })

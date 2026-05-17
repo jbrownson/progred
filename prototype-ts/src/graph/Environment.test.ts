@@ -30,6 +30,18 @@ describe("Environment", () => {
     }, {libraries})
   })
 
+  it("does not treat missing library nodes as present", () => {
+    const libraries = new Map([[
+      "library",
+      {
+        idMap: new MapIDMap(new Map([["guid-lib", new Map([[sidFromString("label"), "guid-target"]])]])),
+        root: "guid-lib" }]])
+
+    withTestEnvironment(() => {
+      expect(get("guid-missing", sidFromString("label"))).toBe(undefined)
+    }, {libraries})
+  })
+
   it("prefers document edges over library edges", () => {
     const libraries = new Map([[
       "library",

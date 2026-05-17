@@ -31,7 +31,7 @@ import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSna
 import { stringFromJSON } from "./transforms/stringFromJSON"
 import { UndoRedo } from "./editor/UndoRedo"
 import { notifyScrollListeners } from "./editor/ScrollListeners"
-import { workspaceRootField, workspaceViewField } from "./workspace"
+import { workspaceViewField } from "./workspace"
 
 const progredFileFilters = [{name: "progred", extensions: ["progred"]}]
 const progred = window.progred
@@ -167,8 +167,7 @@ function activeID(): Maybe<ID> {
 
 function newNode() {
   const id = generateGUID()
-  if (!commitToActiveElementWithRefocus(id))
-    set(environment().workspace.id, workspaceRootField.id, id) }
+  commitToActiveElementWithRefocus(id) }
 
 function startNewEdge() {
   mapMaybe(editorCommandsForActiveElement(), commands => mapMaybe(commands.newEdge, newEdge => newEdge())) }
@@ -339,9 +338,13 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
   function activeEditorSupportsUnderselection(): boolean {
     return editorCommandsForActiveElement()?.newEdge !== undefined }
 
+  function activeEditorSupportsCommit(): boolean {
+    return editorCommandsForActiveElement()?.commit !== undefined }
+
   function updateMenuState() {
+    progred.setMenuItemEnabled("new-node", activeEditorSupportsCommit())
     progred.setMenuItemEnabled("new-edge", activeEditorSupportsUnderselection())
-    progred.setMenuItemEnabled("delete", editorCommandsForActiveElement()?.commit !== undefined || graphHighlight !== nothing)
+    progred.setMenuItemEnabled("delete", activeEditorSupportsCommit() || graphHighlight !== nothing)
     progred.setMenuItemChecked("show-graph", showGraph.current) }
 
   function setGraphSelection(nextGraphSelection: Maybe<GraphSelection>) {

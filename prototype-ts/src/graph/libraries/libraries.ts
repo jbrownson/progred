@@ -8,7 +8,6 @@ import bradParams from "./BradParams.progred"
 import evaluate from "./Evaluate.progred"
 import javascript from "./Javascript.progred"
 import json from "./JSON.progred"
-import loadJson from "./LoadJSON.progred"
 import render from "./Render.progred"
 import typeLibrary from "./type.progred"
 
@@ -16,7 +15,6 @@ const loads: {[key: string]: {root: Maybe<ID>, guidMap: GUIDMap}} = {
   Type: load(typeLibrary),
   BradParams: load(bradParams),
   JSON: load(json),
-  LoadJSON: load(loadJson),
   JavaScript: load(javascript),
   Render: load(render),
   Evaluate: load(evaluate),

@@ -1,4 +1,3 @@
-import { logS } from "../../lib/debug"
 import { bindMaybe, maybeFromException } from "../../lib/Maybe"
 import { JavaScriptProgram } from "../graph"
 import { javascriptFromGraph } from "./javascriptFromGraph"
@@ -10,4 +9,4 @@ function runInContext(javascript: string, sandboxObject: Record<string, unknown>
 
 export function runJavascript(javascriptProgram: JavaScriptProgram, sandboxObject: Record<string, unknown> = {}): any {
   return bindMaybe(javascriptFromGraph(javascriptProgram),
-    javascript => maybeFromException(() => runInContext(logS("javascript", javascript), sandboxObject)) )}
+    javascript => maybeFromException(() => runInContext(javascript, sandboxObject)) )}

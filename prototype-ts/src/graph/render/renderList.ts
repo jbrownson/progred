@@ -4,7 +4,7 @@ import { set } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, HasID, headField, EmptyList, List, listFromID, ListType, matchList, NonemptyList, tailField } from "../graph"
 import type { EdgeContext, EditorCommands } from "../editor/EditorCommands"
 import { edgeContextForEdge, edgeContextFromEdge } from "../editor/edgeContext"
-import { requestFocusParentFromActiveElement, requestNextTabStopFromActiveElement } from "../editor/EditorFocus"
+import { parentEditorDescendElement, requestFocusParentFromActiveElement, requestNextTabStopFromActiveElement } from "../editor/EditorFocus"
 import { Edge } from "../model/Edge"
 import { guidFromID, ID, matchID } from "../model/ID"
 import { collapsible, collapseToggle } from "./DControls"
@@ -86,6 +86,8 @@ function listRootEditorCommands(): EditorCommands {
     e.preventDefault()
     e.stopPropagation()
     if (e.target instanceof HTMLElement) {
-      const insertionPoint = e.target.querySelector(".listInsertionPoint")
+      let descendElement = parentEditorDescendElement(e.target)
+      const insertionPoint = Array.from(e.target.querySelectorAll(".listInsertionPoint")).find((insertionPoint): insertionPoint is HTMLElement =>
+        insertionPoint instanceof HTMLElement && parentEditorDescendElement(insertionPoint) === descendElement)
       if (insertionPoint instanceof HTMLElement) insertionPoint.focus() }} : nothing}
 }

@@ -42,7 +42,7 @@ function buildMainMenu() {
         { label: "Undo", accelerator: "CmdOrCtrl+Z", click: () => sendMenuAction("undo") },
         { label: "Redo", accelerator: "Shift+CmdOrCtrl+Z", click: () => sendMenuAction("redo") },
         { type: "separator" },
-        { label: "New Node", accelerator: "CmdOrCtrl+Shift+N", click: () => sendMenuAction("new-node") },
+        { id: "new-node", label: "New Node", accelerator: "CmdOrCtrl+Shift+N", enabled: false, click: () => sendMenuAction("new-node") },
         { id: "new-edge", label: "New Edge", accelerator: "CmdOrCtrl+Shift+E", enabled: false, click: () => sendMenuAction("new-edge") },
         { label: "Cut", accelerator: "CmdOrCtrl+X", click: () => sendMenuAction("cut") },
         { label: "Copy", accelerator: "CmdOrCtrl+C", click: () => sendMenuAction("copy") },
@@ -148,7 +148,7 @@ ipcMain.on("clipboard:read-plain-text", event => {
 })
 
 ipcMain.on("menu:send-action-to-first-responder", (_event, action: string) => {
-  const sendAction = (Menu as any).sendActionToFirstResponder
+  const sendAction = (Menu as typeof Menu & {sendActionToFirstResponder?: (action: string) => void}).sendActionToFirstResponder
   if (typeof sendAction === "function") sendAction(action)
 })
 

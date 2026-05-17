@@ -10,47 +10,47 @@ import { focusEditorFromElement } from "../editor/EditorFocus"
 import { IdenticonComponent } from "../components/IdenticonComponent"
 import { ListInsertionEditorComponent } from "../components/ListInsertionEditorComponent"
 import { GUID } from "../model/ID"
-import { childContext, D, isBlock, isSingleLine, mergeEditorCommands, DContext, dElement, DScope } from "./DContext"
+import { childContext, D, DContextValue, isBlock, isSingleLine, mergeEditorCommands, dElement, DScope, renderD, useDContext } from "./DContext"
 
 const indentWidth = 16
 
 export function block(...children: D[]): D {
-  return dElement(BlockComponent, {children}, "block", false)
+  return dElement(BlockComponent, {children}, {singleLine: false, block: true})
 }
 
 function BlockComponent(props: {children: D[]}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   return <span>{concatMap(props.children, (d, index) => isBlock(d)
-    ? [<DScope key={`block${index}`} context={childContext(context, {depth: context.depth + 1})}>{d}</DScope>]
+    ? [<DScope key={`block${index}`} context={childContext(context, {depth: context.depth + 1})}>{renderD(d)}</DScope>]
     : [
       <br key={`br${index}`} />,
       <span key={`indent${index}`} style={{width: indentWidth * (context.depth + 1) + "px", display: "inline-block"}} />,
-      <DScope key={`d${index}`} context={childContext(context, {depth: context.depth + 1})}>{d}</DScope>])}</span>
+      <DScope key={`d${index}`} context={childContext(context, {depth: context.depth + 1})}>{renderD(d)}</DScope>])}</span>
 }
 
 export function line(...children: D[]): D {
-  return dElement(LineComponent, {children}, "line", !children.find(child => !isSingleLine(child)))
+  return dElement(LineComponent, {children}, {singleLine: !children.find(child => !isSingleLine(child))})
 }
 
 function LineComponent(props: {children: D[]}) {
-  return <span>{props.children.map((d, index) => <React.Fragment key={index}>{d}</React.Fragment>)}</span>
+  return <span>{props.children.map((d, index) => <React.Fragment key={index}>{renderD(d)}</React.Fragment>)}</span>
 }
 
 export function dText(string: string): D {
-  return dElement(TextComponent, {string}, "text", true)
+  return dElement(TextComponent, {string}, {singleLine: true})
 }
 
 function TextComponent(props: {string: string}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   return <span onMouseDown={e => keepFocusForChooseID(e)} onClick={e => selectOrChooseID(e, context)}>{props.string}</span>
 }
 
 export function dIdenticon(guid: GUID, size = 16): D {
-  return dElement(IdenticonDComponent, {guid, size}, "identicon", true)
+  return dElement(IdenticonDComponent, {guid, size}, {singleLine: true})
 }
 
 function IdenticonDComponent(props: {guid: GUID, size: number}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   return <span className="identicon" onMouseDown={e => keepFocusForChooseID(e)} onClick={e => selectOrChooseID(e, context)}><IdenticonComponent guid={props.guid} size={props.size} /></span>
 }
 
@@ -59,7 +59,7 @@ function keepFocusForChooseID(e: React.MouseEvent) {
     e.stopPropagation()
     e.preventDefault() }}
 
-function selectOrChooseID(e: React.MouseEvent, context: React.ContextType<typeof DContext>) {
+function selectOrChooseID(e: React.MouseEvent, context: DContextValue) {
   e.stopPropagation()
   if (chooseIDModifier(e)) {
     e.preventDefault()
@@ -73,11 +73,11 @@ export type ListInsertionPoint = {
   requiresMeta?: boolean }
 
 export function dList(opening: string, children: D[], closing: string, separator: string, collapseToggle: Maybe<D> = nothing, insertionPoints: ListInsertionPoint[] = [], collapsed = false): D {
-  return dElement(ListComponent, {opening, children, closing, separator, collapseToggle, insertionPoints, collapsed}, "list", children.length <= 1 && !children.find(child => !isSingleLine(child)))
+  return dElement(ListComponent, {opening, children, closing, separator, collapseToggle, insertionPoints, collapsed}, {singleLine: children.length <= 1 && !children.find(child => !isSingleLine(child))})
 }
 
 function ListComponent(props: {opening: string, children: D[], closing: string, separator: string, collapseToggle: Maybe<D>, insertionPoints: ListInsertionPoint[], collapsed: boolean}) {
-  const context = React.useContext(DContext)
+  const context = useDContext()
   const [activeListInsertion, setActiveListInsertionState] = React.useState<number | undefined>(undefined)
   const activeInsertion = activeListInsertion !== undefined && props.insertionPoints[activeListInsertion] ? activeListInsertion : undefined
   const setActiveListInsertion = (i: number, active: boolean) => setActiveListInsertionState(activeListInsertion => active ? i : activeListInsertion === i ? undefined : activeListInsertion)
@@ -94,7 +94,7 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
           e.stopPropagation()
           setActiveListInsertion(insertionIndex, true) } : nothing})
       : context.editorCommands
-    return <DScope key={`child${i}`} context={childContext(context, {depth, editorCommands})}>{d}</DScope> }
+    return <DScope key={`child${i}`} context={childContext(context, {depth, editorCommands})}>{renderD(d)}</DScope> }
   let active = activeInsertion !== undefined
   let itemCount = props.children.length + (active ? 1 : 0)
   let singleLine = itemCount <= 1 && !props.children.find(child => !isSingleLine(child))
@@ -127,7 +127,7 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
     : singleLine
     ? inactiveInline()
     : inactiveMultiline()
-  return <span>{props.collapseToggle}{opening}{content}{closing}</span>
+  return <span>{maybe(props.collapseToggle, () => null, renderD)}{opening}{content}{closing}</span>
 }
 
 export { indentWidth }

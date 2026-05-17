@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { sidFromString } from "../model/ID"
 import type { Edge } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
-import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, requestFocusActiveEditor, requestNextTabStopFromActiveElement } from "./EditorFocus"
+import { attachEditorDescend, attachEditorFocus, focusChildEditor, focusNextTabStop, focusParentEditor, focusPendingEditor, focusSiblingEditor, parentEditorDescendElement, requestFocusActiveEditor, requestNextTabStopFromActiveElement } from "./EditorFocus"
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -78,6 +78,19 @@ describe("EditorFocus", () => {
     child.focus()
     expect(focusParentEditor()).toBe(false)
     expect(document.activeElement).toBe(child)
+  })
+
+  it("finds the closest parent descend for non-descend focus nodes", () => {
+    const root = descendOnly(edge("root"))
+    const ownInsertionPoint = document.createElement("span")
+    const child = descendOnly(edge("child"))
+    const childInsertionPoint = document.createElement("span")
+    document.body.appendChild(root)
+    root.append(ownInsertionPoint, child)
+    child.appendChild(childInsertionPoint)
+
+    expect(parentEditorDescendElement(ownInsertionPoint)).toBe(root)
+    expect(parentEditorDescendElement(childInsertionPoint)).toBe(child)
   })
 
   it("can defer tab navigation from the active editor until after rerender", () => {

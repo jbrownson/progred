@@ -81,12 +81,10 @@ textarea.i {
 .edgeLabel .identicon > svg {
   width: 16px;
   height: 16px;
-  filter: saturate(0.78);
   padding: 0 }
 .edgeLabel .identicon > svg .identiconBackground {
   fill: #fafafa;
   stroke: none }
-.edgeLabel .identicon > svg rect:not(.identiconBackground) { opacity: 0.9 }
 .edgefield { display: inline-block }
 .listInsertionPoint {
   cursor: text;
@@ -145,11 +143,9 @@ textarea.i {
   fill: #fafafa;
   stroke: #8f96a1;
   stroke-width: 0.8px }
-.graphEdgeIdenticon svg { filter: saturate(0.78) }
 .graphEdgeIdenticon svg .identiconBackground {
   fill: #fafafa;
   stroke: none }
-.graphEdgeIdenticon svg rect:not(.identiconBackground) { opacity: 0.9 }
 .graphNode { cursor: grab }
 .graphNode:active { cursor: grabbing }
 .graphNode > rect { fill: white; stroke: #777; stroke-width: 1.5px }

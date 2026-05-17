@@ -588,17 +588,6 @@ export class GUIDListType extends ListType {
   get guidListType() { return this }
   setType(x: Maybe<Type>) { return _set(this, typeField, getID, x) } }
 
-export class LoadJSON {
-  constructor(public readonly id: ID) {}
-  static fromID(id: ID) { return checkCtor(id, loadJSONCtor) ? new LoadJSON(id) : nothing }
-  get guidLoadJSON() { return mapMaybe(guidFromID(this.id), guid => new GUIDLoadJSON(guid)) }
-  get url(): Maybe<string> { return get(this, urlField, stringFromID) } }
-export class GUIDLoadJSON extends LoadJSON {
-  constructor(public readonly id: GUID) { super(id) }
-  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, loadJSONCtor.id); return new GUIDLoadJSON(guid) }
-  get guidLoadJSON() { return this }
-  setUrl(x: Maybe<string>) { return _set(this, urlField, sidFromString, x) } }
-
 export class Module {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, moduleCtor) ? new Module(id) : nothing }
@@ -1040,7 +1029,6 @@ export const
   trueExpressionField = new GUIDField("689487ddbc71bf382517f6cfa4d6dcc4"),
   trueStatementsField = new GUIDField("e1b260faeec77c426545aa4a541a0f18"),
   typeField = new GUIDField("223a9b55b8a1413497879a52e5dea939"),
-  urlField = new GUIDField("6b251d45b58e759904a6dc7caab743a8"),
   valueField = new GUIDField("a417f1b7167cee31537cf561bc7396ad"),
   weightField = new GUIDField("7bce82bcee93437a748dcd693caa2cc0"),
   widthField = new GUIDField("7e36f32e37b80f495dbba6bb75ec2ec5"),
@@ -1088,7 +1076,6 @@ export const
   letCtor = new GUIDCtor("5556f62d14253cb7b58887ad5f5da099"),
   lineCtor = new GUIDCtor("732ed87bdb114213ddaf17ce6b167d9c"),
   listTypeCtor = new GUIDCtor("6410d2232b824a38bf61780cc1a12886"),
-  loadJSONCtor = new GUIDCtor("a33b56ef93a72c0ae3ab1709cf308928"),
   moduleCtor = new GUIDCtor("3c0e5c714e551ef48390f803fa17569b"),
   networkEntryCtor = new GUIDCtor("191b15b7460b928c1dc29d518f16eb18"),
   newCtor = new GUIDCtor("910127d3651dc8dc1985d624abb8881e"),

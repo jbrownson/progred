@@ -12,8 +12,8 @@ export function getTextWidth(s: string) {
     e.style.visibility = 'hidden'
     e.style.whiteSpace = 'pre'
     document.body.appendChild(e)
-    e.innerHTML = s
-    const width = e.offsetWidth; // if I don't put this semicolon here Typescript 2.1.4 thinks I'm trying to call a number
-    (e.parentElement as HTMLElement).removeChild(e)
+    e.textContent = s
+    const width = e.offsetWidth
+    e.remove()
     getTextWidthCache.set(s, width)
     return width }, identity )}
