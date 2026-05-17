@@ -101,9 +101,8 @@ describe("graphEditor integration", () => {
 
     await typeAndEnter(root, "new Empty List")
     expect(root.textContent).not.toBe("")
-    expect(root.querySelector(".listInsertionPoint")).not.toBe(null)
+    expect(document.activeElement).toBe(root.querySelector("input[placeholder=item]"))
 
-    await actEvent(() => click(root.querySelector(".listInsertionPoint")!))
     await typeAndEnter(root, "hello")
 
     expect(root.textContent).not.toBe("")

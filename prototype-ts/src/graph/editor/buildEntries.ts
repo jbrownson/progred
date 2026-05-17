@@ -8,6 +8,7 @@ import { Ctor, ctorField, emptyListCtor, matchType, nonemptyListCtor, numberAtom
 import { generateGUID, ID, nidFromNumber, sidFromString } from "../model/ID"
 import { LoadedNamedThing, loadedNamedThings } from "../loadedNamedThings"
 import { algebraicTypeHasCtor, typeIsOrHasAtomicType, typeMatches } from "../typeMatches"
+import { requestFocusFirstListInsertionPointFromActiveElement } from "./EditorFocus"
 
 function entryForID(name: string, id: ID, source: Source, expectedType: Maybe<Type>, action: (id: () => ID) => void): Entry {
   let matching = fromMaybe(bindMaybe(expectedType, expectedType => typeMatches(id, expectedType)), () => true)
@@ -22,7 +23,11 @@ function entryForID(name: string, id: ID, source: Source, expectedType: Maybe<Ty
 function newEntryForData(name: string, id: ID, expectedType: Maybe<Type>, action: (id: () => ID) => void): Maybe<Entry> {
   return bindMaybe(Ctor.fromID(id), ctor => ({
     string: `new ${fromMaybe(ctor.name, () => "[unnamed]")}`,
-    action: () => action(() => { let guid = generateGUID(); set(guid, ctorField.id, ctor.id); return guid }),
+    action: () => action(() => {
+      let guid = generateGUID()
+      set(guid, ctorField.id, ctor.id)
+      if (ctor.id === emptyListCtor.id) requestFocusFirstListInsertionPointFromActiveElement()
+      return guid }),
     matching: fromMaybe(mapMaybe(expectedType, type => matchType(type,
       algebraicType => algebraicTypeHasCtor(algebraicType, ctor),
       listType => ctor.id === nonemptyListCtor.id || ctor.id === emptyListCtor.id,

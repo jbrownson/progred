@@ -5,12 +5,14 @@ import { focus } from "./domFocus"
 
 const editorFocusKey = Symbol("editorFocus")
 const editorDescendKey = Symbol("editorDescend")
+const listInsertionPointKey = Symbol("listInsertionPoint")
 type PendingFocus =
   | {kind: "first"}
   | {kind: "activeDescendPath", path: number[]}
   | {kind: "parentDescendPath", path: number[]}
   | {kind: "nextTabStopFromDescendPath", path: number[], shift: boolean}
   | {kind: "nextTabStopFromDescendChildPath", path: number[], index: number}
+  | {kind: "firstListInsertionPointFromDescendPath", path: number[]}
 let pendingFocus: Maybe<PendingFocus> = nothing
 let parentNavigationStack: {parent: HTMLElement, child: HTMLElement}[] = []
 
@@ -23,6 +25,7 @@ type EditorFocus = {
 
 type EditorFocusElement = HTMLElement & {[editorFocusKey]?: EditorFocus}
 type EditorDescendElement = HTMLElement & {[editorDescendKey]?: EditorDescend}
+type ListInsertionPointElement = HTMLElement & {[listInsertionPointKey]?: true}
 
 function editorFocusForElement(element: Maybe<Element>): Maybe<EditorFocus> {
   return element instanceof HTMLElement ? (element as EditorFocusElement)[editorFocusKey] : nothing
@@ -42,6 +45,10 @@ function editorDescendElements(root: ParentNode = document): HTMLElement[] {
   let elements = root instanceof HTMLElement ? [root, ...Array.from(root.querySelectorAll("*"))] : Array.from(root.querySelectorAll("*"))
   return elements.filter(element => element instanceof HTMLElement && editorDescendForElement(element) !== nothing) as HTMLElement[] }
 
+function listInsertionPointElements(root: ParentNode = document): HTMLElement[] {
+  let elements = root instanceof HTMLElement ? [root, ...Array.from(root.querySelectorAll("*"))] : Array.from(root.querySelectorAll("*"))
+  return elements.filter(element => element instanceof HTMLElement && (element as ListInsertionPointElement)[listInsertionPointKey]) as HTMLElement[] }
+
 function parentDescendElement(element: HTMLElement): Maybe<HTMLElement> {
   for (let parent = element.parentElement; parent; parent = parent.parentElement)
     if (editorDescendForElement(parent) !== nothing) return parent
@@ -50,6 +57,10 @@ function parentDescendElement(element: HTMLElement): Maybe<HTMLElement> {
 function ownEditorFocusElement(descendElement: HTMLElement): Maybe<HTMLElement> {
   return editorFocusElements(descendElement).find(element =>
     element === descendElement || (editorDescendForElement(element) === nothing && parentDescendElement(element) === descendElement))
+}
+
+function ownListInsertionPointElement(descendElement: HTMLElement): Maybe<HTMLElement> {
+  return listInsertionPointElements(descendElement).find(element => parentDescendElement(element) === descendElement)
 }
 
 function descendElementForDescend(element: Element, descend: EditorDescend): Maybe<HTMLElement> {
@@ -80,10 +91,14 @@ function focusEditorForDescendElement(descendElement: Maybe<HTMLElement>): boole
 function focusElement(element: HTMLElement): boolean {
   let editorFocus = editorFocusForElement(element)
   return maybe(editorFocus, () => false, editorFocus => {
-    pendingFocus = nothing
-    parentNavigationStack = []
-    focus(element)
+    focusHTMLElement(element)
     return true }) }
+
+function focusHTMLElement(element: HTMLElement): boolean {
+  pendingFocus = nothing
+  parentNavigationStack = []
+  focus(element)
+  return true }
 
 function sibling(descendElement: HTMLElement, n: number): Maybe<HTMLElement> {
   let siblings = childDescendElements(parentDescendElement(descendElement))
@@ -155,6 +170,14 @@ export function detachEditorFocus(element: HTMLElement) {
   delete (element as EditorFocusElement)[editorFocusKey]
 }
 
+export function attachListInsertionPoint(element: HTMLElement) {
+  (element as ListInsertionPointElement)[listInsertionPointKey] = true
+}
+
+export function detachListInsertionPoint(element: HTMLElement) {
+  delete (element as ListInsertionPointElement)[listInsertionPointKey]
+}
+
 export function attachEditorDescend(element: HTMLElement, descend: EditorDescend) {
   (element as EditorDescendElement)[editorDescendKey] = descend
 }
@@ -206,6 +229,13 @@ export function requestNextTabStopFromDescendChildFromActiveElement(index: numbe
       (): PendingFocus => ({kind: "first"}),
       (path): PendingFocus => ({kind: "nextTabStopFromDescendChildPath", path, index}))) }
 
+export function requestFocusFirstListInsertionPointFromActiveElement() {
+  pendingFocus = maybe(activeEditorDescendElement(),
+    (): PendingFocus => ({kind: "first"}),
+    descendElement => maybe(editorDescendPath(descendElement),
+      (): PendingFocus => ({kind: "first"}),
+      (path): PendingFocus => ({kind: "firstListInsertionPointFromDescendPath", path}))) }
+
 export function focusFirstEditor(root: ParentNode = document): boolean {
   return focusEditorForDescendElement(rootDescendElements(root)[0])
 }
@@ -216,6 +246,10 @@ export function focusEditorForEdge(root: ParentNode, edge: Edge): boolean {
 
 function focusDescendChild(descendElement: HTMLElement, index: number): boolean {
   return focusEditorForDescendElement(childDescendElements(descendElement)[index])
+}
+
+function focusFirstListInsertionPointForDescendElement(descendElement: HTMLElement): boolean {
+  return maybe(ownListInsertionPointElement(descendElement), () => false, focusHTMLElement)
 }
 
 export function focusPendingEditor(root: HTMLElement): boolean {
@@ -233,7 +267,10 @@ export function focusPendingEditor(root: HTMLElement): boolean {
       case "nextTabStopFromDescendChildPath":
         return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
           maybe(childDescendElements(descendElement)[pendingFocus.index], () => false, child =>
-            focusEditorForDescendElement(altMaybe(nextTabStop(child, 1), () => child)))) }})
+            focusEditorForDescendElement(altMaybe(nextTabStop(child, 1), () => child))))
+      case "firstListInsertionPointFromDescendPath":
+        return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
+          focusFirstListInsertionPointForDescendElement(descendElement) || focusEditorForDescendElement(descendElement)) }})
 }
 
 export function focusParentEditor(): boolean {

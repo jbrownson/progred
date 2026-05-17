@@ -570,6 +570,39 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
+  it("focuses inside an empty list after committing it", () => {
+    const harness = new EditorHarness(appLikeEnvironment(), true)
+
+    harness.typeAndEnter("new Empty List")
+
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
+    expect(list).not.toBe(undefined)
+    expect(harness.get(list!, ctorField.id)).toBe(emptyListCtor.id)
+    expect(document.activeElement).toBe(harness.textInput())
+    expect(harness.textInput().placeholder).toBe("item")
+
+    harness.unmount()
+  })
+
+  it("cancels an empty list insertion point on Backspace without editing the list", () => {
+    const harness = new EditorHarness(appLikeEnvironment(), true)
+
+    harness.typeAndEnter("new Empty List")
+    const list = harness.get(harness.environment.workspace.id, workspaceRootField.id)
+    expect(list).not.toBe(undefined)
+    expect(document.activeElement).toBe(harness.textInput())
+
+    harness.activeKeyThroughEditor("Backspace")
+
+    expect(harness.get(list!, ctorField.id)).toBe(emptyListCtor.id)
+    expect(harness.get(list!, headField.id)).toBe(undefined)
+    expect(harness.get(list!, tailField.id)).toBe(undefined)
+    expect(harness.container.querySelector("input[placeholder=item]")).toBe(null)
+    harness.expectActive(harness.environment.workspace.id, workspaceRootField.id)
+
+    harness.unmount()
+  })
+
   const activeListInsertionIsMultiline = (harness: EditorHarness) => {
     const placeholder = harness.textInput().parentElement
     return placeholder?.previousSibling instanceof HTMLSpanElement && placeholder.previousSibling.previousSibling instanceof HTMLBRElement
