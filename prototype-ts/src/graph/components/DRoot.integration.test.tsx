@@ -902,6 +902,42 @@ describe("DRoot editor integration", () => {
     harness.unmount()
   })
 
+  it("does not keep a duplicate pending string label after committing its target", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const node = "guid-node"
+    environment.workspace.root = node
+    const harness = new EditorHarness(environment, true)
+
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("label")
+    harness.typeAndEnter("target")
+
+    const label = sidFromString("label")
+    expect(stringFromID(harness.get(node, label)!)).toBe("target")
+    expect(Array.from(harness.container.querySelectorAll(".edgeLabel")).filter(edgeLabel => edgeLabel.textContent === "\"label\" →").length).toBe(1)
+
+    harness.unmount()
+  })
+
+  it("chooses an existing string edge label instead of rendering a duplicate pending field", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const node = "guid-node"
+    const target = "guid-target"
+    const label = sidFromString("label")
+    environment.workspace.root = node
+    environment.guidMap.set(node, label, target)
+    const harness = new EditorHarness(environment, true)
+
+    startNewEdgeFromActive(harness)
+    harness.typeAndEnter("label")
+
+    expect(harness.get(node, label)).toBe(target)
+    harness.expectActive(node, label)
+    expect(Array.from(harness.container.querySelectorAll(".edgeLabel")).filter(edgeLabel => edgeLabel.textContent === "\"label\" →").length).toBe(1)
+
+    harness.unmount()
+  })
+
   it("pastes a reference into the focused placeholder through editor commands", () => {
     const harness = rootHarness()
     const pastedID = idFromClipboardText(JSON.stringify({id: "guid-pasted"}))

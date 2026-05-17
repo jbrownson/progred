@@ -25,6 +25,12 @@ function click(element: Element, options: MouseEventInit = {}) {
   element.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, ...options}))
 }
 
+function graphClick(element: Element, options: MouseEventInit = {}) {
+  element.dispatchEvent(new MouseEvent("mousedown", {bubbles: true, cancelable: true, ...options}))
+  window.dispatchEvent(new MouseEvent("mouseup", {bubbles: true, cancelable: true, ...options}))
+  element.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, ...options}))
+}
+
 function textInput(root: HTMLElement) {
   const input = root.querySelector("input[type=text], textarea") as HTMLInputElement | HTMLTextAreaElement | null
   expect(input).not.toBe(null)
@@ -103,6 +109,18 @@ describe("graphEditor integration", () => {
     expect(root.textContent).not.toBe("")
   })
 
+  it("focuses the root placeholder after creating a new document", async () => {
+    const {root, progred} = await launchEditor()
+
+    await typeAndEnter(root, "random node")
+    expect(root.querySelector(".guidEditor")).not.toBe(null)
+
+    await actEvent(() => progred.menuAction("new"))
+
+    expect(document.activeElement).toBe(root.querySelector("input[placeholder=root]"))
+    expect(progred.menuEnabled.get("new-node")).toBe(true)
+  })
+
   it("only creates a new node when an editor is focused", async () => {
     const {root, progred} = await launchEditor()
 
@@ -171,6 +189,21 @@ describe("graphEditor integration", () => {
     await actEvent(() => progred.menuAction("new-edge"))
 
     expect(root.querySelector("input[placeholder=label]")).not.toBe(null)
+  })
+
+  it("deletes the root node from the graph view", async () => {
+    const {root, progred} = await launchEditor()
+
+    await typeAndEnter(root, "random node")
+    await actEvent(() => progred.menuAction("toggle-graph"))
+    await actEvent(() => graphClick(root.querySelector(".graphNode.rootGraphNode")!))
+    expect(progred.menuEnabled.get("delete")).toBe(true)
+
+    await actEvent(() => progred.menuAction("delete"))
+
+    expect(root.querySelector(".graphNode.rootGraphNode")).toBe(null)
+    expect(root.querySelector(".guidEditor")).toBe(null)
+    expect(root.textContent).toContain("root")
   })
 
   it("closes placeholder completion when arrow navigation leaves the text input", async () => {

@@ -31,7 +31,7 @@ import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSna
 import { stringFromJSON } from "./transforms/stringFromJSON"
 import { UndoRedo } from "./editor/UndoRedo"
 import { notifyScrollListeners } from "./editor/ScrollListeners"
-import { workspaceViewField } from "./workspace"
+import { workspaceRootField, workspaceViewField } from "./workspace"
 
 const progredFileFilters = [{name: "progred", extensions: ["progred"]}]
 const progred = window.progred
@@ -43,7 +43,7 @@ function handleMenuAction(action: string) {
       redoStack = []
       workspace = newWorkspace()
       guidMap = new GUIDMap()
-      initialFocusRequested = false
+      initialFocusRequested = true
       rootComponent.initialFocusConsumed = false
       graphHighlight = nothing
       filename = nothing
@@ -187,6 +187,9 @@ function deleteGraphSelection(): boolean {
           deleted = true }
         break
       case "node":
+        if (workspace.root === graphSelection.id) {
+          _delete(workspace.id, workspaceRootField.id)
+          deleted = true }
         mapMaybe(guidFromID(graphSelection.id), guid =>
           mapMaybe(environment().guidMap.edges(guid), edges =>
             Array.from(edges.keys()).forEach(label => {

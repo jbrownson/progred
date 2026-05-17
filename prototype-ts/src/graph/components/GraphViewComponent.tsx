@@ -13,6 +13,7 @@ const restLength = 120
 const damping = 0.85
 const maxForce = 10
 const gravityK = 0.005
+const parallelEdgeSpacing = 50
 
 const textFontSize = 10
 const textPadding = 8
@@ -359,7 +360,7 @@ export function GraphViewComponent(props: GraphViewProps) {
       const total = pairCounts.get(pairKey) ?? 1
       const edgeIndex = pairIndices.get(pairKey) ?? 0
       pairIndices.set(pairKey, edgeIndex + 1)
-      const curveOffset = (edgeIndex - (total - 1) / 2) * 25 * zoom.current
+      const curveOffset = (edgeIndex - (total - 1) / 2) * parallelEdgeSpacing * zoom.current
 
       if (edge.source === edge.target) {
         const loopHeight = (nodeIconSize * 2.5 + edgeIndex * 20) * zoom.current

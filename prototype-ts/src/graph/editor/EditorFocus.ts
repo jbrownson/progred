@@ -1,5 +1,5 @@
 import { altMaybe, bindMaybe, firstMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
-import { Edge } from "../model/Edge"
+import { Edge, edgesEqual } from "../model/Edge"
 import type { EditorDescend } from "../render/DContext"
 import { focus } from "./domFocus"
 
@@ -131,6 +131,11 @@ function descendElementFromPath(root: ParentNode, path: number[]): Maybe<HTMLEle
     descendElement = next }
   return descendElement }
 
+function descendElementForEdge(root: ParentNode, edge: Edge): Maybe<HTMLElement> {
+  return editorDescendElements(root).find(descendElement => {
+    let descend = editorDescendForElement(descendElement)
+    return descend !== nothing && edgesEqual(descend.edge, edge) }) }
+
 function editorElementForElement(element: Element): Maybe<HTMLElement> {
   for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement || nothing)
     if (editorFocusForElement(current) !== nothing) return current
@@ -201,6 +206,10 @@ export function requestNextTabStopFromDescendChildFromActiveElement(index: numbe
 
 export function focusFirstEditor(root: ParentNode = document): boolean {
   return focusEditorForDescendElement(rootDescendElements(root)[0])
+}
+
+export function focusEditorForEdge(root: ParentNode, edge: Edge): boolean {
+  return focusEditorForDescendElement(descendElementForEdge(root, edge))
 }
 
 function focusDescendChild(descendElement: HTMLElement, index: number): boolean {
