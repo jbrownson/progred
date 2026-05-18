@@ -65,16 +65,17 @@ function GuidEditorComponent(props: {edge: Edge, id: GUID, child: D, focusWhenSe
 }
 
 export type PlaceholderEditorState = {value?: string, itemSelection?: number, entryListAbove?: boolean, completionOpen?: boolean}
-export type PlaceholderEditorActiveState = {entries: (needle: string) => {a: Entry, matches: Match[]}[], editorState: PlaceholderEditorState}
-export type PlaceholderEditor = {name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>}
-export function placeholderEditor(name: string, entries: (needle: string) => {a: Entry, matches: Match[]}[], activeState: Maybe<PlaceholderEditorActiveState>, editorCommands: EditorCommands): D {
+export type EntryFilter = (needle: string) => {a: Entry, matches: Match[]}[]
+export type PlaceholderEditorActiveState = {entries: EntryFilter, editorState: PlaceholderEditorState}
+export type PlaceholderEditor = {name: string, entries: () => EntryFilter, activeState: Maybe<PlaceholderEditorActiveState>}
+export function placeholderEditor(name: string, entries: () => EntryFilter, activeState: Maybe<PlaceholderEditorActiveState>, editorCommands: EditorCommands): D {
   return dElement(PlaceholderEditorDComponent, {placeholderEditor: {name, entries, activeState}, editorCommands}, {singleLine: true})
 }
 
 function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands}) {
   const context = useDContext()
   return <PlaceholderEditorComponent
-    placeholderEditor={props.placeholderEditor}
+    placeholderEditor={{...props.placeholderEditor, entries: () => withEnvironment(context.environment, props.placeholderEditor.entries)}}
     editorCommands={activeEditorCommands(context.edgeContext, context.editorCommands, props.editorCommands)}
     edge={context.descend?.edge}
     descend={context.descend}

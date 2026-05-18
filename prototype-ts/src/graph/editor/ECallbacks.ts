@@ -19,7 +19,12 @@ export type ReadLog = {
   gets: {id: ID, label: ID}[]
   edges: ID[] }
 export class ReadOnlyViolation {}
-export function readOnlyECallbacks(): {readLog: ReadLog, eCallbacks: ECallbacks} {
+export const readOnlyECallbacks: ECallbacks = {
+  ...noopECallbacks,
+  willSet: () => {throw new ReadOnlyViolation},
+  willDelete: () => {throw new ReadOnlyViolation} }
+
+export function readLogECallbacks(): {readLog: ReadLog, eCallbacks: ECallbacks} {
   let readLog: ReadLog = { gets: [], edges: [] }
   return {readLog, eCallbacks: {
     onGet: (id, label) => readLog.gets.push({id, label}),

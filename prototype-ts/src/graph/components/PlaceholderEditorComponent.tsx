@@ -11,10 +11,13 @@ import { useEditorAttachment } from "./useEditorAttachment"
 
 export function PlaceholderEditorComponent(props: {placeholderEditor: PlaceholderEditor, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const [active, setActive] = React.useState(false)
+  const activeState = React.useRef<PlaceholderEditorActiveState | undefined>(undefined)
   const span = React.useRef<HTMLSpanElement | null>(null)
   const editorState = React.useRef<PlaceholderEditorState>({})
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
-  const activate = () => setActive(true)
+  const activate = () => {
+    activeState.current = activeState.current || {entries: props.placeholderEditor.entries(), editorState: editorState.current}
+    setActive(true) }
   const close = (activeState: PlaceholderEditorActiveState) => {
     activeState.editorState.completionOpen = false
     activeState.editorState.value = ""
@@ -22,9 +25,10 @@ export function PlaceholderEditorComponent(props: {placeholderEditor: Placeholde
     forceUpdate() }
   const deactivate = () => {
     editorState.current = {}
+    activeState.current = undefined
     setActive(false) }
   useEditorAttachment(span, props.editorCommands, {edge: props.edge, descend: props.descend, tabStop: true})
-  return maybe(props.placeholderEditor.activeState || (active ? {entries: props.placeholderEditor.entries, editorState: editorState.current} : nothing), () =>
+  return maybe(props.placeholderEditor.activeState || (active ? activeState.current : nothing), () =>
     <span
       className="uneditable"
       tabIndex={0}

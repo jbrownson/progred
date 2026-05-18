@@ -63,7 +63,7 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
               mapMaybe(id, id => newList.setHead({id}))
               commit(newList.id) })
             return {
-              entries: buildEntries(listElementType(edgeContext), id => insert(id())),
+              entries: () => buildEntries(listElementType(edgeContext), id => insert(id())),
               editorCommands: {commit: insert},
               requiresMeta }}
           let listItem = (listEdgeContext: EdgeContext, cyclePath: CyclePath, list: NonemptyList<HasID>) => {

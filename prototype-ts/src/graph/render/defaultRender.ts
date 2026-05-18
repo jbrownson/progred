@@ -30,7 +30,7 @@ function _defaultRender(edge: Edge, sourceID: Maybe<SourceID>, edgeContext?: Edg
 export const defaultRender = tryFirst(renderList(), _defaultRender)
 
 function renderNothing(edgeContext: EdgeContext): D {
-  let entries = buildEntries(edgeContext.expectedType, id => mapMaybe(edgeContext.commit, commit => commit(id())))
+  let entries = () => buildEntries(edgeContext.expectedType, id => mapMaybe(edgeContext.commit, commit => commit(id())))
   return placeholderEditor(fromMaybe(edgeContext.fieldName, () => "[unnamed]"), entries, nothing, listCreationEditorCommands()) }
 
 function renderGUID(edge: Edge, guid: GUID, source: Source, cyclePath: CyclePath): D {

@@ -4,13 +4,13 @@ import { maybe, Maybe, nothing } from "../../lib/Maybe"
 import { chooseIDModifier } from "../editor/chooseIDModifier"
 import { commitToActiveElementWithRefocus } from "../editor/commitWithFocus"
 import { EditorCommands } from "../editor/EditorCommands"
-import { Entry } from "../editor/Entry"
-import { Match } from "../editor/filters"
+import { withEnvironment } from "../Environment"
 import { focusEditorFromElement } from "../editor/EditorFocus"
 import { IdenticonComponent } from "../components/IdenticonComponent"
 import { ListInsertionEditorComponent } from "../components/ListInsertionEditorComponent"
 import { GUID } from "../model/ID"
 import { childContext, D, DContextValue, isBlock, isSingleLine, mergeEditorCommands, dElement, DScope, renderD, useDContext } from "./DContext"
+import type { EntryFilter } from "./DEditors"
 
 const indentWidth = 16
 
@@ -68,7 +68,7 @@ function selectOrChooseID(e: React.MouseEvent, context: DContextValue) {
   focusEditorFromElement(e.currentTarget) }
 
 export type ListInsertionPoint = {
-  entries: (needle: string) => {a: Entry, matches: Match[]}[]
+  entries: () => EntryFilter
   editorCommands: EditorCommands
   requiresMeta?: boolean }
 
@@ -84,7 +84,7 @@ function ListComponent(props: {opening: string, children: D[], closing: string, 
   let opening = <span onMouseDown={e => keepFocusForChooseID(e)} onClick={e => selectOrChooseID(e, context)}>{props.opening}</span>
   let closing = <span>{props.closing}</span>
   let insertionPoint = (i: number, label: string) => props.insertionPoints[i]
-    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionPoint={props.insertionPoints[i]} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} insertionIndex={i} descend={context.descend} runE={context.runE} />
+    ? <ListInsertionEditorComponent key={`insertion${i}`} insertionPoint={{...props.insertionPoints[i], entries: () => withEnvironment(context.environment, props.insertionPoints[i].entries)}} label={label} active={activeInsertion === i} setActive={active => setActiveListInsertion(i, active)} insertionIndex={i} descend={context.descend} runE={context.runE} />
     : <span key={`insertion${i}`}>{label}</span>
   let child = (d: D, i: number, depth: number) => {
     let insertionIndex = i + 1

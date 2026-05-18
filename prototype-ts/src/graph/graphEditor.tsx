@@ -231,7 +231,7 @@ let initialFocusRequested = true
 let graphHighlight: Maybe<GraphSelection> = nothing
 let filename: Maybe<string> = nothing
 
-let libraryRender = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(renders, defaultRender), readOnlyECallbacks().eCallbacks), () => renderFromLibraries(libraries))
+let libraryRender = withEnvironment(new Environment(libraries, guidMap, workspace, tryFirst(renders, defaultRender), readOnlyECallbacks), () => renderFromLibraries(libraries))
 
 function actionIfTextInputWithSelection(action: string) {
   if (document.activeElement) {
@@ -379,13 +379,13 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
     focusSelection()
     updateMenuState() })
 
-  let documentEnvironment = new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks)
+  let documentEnvironment = new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks)
   let documentRender = withEnvironment(documentEnvironment, () =>
     bindMaybe(bindMaybe(environment().workspace.root, Module.fromID), renderFromModule) )
-  let projectionEnvironment = new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks().eCallbacks)
+  let projectionEnvironment = new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks)
   let {rootDescend, viewDescend} = withEnvironment(projectionEnvironment, createProjection)
   let graphSnapshot = showGraph.current
-    ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks().eCallbacks), () =>
+    ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks), () =>
       buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
     : nothing
   let hasSidebar = showGraph.current || viewDescend !== nothing
