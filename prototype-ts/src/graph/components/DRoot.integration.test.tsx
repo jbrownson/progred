@@ -9,7 +9,7 @@ import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, set, withEnvironment } from "../Environment"
-import { appCtor, checkString, ctorCtor, ctorField, dataField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLabel, GUIDLine, GUIDRenderCtor, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, returnCtor, statementsField, tailField } from "../graph"
+import { appCtor, argumentsField, checkString, colorField, ctorCtor, ctorField, dataField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLabel, GUIDLine, GUIDRenderCtor, GUIDVec3, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, pointsField, polyline3DCtor, returnCtor, statementsField, tailField, vec3Ctor, xField, yField, zField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DRoot, type D } from "../render/D"
 import { createProjection } from "../render/project"
@@ -19,7 +19,7 @@ import { renderFromRender } from "../render/renderFromRender"
 import { dispatch, Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { defaultKeyHandler } from "../editor/keyHandler"
-import { editorFocusForActiveElement, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
+import { editorFocusForActiveElement, focusEditorForEdge, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
 import { commitToActiveElementWithRefocus, deleteActiveElementWithRefocus } from "../editor/commitWithFocus"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
@@ -282,6 +282,10 @@ function pasteReferenceIntoActive(harness: EditorHarness, copy: {referenceID: ID
     expect(id).not.toBe(undefined)
     expect(commitToActiveElementWithRefocus(id!)).toBe(true)
     return id! })
+}
+
+function focusEdge(harness: EditorHarness, parent: ID, label: ID) {
+  harness.run(() => expect(focusEditorForEdge(harness.container, {parent, label})).toBe(true))
 }
 
 function startNewEdgeFromActive(harness: EditorHarness) {
@@ -580,6 +584,67 @@ describe("DRoot editor integration", () => {
     expect(harness.get(list!, ctorField.id)).toBe(emptyListCtor.id)
     expect(document.activeElement).toBe(harness.textInput())
     expect(harness.textInput().placeholder).toBe("item")
+
+    harness.unmount()
+  })
+
+  it("initializes list fields when creating a constructor", () => {
+    const environment = appLikeEnvironment()
+    const harness = new EditorHarness(environment, true)
+
+    harness.typeAndEnter("new Polyline3D")
+
+    const polyline = harness.get(environment.workspace.id, workspaceRootField.id)
+    expect(polyline).not.toBe(undefined)
+    expect(harness.get(polyline!, ctorField.id)).toBe(polyline3DCtor.id)
+    const points = harness.get(polyline!, pointsField.id)
+    expect(points).not.toBe(undefined)
+    expect(harness.get(points!, ctorField.id)).toBe(emptyListCtor.id)
+    expect(harness.get(polyline!, colorField.id)).toBe(undefined)
+
+    harness.unmount()
+  })
+
+  it("continues to the next insertion point after completing a structured list item", () => {
+    const environment = appLikeEnvironment()
+    const harness = new EditorHarness(environment, true)
+
+    harness.typeAndEnter("new Polyline3D")
+    const polyline = harness.get(environment.workspace.id, workspaceRootField.id)
+    expect(polyline).not.toBe(undefined)
+    expect(document.activeElement).toBe(harness.textInput())
+    expect(harness.textInput().placeholder).toBe("item")
+
+    harness.typeAndEnter("new Vec3")
+    let points = harness.get(polyline!, pointsField.id)
+    const point = harness.get(points!, headField.id)
+    expect(point).not.toBe(undefined)
+    expect(harness.get(point!, ctorField.id)).toBe(vec3Ctor.id)
+
+    harness.typeAndEnter("1")
+    harness.typeAndEnter("2")
+    harness.typeAndEnter("3")
+
+    expect(harness.get(point!, xField.id)).not.toBe(undefined)
+    expect(harness.get(point!, yField.id)).not.toBe(undefined)
+    expect(harness.get(point!, zField.id)).not.toBe(undefined)
+    points = harness.get(polyline!, pointsField.id)
+    expect(harness.get(points!, headField.id)).toBe(point)
+    expect(document.activeElement).toBe(harness.textInput())
+    expect(harness.textInput().placeholder).toBe("item")
+
+    harness.unmount()
+  })
+
+  it("renders Vec3 with the Scene3D inline template", () => {
+    const environment = appLikeEnvironment()
+    const vec3 = withEnvironment(environment, () => GUIDVec3.new().setX(1).setY(2).setZ(3))
+    environment.workspace.root = vec3.id
+    const harness = new EditorHarness(environment)
+
+    expect(harness.container.textContent).toBe("(, , )")
+    expect(Array.from(harness.container.querySelectorAll("input.number")).map(input => (input as HTMLInputElement).value)).toEqual(["1", "2", "3"])
+    expect(harness.container.querySelector(".edgeLabel")).toBe(null)
 
     harness.unmount()
   })
@@ -1168,12 +1233,12 @@ describe("DRoot editor integration", () => {
 
     harness.typeAndEnter("new JavaScriptProgram")
     const javascriptProgram = harness.get(environment.workspace.id, workspaceRootField.id)
-    harness.key("[")
-    const statements = harness.get(javascriptProgram!, statementsField.id)
+    let statements = harness.get(javascriptProgram!, statementsField.id)
     harness.typeAndEnter("new Function Declaration")
+    statements = harness.get(javascriptProgram!, statementsField.id)
     const factorial = harness.get(statements!, headField.id)
     harness.typeAndEnter("factorial")
-    harness.arrowUp(1, statements!, headField.id)
+    focusEdge(harness, statements!, headField.id)
     const copy = copyActive(harness)
 
     harness.activeKey(",", {metaKey: true})
@@ -1238,17 +1303,17 @@ describe("DRoot editor integration", () => {
 
     harness.typeAndEnter("new JavaScriptProgram")
     const javascriptProgram = harness.get(environment.workspace.id, workspaceRootField.id)
-    harness.key("[")
-    const statements = harness.get(javascriptProgram!, statementsField.id)
+    let statements = harness.get(javascriptProgram!, statementsField.id)
     harness.typeAndEnter("new Function Declaration")
+    statements = harness.get(javascriptProgram!, statementsField.id)
     const original = harness.get(statements!, headField.id)
     harness.typeAndEnter("factorial")
-    harness.key("[")
-    const originalParameters = harness.get(original!, parametersField.id)
+    let originalParameters = harness.get(original!, parametersField.id)
     harness.typeAndEnter("new Parameter")
+    originalParameters = harness.get(original!, parametersField.id)
     const originalParameter = harness.get(originalParameters!, headField.id)
     harness.typeAndEnter("n")
-    harness.arrowUp(1, statements!, headField.id)
+    focusEdge(harness, statements!, headField.id)
     const copy = copyActive(harness)
 
     harness.activeKey(",", {metaKey: true})
@@ -1781,11 +1846,11 @@ describe("DRoot editor integration", () => {
     expect(javascriptProgram).not.toBe(undefined)
     expect(harness.get(javascriptProgram!, ctorField.id)).toBe(javascriptProgramCtor.id)
 
-    harness.key("[")
-    const topStatements = harness.get(javascriptProgram!, statementsField.id)
+    let topStatements = harness.get(javascriptProgram!, statementsField.id)
     expect(topStatements).not.toBe(undefined)
 
     harness.typeAndEnter("new Function Declaration")
+    topStatements = harness.get(javascriptProgram!, statementsField.id)
     const factorial = harness.get(topStatements!, headField.id)
     expect(factorial).not.toBe(undefined)
     expect(harness.get(factorial!, ctorField.id)).toBe(functionDeclarationCtor.id)
@@ -1793,22 +1858,24 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("factorial")
     expect(stringFromID(harness.get(factorial!, nameField.id)!)).toBe("factorial")
 
-    harness.key("[")
-    const parameters = harness.get(factorial!, parametersField.id)
+    let parameters = harness.get(factorial!, parametersField.id)
     expect(parameters).not.toBe(undefined)
 
     harness.typeAndEnter("new Parameter")
+    parameters = harness.get(factorial!, parametersField.id)
     const n = harness.get(parameters!, headField.id)
     expect(n).not.toBe(undefined)
 
     harness.typeAndEnter("n")
     expect(stringFromID(harness.get(n!, nameField.id)!)).toBe("n")
 
-    harness.key("[")
-    const bodyStatements = harness.get(factorial!, statementsField.id)
+    let bodyStatements = harness.get(factorial!, statementsField.id)
     expect(bodyStatements).not.toBe(undefined)
 
+    focusEdge(harness, factorial!, statementsField.id)
+    harness.activeKey(",")
     harness.typeAndEnter("new Return")
+    bodyStatements = harness.get(factorial!, statementsField.id)
     const returnStatement = harness.get(bodyStatements!, headField.id)
     expect(returnStatement).not.toBe(undefined)
 
@@ -1822,17 +1889,19 @@ describe("DRoot editor integration", () => {
     harness.typeAndEnter("n")
     harness.typeAndEnter("new Product")
     harness.typeAndEnter("new Function Call")
+    const recursiveCall = harness.activeEdge().parent
     harness.typeAndEnter("factorial")
-    harness.key("[")
-    const recursiveArguments = harness.activeEdge().parent
+    let recursiveArguments = harness.get(recursiveCall, argumentsField.id)
     expect(recursiveArguments).not.toBe(undefined)
 
     harness.typeAndEnter("new Binary Inline")
+    recursiveArguments = harness.get(recursiveCall, argumentsField.id)
+    expect(recursiveArguments).not.toBe(undefined)
     harness.typeAndEnter("n")
     harness.typeAndEnter("new Difference")
     harness.typeAndEnter("1")
 
-    harness.arrowUp(8, topStatements!, headField.id)
+    focusEdge(harness, topStatements!, headField.id)
     harness.activeKey(",", {metaKey: true})
     harness.typeAndEnter("new Function Call")
     const topCallList = harness.get(topStatements!, tailField.id)
@@ -1841,7 +1910,6 @@ describe("DRoot editor integration", () => {
     expect(topCall).not.toBe(undefined)
 
     harness.typeAndEnter("factorial")
-    harness.key("[")
     harness.typeAndEnter("5")
 
     const javascript = javascriptCalls[javascriptCalls.length - 1]

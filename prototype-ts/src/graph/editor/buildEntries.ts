@@ -4,11 +4,10 @@ import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } f
 import { Entry } from "./Entry"
 import { _get, set, Source, SourceType } from "../Environment"
 import { defaultFilter, Match, sortFilter } from "./filters"
-import { Ctor, ctorField, emptyListCtor, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "../graph"
-import { generateGUID, ID, nidFromNumber, sidFromString } from "../model/ID"
+import { Ctor, ctorField, emptyListCtor, GUIDEmptyList, ListType, matchType, nonemptyListCtor, numberAtomicType, stringAtomicType, Type } from "../graph"
+import { generateGUID, GUID, ID, nidFromNumber, sidFromString } from "../model/ID"
 import { LoadedNamedThing, loadedNamedThings } from "../loadedNamedThings"
 import { algebraicTypeHasCtor, typeIsOrHasAtomicType, typeMatches } from "../typeMatches"
-import { requestFocusFirstListInsertionPointFromActiveElement } from "./EditorFocus"
 
 function entryForID(name: string, id: ID, source: Source, expectedType: Maybe<Type>, action: (id: () => ID) => void): Entry {
   let matching = fromMaybe(bindMaybe(expectedType, expectedType => typeMatches(id, expectedType)), () => true)
@@ -26,7 +25,7 @@ function newEntryForData(name: string, id: ID, expectedType: Maybe<Type>, action
     action: () => action(() => {
       let guid = generateGUID()
       set(guid, ctorField.id, ctor.id)
-      if (ctor.id === emptyListCtor.id) requestFocusFirstListInsertionPointFromActiveElement()
+      initializeDefaultFields(guid, ctor)
       return guid }),
     matching: fromMaybe(mapMaybe(expectedType, type => matchType(type,
       algebraicType => algebraicTypeHasCtor(algebraicType, ctor),
@@ -34,6 +33,11 @@ function newEntryForData(name: string, id: ID, expectedType: Maybe<Type>, action
       _ctor => ctor.id === _ctor.id,
       atomicType => false )), () => true),
     external: false, new: true, magic: false }))}
+
+function initializeDefaultFields(guid: GUID, ctor: Ctor) {
+  maybe(ctor.fields, () => {}, fields => fields.forEach(field =>
+    maybe(field.type, () => {}, type => {
+      if (type instanceof ListType) set(guid, field.id, GUIDEmptyList.new().id) }))) }
 
 function numberMagicEntry(searchString: string, typeMatchesNumber: boolean, action: (id: () => ID) => void): Entry[] {
   let number = +searchString

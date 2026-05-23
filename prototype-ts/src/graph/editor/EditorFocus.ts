@@ -12,7 +12,6 @@ type PendingFocus =
   | {kind: "parentDescendPath", path: number[]}
   | {kind: "nextTabStopFromDescendPath", path: number[], shift: boolean}
   | {kind: "nextTabStopFromDescendChildPath", path: number[], index: number}
-  | {kind: "firstListInsertionPointFromDescendPath", path: number[]}
 let pendingFocus: Maybe<PendingFocus> = nothing
 let parentNavigationStack: {parent: HTMLElement, child: HTMLElement}[] = []
 
@@ -63,6 +62,10 @@ function ownListInsertionPointElement(descendElement: HTMLElement): Maybe<HTMLEl
   return listInsertionPointElements(descendElement).find(element => parentDescendElement(element) === descendElement)
 }
 
+function ownListInsertionPointElements(descendElement: HTMLElement): HTMLElement[] {
+  return listInsertionPointElements(descendElement).filter(element => parentDescendElement(element) === descendElement)
+}
+
 function descendElementForDescend(element: Element, descend: EditorDescend): Maybe<HTMLElement> {
   for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement || nothing)
     if (editorDescendForElement(current) === descend) return current
@@ -87,6 +90,12 @@ function focusEditorForDescendElement(descendElement: Maybe<HTMLElement>): boole
   return maybe(descendElement, () => false, descendElement => maybe(editorDescendForElement(descendElement), () => false, descend => {
     let element = ownEditorFocusElement(descendElement)
     return maybe(element, () => false, focusElement) })) }
+
+function focusTabStop(tabStop: Maybe<HTMLElement>): boolean {
+  return maybe(tabStop, () => false, element =>
+    (element as ListInsertionPointElement)[listInsertionPointKey]
+      ? focusHTMLElement(element)
+      : focusEditorForDescendElement(element)) }
 
 function focusElement(element: HTMLElement): boolean {
   let editorFocus = editorFocusForElement(element)
@@ -115,16 +124,28 @@ function descendHasTabStop(descendElement: HTMLElement): boolean {
     let editorFocus = editorFocusForElement(element)
     return editorFocus !== nothing && editorFocus.descend === descend && editorFocus.tabStop === true }) }
 
+function emptyListInsertionPoint(descendElement: HTMLElement): Maybe<HTMLElement> {
+  return childDescendElements(descendElement).length === 0 ? ownListInsertionPointElement(descendElement) : nothing
+}
+
+function nextListInsertionPointAfter(descendElement: HTMLElement): Maybe<HTMLElement> {
+  return bindMaybe(parentDescendElement(descendElement), parent =>
+    ownListInsertionPointElements(parent).find(element =>
+      Boolean(descendElement.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING))) }
+
 function tabStopDown(descendElement: HTMLElement, n: number): Maybe<HTMLElement> {
   let children = childDescendElements(descendElement)
-  return descendHasTabStop(descendElement) ? descendElement : firstMaybe((n > 0 ? children : children.reverse()).map(child => () => tabStopDown(child, n))) }
+  return descendHasTabStop(descendElement)
+    ? descendElement
+    : altMaybe(emptyListInsertionPoint(descendElement), () => firstMaybe((n > 0 ? children : children.reverse()).map(child => () => tabStopDown(child, n)))) }
 
 function tabStopDownChildren(descendElement: HTMLElement, n: number): Maybe<HTMLElement> {
   let children = childDescendElements(descendElement)
-  return firstMaybe((n > 0 ? children : children.reverse()).map(child => () => tabStopDown(child, n))) }
+  return altMaybe(firstMaybe((n > 0 ? children : children.reverse()).map(child => () => tabStopDown(child, n))), () => emptyListInsertionPoint(descendElement)) }
 
-function tabStopUp(descendElement: HTMLElement, n: number): Maybe<HTMLElement> {
-  return altMaybe(bindMaybe(sibling(descendElement, n), sibling => tabStopDown(sibling, n)), () => bindMaybe(parentDescendElement(descendElement), parent => tabStopUp(parent, n))) }
+function tabStopUp(descendElement: HTMLElement, n: number, fromChild = false): Maybe<HTMLElement> {
+  return altMaybe(fromChild && n > 0 ? nextListInsertionPointAfter(descendElement) : nothing, () =>
+    altMaybe(bindMaybe(sibling(descendElement, n), sibling => tabStopDown(sibling, n)), () => bindMaybe(parentDescendElement(descendElement), parent => tabStopUp(parent, n, true)))) }
 
 function firstTabStop(n: number): Maybe<HTMLElement> {
   let roots = childDescendElements(nothing)
@@ -229,27 +250,12 @@ export function requestNextTabStopFromDescendChildFromActiveElement(index: numbe
       (): PendingFocus => ({kind: "first"}),
       (path): PendingFocus => ({kind: "nextTabStopFromDescendChildPath", path, index}))) }
 
-export function requestFocusFirstListInsertionPointFromActiveElement() {
-  pendingFocus = maybe(activeEditorDescendElement(),
-    (): PendingFocus => ({kind: "first"}),
-    descendElement => maybe(editorDescendPath(descendElement),
-      (): PendingFocus => ({kind: "first"}),
-      (path): PendingFocus => ({kind: "firstListInsertionPointFromDescendPath", path}))) }
-
 export function focusFirstEditor(root: ParentNode = document): boolean {
   return focusEditorForDescendElement(rootDescendElements(root)[0])
 }
 
 export function focusEditorForEdge(root: ParentNode, edge: Edge): boolean {
   return focusEditorForDescendElement(descendElementForEdge(root, edge))
-}
-
-function focusDescendChild(descendElement: HTMLElement, index: number): boolean {
-  return focusEditorForDescendElement(childDescendElements(descendElement)[index])
-}
-
-function focusFirstListInsertionPointForDescendElement(descendElement: HTMLElement): boolean {
-  return maybe(ownListInsertionPointElement(descendElement), () => false, focusHTMLElement)
 }
 
 export function focusPendingEditor(root: HTMLElement): boolean {
@@ -263,14 +269,11 @@ export function focusPendingEditor(root: HTMLElement): boolean {
         return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), focusEditorForDescendElement)
       case "nextTabStopFromDescendPath":
         return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
-          focusEditorForDescendElement(altMaybe(nextTabStop(descendElement, pendingFocus.shift ? -1 : 1), () => descendElement)))
+          focusTabStop(altMaybe(nextTabStop(descendElement, pendingFocus.shift ? -1 : 1), () => descendElement)))
       case "nextTabStopFromDescendChildPath":
         return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
           maybe(childDescendElements(descendElement)[pendingFocus.index], () => false, child =>
-            focusEditorForDescendElement(altMaybe(nextTabStop(child, 1), () => child))))
-      case "firstListInsertionPointFromDescendPath":
-        return maybe(descendElementFromPath(root, pendingFocus.path), () => focusFirstEditor(root), descendElement =>
-          focusFirstListInsertionPointForDescendElement(descendElement) || focusEditorForDescendElement(descendElement)) }})
+            focusTabStop(altMaybe(tabStopDown(child, 1), () => child)))) }})
 }
 
 export function focusParentEditor(): boolean {
@@ -315,5 +318,5 @@ export function focusSiblingEditor(n: number): boolean {
 
 export function focusNextTabStop(shift: boolean): boolean {
   parentNavigationStack = []
-  return focusEditorForDescendElement(nextTabStop(activeEditorDescendElement(), shift ? -1 : 1))
+  return focusTabStop(nextTabStop(activeEditorDescendElement(), shift ? -1 : 1))
 }
