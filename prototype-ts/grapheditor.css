@@ -155,3 +155,21 @@ textarea.i {
 .graphNode.selectedGraphElement > rect, .graphNode.selectedGraphElement .graphIdenticonFrame { stroke: #111; stroke-width: 2.5px }
 .secondarySelectedGraphElement.graphEdge, .secondarySelectedGraphElement.graphArrow { stroke: #777; stroke-width: 2.5px }
 .graphNode.secondarySelectedGraphElement > rect, .graphNode.secondarySelectedGraphElement .graphIdenticonFrame { stroke: #777; stroke-width: 2.5px }
+.scene3DPanel {
+  background-color: #fafafa;
+  box-sizing: border-box }
+.scene3DRoot,
+.scene3DRoot > span.descend {
+  display: block;
+  height: 100% }
+.scene3DView {
+  box-sizing: border-box;
+  display: block;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  width: 100% }
+.scene3DView > canvas {
+  display: block;
+  height: 100%;
+  width: 100% }

@@ -9,6 +9,7 @@ import evaluate from "./Evaluate.progred"
 import javascript from "./Javascript.progred"
 import json from "./JSON.progred"
 import render from "./Render.progred"
+import scene3D from "./Scene3D.progred"
 import typeLibrary from "./type.progred"
 
 const loads: {[key: string]: {root: Maybe<ID>, guidMap: GUIDMap}} = {
@@ -17,6 +18,7 @@ const loads: {[key: string]: {root: Maybe<ID>, guidMap: GUIDMap}} = {
   JSON: load(json),
   JavaScript: load(javascript),
   Render: load(render),
+  Scene3D: load(scene3D),
   Evaluate: load(evaluate),
   Apps: load(apps) }
 

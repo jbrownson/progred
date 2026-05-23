@@ -1,0 +1,663 @@
+{
+  "root": "a836b3210eb28f0124048fd44176b83f",
+  "guidMap": {
+    "16cb6cb0a236328b1c6c320ac1cda35b": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "x"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "f97bcfc1c3a84a45958307a512f05954"
+        }
+      }
+    ],
+    "e4d8dbc5a920f802c9c11ab8bb450d5e": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "y"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "f97bcfc1c3a84a45958307a512f05954"
+        }
+      }
+    ],
+    "1ab20c7a7fab7ea4f9834ef7f2b92dde": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "z"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "f97bcfc1c3a84a45958307a512f05954"
+        }
+      }
+    ],
+    "09c9906b4b71b381c451a9585e2fe111": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "e35d27082ac44a759a4e4c0535f243d7"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Vec3"
+        }
+      },
+      {
+        "label": {
+          "guid": "210a5f0ea35c4677bf37192a69f0fb84"
+        },
+        "to": {
+          "guid": "d662a321376900ba510aede9f6594633"
+        }
+      }
+    ],
+    "d662a321376900ba510aede9f6594633": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "16cb6cb0a236328b1c6c320ac1cda35b"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "6f165c18c1730062e15b56107ebe32ae"
+        }
+      }
+    ],
+    "6f165c18c1730062e15b56107ebe32ae": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "e4d8dbc5a920f802c9c11ab8bb450d5e"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "bf559907d3a4b0bd1c1d7e7e652dc297"
+        }
+      }
+    ],
+    "bf559907d3a4b0bd1c1d7e7e652dc297": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "1ab20c7a7fab7ea4f9834ef7f2b92dde"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "97eaf516e0d1b0f2ce42d32a51ad4990"
+        }
+      }
+    ],
+    "97eaf516e0d1b0f2ce42d32a51ad4990": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "3cde40500b87c02387040cb9c2d57839": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "6410d2232b824a38bf61780cc1a12886"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "09c9906b4b71b381c451a9585e2fe111"
+        }
+      }
+    ],
+    "7bede3fd6748245ea3690b6bd49016c1": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "points"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "3cde40500b87c02387040cb9c2d57839"
+        }
+      }
+    ],
+    "29108bc98f7d432d2e739cffcfbf9e87": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "color"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "70d1d53107174f88858da0cdad6050d5"
+        }
+      }
+    ],
+    "abb1101a80c25f8ea62619539ccff825": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "e35d27082ac44a759a4e4c0535f243d7"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Polyline 3D"
+        }
+      },
+      {
+        "label": {
+          "guid": "210a5f0ea35c4677bf37192a69f0fb84"
+        },
+        "to": {
+          "guid": "1fb91a838a0ffa36cb0ebc3421ecf01d"
+        }
+      }
+    ],
+    "1fb91a838a0ffa36cb0ebc3421ecf01d": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "7bede3fd6748245ea3690b6bd49016c1"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "f3f74f8364d4e76c0dcb0eb2061947fe"
+        }
+      }
+    ],
+    "f3f74f8364d4e76c0dcb0eb2061947fe": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "29108bc98f7d432d2e739cffcfbf9e87"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "5b06e8c5ffb5ab5e66b97b984cd98e12"
+        }
+      }
+    ],
+    "5b06e8c5ffb5ab5e66b97b984cd98e12": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "dea2c450d1c9c6097a10880e631558a1": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "ba181d67665d4e57b9fa1694dbdacbca"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Scene 3D Object"
+        }
+      },
+      {
+        "label": {
+          "guid": "1088fc911436441ca7f0b569fcf72da5"
+        },
+        "to": {
+          "guid": "bf7048f19a93b80626530de718c5481b"
+        }
+      }
+    ],
+    "bf7048f19a93b80626530de718c5481b": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "abb1101a80c25f8ea62619539ccff825"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "52ccd4cdc818fb8a3087b3f76d5cf3a4"
+        }
+      }
+    ],
+    "52ccd4cdc818fb8a3087b3f76d5cf3a4": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "428a03042f2d85fc71b4e1409295560f": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "6410d2232b824a38bf61780cc1a12886"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "dea2c450d1c9c6097a10880e631558a1"
+        }
+      }
+    ],
+    "81ab0e26b1c122583d89fb5c2ccf9ca2": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "a963494fb49742f4a0a2b12011ac3cbe"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "objects"
+        }
+      },
+      {
+        "label": {
+          "guid": "223a9b55b8a1413497879a52e5dea939"
+        },
+        "to": {
+          "guid": "428a03042f2d85fc71b4e1409295560f"
+        }
+      }
+    ],
+    "5c0ab5320b84668d455ac5def940bdd4": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "e35d27082ac44a759a4e4c0535f243d7"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Scene 3D"
+        }
+      },
+      {
+        "label": {
+          "guid": "210a5f0ea35c4677bf37192a69f0fb84"
+        },
+        "to": {
+          "guid": "3a1bdb81f31c4c262ad2ca8906cbbfdf"
+        }
+      }
+    ],
+    "3a1bdb81f31c4c262ad2ca8906cbbfdf": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "81ab0e26b1c122583d89fb5c2ccf9ca2"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "54f97b8ecc12d2b94561a4bf9d64f319"
+        }
+      }
+    ],
+    "54f97b8ecc12d2b94561a4bf9d64f319": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ],
+    "a836b3210eb28f0124048fd44176b83f": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "3c0e5c714e551ef48390f803fa17569b"
+        }
+      },
+      {
+        "label": {
+          "guid": "1088fc911436441ca7f0b569fcf72da5"
+        },
+        "to": {
+          "guid": "0e846afb2dbc72dc74d0d8e89f6382cf"
+        }
+      },
+      {
+        "label": {
+          "guid": "169a81aefca74e92b45e3fa03c7021df"
+        },
+        "to": {
+          "string": "Scene3D"
+        }
+      }
+    ],
+    "0e846afb2dbc72dc74d0d8e89f6382cf": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "5c0ab5320b84668d455ac5def940bdd4"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "a2ec9d8d2429b57122312f16608e93ef"
+        }
+      }
+    ],
+    "a2ec9d8d2429b57122312f16608e93ef": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "dea2c450d1c9c6097a10880e631558a1"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "397e46639fb72d19df3f9d10aa4dbe2f"
+        }
+      }
+    ],
+    "397e46639fb72d19df3f9d10aa4dbe2f": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "abb1101a80c25f8ea62619539ccff825"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "d2ca1f5575d0f86416f8bd8dd2a7a07d"
+        }
+      }
+    ],
+    "d2ca1f5575d0f86416f8bd8dd2a7a07d": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "f0408beb29c74dc7bc20dc461104e949"
+        }
+      },
+      {
+        "label": {
+          "guid": "a74851b7a58f4e52b72ee719b258a7b1"
+        },
+        "to": {
+          "guid": "09c9906b4b71b381c451a9585e2fe111"
+        }
+      },
+      {
+        "label": {
+          "guid": "e53f14ab72eb40f590e5ae53fb53e988"
+        },
+        "to": {
+          "guid": "dde69460d27010de61fa39db749b7802"
+        }
+      }
+    ],
+    "dde69460d27010de61fa39db749b7802": [
+      {
+        "label": {
+          "guid": "aba6ac79fd3d409da860a77c90942852"
+        },
+        "to": {
+          "guid": "51fb7a7a95d4486bb197509fd53dec2d"
+        }
+      }
+    ]
+  }
+}

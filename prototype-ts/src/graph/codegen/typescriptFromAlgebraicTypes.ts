@@ -86,7 +86,7 @@ function fromIDFromAtomicType(atomicType: AtomicType) {
   return atomicType.id === numberAtomicType.id ? "numberFromID" : atomicType.id === stringAtomicType.id ? "stringFromID" : "unknown atomic type" }
 
 function fromIDFromAlgebraicType(algebraicType: AlgebraicType) {
-  return unsafeUnwrapMaybe(algebraicType.ctorOrAlgebraicTypes).length <= 1 ? `${symbolFromAlgebraicType(algebraicType)}.fromID` : `${camelCase(unsafeUnwrapMaybe(algebraicType.name))}FromID` }
+  return `${camelCase(unsafeUnwrapMaybe(algebraicType.name))}FromID` }
 
 function symbolFromCtor(ctor: Ctor) { return pascalCase(unsafeUnwrapMaybe(ctor.name)) }
 function symbolFromAtomic(atomicType: AtomicType) { return atomicType.id === stringAtomicType.id ? "HasSID" : atomicType.id === numberAtomicType.id ? "HasNID" : "unsupported atomic type" }
@@ -140,7 +140,7 @@ function typescriptFromAlgebraicType(algebraicType: AlgebraicType): Maybe<string
   let check = atomics.length > 0
     ? `altMaybe(${[checkAlgebraicType, ...atomics.map(atomic => `() => check${pascalCase(unsafeUnwrapMaybe(atomic.name))}(id)`)].join(', ')})`
     : checkAlgebraicType
-  return ctors.length < 2 ? nothing : [
+  return ctors.length + atomics.length < 1 ? nothing : [
     `export type ${symbolFromAlgebraicType(algebraicType)} = ${[...ctors.map(symbolFromCtor), ...atomics.map(symbolFromAtomic)].join(" | ")}`,
     ...atomics.length === 0 ? [`export type GUID${symbolFromAlgebraicType(algebraicType)} = ${ctors.map(ctor => `GUID${symbolFromCtor(ctor)}`).join(" | ")}`] : [],
     `export function ${camelCase(name)}FromID(id: ID): Maybe<${symbolFromAlgebraicType(algebraicType)}> { return ${check} }`,

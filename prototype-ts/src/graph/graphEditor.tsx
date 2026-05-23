@@ -5,7 +5,7 @@ import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, maybeToArray, nothing } f
 import { bradParamsFromJSON } from "./transforms/bradParamsFromJSON"
 import type { D } from "./render/D"
 import { DRoot } from "./render/DRoot"
-import { createProjection } from "./render/project"
+import { createProjection, createRootRenderDescend } from "./render/project"
 import { GraphViewComponent } from "./components/GraphViewComponent"
 import { defaultRender, tryFirst } from "./render/defaultRender"
 import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText, plainTextFormat } from "./editor/Clipboard"
@@ -26,6 +26,7 @@ import { load } from "./model/load"
 import { dispatch } from "./render/R"
 import { renderFromLibraries, renderFromModule } from "./render/renderFromLibraries"
 import { renders } from "./render/renders"
+import { renderScene3D } from "./render/renderScene3D"
 import { save } from "./model/save"
 import { buildGraphViewSnapshot, GraphSelection } from "./graphView/GraphViewSnapshot"
 import { stringFromJSON } from "./transforms/stringFromJSON"
@@ -382,20 +383,24 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
   let documentEnvironment = new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks)
   let documentRender = withEnvironment(documentEnvironment, () =>
     bindMaybe(bindMaybe(environment().workspace.root, Module.fromID), renderFromModule) )
-  let projectionEnvironment = new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks)
-  let {rootDescend, viewDescend} = withEnvironment(projectionEnvironment, createProjection)
+  let editorEnvironment = new Environment(libraries, guidMap, workspace, tryFirst(dispatch(renders, libraryRender, ...maybeToArray(documentRender)), defaultRender), readOnlyECallbacks)
+  let rootScene3DEnvironment = new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks)
+  let {rootDescend, viewDescend} = withEnvironment(editorEnvironment, createProjection)
+  let rootScene3DDescend = withEnvironment(rootScene3DEnvironment, () => createRootRenderDescend(renderScene3D, "3D"))
   let graphSnapshot = showGraph.current
     ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks), () =>
       buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
     : nothing
-  let hasSidebar = showGraph.current || viewDescend !== nothing
+  let sidebarPanelCount = (showGraph.current ? 1 : 0) + (rootScene3DDescend !== nothing ? 1 : 0) + (viewDescend !== nothing ? 1 : 0)
+  let hasSidebar = sidebarPanelCount > 0
+  let sidebarPanelHeight = hasSidebar ? `${100 / sidebarPanelCount}%` : "100%"
   return <div style={{position: "absolute", top: 0, left: 0, right: 0, bottom: 0}}>
       <div ref={element => { leftPanel.current = element }} className={hasSidebar ? "leftPanel" : ""}
       style={{display: "inline-block", width: hasSidebar ? "60%" : "100%", height: "100%", overflow: "auto"}}
       onScroll={() => notifyScrollListeners()} >
       <div className="doc"><DRoot
         d={rootDescend}
-        environment={projectionEnvironment}
+        environment={editorEnvironment}
         depth={0}
         runE={f => runE(f)} /></div></div>
     {hasSidebar
@@ -403,18 +408,25 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
         <div className="separator" style={{height: "100%", display: "inline-block"}} />
         <div className="rightPanel" style={{width: "100%", height: "100%", display: "inline-block"}}>
           {maybe(graphSnapshot, () => null, graphSnapshot =>
-            <div className="graphPanel" style={{height: viewDescend === nothing ? "100%" : "50%"}}>
+            <div className="graphPanel" style={{height: sidebarPanelHeight}}>
               <GraphViewComponent
                 snapshot={graphSnapshot}
                 setGraphSelection={selection => setGraphSelection(selection)}
                 chooseID={id => runE(() => commitToActiveElementWithRefocus(id))} />
             </div>)}
+          {maybe(rootScene3DDescend, () => null, rootScene3DDescend =>
+            <div className="scene3DPanel" style={{height: sidebarPanelHeight, overflow: "auto"}}>
+              <div className="scene3DRoot"><DRoot
+                d={rootScene3DDescend}
+                environment={rootScene3DEnvironment}
+                depth={0}
+                runE={f => runE(f)} /></div></div>)}
           {maybe(viewDescend, () => null, viewDescend =>
-            <div ref={element => { rightPanel.current = element }} className="viewPanel" style={{height: showGraph.current ? "50%" : "100%", overflow: "auto"}}
+            <div ref={element => { rightPanel.current = element }} className="viewPanel" style={{height: sidebarPanelHeight, overflow: "auto"}}
               onScroll={() => notifyScrollListeners()} >
               <div className="view"><DRoot
                 d={viewDescend}
-                environment={projectionEnvironment}
+                environment={editorEnvironment}
                 depth={0}
                 runE={f => runE(f)} /></div></div>)}
         </div></div>

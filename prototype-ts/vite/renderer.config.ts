@@ -6,6 +6,7 @@ export default defineConfig({
   base: "./",
   plugins: [progredDataPlugin(), react()],
   build: {
+    chunkSizeWarningLimit: 1500,
     outDir: "build/renderer",
     emptyOutDir: true,
     rollupOptions: {

@@ -699,6 +699,19 @@ export class GUIDPlatform extends Platform {
   get guidPlatform() { return this }
   setName(x: Maybe<string>) { return _set(this, nameField, sidFromString, x) } }
 
+export class Polyline3D {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, polyline3DCtor) ? new Polyline3D(id) : nothing }
+  get guidPolyline3D() { return mapMaybe(guidFromID(this.id), guid => new GUIDPolyline3D(guid)) }
+  get points(): Maybe<Vec3[]> { return getList(this, pointsField, Vec3.fromID) }
+  get color(): Maybe<string> { return get(this, colorField, stringFromID) } }
+export class GUIDPolyline3D extends Polyline3D {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, polyline3DCtor.id); return new GUIDPolyline3D(guid) }
+  get guidPolyline3D() { return this }
+  setPoints(x: Maybe<Vec3[]>) { return setList(this, pointsField, getID, x) }
+  setColor(x: Maybe<string>) { return _set(this, colorField, sidFromString, x) } }
+
 export class Product {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, productCtor) ? new Product(id) : nothing }
@@ -773,6 +786,17 @@ export class GUIDReturn extends Return {
   get guidReturn() { return this }
   setExpression(x: Maybe<Expression>) { return _set(this, expressionField, getID, x) } }
 
+export class Scene3D {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, scene3DCtor) ? new Scene3D(id) : nothing }
+  get guidScene3D() { return mapMaybe(guidFromID(this.id), guid => new GUIDScene3D(guid)) }
+  get objects(): Maybe<Scene3DObject[]> { return getList(this, objectsField, scene3DObjectFromID) } }
+export class GUIDScene3D extends Scene3D {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, scene3DCtor.id); return new GUIDScene3D(guid) }
+  get guidScene3D() { return this }
+  setObjects(x: Maybe<Scene3DObject[]>) { return setList(this, objectsField, getID, x) } }
+
 export class StrictEquals {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, strictEqualsCtor) ? new StrictEquals(id) : nothing }
@@ -842,6 +866,21 @@ export class GUIDVariableDeclaration extends VariableDeclaration {
   setName(x: Maybe<string>) { return _set(this, nameField, sidFromString, x) }
   setConstLetVar(x: Maybe<ConstLetVar>) { return _set(this, constLetVarField, getID, x) }
   setExpression(x: Maybe<Expression>) { return _set(this, expressionField, getID, x) } }
+
+export class Vec3 {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, vec3Ctor) ? new Vec3(id) : nothing }
+  get guidVec3() { return mapMaybe(guidFromID(this.id), guid => new GUIDVec3(guid)) }
+  get x(): Maybe<number> { return get(this, xField, numberFromID) }
+  get y(): Maybe<number> { return get(this, yField, numberFromID) }
+  get z(): Maybe<number> { return get(this, zField, numberFromID) } }
+export class GUIDVec3 extends Vec3 {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, vec3Ctor.id); return new GUIDVec3(guid) }
+  get guidVec3() { return this }
+  setX(x: Maybe<number>) { return _set(this, xField, nidFromNumber, x) }
+  setY(x: Maybe<number>) { return _set(this, yField, nidFromNumber, x) }
+  setZ(x: Maybe<number>) { return _set(this, zField, nidFromNumber, x) } }
 
 export type List<A extends HasID = HasID> = NonemptyList<A> | EmptyList
 export type GUIDList<A extends HasID = HasID> = GUIDNonemptyList<A> | GUIDEmptyList
@@ -933,6 +972,12 @@ export function renderListFromRender(x: Render) { return x instanceof RenderList
 export function renderNameShallowFromRender(x: Render) { return x instanceof RenderNameShallow ? x : nothing }
 export function dispatchFromRender(x: Render) { return x instanceof Dispatch ? x : nothing }
 
+export type Scene3DObject = Polyline3D
+export type GUIDScene3DObject = GUIDPolyline3D
+export function scene3DObjectFromID(id: ID): Maybe<Scene3DObject> { return checkAlgebraicType<Scene3DObject>(id, [{ctor: polyline3DCtor, f: id => new Polyline3D(id)}]) }
+export function matchScene3DObject<A>(x: Scene3DObject, polyline3DF: (x: Polyline3D) => A) { return polyline3DF(x) }
+export function polyline3DFromScene3DObject(x: Scene3DObject) { return x instanceof Polyline3D ? x : nothing }
+
 export type Statement = FunctionDeclaration | Extern | Parameter | ArrayLiteral | ObjectLiteral | KeyValue | BinaryInline | Conditional | FunctionCall | ArrowFunction | New | Undefined | Null | Return | If | VariableDeclaration | HasNID | HasSID
 export function statementFromID(id: ID): Maybe<Statement> { return altMaybe(checkAlgebraicType<Statement>(id, [{ctor: functionDeclarationCtor, f: id => new FunctionDeclaration(id)}, {ctor: externCtor, f: id => new Extern(id)}, {ctor: parameterCtor, f: id => new Parameter(id)}, {ctor: arrayLiteralCtor, f: id => new ArrayLiteral(id)}, {ctor: objectLiteralCtor, f: id => new ObjectLiteral(id)}, {ctor: keyValueCtor, f: id => new KeyValue(id)}, {ctor: binaryInlineCtor, f: id => new BinaryInline(id)}, {ctor: conditionalCtor, f: id => new Conditional(id)}, {ctor: functionCallCtor, f: id => new FunctionCall(id)}, {ctor: arrowFunctionCtor, f: id => new ArrowFunction(id)}, {ctor: newCtor, f: id => new New(id)}, {ctor: undefinedCtor, f: id => new Undefined(id)}, {ctor: nullCtor, f: id => new Null(id)}, {ctor: returnCtor, f: id => new Return(id)}, {ctor: ifCtor, f: id => new If(id)}, {ctor: variableDeclarationCtor, f: id => new VariableDeclaration(id)}]), () => checkNumber(id), () => checkString(id)) }
 export function matchStatement<A>(x: Statement, functionDeclarationF: (x: FunctionDeclaration) => A, externF: (x: Extern) => A, parameterF: (x: Parameter) => A, arrayLiteralF: (x: ArrayLiteral) => A, objectLiteralF: (x: ObjectLiteral) => A, keyValueF: (x: KeyValue) => A, binaryInlineF: (x: BinaryInline) => A, conditionalF: (x: Conditional) => A, functionCallF: (x: FunctionCall) => A, arrowFunctionF: (x: ArrowFunction) => A, newF: (x: New) => A, undefinedF: (x: Undefined) => A, nullF: (x: Null) => A, returnF: (x: Return) => A, ifF: (x: If) => A, variableDeclarationF: (x: VariableDeclaration) => A, numberF: (x: number) => A, stringF: (x: string) => A) { return x instanceof FunctionDeclaration ? functionDeclarationF(x) : x instanceof Extern ? externF(x) : x instanceof Parameter ? parameterF(x) : x instanceof ArrayLiteral ? arrayLiteralF(x) : x instanceof ObjectLiteral ? objectLiteralF(x) : x instanceof KeyValue ? keyValueF(x) : x instanceof BinaryInline ? binaryInlineF(x) : x instanceof Conditional ? conditionalF(x) : x instanceof FunctionCall ? functionCallF(x) : x instanceof ArrowFunction ? arrowFunctionF(x) : x instanceof New ? newF(x) : x instanceof Undefined ? undefinedF(x) : x instanceof Null ? nullF(x) : x instanceof Return ? returnF(x) : x instanceof If ? ifF(x) : x instanceof VariableDeclaration ? variableDeclarationF(x) : x instanceof HasNID ? numberF(x.number) : stringF(x.string) }
@@ -980,6 +1025,7 @@ export const
   childField = new GUIDField("b8b38542590248fddea03aa7faa9004c"),
   childrenField = new GUIDField("55944d181e596b9c1642f9687ac9fcd5"),
   closingField = new GUIDField("022d34a8b5652176e825bb0440454ab2"),
+  colorField = new GUIDField("29108bc98f7d432d2e739cffcfbf9e87"),
   conditionField = new GUIDField("b061582a37c4c6930f3d5c74a0201263"),
   constLetVarField = new GUIDField("da71dfbbc95473dcf8171a99caa8c117"),
   contextRenderField = new GUIDField("908e3614a53ec485765099f4f88ffd5e"),
@@ -1013,9 +1059,11 @@ export const
   nameField = new GUIDField("169a81aefca74e92b45e3fa03c7021df"),
   objectKeyField = new GUIDField("00936cdba9ff09ffbdaf7ade7251c493"),
   objectValueField = new GUIDField("4391d8d2309238edae2725047118f7af"),
+  objectsField = new GUIDField("81ab0e26b1c122583d89fb5c2ccf9ca2"),
   openingField = new GUIDField("cf1d43a4cb7bbe296f2d38c65f36cd2a"),
   parametersField = new GUIDField("6d65c89d35881c900e1418ff1db52bb9"),
   platformField = new GUIDField("e92b32a5abe83351ec2bc7085d957113"),
+  pointsField = new GUIDField("7bede3fd6748245ea3690b6bd49016c1"),
   renderCtorsField = new GUIDField("bc20a35da250d825fc8af115d52f879f"),
   rendersField = new GUIDField("abb3a705a157db4b6f2b0ae1a75f6439"),
   rightField = new GUIDField("12c8dcfc40feb95766d8810013c47ed5"),
@@ -1032,6 +1080,9 @@ export const
   valueField = new GUIDField("a417f1b7167cee31537cf561bc7396ad"),
   weightField = new GUIDField("7bce82bcee93437a748dcd693caa2cc0"),
   widthField = new GUIDField("7e36f32e37b80f495dbba6bb75ec2ec5"),
+  xField = new GUIDField("16cb6cb0a236328b1c6c320ac1cda35b"),
+  yField = new GUIDField("e4d8dbc5a920f802c9c11ab8bb450d5e"),
+  zField = new GUIDField("1ab20c7a7fab7ea4f9834ef7f2b92dde"),
   algebraicTypeCtor = new GUIDCtor("ba181d67665d4e57b9fa1694dbdacbca"),
   andCtor = new GUIDCtor("89da9a377b0116af9531275a81545c32"),
   appCtor = new GUIDCtor("2a19592fa5047f6ad1ef58d885611c6f"),
@@ -1086,18 +1137,21 @@ export const
   orCtor = new GUIDCtor("b25858d75fd4a4bc97352c13367760d7"),
   parameterCtor = new GUIDCtor("ee0ccdd47b67323bb4442be189813268"),
   platformCtor = new GUIDCtor("31c3b378fad19ce374296bc7b93a6c32"),
+  polyline3DCtor = new GUIDCtor("abb1101a80c25f8ea62619539ccff825"),
   productCtor = new GUIDCtor("64663d851ac8fd5667c29f9eb836a16f"),
   quotientCtor = new GUIDCtor("d4dfa5bba3f44b1c8db13b38c8504939"),
   renderCtorCtor = new GUIDCtor("e4ba7b3350b6ba78485c3b0fe66d74e7"),
   renderListCtor = new GUIDCtor("bfe62ce7b212eb753823b3a5f244c404"),
   renderNameShallowCtor = new GUIDCtor("bcb942240e9f0e111b0cf985360c5188"),
   returnCtor = new GUIDCtor("bba85fdde889e435725b437d82d41596"),
+  scene3DCtor = new GUIDCtor("5c0ab5320b84668d455ac5def940bdd4"),
   strictEqualsCtor = new GUIDCtor("9e7e02107fb914004fd34a5867652c5c"),
   strictNotEqualsCtor = new GUIDCtor("c57de19bbff6519003d2959e8f3d0123"),
   sumCtor = new GUIDCtor("66a2a6cacfd8f5bcddb200964e936457"),
   undefinedCtor = new GUIDCtor("61bb6c05ed466f923d8d6ee0b0c1295b"),
   varCtor = new GUIDCtor("9eb7b6c08dea5bd3118ab4e52a67af55"),
   variableDeclarationCtor = new GUIDCtor("b98dd2eb21483f6acd304be44ef40c9c"),
+  vec3Ctor = new GUIDCtor("09c9906b4b71b381c451a9585e2fe111"),
   binaryOperatorAlgebraicType = new GUIDAlgebraicType("e27fa156592ee2f9b738bbfe9d66dff6"),
   constLetVarAlgebraicType = new GUIDAlgebraicType("556afcdc910c5bbaa3ecb24014389a0a"),
   ctorOrAlgebraicTypeAlgebraicType = new GUIDAlgebraicType("63a2e588102f5e5453316d46fea2f02b"),
@@ -1106,6 +1160,7 @@ export const
   jsonAlgebraicType = new GUIDAlgebraicType("52120b6d534a2fffe968f0c055df6ca8"),
   listAlgebraicType = new GUIDAlgebraicType("e06b24ad99bf4e14a368aaf93bfb143b"),
   renderAlgebraicType = new GUIDAlgebraicType("86a592afa6af938c63acde8fcc753aba"),
+  scene3DObjectAlgebraicType = new GUIDAlgebraicType("dea2c450d1c9c6097a10880e631558a1"),
   statementAlgebraicType = new GUIDAlgebraicType("1f0ef6c04ffe3cddcb354d92492e0bbd"),
   typeAlgebraicType = new GUIDAlgebraicType("17458686b71245d092a8c930140c32c5"),
   weightedEntryAlgebraicType = new GUIDAlgebraicType("9ce59e032d7570cd200f1b30589d0c15"),
