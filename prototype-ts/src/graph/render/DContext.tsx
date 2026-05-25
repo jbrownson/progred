@@ -58,7 +58,7 @@ export function activeEditorCommands(edgeContext: Maybe<EdgeContext>, inheritedC
   return {
     ...inheritedCommands,
     ...editorCommands,
-    commit: edgeContext?.commit || editorCommands.commit || inheritedCommands?.commit }}
+    commit: edgeContext && "commit" in edgeContext ? edgeContext.commit : editorCommands.commit || inheritedCommands?.commit }}
 
 export function childContext(context: DContextValue, props: Partial<DContextValue>): DContextValue {
   return {...context, ...props}

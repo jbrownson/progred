@@ -1,15 +1,27 @@
-import { bindMaybe, guardMaybe, mapMaybe, Maybe, maybeMap, sequenceMaybe } from "../../lib/Maybe"
+import { bindMaybe, guardMaybe, mapMaybe, Maybe, maybe, maybeMap, sequenceMaybe } from "../../lib/Maybe"
 import type { D } from "./DContext"
 import { block as dBlock, dText, line as dLine } from "./DLayout"
 import { label as dLabel } from "./DEditors"
 import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
 import { renderList } from "./renderList"
-import { _get, SourceID } from "../Environment"
+import { _get, edges, SourceID, SourceType } from "../Environment"
 import * as G from "../graph"
 import { Edge } from "../model/Edge"
 import { descend, dispatch, Render } from "./R"
 import { renderNameShallow } from "./renderNameShallow"
 import type { CyclePath } from "./CyclePath"
+import { edgeContextForEdge } from "../editor/edgeContext"
+
+function edgeContextForSourceID(sourceID: SourceID, field: G.Field) {
+  let edge = {parent: sourceID.id, label: field.id}
+  let edgeContext = edgeContextForEdge(edge)
+  let writable = sourceIDIsWritable(sourceID)
+  return writable ? edgeContext : {...edgeContext, commit: undefined}
+}
+
+function sourceIDIsWritable(sourceID: SourceID): boolean {
+  return maybe(edges(sourceID.id), () => sourceID.source, ({source}) => source).source === SourceType.DocumentType
+}
 
 function dConstructorFromD(d: G.D): Maybe<(edge: Edge, sourceID: SourceID, cyclePath?: CyclePath) => Maybe<D>> {
   return G.matchD(d,
@@ -17,7 +29,7 @@ function dConstructorFromD(d: G.D): Maybe<(edge: Edge, sourceID: SourceID, cycle
       mapMaybe(sequenceMaybe(childConstructors.map(childConstructor => () => childConstructor(edge, sourceID, cyclePath))), children => dBlock(...children)) ),
     line => bindMaybe(bindMaybe(line.children, children => sequenceMaybe(children.map(child => () => dConstructorFromD(child)))), childConstructors => (edge: Edge, sourceID: SourceID, cyclePath?: CyclePath): Maybe<D> =>
       mapMaybe(sequenceMaybe(childConstructors.map(childConstructor => () => childConstructor(edge, sourceID, cyclePath))), children => dLine(...children)) ),
-    _descend => mapMaybe(_descend.field, field => (edge: Edge, sourceID: SourceID, cyclePath?: CyclePath) => descend(sourceID.id, field.id, bindMaybe(_descend.contextRender, renderFromRender), undefined, cyclePath)),
+    _descend => mapMaybe(_descend.field, field => (edge: Edge, sourceID: SourceID, cyclePath?: CyclePath) => descend(sourceID.id, field.id, bindMaybe(_descend.contextRender, renderFromRender), edgeContextForSourceID(sourceID, field), cyclePath)),
     label => bindMaybe(label.field, field => bindMaybe(bindMaybe(label.child, dConstructorFromD), childConstructor => (edge: Edge, sourceID: SourceID, cyclePath?: CyclePath): Maybe<D> => mapMaybe(childConstructor({parent: sourceID.id, label: field.id}, sourceID, cyclePath), child => dLabel({parent: sourceID.id, label: field.id}, child)))),
     string => () => dText(string) )}
 

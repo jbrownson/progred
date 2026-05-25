@@ -9,7 +9,7 @@ import { useEditorAttachment } from "./useEditorAttachment"
 
 export function StringEditorComponent(props: {stringEditor: StringEditor, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const textArea = React.useRef<HTMLTextAreaElement | null>(null)
-  useEditorAttachment(textArea, props.editorCommands, {edge: props.edge, descend: props.descend})
+  useEditorAttachment(textArea, props.editorCommands, {id: props.stringEditor.id, edge: props.edge, descend: props.descend})
   let onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     let keyDownAction = editorKeyDownAction(props.editorCommands, e)
     if (keyDownAction) { props.runE(keyDownAction); return }

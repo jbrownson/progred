@@ -51,6 +51,7 @@ export function ListInsertionEditorComponent(props: {insertionPoint: ListInserti
     placeholder="item"
     editorCommands={editorCommands}
     descend={props.descend}
+    className="listInsertionPointEditor"
     runE={props.runE}
     closeCompletion={() => {
       clearEditorState()

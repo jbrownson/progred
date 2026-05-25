@@ -3,6 +3,7 @@ import { sidFromString } from "../model/ID"
 import { block, dList, dText, isBlock, isSingleLine, line } from "./D"
 import { descend } from "./R"
 import { withTestEnvironment } from "../testHelpers"
+import { activeEditorCommands } from "./DContext"
 
 describe("D", () => {
   it("marks line and block layout in D metadata", () => {
@@ -29,5 +30,15 @@ describe("D", () => {
       expect(isSingleLine(d)).toBe(true)
       expect(renders).toBe(1)
     })
+  })
+
+  it("does not inherit commit through explicit read-only edge context", () => {
+    let inheritedCommitted = false
+    const commands = activeEditorCommands({commit: undefined}, {commit: () => { inheritedCommitted = true }}, {})
+
+    commands.commit?.("guid-target")
+
+    expect(inheritedCommitted).toBe(false)
+    expect(commands.commit).toBe(undefined)
   })
 })

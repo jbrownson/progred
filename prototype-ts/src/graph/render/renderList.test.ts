@@ -1,14 +1,16 @@
 import { act } from "react"
 import { afterEach, describe, expect, it } from "vitest"
 import { mapMaybe } from "../../lib/Maybe"
-import { commitIDToActiveElement } from "../editor/EditorCommands"
+import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { SourceType } from "../Environment"
-import { GUIDEmptyList, GUIDNonemptyList, headField, tailField } from "../graph"
+import { ctorField, emptyListCtor, GUIDEmptyList, GUIDNonemptyList, headField, nonemptyListCtor, tailField } from "../graph"
+import { MapIDMap } from "../model/MapIDMap"
 import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
 import { withTestEnvironment } from "../testHelpers"
 import { emptyCyclePath, stepCyclePath } from "./CyclePath"
 import { dText } from "./D"
+import { defaultRender } from "./defaultRender"
 import { renderList } from "./renderList"
 import { renderDForTest } from "./renderTestHelpers"
 
@@ -114,5 +116,24 @@ describe("renderList", () => {
       expect(environment.guidMap.get(newTail as string, tailField.id)).toBe(empty.id)
       unmount()
     })
+  })
+
+  it("renders library lists without insertion points or item commits", () => {
+    const list = "guid-list"
+    const empty = "guid-empty"
+    const libraryMap = new Map([
+      [list, new Map([[ctorField.id, nonemptyListCtor.id], [headField.id, sidFromString("a")], [tailField.id, empty]])],
+      [empty, new Map([[ctorField.id, emptyListCtor.id]])] ])
+    const libraries = new Map([["library", {idMap: new MapIDMap(libraryMap), root: list}]])
+    withTestEnvironment(environment => {
+      const d = renderList()(edge(), {id: list, source: {source: SourceType.LibraryType}})
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d!)
+
+      expect(container.querySelectorAll(".listInsertionPoint")).toHaveLength(0)
+      ;(container.querySelector("textarea.string") as HTMLElement).focus()
+      expect(editorCommandsForActiveElement()?.commit).toBe(undefined)
+      unmount()
+    }, {libraries, defaultRender})
   })
 })

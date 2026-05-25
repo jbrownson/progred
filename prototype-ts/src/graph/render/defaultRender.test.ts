@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { act } from "react"
 import { SourceType } from "../Environment"
-import { nameField } from "../graph"
+import { appCtor, ctorField, nameField } from "../graph"
 import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
+import { MapIDMap } from "../model/MapIDMap"
 import { withTestEnvironment } from "../testHelpers"
 import { dText } from "./D"
 import { defaultRender, renderString } from "./defaultRender"
@@ -11,6 +12,7 @@ import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
 import { renderField } from "./renderField"
 import { renderDForTest } from "./renderTestHelpers"
 import { editorCommandsForActiveElement } from "../editor/EditorCommands"
+import { renderIfApp } from "../renderIfs"
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -58,16 +60,49 @@ describe("defaultRender", () => {
     })
   })
 
-  it("does not wrap library GUIDs in document editor commands", () => {
+  it("renders library GUIDs as selectable editors without document edit commands", () => {
     withTestEnvironment(environment => {
       const e = edge()
       const d = renderDocumentGuidEditor(e, {id: "guid-node", source: {source: SourceType.LibraryType}}, dText("node"))
       const {container, unmount} = renderDForTest(environment, d)
 
-      expect(container.querySelector(".guidEditor")).toBe(null)
-      expect(container.textContent).toBe("node")
+      const editor = container.querySelector(".guidEditor") as HTMLElement
+      expect(editor.textContent).toBe("node")
+      editor.focus()
+      expect(editorCommandsForActiveElement()?.copy?.().referenceID).toBe("guid-node")
+      expect(editorCommandsForActiveElement()?.newEdge).toBe(undefined)
       unmount()
     })
+  })
+
+  it("renders library GUIDs reached through document edges without document edit commands", () => {
+    const libraryMap = new Map([["guid-node", new Map([[nameField.id, sidFromString("Library Node")]])]])
+    const libraries = new Map([["library", {idMap: new MapIDMap(libraryMap), root: "guid-node"}]])
+    withTestEnvironment(environment => {
+      const e = edge()
+      const d = renderDocumentGuidEditor(e, {id: "guid-node", source: {source: SourceType.DocumentType, guid: "guid-holder"}}, dText("node"))
+      const {container, unmount} = renderDForTest(environment, d)
+
+      const editor = container.querySelector(".guidEditor") as HTMLElement
+      editor.focus()
+      expect(editorCommandsForActiveElement()?.copy?.().referenceID).toBe("guid-node")
+      expect(editorCommandsForActiveElement()?.newEdge).toBe(undefined)
+      unmount()
+    }, {libraries})
+  })
+
+  it("renders generated render children under library GUIDs without document edit commands", () => {
+    const libraryMap = new Map([["guid-app", new Map([[ctorField.id, appCtor.id], [nameField.id, sidFromString("Library App")]])]])
+    const libraries = new Map([["library", {idMap: new MapIDMap(libraryMap), root: "guid-app"}]])
+    withTestEnvironment(environment => {
+      const d = renderIfApp(name => name)(edge(), {id: "guid-app", source: {source: SourceType.DocumentType, guid: "guid-holder"}})
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d!)
+
+      ;(container.querySelector("textarea.string") as HTMLElement).focus()
+      expect(editorCommandsForActiveElement()?.commit).toBe(undefined)
+      unmount()
+    }, {libraries, defaultRender})
   })
 
   it("renders named labels as text in fields", () => {

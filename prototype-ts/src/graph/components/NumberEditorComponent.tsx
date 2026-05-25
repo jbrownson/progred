@@ -12,7 +12,7 @@ import { useEditorAttachment } from "./useEditorAttachment"
 export function NumberEditorComponent(props: {numberEditor: NumberEditor, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, runE: (f: () => void) => void}) {
   const [editedValue, setEditedValue] = React.useState<string | undefined>(undefined)
   const input = React.useRef<HTMLInputElement | null>(null)
-  useEditorAttachment(input, props.editorCommands, {edge: props.edge, descend: props.descend})
+  useEditorAttachment(input, props.editorCommands, {id: nidFromNumber(props.numberEditor.number), edge: props.edge, descend: props.descend})
   let commit = (value: string) => {
     let number = +value
     if (!isNaN(number) && props.numberEditor.writable) {

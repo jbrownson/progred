@@ -1,5 +1,6 @@
 import { altMaybe, bindMaybe, firstMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { Edge, edgesEqual } from "../model/Edge"
+import { ID } from "../model/ID"
 import type { EditorDescend } from "../render/DContext"
 import { focus } from "./domFocus"
 
@@ -16,6 +17,7 @@ let pendingFocus: Maybe<PendingFocus> = nothing
 let parentNavigationStack: {parent: HTMLElement, child: HTMLElement}[] = []
 
 type EditorFocus = {
+  id?: ID
   edge?: Edge
   descend?: EditorDescend
   focusWhenSelected?: boolean
@@ -169,11 +171,6 @@ function descendElementFromPath(root: ParentNode, path: number[]): Maybe<HTMLEle
     descendElement = next }
   return descendElement }
 
-function descendElementForEdge(root: ParentNode, edge: Edge): Maybe<HTMLElement> {
-  return editorDescendElements(root).find(descendElement => {
-    let descend = editorDescendForElement(descendElement)
-    return descend !== nothing && edgesEqual(descend.edge, edge) }) }
-
 function editorElementForElement(element: Element): Maybe<HTMLElement> {
   for (let current: Maybe<Element> = element; current instanceof HTMLElement; current = current.parentElement || nothing)
     if (editorFocusForElement(current) !== nothing) return current
@@ -207,12 +204,22 @@ export function editorFocusForActiveElement(): Maybe<EditorFocus> {
   return editorFocusForElement(document.activeElement || nothing)
 }
 
+export function activeEditorID(): Maybe<ID> {
+  return editorFocusForActiveElement()?.id
+}
+
 export function parentEditorDescendElement(element: Element): Maybe<HTMLElement> {
   return element instanceof HTMLElement ? parentDescendElement(element) : nothing
 }
 
 export function focusEditorFromElement(element: Element): boolean {
   return maybe(editorElementForElement(element), () => maybe(nextEditorElementAfter(element), () => false, focusElement), focusElement)
+}
+
+export function editorElementsForEdge(root: ParentNode, edge: Edge): HTMLElement[] {
+  return editorFocusElements(root).filter(element => {
+    let focus = editorFocusForElement(element)
+    return focus !== nothing && focus.edge !== undefined && edgesEqual(focus.edge, edge) })
 }
 
 export function requestFocusFirstEditor() {
@@ -252,10 +259,6 @@ export function requestNextTabStopFromDescendChildFromActiveElement(index: numbe
 
 export function focusFirstEditor(root: ParentNode = document): boolean {
   return focusEditorForDescendElement(rootDescendElements(root)[0])
-}
-
-export function focusEditorForEdge(root: ParentNode, edge: Edge): boolean {
-  return focusEditorForDescendElement(descendElementForEdge(root, edge))
 }
 
 export function focusPendingEditor(root: HTMLElement): boolean {

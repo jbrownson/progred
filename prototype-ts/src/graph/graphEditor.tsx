@@ -12,8 +12,8 @@ import { clipboardFormat, clipboardStringForCopyResult, copyIDFromClipboardText,
 import { composeECallbacks, ECallbacks, noopECallbacks, readOnlyECallbacks, undoRedoECallbacks } from "./editor/ECallbacks"
 import { editorCommandsForActiveElement } from "./editor/EditorCommands"
 import { commitToActiveElementWithRefocus, deleteActiveElementWithRefocus } from "./editor/commitWithFocus"
-import { clearParentNavigationMemory, editorFocusForActiveElement, focusFirstEditor, focusPendingEditor, requestFocusFirstEditor } from "./editor/EditorFocus"
-import { _delete, _get, environment, Environment, get, guidFromSource, logID, set, Workspace, withEnvironment } from "./Environment"
+import { activeEditorID, clearParentNavigationMemory, editorFocusForActiveElement, focusFirstEditor, focusPendingEditor, requestFocusFirstEditor } from "./editor/EditorFocus"
+import { _delete, _get, environment, Environment, logID, set, Workspace, withEnvironment } from "./Environment"
 import { BradParams, ctorField, HasID, jsonFromID, Module } from "./graph"
 import { garbageCollectGUIDMap, GUIDMap } from "./model/GUIDMap"
 import { Edge } from "./model/Edge"
@@ -164,7 +164,10 @@ function activeEdge(): Maybe<Edge> {
   return editorFocusForActiveElement()?.edge }
 
 function activeID(): Maybe<ID> {
-  return bindMaybe(activeEdge(), edge => _get(edge.parent, edge.label)) }
+  return activeEditorID() }
+
+function activeEditorCanCommit(): boolean {
+  return editorCommandsForActiveElement()?.commit !== undefined }
 
 function newNode() {
   const id = generateGUID()
@@ -220,8 +223,9 @@ const graphKeyHandler: KeyHandler = (e, runE) => {
 const keyHandler = composedKeyHandler(graphKeyHandler, defaultKeyHandler)
 
 function transform(f: (id: ID) => Maybe<HasID>) {
-  rootComponent.runE(() => bindMaybe(activeEdge(), edge => bindMaybe(get(edge.parent, edge.label), ({id, source}) =>
-    bindMaybe(guidFromSource(source), guid => bindMaybe(f(id), newID => set(guid, edge.label, newID.id))) )))}
+  rootComponent.runE(() => {
+    if (!activeEditorCanCommit()) return
+    mapMaybe(bindMaybe(activeID(), f), newID => commitToActiveElementWithRefocus(newID.id)) })}
 
 let undoStack: UndoRedo[][] = []
 let redoStack: UndoRedo[][] = []
@@ -271,6 +275,7 @@ function _pasteID() {
     pasteID) }
 
 function _pasteStructure() {
+  if (!activeEditorCanCommit()) return
   maybe(copyIDFromClipboardText(progred.readClipboardText(clipboardFormat)), () => {
     if (progred.availableClipboardFormats().indexOf(plainTextFormat) >= 0 && !actionIfTextInput("paste:"))
       pasteID(sidFromString(progred.readPlainText())) },
@@ -343,7 +348,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
     return editorCommandsForActiveElement()?.newEdge !== undefined }
 
   function activeEditorSupportsCommit(): boolean {
-    return editorCommandsForActiveElement()?.commit !== undefined }
+    return activeEditorCanCommit() }
 
   function updateMenuState() {
     progred.setMenuItemEnabled("new-node", activeEditorSupportsCommit())

@@ -1,6 +1,6 @@
 import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { buildEntries } from "../editor/buildEntries"
-import { set } from "../Environment"
+import { edges, set, Source, SourceType } from "../Environment"
 import { GUIDEmptyList, GUIDNonemptyList, HasID, headField, EmptyList, List, listFromID, ListType, matchList, NonemptyList, tailField } from "../graph"
 import type { EdgeContext, EditorCommands } from "../editor/EditorCommands"
 import { edgeContextForEdge, edgeContextFromEdge } from "../editor/edgeContext"
@@ -52,6 +52,8 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
     const edgeContext = fromMaybe(listEdgeContext, () => edgeContextForEdge(listEdge))
     return bindMaybe(listFromID(sourceID.id, id => ({id})), list =>
       mapMaybe(listProjectionFromList(listEdge, edgeContext, cyclePath, list), ({items, emptyTailEdge, emptyTailEdgeContext, emptyTail}) => {
+        const listEdges = edges(sourceID.id)
+        const writable = maybe(listEdges, () => sourceIsWritable(sourceID.source), ({source}) => sourceIsWritable(source))
         let cycleStep = stepCyclePath(cyclePath, sourceID.id)
         let defaultCollapsed = cycleStep.hasCycle
         let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
@@ -67,19 +69,21 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
               editorCommands: {commit: insert},
               requiresMeta }}
           let listItem = (listEdgeContext: EdgeContext, cyclePath: CyclePath, list: NonemptyList<HasID>) => {
-            let commit = (id: Maybe<ID>) => maybe(id,
+            let commit = writable ? (id: Maybe<ID>) => maybe(id,
               () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => {
                 requestFocusParentFromActiveElement()
                 commit(tail.id) })),
-              id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) )
+              id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) ) : undefined
             return descend(list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)}, cyclePath) }
           let requiresMetaAfter = (list: NonemptyList<HasID>) => maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
-          let insertionPoints = [
+          let insertionPoints = writable ? [
             ...items.map(({edge, edgeContext, list}, i) => insertionPoint(edge, edgeContext, list, i !== 0 && requiresMetaAfter(items[i - 1].list))),
-            insertionPoint(emptyTailEdge, emptyTailEdgeContext, emptyTail, maybe(items[items.length - 1], () => false, ({list}) => requiresMetaAfter(list))) ]
+            insertionPoint(emptyTailEdge, emptyTailEdgeContext, emptyTail, maybe(items[items.length - 1], () => false, ({list}) => requiresMetaAfter(list))) ] : []
           return renderDocumentGuidEditor(listEdge, sourceID, dList(opening, items.map(({edgeContext, cyclePath, list}) => listItem(edgeContext, cyclePath, list)), closing, separator, toggle,
-            insertionPoints, collapsed), listRootEditorCommands()) }
+            insertionPoints, collapsed), writable ? listRootEditorCommands() : {}) }
         return defaultCollapsed || list instanceof NonemptyList ? collapsible(defaultCollapsed, defaultCollapsed, render) : render(false, () => {}) }))})}
+
+function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 
 function listRootEditorCommands(): EditorCommands {
   return {keyDown: e => e.key === "," ? () => {

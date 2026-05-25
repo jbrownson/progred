@@ -4,7 +4,7 @@ import { buildEdgeLabelEntries } from "../editor/buildEntries"
 import { attachEditorCommands, detachEditorCommands, EdgeContext, EditorCommands, editorKeyDownAction } from "../editor/EditorCommands"
 import { Entry } from "../editor/Entry"
 import { Match } from "../editor/filters"
-import { attachEditorDescend, attachEditorFocus, detachEditorFocus, focusEditorForEdge, focusFirstEditor } from "../editor/EditorFocus"
+import { attachEditorDescend, attachEditorFocus, detachEditorFocus, editorElementsForEdge, focusEditorFromElement, focusFirstEditor } from "../editor/EditorFocus"
 import { focus } from "../editor/domFocus"
 import { _get, withEnvironment } from "../Environment"
 import { Edge } from "../model/Edge"
@@ -46,7 +46,7 @@ function GuidEditorComponent(props: {edge: Edge, id: GUID, child: D, focusWhenSe
     let element = span.current
     if (!element) return
     attachEditorCommands(element, editorCommands())
-    attachEditorFocus(element, {edge: props.edge, descend: context.descend, focusWhenSelected: props.focusWhenSelected})
+    attachEditorFocus(element, {id: props.id, edge: props.edge, descend: context.descend, focusWhenSelected: props.focusWhenSelected})
     return () => {
       detachEditorCommands(element)
       detachEditorFocus(element) }
@@ -82,9 +82,9 @@ function PlaceholderEditorDComponent(props: {placeholderEditor: PlaceholderEdito
     runE={context.runE} />
 }
 
-export type StringEditor = {string: string, writable: boolean}
-export function stringEditor(string: string, writable: boolean, editorCommands: EditorCommands): D {
-  return dElement(StringEditorDComponent, {stringEditor: {string, writable}, editorCommands}, {singleLine: true})
+export type StringEditor = {id: ID, string: string, writable: boolean}
+export function stringEditor(id: ID, string: string, writable: boolean, editorCommands: EditorCommands): D {
+  return dElement(StringEditorDComponent, {stringEditor: {id, string, writable}, editorCommands}, {singleLine: true})
 }
 
 function StringEditorDComponent(props: {stringEditor: StringEditor, editorCommands: EditorCommands}) {
@@ -135,11 +135,12 @@ function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, m
     labelEditorState.current = {}
     setState({pendingEdgeLabel: true, missingLabel: undefined, focusMissingLabel: false}) }
   let editorCommands = mergeEditorCommands(context.editorCommands, {newEdge: startNewEdge})
-  const missingLabelIsExistingEdge = (label: ID) => withEnvironment(context.environment, () => _get(props.id, label) !== nothing)
+  const existingID = (label: ID) => withEnvironment(context.environment, () => _get(props.id, label))
   React.useLayoutEffect(() => {
-    if (state.missingLabel !== undefined && missingLabelIsExistingEdge(state.missingLabel)) {
-      if (state.focusMissingLabel && span.current)
-        focusEditorForEdge(span.current, {parent: props.id, label: state.missingLabel})
+    if (state.missingLabel !== undefined && existingID(state.missingLabel) !== nothing) {
+      if (state.focusMissingLabel && span.current) {
+        let editors = editorElementsForEdge(span.current, {parent: props.id, label: state.missingLabel})
+        if (editors.length === 1) focusEditorFromElement(editors[0]) }
       setState({pendingEdgeLabel: false})
       return }
     if (state.focusMissingLabel && missingFieldSpan.current && focusFirstEditor(missingFieldSpan.current))
@@ -170,7 +171,7 @@ function SupportsUnderselectionComponent(props: {edge: Edge, id: ID, child: D, m
         <span> →</span>
       </span>
       : null}
-    {mapMaybe(state.missingLabel, label => missingLabelIsExistingEdge(label) ? nothing :
+    {mapMaybe(state.missingLabel, label => existingID(label) !== nothing ? nothing :
       <span key="missingLabel" ref={missingFieldSpan}><DScope context={context}>{renderD(withEnvironment(context.environment, () => props.missingField(label)))}</DScope></span>)}
   </span>
 }

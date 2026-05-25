@@ -19,7 +19,7 @@ import { renderFromRender } from "../render/renderFromRender"
 import { dispatch, Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { defaultKeyHandler } from "../editor/keyHandler"
-import { editorFocusForActiveElement, focusEditorForEdge, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
+import { editorElementsForEdge, editorFocusForActiveElement, focusEditorFromElement, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
 import { commitToActiveElementWithRefocus, deleteActiveElementWithRefocus } from "../editor/commitWithFocus"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
@@ -285,7 +285,9 @@ function pasteReferenceIntoActive(harness: EditorHarness, copy: {referenceID: ID
 }
 
 function focusEdge(harness: EditorHarness, parent: ID, label: ID) {
-  harness.run(() => expect(focusEditorForEdge(harness.container, {parent, label})).toBe(true))
+  const editors = editorElementsForEdge(harness.container, {parent, label})
+  expect(editors.length).toBe(1)
+  harness.run(() => expect(focusEditorFromElement(editors[0])).toBe(true))
 }
 
 function startNewEdgeFromActive(harness: EditorHarness) {

@@ -7,7 +7,7 @@ import { guidEditor, numberEditor, placeholderEditor, stringEditor, supportsUnde
 import { _get, edges, Source, SourceID, SourceType } from "../Environment"
 import { Ctor, ctorField, nameField } from "../graph"
 import { Edge } from "../model/Edge"
-import { GUID, matchID, SID } from "../model/ID"
+import { GUID, ID, matchID, SID } from "../model/ID"
 import { stringFromID } from "../model/ID"
 import { descend, Render } from "./R"
 import type { EdgeContext } from "../editor/EditorCommands"
@@ -45,13 +45,16 @@ function renderGUID(edge: Edge, guid: GUID, source: Source, cyclePath: CyclePath
     ...extraLabels.filter(label => label !== nameField.id && label !== ctorField.id) ]
   let cycleStep = stepCyclePath(cyclePath, guid)
   let defaultCollapsed = cycleStep.hasCycle
+  let fieldEdgeContext = (label: ID): EdgeContext => {
+    let edgeContext = edgeContextForEdge({parent: guid, label})
+    return writable ? edgeContext : {...edgeContext, commit: undefined} }
   let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
     let nameDs = hasName
       ? collapsed
         ? maybe(bindMaybe(_get(guid, nameField.id), stringFromID), () => [], name => [dText(" "), dText(name)])
-        : [dText(" "), descend(guid, nameField.id, undefined, undefined, cyclePath)]
+        : [dText(" "), descend(guid, nameField.id, undefined, fieldEdgeContext(nameField.id), cyclePath)]
       : []
-    let fieldDs = collapsed ? [] : labels.map(label => renderField(guid, label, undefined, cyclePath))
+    let fieldDs = collapsed ? [] : labels.map(label => renderField(guid, label, fieldEdgeContext(label), cyclePath))
     const d = line(
       guidEditor(edge, guid, fromMaybe<D>(bindMaybe(ctor, ctor => mapMaybe(ctor.name, name => dText(name))), () => dIdenticon(guid)),
         true,
@@ -59,7 +62,7 @@ function renderGUID(edge: Edge, guid: GUID, source: Source, cyclePath: CyclePath
       ...nameDs,
       ...(hasName || labels.length > 0 ? [collapseToggle(collapsed, () => setCollapsed(!collapsed))] : []),
       ...fieldDs )
-    return writable ? supportsUnderselection(edge, guid, d, missingLabel => renderField(guid, missingLabel, undefined, cyclePath)) : d }
+    return writable ? supportsUnderselection(edge, guid, d, missingLabel => renderField(guid, missingLabel, fieldEdgeContext(missingLabel), cyclePath)) : d }
   return defaultCollapsed || hasName || labels.length > 0 ? collapsible(defaultCollapsed, defaultCollapsed || labels.length === 0, render) : render(false, () => {}) }
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
@@ -67,4 +70,4 @@ function sourceIsWritable(source: Source) { return source.source === SourceType.
 export function renderNumber(edge: Edge, number: number, source: Source): D {
   return numberEditor(number, sourceIsWritable(source), editorCommands(number)) }
 export function renderString(edge: Edge, sid: SID, string: string, source: Source): D {
-  return stringEditor(string, sourceIsWritable(source), editorCommands(sid)) }
+  return stringEditor(sid, string, sourceIsWritable(source), editorCommands(sid)) }

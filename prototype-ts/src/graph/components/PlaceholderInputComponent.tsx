@@ -101,7 +101,7 @@ function blurMovedInsideDocument(e: React.FocusEvent<HTMLInputElement>): boolean
   return e.relatedTarget instanceof Node && document.contains(e.relatedTarget) || document.hasFocus()
 }
 
-export function PlaceholderInputComponent(props: {activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, tabStop?: boolean, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: () => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}) {
+export function PlaceholderInputComponent(props: {activeState: PlaceholderEditorActiveState, placeholder: string, editorCommands: EditorCommands, edge?: Edge, descend?: EditorDescend, tabStop?: boolean, className?: string, runE: (f: () => void) => void, closeCompletion: () => void, cancel: () => void, blur: () => void, commit: (action: () => void, e: React.SyntheticEvent) => void, keyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void, entryListKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>, commitActionIfSomethingToCommit: () => void) => void}) {
   const entryList = React.useRef<EntryListHandle | null>(null)
   const input = React.useRef<HTMLInputElement | null>(null)
   const [, forceUpdate] = React.useReducer(n => n + 1, 0)
@@ -115,7 +115,7 @@ export function PlaceholderInputComponent(props: {activeState: PlaceholderEditor
   React.useEffect(() => registerScrollListener(updateEntryListAbove))
   React.useLayoutEffect(() => { if (input.current) focus(input.current) }, [])
   React.useLayoutEffect(() => updateEntryListAbove())
-  return <span className="edgefield" style={{position: "relative"}}>
+  return <span className={["edgefield", props.className].filter(Boolean).join(" ")} style={{position: "relative"}}>
     <input
       ref={input}
       className="i edgefield"

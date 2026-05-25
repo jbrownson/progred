@@ -21,7 +21,7 @@ span.descend {
   border-radius: 3px;
   box-decoration-break: clone }
 span.descend:has(.guidEditor:focus):not(:has(span.descend .guidEditor:focus)),
-span.descend:has(.i:focus):not(:has(span.descend .i:focus)) {
+span.descend:has(.i:focus):not(:has(span.descend .i:focus)):not(:has(.listInsertionPointEditor .i:focus)) {
   outline: 4px solid #dbeaff;
   outline-offset: 0 }
 .guidEditor:focus { outline: none }
