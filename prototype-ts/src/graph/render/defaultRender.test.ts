@@ -1,18 +1,20 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { act } from "react"
 import { SourceType } from "../Environment"
-import { appCtor, ctorField, nameField } from "../graph"
+import { appCtor, ctorField, GUIDExternFunction, GUIDParameter, nameField } from "../graph"
 import type { Edge } from "../model/Edge"
 import { sidFromString } from "../model/ID"
 import { MapIDMap } from "../model/MapIDMap"
 import { withTestEnvironment } from "../testHelpers"
+import { libraries } from "../libraries/libraries"
 import { dText } from "./D"
-import { defaultRender, renderString } from "./defaultRender"
+import { defaultRender, renderString, tryFirst } from "./defaultRender"
 import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
 import { renderField } from "./renderField"
 import { renderDForTest } from "./renderTestHelpers"
 import { editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { renderIfApp } from "../renderIfs"
+import { renderFromLibraries } from "./renderFromLibraries"
 
 afterEach(() => {
   document.body.replaceChildren()
@@ -116,6 +118,44 @@ describe("defaultRender", () => {
       expect(container.querySelector(".edgeLabel")?.textContent).toBe("Label →")
       unmount()
     })
+  })
+
+  it("does not show a collapse toggle for name-only constructors", () => {
+    withTestEnvironment(environment => {
+      const id = "guid-app"
+      environment.guidMap.set(id, ctorField.id, appCtor.id)
+
+      const d = defaultRender(edge(), {id, source: {source: SourceType.DocumentType, guid: id}})
+      const {container, unmount} = renderDForTest(environment, d)
+
+      expect(container.querySelector(".collapseToggle")).toBe(null)
+      expect(container.querySelector(".uneditable")?.textContent).toBe("name")
+      unmount()
+    }, {libraries, defaultRender})
+  })
+
+  it("renders extern functions with a prefix and parenthesized parameters", () => {
+    withTestEnvironment(environment => {
+      const x = GUIDParameter.new("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").setName("x")
+      const y = GUIDParameter.new("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").setName("y")
+      const add = GUIDExternFunction.new("cccccccccccccccccccccccccccccccc")
+        .setName("add")
+        .setParameters([x, y])
+
+      environment.defaultRender = tryFirst(renderFromLibraries(libraries), defaultRender)
+      const d = environment.defaultRender(edge(), {id: add.id, source: {source: SourceType.DocumentType, guid: add.id}})
+      expect(d).not.toBe(undefined)
+      const {container, unmount} = renderDForTest(environment, d)
+
+      expect(container.textContent).toContain("extern ")
+      expect(container.textContent).toContain("add")
+      expect(container.textContent).toContain("(")
+      expect(container.textContent).toContain("x")
+      expect(container.textContent).toContain(",")
+      expect(container.textContent).toContain("y")
+      expect(container.textContent).toContain(")")
+      unmount()
+    }, {libraries, defaultRender})
   })
 
   it("renders unnamed GUID labels as identicons in fields", () => {

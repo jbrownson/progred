@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest"
-import { GUIDBinaryInline, GUIDFunctionCall, GUIDFunctionDeclaration, GUIDJavaScriptProgram, GUIDParameter, GUIDProduct, GUIDReturn, HasNID, HasSID } from "../graph"
+import { GUIDBinaryInline, GUIDExternFunction, GUIDFunctionCall, GUIDFunctionDeclaration, GUIDJavaScriptProgram, GUIDParameter, GUIDProduct, GUIDReturn, HasNID, HasSID } from "../graph"
 import { withTestEnvironment } from "../testHelpers"
 import { sidFromString } from "../model/ID"
 import { javascriptFromGraph } from "./javascriptFromGraph"
 
 function evalJavascript(javascript: string) {
   return Function("javascript", "return eval(javascript)")(javascript)
+}
+
+function evalJavascriptWithExtern(javascript: string, __extern: Record<string, unknown>) {
+  return Function("__extern", "javascript", "return eval(javascript)")(__extern, javascript)
 }
 
 describe("javascriptFromGraph", () => {
@@ -70,6 +74,36 @@ describe("javascriptFromGraph", () => {
       expect(javascript).not.toContain("double(")
       expect(javascript).not.toContain("\"n\"")
       expect(evalJavascript(javascript!)).toBe(10)
+    })
+  })
+
+  it("emits extern functions through the extern namespace", () => {
+    withTestEnvironment(() => {
+      const add = GUIDExternFunction.new("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").setName("add")
+      const call = GUIDFunctionCall.new("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        .setFunction(add)
+        .setArguments([new HasNID(2), new HasNID(3)])
+      const program = GUIDJavaScriptProgram.new("cccccccccccccccccccccccccccccccc")
+        .setStatements([call])
+      const javascript = javascriptFromGraph(program)
+
+      expect(javascript).toContain("__extern[\"add\"](2, 3)")
+      expect(evalJavascriptWithExtern(javascript!, {add: (a: number, b: number) => a + b})).toBe(5)
+    })
+  })
+
+  it("emits arbitrary extern function names as string keys", () => {
+    withTestEnvironment(() => {
+      const max = GUIDExternFunction.new("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").setName("Math max")
+      const call = GUIDFunctionCall.new("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        .setFunction(max)
+        .setArguments([new HasNID(2), new HasNID(3)])
+      const program = GUIDJavaScriptProgram.new("cccccccccccccccccccccccccccccccc")
+        .setStatements([call])
+      const javascript = javascriptFromGraph(program)
+
+      expect(javascript).toContain("__extern[\"Math max\"](2, 3)")
+      expect(evalJavascriptWithExtern(javascript!, {"Math max": Math.max})).toBe(3)
     })
   })
 })

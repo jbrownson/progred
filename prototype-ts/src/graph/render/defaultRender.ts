@@ -60,10 +60,10 @@ function renderGUID(edge: Edge, guid: GUID, source: Source, cyclePath: CyclePath
         true,
         editorCommands(guid)),
       ...nameDs,
-      ...(hasName || labels.length > 0 ? [collapseToggle(collapsed, () => setCollapsed(!collapsed))] : []),
+      ...(labels.length > 0 ? [collapseToggle(collapsed, () => setCollapsed(!collapsed))] : []),
       ...fieldDs )
     return writable ? supportsUnderselection(edge, guid, d, missingLabel => renderField(guid, missingLabel, fieldEdgeContext(missingLabel), cyclePath)) : d }
-  return defaultCollapsed || hasName || labels.length > 0 ? collapsible(defaultCollapsed, defaultCollapsed || labels.length === 0, render) : render(false, () => {}) }
+  return defaultCollapsed || labels.length > 0 ? collapsible(defaultCollapsed, defaultCollapsed || labels.length === 0, render) : render(false, () => {}) }
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 

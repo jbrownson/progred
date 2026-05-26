@@ -1,6 +1,6 @@
 import { bindMaybe, Maybe, nothing, sequenceMaybe } from "../../lib/Maybe"
 import {
-  And, ArrayLiteral, ArrowFunction, Assignment, BinaryInline, BinaryOperator, Conditional, Const, ConstLetVar, Difference, Dot, Equals, Extern, Expression, FunctionCall, FunctionDeclaration, GreaterThan, GreaterThanOrEqualTo, HasNID, HasSID, If, JavaScriptProgram, KeyValue, LessThan, LessThanOrEqualTo, Let, matchBinaryOperator, matchConstLetVar, New, NotEquals, Null, ObjectLiteral, Or, Parameter, Product, Quotient, Return, Statement, StrictEquals, StrictNotEquals, Sum, Undefined, Var, VariableDeclaration
+  And, ArrayLiteral, ArrowFunction, Assignment, BinaryInline, BinaryOperator, Conditional, Const, ConstLetVar, Difference, Dot, Equals, Extern, ExternFunction, Expression, FunctionCall, FunctionDeclaration, GreaterThan, GreaterThanOrEqualTo, HasNID, HasSID, If, JavaScriptProgram, KeyValue, LessThan, LessThanOrEqualTo, Let, matchBinaryOperator, matchConstLetVar, New, NotEquals, Null, ObjectLiteral, Or, Parameter, Product, Quotient, Return, Statement, StrictEquals, StrictNotEquals, Sum, Undefined, Var, VariableDeclaration
 } from "../graph"
 import { GUID, guidFromID, ID } from "../model/ID"
 
@@ -114,6 +114,7 @@ export function statementFromGraph(statement: Statement, scopes: Scope[] = [], i
 export function expressionFromGraph(expression: Expression, scopes: Scope[] = []): Maybe<string> {
   return expression instanceof FunctionDeclaration ? identifierFor(expression.id)
     : expression instanceof Extern ? bindMaybe(expression.name, rawIdentifier)
+    : expression instanceof ExternFunction ? bindMaybe(expression.name, name => `__extern[${JSON.stringify(name)}]`)
     : expression instanceof Parameter ? identifierFor(expression.id)
     : expression instanceof ArrayLiteral ? bindMaybe(expressionList(expression.expressions, scopes), expressions => `[${expressions}]`)
     : expression instanceof ObjectLiteral ? bindMaybe(expression.keyValues, keyValues => bindMaybe(sequenceMaybe(keyValues.map(keyValue => () => keyValueFromGraph(keyValue, scopes))), keyValues => `({${keyValues.join(", ")}})`))
