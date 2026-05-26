@@ -19,6 +19,19 @@ xcodebuild -project prototype-swift/progred.xcodeproj -scheme progred -destinati
 
 Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache access. Pass `-project` instead of `cd`-ing into the subdirectory; bash `cd` persists across tool calls and will silently break later relative paths (e.g. `git add`).
 
+## TypeScript Graph CLI
+
+The TypeScript prototype has a read-only graph CLI:
+
+```bash
+cd prototype-ts
+npm run graph -- find src/graph/libraries/type.progred "Ctor"
+npm run graph -- inspect src/graph/libraries/type.progred
+npm run graph -- render src/graph/libraries/type.progred
+```
+
+Use `find` for named nodes/fields/ctors, `inspect` for structural edges and list contents, and `render` for the real React projection rendered to pretty-printed static markup. This is useful when reviewing or editing `.progred` graph libraries without reading raw JSON.
+
 ## Architecture
 
 - `D` enum is the display language (`Display/D.swift`)

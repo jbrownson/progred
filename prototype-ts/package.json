@@ -10,6 +10,7 @@
     "test:watch": "vitest",
     "start": "npm run build && electron .",
     "gen": "vite build --config vite/generator.config.ts && node build/generator.cjs",
+    "graph": "vite build --logLevel error --config vite/graph.config.ts && node build/graph.cjs",
     "dist": "electron-packager ."
   },
   "main": "build/main.cjs",

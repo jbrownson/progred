@@ -112,9 +112,12 @@ npm start
 npm run typecheck
 npm run build
 npm run gen
+npm run graph -- inspect src/graph/libraries/type.progred
+npm run graph -- render src/graph/libraries/type.progred
 ```
 
 `npm start` builds the app and launches Electron. `npm run gen` rebuilds the graph wrappers from the graph schema and rewrites `src/graph/graph.ts` and `src/graph/renderIfs.ts`; inspect the diff after running it.
+`npm run graph -- ...` builds and runs a read-only graph CLI. Use `find` to search graph/library names, `inspect` to print structural edges and list contents, and `render` to server-render the actual editor projection as pretty-printed static markup.
 
 ### Other Prototypes
 
