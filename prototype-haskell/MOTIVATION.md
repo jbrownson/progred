@@ -2,11 +2,13 @@
 
 This is the Haskell/Wasm exploration for Progred.
 
+Status: parked. The main editor prototype is currently TypeScript/Electron.
+
 The original Haskell spike had three render targets: GTK, ImGui, and
 Wasm/DOM. The native probes proved basic GUI viability but did not solve
 the product-shape questions: shareability, web/VSC extension potential,
-and escaping native toolkit focus behavior. The active path is now the
-Wasm/DOM target.
+ and escaping native toolkit focus behavior. The active path inside this
+prototype is the Wasm/DOM target.
 
 The two reasons to keep investigating Haskell:
 

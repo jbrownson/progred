@@ -23,7 +23,7 @@ In text, identity IS naming. To reference a function, you write its name. This c
 
 This conflation causes problems: renaming requires find-and-replace, shadowing creates ambiguity, name resolution needs scope rules, two things can't share a name in the same scope.
 
-gid separates these: a node's identity is its UUID. Its name is just data attached to that identity—an edge labeled `name` pointing to a string. You can:
+gid separates these: a node's identity is its GUID. Its name is just data attached to that identity—an edge labeled `name` pointing to a string. You can:
 - Rename freely without breaking references
 - Have duplicate names, or no name at all
 - Compute names, use icons, support multiple languages
@@ -53,9 +53,9 @@ Id -> label -> Id
 ```
 
 Where `Id` can be:
-- **UUID**: Opaque identity for mutable nodes
-- **String**: String literal—the string IS its own identity
-- **Number**: Number literal—the number IS its own identity
+- **GUID**: Opaque identity for mutable nodes
+- **SID**: String literal, encoded as `sid:...`; the string IS its own identity
+- **NID**: Number literal; the number IS its own identity
 
 The graph knows nothing about programming, types, functions, or scope. It's a dumb substrate that can represent anything—just like text is characters that can represent anything.
 
@@ -73,31 +73,32 @@ gid can represent any structure, but we're starting with two domains:
 
 ### Storage Model
 
-```swift
-// Identity types
-enum Id {
-    case uuid(UUID)
-    case string(String)
-    case number(Double)
-}
+```ts
+type GUID = string
+type SID = string
+type NID = number
+type ID = GUID | SID | NID
 
-// The entire graph: entity -> label -> value
-// Map<UUID, Map<Id, Id>>
+// Stored outgoing edges exist for GUID nodes.
+// Primitive string/number IDs are eternal nodes with library-provided edges.
+type GUIDMap = Map<GUID, Map<ID, ID>>
 ```
 
 Single-valued edges: each entity has at most one value per label. Multiplicity is explicit via List (cons/empty linked list in the graph).
 
 ### Type System
 
-A self-describing schema defined in the graph itself. See `prototype-swift/structured-editor-type-system-reference.md` for the full design. Key constructs:
+The TypeScript prototype currently uses a self-describing graph schema with generated wrappers in `prototype-ts/src/graph/graph.ts`. The current schema language is the older `Ctor` / `AlgebraicType` model:
 
-- **Record**: constructor/schema head with named fields
-- **Sum**: choice among type expressions
-- **Apply**: instantiates a generic Record or Sum, using type parameter node IDs as edge labels (no positional arguments)
-- **Field**: names a field and gives its expected type expression
-- **Type Parameter**: binder/placeholder in type expressions
+- **Ctor**: constructor/schema head for a node
+- **Field**: named edge with an expected type
+- **AlgebraicType**: choice among constructors or nested algebraic types
+- **ListType**: expected list element type
+- **AtomicType**: primitive string/number types
 
-Value nodes carry a `record` edge identifying their constructor. Full type matching is contextual via `matches(value, type expression, substitution)`.
+Value nodes carry a `ctor` edge (`ctorField`) identifying their constructor. The Swift reference in `prototype-swift/structured-editor-type-system-reference.md` describes a more general target direction with records, sums, type parameters, and `Apply`; it is not the exact TypeScript implementation today.
+
+Full type matching remains contextual and intentionally tolerant of malformed graph states.
 
 ### Current Prototype
 
@@ -109,6 +110,7 @@ Useful commands:
 cd prototype-ts
 npm install
 npm start
+npm test
 npm run typecheck
 npm run build
 npm run gen
@@ -123,4 +125,4 @@ npm run graph -- render src/graph/libraries/type.progred
 
 - `prototype-swift/` — Swift/AppKit native exploration
 - `prototype-rust/` — Rust/egui prototype, paused due to focus and tab-navigation constraints. See `prototype-rust/AGENTS.md` for details.
-- `prototype-haskell/` — Haskell exploration
+- `prototype-haskell/` — Haskell/Wasm DOM exploration, currently parked

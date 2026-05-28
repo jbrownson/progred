@@ -2,11 +2,13 @@
 
 ## Status
 
-This document describes the current design of the schema and type system for the structured editor project.
+This document describes a target/reference design for the schema and type system.
 
 It is intended to be a **self-contained reference** for the model we converged on in design discussion. It records the core ideas, the current pseudo-syntax, and the intended semantics.
 
 The design is intentionally small. It is not trying to be a general-purpose programming language type system. The goal is to define and validate structured editor data, including the schema language itself, inside one uniform graph.
+
+Status: reference design, not the exact TypeScript implementation. The current TypeScript prototype still uses the older `Ctor` / `AlgebraicType` schema and the `ctorField` edge. This document remains useful when revisiting a schema-language refresh.
 
 ---
 

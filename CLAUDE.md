@@ -1,25 +1,30 @@
 # Development Notes
 
-Read `README.md` for project philosophy and architecture.
+Read `README.md` first for project philosophy, active prototypes, and current status.
 
 ## Workflow
 
-- Don't run the app — the user prefers to run and test it themselves
-- Don't fight the system — avoid hacks/workarounds that go against how frameworks or platforms are designed; push back early when something seems like it's not meant to work that way
-- Keep unrelated changes in separate commits whenever possible; avoid bundling housekeeping with feature work
-- Only commit when explicitly asked
-- When a design pattern or lesson emerges during work, propose additions to this document so future sessions start with that knowledge
+- Don't run GUI apps unless the user asks; they usually prefer to run and test interactive apps themselves.
+- Don't fight the system. Avoid hacks/workarounds that go against how frameworks or platforms are designed; push back early when something seems like it is not meant to work that way.
+- Keep unrelated changes in separate commits whenever possible.
+- Only commit when explicitly asked.
+- When a design pattern or lesson emerges during work, propose adding it to the relevant doc so future sessions start with that knowledge.
 
-## Building and Testing
+## Active TypeScript Prototype
+
+The main editor prototype is `prototype-ts/`.
 
 ```bash
-xcodebuild -project prototype-swift/progred.xcodeproj -scheme progred -destination 'platform=macOS' build
-xcodebuild -project prototype-swift/progred.xcodeproj -scheme progred -destination 'platform=macOS' test
+cd prototype-ts
+npm install
+npm start
+npm test
+npm run typecheck
+npm run build
+npm run gen
 ```
 
-Note: xcodebuild requires sandbox to be disabled for Swift Package Manager cache access. Pass `-project` instead of `cd`-ing into the subdirectory; bash `cd` persists across tool calls and will silently break later relative paths (e.g. `git add`).
-
-## TypeScript Graph CLI
+`npm start` builds the app and launches Electron. `npm run gen` rebuilds generated graph wrappers from graph libraries; inspect the diff after running it.
 
 The TypeScript prototype has a read-only graph CLI:
 
@@ -30,46 +35,33 @@ npm run graph -- inspect src/graph/libraries/type.progred
 npm run graph -- render src/graph/libraries/type.progred
 ```
 
-Use `find` for named nodes/fields/ctors, `inspect` for structural edges and list contents, and `render` for the real React projection rendered to pretty-printed static markup. This is useful when reviewing or editing `.progred` graph libraries without reading raw JSON.
+Use `find` for named nodes/fields/ctors, `inspect` for structural edges and list contents, and `render` for the actual editor projection rendered to pretty-printed static markup. This is useful when reviewing or editing `.progred` graph libraries without reading raw JSON.
 
-## Architecture
+## Current TypeScript Architecture Notes
 
-- `D` enum is the display language (`Display/D.swift`)
-- `ProjectionContext` + dispatch chain projects graph → D (`Display/Projection.swift`)
-- Layered projections: domain (`Display/DomainProjection.swift`) → kernel (`Display/KernelProjection.swift`) → raw
-- `Reconcilable` protocol for D → AppKit view reconciliation (`Display/DViews/Reconcilable.swift`)
-- `descend(field)` looks up an edge, projects through the dispatch chain, and wraps in `Descend` — handles missing values (placeholder via raw fallback), cycles, and editability (`commit == nil` means read-only)
-- `renderRef` renders shallow type references (just names); full `descend` renders declarations
-- Lists (cons/empty) need custom handling — their graph structure doesn't match the editing/display structure
-
-## Key Design Rules
-
-- **Documents are pure graph structure** — No semantic interpretation baked in. The graph is a dumb substrate.
-- **All ids are eternal nodes** — Primitive ids (strings, numbers) are not created or destroyed; they simply exist in the universe. Editing a string field doesn't mutate a string node — it repoints the parent's edge at a different string id. `readOnly` on a node means its edges can't be mutated, but the parent's edge pointing *to* it can still be replaced (`descend` separates `edgeCommit` from child context commit).
-- **Resilient to invalid graph states** — The graph can contain anything. Projections specify the happy path but must fall through gracefully. `descend` handles missing edges (placeholder) and unexpected values (default rendering) automatically. Never assume what's at an edge; make the good case easy but don't crash or hide data on the bad case.
-- **Dispatch on record type, not edge presence** — Check `ctx.record() == schema.someRecord`, not "has fields edge therefore is a record." Duck typing breaks when unrelated nodes share edge labels.
-- **`record` edge is the value head** — Every value node's schema head is determined by its `record` edge (kernel convention). This replaces `isa` from the Rust prototype.
-- **Type parameters as edge labels on Apply** — Apply uses the actual Type Parameter node UUIDs as edge labels, not positional lists. This makes type application naturally map-shaped.
-- **Self-describing schema** — The type system defines itself in the same graph. Record describes Record, Field describes Field, etc.
+- Documents are pure graph structure. Semantics come from graph libraries and conventions.
+- Mutable nodes are GUIDs. Strings are SIDs (`sid:...`). Numbers are NIDs.
+- The current schema language uses `Ctor`, `Field`, `AlgebraicType`, `ListType`, and `AtomicType`; value nodes use the `ctorField` edge.
+- DOM focus is the source of truth for the active editor target. Avoid reintroducing parallel selection state unless a real selection cannot be represented by focus.
+- Editors attach commands/callbacks to their focused DOM elements. Prefer local projection-owned behavior over global cursor/path reconstruction.
+- Lists intentionally have custom projection/editing behavior because their displayed insertion points do not match the linked-list graph shape.
+- Rendering must tolerate malformed graph states: missing fields render as placeholders, unexpected values fall through to default/raw rendering, and extra fields remain visible.
+- Library/source metadata controls read-only behavior. Do not bypass it when adding editing paths.
 
 ## Code Style
 
-- Very limited comments — code should be self-documenting; use `// MARK: -` for section navigation in Xcode but only when grouping non-obvious things, not echoing adjacent function/type names
-- Expression-oriented where possible
-- Prefer long expressions broken across multiple lines over multiple statements with intermediate names
-- Exception: extract helper functions when intermediate steps represent distinct semantic concepts
-- Look for generic abstractions — extract patterns in how computations combine and data flows
-- Factor generic algorithms from concrete operations — parameterize with closures, keep the algorithm free of domain types (e.g., `reconcile<T, Ts>` takes closures for replace/append/remove, knows nothing about NSView)
-- Prefer composable combinators over monolithic functions — small functions that transform or wrap behavior (e.g., `orFilter`, `caseInsensitive`, `sortedFilter`) let you build complex pipelines that read as a declaration of intent
-- Prefer `zip`, `dropFirst`, `enumerated`, `forEach`, `map` over index arithmetic, `stride`, and manual `for i in 0..<n` loops
-- Prefer free functions with explicit parameters over methods when `self` isn't needed
-- Apply Haskell-style thinking (explicit data flow, pure function composition) but idiomatic Swift syntax
-- `guard` for preconditions is idiomatic — use it freely for early returns
-- Prefer ternary expressions over if/else when returning or assigning a value based on a condition
-- Name constants that are repeated or related to other values; express relationships explicitly (one as a function of the other). Inline one-off values are fine.
-- Use consistent naming across abstraction levels — if the generic algorithm uses `reconcile`, the concrete wrappers and protocol methods should too, not `resolve` or `update`
-- Don't introduce words without clear meaning — every term in a name should pull its weight
-- Use the same name for the same concept within a scope — don't alias (e.g., `conses` in one place, `elements` in another for the same data)
-- Be sparing with default arguments — only when the default is a genuinely reasonable "most of the time" value that is occasionally overridden, not just to save typing at one call site
-- Dead code should be deleted, not commented out
-- Push back if something seems wrong
+- Very limited comments. Code should be self-documenting; comment only when a short note prevents non-obvious misreadings.
+- Prefer expression-oriented code and inline one-off intermediate values.
+- Extract helpers when a step is semantically distinct, reused, or helps type inference.
+- Prefer small functions over monolithic functions.
+- Avoid partial functions and unsafe downcasts where the type can carry the distinction.
+- Dead code should be deleted, not commented out.
+- Push back if something seems wrong.
+
+## Historical Notes
+
+Prototype-specific historical guidance lives with those prototypes:
+
+- `prototype-rust/AGENTS.md` documents egui focus/layout constraints.
+- `prototype-swift/MOTIVATION.md` documents the AppKit focus motivation.
+- `prototype-haskell/README.md` documents the parked Haskell/Wasm spike.

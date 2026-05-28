@@ -1,69 +1,42 @@
 # Prototype Survey Follow-ups
 
-This tracks ideas from `prototype-rust`, `prototype-swift`, and `prototype-haskell` that are worth considering for the TypeScript/Electron prototype. It also records the constraints from the follow-up discussion, especially where an idea should not be copied directly.
+This records ideas from `prototype-rust`, `prototype-swift`, and `prototype-haskell` that affected the TypeScript/Electron prototype. It is a status note, not a complete roadmap.
 
-## Guiding Principles
+## Landed In TypeScript
+
+- Raw graph editing works from an empty document: unnamed GUID nodes render with identicons, arbitrary edge labels can be created, and arbitrary existing nodes can be chosen by modifier-click from pending placeholders.
+- Graph view exists as a demo/inspection pane with bubbles, arrows, panning, zooming, dragging, node/edge selection, deletion, identicons, and graph/projection selection decoration.
+- Identicons are used in the default projection and graph view. Edge-label identicons use the circular treatment to distinguish them from node identicons.
+- DOM focus is now the source of truth for the active editor target. The previous parallel editor-selection state was removed.
+- Editor-owned commands replaced most global cursor-driven editing. Projections provide local commit/copy/key behavior through focused editor targets.
+- List insertion points are focusable editor targets rather than persistent model mutations. Empty-list insertion, insertion-before-item, and comma-driven list insertion are handled in the list projection.
+- Copy/paste now copies structure through projection-owned copy behavior rather than reconstructing everything from a central cursor path.
+- Keyboard navigation walks the DOM/editor-target structure rather than a separate D tree.
+- The React `D` compatibility layer was removed; projections now produce React components directly. The graph-defined `D` schema remains for template/render definitions in graph libraries.
+- The TypeScript prototype has a substantial Vitest suite covering editor commands, focus behavior, copy/paste, list insertion, graph view helpers, rendering, save/load, and integration flows.
+- The graph CLI exists:
+
+  ```sh
+  cd prototype-ts
+  npm run graph -- find src/graph/libraries/type.progred "Ctor"
+  npm run graph -- inspect src/graph/libraries/type.progred
+  npm run graph -- render src/graph/libraries/type.progred
+  ```
+
+## Current Principles
 
 - Make one consistent state change at a time. Avoid batching unrelated UI actions into an event queue unless a framework forces it.
-- Prefer direct local mutations at the point where the user action is understood. Do not introduce an Elm-style action enum/interpreter unless the duplication buys something concrete.
+- Prefer direct local mutations at the point where the user action is understood.
 - Undo/redo should come from snapshots or structural sharing in the graph data structure, not from replaying action records.
-- Prefer using DOM/OS focus as the selected UI element when it can represent the selection directly. Add separate editor selection state only where DOM focus cannot express the desired selection.
-- DOM focus is still mandatory for text boxes, so any selection model must cooperate with native focus rather than fight it.
-- Raw graph editing and graph visualization are the main missing explanatory features in the TypeScript prototype.
+- DOM/OS focus is the active editor target. Do not reintroduce duplicated selection state unless there is a selection that focus cannot represent.
+- Projection-specific edit policy belongs in the projection. Lists are the main example: insertion points and comma handling are list behavior, not global cursor policy.
+- The graph can be malformed. Projections should make the expected case smooth but fall through to default/raw rendering rather than hiding or crashing on unexpected data.
 
-## Priority Work
+## Still Worth Considering
 
-### 1. Raw Graph Mode
+### Schema Language Refresh
 
-Goal: make the underlying graph explorable without bootstrapped semantics.
-
-What to bring over:
-
-- Rust's raw graph progression: unnamed UUIDs render as identicons; known `name` fields improve labels; known type/record fields enable richer projection.
-- Commands/interactions to create arbitrary UUID nodes.
-- Commands/interactions to connect arbitrary nodes by arbitrary labels, including labels without names.
-- A way to define or designate semantics from raw graph state, rather than requiring the existing semantic layer.
-
-Notes:
-
-- This is the biggest missing piece in the TypeScript prototype.
-- It should be possible to demo Progred from an empty or nearly empty graph.
-- Raw mode will make orphan handling more important.
-
-### 2. Graph View
-
-Goal: show true topology alongside the tree/projection view.
-
-What to consider:
-
-- Rust's force-directed graph view.
-- Stable deterministic initial positions based on node identity.
-- Position preservation when an edge target changes.
-- Edge labels rendered as names where possible, identicons otherwise.
-- Node and edge selection synchronized with the projection/tree view.
-- Pan, zoom, and drag interactions.
-
-Purpose:
-
-- Explain the real data structure visually.
-- Show cycles, sharing, multiple paths, and orphan nodes.
-- Support raw semantics definition without relying on an existing textual projection.
-
-### 3. Identicons
-
-Goal: make anonymous UUIDs recognizable without names.
-
-What to consider:
-
-- Rust's simple symmetric 5x5 identicon hash.
-- Use identicons both in raw tree views and graph views.
-- Keep the implementation DOM/SVG/canvas-native in TypeScript.
-
-### 4. Schema Language Refresh
-
-Goal: replace or evolve the old TypeScript `Ctor` / `AlgebraicType` schema toward the newer model.
-
-Promising direction from Swift/Rust:
+The TypeScript schema still uses the older `Ctor` / `AlgebraicType` model. The Swift/Rust direction remains interesting:
 
 - `Record`
 - `Sum`
@@ -73,151 +46,60 @@ Promising direction from Swift/Rust:
 - Primitive records for strings and numbers
 - Lists described in the same graph schema
 
-Key design point:
+Key design point: type application should use type parameter node IDs as labels, not positional arguments.
 
-- Type application should use type parameter node IDs as labels, not positional arguments.
+This is not urgent while the current schema is sufficient for bootstrapping domains.
 
-Open question:
+### Contextual Expected Types
 
-- Re-read the current TypeScript schema before designing the migration. Some ideas may already exist under different names.
+Expected-type lookup should become less cursor/path-shaped and more projection/context-owned. Useful targets:
 
-### 5. Contextual Expected Types
-
-Goal: use schema context to drive placeholders, validation, and projection.
-
-What to bring over:
-
-- Expected type lookup through the cursor/path.
-- Substitution-aware traversal through generic `Apply` nodes.
-- Tri-state matching where useful: yes, no, unknown/malformed.
+- Better placeholder ranking and filtering.
+- Clearer mismatch rendering.
+- Substitution-aware traversal through generic `Apply` if/when the schema language is refreshed.
 - Cycle-safe type matching.
 
-Why:
+### Orphan Handling
 
-- This makes placeholder suggestions and inline mismatch display more accurate.
-- It is needed for the refreshed schema language.
+Raw graph editing and graph view exposed the orphan question. Current behavior is pragmatic, not principled.
 
-### 6. Placeholder and Completion Improvements
+Open questions:
 
-Goal: compare Rust's placeholder behavior against TypeScript's existing completion dialog and port the improvements that matter.
-
-Rust ideas worth checking:
-
-- Separate entry kinds: existing reference, literal, new typed node, raw new node.
-- Type-compatible entries sort ahead of incompatible entries.
-- Creation entries can sort ahead of references where appropriate.
-- Disambiguation by type/name.
-- Fuzzy tiers with deterministic ordering.
-- Popup sizing based on content.
-
-TypeScript already has:
-
-- Existing references.
-- New constructor entries.
-- String and number magic entries.
-- Type-aware matching.
-- Fuzzy filtering.
-
-Task:
-
-- Do a direct comparison before rewriting. The Rust version may be more disciplined, but TypeScript already has much of the original idea.
-
-### 7. List Insertion Affordances
-
-Goal: make list insertion reliable and discoverable.
-
-What to consider:
-
-- Rust's distinct vertical and horizontal list insertion points.
-- Visible empty-list insertion slots.
-- Treat insertion points as actual UI focus/interaction targets where possible.
-
-Constraint:
-
-- Avoid inventing a complex separate selection object just to point between list nodes if DOM focus can track the active UI insertion target.
-
-### 8. Default Projection Audit
-
-Goal: confirm TypeScript handles malformed and partial graph states as well as Rust.
-
-Checklist:
-
-- Declared fields render before extra fields.
-- Missing declared fields render as placeholders.
-- Extra fields are still visible.
-- Unexpected values fall back to default rendering instead of disappearing.
-- Cycle handling remains clear.
-- Field labels without names still render via identicon or raw ID.
-
-TS likely already does part of this, but raw graph mode will stress it harder.
-
-### 9. Orphan Handling
-
-Goal: handle nodes disconnected from the current root once raw graph editing exists.
-
-What to consider:
-
-- Show orphan roots in graph view.
-- Provide a way to inspect or reattach orphans.
-- Consider optional garbage collection only when the user explicitly deletes/purges.
-
-Rust has document-level reachability/orphan helpers that can guide this, but TS may need a UI-first version.
-
-## Later Research
-
-### Partial Invalidation
-
-Swift's `TrackingGid` records graph reads so a graph delta can decide whether a projection needs to rerun.
-
-This is worth revisiting later, especially for expensive projections. It is not needed for the next modernization pass.
-
-Questions:
-
-- Has this already been prototyped elsewhere in TypeScript?
-- Should reads be tracked at edge granularity, node granularity, or projection-level dependencies?
-- How does this interact with arbitrary JavaScript or TypeScript projection code?
-
-### Layered Graph API
-
-TypeScript already has library/document source tracking through `SourceID`, and Rust/Swift inherited similar ideas.
-
-Potential cleanup:
-
-- Make document, semantics/library, and primitive/builtin layers explicit.
-- Preserve read-only/writeable provenance.
-- Clarify whether overlapping entity IDs should merge edges or whether the top layer wins.
-
-This is probably a cleanup of existing TypeScript ideas rather than a feature to port back.
+- Should graph view show all document GUIDs or only nodes reachable from the current root?
+- Is there a semantic difference between a GUID with no edges and a GUID not present in the document map?
+- Should garbage collection be explicit only?
 
 ### JavaScript and TypeScript Projection Runtime
 
-The TypeScript prototype already has a lightweight JavaScript representation. It is worth fleshing this out.
+The TypeScript prototype has a lightweight JavaScript representation and a scene/3D direction. Still useful:
 
-Ideas:
+- More complete JavaScript AST/schema coverage.
+- Better extern modeling.
+- TypeScript projection authoring eventually, likely through the TypeScript compiler or LSP.
+- Error/span mapping back to graph node IDs.
 
-- Add TypeScript as a projection authoring language.
-- Use the TypeScript compiler API for checking projection code.
-- Keep arbitrary JavaScript execution as the quick path.
-- Decide how projection code maps errors and spans back to graph node IDs.
+### Partial Invalidation
 
-Haskell remains a useful reference for the hosted-language/self-hosting story, but not something to port into the TypeScript UI.
+The current React path rerenders enough for now, and recent performance issues were caused by eager completion-entry construction rather than React itself. Read tracking remains a useful research topic for expensive projections:
+
+- Track reads at edge or node granularity.
+- Invalidate only projections affected by graph edits.
+- Decide how arbitrary JavaScript/TypeScript projection code participates.
+
+This should wait until there is a real user-facing performance problem.
+
+### Post-React Rendering
+
+React has caused some focus/lifecycle friction, but there is not currently a strong user-facing reason to replace it. A future direct-DOM/Purview-style renderer would need:
+
+- A concrete virtual or real DOM reconciliation model.
+- A clean answer for view-local state such as collapse state and insertion-point focus.
+- A better reason than architectural preference.
 
 ## Explicit Non-goals For Now
 
 - Do not port Rust's event queue wholesale. It was mainly a response to egui's immediate-mode event constraints.
 - Do not introduce a global action enum/interpreter just for architectural symmetry.
-- Do not replace DOM/OS focus with duplicated selection state unless there is a specific selection that DOM focus cannot represent.
-- Do not start with partial invalidation. Keep full rerendering until projection cost makes it necessary.
-- Do not delete `graph2` as part of this thread. It remains a historical data-structure sketch and may be replaced later.
-
-## Suggested Order
-
-1. Add identicons.
-2. Add a minimal raw graph projection.
-3. Add raw graph creation/linking interactions.
-4. Add or expose graph view.
-5. Audit default projection under malformed/raw graphs.
-6. Compare and improve placeholder behavior.
-7. Revisit schema language and expected-type substitutions.
-8. Expand JavaScript/TypeScript projection runtime.
-9. Research partial invalidation.
+- Do not duplicate DOM focus with editor selection state.
+- Do not start with partial invalidation until projection cost makes it necessary.
+- Do not let the demo graph view drive core model complexity.

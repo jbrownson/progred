@@ -18,3 +18,6 @@ chain provides hierarchical focus with innermost-wins semantics. Focus and
 click are orthogonal — exactly what a structured editor needs.
 
 See `prototype-rust/AGENTS.md` for the full egui post-mortem.
+
+Status: historical. The Swift/AppKit prototype clarified focus and type-system
+ideas, but the current main editor prototype is `prototype-ts/`.

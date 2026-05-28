@@ -1,6 +1,10 @@
 # Why this prototype exists
 
-Successor to `prototype-ts/`. Goals:
+Historical successor to the original `prototype-ts/`. The current mainline
+prototype is back in `prototype-ts/`; this Rust version is kept as a record of
+raw graph, graph-view, and egui lessons.
+
+Goals:
 
 - **Modern stack** — TS/Electron felt aged.
 - **Demo the raw graph format from the start.** The TS prototype required a
@@ -18,4 +22,5 @@ among the more mature Rust GUI frameworks at the time, was cross-platform
 editor where the display is derived from the underlying graph each frame.
 
 The egui choice didn't pan out — see `AGENTS.md` for the focus-model
-post-mortem that drove the move to Swift/AppKit.
+post-mortem that first drove the move to Swift/AppKit, and later informed the
+TypeScript DOM/focus redesign.

@@ -1,5 +1,9 @@
 # Progred
 
+Status: historical Rust/egui prototype. It is kept for architecture notes and
+lessons around raw graph editing, graph view, identicons, and egui focus
+limitations. The current main editor prototype is `prototype-ts/`.
+
 A structural editor that preserves what makes text great—simplicity, flexibility, universality—while lifting the abstraction level to represent actual structures.
 
 ## Core Philosophy
