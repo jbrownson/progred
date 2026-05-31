@@ -8,6 +8,7 @@ import { parentEditorDescendElement, requestFocusParentFromActiveElement, reques
 import { Edge } from "../model/Edge"
 import { guidFromID, ID, matchID } from "../model/ID"
 import { collapsible, collapseToggle } from "./DControls"
+import { isSingleLine } from "./DContext"
 import { dList, type ListInsertionPoint } from "./DLayout"
 import { alwaysFail, descend, Render } from "./R"
 import { renderDocumentGuidEditor } from "./renderDocumentGuidEditor"
@@ -56,32 +57,36 @@ export function renderList(opening = "[", closing = "]", separator = ",", r = al
         const writable = maybe(listEdges, () => sourceIsWritable(sourceID.source), ({source}) => sourceIsWritable(source))
         let cycleStep = stepCyclePath(cyclePath, sourceID.id)
         let defaultCollapsed = cycleStep.hasCycle
+        let insertionPoint = (edge: Edge, edgeContext: EdgeContext, oldTail: List<HasID>, requiresMeta = false): ListInsertionPoint => {
+          let insert = (id: Maybe<ID>) => mapMaybe(edgeContext.commit, commit => {
+            let newList = GUIDNonemptyList.new(id => ({id})).setTail(oldTail)
+            mapMaybe(id, id => newList.setHead({id}))
+            commit(newList.id) })
+          return {
+            entries: () => buildEntries(listElementType(edgeContext), id => insert(id())),
+            editorCommands: {commit: insert},
+            requiresMeta }}
+        let listItem = (listEdgeContext: EdgeContext, cyclePath: CyclePath, list: NonemptyList<HasID>) => {
+          let commit = writable ? (id: Maybe<ID>) => maybe(id,
+            () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => {
+              requestFocusParentFromActiveElement()
+              commit(tail.id) })),
+            id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) ) : undefined
+          return descend(list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)}, cyclePath) }
+        // Collapsible layout metadata is visible to the parent before React state exists.
+        // For cycle-collapsed lists, do not render expanded children just to compute it.
+        let itemDs = defaultCollapsed ? undefined : items.map(({edgeContext, cyclePath, list}) => listItem(edgeContext, cyclePath, list))
+        let mountedSingleLine = defaultCollapsed || (itemDs !== undefined && itemDs.length <= 1 && !itemDs.find(child => !isSingleLine(child)))
+        let requiresMetaAfter = (list: NonemptyList<HasID>) => maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
+        let insertionPoints = writable ? [
+          ...items.map(({edge, edgeContext, list}, i) => insertionPoint(edge, edgeContext, list, i !== 0 && requiresMetaAfter(items[i - 1].list))),
+          insertionPoint(emptyTailEdge, emptyTailEdgeContext, emptyTail, maybe(items[items.length - 1], () => false, ({list}) => requiresMetaAfter(list))) ] : []
         let render = (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => {
           let toggle = list instanceof NonemptyList ? collapseToggle(collapsed, () => setCollapsed(!collapsed)) : nothing
           if (collapsed && toggle) return renderDocumentGuidEditor(listEdge, sourceID, dList(opening, [], closing, separator, toggle, [], collapsed))
-          let insertionPoint = (edge: Edge, edgeContext: EdgeContext, oldTail: List<HasID>, requiresMeta = false): ListInsertionPoint => {
-            let insert = (id: Maybe<ID>) => mapMaybe(edgeContext.commit, commit => {
-              let newList = GUIDNonemptyList.new(id => ({id})).setTail(oldTail)
-              mapMaybe(id, id => newList.setHead({id}))
-              commit(newList.id) })
-            return {
-              entries: () => buildEntries(listElementType(edgeContext), id => insert(id())),
-              editorCommands: {commit: insert},
-              requiresMeta }}
-          let listItem = (listEdgeContext: EdgeContext, cyclePath: CyclePath, list: NonemptyList<HasID>) => {
-            let commit = writable ? (id: Maybe<ID>) => maybe(id,
-              () => mapMaybe(list.tail, tail => mapMaybe(listEdgeContext.commit, commit => {
-                requestFocusParentFromActiveElement()
-                commit(tail.id) })),
-              id => mapMaybe(guidFromID(list.id), guid => set(guid, headField.id, id)) ) : undefined
-            return descend(list.id, headField.id, r, {commit, expectedType: listElementType(listEdgeContext)}, cyclePath) }
-          let requiresMetaAfter = (list: NonemptyList<HasID>) => maybe(list.head, () => false, head => matchID(head.id, () => false, () => true, () => false))
-          let insertionPoints = writable ? [
-            ...items.map(({edge, edgeContext, list}, i) => insertionPoint(edge, edgeContext, list, i !== 0 && requiresMetaAfter(items[i - 1].list))),
-            insertionPoint(emptyTailEdge, emptyTailEdgeContext, emptyTail, maybe(items[items.length - 1], () => false, ({list}) => requiresMetaAfter(list))) ] : []
-          return renderDocumentGuidEditor(listEdge, sourceID, dList(opening, items.map(({edgeContext, cyclePath, list}) => listItem(edgeContext, cyclePath, list)), closing, separator, toggle,
+          return renderDocumentGuidEditor(listEdge, sourceID, dList(opening, itemDs || items.map(({edgeContext, cyclePath, list}) => listItem(edgeContext, cyclePath, list)), closing, separator, toggle,
             insertionPoints, collapsed), writable ? listRootEditorCommands() : {}) }
-        return defaultCollapsed || list instanceof NonemptyList ? collapsible(defaultCollapsed, defaultCollapsed, render) : render(false, () => {}) }))})}
+        return defaultCollapsed || list instanceof NonemptyList ? collapsible(defaultCollapsed, mountedSingleLine, render) : render(false, () => {}) }))})}
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 

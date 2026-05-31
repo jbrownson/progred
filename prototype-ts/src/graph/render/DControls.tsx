@@ -2,8 +2,8 @@ import * as React from "react"
 import { withEnvironment } from "../Environment"
 import { childContext, D, mergeEditorCommands, dElement, DScope, renderD, useDContext } from "./DContext"
 
-export function collapsible(defaultCollapsed: boolean, singleLine: boolean, render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D): D {
-  return dElement(CollapsibleComponent, {defaultCollapsed, render}, {singleLine})
+export function collapsible(defaultCollapsed: boolean, mountedSingleLine: boolean, render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D): D {
+  return dElement(CollapsibleComponent, {defaultCollapsed, render}, {singleLine: mountedSingleLine})
 }
 
 function CollapsibleComponent(props: {defaultCollapsed: boolean, render: (collapsed: boolean, setCollapsed: (collapsed: boolean) => void) => D}) {

@@ -63,7 +63,8 @@ function renderGUID(edge: Edge, guid: GUID, source: Source, cyclePath: CyclePath
       ...(labels.length > 0 ? [collapseToggle(collapsed, () => setCollapsed(!collapsed))] : []),
       ...fieldDs )
     return writable ? supportsUnderselection(edge, guid, d, missingLabel => renderField(guid, missingLabel, fieldEdgeContext(missingLabel), cyclePath)) : d }
-  return defaultCollapsed || labels.length > 0 ? collapsible(defaultCollapsed, defaultCollapsed || labels.length === 0, render) : render(false, () => {}) }
+  let mountedSingleLine = defaultCollapsed || labels.length === 0
+  return defaultCollapsed || labels.length > 0 ? collapsible(defaultCollapsed, mountedSingleLine, render) : render(false, () => {}) }
 
 function sourceIsWritable(source: Source) { return source.source === SourceType.DocumentType }
 

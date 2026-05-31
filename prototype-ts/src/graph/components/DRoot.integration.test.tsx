@@ -9,7 +9,7 @@ import { undoRedoECallbacks } from "../editor/ECallbacks"
 import { commitIDToActiveElement, editorCommandsForActiveElement } from "../editor/EditorCommands"
 import { clipboardStringForCopyResult, copyIDFromClipboardText, idFromClipboardText } from "../editor/Clipboard"
 import { _get, Environment, set, withEnvironment } from "../Environment"
-import { appCtor, argumentsField, checkString, colorField, ctorCtor, ctorField, dataField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLabel, GUIDLine, GUIDRenderCtor, GUIDVec3, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, pointsField, polyline3DCtor, returnCtor, statementsField, tailField, vec3Ctor, xField, yField, zField } from "../graph"
+import { appCtor, argumentsField, checkString, colorField, ctorCtor, ctorField, dataField, emptyListCtor, evaluateCtor, fieldCtor, fieldsField, functionDeclarationCtor, functionField, GUIDApp, GUIDDescend, GUIDEmptyList, GUIDField, GUIDLabel, GUIDLine, GUIDNonemptyList, GUIDRenderCtor, GUIDVec3, headField, javascriptProgramCtor, javascriptProgramField, nameField, nonemptyListCtor, parametersField, pointsField, polyline3DCtor, returnCtor, statementsField, tailField, vec3Ctor, xField, yField, zField } from "../graph"
 import { ID, sidFromID, sidFromString, stringFromID } from "../model/ID"
 import { DRoot, type D } from "../render/D"
 import { createProjection } from "../render/project"
@@ -726,6 +726,22 @@ describe("DRoot editor integration", () => {
 
     harness.click(harness.first(".listInsertionPoint"))
     harness.typeAndEnter("first")
+
+    expect(renderedRootListIsMultiline(harness)).toBe(false)
+
+    harness.unmount()
+  })
+
+  it("keeps a committed one-item list containing a one-item list inline", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    withEnvironment(environment, () => {
+      const innerTail = GUIDEmptyList.new()
+      const inner = GUIDNonemptyList.new(id => ({id})).setHead({id: sidFromString("asdf")}).setTail(innerTail)
+      const outerTail = GUIDEmptyList.new()
+      const outer = GUIDNonemptyList.new(id => ({id})).setHead({id: inner.id}).setTail(outerTail)
+      set(environment.workspace.id, workspaceRootField.id, outer.id)
+    })
+    const harness = new EditorHarness(environment)
 
     expect(renderedRootListIsMultiline(harness)).toBe(false)
 
