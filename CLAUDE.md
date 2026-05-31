@@ -45,6 +45,7 @@ Use `find` for named nodes/fields/ctors, `inspect` for structural edges and list
 
 - Documents are pure graph structure. Semantics come from graph libraries and conventions.
 - Mutable nodes are GUIDs. Strings are SIDs (`sid:...`). Numbers are NIDs.
+- The React/DOM renderer has repeated synchronization problems around browser focus, selection, secondary selection, local collapse/layout state, and pending editors. Do not add more focus-sync workarounds casually; `graphEditor.integration.test.tsx` contains an expected-failing test for graph primary selection staying active after document focus returns.
 - The current schema language uses `Ctor`, `Field`, `AlgebraicType`, `ListType`, and `AtomicType`; value nodes use the `ctorField` edge.
 - DOM focus is the source of truth for the active editor target. Avoid reintroducing parallel selection state unless a real selection cannot be represented by focus.
 - Editors attach commands/callbacks to their focused DOM elements. Prefer local projection-owned behavior over global cursor/path reconstruction.

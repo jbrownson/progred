@@ -104,6 +104,8 @@ Full type matching remains contextual and intentionally tolerant of malformed gr
 
 The active path is `prototype-ts/`: a TypeScript/Electron prototype using React DOM for the renderer, Vite for bundling, and `tsc --noEmit` for typechecking.
 
+The TypeScript prototype is usable, but React/DOM focus and local component state have repeatedly caused subtle synchronization bugs around selection, secondary selection, collapse/layout state, and pending editors. One known unresolved issue is documented as an expected-failing test in `prototype-ts/src/graph/graphEditor.integration.test.tsx`: graph-view primary selection can remain active after focus moves back into the document editor. Further React-side polishing is on hold while we explore a stateless UI runtime where focus and edit state are explicit model data rather than hidden browser/component state.
+
 Useful commands:
 
 ```sh

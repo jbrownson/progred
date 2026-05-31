@@ -1,5 +1,7 @@
 import { act } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { nameField } from "./graph"
+import type { SerializedGraph } from "./model/save"
 
 (globalThis as unknown as {IS_REACT_ACT_ENVIRONMENT: boolean}).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -52,11 +54,11 @@ async function typeAndEnter(root: HTMLElement, value: string) {
   })
 }
 
-function installProgred() {
+function installProgred(openFile?: {path: string, contents: string}) {
   let menuAction: ((action: string) => void) | undefined
   let menuEnabled = new Map<string, boolean>()
   window.progred = {
-    openFile: async () => undefined,
+    openFile: async () => openFile,
     saveFileAs: async () => undefined,
     writeFile: async () => {},
     readFileBytes: async () => new Uint8Array(),
@@ -80,15 +82,29 @@ function installProgred() {
       menuAction!(action) }}
 }
 
-async function launchEditor() {
+async function launchEditor(openFile?: {path: string, contents: string}) {
   document.body.innerHTML = `<div id="root"></div>`
-  const progred = installProgred()
+  const progred = installProgred(openFile)
   await act(async () => {
     await import("./graphEditor")
     await Promise.resolve()
   })
   return {root: document.getElementById("root")!, progred}
 }
+
+function namedSharedReferenceGraph(): SerializedGraph {
+  const root = "guid-root"
+  const shared = "guid-shared"
+  const other = "guid-other"
+  return {
+    root,
+    guidMap: {
+      [root]: [
+        {label: {string: "first"}, to: {guid: shared}},
+        {label: {string: "second"}, to: {guid: shared}},
+        {label: {string: "third"}, to: {guid: other}} ],
+      [shared]: [{label: {guid: nameField.id}, to: {string: "Shared"}}],
+      [other]: [{label: {guid: nameField.id}, to: {string: "Other"}}] }}}
 
 describe("graphEditor integration", () => {
   afterEach(() => {
@@ -204,6 +220,42 @@ describe("graphEditor integration", () => {
     expect(root.querySelector(".graphNode.rootGraphNode")).toBe(null)
     expect(root.querySelector(".guidEditor")).toBe(null)
     expect(root.textContent).toContain("root")
+  })
+
+  it.fails("clears graph primary selection when document focus changes", async () => {
+    const {root, progred} = await launchEditor()
+
+    await typeAndEnter(root, "new Module")
+    await actEvent(() => progred.menuAction("toggle-graph"))
+    const graphNode = root.querySelector(".graphNode:not(.rootGraphNode)")!
+    await actEvent(() => graphClick(graphNode))
+    expect(graphNode.classList.contains("selectedGraphElement")).toBe(true)
+
+    await actEvent(() => click(root.querySelector(".guidEditor")!))
+
+    expect(root.querySelector(".graphNode.selectedGraphElement")).toBe(null)
+  })
+
+  it("updates document secondary selection when editor focus changes", async () => {
+    const {root, progred} = await launchEditor({path: "shared.progred", contents: JSON.stringify(namedSharedReferenceGraph())})
+
+    await act(async () => {
+      progred.menuAction("open")
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    const sharedEditors = Array.from(root.querySelectorAll("svg[aria-label=guid-shared]")).map(svg => svg.closest(".guidEditor")) as HTMLElement[]
+    const otherEditor = root.querySelector("svg[aria-label=guid-other]")?.closest(".guidEditor") as HTMLElement | undefined
+    expect(sharedEditors).toHaveLength(2)
+    expect(otherEditor).not.toBe(undefined)
+
+    await actEvent(() => click(sharedEditors[0]))
+    const second = sharedEditors[1]
+    expect(second.closest(".descend")?.classList.contains("secondarySelected")).toBe(true)
+
+    await actEvent(() => click(otherEditor!))
+
+    expect(second.closest(".descend")?.classList.contains("secondarySelected")).toBe(false)
   })
 
   it("closes placeholder completion when arrow navigation leaves the text input", async () => {
