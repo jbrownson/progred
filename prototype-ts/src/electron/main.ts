@@ -129,6 +129,9 @@ ipcMain.handle("file:write", async (_event, { path: filePath, contents }: { path
   await writeFile(filePath, contents)
 })
 
+ipcMain.handle("file:read-bytes", async (_event, filePath: string) =>
+  new Uint8Array(await readFile(filePath)))
+
 ipcMain.on("clipboard:write-text", (event, { format, text }: { format: string, text: string }) => {
   clipboard.writeBuffer(format, Buffer.from(text))
   event.returnValue = undefined

@@ -46,6 +46,19 @@ export class GUIDNonemptyList<A extends HasID> extends NonemptyList<A> {
   setHead(head: Maybe<A>) { return _set(this, headField, getID, head) }
   setTail(tail: Maybe<List<A>>) { return _set(this, tailField, getID, tail) } }
 
+export class Add {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, addCtor) ? new Add(id) : nothing }
+  get guidAdd() { return mapMaybe(guidFromID(this.id), guid => new GUIDAdd(guid)) }
+  get a(): Maybe<Implicit> { return get(this, aField, implicitFromID) }
+  get b(): Maybe<Implicit> { return get(this, bField, implicitFromID) } }
+export class GUIDAdd extends Add {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, addCtor.id); return new GUIDAdd(guid) }
+  get guidAdd() { return this }
+  setA(x: Maybe<Implicit>) { return _set(this, aField, getID, x) }
+  setB(x: Maybe<Implicit>) { return _set(this, bField, getID, x) } }
+
 export class AlgebraicType {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, algebraicTypeCtor) ? new AlgebraicType(id) : nothing }
@@ -211,6 +224,17 @@ export class GUIDConst extends Const {
   get guidConst() { return this }
    }
 
+export class Constant {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, constantCtor) ? new Constant(id) : nothing }
+  get guidConstant() { return mapMaybe(guidFromID(this.id), guid => new GUIDConstant(guid)) }
+  get constant(): Maybe<number> { return get(this, constantField, numberFromID) } }
+export class GUIDConstant extends Constant {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, constantCtor.id); return new GUIDConstant(guid) }
+  get guidConstant() { return this }
+  setConstant(x: Maybe<number>) { return _set(this, constantField, nidFromNumber, x) } }
+
 export class Ctor {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, ctorCtor) ? new Ctor(id) : nothing }
@@ -269,6 +293,19 @@ export class GUIDDispatch extends Dispatch {
   static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, dispatchCtor.id); return new GUIDDispatch(guid) }
   get guidDispatch() { return this }
   setRenders(x: Maybe<Render[]>) { return setList(this, rendersField, getID, x) } }
+
+export class Divide {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, divideCtor) ? new Divide(id) : nothing }
+  get guidDivide() { return mapMaybe(guidFromID(this.id), guid => new GUIDDivide(guid)) }
+  get a(): Maybe<Implicit> { return get(this, aField, implicitFromID) }
+  get b(): Maybe<Implicit> { return get(this, bField, implicitFromID) } }
+export class GUIDDivide extends Divide {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, divideCtor.id); return new GUIDDivide(guid) }
+  get guidDivide() { return this }
+  setA(x: Maybe<Implicit>) { return _set(this, aField, getID, x) }
+  setB(x: Maybe<Implicit>) { return _set(this, bField, getID, x) } }
 
 export class Dot {
   constructor(public readonly id: ID) {}
@@ -452,6 +489,21 @@ export class GUIDIf extends If {
   setTrueStatements(x: Maybe<Statement[]>) { return setList(this, trueStatementsField, getID, x) }
   setFalseStatements(x: Maybe<Statement[]>) { return setList(this, falseStatementsField, getID, x) } }
 
+export class ImplicitSolid {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, implicitSolidCtor) ? new ImplicitSolid(id) : nothing }
+  get guidImplicitSolid() { return mapMaybe(guidFromID(this.id), guid => new GUIDImplicitSolid(guid)) }
+  get implicit(): Maybe<Implicit> { return get(this, implicitField, implicitFromID) }
+  get depth(): Maybe<number> { return get(this, depthField, numberFromID) }
+  get scale(): Maybe<number> { return get(this, scaleField, numberFromID) } }
+export class GUIDImplicitSolid extends ImplicitSolid {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, implicitSolidCtor.id); return new GUIDImplicitSolid(guid) }
+  get guidImplicitSolid() { return this }
+  setImplicit(x: Maybe<Implicit>) { return _set(this, implicitField, getID, x) }
+  setDepth(x: Maybe<number>) { return _set(this, depthField, nidFromNumber, x) }
+  setScale(x: Maybe<number>) { return _set(this, scaleField, nidFromNumber, x) } }
+
 export class JavaScriptProgram {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, javascriptProgramCtor) ? new JavaScriptProgram(id) : nothing }
@@ -601,6 +653,32 @@ export class GUIDListType extends ListType {
   get guidListType() { return this }
   setType(x: Maybe<Type>) { return _set(this, typeField, getID, x) } }
 
+export class Maximum {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, maximumCtor) ? new Maximum(id) : nothing }
+  get guidMaximum() { return mapMaybe(guidFromID(this.id), guid => new GUIDMaximum(guid)) }
+  get a(): Maybe<Implicit> { return get(this, aField, implicitFromID) }
+  get b(): Maybe<Implicit> { return get(this, bField, implicitFromID) } }
+export class GUIDMaximum extends Maximum {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, maximumCtor.id); return new GUIDMaximum(guid) }
+  get guidMaximum() { return this }
+  setA(x: Maybe<Implicit>) { return _set(this, aField, getID, x) }
+  setB(x: Maybe<Implicit>) { return _set(this, bField, getID, x) } }
+
+export class Minimum {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, minimumCtor) ? new Minimum(id) : nothing }
+  get guidMinimum() { return mapMaybe(guidFromID(this.id), guid => new GUIDMinimum(guid)) }
+  get a(): Maybe<Implicit> { return get(this, aField, implicitFromID) }
+  get b(): Maybe<Implicit> { return get(this, bField, implicitFromID) } }
+export class GUIDMinimum extends Minimum {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, minimumCtor.id); return new GUIDMinimum(guid) }
+  get guidMinimum() { return this }
+  setA(x: Maybe<Implicit>) { return _set(this, aField, getID, x) }
+  setB(x: Maybe<Implicit>) { return _set(this, bField, getID, x) } }
+
 export class Module {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, moduleCtor) ? new Module(id) : nothing }
@@ -617,6 +695,19 @@ export class GUIDModule extends Module {
   setData(x: Maybe<HasID>) { return _set(this, dataField, getID, x) }
   setRenderCtors(x: Maybe<RenderCtor[]>) { return setList(this, renderCtorsField, getID, x) }
   setTransformations(x: Maybe<HasID[]>) { return setList(this, transformationsField, getID, x) } }
+
+export class Multiply {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, multiplyCtor) ? new Multiply(id) : nothing }
+  get guidMultiply() { return mapMaybe(guidFromID(this.id), guid => new GUIDMultiply(guid)) }
+  get a(): Maybe<Implicit> { return get(this, aField, implicitFromID) }
+  get b(): Maybe<Implicit> { return get(this, bField, implicitFromID) } }
+export class GUIDMultiply extends Multiply {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, multiplyCtor.id); return new GUIDMultiply(guid) }
+  get guidMultiply() { return this }
+  setA(x: Maybe<Implicit>) { return _set(this, aField, getID, x) }
+  setB(x: Maybe<Implicit>) { return _set(this, bField, getID, x) } }
 
 export class NetworkEntry {
   constructor(public readonly id: ID) {}
@@ -832,6 +923,19 @@ export class GUIDStrictNotEquals extends StrictNotEquals {
   get guidStrictNotEquals() { return this }
    }
 
+export class Subtract {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, subtractCtor) ? new Subtract(id) : nothing }
+  get guidSubtract() { return mapMaybe(guidFromID(this.id), guid => new GUIDSubtract(guid)) }
+  get a(): Maybe<Implicit> { return get(this, aField, implicitFromID) }
+  get b(): Maybe<Implicit> { return get(this, bField, implicitFromID) } }
+export class GUIDSubtract extends Subtract {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, subtractCtor.id); return new GUIDSubtract(guid) }
+  get guidSubtract() { return this }
+  setA(x: Maybe<Implicit>) { return _set(this, aField, getID, x) }
+  setB(x: Maybe<Implicit>) { return _set(this, bField, getID, x) } }
+
 export class Sum {
   constructor(public readonly id: ID) {}
   static fromID(id: ID) { return checkCtor(id, sumCtor) ? new Sum(id) : nothing }
@@ -894,6 +998,39 @@ export class GUIDVec3 extends Vec3 {
   setX(x: Maybe<number>) { return _set(this, xField, nidFromNumber, x) }
   setY(x: Maybe<number>) { return _set(this, yField, nidFromNumber, x) }
   setZ(x: Maybe<number>) { return _set(this, zField, nidFromNumber, x) } }
+
+export class XCoordinate {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, xCoordinateCtor) ? new XCoordinate(id) : nothing }
+  get guidXCoordinate() { return mapMaybe(guidFromID(this.id), guid => new GUIDXCoordinate(guid)) }
+   }
+export class GUIDXCoordinate extends XCoordinate {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, xCoordinateCtor.id); return new GUIDXCoordinate(guid) }
+  get guidXCoordinate() { return this }
+   }
+
+export class YCoordinate {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, yCoordinateCtor) ? new YCoordinate(id) : nothing }
+  get guidYCoordinate() { return mapMaybe(guidFromID(this.id), guid => new GUIDYCoordinate(guid)) }
+   }
+export class GUIDYCoordinate extends YCoordinate {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, yCoordinateCtor.id); return new GUIDYCoordinate(guid) }
+  get guidYCoordinate() { return this }
+   }
+
+export class ZCoordinate {
+  constructor(public readonly id: ID) {}
+  static fromID(id: ID) { return checkCtor(id, zCoordinateCtor) ? new ZCoordinate(id) : nothing }
+  get guidZCoordinate() { return mapMaybe(guidFromID(this.id), guid => new GUIDZCoordinate(guid)) }
+   }
+export class GUIDZCoordinate extends ZCoordinate {
+  constructor(public readonly id: GUID) { super(id) }
+  static new(guid: GUID = generateGUID()) { set(guid, ctorField.id, zCoordinateCtor.id); return new GUIDZCoordinate(guid) }
+  get guidZCoordinate() { return this }
+   }
 
 export type List<A extends HasID = HasID> = NonemptyList<A> | EmptyList
 export type GUIDList<A extends HasID = HasID> = GUIDNonemptyList<A> | GUIDEmptyList
@@ -968,6 +1105,21 @@ export function externFunctionFromExpression(x: Expression) { return x instanceo
 export function numberFromExpression(x: Expression) { return numberFromID(x.id) }
 export function stringFromExpression(x: Expression) { return stringFromID(x.id) }
 
+export type Implicit = XCoordinate | YCoordinate | ZCoordinate | Constant | Add | Subtract | Multiply | Divide | Minimum | Maximum
+export type GUIDImplicit = GUIDXCoordinate | GUIDYCoordinate | GUIDZCoordinate | GUIDConstant | GUIDAdd | GUIDSubtract | GUIDMultiply | GUIDDivide | GUIDMinimum | GUIDMaximum
+export function implicitFromID(id: ID): Maybe<Implicit> { return checkAlgebraicType<Implicit>(id, [{ctor: xCoordinateCtor, f: id => new XCoordinate(id)}, {ctor: yCoordinateCtor, f: id => new YCoordinate(id)}, {ctor: zCoordinateCtor, f: id => new ZCoordinate(id)}, {ctor: constantCtor, f: id => new Constant(id)}, {ctor: addCtor, f: id => new Add(id)}, {ctor: subtractCtor, f: id => new Subtract(id)}, {ctor: multiplyCtor, f: id => new Multiply(id)}, {ctor: divideCtor, f: id => new Divide(id)}, {ctor: minimumCtor, f: id => new Minimum(id)}, {ctor: maximumCtor, f: id => new Maximum(id)}]) }
+export function matchImplicit<A>(x: Implicit, xCoordinateF: (x: XCoordinate) => A, yCoordinateF: (x: YCoordinate) => A, zCoordinateF: (x: ZCoordinate) => A, constantF: (x: Constant) => A, addF: (x: Add) => A, subtractF: (x: Subtract) => A, multiplyF: (x: Multiply) => A, divideF: (x: Divide) => A, minimumF: (x: Minimum) => A, maximumF: (x: Maximum) => A) { return x instanceof XCoordinate ? xCoordinateF(x) : x instanceof YCoordinate ? yCoordinateF(x) : x instanceof ZCoordinate ? zCoordinateF(x) : x instanceof Constant ? constantF(x) : x instanceof Add ? addF(x) : x instanceof Subtract ? subtractF(x) : x instanceof Multiply ? multiplyF(x) : x instanceof Divide ? divideF(x) : x instanceof Minimum ? minimumF(x) : maximumF(x) }
+export function xCoordinateFromImplicit(x: Implicit) { return x instanceof XCoordinate ? x : nothing }
+export function yCoordinateFromImplicit(x: Implicit) { return x instanceof YCoordinate ? x : nothing }
+export function zCoordinateFromImplicit(x: Implicit) { return x instanceof ZCoordinate ? x : nothing }
+export function constantFromImplicit(x: Implicit) { return x instanceof Constant ? x : nothing }
+export function addFromImplicit(x: Implicit) { return x instanceof Add ? x : nothing }
+export function subtractFromImplicit(x: Implicit) { return x instanceof Subtract ? x : nothing }
+export function multiplyFromImplicit(x: Implicit) { return x instanceof Multiply ? x : nothing }
+export function divideFromImplicit(x: Implicit) { return x instanceof Divide ? x : nothing }
+export function minimumFromImplicit(x: Implicit) { return x instanceof Minimum ? x : nothing }
+export function maximumFromImplicit(x: Implicit) { return x instanceof Maximum ? x : nothing }
+
 export type JSON = JSONString | JSONNumber | JSONArray | JSONObject
 export type GUIDJSON = GUIDJSONString | GUIDJSONNumber | GUIDJSONArray | GUIDJSONObject
 export function jsonFromID(id: ID): Maybe<JSON> { return checkAlgebraicType<JSON>(id, [{ctor: jsonStringCtor, f: id => new JSONString(id)}, {ctor: jsonNumberCtor, f: id => new JSONNumber(id)}, {ctor: jsonArrayCtor, f: id => new JSONArray(id)}, {ctor: jsonObjectCtor, f: id => new JSONObject(id)}]) }
@@ -986,11 +1138,12 @@ export function renderListFromRender(x: Render) { return x instanceof RenderList
 export function renderNameShallowFromRender(x: Render) { return x instanceof RenderNameShallow ? x : nothing }
 export function dispatchFromRender(x: Render) { return x instanceof Dispatch ? x : nothing }
 
-export type Scene3DObject = Polyline3D
-export type GUIDScene3DObject = GUIDPolyline3D
-export function scene3DObjectFromID(id: ID): Maybe<Scene3DObject> { return checkAlgebraicType<Scene3DObject>(id, [{ctor: polyline3DCtor, f: id => new Polyline3D(id)}]) }
-export function matchScene3DObject<A>(x: Scene3DObject, polyline3DF: (x: Polyline3D) => A) { return polyline3DF(x) }
+export type Scene3DObject = Polyline3D | ImplicitSolid
+export type GUIDScene3DObject = GUIDPolyline3D | GUIDImplicitSolid
+export function scene3DObjectFromID(id: ID): Maybe<Scene3DObject> { return checkAlgebraicType<Scene3DObject>(id, [{ctor: polyline3DCtor, f: id => new Polyline3D(id)}, {ctor: implicitSolidCtor, f: id => new ImplicitSolid(id)}]) }
+export function matchScene3DObject<A>(x: Scene3DObject, polyline3DF: (x: Polyline3D) => A, implicitSolidF: (x: ImplicitSolid) => A) { return x instanceof Polyline3D ? polyline3DF(x) : implicitSolidF(x) }
 export function polyline3DFromScene3DObject(x: Scene3DObject) { return x instanceof Polyline3D ? x : nothing }
+export function implicitSolidFromScene3DObject(x: Scene3DObject) { return x instanceof ImplicitSolid ? x : nothing }
 
 export type Statement = FunctionDeclaration | Extern | Parameter | ArrayLiteral | ObjectLiteral | KeyValue | BinaryInline | Conditional | FunctionCall | ArrowFunction | New | Undefined | Null | ExternFunction | Return | If | VariableDeclaration | HasNID | HasSID
 export function statementFromID(id: ID): Maybe<Statement> { return altMaybe(checkAlgebraicType<Statement>(id, [{ctor: functionDeclarationCtor, f: id => new FunctionDeclaration(id)}, {ctor: externCtor, f: id => new Extern(id)}, {ctor: parameterCtor, f: id => new Parameter(id)}, {ctor: arrayLiteralCtor, f: id => new ArrayLiteral(id)}, {ctor: objectLiteralCtor, f: id => new ObjectLiteral(id)}, {ctor: keyValueCtor, f: id => new KeyValue(id)}, {ctor: binaryInlineCtor, f: id => new BinaryInline(id)}, {ctor: conditionalCtor, f: id => new Conditional(id)}, {ctor: functionCallCtor, f: id => new FunctionCall(id)}, {ctor: arrowFunctionCtor, f: id => new ArrowFunction(id)}, {ctor: newCtor, f: id => new New(id)}, {ctor: undefinedCtor, f: id => new Undefined(id)}, {ctor: nullCtor, f: id => new Null(id)}, {ctor: externFunctionCtor, f: id => new ExternFunction(id)}, {ctor: returnCtor, f: id => new Return(id)}, {ctor: ifCtor, f: id => new If(id)}, {ctor: variableDeclarationCtor, f: id => new VariableDeclaration(id)}]), () => checkNumber(id), () => checkString(id)) }
@@ -1032,10 +1185,12 @@ export function networkEntryFromWeightedEntry(x: WeightedEntry) { return x insta
 export function houseAdEntryFromWeightedEntry(x: WeightedEntry) { return x instanceof HouseAdEntry ? x : nothing }
 
 export const
+  aField = new GUIDField("4c4d18fcc0dc87851c6bba5aa8e55e0d"),
   actionURLField = new GUIDField("380d186f699bf418eb78c420e1ecaefa"),
   adProbabilityField = new GUIDField("32945debf12af7f536c235bbbf18ac6d"),
   appField = new GUIDField("29bee9c65d2cec2af757bedc2fbf90aa"),
   argumentsField = new GUIDField("40c9d6a1d748f79df7704ac5629b0e76"),
+  bField = new GUIDField("87304db681ef3e6cef62d53b4ad01461"),
   binaryOperatorField = new GUIDField("a6bd0e68fd675a8b5de2f12f48e83d07"),
   childField = new GUIDField("b8b38542590248fddea03aa7faa9004c"),
   childrenField = new GUIDField("55944d181e596b9c1642f9687ac9fcd5"),
@@ -1043,11 +1198,13 @@ export const
   colorField = new GUIDField("29108bc98f7d432d2e739cffcfbf9e87"),
   conditionField = new GUIDField("b061582a37c4c6930f3d5c74a0201263"),
   constLetVarField = new GUIDField("da71dfbbc95473dcf8171a99caa8c117"),
+  constantField = new GUIDField("b2a519e079d66c8169ef87dd59e4c998"),
   contextRenderField = new GUIDField("908e3614a53ec485765099f4f88ffd5e"),
   ctorField = new GUIDField("aba6ac79fd3d409da860a77c90942852"),
   ctorOrAlgebraicTypesField = new GUIDField("1088fc911436441ca7f0b569fcf72da5"),
   dField = new GUIDField("06468db341494c6d0f1a1113453b5284"),
   dataField = new GUIDField("d4220640231679254ebab0c7ab0ba283"),
+  depthField = new GUIDField("7c59917d16ee28d0fa4b3f202fe45c01"),
   expressionField = new GUIDField("8369f4dd22a83095c4c2764c2e5502cc"),
   expressionsField = new GUIDField("6395df831571ce039f9b83d69ed2db6b"),
   extensionField = new GUIDField("614146d19462f584896cbc9c4f4b0ce8"),
@@ -1061,6 +1218,7 @@ export const
   headField = new GUIDField("a74851b7a58f4e52b72ee719b258a7b1"),
   heightField = new GUIDField("28b8f1f8e7bacfcf6b0ee28bbb8e6fa2"),
   imagesField = new GUIDField("a29ee2f11e99119d332884077a8c3e16"),
+  implicitField = new GUIDField("5a943510101c593084dfc9372c7ac945"),
   javascriptProgramField = new GUIDField("07457861b489ce71e67206291d7b9a91"),
   jsonArrayField = new GUIDField("d8f7169ac31b569619c61ce5971f8ed4"),
   jsonNumberField = new GUIDField("c420e072625c55a4580d04e693e02a56"),
@@ -1082,6 +1240,7 @@ export const
   renderCtorsField = new GUIDField("bc20a35da250d825fc8af115d52f879f"),
   rendersField = new GUIDField("abb3a705a157db4b6f2b0ae1a75f6439"),
   rightField = new GUIDField("12c8dcfc40feb95766d8810013c47ed5"),
+  scaleField = new GUIDField("0d1107f4189662c8909fc52931be003d"),
   separatorField = new GUIDField("ce030d314931a9df1ba07c298b0cad90"),
   sha1Field = new GUIDField("b008bca2b15f47feebd5c6ee7e7afae7"),
   statementsField = new GUIDField("b00e2d33c8ef3a0188a9bab0bacea20a"),
@@ -1098,6 +1257,7 @@ export const
   xField = new GUIDField("16cb6cb0a236328b1c6c320ac1cda35b"),
   yField = new GUIDField("e4d8dbc5a920f802c9c11ab8bb450d5e"),
   zField = new GUIDField("1ab20c7a7fab7ea4f9834ef7f2b92dde"),
+  addCtor = new GUIDCtor("a424b9d7b717e729bf24812a95998c97"),
   algebraicTypeCtor = new GUIDCtor("ba181d67665d4e57b9fa1694dbdacbca"),
   andCtor = new GUIDCtor("89da9a377b0116af9531275a81545c32"),
   appCtor = new GUIDCtor("2a19592fa5047f6ad1ef58d885611c6f"),
@@ -1111,11 +1271,13 @@ export const
   bradParamsCtor = new GUIDCtor("4f4e5a4bb6f56d5c618156e9d7a539d5"),
   conditionalCtor = new GUIDCtor("8f16557541a11785df1072f59a7e0395"),
   constCtor = new GUIDCtor("7b52c4f1319c085ae838e07e2cf88c85"),
+  constantCtor = new GUIDCtor("80c8d4dbd6d6a91be5bc75262b5b57f0"),
   ctorCtor = new GUIDCtor("e35d27082ac44a759a4e4c0535f243d7"),
   ctorFieldCtor = new GUIDCtor("68f4a71d7c13980c249e939358fc4f17"),
   descendCtor = new GUIDCtor("7a6f518f8b877cf182c427e98e65a5b5"),
   differenceCtor = new GUIDCtor("8d2f13893c49fb07f159439c663263c4"),
   dispatchCtor = new GUIDCtor("db98a62666a14eb8d942ec1b82ffdb70"),
+  divideCtor = new GUIDCtor("ccb1d5150d3e8e459120ccbfd5b73003"),
   dotCtor = new GUIDCtor("d6e2fe096d28de66598ba3a98dee2cb3"),
   emptyListCtor = new GUIDCtor("51fb7a7a95d4486bb197509fd53dec2d"),
   equalsCtor = new GUIDCtor("afd0cd8ae646f670f738f3a5a525f650"),
@@ -1130,6 +1292,7 @@ export const
   houseAdEntryCtor = new GUIDCtor("b33d5e998f7bfbdcce857e09582edda5"),
   houseAdImageCtor = new GUIDCtor("e912c5ddb1cad6518f36ab50e240fba7"),
   ifCtor = new GUIDCtor("cd38287e9184f0062b0f2cbd3f50da7a"),
+  implicitSolidCtor = new GUIDCtor("6aeaa74ef39e75fe6e1c3cdb3ac766cf"),
   javascriptProgramCtor = new GUIDCtor("4ab3f0dc1c14bd4bfffe937802930d05"),
   jsonArrayCtor = new GUIDCtor("e08c7a6c29586e9ac1e276b48fa93f35"),
   jsonNumberCtor = new GUIDCtor("4d2089e72be2dda1d8ad71b990b4ddcd"),
@@ -1143,7 +1306,10 @@ export const
   letCtor = new GUIDCtor("5556f62d14253cb7b58887ad5f5da099"),
   lineCtor = new GUIDCtor("732ed87bdb114213ddaf17ce6b167d9c"),
   listTypeCtor = new GUIDCtor("6410d2232b824a38bf61780cc1a12886"),
+  maximumCtor = new GUIDCtor("ee78509c48b89d297cc2014ab5c70993"),
+  minimumCtor = new GUIDCtor("9f5be63ff2b9779087a3995e2769569f"),
   moduleCtor = new GUIDCtor("3c0e5c714e551ef48390f803fa17569b"),
+  multiplyCtor = new GUIDCtor("1dd981d729b276bf005822a5c9a3e2e0"),
   networkEntryCtor = new GUIDCtor("191b15b7460b928c1dc29d518f16eb18"),
   newCtor = new GUIDCtor("910127d3651dc8dc1985d624abb8881e"),
   nonemptyListCtor = new GUIDCtor("f0408beb29c74dc7bc20dc461104e949"),
@@ -1163,16 +1329,21 @@ export const
   scene3DCtor = new GUIDCtor("5c0ab5320b84668d455ac5def940bdd4"),
   strictEqualsCtor = new GUIDCtor("9e7e02107fb914004fd34a5867652c5c"),
   strictNotEqualsCtor = new GUIDCtor("c57de19bbff6519003d2959e8f3d0123"),
+  subtractCtor = new GUIDCtor("59f7e43d9f190654de9bdc67b3a6c233"),
   sumCtor = new GUIDCtor("66a2a6cacfd8f5bcddb200964e936457"),
   undefinedCtor = new GUIDCtor("61bb6c05ed466f923d8d6ee0b0c1295b"),
   varCtor = new GUIDCtor("9eb7b6c08dea5bd3118ab4e52a67af55"),
   variableDeclarationCtor = new GUIDCtor("b98dd2eb21483f6acd304be44ef40c9c"),
   vec3Ctor = new GUIDCtor("09c9906b4b71b381c451a9585e2fe111"),
+  xCoordinateCtor = new GUIDCtor("c1ff10269ec7e101a06242a6f1f7c1bb"),
+  yCoordinateCtor = new GUIDCtor("5612bdb3b1cf0cbd56233b3d64d40507"),
+  zCoordinateCtor = new GUIDCtor("3c6564292265dd793e6274b094a50a7f"),
   binaryOperatorAlgebraicType = new GUIDAlgebraicType("e27fa156592ee2f9b738bbfe9d66dff6"),
   constLetVarAlgebraicType = new GUIDAlgebraicType("556afcdc910c5bbaa3ecb24014389a0a"),
   ctorOrAlgebraicTypeAlgebraicType = new GUIDAlgebraicType("63a2e588102f5e5453316d46fea2f02b"),
   dAlgebraicType = new GUIDAlgebraicType("583bb47238632e875ffea7544a909e1a"),
   expressionAlgebraicType = new GUIDAlgebraicType("32134c040cd504435205a551d2d4fb66"),
+  implicitAlgebraicType = new GUIDAlgebraicType("57cdc56e52b9f90183ddc81b1f31416e"),
   jsonAlgebraicType = new GUIDAlgebraicType("52120b6d534a2fffe968f0c055df6ca8"),
   listAlgebraicType = new GUIDAlgebraicType("e06b24ad99bf4e14a368aaf93bfb143b"),
   renderAlgebraicType = new GUIDAlgebraicType("86a592afa6af938c63acde8fcc753aba"),

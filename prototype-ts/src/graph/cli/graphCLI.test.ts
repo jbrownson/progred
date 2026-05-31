@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ctorField, emptyListCtor, externFunctionCtor, headField, nameField, nonemptyListCtor, parameterCtor, parametersField, tailField } from "../graph"
+import { aField, addCtor, bField, constantCtor, constantField, ctorField, emptyListCtor, externFunctionCtor, headField, nameField, nonemptyListCtor, parameterCtor, parametersField, tailField } from "../graph"
 import type { SerializedGraph } from "../model/save"
 import { findGraph, inspectGraph, loadSerializedGraph, prettyStaticMarkup, renderGraph, runGraphCLI } from "./graphCLI"
 
@@ -66,6 +66,33 @@ describe("graph CLI", () => {
     expect(output).toContain(">y</span>")
     expect(output).toContain("guidEditor")
     expect(output).toContain("\n  <span")
+  })
+
+  it("renders Scene3D implicit expression templates as static markup", () => {
+    const loadedGraph = loadSerializedGraph({
+      root: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      guidMap: {
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: [
+          {label: {guid: ctorField.id}, to: {guid: addCtor.id}},
+          {label: {guid: aField.id}, to: {guid: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}},
+          {label: {guid: bField.id}, to: {guid: "cccccccccccccccccccccccccccccccc"}},
+        ],
+        bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: [
+          {label: {guid: ctorField.id}, to: {guid: constantCtor.id}},
+          {label: {guid: constantField.id}, to: {number: 1}},
+        ],
+        cccccccccccccccccccccccccccccccc: [
+          {label: {guid: ctorField.id}, to: {guid: constantCtor.id}},
+          {label: {guid: constantField.id}, to: {number: 2}},
+        ],
+      },
+    })
+    const output = renderGraph(loadedGraph, "root")
+
+    expect(output).toContain("<span>(</span>")
+    expect(output).toContain("<span> + </span>")
+    expect(output).toContain("value=\"1\"")
+    expect(output).toContain("value=\"2\"")
   })
 
   it("reports usage for incomplete commands", () => {

@@ -4,7 +4,8 @@
   "private": true,
   "description": "",
   "scripts": {
-    "build": "vite build --config vite/renderer.config.ts && vite build --config vite/main.config.ts && vite build --config vite/preload.config.ts",
+    "build": "npm run build:fidget && vite build --config vite/renderer.config.ts && vite build --config vite/main.config.ts && vite build --config vite/preload.config.ts",
+    "build:fidget": "PATH=/opt/homebrew/opt/rustup/bin:$PATH cargo build --manifest-path fidget/Cargo.toml --target wasm32-unknown-unknown --release && wasm-bindgen fidget/target/wasm32-unknown-unknown/release/progred_fidget.wasm --out-dir src/fidget/generated --target web",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

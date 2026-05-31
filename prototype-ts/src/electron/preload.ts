@@ -17,6 +17,9 @@ const progred = {
   writeFile: (path: string, contents: string): Promise<void> =>
     ipcRenderer.invoke("file:write", { path, contents }),
 
+  readFileBytes: (path: string): Promise<Uint8Array> =>
+    ipcRenderer.invoke("file:read-bytes", path),
+
   writeClipboardText: (format: string, text: string) => {
     ipcRenderer.sendSync("clipboard:write-text", { format, text })
   },

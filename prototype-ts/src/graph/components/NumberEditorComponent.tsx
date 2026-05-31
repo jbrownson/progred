@@ -28,10 +28,11 @@ export function NumberEditorComponent(props: {numberEditor: NumberEditor, editor
         e.stopPropagation()
         commit(e.currentTarget.value) }}}
   const value = fromMaybe(editedValue, () => `${props.numberEditor.number}`)
+  const style = typeof document === "undefined" ? undefined : {width: getTextWidth(value) + "px"}
   return <input
     className={"number i"}
     type="text"
-    style={{width: getTextWidth(value) + "px"}}
+    style={style}
     onChange={e => { if (props.numberEditor.writable) setEditedValue(e.currentTarget.value) }}
     onBlur={() => setEditedValue(undefined)}
     value={value}

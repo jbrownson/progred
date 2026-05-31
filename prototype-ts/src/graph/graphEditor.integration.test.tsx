@@ -59,6 +59,7 @@ function installProgred() {
     openFile: async () => undefined,
     saveFileAs: async () => undefined,
     writeFile: async () => {},
+    readFileBytes: async () => new Uint8Array(),
     writeClipboardText: () => {},
     readClipboardText: () => undefined,
     availableClipboardFormats: () => [],

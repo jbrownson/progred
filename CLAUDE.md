@@ -21,10 +21,12 @@ npm start
 npm test
 npm run typecheck
 npm run build
+npm run build:fidget
 npm run gen
 ```
 
 `npm start` builds the app and launches Electron. `npm run gen` rebuilds generated graph wrappers from graph libraries; inspect the diff after running it.
+`npm run build` regenerates the Fidget wasm bridge first; that path expects Rust with the `wasm32-unknown-unknown` target and `wasm-bindgen`.
 
 The TypeScript prototype has a read-only graph CLI:
 
