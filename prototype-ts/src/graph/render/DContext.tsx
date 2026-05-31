@@ -2,8 +2,8 @@ import * as React from "react"
 import { altMaybe, Maybe, nothing } from "../../lib/Maybe"
 import { EdgeContext, EditorCommands, EditorKeyDownEvent } from "../editor/EditorCommands"
 import type { Environment } from "../Environment"
-import { Edge } from "../model/Edge"
-import { ID } from "../model/ID"
+import type { Edge } from "../model/Edge"
+import type { ID } from "../model/ID"
 
 export type D = {
   singleLine: boolean
@@ -21,6 +21,7 @@ export type DContextValue = {
   environment: Environment
   depth: number
   runE: (f: () => void) => void
+  secondarySelectionID?: Maybe<ID>
   edgeContext?: EdgeContext
   editorCommands?: EditorCommands
   chooseID?: () => Maybe<ID>

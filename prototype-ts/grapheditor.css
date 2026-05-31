@@ -19,11 +19,17 @@ body {
 span.unmatching { border-bottom: 1px solid red }
 span.descend {
   border-radius: 3px;
-  box-decoration-break: clone }
+  box-decoration-break: clone;
+  position: relative }
+span.descend.secondarySelected:not(:has(.guidEditor:focus)):not(:has(.i:focus)):not(:has(.listInsertionPointEditor .i:focus)) {
+  outline: 3px solid #edf4ff;
+  outline-offset: 0;
+  z-index: 1 }
 span.descend:has(.guidEditor:focus):not(:has(span.descend .guidEditor:focus)),
 span.descend:has(.i:focus):not(:has(span.descend .i:focus)):not(:has(.listInsertionPointEditor .i:focus)) {
   outline: 4px solid #dbeaff;
-  outline-offset: 0 }
+  outline-offset: 0;
+  z-index: 2 }
 .guidEditor:focus { outline: none }
 .i {
   height: 16px;

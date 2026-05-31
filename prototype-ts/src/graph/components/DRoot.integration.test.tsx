@@ -19,7 +19,7 @@ import { renderFromRender } from "../render/renderFromRender"
 import { dispatch, Render } from "../render/R"
 import { makeTestEnvironment } from "../testHelpers"
 import { defaultKeyHandler } from "../editor/keyHandler"
-import { editorElementsForEdge, editorFocusForActiveElement, focusEditorFromElement, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
+import { activeEditorID, editorElementsForEdge, editorFocusForActiveElement, focusEditorFromElement, focusFirstEditor, focusPendingEditor } from "../editor/EditorFocus"
 import { commitToActiveElementWithRefocus, deleteActiveElementWithRefocus } from "../editor/commitWithFocus"
 import { MapIDMap } from "../model/MapIDMap"
 import type { UndoRedo } from "../editor/UndoRedo"
@@ -75,6 +75,7 @@ class EditorHarness {
           d={rootDescend}
           environment={this.environment}
           depth={0}
+          secondarySelectionID={activeEditorID()}
           runE={f => {
             this.runWithUndoCallbacks(f)
             this.render() }} />))
@@ -402,6 +403,27 @@ describe("DRoot editor integration", () => {
     const root = harness.get(harness.environment.workspace.id, workspaceRootField.id)
     expect(root).not.toBe(undefined)
     expect(sidFromID(root!)).toBe(undefined)
+
+    harness.unmount()
+  })
+
+  it("secondary-highlights other projections of the focused node", () => {
+    const environment = makeTestEnvironment({defaultRender})
+    const root = "guid-root"
+    const child = "guid-shared-child"
+    const firstLabel = sidFromString("first")
+    const secondLabel = sidFromString("second")
+    withEnvironment(environment, () => {
+      set(environment.workspace.id, workspaceRootField.id, root)
+      set(root, firstLabel, child)
+      set(root, secondLabel, child) })
+    const harness = new EditorHarness(environment)
+
+    focusEdge(harness, root, firstLabel)
+    harness.render()
+
+    const secondEditor = editorElementsForEdge(harness.container, {parent: root, label: secondLabel})[0]
+    expect(secondEditor.closest(".descend")?.classList.contains("secondarySelected")).toBe(true)
 
     harness.unmount()
   })

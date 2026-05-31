@@ -23,7 +23,9 @@ export function descendElement(edge: Edge, child: D, unmatching: boolean, edgeCo
 function DescendComponent(props: {edge: Edge, child: D, unmatching: boolean, edgeContext: EdgeContext}) {
   const context = useDContext()
   const descend = React.useMemo(() => ({edge: props.edge, edgeContext: props.edgeContext, unmatching: props.unmatching}), [props.edge, props.edgeContext, props.unmatching])
-  let classNames = ["descend", ...maybeMap([[props.unmatching, "unmatching"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
+  const childID = withEnvironment(context.environment, () => _get(props.edge.parent, props.edge.label))
+  const secondarySelected = context.secondarySelectionID !== undefined && childID === context.secondarySelectionID
+  let classNames = ["descend", ...maybeMap([[props.unmatching, "unmatching"], [secondarySelected, "secondarySelected"]] as [boolean, string][], ([boolean, className]) => boolean ? className : nothing)]
   return <span className={classNames.join(" ")} ref={span => { if (span) attachEditorDescend(span, descend) }}>
     <DScope context={childContext(context, {
       edgeContext: props.edgeContext,

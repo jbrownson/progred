@@ -1,4 +1,4 @@
-import { bindMaybe, fromMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
+import { bindMaybe, mapMaybe, Maybe, maybe, nothing } from "../../lib/Maybe"
 import { _get } from "../Environment"
 import { ctorField, fieldCtor, nameField } from "../graph"
 import { Edge } from "../model/Edge"
@@ -55,7 +55,7 @@ function selectedEdgeFromActiveEdge(activeEdge: Maybe<Edge>): Maybe<SelectedGrap
 function selectedEdgeFromGraphSelection(graphSelection: Maybe<GraphSelection>): Maybe<SelectedGraphEdgeID> {
   return bindMaybe(graphSelection, graphSelection => graphSelection.kind === "edge" ? {source: graphSelection.source, label: graphSelection.label} : nothing) }
 
-export function buildGraphViewSnapshot(guidMap: GUIDMap, rootID: Maybe<ID>, activeEdge: Maybe<Edge>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
+export function buildGraphViewSnapshot(guidMap: GUIDMap, rootID: Maybe<ID>, activeID: Maybe<ID>, activeEdge: Maybe<Edge>, graphSelection: Maybe<GraphSelection>): GraphViewSnapshot {
   let ids = new Set<ID>()
   mapMaybe(rootID, id => ids.add(id))
 
@@ -66,16 +66,15 @@ export function buildGraphViewSnapshot(guidMap: GUIDMap, rootID: Maybe<ID>, acti
       ids.add(target)
       edges.push({source, label, target, labelText: idDisplayLabel(label, true)}) }}
 
-  let activeSelectedNode = bindMaybe(activeEdge, edge => _get(edge.parent, edge.label))
   let graphSelectedNode = selectedNodeFromGraphSelection(graphSelection)
   let activeSelectedEdge = selectedEdgeFromActiveEdge(activeEdge)
   let graphSelectedEdge = selectedEdgeFromGraphSelection(graphSelection)
   return {
     nodes: Array.from(ids).map(id => ({id, label: idDisplayLabel(id), root: id === rootID})),
     edges,
-    selectedNode: fromMaybe(
-      mapMaybe(graphSelectedNode, id => ({id, strength: "primary" as GraphSelectionStrength})),
-      () => mapMaybe(activeSelectedNode, id => ({id, strength: "secondary" as GraphSelectionStrength}))),
-    selectedEdge: fromMaybe(
-      mapMaybe(graphSelectedEdge, edge => ({...edge, strength: "primary" as GraphSelectionStrength})),
-      () => mapMaybe(activeSelectedEdge, edge => ({...edge, strength: "secondary" as GraphSelectionStrength}))) } }
+    selectedNode: graphSelection === undefined
+      ? mapMaybe(activeID, id => ({id, strength: "secondary" as GraphSelectionStrength}))
+      : mapMaybe(graphSelectedNode, id => ({id, strength: "primary" as GraphSelectionStrength})),
+    selectedEdge: graphSelection === undefined
+      ? mapMaybe(activeSelectedEdge, edge => ({...edge, strength: "secondary" as GraphSelectionStrength}))
+      : mapMaybe(graphSelectedEdge, edge => ({...edge, strength: "primary" as GraphSelectionStrength})) } }

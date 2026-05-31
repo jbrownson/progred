@@ -12,7 +12,7 @@ describe("GraphViewSnapshot", () => {
       ["guid-child", new Map([[nameField.id, sidFromString("Child")]])]]))
 
     withTestEnvironment(() => {
-      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", undefined, undefined)
+      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", undefined, undefined, undefined)
 
       expect(snapshot.nodes.map(node => node.id).sort()).toEqual(["guid-child", "guid-root", sidFromString("Child")].sort())
       expect(snapshot.nodes.find(node => node.id === "guid-root")?.root).toBe(true)
@@ -28,7 +28,7 @@ describe("GraphViewSnapshot", () => {
       ["guid-root", new Map([[label, "guid-child"]])]]))
 
     withTestEnvironment(() => {
-      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", {parent: "guid-root", label}, undefined)
+      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", "guid-child", {parent: "guid-root", label}, undefined)
 
       expect(snapshot.selectedNode).toEqual({id: "guid-child", strength: "secondary"})
       expect(snapshot.selectedEdge).toEqual({source: "guid-root", label, strength: "secondary"})
@@ -41,7 +41,7 @@ describe("GraphViewSnapshot", () => {
       ["guid-root", new Map([[label, "guid-child"]])]]))
 
     withTestEnvironment(() => {
-      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", undefined, {kind: "edge", source: "guid-root", label})
+      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", "guid-child", {parent: "guid-root", label}, {kind: "edge", source: "guid-root", label})
 
       expect(snapshot.selectedNode).toBe(undefined)
       expect(snapshot.selectedEdge).toEqual({source: "guid-root", label, strength: "primary"})
@@ -55,7 +55,7 @@ describe("GraphViewSnapshot", () => {
       ["guid-root", new Map([[field, "guid-child"]])]]))
 
     withTestEnvironment(() => {
-      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", undefined, undefined)
+      const snapshot = buildGraphViewSnapshot(guidMap, "guid-root", undefined, undefined, undefined)
 
       expect(snapshot.edges.find(edge => edge.label === field)?.labelText.parts).toEqual([{name: "fieldName", guid: field}])
     }, {guidMap, root: "guid-root"})

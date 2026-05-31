@@ -166,6 +166,11 @@ function activeEdge(): Maybe<Edge> {
 function activeID(): Maybe<ID> {
   return activeEditorID() }
 
+function secondarySelectionID(): Maybe<ID> {
+  return graphHighlight === nothing
+    ? activeID()
+    : graphHighlight.kind === "node" ? graphHighlight.id : nothing }
+
 function activeEditorCanCommit(): boolean {
   return editorCommandsForActiveElement()?.commit !== undefined }
 
@@ -394,8 +399,9 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
   let rootScene3DDescend = withEnvironment(rootScene3DEnvironment, () => createRootRenderDescend(renderScene3D, "3D"))
   let graphSnapshot = showGraph.current
     ? withEnvironment(new Environment(libraries, guidMap, workspace, defaultRender, readOnlyECallbacks), () =>
-      buildGraphViewSnapshot(guidMap, workspace.root, activeEdge(), graphHighlight))
+      buildGraphViewSnapshot(guidMap, workspace.root, activeID(), activeEdge(), graphHighlight))
     : nothing
+  let activeSecondarySelectionID = secondarySelectionID()
   let sidebarPanelCount = (showGraph.current ? 1 : 0) + (rootScene3DDescend !== nothing ? 1 : 0) + (viewDescend !== nothing ? 1 : 0)
   let hasSidebar = sidebarPanelCount > 0
   let sidebarPanelHeight = hasSidebar ? `${100 / sidebarPanelCount}%` : "100%"
@@ -407,6 +413,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
         d={rootDescend}
         environment={editorEnvironment}
         depth={0}
+        secondarySelectionID={activeSecondarySelectionID}
         runE={f => runE(f)} /></div></div>
     {hasSidebar
       ? <div className="sidebar" style={{width: "40%", height: "100%", display: "inline-block"}}>
@@ -425,6 +432,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
                 d={rootScene3DDescend}
                 environment={rootScene3DEnvironment}
                 depth={0}
+                secondarySelectionID={activeSecondarySelectionID}
                 runE={f => runE(f)} /></div></div>)}
           {maybe(viewDescend, () => null, viewDescend =>
             <div ref={element => { rightPanel.current = element }} className="viewPanel" style={{height: sidebarPanelHeight, overflow: "auto"}}
@@ -433,6 +441,7 @@ const RootComponentView = React.forwardRef<RootComponent>(function RootComponent
                 d={viewDescend}
                 environment={editorEnvironment}
                 depth={0}
+                secondarySelectionID={activeSecondarySelectionID}
                 runE={f => runE(f)} /></div></div>)}
         </div></div>
       : null}</div> })
