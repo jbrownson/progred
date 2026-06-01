@@ -1,19 +1,21 @@
 PORT ?= 8000
-WASM_GHC ?= wasm32-wasi-ghc
+WASM_GHC_VERSION ?= wasm32-wasi-9.12.2.20250327
+GHC_WASM_ENV ?= $(HOME)/.ghc-wasm/env
+WASM_TOOL = . "$(GHC_WASM_ENV)" && ghcup run --ghc "$(WASM_GHC_VERSION)" --
 WASM = prototype-haskell.wasm
 DIST = dist
-POST_LINK = $(shell $(WASM_GHC) --print-libdir)/post-link.mjs
 
 .PHONY: build dist run serve tauri-dev tauri-build
 
 build:
-	cabal build --project-file=cabal-wasm.project exe:prototype-haskell
+	$(WASM_TOOL) cabal build --project-file=cabal-wasm.project exe:prototype-haskell
 
 dist: build
 	mkdir -p $(DIST)
 	@wasm=$$(find dist-newstyle/build/wasm32-wasi -type f -name "$(WASM)" | head -n 1); \
 	if [ -z "$$wasm" ]; then echo "Could not find built wasm output"; exit 1; fi; \
-	node "$(POST_LINK)" -i "$$wasm" -o "$(DIST)/ghc_wasm_jsffi.js"; \
+	post_link=$$($(WASM_TOOL) wasm32-wasi-ghc --print-libdir); \
+	$(WASM_TOOL) node "$$post_link/post-link.mjs" -i "$$wasm" -o "$(DIST)/ghc_wasm_jsffi.js"; \
 	cp "$$wasm" "$(DIST)/$(WASM)"
 	cp index.html $(DIST)/
 

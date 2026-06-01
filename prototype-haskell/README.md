@@ -2,19 +2,18 @@
 
 Haskell/Wasm prototype for Progred.
 
-Status: this is parked as a runnable Haskell/Wasm spike, not the
-mainline prototype. It proves a small loop where Haskell owns a `Gid`
-model, projects it to a lightweight `View`, renders HTML, and sends that
-to the DOM through JSFFI. That is useful research, but it is not yet a
-strong reason to abandon the TypeScript prototype; TypeScript still has
-the more practical DOM/Electron path and can host JavaScript/TypeScript
-directly. The next Haskell step would be adding Haskell-owned app state
-and delegated DOM events, still with full DOM replacement, before doing a
-proper Purview-style incremental render port.
+Status: this is a Haskell/Wasm/Tauri spike for testing whether Haskell
+can own UI state and event interpretation while a thin JavaScript host
+only forwards browser events and provides drawing primitives. The current
+demo renders directly to a `<canvas>` through JSFFI. Haskell owns the
+model, focus state, hit testing, keyboard handling, and draw-command
+generation.
 
 This prototype's direction is Haskell compiled to Wasm via GHC's Wasm
-backend, talking to the DOM through JSFFI. The HTML host (`index.html`)
-loads the `.wasm` output and wires up a click handler.
+backend, talking to Canvas/Web APIs through JSFFI. The HTML host
+(`index.html`) loads the `.wasm` output, resizes the canvas, forwards
+pointer/key events, and exposes a small `window.progredCanvas` drawing
+surface.
 
 Requires a native GHC for editor/typechecking and the WASM-targeted GHC
 cross-compiler for the app bundle:
@@ -22,13 +21,18 @@ cross-compiler for the app bundle:
 ```sh
 ghcup install ghc 9.12.2
 ghcup config add-release-channel cross
-ghcup install ghc 9.12 --target wasm32-wasi
+source ~/.ghc-wasm/env
+ghcup install ghc wasm32-wasi-9.12.2.20250327 -- --host=aarch64-apple-darwin --target=wasm32-wasi --with-intree-gmp --with-system-libffi
 ```
 
 The default `cabal.project` selects native `ghc-9.12.2` so editor
 tooling can typecheck the Haskell code. `cabal-wasm.project` selects
 `wasm32-wasi-ghc` for the real app bundle, and the Makefile uses that
-project file when building the Wasm executable.
+project file when building the Wasm executable. The Makefile invokes the
+cross compiler through `ghcup run` instead of changing the global active
+GHC, so native editor tooling can keep using the native compiler.
+It still expects the ghc-wasm-meta environment at `~/.ghc-wasm/env` for
+the WASI SDK, Node, Binaryen, and related tools.
 
 Run in a browser:
 
@@ -64,5 +68,11 @@ Wasm-only JS exports live in `platform/wasm/Progred/Wasm/Exports.hs`.
 
 The native GTK and ImGui probes were removed. They proved basic native
 Haskell GUI viability, but the active question is now whether Haskell can
-own the model/projection logic while the DOM remains the rendering and
-distribution substrate.
+own the UI model/projection/event logic while the browser/webview remains
+the rendering and distribution substrate.
+
+There does not appear to be a mature Haskell binding for Nic Barker's C
+Clay layout library. The Haskell package named `clay` is a CSS EDSL, not
+that layout engine. For now layout is deliberately tiny and explicit in
+`src/Main.hs`; binding C Clay is a later option if the stack proves worth
+continuing.

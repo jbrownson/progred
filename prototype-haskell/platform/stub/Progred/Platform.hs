@@ -1,16 +1,18 @@
 module Progred.Platform
-  ( logClick
-  , setRoot
-  , setRootHtml
+  ( clearCanvas
+  , fillRect
+  , fillText
+  , strokeRect
   ) where
 
-import Data.Word (Word32)
+clearCanvas :: Double -> Double -> IO ()
+clearCanvas = undefined
 
-logClick :: Word32 -> IO ()
-logClick = undefined
+fillRect :: Double -> Double -> Double -> Double -> String -> IO ()
+fillRect = undefined
 
-setRoot :: String -> IO ()
-setRoot = undefined
+strokeRect :: Double -> Double -> Double -> Double -> String -> Double -> IO ()
+strokeRect = undefined
 
-setRootHtml :: String -> IO ()
-setRootHtml = undefined
+fillText :: Double -> Double -> String -> String -> IO ()
+fillText = undefined

@@ -4,211 +4,74 @@
     <meta charset="utf-8" />
     <title>prototype-haskell</title>
     <style>
-      :root {
-        --editor-font-size: 13px;
-        --editor-line-height: 1.45;
-        --editor-row-height: 20px;
-      }
-      * {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-weight: 400;
-      }
-      html { width: 100%; height: 100%; }
+      html,
       body {
-        background-color: #fbfbfa;
-        color: #3f454d;
-        font-size: var(--editor-font-size);
-        line-height: var(--editor-line-height);
-        white-space: nowrap;
-        overflow: hidden;
         margin: 0;
         width: 100%;
         height: 100%;
-      }
-      #root { width: 100%; height: 100%; }
-      .scrollparent {
-        padding: 0px;
-        width: 100%;
-        height: 100%;
-        overflow: auto;
-      }
-      unselectable {
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        -o-user-select: none;
-        user-select: none;
-        display: inline-block;
-      }
-      .uneditable { color: #aaa; }
-      span.unmatching { border-bottom: 1px solid red; }
-      span.descend {
-        border-radius: 3px;
-        box-decoration-break: clone;
-      }
-      span.selected {
-        outline: 4px solid #dbeaff;
-        outline-offset: 0;
-      }
-      span.hinted {
-        outline: 3px solid #edf5ff;
-        outline-offset: 0;
-      }
-      .i {
-        height: 16px;
-        border: none;
-        outline: none;
-        color: inherit;
-        font: inherit;
-        line-height: 16px;
-        background-color: transparent;
-        border-radius: 3px;
-        margin: 0;
-        padding: 0;
-        box-sizing: content-box;
-      }
-      textarea.i {
-        field-sizing: content;
-        height: auto;
-        min-height: 16px;
-        min-width: 1ch;
-        resize: none;
         overflow: hidden;
-        white-space: pre;
-        vertical-align: text-top;
+        background: #fbfbfa;
       }
-      .string { color: #5b6fc9; }
-      .number { color: #d85a4f; }
-      .boolean { color: #d85a4f; }
-      .collapseToggle {
-        align-items: center;
-        display: inline-flex;
-        justify-content: center;
-        width: 14px;
-        height: 14px;
-        color: #8f96a1;
-        cursor: default;
-        user-select: none;
-      }
-      .collapseToggle:hover {
-        color: #3f454d;
-        background-color: #eceef1;
-        border-radius: 3px;
-      }
-      .collapsedListContents { color: #8f96a1; }
-      .identicon {
-        align-items: center;
-        display: inline-flex;
-        height: var(--editor-row-height);
-        justify-content: center;
-        line-height: 0;
-        vertical-align: top;
-      }
-      .identicon > svg { display: block; }
-      .edgeLabel .identicon {
-        background-color: #fafafa;
-        border: 0.8px solid #8f96a1;
-        border-radius: 50%;
+
+      * {
         box-sizing: border-box;
-        overflow: hidden;
-        width: var(--editor-row-height);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      .edgeLabel .identicon > svg {
-        width: 16px;
-        height: 16px;
-        filter: saturate(0.78);
-        padding: 0;
+
+      #root {
+        width: 100%;
+        height: 100%;
       }
-      .edgeLabel .identicon > svg .identiconBackground {
-        fill: #fafafa;
-        stroke: none;
-      }
-      .edgeLabel .identicon > svg rect:not(.identiconBackground) { opacity: 0.9; }
-      .edgefield { display: inline-block; }
-      .entrylist {
-        position: absolute;
-        background: white;
-        z-index: 1;
-        border: 1px solid #d7d9de;
-        border-radius: 6px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-        overflow: hidden;
-        min-width: 100px;
-      }
-      .entrylist > ul {
-        list-style-type: none;
-        margin: 0;
-        max-height: 200px;
-        overflow: auto;
-        padding: 3px 0;
-      }
-      .entrylist > ul > li {
-        list-style-type: none;
-        margin: 0;
-        padding: 3px 8px;
-        white-space: nowrap;
-        color: #98a0aa;
-      }
-      .entrylist > ul > li.selected { background-color: rgba(10, 132, 255, 0.13); }
-      .entrylist > ul > li > span.matching { color: #20242a; }
-      .entrylist > ul > li.unmatching > span.matching { color: #888; }
-      .entrylist > ul > li.unmatching { color: #bbb; }
-      .entrylist > ul > li.external { font-style: italic; }
-      .disambiguation::before { content: " ("; }
-      .disambiguation::after { content: ")"; }
-      .disambiguation { color: #b7bcc4; }
-      .doc, .views { padding: 12px; }
-      .separator { width: 0px; border-left: 1px #d0d3d8 solid; }
-      .sidebar { height: 100%; background-color: #f4f5f6; }
-      .rightPanel { vertical-align: top; }
-      .graphPanel { border-bottom: 1px #bbb solid; box-sizing: border-box; background: #fafafa; }
-      .graphView { width: 100%; height: 100%; display: block; touch-action: none; }
-      .graphBackground { fill: #fafafa; }
-      .graphEdge { fill: none; stroke: #888; stroke-width: 1.5px; }
-      .graphArrow { fill: none; stroke: #888; stroke-width: 1.5px; stroke-linecap: round; stroke-linejoin: round; }
-      .graphEdgeLabel { cursor: default; }
-      .graphEdgeLabel > rect { fill: #fafafa; stroke: none; }
-      .graphEdgeLabel text, .graphNode text { fill: #555; font-family: sans-serif; font-weight: 500; text-anchor: middle; user-select: none; }
-      .graphEdgeLabel .graphLabelType, .graphNode .graphLabelType { fill: #999; opacity: 0.72; }
-      .graphEdgeIdenticon > circle {
-        fill: #fafafa;
-        stroke: #8f96a1;
-        stroke-width: 0.8px;
-      }
-      .graphEdgeIdenticon svg { filter: saturate(0.78); }
-      .graphEdgeIdenticon svg .identiconBackground {
-        fill: #fafafa;
-        stroke: none;
-      }
-      .graphEdgeIdenticon svg rect:not(.identiconBackground) { opacity: 0.9; }
-      .graphNode { cursor: grab; }
-      .graphNode:active { cursor: grabbing; }
-      .graphNode > rect { fill: white; stroke: #777; stroke-width: 1.5px; }
-      .graphNode.rootGraphNode > rect:not(.graphIdenticonFrame) { fill: #ebf0fa; }
-      .graphNode .graphIdenticonFrame { fill: none; stroke: #777; stroke-width: 1.5px; }
-      .selectedGraphElement.graphEdge, .selectedGraphElement.graphArrow { stroke: #111; stroke-width: 2.5px; }
-      .graphNode.selectedGraphElement > rect, .graphNode.selectedGraphElement .graphIdenticonFrame { stroke: #111; stroke-width: 2.5px; }
-      .secondarySelectedGraphElement.graphEdge, .secondarySelectedGraphElement.graphArrow { stroke: #777; stroke-width: 2.5px; }
-      .graphNode.secondarySelectedGraphElement > rect, .graphNode.secondarySelectedGraphElement .graphIdenticonFrame { stroke: #777; stroke-width: 2.5px; }
-      .debugButton {
-        position: fixed;
-        right: 12px;
-        bottom: 12px;
-        margin: 0;
-        padding: 4px 10px;
-        z-index: 2;
+
+      #appCanvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        outline: none;
       }
     </style>
   </head>
   <body>
-    <div id="root">loading…</div>
-    <button id="go" class="debugButton">click me</button>
+    <div id="root">
+      <canvas id="appCanvas" tabindex="0"></canvas>
+    </div>
     <script type="module">
       import { WASI, OpenFile, File, ConsoleStdout }
         from "https://unpkg.com/@bjorn3/browser_wasi_shim@0.3.0/dist/index.js";
-      // GHC's post-link.mjs generated this — it provides the JS bodies
-      // for every `foreign import javascript` we declared in Main.hs.
       import ghc_wasm_jsffi from "./ghc_wasm_jsffi.js";
+
+      const canvas = document.getElementById("appCanvas");
+      const context = canvas.getContext("2d");
+
+      window.progredCanvas = {
+        clear(width, height) {
+          context.clearRect(0, 0, width, height);
+        },
+        fillRect(x, y, width, height, color) {
+          context.fillStyle = color;
+          context.fillRect(x, y, width, height);
+        },
+        strokeRect(x, y, width, height, color, lineWidth) {
+          context.strokeStyle = color;
+          context.lineWidth = lineWidth;
+          context.strokeRect(x, y, width, height);
+        },
+        fillText(x, y, color, text) {
+          context.fillStyle = color;
+          context.font = "14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+          context.textBaseline = "alphabetic";
+          context.fillText(text, x, y);
+        },
+      };
+
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        context.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return rect;
+      }
 
       const args = [];
       const env = [];
@@ -220,10 +83,6 @@
       const wasi = new WASI(args, env, fds);
 
       const wasm = await WebAssembly.compileStreaming(fetch("./prototype-haskell.wasm"));
-
-      // ghc_wasm_jsffi(__exports) returns the JSFFI import object;
-      // __exports is filled in after instantiation. Two-step dance so
-      // the generated functions can reach the wasm exports.
       const __exports = {};
       const inst = await WebAssembly.instantiate(wasm, {
         wasi_snapshot_preview1: wasi.wasiImport,
@@ -233,11 +92,28 @@
 
       wasi.initialize(inst);
       inst.exports.hs_init(0, 0);
-      await inst.exports.start();
 
-      let n = 0;
-      document.getElementById("go").addEventListener("click", async () => {
-        await inst.exports.onClick(++n);
+      const initialRect = resizeCanvas();
+      await inst.exports.start();
+      await inst.exports.onResize(initialRect.width, initialRect.height);
+      canvas.focus();
+
+      window.addEventListener("resize", async () => {
+        const rect = resizeCanvas();
+        await inst.exports.onResize(rect.width, rect.height);
+      });
+
+      canvas.addEventListener("pointerdown", async event => {
+        const rect = canvas.getBoundingClientRect();
+        canvas.focus();
+        await inst.exports.onPointerDown(event.clientX - rect.left, event.clientY - rect.top);
+      });
+
+      canvas.addEventListener("keydown", async event => {
+        if (["Tab", "Enter", " ", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(event.key)) {
+          event.preventDefault();
+          await inst.exports.onKeyDown(event.keyCode);
+        }
       });
     </script>
   </body>
