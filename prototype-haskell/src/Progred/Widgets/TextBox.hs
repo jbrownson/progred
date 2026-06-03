@@ -6,6 +6,7 @@ module Progred.Widgets.TextBox
 
 import Control.Monad (when)
 import Data.List (minimumBy)
+import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import qualified Progred.Platform as Platform
 import Progred.UI
@@ -153,10 +154,7 @@ moveCaret extending delta textState =
   where
     oldCaret = textBoxCaret textState
     newCaret = max 0 (min (length (textBoxText textState)) (oldCaret + delta))
-    anchor =
-      case textBoxSelectionAnchor textState of
-        Just value -> value
-        Nothing -> oldCaret
+    anchor = fromMaybe oldCaret (textBoxSelectionAnchor textState)
 
 hasSelection :: TextBoxState -> Bool
 hasSelection textState =
