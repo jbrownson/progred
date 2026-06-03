@@ -14,8 +14,13 @@ executable prototype-haskell
   other-modules:
     Progred.Gid
     Progred.MapGid
+    Progred.App
+    Progred.Canvas
     Progred.Platform
-    Progred.View
+    Progred.UI
+    Progred.Viewport
+    Progred.Widgets.Button
+    Progred.Widgets.TextBox
   hs-source-dirs:   src
   default-language: GHC2021
   build-depends:

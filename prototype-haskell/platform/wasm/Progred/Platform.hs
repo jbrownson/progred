@@ -4,6 +4,10 @@ module Progred.Platform
   ( clearCanvas
   , fillRect
   , fillText
+  , fillTextMiddle
+  , getCanvasHeight
+  , getCanvasWidth
+  , measureText
   , strokeRect
   ) where
 
@@ -23,6 +27,18 @@ foreign import javascript unsafe "window.progredCanvas.strokeRect($1, $2, $3, $4
 foreign import javascript unsafe "window.progredCanvas.fillText($1, $2, $3, $4)"
   jsFillText :: Double -> Double -> JSVal -> JSVal -> IO ()
 
+foreign import javascript unsafe "window.progredCanvas.fillTextMiddle($1, $2, $3, $4)"
+  jsFillTextMiddle :: Double -> Double -> JSVal -> JSVal -> IO ()
+
+foreign import javascript unsafe "window.progredCanvas.measureText($1)"
+  jsMeasureText :: JSVal -> Double
+
+foreign import javascript unsafe "window.progredCanvas.width()"
+  getCanvasWidth :: IO Double
+
+foreign import javascript unsafe "window.progredCanvas.height()"
+  getCanvasHeight :: IO Double
+
 fillRect :: Double -> Double -> Double -> Double -> String -> IO ()
 fillRect x y width height color =
   case toJSString color of
@@ -37,3 +53,13 @@ fillText :: Double -> Double -> String -> String -> IO ()
 fillText x y color string =
   case (toJSString color, toJSString string) of
     (JSString colorString, JSString textString) -> jsFillText x y colorString textString
+
+fillTextMiddle :: Double -> Double -> String -> String -> IO ()
+fillTextMiddle x y color string =
+  case (toJSString color, toJSString string) of
+    (JSString colorString, JSString textString) -> jsFillTextMiddle x y colorString textString
+
+measureText :: String -> Double
+measureText string =
+  case toJSString string of
+    JSString textString -> jsMeasureText textString

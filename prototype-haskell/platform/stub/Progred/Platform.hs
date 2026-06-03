@@ -2,6 +2,10 @@ module Progred.Platform
   ( clearCanvas
   , fillRect
   , fillText
+  , fillTextMiddle
+  , getCanvasHeight
+  , getCanvasWidth
+  , measureText
   , strokeRect
   ) where
 
@@ -16,3 +20,15 @@ strokeRect = undefined
 
 fillText :: Double -> Double -> String -> String -> IO ()
 fillText = undefined
+
+fillTextMiddle :: Double -> Double -> String -> String -> IO ()
+fillTextMiddle = undefined
+
+getCanvasWidth :: IO Double
+getCanvasWidth = undefined
+
+getCanvasHeight :: IO Double
+getCanvasHeight = undefined
+
+measureText :: String -> Double
+measureText = undefined
