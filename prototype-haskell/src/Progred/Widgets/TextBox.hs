@@ -1,30 +1,29 @@
 module Progred.Widgets.TextBox
   ( TextBoxState (..)
-  , initialTextBox
+  , textBoxState
   , textBox
   ) where
 
 import Control.Monad (when)
 import Data.List (minimumBy)
-import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import qualified Progred.Platform as Platform
 import Progred.UI
 
 data TextBoxState = TextBoxState
-  { textBoxText :: String
-  , textBoxCaret :: Int
-  , textBoxSelectionAnchor :: Maybe Int
-  , textBoxDragAnchor :: Maybe Int
+  { textBeforeCaret :: String
+  , textAfterCaret :: String
+  , textBoxSelectionOffset :: Int
+  , textBoxDragging :: Bool
   }
 
-initialTextBox :: String -> TextBoxState
-initialTextBox text =
+textBoxState :: String -> TextBoxState
+textBoxState text =
   TextBoxState
-    { textBoxText = text
-    , textBoxCaret = length text
-    , textBoxSelectionAnchor = Nothing
-    , textBoxDragAnchor = Nothing
+    { textBeforeCaret = text
+    , textAfterCaret = ""
+    , textBoxSelectionOffset = 0
+    , textBoxDragging = False
     }
 
 textBox
@@ -50,35 +49,36 @@ textBox getFocus setFocus world focusId rect get set =
             then
               Just $ do
                 let old = get current
-                let newCaret = caretFromX old pointerX
+                let newCaret = caretIndexFromX old pointerX
+                let moved = setCaretIndex newCaret old
                 let updated =
-                      old
-                        { textBoxCaret = newCaret
-                        , textBoxSelectionAnchor = Nothing
-                        , textBoxDragAnchor = Just newCaret
+                      moved
+                        { textBoxSelectionOffset = 0
+                        , textBoxDragging = True
                         }
                 pure (set updated (setFocus (Just focusId) current))
             else Nothing
         PointerMove {pointerX} ->
-          case textBoxDragAnchor (get current) of
-            Nothing -> Nothing
-            Just anchor ->
+          if textBoxDragging (get current)
+            then
               Just $ do
                 let old = get current
-                let newCaret = caretFromX old pointerX
+                let anchor = caretIndex old + textBoxSelectionOffset old
+                let newCaret = caretIndexFromX old pointerX
+                let moved = setCaretIndex newCaret old
                 let updated =
-                      old
-                        { textBoxCaret = newCaret
-                        , textBoxSelectionAnchor = Just anchor
+                      moved
+                        { textBoxSelectionOffset = anchor - caretIndex moved
                         }
                 pure (set updated current)
+            else Nothing
         PointerUp {} ->
-          case textBoxDragAnchor (get current) of
-            Nothing -> Nothing
-            Just _ ->
+          if textBoxDragging (get current)
+            then
               Just $ do
                 let old = get current
-                pure (set old {textBoxDragAnchor = Nothing} current)
+                pure (set old {textBoxDragging = False} current)
+            else Nothing
     onKey $ \current event ->
       if getFocus current == Just focusId
         then fmap pure (editText event current)
@@ -88,7 +88,7 @@ textBox getFocus setFocus world focusId rect get set =
     selected = getFocus world == Just focusId
     textX = x rect
     textY = y rect + height rect / 2
-    caretFromX old pointerX =
+    caretIndexFromX old pointerX =
       closestCaretIndex (textBoxText old) (pointerX - textX)
     editText event current =
       let old = get current
@@ -101,112 +101,170 @@ textBox getFocus setFocus world focusId rect get set =
             KeyCode 39 -> Just (set (moveCaret False 1 old) current)
             KeyCode 1037 -> Just (set (moveCaret True (-1) old) current)
             KeyCode 1039 -> Just (set (moveCaret True 1 old) current)
-            KeyCode 36 -> Just (set old {textBoxCaret = 0, textBoxSelectionAnchor = Nothing} current)
-            KeyCode 35 -> Just (set old {textBoxCaret = length (textBoxText old), textBoxSelectionAnchor = Nothing} current)
+            KeyCode 36 -> Just (set (moveCaretStart old) current)
+            KeyCode 35 -> Just (set (moveCaretEnd old) current)
             _ -> Nothing
 
 insertString :: String -> TextBoxState -> TextBoxState
 insertString string textState =
-  textState
-    { textBoxText = before <> string <> after
-    , textBoxCaret = start + length string
-    , textBoxSelectionAnchor = Nothing
-    , textBoxDragAnchor = Nothing
+  withoutSelection
+    { textBeforeCaret = textBeforeCaret withoutSelection <> string
+    , textBoxDragging = False
     }
   where
-    (start, end) = editRange textState
-    (before, selectedAndAfter) = splitAt start (textBoxText textState)
-    after = drop (end - start) selectedAndAfter
+    withoutSelection = deleteSelection textState
 
 deleteBackward :: TextBoxState -> TextBoxState
 deleteBackward textState
-  | hasSelection textState = replaceRange "" textState
-  | textBoxCaret textState <= 0 =
-      textState {textBoxSelectionAnchor = Nothing}
+  | hasSelection textState = deleteSelection textState
+  | null (textBeforeCaret textState) =
+      textState {textBoxSelectionOffset = 0, textBoxDragging = False}
   | otherwise =
       textState
-        { textBoxText = before <> after
-        , textBoxCaret = textBoxCaret textState - 1
-        , textBoxSelectionAnchor = Nothing
+        { textBeforeCaret = init (textBeforeCaret textState)
+        , textBoxSelectionOffset = 0
+        , textBoxDragging = False
         }
-  where
-    (beforeWithDeleted, after) = splitAt (textBoxCaret textState) (textBoxText textState)
-    before = take (length beforeWithDeleted - 1) beforeWithDeleted
 
 deleteForward :: TextBoxState -> TextBoxState
 deleteForward textState
-  | hasSelection textState = replaceRange "" textState
+  | hasSelection textState = deleteSelection textState
   | otherwise =
       textState
-        { textBoxText = before <> drop 1 after
-        , textBoxSelectionAnchor = Nothing
+        { textAfterCaret = drop 1 (textAfterCaret textState)
+        , textBoxSelectionOffset = 0
+        , textBoxDragging = False
         }
-  where
-    (before, after) = splitAt (textBoxCaret textState) (textBoxText textState)
 
 moveCaret :: Bool -> Int -> TextBoxState -> TextBoxState
 moveCaret extending delta textState =
-  textState
-    { textBoxCaret = newCaret
-    , textBoxSelectionAnchor = if extending then Just anchor else Nothing
-    , textBoxDragAnchor = Nothing
+  moved
+    { textBoxSelectionOffset = if extending then anchor - caretIndex moved else 0
+    , textBoxDragging = False
     }
   where
-    oldCaret = textBoxCaret textState
-    newCaret = max 0 (min (length (textBoxText textState)) (oldCaret + delta))
-    anchor = fromMaybe oldCaret (textBoxSelectionAnchor textState)
+    anchor = caretIndex textState + textBoxSelectionOffset textState
+    moved
+      | delta < 0 = moveCaretLeft textState
+      | delta > 0 = moveCaretRight textState
+      | otherwise = textState
+
+moveCaretLeft :: TextBoxState -> TextBoxState
+moveCaretLeft textState
+  | null (textBeforeCaret textState) = textState
+  | otherwise =
+      textState
+        { textBeforeCaret = before
+        , textAfterCaret = moved : textAfterCaret textState
+        }
+  where
+    before = init (textBeforeCaret textState)
+    moved = last (textBeforeCaret textState)
+
+moveCaretRight :: TextBoxState -> TextBoxState
+moveCaretRight textState =
+  case textAfterCaret textState of
+    [] -> textState
+    moved : after ->
+      textState
+        { textBeforeCaret = textBeforeCaret textState <> [moved]
+        , textAfterCaret = after
+        }
+
+moveCaretStart :: TextBoxState -> TextBoxState
+moveCaretStart textState =
+  textState
+    { textBeforeCaret = ""
+    , textAfterCaret = textBoxText textState
+    , textBoxSelectionOffset = 0
+    , textBoxDragging = False
+    }
+
+moveCaretEnd :: TextBoxState -> TextBoxState
+moveCaretEnd textState =
+  textState
+    { textBeforeCaret = textBoxText textState
+    , textAfterCaret = ""
+    , textBoxSelectionOffset = 0
+    , textBoxDragging = False
+    }
 
 hasSelection :: TextBoxState -> Bool
 hasSelection textState =
-  case selectedRange textState of
+  case selectionText textState of
     Nothing -> False
     Just _ -> True
 
-editRange :: TextBoxState -> (Int, Int)
-editRange textState =
-  case selectedRange textState of
-    Nothing -> (textBoxCaret textState, textBoxCaret textState)
-    Just (start, end) -> orderedRange start end
+deleteSelection :: TextBoxState -> TextBoxState
+deleteSelection textState
+  | textBoxSelectionOffset textState > 0 =
+      textState
+        { textAfterCaret = drop (textBoxSelectionOffset textState) (textAfterCaret textState)
+        , textBoxSelectionOffset = 0
+        , textBoxDragging = False
+        }
+  | textBoxSelectionOffset textState < 0 =
+      textState
+        { textBeforeCaret = keepUnselectedBefore textState
+        , textBoxSelectionOffset = 0
+        , textBoxDragging = False
+        }
+  | otherwise =
+      textState {textBoxDragging = False}
 
-replaceRange :: String -> TextBoxState -> TextBoxState
-replaceRange replacement textState =
+setCaretIndex :: Int -> TextBoxState -> TextBoxState
+setCaretIndex index textState =
   textState
-    { textBoxText = before <> replacement <> after
-    , textBoxCaret = start + length replacement
-    , textBoxSelectionAnchor = Nothing
-    , textBoxDragAnchor = Nothing
+    { textBeforeCaret = before
+    , textAfterCaret = after
     }
   where
-    (start, end) = editRange textState
-    (before, selectedAndAfter) = splitAt start (textBoxText textState)
-    after = drop (end - start) selectedAndAfter
+    clampedIndex = max 0 (min (length (textBoxText textState)) index)
+    (before, after) = splitAt clampedIndex (textBoxText textState)
 
-selectedRange :: TextBoxState -> Maybe (Int, Int)
-selectedRange TextBoxState {textBoxSelectionAnchor = Nothing} =
-  Nothing
-selectedRange TextBoxState {textBoxCaret, textBoxSelectionAnchor = Just anchor}
-  | anchor == textBoxCaret = Nothing
-  | otherwise = Just (orderedRange anchor textBoxCaret)
+caretIndex :: TextBoxState -> Int
+caretIndex =
+  length . textBeforeCaret
 
-orderedRange :: Int -> Int -> (Int, Int)
-orderedRange start end =
-  (min start end, max start end)
+textBoxText :: TextBoxState -> String
+textBoxText textState =
+  textBeforeCaret textState <> textAfterCaret textState
 
 drawMeasuredCaret :: Rect -> TextBoxState -> Render world IO ()
-drawMeasuredCaret rect TextBoxState {textBoxText, textBoxCaret} =
+drawMeasuredCaret rect TextBoxState {textBeforeCaret} =
   fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
   where
-    prefixWidth = Platform.measureText (take textBoxCaret textBoxText)
+    prefixWidth = Platform.measureText textBeforeCaret
 
 drawMeasuredSelection :: Rect -> TextBoxState -> Render world IO ()
 drawMeasuredSelection rect textState =
-  case selectedRange textState of
+  case selectionText textState of
     Nothing -> pure ()
-    Just (start, end) ->
-      fillRect (Rect (x rect + beforeWidth start) (y rect) (selectionWidth start end) (height rect)) selectionColor
+    Just (beforeSelection, selection) ->
+      fillRect (Rect (x rect + Platform.measureText beforeSelection) (y rect) (Platform.measureText selection) (height rect)) selectionColor
+
+selectionText :: TextBoxState -> Maybe (String, String)
+selectionText textState
+  | textBoxSelectionOffset textState > 0 =
+      nonemptySelection (textBeforeCaret textState) (take (textBoxSelectionOffset textState) (textAfterCaret textState))
+  | textBoxSelectionOffset textState < 0 =
+      nonemptySelection beforeSelection (drop (length beforeSelection) (textBeforeCaret textState))
+  | otherwise =
+      Nothing
   where
-    beforeWidth start = Platform.measureText (take start (textBoxText textState))
-    selectionWidth start end = Platform.measureText (take (end - start) (drop start (textBoxText textState)))
+    beforeSelection = keepUnselectedBefore textState
+
+nonemptySelection :: String -> String -> Maybe (String, String)
+nonemptySelection beforeSelection selection
+  | null selection = Nothing
+  | otherwise = Just (beforeSelection, selection)
+
+keepUnselectedBefore :: TextBoxState -> String
+keepUnselectedBefore textState =
+  take keepCount (textBeforeCaret textState)
+  where
+    selectedCount = min (negate (textBoxSelectionOffset textState)) (length (textBeforeCaret textState))
+    keepCount = length (textBeforeCaret textState) - selectedCount
 
 closestCaretIndex :: String -> Double -> Int
 closestCaretIndex text targetX =

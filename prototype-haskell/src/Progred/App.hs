@@ -26,7 +26,7 @@ initialModel =
   Model
     { focus = Nothing
     , count = 0
-    , nameField = initialTextBox "canvas owns focus"
+    , nameField = textBoxState "canvas owns focus"
     }
 
 view :: Viewport -> Model -> Frame Model IO
