@@ -1,10 +1,9 @@
 module Progred.Widgets.TextBox
   ( TextBoxState (..)
-  , textBoxState
+  , defaultTextBoxState
   , textBox
   ) where
 
-import Control.Monad (when)
 import Data.List (minimumBy)
 import Data.Ord (comparing)
 import qualified Progred.Platform as Platform
@@ -17,93 +16,83 @@ data TextBoxState = TextBoxState
   , textBoxDragging :: Bool
   }
 
-textBoxState :: String -> TextBoxState
-textBoxState text =
+defaultTextBoxState :: TextBoxState
+defaultTextBoxState =
   TextBoxState
-    { textBeforeCaret = text
+    { textBeforeCaret = ""
     , textAfterCaret = ""
     , textBoxSelectionOffset = 0
     , textBoxDragging = False
     }
 
 textBox
-  :: Eq focus
-  => (world -> Maybe focus)
-  -> (Maybe focus -> world -> world)
-  -> world
-  -> focus
+  :: Applicative m
+  => FocusTarget world
   -> Rect
-  -> (world -> TextBoxState)
+  -> TextBoxState
   -> (TextBoxState -> world -> world)
-  -> Render world IO ()
-textBox getFocus setFocus world focusId rect get set =
-  do
-    drawMeasuredSelection rect value
-    fillTextMiddle (Point textX textY) textColor (textBoxText value)
-    when selected $
-      drawMeasuredCaret rect value
-    onPointer $ \current event ->
-      case event of
-        PointerDown {pointerX, pointerY} ->
-          if rectContains rect pointerX pointerY
-            then
-              Just $ do
-                let old = get current
-                let newCaret = caretIndexFromX old pointerX
-                let moved = setCaretIndex newCaret old
-                let updated =
-                      moved
-                        { textBoxSelectionOffset = 0
-                        , textBoxDragging = True
-                        }
-                pure (set updated (setFocus (Just focusId) current))
-            else Nothing
-        PointerMove {pointerX} ->
-          if textBoxDragging (get current)
-            then
-              Just $ do
-                let old = get current
-                let anchor = caretIndex old + textBoxSelectionOffset old
-                let newCaret = caretIndexFromX old pointerX
-                let moved = setCaretIndex newCaret old
-                let updated =
-                      moved
-                        { textBoxSelectionOffset = anchor - caretIndex moved
-                        }
-                pure (set updated current)
-            else Nothing
-        PointerUp {} ->
-          if textBoxDragging (get current)
-            then
-              Just $ do
-                let old = get current
-                pure (set old {textBoxDragging = False} current)
-            else Nothing
-    onKey $ \current event ->
-      if getFocus current == Just focusId
-        then fmap pure (editText event current)
-        else Nothing
+  -> Frame world m
+textBox focusTarget rect state set =
+  mconcat
+    [ drawMeasuredSelection rect state
+    , fillTextMiddle (Point textX textY) textColor (textBoxText state)
+    , if selected then drawMeasuredCaret rect state else mempty
+    , onPointer $ \current event ->
+        case event of
+          PointerDown {pointerX, pointerY} ->
+            if rectContains rect pointerX pointerY
+              then
+                Just $ do
+                  let newCaret = caretIndexFromX pointerX
+                  let moved = setCaretIndex newCaret state
+                  let updated =
+                        moved
+                          { textBoxSelectionOffset = 0
+                          , textBoxDragging = True
+                          }
+                  pure (set updated (focusTargetFocus focusTarget current))
+              else Nothing
+          PointerMove {pointerX} ->
+            if textBoxDragging state
+              then
+                Just $ do
+                  let anchor = caretIndex state + textBoxSelectionOffset state
+                  let newCaret = caretIndexFromX pointerX
+                  let moved = setCaretIndex newCaret state
+                  let updated =
+                        moved
+                          { textBoxSelectionOffset = anchor - caretIndex moved
+                          }
+                  pure (set updated current)
+              else Nothing
+          PointerUp {} ->
+            if textBoxDragging state
+              then Just (pure (set state {textBoxDragging = False} current))
+              else Nothing
+    , onKey $ \current event ->
+        if focusTargetIsFocused focusTarget
+          then fmap (pure . flip set current) (editText event)
+          else Nothing
+    ]
   where
-    value = get world
-    selected = getFocus world == Just focusId
+    selected = focusTargetIsFocused focusTarget
     textX = x rect
     textY = y rect + height rect / 2
-    caretIndexFromX old pointerX =
-      closestCaretIndex (textBoxText old) (pointerX - textX)
-    editText event current =
-      let old = get current
-       in case event of
-            TextInput string -> Just (set (insertString string old) current)
-            KeyCode 32 -> Just (set (insertString " " old) current)
-            KeyCode 8 -> Just (set (deleteBackward old) current)
-            KeyCode 46 -> Just (set (deleteForward old) current)
-            KeyCode 37 -> Just (set (moveCaret False (-1) old) current)
-            KeyCode 39 -> Just (set (moveCaret False 1 old) current)
-            KeyCode 1037 -> Just (set (moveCaret True (-1) old) current)
-            KeyCode 1039 -> Just (set (moveCaret True 1 old) current)
-            KeyCode 36 -> Just (set (moveCaretStart old) current)
-            KeyCode 35 -> Just (set (moveCaretEnd old) current)
-            _ -> Nothing
+    caretIndexFromX pointerX =
+      closestCaretIndex (textBoxText state) (pointerX - textX)
+    editText event =
+      case event of
+        TextInput string -> Just (insertString string state)
+        KeyCode 32 -> Just (insertString " " state)
+        KeyCode 8 -> Just (deleteBackward state)
+        KeyCode 46 -> Just (deleteForward state)
+        KeyCode 37 -> Just (moveCaret False (-1) state)
+        KeyCode 39 -> Just (moveCaret False 1 state)
+        KeyCode 1037 -> Just (moveCaret True (-1) state)
+        KeyCode 1039 -> Just (moveCaret True 1 state)
+        KeyCode 36 -> Just (moveCaretStart state)
+        KeyCode 35 -> Just (moveCaretEnd state)
+        _ -> Nothing
 
 insertString :: String -> TextBoxState -> TextBoxState
 insertString string textState =
@@ -230,16 +219,16 @@ textBoxText :: TextBoxState -> String
 textBoxText textState =
   textBeforeCaret textState <> textAfterCaret textState
 
-drawMeasuredCaret :: Rect -> TextBoxState -> Render world IO ()
+drawMeasuredCaret :: Rect -> TextBoxState -> Frame world m
 drawMeasuredCaret rect TextBoxState {textBeforeCaret} =
   fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
   where
     prefixWidth = Platform.measureText textBeforeCaret
 
-drawMeasuredSelection :: Rect -> TextBoxState -> Render world IO ()
+drawMeasuredSelection :: Rect -> TextBoxState -> Frame world m
 drawMeasuredSelection rect textState =
   case selectionText textState of
-    Nothing -> pure ()
+    Nothing -> mempty
     Just (beforeSelection, selection) ->
       fillRect (Rect (x rect + Platform.measureText beforeSelection) (y rect) (Platform.measureText selection) (height rect)) selectionColor
 

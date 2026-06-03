@@ -1,14 +1,13 @@
 module Progred.UI
   ( DrawCommand (..)
+  , FocusTarget (..)
   , Frame (..)
   , Insets (..)
   , KeyEvent (..)
   , Point (..)
   , PointerEvent (..)
   , Rect (..)
-  , Render
   , draw
-  , execRender
   , fillRect
   , fillText
   , fillTextMiddle
@@ -67,6 +66,11 @@ data KeyEvent
   = KeyCode Word32
   | TextInput String
 
+data FocusTarget world = FocusTarget
+  { focusTargetIsFocused :: Bool
+  , focusTargetFocus :: world -> world
+  }
+
 type PointerHandler world m = world -> PointerEvent -> Maybe (m world)
 
 type KeyHandler world m = world -> KeyEvent -> Maybe (m world)
@@ -88,51 +92,33 @@ instance Semigroup (Frame world m) where
 instance Monoid (Frame world m) where
   mempty = Frame [] [] []
 
-newtype Render world m a = Render (a, Frame world m)
-
-instance Functor (Render world m) where
-  fmap f (Render (a, frame)) = Render (f a, frame)
-
-instance Applicative (Render world m) where
-  pure a = Render (a, mempty)
-  Render (f, left) <*> Render (a, right) = Render (f a, left <> right)
-
-instance Monad (Render world m) where
-  Render (a, left) >>= f =
-    let Render (b, right) = f a
-     in Render (b, left <> right)
-
-execRender :: Render world m a -> Frame world m
-execRender (Render (_, frame)) =
-  frame
-
-draw :: DrawCommand -> Render world m ()
+draw :: DrawCommand -> Frame world m
 draw command =
-  Render ((), mempty {draws = [command]})
+  mempty {draws = [command]}
 
-fillRect :: Rect -> String -> Render world m ()
+fillRect :: Rect -> String -> Frame world m
 fillRect rect color =
   draw (FillRect rect color)
 
-strokeRect :: Rect -> String -> Double -> Render world m ()
+strokeRect :: Rect -> String -> Double -> Frame world m
 strokeRect rect color lineWidth =
   draw (StrokeRect rect color lineWidth)
 
-fillText :: Point -> String -> String -> Render world m ()
+fillText :: Point -> String -> String -> Frame world m
 fillText point color string =
   draw (FillText point color string)
 
-fillTextMiddle :: Point -> String -> String -> Render world m ()
+fillTextMiddle :: Point -> String -> String -> Frame world m
 fillTextMiddle point color string =
   draw (FillTextMiddle point color string)
 
-onPointer :: PointerHandler world m -> Render world m ()
+onPointer :: PointerHandler world m -> Frame world m
 onPointer handler =
-  Render ((), mempty {pointerHandlers = [handler]})
+  mempty {pointerHandlers = [handler]}
 
-onKey :: KeyHandler world m -> Render world m ()
+onKey :: KeyHandler world m -> Frame world m
 onKey handler =
-  Render ((), mempty {keyHandlers = [handler]})
+  mempty {keyHandlers = [handler]}
 
 runPointerHandlers :: Monad m => PointerEvent -> Frame world m -> world -> m world
 runPointerHandlers event frame world =

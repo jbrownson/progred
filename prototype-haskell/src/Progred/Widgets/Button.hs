@@ -5,29 +5,27 @@ module Progred.Widgets.Button
 import Progred.UI
 
 button
-  :: Eq focus
-  => (world -> Maybe focus)
-  -> (Maybe focus -> world -> world)
-  -> world
-  -> focus
+  :: Applicative m
+  => FocusTarget world
   -> Rect
   -> (world -> world)
-  -> Render world IO ()
-  -> Render world IO ()
-button getFocus setFocus _world focusId rect activate content =
-  do
-    content
-    onPointer $ \current event ->
-      case event of
-        PointerDown {pointerX, pointerY} ->
-          if rectContains rect pointerX pointerY
-            then Just (pure (activate (setFocus (Just focusId) current)))
-            else Nothing
-        _ -> Nothing
-    onKey $ \current event ->
-      if getFocus current == Just focusId
-        then case event of
-          KeyCode 13 -> Just (pure (activate current))
-          KeyCode 32 -> Just (pure (activate current))
+  -> Frame world m
+  -> Frame world m
+button focusTarget rect activate content =
+  mconcat
+    [ content
+    , onPointer $ \current event ->
+        case event of
+          PointerDown {pointerX, pointerY} ->
+            if rectContains rect pointerX pointerY
+              then Just (pure (activate (focusTargetFocus focusTarget current)))
+              else Nothing
           _ -> Nothing
-        else Nothing
+    , onKey $ \current event ->
+        if focusTargetIsFocused focusTarget
+          then case event of
+            KeyCode 13 -> Just (pure (activate current))
+            KeyCode 32 -> Just (pure (activate current))
+            _ -> Nothing
+          else Nothing
+    ]
