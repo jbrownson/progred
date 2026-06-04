@@ -87,7 +87,7 @@ framedButton model focusId rect text activate =
   runWidgetFrame (statelessWidgetEnv focusId) $
     button
       activate
-      ( mconcat
+      ( \_contentFocus -> mconcat
           [ fillRect rect background
           , strokeRect rect border 2
           , fillTextMiddle (Point (x contentRect) (y contentRect + height contentRect / 2)) "#20242a" text
@@ -95,12 +95,12 @@ framedButton model focusId rect text activate =
       )
       ()
       rect
-      (widgetFocus focused)
+      buttonFocus
       applyWidgetChange
   where
-    focused = focus model == Just focusId
-    background = if focused then "#dbeaff" else "#ffffff"
-    border = if focused then "#0a84ff" else "#c7cbd1"
+    buttonFocus = widgetFocus (focus model == Just focusId)
+    background = "#ffffff"
+    border = "#c7cbd1"
     contentRect = insetRect (Insets 0 16 0 16) rect
 
 framedNameField :: Model -> Rect -> Frame AppM

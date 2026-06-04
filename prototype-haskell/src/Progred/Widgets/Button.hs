@@ -12,11 +12,14 @@ import Progred.Widget
 button
   :: (Applicative widgetM, WidgetActions () appM widgetM)
   => appM ()
-  -> Frame widgetM
+  -> (WidgetFocus -> Frame widgetM)
   -> Widget () widgetM
 button activate content _ rect focus _onChange =
   mconcat
-    [ content
+    [ content focus
+    , case focus of
+        WidgetFocused -> strokeRect rect focusColor 2
+        WidgetUnfocused -> mempty
     , onPointer $ \case
         PointerDown {pointerX, pointerY} ->
           if rectContains rect pointerX pointerY
@@ -32,3 +35,7 @@ button activate content _ rect focus _onChange =
             _ -> Nothing
           WidgetUnfocused -> Nothing
     ]
+
+focusColor :: String
+focusColor =
+  "#0a84ff"
