@@ -15,6 +15,7 @@ executable prototype-haskell
     Progred.Gid
     Progred.Frame
     Progred.Geometry
+    Progred.KeyCode
     Progred.MapGid
     Progred.App
     Progred.Canvas

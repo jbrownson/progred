@@ -8,6 +8,7 @@ module Progred.App
 
 import Progred.Frame
 import Progred.Geometry
+import qualified Progred.KeyCode as KeyCode
 import Progred.Viewport
 import Progred.Widget
 import Progred.Widget.Interpreter
@@ -147,12 +148,13 @@ globalKeys :: Frame AppM
 globalKeys =
   onKey $ \event ->
     case event of
-      KeyCode 9 -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-      KeyCode 1009 -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-      KeyCode 37 -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-      KeyCode 38 -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-      KeyCode 39 -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-      KeyCode 40 -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+      KeyCode code
+        | code == KeyCode.tab -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+        | code == KeyCode.shiftTab -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+        | code == KeyCode.left -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+        | code == KeyCode.up -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+        | code == KeyCode.right -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+        | code == KeyCode.down -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
       _ -> Nothing
 
 clearFocusOnBackground :: Viewport -> Frame AppM

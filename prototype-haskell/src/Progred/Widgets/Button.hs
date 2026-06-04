@@ -6,6 +6,7 @@ module Progred.Widgets.Button
 
 import Progred.Frame
 import Progred.Geometry
+import qualified Progred.KeyCode as KeyCode
 import Progred.Widget
 
 button
@@ -25,8 +26,9 @@ button activate content _ rect focus _onChange =
     , onKey $ \event ->
         case focus of
           WidgetFocused -> case event of
-            KeyCode 13 -> Just (liftApp activate)
-            KeyCode 32 -> Just (liftApp activate)
+            KeyCode code
+              | code == KeyCode.enter -> Just (liftApp activate)
+              | code == KeyCode.space -> Just (liftApp activate)
             _ -> Nothing
           WidgetUnfocused -> Nothing
     ]

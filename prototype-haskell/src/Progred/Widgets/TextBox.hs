@@ -10,6 +10,7 @@ import Data.List (minimumBy)
 import Data.Ord (comparing)
 import Progred.Frame
 import Progred.Geometry
+import qualified Progred.KeyCode as KeyCode
 import qualified Progred.Platform as Platform
 import Progred.Widget
 
@@ -85,15 +86,16 @@ textBox state rect focus onChange =
     editText event =
       case event of
         TextInput string -> Just (insertString string state)
-        KeyCode 32 -> Just (insertString " " state)
-        KeyCode 8 -> Just (deleteBackward state)
-        KeyCode 46 -> Just (deleteForward state)
-        KeyCode 37 -> Just (moveCaret False (-1) state)
-        KeyCode 39 -> Just (moveCaret False 1 state)
-        KeyCode 1037 -> Just (moveCaret True (-1) state)
-        KeyCode 1039 -> Just (moveCaret True 1 state)
-        KeyCode 36 -> Just (moveCaretStart state)
-        KeyCode 35 -> Just (moveCaretEnd state)
+        KeyCode code
+          | code == KeyCode.space -> Just (insertString " " state)
+          | code == KeyCode.backspace -> Just (deleteBackward state)
+          | code == KeyCode.delete -> Just (deleteForward state)
+          | code == KeyCode.left -> Just (moveCaret False (-1) state)
+          | code == KeyCode.right -> Just (moveCaret False 1 state)
+          | code == KeyCode.shiftLeft -> Just (moveCaret True (-1) state)
+          | code == KeyCode.shiftRight -> Just (moveCaret True 1 state)
+          | code == KeyCode.home -> Just (moveCaretStart state)
+          | code == KeyCode.end -> Just (moveCaretEnd state)
         _ -> Nothing
 
 insertString :: String -> TextBoxState -> TextBoxState
