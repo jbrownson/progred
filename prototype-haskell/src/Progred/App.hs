@@ -85,15 +85,13 @@ framedButton :: Model -> FocusId -> Rect -> String -> AppM () -> Frame AppM
 framedButton model focusId rect text activate =
   runWidgetFrame (statelessWidgetEnv focusId) $
     button
-      ButtonParams
-        { buttonActivate = activate
-        , buttonContent =
-            mconcat
-              [ fillRect rect background
-              , strokeRect rect border 2
-              , fillTextMiddle (Point (x contentRect) (y contentRect + height contentRect / 2)) "#20242a" text
-              ]
-      }
+      activate
+      ( mconcat
+          [ fillRect rect background
+          , strokeRect rect border 2
+          , fillTextMiddle (Point (x contentRect) (y contentRect + height contentRect / 2)) "#20242a" text
+          ]
+      )
       ()
       rect
       (widgetFocus focused)
