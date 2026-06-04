@@ -83,7 +83,7 @@ label =
 
 framedButton :: Model -> FocusId -> Rect -> String -> AppM () -> Frame AppM
 framedButton model focusId rect text activate =
-  runWidget (statelessWidgetEnv focusId) $
+  runWidgetFrame (statelessWidgetEnv focusId) $
     button
       ButtonParams
         { buttonActivate = activate
@@ -106,7 +106,7 @@ framedButton model focusId rect text activate =
 
 framedNameField :: Model -> Rect -> Frame AppM
 framedNameField model rect =
-  runWidget (textBoxWidgetEnv NameField (\state world -> world {nameField = state})) $
+  runWidgetFrame (textBoxWidgetEnv NameField (\state world -> world {nameField = state})) $
     mconcat
       [ fillRect rect "#ffffff"
       , strokeRect rect border 2
@@ -122,6 +122,10 @@ framedNameField model rect =
 widgetFocus :: Bool -> WidgetFocus
 widgetFocus focused =
   if focused then WidgetFocused else WidgetUnfocused
+
+applyWidgetChange :: WidgetActions state appM widgetM => WidgetChangeEvent state -> widgetM ()
+applyWidgetChange event =
+  putState (widgetChangeNew event)
 
 statelessWidgetEnv :: FocusId -> WidgetEnv () AppM
 statelessWidgetEnv focusId =

@@ -1,48 +1,48 @@
 module Progred.Widget.Interpreter
-  ( WidgetAction
+  ( WidgetM
   , WidgetEnv (..)
-  , runWidget
+  , runWidgetFrame
   ) where
 
 import Progred.Frame
 import Progred.Widget
 
-data WidgetEnv state actionM = WidgetEnv
-  { widgetEnvPutState :: state -> actionM ()
-  , widgetEnvFocusSelf :: actionM ()
+data WidgetEnv state appM = WidgetEnv
+  { widgetEnvPutState :: state -> appM ()
+  , widgetEnvFocusSelf :: appM ()
   }
 
-newtype WidgetAction state actionM a = WidgetAction
-  { runWidgetAction :: WidgetEnv state actionM -> actionM a
+newtype WidgetM state appM a = WidgetM
+  { runWidgetM :: WidgetEnv state appM -> appM a
   }
 
-instance Functor actionM => Functor (WidgetAction state actionM) where
+instance Functor appM => Functor (WidgetM state appM) where
   fmap f action =
-    WidgetAction $ \env -> fmap f (runWidgetAction action env)
+    WidgetM $ \env -> fmap f (runWidgetM action env)
 
-instance Applicative actionM => Applicative (WidgetAction state actionM) where
+instance Applicative appM => Applicative (WidgetM state appM) where
   pure value =
-    WidgetAction $ \_env -> pure value
+    WidgetM $ \_env -> pure value
   function <*> argument =
-    WidgetAction $ \env ->
-      runWidgetAction function env <*> runWidgetAction argument env
+    WidgetM $ \env ->
+      runWidgetM function env <*> runWidgetM argument env
 
-instance Monad actionM => Monad (WidgetAction state actionM) where
+instance Monad appM => Monad (WidgetM state appM) where
   action >>= f =
-    WidgetAction $ \env -> do
-      value <- runWidgetAction action env
-      runWidgetAction (f value) env
+    WidgetM $ \env -> do
+      value <- runWidgetM action env
+      runWidgetM (f value) env
 
-instance WidgetActions state actionM (WidgetAction state actionM) where
+instance WidgetActions state appM (WidgetM state appM) where
   putState state =
-    WidgetAction $ \env -> widgetEnvPutState env state
+    WidgetM $ \env -> widgetEnvPutState env state
   focusSelf =
-    WidgetAction widgetEnvFocusSelf
-  liftAction action =
-    WidgetAction $ const action
+    WidgetM widgetEnvFocusSelf
+  liftApp action =
+    WidgetM $ const action
 
-runWidget :: WidgetEnv state actionM -> Frame (WidgetAction state actionM) -> Frame actionM
-runWidget env frame =
+runWidgetFrame :: WidgetEnv state appM -> Frame (WidgetM state appM) -> Frame appM
+runWidgetFrame env frame =
   Frame
     { draws = draws frame
     , pointerHandlers = fmap runPointerHandler (pointerHandlers frame)
@@ -50,6 +50,6 @@ runWidget env frame =
     }
   where
     runPointerHandler handler event =
-      fmap (`runWidgetAction` env) (handler event)
+      fmap (`runWidgetM` env) (handler event)
     runKeyHandler handler event =
-      fmap (`runWidgetAction` env) (handler event)
+      fmap (`runWidgetM` env) (handler event)

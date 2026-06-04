@@ -30,7 +30,7 @@ defaultTextBoxState =
     }
 
 textBox
-  :: (Applicative widgetM, WidgetActions TextBoxState actionM widgetM)
+  :: (Applicative widgetM, WidgetActions TextBoxState appM widgetM)
   => Widget TextBoxState widgetM
 textBox state rect focus onChange =
   mconcat
@@ -79,9 +79,8 @@ textBox state rect focus onChange =
     commitState updated =
       onChange
         WidgetChangeEvent
-          { widgetChangeOldState = state
-          , widgetChangeNewState = updated
-          , applyWidgetChange = putState updated
+          { widgetChangeOld = state
+          , widgetChangeNew = updated
           }
     editText event =
       case event of
