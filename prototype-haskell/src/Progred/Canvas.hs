@@ -4,7 +4,8 @@ module Progred.Canvas
   ) where
 
 import qualified Progred.Platform as Platform
-import Progred.UI
+import Progred.Frame
+import Progred.Geometry
 import Progred.Viewport
 
 getViewport :: IO Viewport

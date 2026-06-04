@@ -13,12 +13,15 @@ executable prototype-haskell
   main-is:          Main.hs
   other-modules:
     Progred.Gid
+    Progred.Frame
+    Progred.Geometry
     Progred.MapGid
     Progred.App
     Progred.Canvas
     Progred.Platform
-    Progred.UI
     Progred.Viewport
+    Progred.Widget
+    Progred.Widget.Interpreter
     Progred.Widgets.Button
     Progred.Widgets.TextBox
   hs-source-dirs:   src

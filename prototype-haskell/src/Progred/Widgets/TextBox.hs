@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Progred.Widgets.TextBox
   ( TextBoxState (..)
   , defaultTextBoxState
@@ -6,8 +8,10 @@ module Progred.Widgets.TextBox
 
 import Data.List (minimumBy)
 import Data.Ord (comparing)
+import Progred.Frame
+import Progred.Geometry
 import qualified Progred.Platform as Platform
-import Progred.UI
+import Progred.Widget
 
 data TextBoxState = TextBoxState
   { textBeforeCaret :: String
@@ -26,60 +30,59 @@ defaultTextBoxState =
     }
 
 textBox
-  :: Applicative m
-  => FocusTarget world
-  -> Rect
-  -> TextBoxState
-  -> (TextBoxState -> world -> world)
-  -> Frame world m
-textBox focusTarget rect state set =
+  :: (Applicative widgetM, WidgetActions TextBoxState actionM widgetM)
+  => Widget TextBoxState widgetM
+textBox state rect focus onChange =
   mconcat
     [ drawMeasuredSelection rect state
     , fillTextMiddle (Point textX textY) textColor (textBoxText state)
-    , if selected then drawMeasuredCaret rect state else mempty
-    , onPointer $ \current event ->
-        case event of
-          PointerDown {pointerX, pointerY} ->
-            if rectContains rect pointerX pointerY
-              then
-                Just $ do
-                  let newCaret = caretIndexFromX pointerX
-                  let moved = setCaretIndex newCaret state
-                  let updated =
-                        moved
-                          { textBoxSelectionOffset = 0
-                          , textBoxDragging = True
-                          }
-                  pure (set updated (focusTargetFocus focusTarget current))
-              else Nothing
-          PointerMove {pointerX} ->
-            if textBoxDragging state
-              then
-                Just $ do
-                  let anchor = caretIndex state + textBoxSelectionOffset state
-                  let newCaret = caretIndexFromX pointerX
-                  let moved = setCaretIndex newCaret state
-                  let updated =
-                        moved
-                          { textBoxSelectionOffset = anchor - caretIndex moved
-                          }
-                  pure (set updated current)
-              else Nothing
-          PointerUp {} ->
-            if textBoxDragging state
-              then Just (pure (set state {textBoxDragging = False} current))
-              else Nothing
-    , onKey $ \current event ->
-        if focusTargetIsFocused focusTarget
-          then fmap (pure . flip set current) (editText event)
-          else Nothing
+    , case focus of
+        WidgetFocused -> drawMeasuredCaret rect state
+        WidgetUnfocused -> mempty
+    , onPointer $ \case
+        PointerDown {pointerX, pointerY} ->
+          if rectContains rect pointerX pointerY
+            then Just (focusSelf *> commitState (startDragAt pointerX))
+            else Nothing
+        PointerMove {pointerX} ->
+          if textBoxDragging state
+            then Just (commitState (continueDragAt pointerX))
+            else Nothing
+        PointerUp {} ->
+          if textBoxDragging state
+            then Just (commitState state {textBoxDragging = False})
+            else Nothing
+    , onKey $ \event ->
+        case focus of
+          WidgetFocused -> case editText event of
+            Just updated -> Just (commitState updated)
+            Nothing -> Nothing
+          WidgetUnfocused -> Nothing
     ]
   where
-    selected = focusTargetIsFocused focusTarget
     textX = x rect
     textY = y rect + height rect / 2
     caretIndexFromX pointerX =
       closestCaretIndex (textBoxText state) (pointerX - textX)
+    startDragAt pointerX =
+      (setCaretIndex (caretIndexFromX pointerX) state)
+        { textBoxSelectionOffset = 0
+        , textBoxDragging = True
+        }
+    continueDragAt pointerX =
+      moved
+        { textBoxSelectionOffset = anchor - caretIndex moved
+        }
+      where
+        anchor = caretIndex state + textBoxSelectionOffset state
+        moved = setCaretIndex (caretIndexFromX pointerX) state
+    commitState updated =
+      onChange
+        WidgetChangeEvent
+          { widgetChangeOldState = state
+          , widgetChangeNewState = updated
+          , applyWidgetChange = putState updated
+          }
     editText event =
       case event of
         TextInput string -> Just (insertString string state)
@@ -219,13 +222,13 @@ textBoxText :: TextBoxState -> String
 textBoxText textState =
   textBeforeCaret textState <> textAfterCaret textState
 
-drawMeasuredCaret :: Rect -> TextBoxState -> Frame world m
+drawMeasuredCaret :: Rect -> TextBoxState -> Frame m
 drawMeasuredCaret rect TextBoxState {textBeforeCaret} =
   fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
   where
     prefixWidth = Platform.measureText textBeforeCaret
 
-drawMeasuredSelection :: Rect -> TextBoxState -> Frame world m
+drawMeasuredSelection :: Rect -> TextBoxState -> Frame m
 drawMeasuredSelection rect textState =
   case selectionText textState of
     Nothing -> mempty

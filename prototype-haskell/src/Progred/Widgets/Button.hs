@@ -1,31 +1,36 @@
 module Progred.Widgets.Button
-  ( button
+  ( ButtonParams (..)
+  , button
   ) where
 
-import Progred.UI
+import Progred.Frame
+import Progred.Geometry
+import Progred.Widget
+
+data ButtonParams actionM widgetM = ButtonParams
+  { buttonActivate :: actionM ()
+  , buttonContent :: Frame widgetM
+  }
 
 button
-  :: Applicative m
-  => FocusTarget world
-  -> Rect
-  -> (world -> world)
-  -> Frame world m
-  -> Frame world m
-button focusTarget rect activate content =
+  :: (Applicative widgetM, WidgetActions () actionM widgetM)
+  => ButtonParams actionM widgetM
+  -> Widget () widgetM
+button params _ rect focus _onChange =
   mconcat
-    [ content
-    , onPointer $ \current event ->
+    [ buttonContent params
+    , onPointer $ \event ->
         case event of
           PointerDown {pointerX, pointerY} ->
             if rectContains rect pointerX pointerY
-              then Just (pure (activate (focusTargetFocus focusTarget current)))
+              then Just (focusSelf *> liftAction (buttonActivate params))
               else Nothing
           _ -> Nothing
-    , onKey $ \current event ->
-        if focusTargetIsFocused focusTarget
-          then case event of
-            KeyCode 13 -> Just (pure (activate current))
-            KeyCode 32 -> Just (pure (activate current))
+    , onKey $ \event ->
+        case focus of
+          WidgetFocused -> case event of
+            KeyCode 13 -> Just (liftAction (buttonActivate params))
+            KeyCode 32 -> Just (liftAction (buttonActivate params))
             _ -> Nothing
-          else Nothing
+          WidgetUnfocused -> Nothing
     ]

@@ -14,7 +14,7 @@ import Data.Word (Word32)
 import qualified Progred.Platform as Platform
 import Progred.App
 import Progred.Canvas
-import Progred.UI
+import Progred.Frame
 import Progred.Viewport
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -46,7 +46,7 @@ dispatchPointer :: PointerEvent -> IO ()
 dispatchPointer event = do
   model <- readIORef state
   viewport <- getViewport
-  updated <- runPointerHandlers event (view viewport model) model
+  (_, updated) <- runAppM (runPointerHandlers event (view viewport model)) model
   writeIORef state updated
   renderState
 
@@ -62,7 +62,7 @@ dispatchKey :: KeyEvent -> IO ()
 dispatchKey event = do
   model <- readIORef state
   viewport <- getViewport
-  updated <- runKeyHandlers event (view viewport model) model
+  (_, updated) <- runAppM (runKeyHandlers event (view viewport model)) model
   writeIORef state updated
   renderState
 
