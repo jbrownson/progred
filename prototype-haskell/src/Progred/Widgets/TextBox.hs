@@ -43,21 +43,16 @@ textBox
 textBox state rect focus actions = do
   geometry <- TextBoxGeometry rect <$> measureCaretPositions (textBoxText state)
   drawTextBox state geometry focus
-  pure $
-    textBoxHandler state geometry focus actions
+  pure $ textBoxHandler state geometry focus actions
 
 drawTextBox :: Canvas.Canvas m => TextBoxState -> TextBoxGeometry -> WidgetFocus -> m ()
 drawTextBox state geometry@TextBoxGeometry {textBoxRect = rect} focus = do
   drawSelection state geometry
   Canvas.fillTextMiddle (Point textX textY) textColor (textBoxText state)
-  when focused (drawCaret state geometry)
+  when (widgetIsFocused focus) (drawCaret state geometry)
   where
     textX = x rect
     textY = y rect + height rect / 2
-    focused =
-      case focus of
-        WidgetFocused -> True
-        WidgetUnfocused -> False
 
 textBoxHandler
   :: Applicative actionM

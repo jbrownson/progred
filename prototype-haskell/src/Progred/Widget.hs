@@ -2,6 +2,7 @@ module Progred.Widget
   ( Widget
   , WidgetActions (..)
   , WidgetFocus (..)
+  , widgetIsFocused
   ) where
 
 import Progred.Handler
@@ -22,3 +23,9 @@ data WidgetActions state actionM = WidgetActions
 data WidgetFocus
   = WidgetFocused
   | WidgetUnfocused
+
+widgetIsFocused :: WidgetFocus -> Bool
+widgetIsFocused WidgetFocused =
+  True
+widgetIsFocused WidgetUnfocused =
+  False

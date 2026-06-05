@@ -4,6 +4,7 @@ module Progred.Widgets.Button
   ( button
   ) where
 
+import Control.Monad (when)
 import Progred.Handler
 import Progred.Geometry
 import qualified Progred.Canvas as Canvas
@@ -17,9 +18,7 @@ button
   -> Widget () actionM renderM
 button activate content _ rect focus actions = do
   content focus
-  case focus of
-    WidgetFocused -> Canvas.strokeRect rect focusColor 2
-    WidgetUnfocused -> pure ()
+  when (widgetIsFocused focus) (Canvas.strokeRect rect focusColor 2)
   pure $
     mconcat
       [ onPointer $ \case
@@ -29,14 +28,17 @@ button activate content _ rect focus actions = do
             else Nothing
         _ -> Nothing
       , onKey $ \event ->
-        case focus of
-          WidgetFocused -> case event of
-            KeyCode code
-              | code == KeyCode.enter -> Just activate
-              | code == KeyCode.space -> Just activate
-            _ -> Nothing
-          WidgetUnfocused -> Nothing
+        if widgetIsFocused focus
+          then keyActivate event
+          else Nothing
       ]
+  where
+    keyActivate event =
+      case event of
+        KeyCode code
+          | code == KeyCode.enter -> Just activate
+          | code == KeyCode.space -> Just activate
+        _ -> Nothing
 
 focusColor :: String
 focusColor =
