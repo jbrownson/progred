@@ -7,16 +7,16 @@ module Progred.Widget
 import Progred.Frame
 import Progred.Geometry
 
-type Widget state m =
+type Widget state actionM renderM =
   state
     -> Rect
     -> WidgetFocus
-    -> WidgetActions state m
-    -> Frame m
+    -> WidgetActions state actionM
+    -> Frame actionM renderM
 
-data WidgetActions state m = WidgetActions
-  { widgetFocusSelf :: m ()
-  , widgetSetState :: state -> m ()
+data WidgetActions state actionM = WidgetActions
+  { widgetFocusSelf :: actionM ()
+  , widgetSetState :: state -> actionM ()
   }
 
 data WidgetFocus

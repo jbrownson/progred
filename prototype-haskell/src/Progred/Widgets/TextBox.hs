@@ -8,10 +8,10 @@ module Progred.Widgets.TextBox
 
 import Data.List (minimumBy)
 import Data.Ord (comparing)
+import qualified Progred.Canvas as Canvas
 import Progred.Frame
 import Progred.Geometry
 import qualified Progred.KeyCode as KeyCode
-import qualified Progred.Platform as Platform
 import Progred.Widget
 
 data TextBoxState = TextBoxState
@@ -31,8 +31,8 @@ defaultTextBoxState =
     }
 
 textBox
-  :: Applicative m
-  => Widget TextBoxState m
+  :: (Applicative actionM, Canvas.Canvas renderM)
+  => Widget TextBoxState actionM renderM
 textBox state rect focus actions =
   mconcat
     [ selection
@@ -51,7 +51,7 @@ textBox state rect focus actions =
     pointerDownEvents =
       onPointer $ \case
         PointerDown {pointerX, pointerY} -> pointerDown pointerX pointerY
-        _ -> Nothing
+        _ -> pure Nothing
     focusedFrame =
       case focus of
         WidgetFocused -> mconcat [caret, keyEvents]
@@ -66,37 +66,40 @@ textBox state rect focus actions =
       onPointer $ \case
         PointerMove {pointerX} -> pointerMove pointerX
         PointerUp {} -> pointerUp
-        _ -> Nothing
+        _ -> pure Nothing
     keyEvents =
       onKey keyDown
     pointerDown pointerX pointerY =
       if rectContains rect pointerX pointerY
-        then Just (widgetFocusSelf actions *> setState (startDragAt pointerX))
-        else Nothing
-    pointerMove pointerX =
-      Just (setState (continueDragAt pointerX))
+        then do
+          newCaret <- caretIndexFromX pointerX
+          pure (Just (widgetFocusSelf actions *> setState (startDragAt newCaret)))
+        else pure Nothing
+    pointerMove pointerX = do
+      newCaret <- caretIndexFromX pointerX
+      pure (Just (setState (continueDragAt newCaret)))
     pointerUp =
-      Just (setState state {textBoxDragging = False})
+      pure (Just (setState state {textBoxDragging = False}))
     keyDown event =
       case editText event of
-        Just updated -> Just (setState updated)
-        Nothing -> Nothing
+        Just updated -> pure (Just (setState updated))
+        Nothing -> pure Nothing
     caretIndexFromX pointerX =
-      closestCaretIndex (textBoxText state) (pointerX - textX)
-    startDragAt pointerX =
-      (setCaretIndex (caretIndexFromX pointerX) state)
+      closestCaretIndex (Canvas.measureText) (textBoxText state) (pointerX - textX)
+    startDragAt newCaret =
+      (setCaretIndex newCaret state)
         { textBoxSelectionOffset = 0
         , textBoxDragging = True
         }
-    continueDragAt pointerX =
+    continueDragAt newCaret =
       moved
         { textBoxSelectionOffset = anchor - caretIndex moved
         }
       where
         anchor = caretIndex state + textBoxSelectionOffset state
-        moved = setCaretIndex (caretIndexFromX pointerX) state
-    setState updated =
-      widgetSetState actions updated
+        moved = setCaretIndex newCaret state
+    setState =
+      widgetSetState actions
     editText event =
       case event of
         TextInput string -> Just (insertString string state)
@@ -237,18 +240,21 @@ textBoxText :: TextBoxState -> String
 textBoxText textState =
   textBeforeCaret textState <> textAfterCaret textState
 
-drawCaret :: Rect -> TextBoxState -> Frame m
+drawCaret :: Canvas.Canvas renderM => Rect -> TextBoxState -> Frame actionM renderM
 drawCaret rect TextBoxState {textBeforeCaret} =
-  fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
-  where
-    prefixWidth = Platform.measureText textBeforeCaret
+  draw $ do
+    prefixWidth <- Canvas.measureText textBeforeCaret
+    Canvas.fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
 
-drawSelection :: Rect -> TextBoxState -> Frame m
+drawSelection :: Canvas.Canvas renderM => Rect -> TextBoxState -> Frame actionM renderM
 drawSelection rect textState =
   case selectionText textState of
     Nothing -> mempty
     Just (beforeSelection, selection) ->
-      fillRect (Rect (x rect + Platform.measureText beforeSelection) (y rect) (Platform.measureText selection) (height rect)) selectionColor
+      draw $ do
+        beforeWidth <- Canvas.measureText beforeSelection
+        selectionWidth <- Canvas.measureText selection
+        Canvas.fillRect (Rect (x rect + beforeWidth) (y rect) selectionWidth (height rect)) selectionColor
 
 selectionText :: TextBoxState -> Maybe (String, String)
 selectionText textState
@@ -273,14 +279,15 @@ keepUnselectedBefore textState =
     selectedCount = min (negate (textBoxSelectionOffset textState)) (length (textBeforeCaret textState))
     keepCount = length (textBeforeCaret textState) - selectedCount
 
-closestCaretIndex :: String -> Double -> Int
-closestCaretIndex text targetX =
-  fst (minimumBy (comparing snd) measured)
+closestCaretIndex :: Monad m => (String -> m Double) -> String -> Double -> m Int
+closestCaretIndex measure text targetX = do
+  measured <- traverse measureIndex [0 .. length text]
+  pure (fst (minimumBy (comparing snd) measured))
   where
-    measured = fmap measureIndex [0 .. length text]
     measureIndex index =
-      let prefixWidth = Platform.measureText (take index text)
-       in (index, abs (prefixWidth - targetX))
+      do
+        prefixWidth <- measure (take index text)
+        pure (index, abs (prefixWidth - targetX))
 
 textColor :: String
 textColor = "#20242a"

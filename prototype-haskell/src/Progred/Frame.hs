@@ -1,6 +1,5 @@
 module Progred.Frame
-  ( DrawCommand (..)
-  , Frame (..)
+  ( Frame (..)
   , KeyEvent (..)
   , KeyHandler
   , PointerEvent (..)
@@ -16,15 +15,9 @@ module Progred.Frame
   , strokeRect
   ) where
 
-import Data.Foldable (asum)
 import Data.Word (Word32)
+import qualified Progred.Canvas as Canvas
 import Progred.Geometry
-
-data DrawCommand
-  = FillRect Rect String
-  | StrokeRect Rect String Double
-  | FillText Point String String
-  | FillTextMiddle Point String String
 
 data PointerEvent
   = PointerDown
@@ -44,69 +37,80 @@ data KeyEvent
   = KeyCode Word32
   | TextInput String
 
-type PointerHandler m = PointerEvent -> Maybe (m ())
+type PointerHandler actionM renderM = PointerEvent -> renderM (Maybe (actionM ()))
 
-type KeyHandler m = KeyEvent -> Maybe (m ())
+type KeyHandler actionM renderM = KeyEvent -> renderM (Maybe (actionM ()))
 
-data Frame m = Frame
-  { draws :: [DrawCommand]
-  , pointerHandlers :: [PointerHandler m]
-  , keyHandlers :: [KeyHandler m]
+data Frame actionM renderM = Frame
+  { renderFrame :: renderM ()
+  , pointerHandlers :: [PointerHandler actionM renderM]
+  , keyHandlers :: [KeyHandler actionM renderM]
   }
 
-instance Semigroup (Frame m) where
+instance Applicative renderM => Semigroup (Frame actionM renderM) where
   left <> right =
     Frame
-      { draws = draws left <> draws right
+      { renderFrame = renderFrame left *> renderFrame right
       , pointerHandlers = pointerHandlers left <> pointerHandlers right
       , keyHandlers = keyHandlers left <> keyHandlers right
       }
 
-instance Monoid (Frame m) where
-  mempty = Frame [] [] []
+instance Applicative renderM => Monoid (Frame actionM renderM) where
+  mempty = Frame (pure ()) [] []
 
-draw :: DrawCommand -> Frame m
-draw command =
-  mempty {draws = [command]}
+draw :: renderM () -> Frame actionM renderM
+draw action =
+  Frame action [] []
 
-fillRect :: Rect -> String -> Frame m
+fillRect :: Canvas.Canvas renderM => Rect -> String -> Frame actionM renderM
 fillRect rect color =
-  draw (FillRect rect color)
+  draw (Canvas.fillRect rect color)
 
-strokeRect :: Rect -> String -> Double -> Frame m
+strokeRect :: Canvas.Canvas renderM => Rect -> String -> Double -> Frame actionM renderM
 strokeRect rect color lineWidth =
-  draw (StrokeRect rect color lineWidth)
+  draw (Canvas.strokeRect rect color lineWidth)
 
-fillText :: Point -> String -> String -> Frame m
+fillText :: Canvas.Canvas renderM => Point -> String -> String -> Frame actionM renderM
 fillText point color string =
-  draw (FillText point color string)
+  draw (Canvas.fillText point color string)
 
-fillTextMiddle :: Point -> String -> String -> Frame m
+fillTextMiddle :: Canvas.Canvas renderM => Point -> String -> String -> Frame actionM renderM
 fillTextMiddle point color string =
-  draw (FillTextMiddle point color string)
+  draw (Canvas.fillTextMiddle point color string)
 
-onPointer :: PointerHandler m -> Frame m
+onPointer :: Applicative renderM => PointerHandler actionM renderM -> Frame actionM renderM
 onPointer handler =
   mempty {pointerHandlers = [handler]}
 
-onKey :: KeyHandler m -> Frame m
+onKey :: Applicative renderM => KeyHandler actionM renderM -> Frame actionM renderM
 onKey handler =
   mempty {keyHandlers = [handler]}
 
-runPointerHandlers :: Monad m => PointerEvent -> Frame m -> m ()
+runPointerHandlers
+  :: (Monad actionM, Monad renderM)
+  => PointerEvent
+  -> Frame actionM renderM
+  -> renderM (actionM ())
 runPointerHandlers event frame =
   runFirst event (reverse (pointerHandlers frame))
 
-runKeyHandlers :: Monad m => KeyEvent -> Frame m -> m ()
+runKeyHandlers
+  :: (Monad actionM, Monad renderM)
+  => KeyEvent
+  -> Frame actionM renderM
+  -> renderM (actionM ())
 runKeyHandlers event frame =
   runFirst event (keyHandlers frame)
 
 runFirst
-  :: Monad m
+  :: (Monad actionM, Monad renderM)
   => event
-  -> [event -> Maybe (m ())]
-  -> m ()
-runFirst event handlers =
-  case asum (fmap (\handler -> handler event) handlers) of
-    Nothing -> pure ()
-    Just action -> action
+  -> [event -> renderM (Maybe (actionM ()))]
+  -> renderM (actionM ())
+runFirst _event [] =
+  pure (pure ())
+runFirst event (handler : rest) = do
+  result <- handler event
+  case result of
+    Nothing -> runFirst event rest
+    Just action -> pure action

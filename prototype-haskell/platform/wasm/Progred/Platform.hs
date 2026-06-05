@@ -31,7 +31,7 @@ foreign import javascript unsafe "window.progredCanvas.fillTextMiddle($1, $2, $3
   jsFillTextMiddle :: Double -> Double -> JSVal -> JSVal -> IO ()
 
 foreign import javascript unsafe "window.progredCanvas.measureText($1)"
-  jsMeasureText :: JSVal -> Double
+  jsMeasureText :: JSVal -> IO Double
 
 foreign import javascript unsafe "window.progredCanvas.width()"
   getCanvasWidth :: IO Double
@@ -59,7 +59,7 @@ fillTextMiddle x y color string =
   case (toJSString color, toJSString string) of
     (JSString colorString, JSString textString) -> jsFillTextMiddle x y colorString textString
 
-measureText :: String -> Double
+measureText :: String -> IO Double
 measureText string =
   case toJSString string of
     JSString textString -> jsMeasureText textString

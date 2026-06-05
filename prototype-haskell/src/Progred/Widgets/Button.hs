@@ -6,14 +6,15 @@ module Progred.Widgets.Button
 
 import Progred.Frame
 import Progred.Geometry
+import Progred.Canvas (Canvas)
 import qualified Progred.KeyCode as KeyCode
 import Progred.Widget
 
 button
-  :: Applicative m
-  => m ()
-  -> (WidgetFocus -> Frame m)
-  -> Widget () m
+  :: (Applicative actionM, Canvas renderM)
+  => actionM ()
+  -> (WidgetFocus -> Frame actionM renderM)
+  -> Widget () actionM renderM
 button activate content _ rect focus actions =
   mconcat
     [ content focus
@@ -23,17 +24,17 @@ button activate content _ rect focus actions =
     , onPointer $ \case
         PointerDown {pointerX, pointerY} ->
           if rectContains rect pointerX pointerY
-            then Just (widgetFocusSelf actions *> activate)
-            else Nothing
-        _ -> Nothing
+            then pure (Just (widgetFocusSelf actions *> activate))
+            else pure Nothing
+        _ -> pure Nothing
     , onKey $ \event ->
         case focus of
           WidgetFocused -> case event of
             KeyCode code
-              | code == KeyCode.enter -> Just activate
-              | code == KeyCode.space -> Just activate
-            _ -> Nothing
-          WidgetUnfocused -> Nothing
+              | code == KeyCode.enter -> pure (Just activate)
+              | code == KeyCode.space -> pure (Just activate)
+            _ -> pure Nothing
+          WidgetUnfocused -> pure Nothing
     ]
 
 focusColor :: String

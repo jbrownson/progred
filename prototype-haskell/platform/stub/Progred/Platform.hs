@@ -30,5 +30,5 @@ getCanvasWidth = undefined
 getCanvasHeight :: IO Double
 getCanvasHeight = undefined
 
-measureText :: String -> Double
+measureText :: String -> IO Double
 measureText = undefined

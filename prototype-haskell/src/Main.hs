@@ -8,12 +8,10 @@ module Main
   , onTextInput
   ) where
 
-import Data.Foldable (traverse_)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32)
-import qualified Progred.Platform as Platform
 import Progred.App
-import Progred.Canvas
+import qualified Progred.Canvas as Canvas
 import Progred.Frame
 import Progred.Viewport
 import System.IO.Unsafe (unsafePerformIO)
@@ -45,8 +43,9 @@ onPointerUp px py =
 dispatchPointer :: PointerEvent -> IO ()
 dispatchPointer event = do
   model <- readIORef state
-  viewport <- getViewport
-  let (_, updated) = runAppM (runPointerHandlers event (view viewport model)) model
+  viewport <- Canvas.getViewport
+  action <- runPointerHandlers event (currentFrame viewport model)
+  let (_, updated) = runAppM action model
   writeIORef state updated
   renderState
 
@@ -61,15 +60,20 @@ onTextInput string =
 dispatchKey :: KeyEvent -> IO ()
 dispatchKey event = do
   model <- readIORef state
-  viewport <- getViewport
-  let (_, updated) = runAppM (runKeyHandlers event (view viewport model)) model
+  viewport <- Canvas.getViewport
+  action <- runKeyHandlers event (currentFrame viewport model)
+  let (_, updated) = runAppM action model
   writeIORef state updated
   renderState
 
 renderState :: IO ()
 renderState = do
-  viewport <- getViewport
+  viewport <- Canvas.getViewport
   model <- readIORef state
-  let frame = view viewport model
-  Platform.clearCanvas (viewportWidth viewport) (viewportHeight viewport)
-  traverse_ drawCanvas (draws frame)
+  let frame = currentFrame viewport model
+  Canvas.clearCanvas viewport
+  renderFrame frame
+
+currentFrame :: Viewport -> Model -> Frame AppM IO
+currentFrame =
+  view
