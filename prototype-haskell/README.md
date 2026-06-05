@@ -15,6 +15,9 @@ backend, talking to Canvas/Web APIs through JSFFI. The HTML host
 pointer/key events, and exposes a small `window.progredCanvas` drawing
 surface.
 
+The reusable UI component is named `puri`. Its current Haskell modules
+still live under the `Progred.*` namespace while the API shape settles.
+
 Requires a native GHC for editor/typechecking and the WASM-targeted GHC
 cross-compiler for the app bundle:
 
@@ -73,7 +76,7 @@ the rendering and distribution substrate.
 
 ## Layout Notes
 
-Layout is deliberately tiny and explicit in `src/Main.hs` for now. The
+Layout is deliberately tiny and explicit in `app/Progred/App.hs` for now. The
 next useful step may be working on Progred itself and revisiting layout
 only when the app needs more help.
 
