@@ -12,7 +12,7 @@ type Widget state actionM renderM =
     -> Rect
     -> WidgetFocus
     -> WidgetActions state actionM
-    -> Frame actionM renderM
+    -> renderM (Frame actionM)
 
 data WidgetActions state actionM = WidgetActions
   { widgetFocusSelf :: actionM ()

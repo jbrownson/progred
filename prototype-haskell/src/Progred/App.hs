@@ -9,7 +9,7 @@ module Progred.App
   ) where
 
 import Control.Monad.Trans.State.Strict (State, modify, runState)
-import Progred.Canvas (Canvas)
+import qualified Progred.Canvas as Canvas
 import Progred.Frame
 import Progred.Geometry
 import qualified Progred.KeyCode as KeyCode
@@ -49,50 +49,51 @@ initialModel =
     , nameField = defaultTextBoxState {textBeforeCaret = "canvas owns focus"}
     }
 
-view :: Canvas renderM => Viewport -> Model -> Frame AppM renderM
-view viewport model =
-  mconcat
-    [ fillRect (Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)) "#fbfbfa"
-    , clearFocusOnBackground viewport
-    , label (Point 32 42) "#3f454d" "Haskell/Wasm canvas UI"
-    , label (Point 32 70) "#68707c" "Frame, handlers, focus, and text state are owned by Haskell."
-    , label (Point 32 110) "#3f454d" ("Count: " <> show (count model))
-    , framedButton model CounterButton (Rect 32 140 160 42) "Increment" (modifyModel (\world -> world {count = count world + 1}))
-    , framedNameField model (Rect 32 206 300 42)
-    , framedButton model ResetButton (Rect 32 272 120 42) "Reset" (modifyModel (\world -> world {count = 0}))
-    , globalKeys
-    ]
+view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Frame AppM)
+view viewport model = do
+  Canvas.fillRect (Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)) "#fbfbfa"
+  label (Point 32 42) "#3f454d" "Haskell/Wasm canvas UI"
+  label (Point 32 70) "#68707c" "Frame, handlers, focus, and text state are owned by Haskell."
+  label (Point 32 110) "#3f454d" ("Count: " <> show (count model))
+  counter <- framedButton model CounterButton (Rect 32 140 160 42) "Increment" (modifyModel (\world -> world {count = count world + 1}))
+  name <- framedNameField model (Rect 32 206 300 42)
+  reset <- framedButton model ResetButton (Rect 32 272 120 42) "Reset" (modifyModel (\world -> world {count = 0}))
+  pure $
+    mconcat
+      [ clearFocusOnBackground viewport
+      , counter
+      , name
+      , reset
+      , globalKeys
+      ]
 
-label :: Canvas renderM => Point -> String -> String -> Frame AppM renderM
+label :: Canvas.Canvas renderM => Point -> String -> String -> renderM ()
 label =
-  fillText
+  Canvas.fillText
 
-framedButton :: Canvas renderM => Model -> FocusId -> Rect -> String -> AppM () -> Frame AppM renderM
+framedButton :: Canvas.Canvas renderM => Model -> FocusId -> Rect -> String -> AppM () -> renderM (Frame AppM)
 framedButton model focusId rect text activate =
   mountWidget model unitLens focusId rect $
     button
       activate
-      ( \_contentFocus -> mconcat
-          [ fillRect rect background
-          , strokeRect rect border 2
-          , fillTextMiddle (Point (x contentRect) (y contentRect + height contentRect / 2)) "#20242a" text
-          ]
+      ( \_contentFocus -> do
+          Canvas.fillRect rect background
+          Canvas.strokeRect rect border 2
+          Canvas.fillTextMiddle (Point (x contentRect) (y contentRect + height contentRect / 2)) "#20242a" text
       )
   where
     background = "#ffffff"
     border = "#c7cbd1"
     contentRect = insetRect (Insets 0 16 0 16) rect
 
-framedNameField :: Canvas renderM => Model -> Rect -> Frame AppM renderM
+framedNameField :: Canvas.Canvas renderM => Model -> Rect -> renderM (Frame AppM)
 framedNameField model rect =
   mountWidget model nameFieldLens NameField rect field
   where
-    field state fieldRect fieldFocus actions =
-      mconcat
-        [ fillRect fieldRect "#ffffff"
-        , strokeRect fieldRect (fieldBorder fieldFocus) 2
-        , textBox state (insetRect (Insets 10 10 10 10) fieldRect) fieldFocus actions
-        ]
+    field state fieldRect fieldFocus actions = do
+      Canvas.fillRect fieldRect "#ffffff"
+      Canvas.strokeRect fieldRect (fieldBorder fieldFocus) 2
+      textBox state (insetRect (Insets 10 10 10 10) fieldRect) fieldFocus actions
     fieldBorder WidgetFocused = "#0a84ff"
     fieldBorder WidgetUnfocused = "#c7cbd1"
 
@@ -102,7 +103,7 @@ mountWidget
   -> FocusId
   -> Rect
   -> Widget state AppM renderM
-  -> Frame AppM renderM
+  -> renderM (Frame AppM)
 mountWidget model stateLens focusId rect widget =
   widget
     (lensGet stateLens model)
@@ -138,26 +139,26 @@ nameFieldLens =
     , lensSet = \state world -> world {nameField = state}
     }
 
-globalKeys :: Applicative renderM => Frame AppM renderM
+globalKeys :: Frame AppM
 globalKeys =
   onKey $ \case
     KeyCode code
-      | code == KeyCode.tab -> pure (Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))})))
-      | code == KeyCode.shiftTab -> pure (Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))})))
-      | code == KeyCode.left -> pure (Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))})))
-      | code == KeyCode.up -> pure (Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))})))
-      | code == KeyCode.right -> pure (Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))})))
-      | code == KeyCode.down -> pure (Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))})))
-    _ -> pure Nothing
+      | code == KeyCode.tab -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+      | code == KeyCode.shiftTab -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+      | code == KeyCode.left -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+      | code == KeyCode.up -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+      | code == KeyCode.right -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+      | code == KeyCode.down -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+    _ -> Nothing
 
-clearFocusOnBackground :: Applicative renderM => Viewport -> Frame AppM renderM
+clearFocusOnBackground :: Viewport -> Frame AppM
 clearFocusOnBackground Viewport {viewportWidth, viewportHeight} =
   onPointer $ \case
     PointerDown {pointerX, pointerY} ->
       if rectContains (Rect 0 0 viewportWidth viewportHeight) pointerX pointerY
-        then pure (Just (modifyModel (\world -> world {focus = Nothing})))
-        else pure Nothing
-    _ -> pure Nothing
+        then Just (modifyModel (\world -> world {focus = Nothing}))
+        else Nothing
+    _ -> Nothing
 
 nextFocus :: Maybe FocusId -> FocusId
 nextFocus Nothing =

@@ -6,7 +6,9 @@ module Progred.Widgets.TextBox
   , textBox
   ) where
 
+import Control.Monad (when)
 import Data.List (minimumBy)
+import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import qualified Progred.Canvas as Canvas
 import Progred.Frame
@@ -33,59 +35,57 @@ defaultTextBoxState =
 textBox
   :: (Applicative actionM, Canvas.Canvas renderM)
   => Widget TextBoxState actionM renderM
-textBox state rect focus actions =
-  mconcat
-    [ selection
-    , text
-    , pointerDownEvents
-    , focusedFrame
-    , draggingFrame
-    ]
+textBox state rect focus actions = do
+  caretPositions <- measureCaretPositions (textBoxText state)
+  drawSelection rect state caretPositions
+  Canvas.fillTextMiddle (Point textX textY) textColor (textBoxText state)
+  when focused (drawCaret rect state caretPositions)
+  pure $
+    mconcat
+      [ pointerDownEvents caretPositions
+      , focusedFrame
+      , draggingFrame caretPositions
+      ]
   where
     textX = x rect
     textY = y rect + height rect / 2
-    selection =
-      drawSelection rect state
-    text =
-      fillTextMiddle (Point textX textY) textColor (textBoxText state)
-    pointerDownEvents =
+    focused =
+      case focus of
+        WidgetFocused -> True
+        WidgetUnfocused -> False
+    pointerDownEvents caretPositions =
       onPointer $ \case
-        PointerDown {pointerX, pointerY} -> pointerDown pointerX pointerY
-        _ -> pure Nothing
+        PointerDown {pointerX, pointerY} -> pointerDown caretPositions pointerX pointerY
+        _ -> Nothing
     focusedFrame =
       case focus of
-        WidgetFocused -> mconcat [caret, keyEvents]
+        WidgetFocused -> keyEvents
         WidgetUnfocused -> mempty
-    draggingFrame =
+    draggingFrame caretPositions =
       if textBoxDragging state
-        then draggingEvents
+        then draggingEvents caretPositions
         else mempty
-    caret =
-      drawCaret rect state
-    draggingEvents =
+    draggingEvents caretPositions =
       onPointer $ \case
-        PointerMove {pointerX} -> pointerMove pointerX
+        PointerMove {pointerX} -> pointerMove caretPositions pointerX
         PointerUp {} -> pointerUp
-        _ -> pure Nothing
+        _ -> Nothing
     keyEvents =
       onKey keyDown
-    pointerDown pointerX pointerY =
+    pointerDown caretPositions pointerX pointerY =
       if rectContains rect pointerX pointerY
-        then do
-          newCaret <- caretIndexFromX pointerX
-          pure (Just (widgetFocusSelf actions *> setState (startDragAt newCaret)))
-        else pure Nothing
-    pointerMove pointerX = do
-      newCaret <- caretIndexFromX pointerX
-      pure (Just (setState (continueDragAt newCaret)))
+        then Just (widgetFocusSelf actions *> setState (startDragAt (caretIndexFromX caretPositions pointerX)))
+        else Nothing
+    pointerMove caretPositions pointerX =
+      Just (setState (continueDragAt (caretIndexFromX caretPositions pointerX)))
     pointerUp =
-      pure (Just (setState state {textBoxDragging = False}))
+      Just (setState state {textBoxDragging = False})
     keyDown event =
       case editText event of
-        Just updated -> pure (Just (setState updated))
-        Nothing -> pure Nothing
-    caretIndexFromX pointerX =
-      closestCaretIndex (Canvas.measureText) (textBoxText state) (pointerX - textX)
+        Just updated -> Just (setState updated)
+        Nothing -> Nothing
+    caretIndexFromX caretPositions pointerX =
+      closestCaretIndex caretPositions (pointerX - textX)
     startDragAt newCaret =
       (setCaretIndex newCaret state)
         { textBoxSelectionOffset = 0
@@ -240,21 +240,23 @@ textBoxText :: TextBoxState -> String
 textBoxText textState =
   textBeforeCaret textState <> textAfterCaret textState
 
-drawCaret :: Canvas.Canvas renderM => Rect -> TextBoxState -> Frame actionM renderM
-drawCaret rect TextBoxState {textBeforeCaret} =
-  draw $ do
-    prefixWidth <- Canvas.measureText textBeforeCaret
-    Canvas.fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
+drawCaret :: Canvas.Canvas renderM => Rect -> TextBoxState -> [(Int, Double)] -> renderM ()
+drawCaret rect textState caretPositions =
+  Canvas.fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
+  where
+    prefixWidth = caretXAt caretPositions (caretIndex textState)
 
-drawSelection :: Canvas.Canvas renderM => Rect -> TextBoxState -> Frame actionM renderM
-drawSelection rect textState =
+drawSelection :: Canvas.Canvas renderM => Rect -> TextBoxState -> [(Int, Double)] -> renderM ()
+drawSelection rect textState caretPositions =
   case selectionText textState of
-    Nothing -> mempty
+    Nothing -> pure ()
     Just (beforeSelection, selection) ->
-      draw $ do
-        beforeWidth <- Canvas.measureText beforeSelection
-        selectionWidth <- Canvas.measureText selection
-        Canvas.fillRect (Rect (x rect + beforeWidth) (y rect) selectionWidth (height rect)) selectionColor
+      Canvas.fillRect (Rect (x rect + beforeWidth) (y rect) selectionWidth (height rect)) selectionColor
+      where
+        beforeIndex = length beforeSelection
+        afterIndex = beforeIndex + length selection
+        beforeWidth = caretXAt caretPositions beforeIndex
+        selectionWidth = caretXAt caretPositions afterIndex - beforeWidth
 
 selectionText :: TextBoxState -> Maybe (String, String)
 selectionText textState
@@ -279,15 +281,25 @@ keepUnselectedBefore textState =
     selectedCount = min (negate (textBoxSelectionOffset textState)) (length (textBeforeCaret textState))
     keepCount = length (textBeforeCaret textState) - selectedCount
 
-closestCaretIndex :: Monad m => (String -> m Double) -> String -> Double -> m Int
-closestCaretIndex measure text targetX = do
-  measured <- traverse measureIndex [0 .. length text]
-  pure (fst (minimumBy (comparing snd) measured))
+measureCaretPositions :: Canvas.Canvas m => String -> m [(Int, Double)]
+measureCaretPositions text =
+  traverse measureIndex [0 .. length text]
   where
     measureIndex index =
       do
-        prefixWidth <- measure (take index text)
-        pure (index, abs (prefixWidth - targetX))
+        prefixWidth <- Canvas.measureText (take index text)
+        pure (index, prefixWidth)
+
+closestCaretIndex :: [(Int, Double)] -> Double -> Int
+closestCaretIndex caretPositions targetX =
+  fst (minimumBy (comparing distanceFromTarget) caretPositions)
+  where
+    distanceFromTarget (_index, caretX) =
+      abs (caretX - targetX)
+
+caretXAt :: [(Int, Double)] -> Int -> Double
+caretXAt caretPositions index =
+  fromMaybe 0 (lookup index caretPositions)
 
 textColor :: String
 textColor = "#20242a"

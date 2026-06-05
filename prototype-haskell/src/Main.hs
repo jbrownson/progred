@@ -16,9 +16,21 @@ import Progred.Frame
 import Progred.Viewport
 import System.IO.Unsafe (unsafePerformIO)
 
-state :: IORef Model
-state = unsafePerformIO (newIORef initialModel)
-{-# NOINLINE state #-}
+data Runtime = Runtime
+  { runtimeModel :: Model
+  , runtimeFrame :: Frame AppM
+  }
+
+runtime :: IORef Runtime
+runtime =
+  unsafePerformIO
+    ( newIORef
+        Runtime
+          { runtimeModel = initialModel
+          , runtimeFrame = mempty
+          }
+    )
+{-# NOINLINE runtime #-}
 
 main :: IO ()
 main =
@@ -42,11 +54,9 @@ onPointerUp px py =
 
 dispatchPointer :: PointerEvent -> IO ()
 dispatchPointer event = do
-  model <- readIORef state
-  viewport <- Canvas.getViewport
-  action <- runPointerHandlers event (currentFrame viewport model)
-  let (_, updated) = runAppM action model
-  writeIORef state updated
+  Runtime {runtimeModel = model, runtimeFrame = frame} <- readIORef runtime
+  let (_, updated) = runAppM (runPointerHandlers event frame) model
+  writeIORef runtime Runtime {runtimeModel = updated, runtimeFrame = frame}
   renderState
 
 onKeyDown :: Word32 -> IO ()
@@ -59,21 +69,19 @@ onTextInput string =
 
 dispatchKey :: KeyEvent -> IO ()
 dispatchKey event = do
-  model <- readIORef state
-  viewport <- Canvas.getViewport
-  action <- runKeyHandlers event (currentFrame viewport model)
-  let (_, updated) = runAppM action model
-  writeIORef state updated
+  Runtime {runtimeModel = model, runtimeFrame = frame} <- readIORef runtime
+  let (_, updated) = runAppM (runKeyHandlers event frame) model
+  writeIORef runtime Runtime {runtimeModel = updated, runtimeFrame = frame}
   renderState
 
 renderState :: IO ()
 renderState = do
   viewport <- Canvas.getViewport
-  model <- readIORef state
-  let frame = currentFrame viewport model
+  Runtime {runtimeModel = model} <- readIORef runtime
   Canvas.clearCanvas viewport
-  renderFrame frame
+  frame <- currentFrame viewport model
+  writeIORef runtime Runtime {runtimeModel = model, runtimeFrame = frame}
 
-currentFrame :: Viewport -> Model -> Frame AppM IO
+currentFrame :: Viewport -> Model -> IO (Frame AppM)
 currentFrame =
   view
