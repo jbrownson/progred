@@ -94,8 +94,14 @@ If this prototype does grow a layout layer, keep three concerns separate:
    to need giant blocks of prose early, so do not make this a dependency
    until a real use case appears.
 
-3. Structured pretty layout: Progred will need graph/projection layouts
-   that decide whether a structure fits on one line or should become
-   multiline. This is closer to Wadler/Leijen pretty-printing than to
-   browser text flow. Start from the pretty-printer model before
-   inventing ad hoc single-line/multiline policy.
+3. Structured pretty layout: Most of Progred's editor body is likely
+   closer to Wadler/Leijen pretty-printing than to flexbox. Pretty
+   layout decides whether graph/projection structures render flat or
+   multiline, where separators go, and how multiline children affect
+   their parents. Box layout then assigns rectangles to the chosen
+   leaves. These layers should compose, but they are distinct concerns.
+
+The initial Progred foundation does not need that full pretty-printer
+layer. Start with a raw projection that always renders graph structure on
+new lines. Revisit interactive pretty-docs when domain-specific
+projections need flat-vs-multiline choices.
