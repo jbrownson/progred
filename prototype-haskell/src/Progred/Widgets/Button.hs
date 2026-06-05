@@ -4,7 +4,7 @@ module Progred.Widgets.Button
   ( button
   ) where
 
-import Progred.Frame
+import Progred.Handler
 import Progred.Geometry
 import qualified Progred.Canvas as Canvas
 import qualified Progred.KeyCode as KeyCode

@@ -11,7 +11,7 @@ import Data.List (minimumBy)
 import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
 import qualified Progred.Canvas as Canvas
-import Progred.Frame
+import Progred.Handler
 import Progred.Geometry
 import qualified Progred.KeyCode as KeyCode
 import Progred.Widget
@@ -21,6 +21,11 @@ data TextBoxState = TextBoxState
   , textAfterCaret :: String
   , textBoxSelectionOffset :: Int
   , textBoxDragging :: Bool
+  }
+
+data TextBoxGeometry = TextBoxGeometry
+  { textBoxRect :: Rect
+  , textBoxCaretPositions :: [(Int, Double)]
   }
 
 defaultTextBoxState :: TextBoxState
@@ -36,16 +41,16 @@ textBox
   :: (Applicative actionM, Canvas.Canvas renderM)
   => Widget TextBoxState actionM renderM
 textBox state rect focus actions = do
-  caretPositions <- measureCaretPositions (textBoxText state)
-  drawSelection rect state caretPositions
-  Canvas.fillTextMiddle (Point textX textY) textColor (textBoxText state)
-  when focused (drawCaret rect state caretPositions)
+  geometry <- TextBoxGeometry rect <$> measureCaretPositions (textBoxText state)
+  drawTextBox state geometry focus
   pure $
-    mconcat
-      [ pointerDownEvents caretPositions
-      , focusedFrame
-      , draggingFrame caretPositions
-      ]
+    textBoxHandler state geometry focus actions
+
+drawTextBox :: Canvas.Canvas m => TextBoxState -> TextBoxGeometry -> WidgetFocus -> m ()
+drawTextBox state geometry@TextBoxGeometry {textBoxRect = rect} focus = do
+  drawSelection state geometry
+  Canvas.fillTextMiddle (Point textX textY) textColor (textBoxText state)
+  when focused (drawCaret state geometry)
   where
     textX = x rect
     textY = y rect + height rect / 2
@@ -53,67 +58,99 @@ textBox state rect focus actions = do
       case focus of
         WidgetFocused -> True
         WidgetUnfocused -> False
-    pointerDownEvents caretPositions =
+
+textBoxHandler
+  :: Applicative actionM
+  => TextBoxState
+  -> TextBoxGeometry
+  -> WidgetFocus
+  -> WidgetActions TextBoxState actionM
+  -> Handler actionM
+textBoxHandler state geometry focus actions =
+  mconcat
+    [ pointerDownEvents
+    , focusedHandler
+    , draggingHandler
+    ]
+  where
+    pointerDownEvents =
       onPointer $ \case
-        PointerDown {pointerX, pointerY} -> pointerDown caretPositions pointerX pointerY
+        PointerDown {pointerX, pointerY} ->
+          fmap setFocusedState (pointerDownState geometry pointerX pointerY state)
         _ -> Nothing
-    focusedFrame =
+    focusedHandler =
       case focus of
         WidgetFocused -> keyEvents
         WidgetUnfocused -> mempty
-    draggingFrame caretPositions =
+    draggingHandler =
       if textBoxDragging state
-        then draggingEvents caretPositions
+        then draggingEvents
         else mempty
-    draggingEvents caretPositions =
+    draggingEvents =
       onPointer $ \case
-        PointerMove {pointerX} -> pointerMove caretPositions pointerX
-        PointerUp {} -> pointerUp
+        PointerMove {pointerX} ->
+          fmap setState (pointerMoveState geometry pointerX state)
+        PointerUp {} ->
+          fmap setState (pointerUpState state)
         _ -> Nothing
     keyEvents =
       onKey keyDown
-    pointerDown caretPositions pointerX pointerY =
-      if rectContains rect pointerX pointerY
-        then Just (widgetFocusSelf actions *> setState (startDragAt (caretIndexFromX caretPositions pointerX)))
-        else Nothing
-    pointerMove caretPositions pointerX =
-      Just (setState (continueDragAt (caretIndexFromX caretPositions pointerX)))
-    pointerUp =
-      Just (setState state {textBoxDragging = False})
     keyDown event =
-      case editText event of
-        Just updated -> Just (setState updated)
-        Nothing -> Nothing
-    caretIndexFromX caretPositions pointerX =
-      closestCaretIndex caretPositions (pointerX - textX)
-    startDragAt newCaret =
-      (setCaretIndex newCaret state)
-        { textBoxSelectionOffset = 0
-        , textBoxDragging = True
-        }
-    continueDragAt newCaret =
-      moved
-        { textBoxSelectionOffset = anchor - caretIndex moved
-        }
-      where
-        anchor = caretIndex state + textBoxSelectionOffset state
-        moved = setCaretIndex newCaret state
+      fmap setState (keyState event state)
+    setFocusedState updated =
+      widgetFocusSelf actions *> setState updated
     setState =
       widgetSetState actions
-    editText event =
-      case event of
-        TextInput string -> Just (insertString string state)
-        KeyCode code
-          | code == KeyCode.space -> Just (insertString " " state)
-          | code == KeyCode.backspace -> Just (deleteBackward state)
-          | code == KeyCode.delete -> Just (deleteForward state)
-          | code == KeyCode.left -> Just (moveCaret False (-1) state)
-          | code == KeyCode.right -> Just (moveCaret False 1 state)
-          | code == KeyCode.shiftLeft -> Just (moveCaret True (-1) state)
-          | code == KeyCode.shiftRight -> Just (moveCaret True 1 state)
-          | code == KeyCode.home -> Just (moveCaretStart state)
-          | code == KeyCode.end -> Just (moveCaretEnd state)
-        _ -> Nothing
+
+pointerDownState :: TextBoxGeometry -> Double -> Double -> TextBoxState -> Maybe TextBoxState
+pointerDownState geometry@TextBoxGeometry {textBoxRect = rect} pointerX pointerY state
+  | rectContains rect pointerX pointerY =
+      Just (startDragAt (caretIndexFromX geometry pointerX) state)
+  | otherwise = Nothing
+
+pointerMoveState :: TextBoxGeometry -> Double -> TextBoxState -> Maybe TextBoxState
+pointerMoveState geometry pointerX state =
+  Just (continueDragAt (caretIndexFromX geometry pointerX) state)
+
+pointerUpState :: TextBoxState -> Maybe TextBoxState
+pointerUpState state =
+  Just state {textBoxDragging = False}
+
+keyState :: KeyEvent -> TextBoxState -> Maybe TextBoxState
+keyState event state =
+  case event of
+    TextInput string -> Just (insertString string state)
+    KeyCode code
+      | code == KeyCode.space -> Just (insertString " " state)
+      | code == KeyCode.backspace -> Just (deleteBackward state)
+      | code == KeyCode.delete -> Just (deleteForward state)
+      | code == KeyCode.left -> Just (moveCaret False (-1) state)
+      | code == KeyCode.right -> Just (moveCaret False 1 state)
+      | code == KeyCode.shiftLeft -> Just (moveCaret True (-1) state)
+      | code == KeyCode.shiftRight -> Just (moveCaret True 1 state)
+      | code == KeyCode.home -> Just (moveCaretStart state)
+      | code == KeyCode.end -> Just (moveCaretEnd state)
+    _ -> Nothing
+
+caretIndexFromX :: TextBoxGeometry -> Double -> Int
+caretIndexFromX TextBoxGeometry {textBoxRect, textBoxCaretPositions} pointerX =
+  closestCaretIndex textBoxCaretPositions (pointerX - x textBoxRect)
+
+startDragAt :: Int -> TextBoxState -> TextBoxState
+startDragAt newCaret state =
+  (setCaretIndex newCaret state)
+    { textBoxSelectionOffset = 0
+    , textBoxDragging = True
+    }
+
+continueDragAt :: Int -> TextBoxState -> TextBoxState
+continueDragAt newCaret state =
+  moved
+    { textBoxSelectionOffset = anchor - caretIndex moved
+    }
+  where
+    anchor = caretIndex state + textBoxSelectionOffset state
+    moved = setCaretIndex newCaret state
 
 insertString :: String -> TextBoxState -> TextBoxState
 insertString string textState =
@@ -240,14 +277,14 @@ textBoxText :: TextBoxState -> String
 textBoxText textState =
   textBeforeCaret textState <> textAfterCaret textState
 
-drawCaret :: Canvas.Canvas renderM => Rect -> TextBoxState -> [(Int, Double)] -> renderM ()
-drawCaret rect textState caretPositions =
+drawCaret :: Canvas.Canvas renderM => TextBoxState -> TextBoxGeometry -> renderM ()
+drawCaret textState TextBoxGeometry {textBoxRect = rect, textBoxCaretPositions = caretPositions} =
   Canvas.fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
   where
     prefixWidth = caretXAt caretPositions (caretIndex textState)
 
-drawSelection :: Canvas.Canvas renderM => Rect -> TextBoxState -> [(Int, Double)] -> renderM ()
-drawSelection rect textState caretPositions =
+drawSelection :: Canvas.Canvas renderM => TextBoxState -> TextBoxGeometry -> renderM ()
+drawSelection textState TextBoxGeometry {textBoxRect = rect, textBoxCaretPositions = caretPositions} =
   case selectionText textState of
     Nothing -> pure ()
     Just (beforeSelection, selection) ->

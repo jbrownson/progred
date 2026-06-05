@@ -10,7 +10,7 @@ module Progred.App
 
 import Control.Monad.Trans.State.Strict (State, modify, runState)
 import qualified Progred.Canvas as Canvas
-import Progred.Frame
+import Progred.Handler
 import Progred.Geometry
 import qualified Progred.KeyCode as KeyCode
 import Progred.Lens
@@ -49,11 +49,11 @@ initialModel =
     , nameField = defaultTextBoxState {textBeforeCaret = "canvas owns focus"}
     }
 
-view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Frame AppM)
+view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
   Canvas.fillRect (Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)) "#fbfbfa"
   label (Point 32 42) "#3f454d" "Haskell/Wasm canvas UI"
-  label (Point 32 70) "#68707c" "Frame, handlers, focus, and text state are owned by Haskell."
+  label (Point 32 70) "#68707c" "Canvas rendering, handlers, focus, and text state are owned by Haskell."
   label (Point 32 110) "#3f454d" ("Count: " <> show (count model))
   counter <- framedButton model CounterButton (Rect 32 140 160 42) "Increment" (modifyModel (\world -> world {count = count world + 1}))
   name <- framedNameField model (Rect 32 206 300 42)
@@ -71,7 +71,7 @@ label :: Canvas.Canvas renderM => Point -> String -> String -> renderM ()
 label =
   Canvas.fillText
 
-framedButton :: Canvas.Canvas renderM => Model -> FocusId -> Rect -> String -> AppM () -> renderM (Frame AppM)
+framedButton :: Canvas.Canvas renderM => Model -> FocusId -> Rect -> String -> AppM () -> renderM (Handler AppM)
 framedButton model focusId rect text activate =
   mountWidget model unitLens focusId rect $
     button
@@ -86,7 +86,7 @@ framedButton model focusId rect text activate =
     border = "#c7cbd1"
     contentRect = insetRect (Insets 0 16 0 16) rect
 
-framedNameField :: Canvas.Canvas renderM => Model -> Rect -> renderM (Frame AppM)
+framedNameField :: Canvas.Canvas renderM => Model -> Rect -> renderM (Handler AppM)
 framedNameField model rect =
   mountWidget model nameFieldLens NameField rect field
   where
@@ -103,7 +103,7 @@ mountWidget
   -> FocusId
   -> Rect
   -> Widget state AppM renderM
-  -> renderM (Frame AppM)
+  -> renderM (Handler AppM)
 mountWidget model stateLens focusId rect widget =
   widget
     (lensGet stateLens model)
@@ -139,7 +139,7 @@ nameFieldLens =
     , lensSet = \state world -> world {nameField = state}
     }
 
-globalKeys :: Frame AppM
+globalKeys :: Handler AppM
 globalKeys =
   onKey $ \case
     KeyCode code
@@ -151,7 +151,7 @@ globalKeys =
       | code == KeyCode.down -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
     _ -> Nothing
 
-clearFocusOnBackground :: Viewport -> Frame AppM
+clearFocusOnBackground :: Viewport -> Handler AppM
 clearFocusOnBackground Viewport {viewportWidth, viewportHeight} =
   onPointer $ \case
     PointerDown {pointerX, pointerY} ->

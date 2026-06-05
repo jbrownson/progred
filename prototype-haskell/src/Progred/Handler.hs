@@ -1,13 +1,13 @@
-module Progred.Frame
-  ( Frame (..)
+module Progred.Handler
+  ( Handler (..)
   , KeyEvent (..)
   , KeyHandler
   , PointerEvent (..)
   , PointerHandler
+  , handleKey
+  , handlePointer
   , onKey
   , onPointer
-  , runKeyHandlers
-  , runPointerHandlers
   ) where
 
 import Data.Word (Word32)
@@ -34,44 +34,44 @@ type PointerHandler actionM = PointerEvent -> Maybe (actionM ())
 
 type KeyHandler actionM = KeyEvent -> Maybe (actionM ())
 
-data Frame actionM = Frame
+data Handler actionM = Handler
   { pointerHandlers :: [PointerHandler actionM]
   , keyHandlers :: [KeyHandler actionM]
   }
 
-instance Semigroup (Frame actionM) where
+instance Semigroup (Handler actionM) where
   left <> right =
-    Frame
+    Handler
       { pointerHandlers = pointerHandlers left <> pointerHandlers right
       , keyHandlers = keyHandlers left <> keyHandlers right
       }
 
-instance Monoid (Frame actionM) where
-  mempty = Frame [] []
+instance Monoid (Handler actionM) where
+  mempty = Handler [] []
 
-onPointer :: PointerHandler actionM -> Frame actionM
+onPointer :: PointerHandler actionM -> Handler actionM
 onPointer handler =
   mempty {pointerHandlers = [handler]}
 
-onKey :: KeyHandler actionM -> Frame actionM
+onKey :: KeyHandler actionM -> Handler actionM
 onKey handler =
   mempty {keyHandlers = [handler]}
 
-runPointerHandlers
+handlePointer
   :: Monad actionM
   => PointerEvent
-  -> Frame actionM
+  -> Handler actionM
   -> actionM ()
-runPointerHandlers event frame =
-  runFirst event (reverse (pointerHandlers frame))
+handlePointer event handler =
+  runFirst event (reverse (pointerHandlers handler))
 
-runKeyHandlers
+handleKey
   :: Monad actionM
   => KeyEvent
-  -> Frame actionM
+  -> Handler actionM
   -> actionM ()
-runKeyHandlers event frame =
-  runFirst event (keyHandlers frame)
+handleKey event handler =
+  runFirst event (keyHandlers handler)
 
 runFirst
   :: Monad m

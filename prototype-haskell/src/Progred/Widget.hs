@@ -4,7 +4,7 @@ module Progred.Widget
   , WidgetFocus (..)
   ) where
 
-import Progred.Frame
+import Progred.Handler
 import Progred.Geometry
 
 type Widget state actionM renderM =
@@ -12,7 +12,7 @@ type Widget state actionM renderM =
     -> Rect
     -> WidgetFocus
     -> WidgetActions state actionM
-    -> renderM (Frame actionM)
+    -> renderM (Handler actionM)
 
 data WidgetActions state actionM = WidgetActions
   { widgetFocusSelf :: actionM ()

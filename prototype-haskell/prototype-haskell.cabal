@@ -13,7 +13,7 @@ executable prototype-haskell
   main-is:          Main.hs
   other-modules:
     Progred.Gid
-    Progred.Frame
+    Progred.Handler
     Progred.Geometry
     Progred.KeyCode
     Progred.Lens

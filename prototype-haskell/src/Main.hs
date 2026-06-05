@@ -12,13 +12,13 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32)
 import Progred.App
 import qualified Progred.Canvas as Canvas
-import Progred.Frame
+import Progred.Handler
 import Progred.Viewport
 import System.IO.Unsafe (unsafePerformIO)
 
 data Runtime = Runtime
   { runtimeModel :: Model
-  , runtimeFrame :: Frame AppM
+  , runtimeHandler :: Handler AppM
   }
 
 runtime :: IORef Runtime
@@ -27,7 +27,7 @@ runtime =
     ( newIORef
         Runtime
           { runtimeModel = initialModel
-          , runtimeFrame = mempty
+          , runtimeHandler = mempty
           }
     )
 {-# NOINLINE runtime #-}
@@ -54,9 +54,9 @@ onPointerUp px py =
 
 dispatchPointer :: PointerEvent -> IO ()
 dispatchPointer event = do
-  Runtime {runtimeModel = model, runtimeFrame = frame} <- readIORef runtime
-  let (_, updated) = runAppM (runPointerHandlers event frame) model
-  writeIORef runtime Runtime {runtimeModel = updated, runtimeFrame = frame}
+  Runtime {runtimeModel = model, runtimeHandler = handler} <- readIORef runtime
+  let (_, updated) = runAppM (handlePointer event handler) model
+  writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
   renderState
 
 onKeyDown :: Word32 -> IO ()
@@ -69,9 +69,9 @@ onTextInput string =
 
 dispatchKey :: KeyEvent -> IO ()
 dispatchKey event = do
-  Runtime {runtimeModel = model, runtimeFrame = frame} <- readIORef runtime
-  let (_, updated) = runAppM (runKeyHandlers event frame) model
-  writeIORef runtime Runtime {runtimeModel = updated, runtimeFrame = frame}
+  Runtime {runtimeModel = model, runtimeHandler = handler} <- readIORef runtime
+  let (_, updated) = runAppM (handleKey event handler) model
+  writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
   renderState
 
 renderState :: IO ()
@@ -79,9 +79,9 @@ renderState = do
   viewport <- Canvas.getViewport
   Runtime {runtimeModel = model} <- readIORef runtime
   Canvas.clearCanvas viewport
-  frame <- currentFrame viewport model
-  writeIORef runtime Runtime {runtimeModel = model, runtimeFrame = frame}
+  handler <- currentHandler viewport model
+  writeIORef runtime Runtime {runtimeModel = model, runtimeHandler = handler}
 
-currentFrame :: Viewport -> Model -> IO (Frame AppM)
-currentFrame =
+currentHandler :: Viewport -> Model -> IO (Handler AppM)
+currentHandler =
   view
