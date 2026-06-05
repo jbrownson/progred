@@ -31,38 +31,56 @@ defaultTextBoxState =
     }
 
 textBox
-  :: (Applicative widgetM, WidgetActions TextBoxState appM widgetM)
-  => Widget TextBoxState widgetM
-textBox state rect focus onChange =
+  :: Applicative m
+  => Widget TextBoxState m
+textBox state rect focus actions =
   mconcat
-    [ drawMeasuredSelection rect state
-    , fillTextMiddle (Point textX textY) textColor (textBoxText state)
-    , case focus of
-        WidgetFocused -> drawMeasuredCaret rect state
-        WidgetUnfocused -> mempty
-    , onPointer $ \case
-        PointerDown {pointerX, pointerY} ->
-          if rectContains rect pointerX pointerY
-            then Just (focusSelf *> commitState (startDragAt pointerX))
-            else Nothing
-        PointerMove {pointerX} ->
-          if textBoxDragging state
-            then Just (commitState (continueDragAt pointerX))
-            else Nothing
-        PointerUp {} ->
-          if textBoxDragging state
-            then Just (commitState state {textBoxDragging = False})
-            else Nothing
-    , onKey $ \event ->
-        case focus of
-          WidgetFocused -> case editText event of
-            Just updated -> Just (commitState updated)
-            Nothing -> Nothing
-          WidgetUnfocused -> Nothing
+    [ selection
+    , text
+    , pointerDownEvents
+    , focusedFrame
+    , draggingFrame
     ]
   where
     textX = x rect
     textY = y rect + height rect / 2
+    selection =
+      drawSelection rect state
+    text =
+      fillTextMiddle (Point textX textY) textColor (textBoxText state)
+    pointerDownEvents =
+      onPointer $ \case
+        PointerDown {pointerX, pointerY} -> pointerDown pointerX pointerY
+        _ -> Nothing
+    focusedFrame =
+      case focus of
+        WidgetFocused -> mconcat [caret, keyEvents]
+        WidgetUnfocused -> mempty
+    draggingFrame =
+      if textBoxDragging state
+        then draggingEvents
+        else mempty
+    caret =
+      drawCaret rect state
+    draggingEvents =
+      onPointer $ \case
+        PointerMove {pointerX} -> pointerMove pointerX
+        PointerUp {} -> pointerUp
+        _ -> Nothing
+    keyEvents =
+      onKey keyDown
+    pointerDown pointerX pointerY =
+      if rectContains rect pointerX pointerY
+        then Just (widgetFocusSelf actions *> setState (startDragAt pointerX))
+        else Nothing
+    pointerMove pointerX =
+      Just (setState (continueDragAt pointerX))
+    pointerUp =
+      Just (setState state {textBoxDragging = False})
+    keyDown event =
+      case editText event of
+        Just updated -> Just (setState updated)
+        Nothing -> Nothing
     caretIndexFromX pointerX =
       closestCaretIndex (textBoxText state) (pointerX - textX)
     startDragAt pointerX =
@@ -77,12 +95,8 @@ textBox state rect focus onChange =
       where
         anchor = caretIndex state + textBoxSelectionOffset state
         moved = setCaretIndex (caretIndexFromX pointerX) state
-    commitState updated =
-      onChange
-        WidgetChangeEvent
-          { widgetChangeOld = state
-          , widgetChangeNew = updated
-          }
+    setState updated =
+      widgetSetState actions updated
     editText event =
       case event of
         TextInput string -> Just (insertString string state)
@@ -223,14 +237,14 @@ textBoxText :: TextBoxState -> String
 textBoxText textState =
   textBeforeCaret textState <> textAfterCaret textState
 
-drawMeasuredCaret :: Rect -> TextBoxState -> Frame m
-drawMeasuredCaret rect TextBoxState {textBeforeCaret} =
+drawCaret :: Rect -> TextBoxState -> Frame m
+drawCaret rect TextBoxState {textBeforeCaret} =
   fillRect (Rect (x rect + prefixWidth) (y rect) 1 (height rect)) caretColor
   where
     prefixWidth = Platform.measureText textBeforeCaret
 
-drawMeasuredSelection :: Rect -> TextBoxState -> Frame m
-drawMeasuredSelection rect textState =
+drawSelection :: Rect -> TextBoxState -> Frame m
+drawSelection rect textState =
   case selectionText textState of
     Nothing -> mempty
     Just (beforeSelection, selection) ->

@@ -46,7 +46,7 @@ dispatchPointer :: PointerEvent -> IO ()
 dispatchPointer event = do
   model <- readIORef state
   viewport <- getViewport
-  (_, updated) <- runAppM (runPointerHandlers event (view viewport model)) model
+  let (_, updated) = runAppM (runPointerHandlers event (view viewport model)) model
   writeIORef state updated
   renderState
 
@@ -62,7 +62,7 @@ dispatchKey :: KeyEvent -> IO ()
 dispatchKey event = do
   model <- readIORef state
   viewport <- getViewport
-  (_, updated) <- runAppM (runKeyHandlers event (view viewport model)) model
+  let (_, updated) = runAppM (runKeyHandlers event (view viewport model)) model
   writeIORef state updated
   renderState
 

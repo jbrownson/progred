@@ -10,11 +10,11 @@ import qualified Progred.KeyCode as KeyCode
 import Progred.Widget
 
 button
-  :: (Applicative widgetM, WidgetActions () appM widgetM)
-  => appM ()
-  -> (WidgetFocus -> Frame widgetM)
-  -> Widget () widgetM
-button activate content _ rect focus _onChange =
+  :: Applicative m
+  => m ()
+  -> (WidgetFocus -> Frame m)
+  -> Widget () m
+button activate content _ rect focus actions =
   mconcat
     [ content focus
     , case focus of
@@ -23,15 +23,15 @@ button activate content _ rect focus _onChange =
     , onPointer $ \case
         PointerDown {pointerX, pointerY} ->
           if rectContains rect pointerX pointerY
-            then Just (focusSelf *> liftApp activate)
+            then Just (widgetFocusSelf actions *> activate)
             else Nothing
         _ -> Nothing
     , onKey $ \event ->
         case focus of
           WidgetFocused -> case event of
             KeyCode code
-              | code == KeyCode.enter -> Just (liftApp activate)
-              | code == KeyCode.space -> Just (liftApp activate)
+              | code == KeyCode.enter -> Just activate
+              | code == KeyCode.space -> Just activate
             _ -> Nothing
           WidgetUnfocused -> Nothing
     ]

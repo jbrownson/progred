@@ -16,13 +16,13 @@ executable prototype-haskell
     Progred.Frame
     Progred.Geometry
     Progred.KeyCode
+    Progred.Lens
     Progred.MapGid
     Progred.App
     Progred.Canvas
     Progred.Platform
     Progred.Viewport
     Progred.Widget
-    Progred.Widget.Interpreter
     Progred.Widgets.Button
     Progred.Widgets.TextBox
   hs-source-dirs:   src
@@ -30,6 +30,7 @@ executable prototype-haskell
   build-depends:
     , base >= 4.18 && < 4.23
     , containers >= 0.6 && < 0.8
+    , transformers >= 0.5 && < 0.7
 
   if os(wasi)
     hs-source-dirs: platform/wasm

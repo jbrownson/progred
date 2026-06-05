@@ -1,3 +1,5 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Progred.App
   ( AppM
   , Model (..)
@@ -6,12 +8,13 @@ module Progred.App
   , view
   ) where
 
+import Control.Monad.Trans.State.Strict (State, modify, runState)
 import Progred.Frame
 import Progred.Geometry
 import qualified Progred.KeyCode as KeyCode
+import Progred.Lens
 import Progred.Viewport
 import Progred.Widget
-import Progred.Widget.Interpreter
 import Progred.Widgets.Button
 import Progred.Widgets.TextBox
 
@@ -27,34 +30,15 @@ data Model = Model
   , nameField :: TextBoxState
   }
 
-newtype AppM a = AppM
-  { runAppM :: Model -> IO (a, Model)
-  }
+type AppM = State Model
 
-instance Functor AppM where
-  fmap f action =
-    AppM $ \model -> do
-      (value, updated) <- runAppM action model
-      pure (f value, updated)
-
-instance Applicative AppM where
-  pure value =
-    AppM $ \model -> pure (value, model)
-  function <*> argument =
-    AppM $ \model -> do
-      (f, afterFunction) <- runAppM function model
-      (value, afterArgument) <- runAppM argument afterFunction
-      pure (f value, afterArgument)
-
-instance Monad AppM where
-  action >>= f =
-    AppM $ \model -> do
-      (value, updated) <- runAppM action model
-      runAppM (f value) updated
+runAppM :: AppM a -> Model -> (a, Model)
+runAppM =
+  runState
 
 modifyModel :: (Model -> Model) -> AppM ()
-modifyModel f =
-  AppM $ \model -> pure ((), f model)
+modifyModel =
+  modify
 
 initialModel :: Model
 initialModel =
@@ -84,7 +68,7 @@ label =
 
 framedButton :: Model -> FocusId -> Rect -> String -> AppM () -> Frame AppM
 framedButton model focusId rect text activate =
-  runWidgetFrame (statelessWidgetEnv focusId) $
+  mountWidget model unitLens focusId rect $
     button
       activate
       ( \_contentFocus -> mconcat
@@ -93,79 +77,86 @@ framedButton model focusId rect text activate =
           , fillTextMiddle (Point (x contentRect) (y contentRect + height contentRect / 2)) "#20242a" text
           ]
       )
-      ()
-      rect
-      buttonFocus
-      applyWidgetChange
   where
-    buttonFocus = widgetFocus (focus model == Just focusId)
     background = "#ffffff"
     border = "#c7cbd1"
     contentRect = insetRect (Insets 0 16 0 16) rect
 
 framedNameField :: Model -> Rect -> Frame AppM
 framedNameField model rect =
-  runWidgetFrame (textBoxWidgetEnv NameField (\state world -> world {nameField = state})) $
-    mconcat
-      [ fillRect rect "#ffffff"
-      , strokeRect rect border 2
-      , textBox (nameField model) (insetRect (Insets 10 10 10 10) rect) (widgetFocus focused) applyWidgetChange
-      ]
+  mountWidget model nameFieldLens NameField rect field
   where
-    focused =
-      case focus model of
-        Just NameField -> True
-        _ -> False
-    border = if focused then "#0a84ff" else "#c7cbd1"
+    field state fieldRect fieldFocus actions =
+      mconcat
+        [ fillRect fieldRect "#ffffff"
+        , strokeRect fieldRect (fieldBorder fieldFocus) 2
+        , textBox state (insetRect (Insets 10 10 10 10) fieldRect) fieldFocus actions
+        ]
+    fieldBorder WidgetFocused = "#0a84ff"
+    fieldBorder WidgetUnfocused = "#c7cbd1"
+
+mountWidget
+  :: Model
+  -> Lens Model state
+  -> FocusId
+  -> Rect
+  -> Widget state AppM
+  -> Frame AppM
+mountWidget model stateLens focusId rect widget =
+  widget
+    (lensGet stateLens model)
+    rect
+    (widgetFocus (lensGet focusLens model == Just focusId))
+    actions
+  where
+    actions =
+      WidgetActions
+        { widgetFocusSelf = modifyModel (lensSet focusLens (Just focusId))
+        , widgetSetState = applyWidgetState stateLens
+        }
 
 widgetFocus :: Bool -> WidgetFocus
 widgetFocus focused =
   if focused then WidgetFocused else WidgetUnfocused
 
-applyWidgetChange :: WidgetActions state appM widgetM => WidgetChangeEvent state -> widgetM ()
-applyWidgetChange event =
-  putState (widgetChangeNew event)
+applyWidgetState :: Lens Model state -> state -> AppM ()
+applyWidgetState stateLens state =
+  modifyModel (lensSet stateLens state)
 
-statelessWidgetEnv :: FocusId -> WidgetEnv () AppM
-statelessWidgetEnv focusId =
-  WidgetEnv
-    { widgetEnvPutState = \() -> pure ()
-    , widgetEnvFocusSelf = focusSelfInModel focusId
+focusLens :: Lens Model (Maybe FocusId)
+focusLens =
+  Lens
+    { lensGet = focus
+    , lensSet = \newFocus world -> world {focus = newFocus}
     }
 
-textBoxWidgetEnv :: FocusId -> (TextBoxState -> Model -> Model) -> WidgetEnv TextBoxState AppM
-textBoxWidgetEnv focusId set =
-  WidgetEnv
-    { widgetEnvPutState = \state -> modifyModel (set state)
-    , widgetEnvFocusSelf = focusSelfInModel focusId
+nameFieldLens :: Lens Model TextBoxState
+nameFieldLens =
+  Lens
+    { lensGet = nameField
+    , lensSet = \state world -> world {nameField = state}
     }
-
-focusSelfInModel :: FocusId -> AppM ()
-focusSelfInModel focusId =
-  modifyModel (\world -> world {focus = Just focusId})
 
 globalKeys :: Frame AppM
 globalKeys =
-  onKey $ \event ->
-    case event of
-      KeyCode code
-        | code == KeyCode.tab -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-        | code == KeyCode.shiftTab -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-        | code == KeyCode.left -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-        | code == KeyCode.up -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-        | code == KeyCode.right -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-        | code == KeyCode.down -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-      _ -> Nothing
+  onKey $ \case
+    KeyCode code
+      | code == KeyCode.tab -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+      | code == KeyCode.shiftTab -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+      | code == KeyCode.left -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+      | code == KeyCode.up -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
+      | code == KeyCode.right -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+      | code == KeyCode.down -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
+    _ -> Nothing
 
 clearFocusOnBackground :: Viewport -> Frame AppM
 clearFocusOnBackground Viewport {viewportWidth, viewportHeight} =
-  onPointer $ \event ->
-    case event of
-      PointerDown {pointerX, pointerY} ->
-        if rectContains (Rect 0 0 viewportWidth viewportHeight) pointerX pointerY
-          then Just (modifyModel (\world -> world {focus = Nothing}))
-          else Nothing
-      _ -> Nothing
+  onPointer $ \case
+    PointerDown {pointerX, pointerY} ->
+      if rectContains (Rect 0 0 viewportWidth viewportHeight) pointerX pointerY
+        then Just (modifyModel (\world -> world {focus = Nothing}))
+        else Nothing
+    _ -> Nothing
 
 nextFocus :: Maybe FocusId -> FocusId
 nextFocus Nothing =

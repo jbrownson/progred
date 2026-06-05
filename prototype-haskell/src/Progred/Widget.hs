@@ -1,32 +1,24 @@
-{-# LANGUAGE FunctionalDependencies #-}
-
 module Progred.Widget
   ( Widget
-  , WidgetChangeEvent (..)
-  , WidgetFocus (..)
   , WidgetActions (..)
+  , WidgetFocus (..)
   ) where
 
 import Progred.Frame
 import Progred.Geometry
 
-type Widget state widgetM =
+type Widget state m =
   state
     -> Rect
     -> WidgetFocus
-    -> (WidgetChangeEvent state -> widgetM ())
-    -> Frame widgetM
+    -> WidgetActions state m
+    -> Frame m
+
+data WidgetActions state m = WidgetActions
+  { widgetFocusSelf :: m ()
+  , widgetSetState :: state -> m ()
+  }
 
 data WidgetFocus
   = WidgetFocused
   | WidgetUnfocused
-
-data WidgetChangeEvent state = WidgetChangeEvent
-  { widgetChangeOld :: state
-  , widgetChangeNew :: state
-  }
-
-class WidgetActions state appM widgetM | widgetM -> state appM where
-  putState :: state -> widgetM ()
-  focusSelf :: widgetM ()
-  liftApp :: appM a -> widgetM a
