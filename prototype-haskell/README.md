@@ -71,8 +71,28 @@ Haskell GUI viability, but the active question is now whether Haskell can
 own the UI model/projection/event logic while the browser/webview remains
 the rendering and distribution substrate.
 
-There does not appear to be a mature Haskell binding for Nic Barker's C
-Clay layout library. The Haskell package named `clay` is a CSS EDSL, not
-that layout engine. For now layout is deliberately tiny and explicit in
-`src/Main.hs`; binding C Clay is a later option if the stack proves worth
-continuing.
+## Layout Notes
+
+Layout is deliberately tiny and explicit in `src/Main.hs` for now. The
+next useful step may be working on Progred itself and revisiting layout
+only when the app needs more help.
+
+If this prototype does grow a layout layer, keep three concerns separate:
+
+1. Box layout: Nic Barker's C Clay layout library is still a good source
+   of inspiration for a small, fast, flex-like row/column model with
+   fixed/grow/fit sizing, padding, gaps, and measured leaves. There does
+   not appear to be a mature Haskell binding for that Clay. The Haskell
+   package named `clay` is a CSS EDSL, not that layout engine.
+
+2. Text flow: Clay includes text wrapping, but its core value here is box
+   layout rather than text layout. For real text flow, look separately at
+   projects such as Pretext, Parley, or Cosmic Text. Progred is unlikely
+   to need giant blocks of prose early, so do not make this a dependency
+   until a real use case appears.
+
+3. Structured pretty layout: Progred will need graph/projection layouts
+   that decide whether a structure fits on one line or should become
+   multiline. This is closer to Wadler/Leijen pretty-printing than to
+   browser text flow. Start from the pretty-printer model before
+   inventing ad hoc single-line/multiline policy.
