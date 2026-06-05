@@ -11,17 +11,18 @@ common warnings
 library puri
   import:           warnings
   exposed-modules:
-    Progred.Canvas
-    Progred.Handler
-    Progred.Geometry
-    Progred.KeyCode
-    Progred.Lens
-    Progred.Platform
-    Progred.Viewport
-    Progred.Widget
-    Progred.Widgets.Button
-    Progred.Widgets.TextBox
-  hs-source-dirs:   src
+    Puri.Canvas
+    Puri.Handler
+    Puri.Geometry
+    Puri.KeyCode
+    Puri.Lens
+    Puri.Viewport
+    Puri.Widget
+    Puri.Widgets.Button
+    Puri.Widgets.TextBox
+  other-modules:
+    Puri.Platform
+  hs-source-dirs:   puri
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
@@ -34,9 +35,10 @@ library puri
   else
     hs-source-dirs: platform/stub
 
-library progred-graph
+library progred
   import:           warnings
   exposed-modules:
+    Progred.App
     Progred.Gid
     Progred.MapGid
   hs-source-dirs:   src
@@ -44,18 +46,18 @@ library progred-graph
   build-depends:
     , base >= 4.18 && < 4.23
     , containers >= 0.6 && < 0.8
+    , prototype-haskell:puri
+    , transformers >= 0.5 && < 0.7
 
 executable prototype-haskell
   import:           warnings
   main-is:          Main.hs
-  other-modules:
-    Progred.App
   hs-source-dirs:   app
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
+    , prototype-haskell:progred
     , prototype-haskell:puri
-    , transformers >= 0.5 && < 0.7
 
   if os(wasi)
     hs-source-dirs: platform/wasm

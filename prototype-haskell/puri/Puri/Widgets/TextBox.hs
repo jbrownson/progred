@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Progred.Widgets.TextBox
+module Puri.Widgets.TextBox
   ( TextBoxState (..)
   , defaultTextBoxState
   , textBox
@@ -10,11 +10,11 @@ import Control.Monad (when)
 import Data.List (minimumBy)
 import Data.Maybe (fromMaybe)
 import Data.Ord (comparing)
-import qualified Progred.Canvas as Canvas
-import Progred.Handler
-import Progred.Geometry
-import qualified Progred.KeyCode as KeyCode
-import Progred.Widget
+import qualified Puri.Canvas as Canvas
+import Puri.Handler
+import Puri.Geometry
+import qualified Puri.KeyCode as KeyCode
+import Puri.Widget
 
 data TextBoxState = TextBoxState
   { textBeforeCaret :: String
@@ -115,14 +115,12 @@ keyState :: KeyEvent -> TextBoxState -> Maybe TextBoxState
 keyState event state =
   case event of
     TextInput string -> Just (insertString string state)
-    KeyCode code
+    KeyCode modifiers code
       | code == KeyCode.space -> Just (insertString " " state)
       | code == KeyCode.backspace -> Just (deleteBackward state)
       | code == KeyCode.delete -> Just (deleteForward state)
-      | code == KeyCode.left -> Just (moveCaret False (-1) state)
-      | code == KeyCode.right -> Just (moveCaret False 1 state)
-      | code == KeyCode.shiftLeft -> Just (moveCaret True (-1) state)
-      | code == KeyCode.shiftRight -> Just (moveCaret True 1 state)
+      | code == KeyCode.left -> Just (moveCaret (keyShift modifiers) (-1) state)
+      | code == KeyCode.right -> Just (moveCaret (keyShift modifiers) 1 state)
       | code == KeyCode.home -> Just (moveCaretStart state)
       | code == KeyCode.end -> Just (moveCaretEnd state)
     _ -> Nothing

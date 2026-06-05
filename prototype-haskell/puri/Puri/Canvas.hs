@@ -1,4 +1,4 @@
-module Progred.Canvas
+module Puri.Canvas
   ( Canvas
     ( clearCanvas
     , fillRect
@@ -10,9 +10,9 @@ module Progred.Canvas
   , getViewport
   ) where
 
-import qualified Progred.Platform as Platform
-import Progred.Geometry
-import Progred.Viewport
+import qualified Puri.Platform as Platform
+import Puri.Geometry
+import Puri.Viewport
 
 class Monad m => Canvas m where
   clearCanvas :: Viewport -> m ()

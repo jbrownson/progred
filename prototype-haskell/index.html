@@ -135,8 +135,6 @@
       });
 
       canvas.addEventListener("keydown", async event => {
-        const shiftKeyOffset = 1000;
-
         if (!event.metaKey && !event.ctrlKey && event.key.length === 1 && event.key !== " ") {
           event.preventDefault();
           await inst.exports.onTextInput(event.key);
@@ -145,7 +143,13 @@
 
         if (["Tab", "Enter", " ", "Backspace", "Delete", "Home", "End", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(event.key)) {
           event.preventDefault();
-          await inst.exports.onKeyDown(event.shiftKey ? event.keyCode + shiftKeyOffset : event.keyCode);
+          await inst.exports.onKeyDown(
+            event.keyCode,
+            event.shiftKey ? 1 : 0,
+            event.altKey ? 1 : 0,
+            event.ctrlKey ? 1 : 0,
+            event.metaKey ? 1 : 0,
+          );
         }
       });
     </script>

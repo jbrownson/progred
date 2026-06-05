@@ -12,9 +12,30 @@ Read `README.md` first for project philosophy, active prototypes, and current st
 - Only commit when explicitly asked.
 - When a design pattern or lesson emerges during work, propose adding it to the relevant doc so future sessions start with that knowledge.
 
-## Active TypeScript Prototype
+## Active Haskell Prototype
 
-The main editor prototype is `prototype-ts/`.
+The active prototype is `prototype-haskell/`, a Haskell/Wasm canvas UI
+spike using the Puri internal library.
+
+```bash
+cd prototype-haskell
+make run
+make dist
+cabal build lib:puri lib:progred exe:prototype-haskell
+```
+
+`make run` builds the Wasm app and serves it from `dist/`. `make dist`
+builds the Haskell/Wasm executable, generates the JSFFI bridge, and
+copies the browser assets. Use the Cabal command for native
+typechecking/build feedback.
+
+Puri is intentionally small: render one frame, return a transient
+`Handler`, dispatch browser events through that handler into explicit app
+state, then render the next frame. Extend Puri only as Progred needs it.
+
+## Paused TypeScript Prototype
+
+The previous editor prototype is `prototype-ts/`.
 
 ```bash
 cd prototype-ts
@@ -70,4 +91,4 @@ Prototype-specific historical guidance lives with those prototypes:
 
 - `prototype-rust/AGENTS.md` documents egui focus/layout constraints.
 - `prototype-swift/MOTIVATION.md` documents the AppKit focus motivation.
-- `prototype-haskell/README.md` documents the parked Haskell/Wasm spike.
+- `prototype-haskell/README.md` documents the active Haskell/Wasm/Puri spike.

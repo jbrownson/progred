@@ -1,4 +1,4 @@
-module Progred.Viewport
+module Puri.Viewport
   ( Viewport (..)
   ) where
 

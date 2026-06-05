@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 
-module Progred.Platform
+module Puri.Platform
   ( clearCanvas
   , fillRect
   , fillText

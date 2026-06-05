@@ -1,15 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Progred.Widgets.Button
+module Puri.Widgets.Button
   ( button
   ) where
 
 import Control.Monad (when)
-import Progred.Handler
-import Progred.Geometry
-import qualified Progred.Canvas as Canvas
-import qualified Progred.KeyCode as KeyCode
-import Progred.Widget
+import Puri.Handler
+import Puri.Geometry
+import qualified Puri.Canvas as Canvas
+import qualified Puri.KeyCode as KeyCode
+import Puri.Widget
 
 button
   :: (Applicative actionM, Canvas.Canvas renderM)
@@ -35,7 +35,7 @@ button activate content _ rect focus actions = do
   where
     keyActivate event =
       case event of
-        KeyCode code
+        KeyCode _modifiers code
           | code == KeyCode.enter -> Just activate
           | code == KeyCode.space -> Just activate
         _ -> Nothing

@@ -1,4 +1,4 @@
-module Progred.Geometry
+module Puri.Geometry
   ( Insets (..)
   , Point (..)
   , Rect (..)

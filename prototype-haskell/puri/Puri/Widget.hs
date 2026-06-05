@@ -1,12 +1,12 @@
-module Progred.Widget
+module Puri.Widget
   ( Widget
   , WidgetActions (..)
   , WidgetFocus (..)
   , widgetIsFocused
   ) where
 
-import Progred.Handler
-import Progred.Geometry
+import Puri.Handler
+import Puri.Geometry
 
 type Widget state actionM renderM =
   state

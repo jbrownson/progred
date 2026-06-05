@@ -9,15 +9,15 @@ module Progred.App
   ) where
 
 import Control.Monad.Trans.State.Strict (State, modify, runState)
-import qualified Progred.Canvas as Canvas
-import Progred.Handler
-import Progred.Geometry
-import qualified Progred.KeyCode as KeyCode
-import Progred.Lens
-import Progred.Viewport
-import Progred.Widget
-import Progred.Widgets.Button
-import Progred.Widgets.TextBox
+import qualified Puri.Canvas as Canvas
+import Puri.Handler
+import Puri.Geometry
+import qualified Puri.KeyCode as KeyCode
+import Puri.Lens
+import Puri.Viewport
+import Puri.Widget
+import Puri.Widgets.Button
+import Puri.Widgets.TextBox
 
 data FocusId
   = CounterButton
@@ -142,9 +142,9 @@ nameFieldLens =
 globalKeys :: Handler AppM
 globalKeys =
   onKey $ \case
-    KeyCode code
+    KeyCode modifiers code
+      | code == KeyCode.tab && keyShift modifiers -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
       | code == KeyCode.tab -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-      | code == KeyCode.shiftTab -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
       | code == KeyCode.left -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
       | code == KeyCode.up -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
       | code == KeyCode.right -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))

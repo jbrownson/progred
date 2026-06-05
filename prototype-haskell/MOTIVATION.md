@@ -2,7 +2,8 @@
 
 This is the Haskell/Wasm exploration for Progred.
 
-Status: parked. The main editor prototype is currently TypeScript/Electron.
+Status: active again. The current direction is to build Progred on the
+Haskell/Wasm/Puri foundation and extend the UI runtime only as needed.
 
 The original Haskell spike had three render targets: GTK, ImGui, and
 Wasm/DOM. The native probes proved basic GUI viability but did not solve

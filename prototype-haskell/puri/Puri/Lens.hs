@@ -1,4 +1,4 @@
-module Progred.Lens
+module Puri.Lens
   ( Lens (..)
   , unitLens
   ) where

@@ -1,7 +1,8 @@
-module Progred.Handler
+module Puri.Handler
   ( Handler (..)
   , KeyEvent (..)
   , KeyHandler
+  , KeyModifiers (..)
   , PointerEvent (..)
   , PointerHandler
   , handleKey
@@ -26,8 +27,15 @@ data PointerEvent
   , pointerY :: Double
   }
 
+data KeyModifiers = KeyModifiers
+  { keyShift :: Bool
+  , keyAlt :: Bool
+  , keyCtrl :: Bool
+  , keyMeta :: Bool
+  }
+
 data KeyEvent
-  = KeyCode Word32
+  = KeyCode KeyModifiers Word32
   | TextInput String
 
 type PointerHandler actionM = PointerEvent -> Maybe (actionM ())

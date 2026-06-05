@@ -10,10 +10,10 @@ module Main
 
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32)
+import qualified Puri.Canvas as Canvas
+import Puri.Handler
+import Puri.Viewport
 import Progred.App
-import qualified Progred.Canvas as Canvas
-import Progred.Handler
-import Progred.Viewport
 import System.IO.Unsafe (unsafePerformIO)
 
 data Runtime = Runtime
@@ -59,9 +59,18 @@ dispatchPointer event = do
   writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
   renderState
 
-onKeyDown :: Word32 -> IO ()
-onKeyDown keyCode =
-  dispatchKey (KeyCode keyCode)
+onKeyDown :: Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
+onKeyDown keyCode shift alt ctrl meta =
+  dispatchKey (KeyCode (keyModifiers shift alt ctrl meta) keyCode)
+
+keyModifiers :: Word32 -> Word32 -> Word32 -> Word32 -> KeyModifiers
+keyModifiers shift alt ctrl meta =
+  KeyModifiers
+    { keyShift = shift /= 0
+    , keyAlt = alt /= 0
+    , keyCtrl = ctrl /= 0
+    , keyMeta = meta /= 0
+    }
 
 onTextInput :: String -> IO ()
 onTextInput string =

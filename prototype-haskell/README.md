@@ -15,8 +15,9 @@ backend, talking to Canvas/Web APIs through JSFFI. The HTML host
 pointer/key events, and exposes a small `window.progredCanvas` drawing
 surface.
 
-The reusable UI component is named `puri`. Its current Haskell modules
-still live under the `Progred.*` namespace while the API shape settles.
+The reusable UI component is named `puri`. Its Haskell modules live under
+the `Puri.*` namespace, while app-specific prototype modules still live
+under `Progred.*`.
 
 Requires a native GHC for editor/typechecking and the WASM-targeted GHC
 cross-compiler for the app bundle:
@@ -64,7 +65,7 @@ serves or wraps that static directory.
 Haskell source. It is generated as part of `make dist`.
 
 Editor note: the only target-specific code lives under `platform/`.
-`Progred.Platform` is selected by Cabal from either `platform/stub/` or
+`Puri.Platform` is selected by Cabal from either `platform/stub/` or
 `platform/wasm/`. Native HLS sees undefined stubs; the real app bundle is
 still built with the Wasm GHC toolchain and the JSFFI implementation.
 Wasm-only JS exports live in `platform/wasm/Progred/Wasm/Exports.hs`.

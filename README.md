@@ -102,13 +102,26 @@ Full type matching remains contextual and intentionally tolerant of malformed gr
 
 ### Current Prototype
 
-The active path is `prototype-ts/`: a TypeScript/Electron prototype using React DOM for the renderer, Vite for bundling, and `tsc --noEmit` for typechecking.
+The active path is `prototype-haskell/`: a Haskell/Wasm prototype using a
+small canvas UI runtime named Puri. The browser/webview host forwards
+events and provides drawing primitives; Haskell owns model state, focus,
+hit testing, event interpretation, and draw generation.
 
-The TypeScript prototype is usable, but React/DOM focus and local component state have repeatedly caused subtle synchronization bugs around selection, secondary selection, collapse/layout state, and pending editors. One known unresolved issue is documented as an expected-failing test in `prototype-ts/src/graph/graphEditor.integration.test.tsx`: graph-view primary selection can remain active after focus moves back into the document editor. Further React-side polishing is on hold while we explore a stateless UI runtime where focus and edit state are explicit model data rather than hidden browser/component state.
+The previous `prototype-ts/` TypeScript/Electron prototype is usable, but
+React/DOM focus and local component state repeatedly caused subtle
+synchronization bugs around selection, secondary selection,
+collapse/layout state, and pending editors. Further React-side polishing
+is on hold while we explore a stateless UI runtime where focus and edit
+state are explicit model data rather than hidden browser/component state.
 
 Useful commands:
 
 ```sh
+cd prototype-haskell
+make run
+make dist
+cabal build lib:puri lib:progred exe:prototype-haskell
+
 cd prototype-ts
 npm install
 npm start
@@ -127,6 +140,6 @@ npm run graph -- render src/graph/libraries/type.progred
 
 ### Other Prototypes
 
+- `prototype-ts/` — TypeScript/Electron prototype using React DOM, currently paused while the Haskell/Puri direction is explored
 - `prototype-swift/` — Swift/AppKit native exploration
 - `prototype-rust/` — Rust/egui prototype, paused due to focus and tab-navigation constraints. See `prototype-rust/AGENTS.md` for details.
-- `prototype-haskell/` — Haskell/Wasm DOM exploration, currently parked

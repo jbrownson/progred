@@ -5,7 +5,7 @@ module Progred.Wasm.Exports () where
 import Data.Word (Word32)
 import GHC.Wasm.Prim (JSString (JSString), fromJSString)
 import qualified Main
-import qualified Progred.KeyCode as KeyCode
+import qualified Puri.KeyCode as KeyCode
 
 foreign export javascript "start"
   start :: IO ()
@@ -14,7 +14,7 @@ foreign export javascript "onClick"
   onClick :: Word32 -> IO ()
 
 foreign export javascript "onKeyDown"
-  onKeyDown :: Word32 -> IO ()
+  onKeyDown :: Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 
 foreign export javascript "onTextInput"
   onTextInput :: JSString -> IO ()
@@ -35,9 +35,9 @@ start :: IO ()
 start = Main.main
 
 onClick :: Word32 -> IO ()
-onClick _ = Main.onKeyDown KeyCode.enter
+onClick _ = Main.onKeyDown KeyCode.enter 0 0 0 0
 
-onKeyDown :: Word32 -> IO ()
+onKeyDown :: Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onKeyDown = Main.onKeyDown
 
 onTextInput :: JSString -> IO ()
