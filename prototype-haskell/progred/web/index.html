@@ -29,7 +29,7 @@
     <canvas tabindex="0"></canvas>
     <script type="module">
       import { WASI, OpenFile, File, ConsoleStdout }
-        from "https://unpkg.com/@bjorn3/browser_wasi_shim@0.3.0/dist/index.js";
+        from "./vendor/browser_wasi_shim/index.js";
       import ghc_wasm_jsffi from "./ghc_wasm_jsffi.js";
 
       const canvas = document.querySelector("canvas");
@@ -37,7 +37,7 @@
       const measureContext = document.createElement("canvas").getContext("2d");
       const textFont = "14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
-      window.progredCanvas = {
+      window.puriCanvas = {
         clear(width, height) {
           context.clearRect(0, 0, width, height);
         },

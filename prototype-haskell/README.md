@@ -12,7 +12,7 @@ generation.
 This prototype's direction is Haskell compiled to Wasm via GHC's Wasm
 backend, talking to Canvas/Web APIs through JSFFI. The Progred HTML host
 (`progred/web/index.html`) loads the `.wasm` output, resizes the canvas, forwards
-pointer/key events, and exposes a small `window.progredCanvas` drawing
+pointer/key events, and exposes a small `window.puriCanvas` drawing
 surface.
 
 The reusable UI component is named `puri`. Its Haskell modules live under
@@ -58,8 +58,9 @@ make tauri-build
 ```
 
 The Makefile builds the Haskell/Wasm executable, generates
-`ghc_wasm_jsffi.js`, copies the runtime files into `progred/dist/`, and then
-serves or wraps that static directory.
+`ghc_wasm_jsffi.js`, installs the web host's npm dependencies, copies the
+runtime files into `progred/dist/`, and then serves or wraps that static
+directory.
 
 `ghc_wasm_jsffi.js` is the generated JSFFI import object for the current
 Haskell source. It is generated as part of `make dist`.

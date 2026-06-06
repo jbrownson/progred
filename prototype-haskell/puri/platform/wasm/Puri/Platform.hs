@@ -15,28 +15,28 @@ import GHC.Wasm.Prim (JSString (JSString), JSVal, toJSString)
 
 -- JSFFI imports. The GHC WASM backend turns "javascript" foreign
 -- imports into WASM imports the JS host can wire up.
-foreign import javascript unsafe "window.progredCanvas.clear($1, $2)"
+foreign import javascript unsafe "window.puriCanvas.clear($1, $2)"
   clearCanvas :: Double -> Double -> IO ()
 
-foreign import javascript unsafe "window.progredCanvas.fillRect($1, $2, $3, $4, $5)"
+foreign import javascript unsafe "window.puriCanvas.fillRect($1, $2, $3, $4, $5)"
   jsFillRect :: Double -> Double -> Double -> Double -> JSVal -> IO ()
 
-foreign import javascript unsafe "window.progredCanvas.strokeRect($1, $2, $3, $4, $5, $6)"
+foreign import javascript unsafe "window.puriCanvas.strokeRect($1, $2, $3, $4, $5, $6)"
   jsStrokeRect :: Double -> Double -> Double -> Double -> JSVal -> Double -> IO ()
 
-foreign import javascript unsafe "window.progredCanvas.fillText($1, $2, $3, $4)"
+foreign import javascript unsafe "window.puriCanvas.fillText($1, $2, $3, $4)"
   jsFillText :: Double -> Double -> JSVal -> JSVal -> IO ()
 
-foreign import javascript unsafe "window.progredCanvas.fillTextMiddle($1, $2, $3, $4)"
+foreign import javascript unsafe "window.puriCanvas.fillTextMiddle($1, $2, $3, $4)"
   jsFillTextMiddle :: Double -> Double -> JSVal -> JSVal -> IO ()
 
-foreign import javascript unsafe "window.progredCanvas.measureText($1)"
+foreign import javascript unsafe "window.puriCanvas.measureText($1)"
   jsMeasureText :: JSVal -> IO Double
 
-foreign import javascript unsafe "window.progredCanvas.width()"
+foreign import javascript unsafe "window.puriCanvas.width()"
   getCanvasWidth :: IO Double
 
-foreign import javascript unsafe "window.progredCanvas.height()"
+foreign import javascript unsafe "window.puriCanvas.height()"
   getCanvasHeight :: IO Double
 
 fillRect :: Double -> Double -> Double -> Double -> String -> IO ()
