@@ -10,8 +10,8 @@ model, focus state, hit testing, keyboard handling, and draw-command
 generation.
 
 This prototype's direction is Haskell compiled to Wasm via GHC's Wasm
-backend, talking to Canvas/Web APIs through JSFFI. The HTML host
-(`index.html`) loads the `.wasm` output, resizes the canvas, forwards
+backend, talking to Canvas/Web APIs through JSFFI. The Progred HTML host
+(`progred/web/index.html`) loads the `.wasm` output, resizes the canvas, forwards
 pointer/key events, and exposes a small `window.progredCanvas` drawing
 surface.
 
@@ -58,17 +58,21 @@ make tauri-build
 ```
 
 The Makefile builds the Haskell/Wasm executable, generates
-`ghc_wasm_jsffi.js`, copies the runtime files into `dist/`, and then
+`ghc_wasm_jsffi.js`, copies the runtime files into `progred/dist/`, and then
 serves or wraps that static directory.
 
 `ghc_wasm_jsffi.js` is the generated JSFFI import object for the current
 Haskell source. It is generated as part of `make dist`.
 
-Editor note: the only target-specific code lives under `platform/`.
-`Puri.Platform` is selected by Cabal from either `platform/stub/` or
-`platform/wasm/`. Native HLS sees undefined stubs; the real app bundle is
-still built with the Wasm GHC toolchain and the JSFFI implementation.
-Wasm-only JS exports live in `platform/wasm/Progred/Wasm/Exports.hs`.
+Editor note: each Haskell component has its own source tree. Puri lives
+under `puri/src`; Progred lives under `progred/src`; the executable shell
+lives under `progred/app`; and the browser host page lives under
+`progred/web`. Target-specific code lives with the component that owns it:
+`Puri.Platform` is selected by Cabal from either `puri/platform/stub` or
+`puri/platform/wasm`, and Wasm-only JS exports live in
+`progred/platform/wasm/Progred/Wasm/Exports.hs`. There is no native
+app-platform stub because that export module is only listed in the
+`os(wasi)` Cabal branch.
 
 The native GTK and ImGui probes were removed. They proved basic native
 Haskell GUI viability, but the active question is now whether Haskell can
@@ -77,9 +81,9 @@ the rendering and distribution substrate.
 
 ## Layout Notes
 
-Layout is deliberately tiny and explicit in `app/Progred/App.hs` for now. The
-next useful step may be working on Progred itself and revisiting layout
-only when the app needs more help.
+Layout is deliberately tiny and explicit in `progred/src/Progred/App.hs`
+for now. The next useful step may be working on Progred itself and
+revisiting layout only when the app needs more help.
 
 If this prototype does grow a layout layer, keep three concerns separate:
 

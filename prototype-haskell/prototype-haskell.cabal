@@ -22,18 +22,18 @@ library puri
     Puri.Widgets.TextBox
   other-modules:
     Puri.Platform
-  hs-source-dirs:   puri
+  hs-source-dirs:   puri/src
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
 
   if os(wasi)
-    hs-source-dirs: platform/wasm
+    hs-source-dirs: puri/platform/wasm
     build-depends:
       , ghc-experimental ^>= 9.1202
 
   else
-    hs-source-dirs: platform/stub
+    hs-source-dirs: puri/platform/stub
 
 library progred
   import:           warnings
@@ -41,7 +41,7 @@ library progred
     Progred.App
     Progred.Gid
     Progred.MapGid
-  hs-source-dirs:   src
+  hs-source-dirs:   progred/src
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
@@ -52,7 +52,7 @@ library progred
 executable prototype-haskell
   import:           warnings
   main-is:          Main.hs
-  hs-source-dirs:   app
+  hs-source-dirs:   progred/app
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
@@ -60,7 +60,7 @@ executable prototype-haskell
     , prototype-haskell:puri
 
   if os(wasi)
-    hs-source-dirs: platform/wasm
+    hs-source-dirs: progred/platform/wasm
     other-modules:  Progred.Wasm.Exports
     build-depends:
       , ghc-experimental ^>= 9.1202
@@ -71,6 +71,3 @@ executable prototype-haskell
       -no-hs-main
       -optl-mexec-model=reactor
       -optl-Wl,--export=hs_init
-
-  else
-    hs-source-dirs: platform/stub
