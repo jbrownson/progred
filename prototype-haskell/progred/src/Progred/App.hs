@@ -9,6 +9,8 @@ module Progred.App
   ) where
 
 import Control.Monad.Trans.State.Strict (State, modify, runState)
+import Progred.BuiltinLabels
+import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import Puri.Geometry
@@ -58,6 +60,9 @@ view viewport model = do
   counter <- framedButton model CounterButton (Rect 32 140 160 42) "Increment" (modifyModel (\world -> world {count = count world + 1}))
   name <- framedNameField model (Rect 32 206 300 42)
   reset <- framedButton model ResetButton (Rect 32 272 120 42) "Reset" (modifyModel (\world -> world {count = 0}))
+  identicon nameLabel (Rect 32 342 20 20)
+  label (Point 60 358) "#68707c" "name label UUID"
+  drawPaletteTour
   pure $
     mconcat
       [ clearFocusOnBackground viewport
@@ -70,6 +75,26 @@ view viewport model = do
 label :: Canvas.Canvas renderM => Point -> String -> String -> renderM ()
 label =
   Canvas.fillText
+
+drawPaletteTour :: Canvas.Canvas renderM => renderM ()
+drawPaletteTour =
+  mapM_ drawPalette (zip ([0 ..] :: [Int]) paletteTour)
+  where
+    drawPalette (row, (name, palette)) = do
+      label (Point 32 (398 + fromIntegral row * 28)) "#68707c" name
+      identiconWithPalette palette nameLabel (Rect 100 (380 + fromIntegral row * 28) 20 20)
+
+paletteTour :: [(String, IdenticonPalette)]
+paletteTour =
+  [ ("balanced", BalancedPalette)
+  , ("ocean", OceanPalette)
+  , ("ember", EmberPalette)
+  , ("violet", VioletPalette)
+  , ("slate", SlatePalette)
+  , ("candy", CandyPalette)
+  , ("moss", MossPalette)
+  , ("solar", SolarPalette)
+  ]
 
 framedButton :: Canvas.Canvas renderM => Model -> FocusId -> Rect -> String -> AppM () -> renderM (Handler AppM)
 framedButton model focusId rect text activate =

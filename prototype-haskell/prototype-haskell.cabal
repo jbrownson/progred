@@ -42,6 +42,7 @@ library progred
     Progred.BuiltinLabels
     Progred.Graph
     Progred.MapGraph
+    Progred.Widgets.Identicon
   hs-source-dirs:   progred/src
   default-language: GHC2021
   build-depends:
