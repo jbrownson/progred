@@ -82,9 +82,31 @@ the rendering and distribution substrate.
 
 ## Layout Notes
 
-Layout is deliberately tiny and explicit in `progred/src/Progred/App.hs`
-for now. The next useful step may be working on Progred itself and
-revisiting layout only when the app needs more help.
+`halay` is the Clay-inspired layout library used by the prototype. It is
+kept as its own Cabal library so it can eventually move out of this repo
+if the direction holds up. `puri` re-exports its geometry types, and
+Progred uses Halay to place the current raw graph projection.
+
+Run the Halay conformance tests with:
+
+```sh
+cabal --config-file=.cache/cabal/config test halay-tests
+```
+
+For a larger randomized sweep against the vendored Clay oracle:
+
+```sh
+HALAY_QUICKCHECK_TESTS=5000 HALAY_TEXT_QUICKCHECK_TESTS=5000 HALAY_TREE_QUICKCHECK_TESTS=5000 cabal --config-file=.cache/cabal/config test halay-tests
+```
+
+The oracle compiles `halay/test/clay_oracle.c`, which includes the
+vendored Clay header, and QuickCheck compares Halay placements against
+Clay placements while shrinking failures to small repros. Randomized
+coverage includes flat box layouts, basic text wrapping, and recursive
+layout trees. The recursive generator intentionally avoids degenerate
+negative-inner-size cases that can make the Clay oracle nonterminate;
+in practice, that means recursive random padding is only generated on
+fixed-size axes.
 
 If this prototype does grow a layout layer, keep three concerns separate:
 

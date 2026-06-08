@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Progred.App
   ( AppM
   , Model (..)
@@ -8,193 +6,86 @@ module Progred.App
   , view
   ) where
 
-import Control.Monad.Trans.State.Strict (State, modify, runState)
-import Progred.BuiltinLabels
-import Progred.Widgets.Identicon
+import Control.Monad.Trans.State.Strict (State, runState)
+import qualified Data.Map.Strict as Map
+import Data.Word (Word32)
+import qualified Data.UUID.Types as UUID
+import Halay
+import Progred.Document
+import Progred.Graph
+import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
-import Puri.Geometry
-import qualified Puri.KeyCode as KeyCode
-import Puri.Lens
 import Puri.Viewport
-import Puri.Widget
-import Puri.Widgets.Button
-import Puri.Widgets.TextBox
-
-data FocusId
-  = CounterButton
-  | NameField
-  | ResetButton
-  deriving (Bounded, Enum, Eq)
+import System.Random (mkStdGen, randoms)
 
 data Model = Model
-  { focus :: Maybe FocusId
-  , count :: Int
-  , nameField :: TextBoxState
-  }
 
 type AppM = State Model
 
 runAppM :: AppM a -> Model -> (a, Model)
-runAppM =
-  runState
-
-modifyModel :: (Model -> Model) -> AppM ()
-modifyModel =
-  modify
+runAppM = runState
 
 initialModel :: Model
-initialModel =
-  Model
-    { focus = Nothing
-    , count = 0
-    , nameField = defaultTextBoxState {textBeforeCaret = "canvas owns focus"}
-    }
+initialModel = Model
 
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
-view viewport model = do
-  Canvas.fillRect (Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)) "#fbfbfa"
-  label (Point 32 42) "#3f454d" "Haskell/Wasm canvas UI"
-  label (Point 32 70) "#68707c" "Canvas rendering, handlers, focus, and text state are owned by Haskell."
-  label (Point 32 110) "#3f454d" ("Count: " <> show (count model))
-  counter <- framedButton model CounterButton (Rect 32 140 160 42) "Increment" (modifyModel (\world -> world {count = count world + 1}))
-  name <- framedNameField model (Rect 32 206 300 42)
-  reset <- framedButton model ResetButton (Rect 32 272 120 42) "Reset" (modifyModel (\world -> world {count = 0}))
-  identicon nameLabel (Rect 32 342 20 20)
-  label (Point 60 358) "#68707c" "name label UUID"
-  drawPaletteTour
-  pure $
-    mconcat
-      [ clearFocusOnBackground viewport
-      , counter
-      , name
-      , reset
-      , globalKeys
-      ]
-
-label :: Canvas.Canvas renderM => Point -> String -> String -> renderM ()
-label =
-  Canvas.fillText
-
-drawPaletteTour :: Canvas.Canvas renderM => renderM ()
-drawPaletteTour =
-  mapM_ drawPalette (zip ([0 ..] :: [Int]) paletteTour)
+view viewport _model = do
+  Canvas.fillRect viewportRect "#fbfbfa"
+  _ <- placeHalay viewportConstraints viewportRect sampleLayout
+  pure mempty
   where
-    drawPalette (row, (name, palette)) = do
-      label (Point 32 (398 + fromIntegral row * 28)) "#68707c" name
-      identiconWithPalette palette nameLabel (Rect 100 (380 + fromIntegral row * 28) 20 20)
+    viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
+    viewportConstraints = Constraints (Just (viewportWidth viewport)) (Just (viewportHeight viewport))
+    sampleLayout =
+      box
+        defaultBox
+          { boxDirection = TopToBottom
+          , boxPadding = Insets 12 12 12 12
+          , boxWidth = Fill
+          , boxHeight = Fill
+          }
+        [rawDocument sampleDocument]
 
-paletteTour :: [(String, IdenticonPalette)]
-paletteTour =
-  [ ("balanced", BalancedPalette)
-  , ("ocean", OceanPalette)
-  , ("ember", EmberPalette)
-  , ("violet", VioletPalette)
-  , ("slate", SlatePalette)
-  , ("candy", CandyPalette)
-  , ("moss", MossPalette)
-  , ("solar", SolarPalette)
-  ]
-
-framedButton :: Canvas.Canvas renderM => Model -> FocusId -> Rect -> String -> AppM () -> renderM (Handler AppM)
-framedButton model focusId rect text activate =
-  mountWidget model unitLens focusId rect $
-    button
-      activate
-      ( \_contentFocus -> do
-          Canvas.fillRect rect background
-          Canvas.strokeRect rect border 2
-          Canvas.fillTextMiddle (Point (x contentRect) (y contentRect + height contentRect / 2)) "#20242a" text
-      )
-  where
-    background = "#ffffff"
-    border = "#c7cbd1"
-    contentRect = insetRect (Insets 0 16 0 16) rect
-
-framedNameField :: Canvas.Canvas renderM => Model -> Rect -> renderM (Handler AppM)
-framedNameField model rect =
-  mountWidget model nameFieldLens NameField rect field
-  where
-    field state fieldRect fieldFocus actions = do
-      Canvas.fillRect fieldRect "#ffffff"
-      Canvas.strokeRect fieldRect (fieldBorder fieldFocus) 2
-      textBox state (insetRect (Insets 10 10 10 10) fieldRect) fieldFocus actions
-    fieldBorder WidgetFocused = "#0a84ff"
-    fieldBorder WidgetUnfocused = "#c7cbd1"
-
-mountWidget
-  :: Model
-  -> Lens Model state
-  -> FocusId
-  -> Rect
-  -> Widget state AppM renderM
-  -> renderM (Handler AppM)
-mountWidget model stateLens focusId rect widget =
-  widget
-    (lensGet stateLens model)
-    rect
-    (widgetFocus (lensGet focusLens model == Just focusId))
-    actions
-  where
-    actions =
-      WidgetActions
-        { widgetFocusSelf = modifyModel (lensSet focusLens (Just focusId))
-        , widgetSetState = applyWidgetState stateLens
-        }
-
-widgetFocus :: Bool -> WidgetFocus
-widgetFocus focused =
-  if focused then WidgetFocused else WidgetUnfocused
-
-applyWidgetState :: Lens Model state -> state -> AppM ()
-applyWidgetState stateLens state =
-  modifyModel (lensSet stateLens state)
-
-focusLens :: Lens Model (Maybe FocusId)
-focusLens =
-  Lens
-    { lensGet = focus
-    , lensSet = \newFocus world -> world {focus = newFocus}
+sampleDocument :: Document
+sampleDocument =
+  Document
+    { documentRoot = uuid 0
+    , documentGraph =
+        Map.fromList
+          [ ( uuid 0
+            , node
+                [ (uuid 3, VString "raw graph")
+                , (uuid 4, VInt 42)
+                , (uuid 5, VBool True)
+                , (uuid 6, ref 1)
+                , (uuid 7, VList [VString "alpha", VFloat 3.14, ref 2])
+                ]
+            )
+          , ( uuid 1
+            , node
+                [ (uuid 3, VString "child")
+                , (uuid 8, ref 0)
+                ]
+            )
+          , ( uuid 2
+            , node
+                [ (uuid 3, VString "loop")
+                , (uuid 8, ref 2)
+                ]
+            )
+          ]
     }
+  where
+    ref = VRef . uuid
+    uuid index = uuids !! index
+    uuids = seededUUIDs 20260607
+    node = Map.fromList
 
-nameFieldLens :: Lens Model TextBoxState
-nameFieldLens =
-  Lens
-    { lensGet = nameField
-    , lensSet = \state world -> world {nameField = state}
-    }
+seededUUIDs :: Int -> [UUID]
+seededUUIDs seed = wordsToUUIDs (randoms (mkStdGen seed))
 
-globalKeys :: Handler AppM
-globalKeys =
-  onKey $ \case
-    KeyCode modifiers code
-      | code == KeyCode.tab && keyShift modifiers -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-      | code == KeyCode.tab -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-      | code == KeyCode.left -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-      | code == KeyCode.up -> Just (modifyModel (\world -> world {focus = Just (previousFocus (focus world))}))
-      | code == KeyCode.right -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-      | code == KeyCode.down -> Just (modifyModel (\world -> world {focus = Just (nextFocus (focus world))}))
-    _ -> Nothing
-
-clearFocusOnBackground :: Viewport -> Handler AppM
-clearFocusOnBackground Viewport {viewportWidth, viewportHeight} =
-  onPointer $ \case
-    PointerDown {pointerX, pointerY} ->
-      if rectContains (Rect 0 0 viewportWidth viewportHeight) pointerX pointerY
-        then Just (modifyModel (\world -> world {focus = Nothing}))
-        else Nothing
-    _ -> Nothing
-
-nextFocus :: Maybe FocusId -> FocusId
-nextFocus Nothing =
-  minBound
-nextFocus (Just focusId)
-  | focusId == maxBound = minBound
-  | otherwise = succ focusId
-
-previousFocus :: Maybe FocusId -> FocusId
-previousFocus Nothing =
-  maxBound
-previousFocus (Just focusId)
-  | focusId == minBound = maxBound
-  | otherwise = pred focusId
+wordsToUUIDs :: [Word32] -> [UUID]
+wordsToUUIDs (word0 : word1 : word2 : word3 : rest) =
+  UUID.fromWords word0 word1 word2 word3 : wordsToUUIDs rest
+wordsToUUIDs _ = []

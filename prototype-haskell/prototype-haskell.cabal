@@ -8,6 +8,29 @@ common warnings
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
                -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
 
+library halay
+  import:           warnings
+  exposed-modules:
+    Halay
+    Halay.Geometry
+  hs-source-dirs:   halay/src
+  default-language: GHC2021
+  build-depends:
+    , base >= 4.18 && < 4.23
+
+test-suite halay-tests
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  hs-source-dirs:   halay/test
+  default-language: GHC2021
+  build-depends:
+    , QuickCheck >= 2.14 && < 2.16
+    , base >= 4.18 && < 4.23
+    , directory >= 1.3 && < 1.4
+    , process >= 1.6 && < 1.7
+    , prototype-haskell:halay
+
 library puri
   import:           warnings
   exposed-modules:
@@ -26,6 +49,7 @@ library puri
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
+    , prototype-haskell:halay
 
   if os(wasi)
     hs-source-dirs: puri/platform/wasm
@@ -40,15 +64,19 @@ library progred
   exposed-modules:
     Progred.App
     Progred.BuiltinLabels
+    Progred.Document
     Progred.Graph
     Progred.MapGraph
+    Progred.Render.Raw
     Progred.Widgets.Identicon
   hs-source-dirs:   progred/src
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
     , containers >= 0.6 && < 0.8
+    , prototype-haskell:halay
     , prototype-haskell:puri
+    , random >= 1.2 && < 1.4
     , transformers >= 0.5 && < 0.7
     , uuid-types >= 1.0 && < 1.1
 
