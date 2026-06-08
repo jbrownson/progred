@@ -775,7 +775,15 @@ data RandomTreeLayout = RandomTreeLayout
 
 data RandomTreeNode
   = RandomTreeLeaf Size Sizing (Maybe Double)
+  | RandomTreeText RandomBoxConfig (Maybe Double) RandomTreeTextContent
   | RandomTreeBox RandomBoxConfig (Maybe Double) [RandomTreeNode]
+  deriving (Eq, Show)
+
+data RandomTreeTextContent = RandomTreeTextContent
+  { randomTreeTextWrapMode :: TextWrapMode
+  , randomTreeTextAlign :: TextAlign
+  , randomTreeTextLineWordLengths :: [[Int]]
+  }
   deriving (Eq, Show)
 
 data RandomBoxConfig = RandomBoxConfig
@@ -815,10 +823,15 @@ instance Arbitrary RandomTreeLayout where
 
 arbitraryTreeNode :: Int -> Gen RandomTreeNode
 arbitraryTreeNode depth
-  | depth <= 0 = arbitraryTreeLeaf
+  | depth <= 0 =
+      frequency
+        [ (3, arbitraryTreeLeaf)
+        , (2, arbitraryTreeText)
+        ]
   | otherwise =
       frequency
         [ (3, arbitraryTreeLeaf)
+        , (2, arbitraryTreeText)
         , (4, arbitraryTreeBox depth)
         ]
 
@@ -830,6 +843,29 @@ arbitraryTreeLeaf = do
   heightSizing <- arbitraryTreeAxisSizing
   aspect <- arbitraryAspectRatio
   pure (RandomTreeLeaf (Size (fromIntegral width) (fromIntegral height)) (Sizing widthSizing heightSizing) aspect)
+
+arbitraryTreeText :: Gen RandomTreeNode
+arbitraryTreeText = do
+  config <- arbitraryTreeBoxConfig 1
+  aspect <- arbitraryAspectRatio
+  textContent <- arbitraryTreeTextContent
+  pure (RandomTreeText config aspect textContent)
+
+arbitraryTreeTextContent :: Gen RandomTreeTextContent
+arbitraryTreeTextContent = do
+  wrapMode <- arbitraryTextWrapMode
+  textAlign <- arbitraryTextAlign
+  lineCount <-
+    case wrapMode of
+      TextWrapNewlines -> chooseInt (1, 4)
+      _ -> pure 1
+  lineWordLengths <- vectorOf lineCount arbitraryWordLengths
+  pure
+    RandomTreeTextContent
+      { randomTreeTextWrapMode = wrapMode
+      , randomTreeTextAlign = textAlign
+      , randomTreeTextLineWordLengths = lineWordLengths
+      }
 
 arbitraryTreeBox :: Int -> Gen RandomTreeNode
 arbitraryTreeBox depth = do
@@ -924,12 +960,23 @@ shrinkTreeNode (RandomTreeLeaf size sizing aspect) =
     <> [RandomTreeLeaf size shrunkSizing aspect | shrunkSizing <- shrinkSizing sizing]
     <> [RandomTreeLeaf size sizing Nothing | aspect /= Nothing]
     <> [RandomTreeLeaf size sizing (Just ratio) | ratio <- shrinkAspectRatio aspect]
+shrinkTreeNode (RandomTreeText config aspect textContent) =
+  [RandomTreeText shrunkConfig aspect textContent | shrunkConfig <- shrinkBoxConfig 1 config]
+    <> [RandomTreeText config Nothing textContent | aspect /= Nothing]
+    <> [RandomTreeText config (Just ratio) textContent | ratio <- shrinkAspectRatio aspect]
+    <> [RandomTreeText config aspect shrunkTextContent | shrunkTextContent <- shrinkTreeTextContent textContent]
 shrinkTreeNode (RandomTreeBox config aspect children) =
   children
     <> [RandomTreeBox shrunkConfig aspect children | shrunkConfig <- shrinkBoxConfig (length children) config]
     <> [RandomTreeBox config Nothing children | aspect /= Nothing]
     <> [RandomTreeBox config (Just ratio) children | ratio <- shrinkAspectRatio aspect]
     <> [RandomTreeBox config aspect shrunkChildren | shrunkChildren <- shrinkTreeChildren children]
+
+shrinkTreeTextContent :: RandomTreeTextContent -> [RandomTreeTextContent]
+shrinkTreeTextContent textContent =
+  [textContent {randomTreeTextWrapMode = wrapMode} | wrapMode <- shrinkTextWrapMode (randomTreeTextWrapMode textContent)]
+    <> [textContent {randomTreeTextAlign = textAlign} | textAlign <- shrinkTextAlign (randomTreeTextAlign textContent)]
+    <> [textContent {randomTreeTextLineWordLengths = lengths} | lengths <- shrinkLineWordLengths (randomTreeTextLineWordLengths textContent)]
 
 shrinkBoxConfig :: Int -> RandomBoxConfig -> [RandomBoxConfig]
 shrinkBoxConfig childCount config =
@@ -950,6 +997,8 @@ oracleSafeRandomTree randomTree =
 
 oracleSafeTreeNode :: RandomTreeNode -> Bool
 oracleSafeTreeNode RandomTreeLeaf {} = True
+oracleSafeTreeNode (RandomTreeText config _aspect _textContent) =
+  oracleSafeBoxConfig 1 config
 oracleSafeTreeNode (RandomTreeBox config _aspect children) =
   oracleSafeBoxConfig (length children) config && all oracleSafeTreeNode children
 
@@ -1061,11 +1110,23 @@ randomTreeNodeHalay index node =
   case node of
     RandomTreeLeaf size sizing maybeAspect ->
       (index + 1, withAspect maybeAspect (namedLayout name (leafWithSizing sizing (pure size) (const (pure mempty)))))
+    RandomTreeText config maybeAspect textContent ->
+      (index + 1, withAspect maybeAspect (namedLayout name (box (boxConfigFromRandom config) [randomTreeTextHalay textContent])))
     RandomTreeBox config maybeAspect children ->
       let (nextIndex, childLayouts) = mapAccumL randomTreeNodeHalay (index + 1) children
        in (nextIndex, withAspect maybeAspect (namedLayout name (box (boxConfigFromRandom config) childLayouts)))
   where
     name = "n" <> show index
+
+randomTreeTextHalay :: RandomTreeTextContent -> Halay Identity Placements
+randomTreeTextHalay RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign, randomTreeTextLineWordLengths} =
+  text
+    testTextConfig
+      { textWrapMode = randomTreeTextWrapMode
+      , textAlign = randomTreeTextAlign
+      , textPlaceLine = \_index _line _rect -> pure mempty
+      }
+    (linesText randomTreeTextLineWordLengths)
 
 withAspect :: Maybe Double -> Halay Identity Placements -> Halay Identity Placements
 withAspect Nothing layout = layout
@@ -1105,7 +1166,7 @@ randomTreeOracleInput RandomTreeLayout {randomTreeRootConfig, randomTreeRootSize
               (Fixed (sizeWidth randomTreeRootSize))
               (Fixed (sizeHeight randomTreeRootSize))
         }
-    rootWords = treeNodeWords "root" (length randomTreeChildren) (Size 0 0) rootConfig Nothing
+    rootWords = treeNodeWords "root" TreeContainer (length randomTreeChildren) (Size 0 0) rootConfig Nothing
     (_nextIndex, childWords) = treeChildWords 0 randomTreeChildren
 
 treeChildWords :: Int -> [RandomTreeNode] -> (Int, [String])
@@ -1117,10 +1178,12 @@ treeNodeOracleWords :: Int -> RandomTreeNode -> (Int, [String])
 treeNodeOracleWords index node =
   case node of
     RandomTreeLeaf size sizing aspect ->
-      (index + 1, treeNodeWords name 0 size (leafBoxConfig sizing) aspect)
+      (index + 1, treeNodeWords name TreeIntrinsicLeaf 0 size (leafBoxConfig sizing) aspect)
+    RandomTreeText config aspect textContent ->
+      (index + 1, treeNodeWords name TreeTextLeaf 0 (Size 0 0) config aspect <> treeTextWords textContent)
     RandomTreeBox config aspect children ->
       let (nextIndex, childWords) = treeChildWords (index + 1) children
-       in (nextIndex, treeNodeWords name (length children) (Size 0 0) config aspect <> childWords)
+       in (nextIndex, treeNodeWords name TreeContainer (length children) (Size 0 0) config aspect <> childWords)
   where
     name = "n" <> show index
 
@@ -1135,8 +1198,13 @@ leafBoxConfig sizing =
     , randomBoxSizing = sizing
     }
 
-treeNodeWords :: String -> Int -> Size -> RandomBoxConfig -> Maybe Double -> [String]
-treeNodeWords name childCount intrinsicSize RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxAlignX, randomBoxAlignY, randomBoxSizing} maybeAspect =
+data TreeNodeKind
+  = TreeIntrinsicLeaf
+  | TreeTextLeaf
+  | TreeContainer
+
+treeNodeWords :: String -> TreeNodeKind -> Int -> Size -> RandomBoxConfig -> Maybe Double -> [String]
+treeNodeWords name nodeKind childCount intrinsicSize RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxAlignX, randomBoxAlignY, randomBoxSizing} maybeAspect =
   [ name
   , show childCount
   , show (sizeWidth intrinsicSize)
@@ -1158,7 +1226,24 @@ treeNodeWords name childCount intrinsicSize RandomBoxConfig {randomBoxDirection,
   , show (axisSizingMax (sizingWidth randomBoxSizing))
   , show (axisSizingMax (sizingHeight randomBoxSizing))
   , maybe "0" show maybeAspect
+  , show (treeNodeKindValue nodeKind)
   ]
+
+treeNodeKindValue :: TreeNodeKind -> Int
+treeNodeKindValue TreeIntrinsicLeaf = 0
+treeNodeKindValue TreeTextLeaf = 1
+treeNodeKindValue TreeContainer = 2
+
+treeTextWords :: RandomTreeTextContent -> [String]
+treeTextWords RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign, randomTreeTextLineWordLengths} =
+  [ show (textWrapModeValue randomTreeTextWrapMode)
+  , show (textAlignValue randomTreeTextAlign)
+  , show (length randomTreeTextLineWordLengths)
+  ]
+    <> concatMap lineWords randomTreeTextLineWordLengths
+  where
+    lineWords wordLengths =
+      show (length wordLengths) : (show <$> wordLengths)
 
 childNames :: [String]
 childNames = ["a", "b", "c", "d"]

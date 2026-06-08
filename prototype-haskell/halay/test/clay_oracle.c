@@ -424,9 +424,13 @@ static void fixed_case(
 
 #define TREE_MAX_IDS 256
 #define TREE_ID_LENGTH 32
+#define TREE_MAX_TEXTS 256
+#define TREE_TEXT_LENGTH 512
 
 static char tree_emit_ids[TREE_MAX_IDS][TREE_ID_LENGTH];
 static int tree_emit_id_count = 0;
+static char tree_text_buffers[TREE_MAX_TEXTS][TREE_TEXT_LENGTH];
+static int tree_text_count = 0;
 
 static Clay_String clay_string_from_cstring(const char *string) {
     return (Clay_String) {
@@ -442,6 +446,53 @@ static void add_tree_emit_id(const char *id) {
     }
     snprintf(tree_emit_ids[tree_emit_id_count], TREE_ID_LENGTH, "%s", id);
     tree_emit_id_count++;
+}
+
+static char *allocate_tree_text_buffer(const char *case_name) {
+    if (tree_text_count >= TREE_MAX_TEXTS) {
+        fprintf(stderr, "too many tree text nodes in %s\n", case_name);
+        exit(1);
+    }
+    return tree_text_buffers[tree_text_count++];
+}
+
+static Clay_TextElementConfigWrapMode text_wrap_mode_from_int(int value);
+static Clay_TextAlignment text_align_from_int(int value);
+
+static void read_text_buffer(const char *case_name, int line_count, char *text_buffer, size_t text_buffer_capacity) {
+    if (line_count < 1 || line_count > 16) {
+        fprintf(stderr, "invalid line count %d in %s\n", line_count, case_name);
+        exit(1);
+    }
+    size_t offset = 0;
+    for (int line_index = 0; line_index < line_count; line_index++) {
+        int word_count;
+        if (scanf("%d", &word_count) != 1) {
+            fprintf(stderr, "missing word count in %s\n", case_name);
+            exit(1);
+        }
+        if (word_count < 1 || word_count > 16) {
+            fprintf(stderr, "invalid word count %d in %s\n", word_count, case_name);
+            exit(1);
+        }
+        if (line_index > 0 && offset + 1 < text_buffer_capacity) {
+            text_buffer[offset++] = '\n';
+        }
+        for (int word_index = 0; word_index < word_count; word_index++) {
+            int word_length;
+            if (scanf("%d", &word_length) != 1) {
+                fprintf(stderr, "missing word length in %s\n", case_name);
+                exit(1);
+            }
+            if (word_index > 0 && offset + 1 < text_buffer_capacity) {
+                text_buffer[offset++] = ' ';
+            }
+            for (int char_index = 0; char_index < word_length && offset + 1 < text_buffer_capacity; char_index++) {
+                text_buffer[offset++] = 'x';
+            }
+        }
+    }
+    text_buffer[offset] = '\0';
 }
 
 static Clay_ElementDeclaration tree_declaration(
@@ -493,9 +544,29 @@ static void add_intrinsic_leaf(float width, float height) {
     Clay__CloseElement();
 }
 
+static void add_text_leaf(const char *case_name) {
+    int wrap_mode_value;
+    int text_align_value;
+    int line_count;
+    if (scanf("%d %d %d", &wrap_mode_value, &text_align_value, &line_count) != 3) {
+        fprintf(stderr, "missing tree text payload in %s\n", case_name);
+        exit(1);
+    }
+    char *text_buffer = allocate_tree_text_buffer(case_name);
+    read_text_buffer(case_name, line_count, text_buffer, TREE_TEXT_LENGTH);
+    CLAY_TEXT(
+        clay_string_from_cstring(text_buffer),
+        CLAY_TEXT_CONFIG({
+            .fontSize = 1,
+            .wrapMode = text_wrap_mode_from_int(wrap_mode_value),
+            .textAlignment = text_align_from_int(text_align_value),
+        }));
+}
+
 static void read_tree_node(const char *case_name) {
     char id[TREE_ID_LENGTH];
     int child_count;
+    int node_kind;
     float intrinsic_width;
     float intrinsic_height;
     int direction_value;
@@ -517,7 +588,7 @@ static void read_tree_node(const char *case_name) {
     float aspect_ratio;
 
     if (scanf(
-            "%31s %d %f %f %d %u %u %u %u %u %d %d %d %d %f %f %f %f %f %f %f",
+            "%31s %d %f %f %d %u %u %u %u %u %d %d %d %d %f %f %f %f %f %f %f %d",
             id,
             &child_count,
             &intrinsic_width,
@@ -538,13 +609,26 @@ static void read_tree_node(const char *case_name) {
             &height_sizing_min,
             &width_sizing_max,
             &height_sizing_max,
-            &aspect_ratio)
-        != 21) {
+            &aspect_ratio,
+            &node_kind)
+        != 22) {
         fprintf(stderr, "missing tree node in %s\n", case_name);
         exit(1);
     }
     if (child_count < 0 || child_count > 4) {
         fprintf(stderr, "invalid tree child count %d in %s\n", child_count, case_name);
+        exit(1);
+    }
+    if (node_kind < 0 || node_kind > 2) {
+        fprintf(stderr, "invalid tree node kind %d in %s\n", node_kind, case_name);
+        exit(1);
+    }
+    if (node_kind != 2 && child_count != 0) {
+        fprintf(stderr, "tree leaf node kind %d has child count %d in %s\n", node_kind, child_count, case_name);
+        exit(1);
+    }
+    if (node_kind == 2 && child_count == 0) {
+        fprintf(stderr, "tree container has no children in %s\n", case_name);
         exit(1);
     }
 
@@ -569,7 +653,9 @@ static void read_tree_node(const char *case_name) {
             width_sizing_max,
             height_sizing_max,
             aspect_ratio));
-    if (child_count == 0) {
+    if (node_kind == 1) {
+        add_text_leaf(case_name);
+    } else if (child_count == 0) {
         add_intrinsic_leaf(intrinsic_width, intrinsic_height);
     } else {
         for (int i = 0; i < child_count; i++) {
@@ -583,6 +669,7 @@ static void run_tree_stdin_cases(void) {
     char case_name[64];
     while (scanf("%63s", case_name) == 1) {
         tree_emit_id_count = 0;
+        tree_text_count = 0;
         Clay_BeginLayout();
         read_tree_node(case_name);
         Clay_EndLayout(0);
@@ -614,6 +701,7 @@ static void run_tree_debug_stdin_cases(void) {
     char case_name[64];
     while (scanf("%63s", case_name) == 1) {
         tree_emit_id_count = 0;
+        tree_text_count = 0;
         Clay_BeginLayout();
         read_tree_node(case_name);
         for (int i = 0; i < tree_emit_id_count; i++) {
@@ -650,40 +738,8 @@ static void run_text_stdin_cases(void) {
     int text_align_value;
     int line_count;
     while (scanf("%63s %f %f %d %d %d", case_name, &root_width, &root_height, &wrap_mode_value, &text_align_value, &line_count) == 6) {
-        if (line_count < 1 || line_count > 16) {
-            fprintf(stderr, "invalid line count %d in %s\n", line_count, case_name);
-            exit(1);
-        }
         char text_buffer[512];
-        size_t offset = 0;
-        for (int line_index = 0; line_index < line_count; line_index++) {
-            int word_count;
-            if (scanf("%d", &word_count) != 1) {
-                fprintf(stderr, "missing word count in %s\n", case_name);
-                exit(1);
-            }
-            if (word_count < 1 || word_count > 16) {
-                fprintf(stderr, "invalid word count %d in %s\n", word_count, case_name);
-                exit(1);
-            }
-            if (line_index > 0 && offset + 1 < sizeof(text_buffer)) {
-                text_buffer[offset++] = '\n';
-            }
-            for (int word_index = 0; word_index < word_count; word_index++) {
-                int word_length;
-                if (scanf("%d", &word_length) != 1) {
-                    fprintf(stderr, "missing word length in %s\n", case_name);
-                    exit(1);
-                }
-                if (word_index > 0 && offset + 1 < sizeof(text_buffer)) {
-                    text_buffer[offset++] = ' ';
-                }
-                for (int char_index = 0; char_index < word_length && offset + 1 < sizeof(text_buffer); char_index++) {
-                    text_buffer[offset++] = 'x';
-                }
-            }
-        }
-        text_buffer[offset] = '\0';
+        read_text_buffer(case_name, line_count, text_buffer, sizeof(text_buffer));
         Clay_BeginLayout();
         CLAY(CLAY_ID("root"), {.layout = {.sizing = fixed_size(root_width, root_height)}}) {
             CLAY_TEXT(
