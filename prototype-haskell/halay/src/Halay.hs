@@ -471,11 +471,18 @@ resolveCrossAxisChildren axis parent children =
 
 clampNodeHeight :: LayoutNode measureM placed -> Double -> Double
 clampNodeHeight node value =
-  clampMax (nodeAxisMax Vertical node) (clampMin (axisMin sizing) value)
+  clampMax (nodeAxisMax Vertical node) (clampMin (nodeHeightMinForPropagation node) value)
   where
-    sizing = boxHeight (nodeConfig node)
     clampMin minimumValue = max minimumValue
     clampMax maximumValue = min maximumValue
+
+nodeHeightMinForPropagation :: LayoutNode measureM placed -> Double
+nodeHeightMinForPropagation node =
+  case percentValue sizing of
+    Just percent -> percent
+    Nothing -> axisMin sizing
+  where
+    sizing = boxHeight (nodeConfig node)
 
 propagateResolvedHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
 propagateResolvedHeights node =
@@ -485,7 +492,6 @@ propagateResolvedHeights node =
     config = nodeConfig node
     resize current
       | null (nodeChildren current) = current
-      | isPercent (boxHeight config) = current
       | boxDirection config == LeftToRight =
           current
             { nodeDimensions =
@@ -1003,11 +1009,17 @@ nodeAxisMax Horizontal node =
   axisMax (boxWidth (nodeConfig node))
 nodeAxisMax Vertical node =
   case (isPercent sizing, nodeHeightMaxOverride node) of
-    (True, _) -> axisMax sizing
+    (True, Just maximumValue) -> maximumValue
+    (True, Nothing) -> 0
     (_, Just maximumValue) -> maximumValue
     (_, Nothing) -> axisMax sizing
   where
     sizing = boxHeight (nodeConfig node)
+
+percentValue :: AxisSizing -> Maybe Double
+percentValue (Clamp _ _ sizing) = percentValue sizing
+percentValue (Percent value) = Just value
+percentValue _ = Nothing
 
 replaceAt :: Int -> item -> [item] -> [item]
 replaceAt index value items =

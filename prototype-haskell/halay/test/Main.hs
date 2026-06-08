@@ -790,21 +790,28 @@ data RandomBoxConfig = RandomBoxConfig
 
 instance Arbitrary RandomTreeLayout where
   arbitrary = do
-    rootConfig <- arbitraryTreeBoxConfig
     rootWidth <- chooseInt (40, 220)
     rootHeight <- chooseInt (30, 160)
     childCount <- chooseInt (1, 4)
+    let rootSize = Size (fromIntegral rootWidth) (fromIntegral rootHeight)
+    rootConfig <-
+      arbitraryBoxConfigWithSizing
+        childCount
+        (Sizing (Fixed (sizeWidth rootSize)) (Fixed (sizeHeight rootSize)))
     children <- vectorOf childCount (arbitraryTreeNode 3)
     pure
       RandomTreeLayout
         { randomTreeRootConfig = rootConfig
-        , randomTreeRootSize = Size (fromIntegral rootWidth) (fromIntegral rootHeight)
+        , randomTreeRootSize = rootSize
         , randomTreeChildren = children
         }
   shrink randomTree =
-    [randomTree {randomTreeRootConfig = config} | config <- shrinkBoxConfig (randomTreeRootConfig randomTree)]
-      <> [randomTree {randomTreeRootSize = size} | size <- shrinkSizeAtLeast 1 1 (randomTreeRootSize randomTree)]
-      <> [randomTree {randomTreeChildren = children} | children <- shrinkTreeChildren (randomTreeChildren randomTree)]
+    filter
+      oracleSafeRandomTree
+      ( [randomTree {randomTreeRootConfig = config} | config <- shrinkBoxConfig (length (randomTreeChildren randomTree)) (rootSizedConfig randomTree)]
+          <> [randomTree {randomTreeRootSize = size} | size <- shrinkSizeAtLeast 1 1 (randomTreeRootSize randomTree)]
+          <> [randomTree {randomTreeChildren = children} | children <- shrinkTreeChildren (randomTreeChildren randomTree)]
+      )
 
 arbitraryTreeNode :: Int -> Gen RandomTreeNode
 arbitraryTreeNode depth
@@ -826,17 +833,17 @@ arbitraryTreeLeaf = do
 
 arbitraryTreeBox :: Int -> Gen RandomTreeNode
 arbitraryTreeBox depth = do
-  config <- arbitraryTreeBoxConfig
-  aspect <- arbitraryAspectRatio
   childCount <- chooseInt (1, 4)
+  config <- arbitraryTreeBoxConfig childCount
+  aspect <- arbitraryAspectRatio
   children <- vectorOf childCount (arbitraryTreeNode (depth - 1))
   pure (RandomTreeBox config aspect children)
 
-arbitraryTreeBoxConfig :: Gen RandomBoxConfig
-arbitraryTreeBoxConfig = do
+arbitraryTreeBoxConfig :: Int -> Gen RandomBoxConfig
+arbitraryTreeBoxConfig childCount = do
   widthSizing <- arbitraryTreeAxisSizing
   heightSizing <- arbitraryTreeAxisSizing
-  arbitraryBoxConfigWithSizing (Sizing widthSizing heightSizing)
+  arbitraryBoxConfigWithSizing childCount (Sizing widthSizing heightSizing)
 
 arbitraryTreeAxisSizing :: Gen AxisSizing
 arbitraryTreeAxisSizing = arbitraryAxisSizing
@@ -848,12 +855,14 @@ arbitraryAspectRatio =
     , (1, Just . (/ 10) . fromIntegral <$> chooseInt (5, 40))
     ]
 
-arbitraryBoxConfigWithSizing :: Sizing -> Gen RandomBoxConfig
-arbitraryBoxConfigWithSizing sizing = do
+arbitraryBoxConfigWithSizing :: Int -> Sizing -> Gen RandomBoxConfig
+arbitraryBoxConfigWithSizing childCount sizing = do
   direction <- elements [LeftToRight, TopToBottom]
-  (paddingLeft, paddingRight) <- arbitraryPaddingPairForAxis (sizingWidth sizing)
-  (paddingTop, paddingBottom) <- arbitraryPaddingPairForAxis (sizingHeight sizing)
-  gap <- chooseInt (0, 16)
+  gap <- arbitraryGapForMainAxis childCount direction sizing
+  let horizontalGap = axisReservedGap Horizontal childCount direction gap
+  let verticalGap = axisReservedGap Vertical childCount direction gap
+  (paddingLeft, paddingRight) <- arbitraryPaddingPairForAxis (sizingWidth sizing) horizontalGap
+  (paddingTop, paddingBottom) <- arbitraryPaddingPairForAxis (sizingHeight sizing) verticalGap
   alignX <- arbitrary
   alignY <- arbitrary
   pure
@@ -883,11 +892,18 @@ arbitraryPaddingPair maybeMaxTotal =
           second <- chooseInt (0, min 20 (floor maxTotal - first))
           pure (first, second)
 
-arbitraryPaddingPairForAxis :: AxisSizing -> Gen (Int, Int)
-arbitraryPaddingPairForAxis sizing =
+arbitraryPaddingPairForAxis :: AxisSizing -> Double -> Gen (Int, Int)
+arbitraryPaddingPairForAxis sizing reserved =
   case fixedAxisSize sizing of
-    Just maxTotal -> arbitraryPaddingPair (Just maxTotal)
+    Just maxTotal -> arbitraryPaddingPair (Just (max 0 (maxTotal - reserved)))
     Nothing -> pure (0, 0)
+
+arbitraryGapForMainAxis :: Int -> Direction -> Sizing -> Gen Int
+arbitraryGapForMainAxis childCount direction sizing =
+  case fixedAxisSize (mainAxisSizing direction sizing) of
+    Just fixedSize
+      | childCount > 1 -> chooseInt (0, min 16 (floor (fixedSize / fromIntegral (childCount - 1))))
+    _ -> pure 0
 
 shrinkTreeChildren :: [RandomTreeNode] -> [[RandomTreeNode]]
 shrinkTreeChildren [] = []
@@ -910,15 +926,15 @@ shrinkTreeNode (RandomTreeLeaf size sizing aspect) =
     <> [RandomTreeLeaf size sizing (Just ratio) | ratio <- shrinkAspectRatio aspect]
 shrinkTreeNode (RandomTreeBox config aspect children) =
   children
-    <> [RandomTreeBox shrunkConfig aspect children | shrunkConfig <- shrinkBoxConfig config]
+    <> [RandomTreeBox shrunkConfig aspect children | shrunkConfig <- shrinkBoxConfig (length children) config]
     <> [RandomTreeBox config Nothing children | aspect /= Nothing]
     <> [RandomTreeBox config (Just ratio) children | ratio <- shrinkAspectRatio aspect]
     <> [RandomTreeBox config aspect shrunkChildren | shrunkChildren <- shrinkTreeChildren children]
 
-shrinkBoxConfig :: RandomBoxConfig -> [RandomBoxConfig]
-shrinkBoxConfig config =
+shrinkBoxConfig :: Int -> RandomBoxConfig -> [RandomBoxConfig]
+shrinkBoxConfig childCount config =
   filter
-    oracleSafeBoxConfig
+    (oracleSafeBoxConfig childCount)
     ( [config {randomBoxDirection = direction} | direction <- shrinkDirection (randomBoxDirection config)]
         <> [config {randomBoxPadding = insets} | insets <- shrinkInsets (randomBoxPadding config)]
         <> [config {randomBoxGap = gap} | gap <- shrinkIntAtLeast 0 (randomBoxGap config)]
@@ -927,16 +943,55 @@ shrinkBoxConfig config =
         <> [config {randomBoxSizing = sizing} | sizing <- shrinkSizing (randomBoxSizing config)]
     )
 
-oracleSafeBoxConfig :: RandomBoxConfig -> Bool
-oracleSafeBoxConfig RandomBoxConfig {randomBoxPadding, randomBoxSizing} =
-  paddingFitsAxis (sizingWidth randomBoxSizing) (insetLeft randomBoxPadding + insetRight randomBoxPadding)
-    && paddingFitsAxis (sizingHeight randomBoxSizing) (insetTop randomBoxPadding + insetBottom randomBoxPadding)
+oracleSafeRandomTree :: RandomTreeLayout -> Bool
+oracleSafeRandomTree randomTree =
+  oracleSafeBoxConfig (length (randomTreeChildren randomTree)) (rootSizedConfig randomTree)
+    && all oracleSafeTreeNode (randomTreeChildren randomTree)
+
+oracleSafeTreeNode :: RandomTreeNode -> Bool
+oracleSafeTreeNode RandomTreeLeaf {} = True
+oracleSafeTreeNode (RandomTreeBox config _aspect children) =
+  oracleSafeBoxConfig (length children) config && all oracleSafeTreeNode children
+
+oracleSafeBoxConfig :: Int -> RandomBoxConfig -> Bool
+oracleSafeBoxConfig childCount RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxSizing} =
+  paddingFitsAxis (sizingWidth randomBoxSizing) (insetLeft randomBoxPadding + insetRight randomBoxPadding + axisReservedGap Horizontal childCount randomBoxDirection randomBoxGap)
+    && paddingFitsAxis (sizingHeight randomBoxSizing) (insetTop randomBoxPadding + insetBottom randomBoxPadding + axisReservedGap Vertical childCount randomBoxDirection randomBoxGap)
 
 paddingFitsAxis :: AxisSizing -> Double -> Bool
 paddingFitsAxis sizing paddingSize =
   case fixedAxisSize sizing of
     Just maxSize -> paddingSize <= maxSize
     Nothing -> paddingSize == 0
+
+data Axis
+  = Horizontal
+  | Vertical
+
+mainAxisSizing :: Direction -> Sizing -> AxisSizing
+mainAxisSizing LeftToRight = sizingWidth
+mainAxisSizing TopToBottom = sizingHeight
+
+axisReservedGap :: Axis -> Int -> Direction -> Int -> Double
+axisReservedGap axis childCount direction gap
+  | childCount <= 1 = 0
+  | axisIsAlongDirection axis direction =
+      fromIntegral (childCount - 1) * fromIntegral gap
+  | otherwise = 0
+
+axisIsAlongDirection :: Axis -> Direction -> Bool
+axisIsAlongDirection Horizontal LeftToRight = True
+axisIsAlongDirection Vertical TopToBottom = True
+axisIsAlongDirection _ _ = False
+
+rootSizedConfig :: RandomTreeLayout -> RandomBoxConfig
+rootSizedConfig RandomTreeLayout {randomTreeRootConfig, randomTreeRootSize} =
+  randomTreeRootConfig
+    { randomBoxSizing =
+        Sizing
+          (Fixed (sizeWidth randomTreeRootSize))
+          (Fixed (sizeHeight randomTreeRootSize))
+    }
 
 randomTreeLayoutMatchesClay :: FilePath -> RandomTreeLayout -> Property
 randomTreeLayoutMatchesClay oracle randomTree =
