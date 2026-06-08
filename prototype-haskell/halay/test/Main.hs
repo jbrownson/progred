@@ -1212,7 +1212,7 @@ randomTreeNodeHalay :: Int -> RandomTreeNode -> (Int, Halay Identity Placements)
 randomTreeNodeHalay index node =
   case node of
     RandomTreeLeaf size sizing maybeAspect ->
-      (index + 1, withAspect maybeAspect (namedLayout name (leafWithSizing sizing (pure size) (const (pure mempty)))))
+      (index + 1, withAspect maybeAspect (namedLayout name (box (boxConfigFromRandom (leafBoxConfig sizing)) [fixed size mempty])))
     RandomTreeText config maybeAspect textContent ->
       (index + 1, withAspect maybeAspect (namedLayout name (box (boxConfigFromRandom config) [randomTreeTextHalay textContent])))
     RandomTreeBox config maybeAspect children ->
