@@ -1,6 +1,7 @@
 module Halay
   ( AxisSizing (..)
   , BoxConfig (..)
+  , BoxClip (..)
   , CrossAlign (..)
   , Direction (..)
   , Halay
@@ -73,6 +74,14 @@ data BoxConfig = BoxConfig
   , boxHeight :: AxisSizing
   , boxMainAlign :: MainAlign
   , boxCrossAlign :: CrossAlign
+  , boxClip :: BoxClip
+  }
+  deriving (Eq, Show)
+
+data BoxClip = BoxClip
+  { clipHorizontal :: Bool
+  , clipVertical :: Bool
+  , clipChildOffset :: Point
   }
   deriving (Eq, Show)
 
@@ -153,6 +162,7 @@ defaultBox =
     , boxHeight = Fit
     , boxMainAlign = MainStart
     , boxCrossAlign = CrossStart
+    , boxClip = BoxClip False False (Point 0 0)
     }
 
 empty :: (Applicative measureM, Monoid placed) => Halay measureM placed
@@ -337,7 +347,7 @@ closeContainer :: LayoutNode measureM placed -> LayoutNode measureM placed
 closeContainer node =
   node
     { nodeDimensions = expandSize boxInsets contentSize
-    , nodeMinDimensions = expandSize boxInsets minContentSize
+    , nodeMinDimensions = closeContainerMinDimensions config minContentSize
     }
   where
     config = nodeConfig node
@@ -369,6 +379,34 @@ closeContainer node =
             { sizeWidth = maximumOrZero (sizeWidth <$> childMinSizes)
             , sizeHeight = sum (sizeHeight <$> childMinSizes) + gapSize (boxGap config) children
             }
+
+closeContainerMinDimensions :: BoxConfig -> Size -> Size
+closeContainerMinDimensions config Size {sizeWidth, sizeHeight} =
+  case boxDirection config of
+    LeftToRight ->
+      Size
+        { sizeWidth =
+            if clipHorizontal (boxClip config)
+              then insetLeft boxInsets + insetRight boxInsets
+              else sizeWidth + insetLeft boxInsets + insetRight boxInsets
+        , sizeHeight =
+            if clipVertical (boxClip config)
+              then 0
+              else sizeHeight + insetTop boxInsets + insetBottom boxInsets
+        }
+    TopToBottom ->
+      Size
+        { sizeWidth =
+            if clipHorizontal (boxClip config)
+              then 0
+              else sizeWidth + insetLeft boxInsets + insetRight boxInsets
+        , sizeHeight =
+            if clipVertical (boxClip config)
+              then insetTop boxInsets + insetBottom boxInsets
+              else sizeHeight + insetTop boxInsets + insetBottom boxInsets
+        }
+  where
+    boxInsets = boxPadding config
 
 closeNodeSizing :: LayoutNode measureM placed -> LayoutNode measureM placed
 closeNodeSizing node =
@@ -411,7 +449,7 @@ resolveAxisChildren :: Axis -> LayoutNode measureM placed -> [LayoutNode measure
 resolveAxisChildren axis parent =
   if sizingAlongAxis
     then resolveMainAxisChildren axis parent percentChildren
-    else resolveCrossAxisChildren axis parent percentChildren
+    else resolveCrossAxisChildren axis parent innerContentSize percentChildren
   where
     config = nodeConfig parent
     children = nodeChildren parent
@@ -422,6 +460,10 @@ resolveAxisChildren axis parent =
       | sizingAlongAxis = gapSize (boxGap config) children
       | otherwise = 0
     totalPaddingAndChildGaps = parentPadding + gapTotal
+    innerContentSize =
+      if sizingAlongAxis
+        then sum [axisSize axis (nodeDimensions child) | child <- children, not (isPercent (axisSizing axis (nodeSizing child)))] + gapTotal
+        else maximumOrZero (axisSize axis . nodeDimensions <$> children)
     percentChildren =
       [ case axisSizing axis (nodeSizing child) of
           Percent percent -> updateMissingAspectDimension (updateNodeAxisDimension axis ((parentSize - totalPaddingAndChildGaps) * percent) child)
@@ -430,7 +472,7 @@ resolveAxisChildren axis parent =
       ]
 resolveMainAxisChildren :: Axis -> LayoutNode measureM placed -> [LayoutNode measureM placed] -> [LayoutNode measureM placed]
 resolveMainAxisChildren axis parent children
-  | sizeToDistribute < 0 =
+  | sizeToDistribute < 0 && not (nodeClipsAxis axis parent) =
       distributeCompressNodes axis sizeToDistribute baseChildren resizableIndices
   | sizeToDistribute > 0 && not (null growIndices) =
       distributeGrowNodes axis sizeToDistribute baseChildren growIndices
@@ -449,14 +491,17 @@ resolveMainAxisChildren axis parent children
     growIndices =
       [index | (index, child) <- zip [0 ..] children, isFill (axisSizing axis (nodeSizing child))]
 
-resolveCrossAxisChildren :: Axis -> LayoutNode measureM placed -> [LayoutNode measureM placed] -> [LayoutNode measureM placed]
-resolveCrossAxisChildren axis parent children =
+resolveCrossAxisChildren :: Axis -> LayoutNode measureM placed -> Double -> [LayoutNode measureM placed] -> [LayoutNode measureM placed]
+resolveCrossAxisChildren axis parent innerContentSize children =
   [ resolve child | child <- children ]
   where
     config = nodeConfig parent
     parentSize = axisSize axis (nodeDimensions parent)
     parentPadding = axisPadding axis (boxPadding config)
-    maxSize = parentSize - parentPadding
+    maxSize
+      | nodeClipsAxis axis parent = max visibleMaxSize innerContentSize
+      | otherwise = visibleMaxSize
+    visibleMaxSize = parentSize - parentPadding
     resolve child
       | not (nodeCanResizeAlongAxis axis child) =
           child
@@ -614,6 +659,7 @@ placeChildren Point {pointX, pointY} node =
     extraPrimary = max 0 (axisSize primaryAxis (nodeDimensions node) - axisPadding primaryAxis boxInsets - contentPrimary)
     startingPrimary = rectAxisPosition primaryAxis inner + mainAlignmentOffset (boxMainAlign config) extraPrimary
     resolvedGap = mainAlignmentGap (boxMainAlign config) (boxGap config) extraPrimary (length (nodeChildren node))
+    childOffset = nodeChildOffset node
     placeChild (primaryPosition, placed) child = do
       let childSize = nodeDimensions child
       let childPrimary = axisSize primaryAxis childSize
@@ -621,7 +667,7 @@ placeChildren Point {pointX, pointY} node =
       let crossPosition =
             rectAxisPosition crossAxis inner
               + crossAlignmentOffset (boxCrossAlign config) (axisSize crossAxis (shrinkSize boxInsets (nodeDimensions node))) childCross
-      next <- placeLayoutNode (pointFromAxes primaryAxis primaryPosition crossPosition) child
+      next <- placeLayoutNode (offsetPoint childOffset (pointFromAxes primaryAxis primaryPosition crossPosition)) child
       pure (primaryPosition + childPrimary + resolvedGap, placed <> next)
 
 measureTextNode :: Monad measureM => TextConfig measureM placed -> String -> measureM (TextNode measureM placed)
@@ -823,6 +869,24 @@ axisIsAlongDirection :: Axis -> Direction -> Bool
 axisIsAlongDirection Horizontal LeftToRight = True
 axisIsAlongDirection Vertical TopToBottom = True
 axisIsAlongDirection _ _ = False
+
+nodeClipsAxis :: Axis -> LayoutNode measureM placed -> Bool
+nodeClipsAxis Horizontal node =
+  clipHorizontal (boxClip (nodeConfig node))
+nodeClipsAxis Vertical node =
+  clipVertical (boxClip (nodeConfig node))
+
+nodeChildOffset :: LayoutNode measureM placed -> Point
+nodeChildOffset node =
+  if clipHorizontal clipConfig || clipVertical clipConfig
+    then clipChildOffset clipConfig
+    else Point 0 0
+  where
+    clipConfig = boxClip (nodeConfig node)
+
+offsetPoint :: Point -> Point -> Point
+offsetPoint Point {pointX = offsetX, pointY = offsetY} Point {pointX, pointY} =
+  Point (pointX + offsetX) (pointY + offsetY)
 
 axisPadding :: Axis -> Insets -> Double
 axisPadding Horizontal Insets {insetLeft, insetRight} = insetLeft + insetRight
@@ -1040,9 +1104,16 @@ clayFloatEqual left right =
 fillMissingAspectDimension :: Double -> Size -> Size
 fillMissingAspectDimension ratio size@Size {sizeWidth, sizeHeight}
   | ratio == 0 = size
-  | sizeWidth == 0 && sizeHeight /= 0 = Size (sizeHeight * ratio) sizeHeight
-  | sizeWidth /= 0 && sizeHeight == 0 = Size sizeWidth (sizeWidth / ratio)
+  | dimensionIsMissing sizeWidth && not (dimensionIsMissing sizeHeight) = Size (sizeHeight * ratio) sizeHeight
+  | not (dimensionIsMissing sizeWidth) && dimensionIsMissing sizeHeight = Size sizeWidth (sizeWidth / ratio)
   | otherwise = size
+
+dimensionIsMissing :: Double -> Bool
+dimensionIsMissing value =
+  abs value < numericZeroEpsilon
+
+numericZeroEpsilon :: Double
+numericZeroEpsilon = 1e-9
 
 mainAlignmentOffset :: MainAlign -> Double -> Double
 mainAlignmentOffset MainStart _extra = 0

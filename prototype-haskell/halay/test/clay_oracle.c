@@ -311,6 +311,109 @@ static void overflow_cross_center(void) {
     emit_case("overflow_cross_center", ids, 2);
 }
 
+static void clip_main_axis_does_not_compress(void) {
+    const char *ids[] = {"root", "a"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {
+        .layout = {.sizing = fixed_size(6, 20)},
+        .clip = {.horizontal = true},
+    }) {
+        CLAY(CLAY_ID("a"), {}) {
+            CLAY_TEXT(CLAY_STRING("aaaaa bbbbb"), CLAY_TEXT_CONFIG({.fontSize = 1}));
+        }
+    }
+    emit_case("clip_main_axis_does_not_compress", ids, 2);
+}
+
+static void clip_cross_axis_grows_to_content(void) {
+    const char *ids[] = {"root", "a"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {
+        .layout = {.sizing = fixed_size(100, 10)},
+        .clip = {.vertical = true},
+    }) {
+        CLAY(CLAY_ID("a"), {
+            .layout = {
+                .sizing = {
+                    .height = CLAY_SIZING_GROW(0),
+                },
+            },
+            .clip = {.vertical = true},
+        }) {
+            CLAY_AUTO_ID({.layout = {.sizing = fixed_size(5, 20)}}) {}
+        }
+    }
+    emit_case("clip_cross_axis_grows_to_content", ids, 2);
+}
+
+static void clip_cross_axis_uses_pre_percent_inner_size(void) {
+    const char *ids[] = {"root", "a", "b"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {
+        .layout = {
+            .sizing = fixed_size(73, 80),
+            .layoutDirection = CLAY_TOP_TO_BOTTOM,
+            .padding = {.left = 12, .right = 7},
+            .childAlignment = {.x = CLAY_ALIGN_X_CENTER},
+        },
+        .clip = {
+            .horizontal = true,
+            .vertical = true,
+        },
+    }) {
+        CLAY(CLAY_ID("a"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_GROW(0),
+                    .height = CLAY_SIZING_FIXED(67),
+                },
+                .layoutDirection = CLAY_TOP_TO_BOTTOM,
+                .padding = {.top = 5, .bottom = 18},
+            },
+            .clip = {.vertical = true},
+        }) {
+            CLAY_TEXT(
+                CLAY_STRING("xx xxxxxxxxxxxxxxxxxxx xxxxxxxxxxxxxx xxx"),
+                CLAY_TEXT_CONFIG({
+                    .fontSize = 1,
+                    .wrapMode = CLAY_TEXT_WRAP_NONE,
+                    .textAlignment = CLAY_TEXT_ALIGN_CENTER,
+                }));
+        }
+        CLAY(CLAY_ID("b"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_PERCENT(0.84f),
+                    .height = CLAY_SIZING_FIXED(31),
+                },
+            },
+            .aspectRatio = {.aspectRatio = 1.8f},
+        }) {
+            CLAY_AUTO_ID({.layout = {.sizing = fixed_size(3, 26)}}) {}
+        }
+    }
+    emit_case("clip_cross_axis_uses_pre_percent_inner_size", ids, 3);
+}
+
+static void clip_child_offset_places_children(void) {
+    const char *ids[] = {"root", "a"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {
+        .layout = {
+            .sizing = fixed_size(50, 50),
+            .padding = {.left = 5, .top = 6},
+        },
+        .clip = {
+            .horizontal = true,
+            .vertical = true,
+            .childOffset = {-3, 7},
+        },
+    }) {
+        CLAY(CLAY_ID("a"), {.layout = {.sizing = fixed_size(10, 10)}}) {}
+    }
+    emit_case("clip_child_offset_places_children", ids, 2);
+}
+
 static void emit_text_commands(const char *case_name) {
     Clay_RenderCommandArray commands = Clay_EndLayout(0);
     emit_rect(case_name, "root");
@@ -512,7 +615,11 @@ static Clay_ElementDeclaration tree_declaration(
     float height_sizing_min,
     float width_sizing_max,
     float height_sizing_max,
-    float aspect_ratio) {
+    float aspect_ratio,
+    int clip_horizontal,
+    int clip_vertical,
+    float child_offset_x,
+    float child_offset_y) {
     return CLAY__INIT(Clay_ElementDeclaration) {
         .layout = {
             .sizing = {
@@ -533,6 +640,11 @@ static Clay_ElementDeclaration tree_declaration(
             .layoutDirection = direction_value == 0 ? CLAY_LEFT_TO_RIGHT : CLAY_TOP_TO_BOTTOM,
         },
         .aspectRatio = {.aspectRatio = aspect_ratio},
+        .clip = {
+            .horizontal = clip_horizontal != 0,
+            .vertical = clip_vertical != 0,
+            .childOffset = {child_offset_x, child_offset_y},
+        },
     };
 }
 
@@ -586,9 +698,13 @@ static void read_tree_node(const char *case_name) {
     float width_sizing_max;
     float height_sizing_max;
     float aspect_ratio;
+    int clip_horizontal;
+    int clip_vertical;
+    float child_offset_x;
+    float child_offset_y;
 
     if (scanf(
-            "%31s %d %f %f %d %u %u %u %u %u %d %d %d %d %f %f %f %f %f %f %f %d",
+            "%31s %d %f %f %d %u %u %u %u %u %d %d %d %d %f %f %f %f %f %f %f %d %d %d %f %f",
             id,
             &child_count,
             &intrinsic_width,
@@ -610,8 +726,12 @@ static void read_tree_node(const char *case_name) {
             &width_sizing_max,
             &height_sizing_max,
             &aspect_ratio,
-            &node_kind)
-        != 22) {
+            &node_kind,
+            &clip_horizontal,
+            &clip_vertical,
+            &child_offset_x,
+            &child_offset_y)
+        != 26) {
         fprintf(stderr, "missing tree node in %s\n", case_name);
         exit(1);
     }
@@ -652,7 +772,11 @@ static void read_tree_node(const char *case_name) {
             height_sizing_min,
             width_sizing_max,
             height_sizing_max,
-            aspect_ratio));
+            aspect_ratio,
+            clip_horizontal,
+            clip_vertical,
+            child_offset_x,
+            child_offset_y));
     if (node_kind == 1) {
         add_text_leaf(case_name);
     } else if (child_count == 0) {
@@ -872,6 +996,10 @@ int main(int argc, char **argv) {
     unequal_grow_main_axis();
     nested_box_positions_children();
     overflow_cross_center();
+    clip_main_axis_does_not_compress();
+    clip_cross_axis_grows_to_content();
+    clip_cross_axis_uses_pre_percent_inner_size();
+    clip_child_offset_places_children();
     text_wraps_words();
     text_respects_newlines();
     return 0;

@@ -177,6 +177,10 @@ conformanceCases =
   , ConformanceCase "unequal_grow_main_axis" unequalGrowMainAxis
   , ConformanceCase "nested_box_positions_children" nestedBoxPositionsChildren
   , ConformanceCase "overflow_cross_center" overflowCrossCenter
+  , ConformanceCase "clip_main_axis_does_not_compress" clipMainAxisDoesNotCompress
+  , ConformanceCase "clip_cross_axis_grows_to_content" clipCrossAxisGrowsToContent
+  , ConformanceCase "clip_cross_axis_uses_pre_percent_inner_size" clipCrossAxisUsesPrePercentInnerSize
+  , ConformanceCase "clip_child_offset_places_children" clipChildOffsetPlacesChildren
   , ConformanceCase "text_wraps_words" textWrapsWords
   , ConformanceCase "text_respects_newlines" textRespectsNewlines
   ]
@@ -326,6 +330,73 @@ overflowCrossCenter =
   box
     defaultBox {boxWidth = Fixed 10, boxHeight = Fixed 10, boxCrossAlign = CrossCenter}
     [named "a" (Size 5 20)]
+
+clipMainAxisDoesNotCompress :: Halay Identity Placements
+clipMainAxisDoesNotCompress =
+  box
+    defaultBox
+      { boxWidth = Fixed 6
+      , boxHeight = Fixed 20
+      , boxClip = BoxClip True False (Point 0 0)
+      }
+    [namedLayout "a" (box defaultBox [text testTextConfig {textPlaceLine = \_ _ _ -> pure mempty} "aaaaa bbbbb"])]
+
+clipCrossAxisGrowsToContent :: Halay Identity Placements
+clipCrossAxisGrowsToContent =
+  box
+    defaultBox
+      { boxWidth = Fixed 100
+      , boxHeight = Fixed 10
+      , boxClip = BoxClip False True (Point 0 0)
+      }
+    [ sized
+        (Sizing Fit Fill)
+        ( namedLayout "a" $
+            box
+              defaultBox {boxClip = BoxClip False True (Point 0 0)}
+              [fixed (Size 5 20) mempty]
+        )
+    ]
+
+clipCrossAxisUsesPrePercentInnerSize :: Halay Identity Placements
+clipCrossAxisUsesPrePercentInnerSize =
+  box
+    defaultBox
+      { boxDirection = TopToBottom
+      , boxWidth = Fixed 73
+      , boxHeight = Fixed 80
+      , boxPadding = Insets 0 7 0 12
+      , boxCrossAlign = CrossCenter
+      , boxClip = BoxClip True True (Point 0 0)
+      }
+    [ sized
+        (Sizing Fill (Fixed 67))
+        ( namedLayout "a" $
+            box
+              defaultBox
+                { boxDirection = TopToBottom
+                , boxPadding = Insets 5 0 18 0
+                , boxClip = BoxClip False True (Point 0 0)
+                }
+              [text testTextConfig {textWrapMode = TextWrapNone, textAlign = TextAlignCenter, textPlaceLine = \_ _ _ -> pure mempty} "xx xxxxxxxxxxxxxxxxxxx xxxxxxxxxxxxxx xxx"]
+        )
+    , aspectRatio 1.8 $
+        leafWithSizing
+          (Sizing (Percent 0.84) (Fixed 31))
+          (pure (Size 3 26))
+          (\rect -> pure (Placements [("b", rect)]))
+    ]
+
+clipChildOffsetPlacesChildren :: Halay Identity Placements
+clipChildOffsetPlacesChildren =
+  box
+    defaultBox
+      { boxWidth = Fixed 50
+      , boxHeight = Fixed 50
+      , boxPadding = Insets 6 0 0 5
+      , boxClip = BoxClip True True (Point (-3) 7)
+      }
+    [named "a" (Size 10 10)]
 
 textWrapsWords :: Halay Identity Placements
 textWrapsWords =
@@ -793,6 +864,9 @@ data RandomBoxConfig = RandomBoxConfig
   , randomBoxAlignX :: AlignChoice
   , randomBoxAlignY :: AlignChoice
   , randomBoxSizing :: Sizing
+  , randomBoxClipHorizontal :: Bool
+  , randomBoxClipVertical :: Bool
+  , randomBoxChildOffset :: Point
   }
   deriving (Eq, Show)
 
@@ -901,6 +975,9 @@ arbitraryBoxConfigWithSizing childCount sizing = do
   (paddingTop, paddingBottom) <- arbitraryPaddingPairForAxis (sizingHeight sizing) verticalGap
   alignX <- arbitrary
   alignY <- arbitrary
+  clipHorizontal <- arbitraryClipFlag
+  clipVertical <- arbitraryClipFlag
+  childOffset <- arbitraryChildOffset
   pure
     RandomBoxConfig
       { randomBoxDirection = direction
@@ -915,7 +992,21 @@ arbitraryBoxConfigWithSizing childCount sizing = do
       , randomBoxAlignX = alignX
       , randomBoxAlignY = alignY
       , randomBoxSizing = sizing
+      , randomBoxClipHorizontal = clipHorizontal
+      , randomBoxClipVertical = clipVertical
+      , randomBoxChildOffset = childOffset
       }
+
+arbitraryClipFlag :: Gen Bool
+arbitraryClipFlag =
+  frequency [(3, pure False), (1, pure True)]
+
+arbitraryChildOffset :: Gen Point
+arbitraryChildOffset =
+  Point
+    . fromIntegral
+    <$> chooseInt (-20, 20)
+    <*> (fromIntegral <$> chooseInt (-20, 20))
 
 arbitraryPaddingPair :: Maybe Double -> Gen (Int, Int)
 arbitraryPaddingPair maybeMaxTotal =
@@ -988,7 +1079,19 @@ shrinkBoxConfig childCount config =
         <> [config {randomBoxAlignX = alignX} | alignX <- shrink (randomBoxAlignX config)]
         <> [config {randomBoxAlignY = alignY} | alignY <- shrink (randomBoxAlignY config)]
         <> [config {randomBoxSizing = sizing} | sizing <- shrinkSizing (randomBoxSizing config)]
+        <> [config {randomBoxClipHorizontal = False} | randomBoxClipHorizontal config]
+        <> [config {randomBoxClipVertical = False} | randomBoxClipVertical config]
+        <> [config {randomBoxChildOffset = offset} | offset <- shrinkPoint (randomBoxChildOffset config)]
     )
+
+shrinkPoint :: Point -> [Point]
+shrinkPoint Point {pointX, pointY} =
+  [Point value pointY | value <- shrinkDouble pointX]
+    <> [Point pointX value | value <- shrinkDouble pointY]
+
+shrinkDouble :: Double -> [Double]
+shrinkDouble value =
+  fromIntegral <$> shrink (round value :: Int)
 
 oracleSafeRandomTree :: RandomTreeLayout -> Bool
 oracleSafeRandomTree randomTree =
@@ -1137,13 +1240,14 @@ namedLayout name =
   decorate (\rect -> pure (Placements [(name, rect)]))
 
 boxConfigFromRandom :: RandomBoxConfig -> BoxConfig
-boxConfigFromRandom RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxAlignX, randomBoxAlignY, randomBoxSizing} =
+boxConfigFromRandom RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxAlignX, randomBoxAlignY, randomBoxSizing, randomBoxClipHorizontal, randomBoxClipVertical, randomBoxChildOffset} =
   defaultBox
     { boxDirection = randomBoxDirection
     , boxPadding = randomBoxPadding
     , boxGap = fromIntegral randomBoxGap
     , boxWidth = sizingWidth randomBoxSizing
     , boxHeight = sizingHeight randomBoxSizing
+    , boxClip = BoxClip randomBoxClipHorizontal randomBoxClipVertical randomBoxChildOffset
     , boxMainAlign =
         case randomBoxDirection of
           LeftToRight -> mainAlign randomBoxAlignX
@@ -1196,6 +1300,9 @@ leafBoxConfig sizing =
     , randomBoxAlignX = AlignStart
     , randomBoxAlignY = AlignStart
     , randomBoxSizing = sizing
+    , randomBoxClipHorizontal = False
+    , randomBoxClipVertical = False
+    , randomBoxChildOffset = Point 0 0
     }
 
 data TreeNodeKind
@@ -1204,7 +1311,7 @@ data TreeNodeKind
   | TreeContainer
 
 treeNodeWords :: String -> TreeNodeKind -> Int -> Size -> RandomBoxConfig -> Maybe Double -> [String]
-treeNodeWords name nodeKind childCount intrinsicSize RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxAlignX, randomBoxAlignY, randomBoxSizing} maybeAspect =
+treeNodeWords name nodeKind childCount intrinsicSize RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxAlignX, randomBoxAlignY, randomBoxSizing, randomBoxClipHorizontal, randomBoxClipVertical, randomBoxChildOffset} maybeAspect =
   [ name
   , show childCount
   , show (sizeWidth intrinsicSize)
@@ -1227,7 +1334,15 @@ treeNodeWords name nodeKind childCount intrinsicSize RandomBoxConfig {randomBoxD
   , show (axisSizingMax (sizingHeight randomBoxSizing))
   , maybe "0" show maybeAspect
   , show (treeNodeKindValue nodeKind)
+  , show (boolValue randomBoxClipHorizontal)
+  , show (boolValue randomBoxClipVertical)
+  , show (pointX randomBoxChildOffset)
+  , show (pointY randomBoxChildOffset)
   ]
+
+boolValue :: Bool -> Int
+boolValue False = 0
+boolValue True = 1
 
 treeNodeKindValue :: TreeNodeKind -> Int
 treeNodeKindValue TreeIntrinsicLeaf = 0
