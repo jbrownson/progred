@@ -75,8 +75,6 @@ rawIndentBox =
   defaultBox
     { boxDirection = TopToBottom
     , boxPadding = Insets 0 0 0 indent
-    , boxWidth = Fit
-    , boxHeight = Fit
     }
 
 identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM ()

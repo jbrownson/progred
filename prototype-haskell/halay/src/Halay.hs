@@ -6,7 +6,7 @@ module Halay
   , Direction (..)
   , Halay
   , MainAlign (..)
-  , Measured
+  , Measured (..)
   , Sizing (..)
   , TextAlign (..)
   , TextConfig (..)
@@ -70,8 +70,7 @@ data BoxConfig = BoxConfig
   { boxDirection :: Direction
   , boxPadding :: Insets
   , boxGap :: Double
-  , boxWidth :: AxisSizing
-  , boxHeight :: AxisSizing
+  , boxSizing :: Sizing
   , boxMainAlign :: MainAlign
   , boxCrossAlign :: CrossAlign
   , boxClip :: BoxClip
@@ -111,9 +110,6 @@ newtype Halay measureM placed = Halay
 
 data Measured measureM placed = Measured
   { measuredSize :: Size
-  , measuredMinSize :: Size
-  , measuredSizing :: Sizing
-  , measuredAspectRatio :: Maybe Double
   , placeMeasured :: Rect -> measureM placed
   }
 
@@ -163,8 +159,7 @@ defaultBox =
     { boxDirection = LeftToRight
     , boxPadding = Insets 0 0 0 0
     , boxGap = 0
-    , boxWidth = Fit
-    , boxHeight = Fit
+    , boxSizing = defaultSizing
     , boxMainAlign = MainStart
     , boxCrossAlign = CrossStart
     , boxClip = BoxClip False False (Point 0 0)
@@ -189,7 +184,7 @@ leafWithSizing sizing measure place =
   where
     makeNode intrinsicSize =
       emptyNode
-        { nodeConfig = defaultBox {boxWidth = sizingWidth sizing, boxHeight = sizingHeight sizing}
+        { nodeConfig = defaultBox {boxSizing = sizing}
         , nodeContent = Intrinsic intrinsicSize
         , nodePlacers = [place]
         }
@@ -236,9 +231,6 @@ measureHalay halay = do
   pure
     Measured
       { measuredSize = nodeDimensions measuredNode
-      , measuredMinSize = nodeMinDimensions measuredNode
-      , measuredSizing = nodeSizing measuredNode
-      , measuredAspectRatio = nodeAspectRatio measuredNode
       , placeMeasured = \rect ->
           placeLayoutNode (Point (x rect) (y rect)) (layoutNode (Just (Size (width rect) (height rect))) source)
       }
@@ -283,8 +275,8 @@ emptyNode =
     }
 
 setNodeSizing :: Sizing -> LayoutNode measureM placed -> LayoutNode measureM placed
-setNodeSizing Sizing {sizingWidth, sizingHeight} node =
-  node {nodeConfig = (nodeConfig node) {boxWidth = sizingWidth, boxHeight = sizingHeight}}
+setNodeSizing sizing node =
+  node {nodeConfig = (nodeConfig node) {boxSizing = sizing}}
 
 setNodeAspectRatio :: Double -> LayoutNode measureM placed -> LayoutNode measureM placed
 setNodeAspectRatio ratio node =
@@ -303,8 +295,8 @@ postOrder change node =
   change (mapNodeChildren (postOrder change) node)
 
 nodeSizing :: LayoutNode measureM placed -> Sizing
-nodeSizing LayoutNode {nodeConfig = BoxConfig {boxWidth, boxHeight}} =
-  Sizing boxWidth boxHeight
+nodeSizing LayoutNode {nodeConfig = BoxConfig {boxSizing}} =
+  boxSizing
 
 layoutNode :: Maybe Size -> LayoutNode measureM placed -> LayoutNode measureM placed
 layoutNode rootSizeOverride =
@@ -497,7 +489,7 @@ nodeHeightMinForPropagation node =
     Just percent -> percent
     Nothing -> axisMin sizing
   where
-    sizing = boxHeight (nodeConfig node)
+    sizing = sizingHeight (nodeSizing node)
 
 propagateResolvedHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
 propagateResolvedHeights =
@@ -1073,7 +1065,7 @@ axisMin _ = 0
 
 nodeAxisMax :: Axis -> LayoutNode measureM placed -> Double
 nodeAxisMax Horizontal node =
-  axisMax (boxWidth (nodeConfig node))
+  axisMax (sizingWidth (nodeSizing node))
 nodeAxisMax Vertical node =
   case (isPercent sizing, nodeHeightMaxOverride node) of
     (True, Just maximumValue) -> maximumValue
@@ -1081,7 +1073,7 @@ nodeAxisMax Vertical node =
     (_, Just maximumValue) -> maximumValue
     (_, Nothing) -> axisMax sizing
   where
-    sizing = boxHeight (nodeConfig node)
+    sizing = sizingHeight (nodeSizing node)
 
 percentValue :: AxisSizing -> Maybe Double
 percentValue (Clamp _ _ sizing) = percentValue sizing

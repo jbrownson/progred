@@ -249,8 +249,7 @@ fixedBoxCentersChild :: Halay Identity Placements
 fixedBoxCentersChild =
   box
     defaultBox
-      { boxWidth = Fixed 100
-      , boxHeight = Fixed 50
+      { boxSizing = Sizing (Fixed 100) (Fixed 50)
       , boxMainAlign = MainCenter
       , boxCrossAlign = CrossCenter
       }
@@ -259,7 +258,7 @@ fixedBoxCentersChild =
 percentChild :: Halay Identity Placements
 percentChild =
   box
-    defaultBox {boxWidth = Fixed 200, boxHeight = Fixed 20}
+    defaultBox {boxSizing = Sizing (Fixed 200) (Fixed 20)}
     [ sized (Sizing (Percent 0.5) (Fixed 10)) (named "a" (Size 10 10))
     , named "b" (Size 20 10)
     ]
@@ -267,7 +266,7 @@ percentChild =
 growMainAxis :: Halay Identity Placements
 growMainAxis =
   box
-    defaultBox {boxWidth = Fixed 100, boxHeight = Fixed 20, boxGap = 10}
+    defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 20), boxGap = 10}
     [ named "a" (Size 20 10)
     , sized (Sizing Fill (Fixed 10)) (named "b" (Size 0 10))
     ]
@@ -275,13 +274,13 @@ growMainAxis =
 growCrossAxis :: Halay Identity Placements
 growCrossAxis =
   box
-    defaultBox {boxWidth = Fixed 100, boxHeight = Fixed 50}
+    defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 50)}
     [sized (Sizing (Fixed 10) Fill) (named "a" (Size 10 0))]
 
 clampGrow :: Halay Identity Placements
 clampGrow =
   box
-    defaultBox {boxWidth = Fixed 100, boxHeight = Fixed 20}
+    defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 20)}
     [ named "a" (Size 20 10)
     , sized (Sizing (Clamp Nothing (Just 30) Fill) (Fixed 10)) (named "b" (Size 0 10))
     ]
@@ -289,19 +288,19 @@ clampGrow =
 aspectRatioWidthDrivesHeight :: Halay Identity Placements
 aspectRatioWidthDrivesHeight =
   box
-    defaultBox {boxWidth = Fixed 100, boxHeight = Fixed 100}
+    defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 100)}
     [aspectRatio 2 (sized (Sizing (Fixed 40) Fit) (named "a" (Size 0 0)))]
 
 aspectRatioHeightDrivesWidth :: Halay Identity Placements
 aspectRatioHeightDrivesWidth =
   box
-    defaultBox {boxDirection = TopToBottom, boxWidth = Fixed 100, boxHeight = Fixed 100}
+    defaultBox {boxDirection = TopToBottom, boxSizing = Sizing (Fixed 100) (Fixed 100)}
     [aspectRatio 2 (sized (Sizing Fit (Fixed 30)) (named "a" (Size 0 0)))]
 
 unequalGrowMainAxis :: Halay Identity Placements
 unequalGrowMainAxis =
   box
-    defaultBox {boxDirection = TopToBottom, boxWidth = Fixed 1, boxHeight = Fixed 4}
+    defaultBox {boxDirection = TopToBottom, boxSizing = Sizing (Fixed 1) (Fixed 4)}
     [ sized (Sizing Fit Fill) (named "a" (Size 1 1))
     , sized (Sizing Fit Fill) (named "b" (Size 1 2))
     ]
@@ -310,8 +309,7 @@ nestedBoxPositionsChildren :: Halay Identity Placements
 nestedBoxPositionsChildren =
   box
     defaultBox
-      { boxWidth = Fixed 120
-      , boxHeight = Fixed 80
+      { boxSizing = Sizing (Fixed 120) (Fixed 80)
       , boxPadding = Insets 3 7 5 4
       , boxGap = 6
       }
@@ -328,15 +326,14 @@ nestedBoxPositionsChildren =
 overflowCrossCenter :: Halay Identity Placements
 overflowCrossCenter =
   box
-    defaultBox {boxWidth = Fixed 10, boxHeight = Fixed 10, boxCrossAlign = CrossCenter}
+    defaultBox {boxSizing = Sizing (Fixed 10) (Fixed 10), boxCrossAlign = CrossCenter}
     [named "a" (Size 5 20)]
 
 clipMainAxisDoesNotCompress :: Halay Identity Placements
 clipMainAxisDoesNotCompress =
   box
     defaultBox
-      { boxWidth = Fixed 6
-      , boxHeight = Fixed 20
+      { boxSizing = Sizing (Fixed 6) (Fixed 20)
       , boxClip = BoxClip True False (Point 0 0)
       }
     [namedLayout "a" (box defaultBox [text (testTextConfig 1 Nothing) {textPlaceLine = \_ _ _ -> pure mempty} "aaaaa bbbbb"])]
@@ -345,8 +342,7 @@ clipCrossAxisGrowsToContent :: Halay Identity Placements
 clipCrossAxisGrowsToContent =
   box
     defaultBox
-      { boxWidth = Fixed 100
-      , boxHeight = Fixed 10
+      { boxSizing = Sizing (Fixed 100) (Fixed 10)
       , boxClip = BoxClip False True (Point 0 0)
       }
     [ sized
@@ -363,8 +359,7 @@ clipCrossAxisUsesPrePercentInnerSize =
   box
     defaultBox
       { boxDirection = TopToBottom
-      , boxWidth = Fixed 73
-      , boxHeight = Fixed 80
+      , boxSizing = Sizing (Fixed 73) (Fixed 80)
       , boxPadding = Insets 0 7 0 12
       , boxCrossAlign = CrossCenter
       , boxClip = BoxClip True True (Point 0 0)
@@ -391,8 +386,7 @@ clipChildOffsetPlacesChildren :: Halay Identity Placements
 clipChildOffsetPlacesChildren =
   box
     defaultBox
-      { boxWidth = Fixed 50
-      , boxHeight = Fixed 50
+      { boxSizing = Sizing (Fixed 50) (Fixed 50)
       , boxPadding = Insets 6 0 0 5
       , boxClip = BoxClip True True (Point (-3) 7)
       }
@@ -401,13 +395,13 @@ clipChildOffsetPlacesChildren =
 textWrapsWords :: Halay Identity Placements
 textWrapsWords =
   box
-    defaultBox {boxWidth = Fixed 6, boxHeight = Fixed 20}
+    defaultBox {boxSizing = Sizing (Fixed 6) (Fixed 20)}
     [text (testTextConfig 1 Nothing) "alpha beta gamma"]
 
 textRespectsNewlines :: Halay Identity Placements
 textRespectsNewlines =
   box
-    defaultBox {boxWidth = Fixed 20, boxHeight = Fixed 20}
+    defaultBox {boxSizing = Sizing (Fixed 20) (Fixed 20)}
     [text (testTextConfig 1 Nothing) {textWrapMode = TextWrapNewlines} "alpha\nbeta"]
 
 testTextConfig :: Int -> Maybe Int -> TextConfig Identity Placements
@@ -624,8 +618,10 @@ randomLayoutHalay randomLayout =
       { boxDirection = randomDirection randomLayout
       , boxPadding = randomPadding randomLayout
       , boxGap = fromIntegral (randomGap randomLayout)
-      , boxWidth = Fixed (sizeWidth (randomRootSize randomLayout))
-      , boxHeight = Fixed (sizeHeight (randomRootSize randomLayout))
+      , boxSizing =
+          Sizing
+            (Fixed (sizeWidth (randomRootSize randomLayout)))
+            (Fixed (sizeHeight (randomRootSize randomLayout)))
       , boxMainAlign = randomMainAlign randomLayout
       , boxCrossAlign = randomCrossAlign randomLayout
       }
@@ -821,8 +817,10 @@ randomTextLayoutHalay :: RandomTextLayout -> Halay Identity Placements
 randomTextLayoutHalay RandomTextLayout {randomTextRootWidth, randomTextRootHeight, randomTextWrapMode, randomTextAlign, randomTextFontSize, randomTextLineHeight, randomTextLineWordLengths} =
   box
     defaultBox
-      { boxWidth = Fixed (fromIntegral randomTextRootWidth)
-      , boxHeight = Fixed (fromIntegral randomTextRootHeight)
+      { boxSizing =
+          Sizing
+            (Fixed (fromIntegral randomTextRootWidth))
+            (Fixed (fromIntegral randomTextRootHeight))
       }
     [ text
         (testTextConfig randomTextFontSize randomTextLineHeight)
@@ -1285,8 +1283,7 @@ boxConfigFromRandom RandomBoxConfig {randomBoxDirection, randomBoxPadding, rando
     { boxDirection = randomBoxDirection
     , boxPadding = randomBoxPadding
     , boxGap = fromIntegral randomBoxGap
-    , boxWidth = sizingWidth randomBoxSizing
-    , boxHeight = sizingHeight randomBoxSizing
+    , boxSizing = randomBoxSizing
     , boxClip = BoxClip randomBoxClipHorizontal randomBoxClipVertical randomBoxChildOffset
     , boxMainAlign =
         case randomBoxDirection of
