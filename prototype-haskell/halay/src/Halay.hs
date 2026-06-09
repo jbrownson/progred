@@ -150,6 +150,22 @@ data TextLine = TextLine
   , lineWidth :: Double
   }
 
+data FlatNode measureM placed = FlatNode
+  { flatNodeLayout :: LayoutNode measureM placed
+  , flatNodeChildren :: [Int]
+  }
+
+data FlatLayout measureM placed = FlatLayout
+  { flatLayoutNodes :: [FlatNode measureM placed]
+  , flatLayoutRoot :: Int
+  }
+
+data SizePhaseResult measureM placed = SizePhaseResult
+  { sizePhaseLayout :: FlatLayout measureM placed
+  , sizePhaseTextNodes :: [Int]
+  , sizePhaseAspectNodes :: [Int]
+  }
+
 defaultSizing :: Sizing
 defaultSizing = Sizing Fit Fit
 
@@ -286,28 +302,446 @@ addNodePlacer :: (Rect -> measureM placed) -> LayoutNode measureM placed -> Layo
 addNodePlacer place node =
   node {nodePlacers = place : nodePlacers node}
 
-mapNodeChildren :: (LayoutNode measureM placed -> LayoutNode measureM placed) -> LayoutNode measureM placed -> LayoutNode measureM placed
-mapNodeChildren change node =
-  node {nodeChildren = change <$> nodeChildren node}
-
-postOrder :: (LayoutNode measureM placed -> LayoutNode measureM placed) -> LayoutNode measureM placed -> LayoutNode measureM placed
-postOrder change node =
-  change (mapNodeChildren (postOrder change) node)
-
 nodeSizing :: LayoutNode measureM placed -> Sizing
 nodeSizing LayoutNode {nodeConfig = BoxConfig {boxSizing}} =
   boxSizing
 
 layoutNode :: Maybe Size -> LayoutNode measureM placed -> LayoutNode measureM placed
 layoutNode rootSizeOverride =
-  scaleAspectWidths
-    . sizeContainersAlongAxis Vertical
-    . propagateResolvedHeights
-    . wrapTextNodes
-    . scaleAspectHeights
-    . sizeContainersAlongAxis Horizontal
+  rebuildFlatLayout
+    . layoutFlat
+    . flattenLayout
     . overrideRootSize rootSizeOverride
     . closeNode
+
+flattenLayout :: LayoutNode measureM placed -> FlatLayout measureM placed
+flattenLayout root =
+  FlatLayout
+    { flatLayoutNodes = nodes
+    , flatLayoutRoot = rootIndex
+    }
+  where
+    (_nextIndex, nodes, rootIndex) = flattenFrom 0 root
+
+flattenFrom :: Int -> LayoutNode measureM placed -> (Int, [FlatNode measureM placed], Int)
+flattenFrom index node =
+  (nextIndex, ownNode : concat childNodeLists, index)
+  where
+    (nextIndex, childIndicesReversed, childNodeListsReversed) =
+      foldl flattenChild (index + 1, [], []) (nodeChildren node)
+    flattenChild (nextChildIndex, childIndicesSoFar, childNodeListsSoFar) child =
+      (nextAfterChild, childIndex : childIndicesSoFar, childNodes : childNodeListsSoFar)
+      where
+        (nextAfterChild, childNodes, childIndex) = flattenFrom nextChildIndex child
+    childIndices = reverse childIndicesReversed
+    childNodeLists = reverse childNodeListsReversed
+    ownNode =
+      FlatNode
+        { flatNodeLayout = node {nodeChildren = []}
+        , flatNodeChildren = childIndices
+        }
+
+rebuildFlatLayout :: FlatLayout measureM placed -> LayoutNode measureM placed
+rebuildFlatLayout FlatLayout {flatLayoutNodes, flatLayoutRoot} =
+  rebuild flatLayoutRoot
+  where
+    rebuild index =
+      layout {nodeChildren = rebuild <$> flatNodeChildren flatNode}
+      where
+        flatNode = flatLayoutNodes !! index
+        layout = flatNodeLayout flatNode
+
+layoutFlat :: FlatLayout measureM placed -> FlatLayout measureM placed
+layoutFlat source =
+  scaleAspectWidthsFlat aspectNodes afterVerticalSizing
+  where
+    horizontalResult = sizeContainersAlongAxisFlat Horizontal True source
+    afterHorizontalSizing = sizePhaseLayout horizontalResult
+    textNodes = sizePhaseTextNodes horizontalResult
+    aspectNodes = sizePhaseAspectNodes horizontalResult
+    wrappedText = wrapTextNodesFlat textNodes afterHorizontalSizing
+    aspectHeights = scaleAspectHeightsFlat aspectNodes wrappedText
+    propagatedHeights = propagateResolvedHeightsFlat aspectHeights
+    afterVerticalSizing = sizePhaseLayout (sizeContainersAlongAxisFlat Vertical False propagatedHeights)
+
+flatNodeAt :: Int -> FlatLayout measureM placed -> FlatNode measureM placed
+flatNodeAt index FlatLayout {flatLayoutNodes} =
+  flatLayoutNodes !! index
+
+flatLayoutNodeAt :: Int -> FlatLayout measureM placed -> LayoutNode measureM placed
+flatLayoutNodeAt index =
+  flatNodeLayout . flatNodeAt index
+
+modifyFlatNode :: Int -> (FlatNode measureM placed -> FlatNode measureM placed) -> FlatLayout measureM placed -> FlatLayout measureM placed
+modifyFlatNode index change layout@FlatLayout {flatLayoutNodes} =
+  layout {flatLayoutNodes = replaceAt index (change (flatLayoutNodes !! index)) flatLayoutNodes}
+
+modifyFlatLayoutNode :: Int -> (LayoutNode measureM placed -> LayoutNode measureM placed) -> FlatLayout measureM placed -> FlatLayout measureM placed
+modifyFlatLayoutNode index change =
+  modifyFlatNode index changeFlatNode
+  where
+    changeFlatNode flatNode =
+      flatNode {flatNodeLayout = change (flatNodeLayout flatNode)}
+
+sizeContainersAlongAxisFlat :: Axis -> Bool -> FlatLayout measureM placed -> SizePhaseResult measureM placed
+sizeContainersAlongAxisFlat axis collectPhaseNodes source =
+  sizeBreadthFirst [flatLayoutRoot source] (SizePhaseResult source [] [])
+  where
+    sizeBreadthFirst [] result = result
+    sizeBreadthFirst (parentIndex : remaining) result =
+      sizeBreadthFirst
+        (remaining <> parentSizingQueuedChildren parentSizing)
+        SizePhaseResult
+          { sizePhaseLayout = parentSizingLayout parentSizing
+          , sizePhaseTextNodes = sizePhaseTextNodes result <> parentSizingTextNodes parentSizing
+          , sizePhaseAspectNodes = sizePhaseAspectNodes result <> parentSizingAspectNodes parentSizing
+          }
+      where
+        parentSizing =
+          sizeFlatParent axis collectPhaseNodes parentIndex (sizePhaseLayout result)
+
+data ParentSizing measureM placed = ParentSizing
+  { parentSizingLayout :: FlatLayout measureM placed
+  , parentSizingQueuedChildren :: [Int]
+  , parentSizingTextNodes :: [Int]
+  , parentSizingAspectNodes :: [Int]
+  }
+
+data ParentScan = ParentScan
+  { scanInnerContentSize :: Double
+  , scanTotalPaddingAndChildGaps :: Double
+  , scanGrowContainerCount :: Int
+  , scanResizableChildren :: [Int]
+  , scanQueuedChildren :: [Int]
+  , scanTextNodes :: [Int]
+  , scanAspectNodes :: [Int]
+  , scanIsFirstChild :: Bool
+  }
+
+sizeFlatParent :: Axis -> Bool -> Int -> FlatLayout measureM placed -> ParentSizing measureM placed
+sizeFlatParent axis collectPhaseNodes parentIndex source =
+  ParentSizing
+    { parentSizingLayout = distributeParentSpace percentLayout percentInnerContentSize
+    , parentSizingQueuedChildren = scanQueuedChildren scan
+    , parentSizingTextNodes = scanTextNodes scan
+    , parentSizingAspectNodes = scanAspectNodes scan
+    }
+  where
+    parentFlatNode = flatNodeAt parentIndex source
+    parent = flatNodeLayout parentFlatNode
+    parentChildren = flatNodeChildren parentFlatNode
+    config = nodeConfig parent
+    parentSize = axisSize axis (nodeDimensions parent)
+    parentPadding = axisPadding axis (boxPadding config)
+    sizingAlongAxis = axis == directionAxis (boxDirection config)
+    initialScan =
+      ParentScan
+        { scanInnerContentSize = 0
+        , scanTotalPaddingAndChildGaps = parentPadding
+        , scanGrowContainerCount = 0
+        , scanResizableChildren = []
+        , scanQueuedChildren = []
+        , scanTextNodes = []
+        , scanAspectNodes = []
+        , scanIsFirstChild = True
+        }
+    scan = foldl scanChild initialScan parentChildren
+    scanChild current childIndex =
+      current
+        { scanInnerContentSize = nextInnerContentSize
+        , scanTotalPaddingAndChildGaps = nextTotalPaddingAndChildGaps
+        , scanGrowContainerCount = nextGrowContainerCount
+        , scanResizableChildren = scanResizableChildren current <> resizableChild
+        , scanQueuedChildren = scanQueuedChildren current <> queuedChild
+        , scanTextNodes = scanTextNodes current <> textNode
+        , scanAspectNodes = scanAspectNodes current <> aspectNode
+        , scanIsFirstChild = False
+        }
+      where
+        childFlatNode = flatNodeAt childIndex source
+        child = flatNodeLayout childFlatNode
+        childSizing = nodeAxisSizing axis child
+        childSize = axisSize axis (nodeDimensions child)
+        childGap =
+          if scanIsFirstChild current || not sizingAlongAxis
+            then 0
+            else boxGap config
+        nextInnerContentSize =
+          if sizingAlongAxis
+            then
+              clayAdd
+                (clayAdd (scanInnerContentSize current) childGap)
+                (if isPercent childSizing then 0 else childSize)
+            else max childSize (scanInnerContentSize current)
+        nextTotalPaddingAndChildGaps =
+          clayAdd (scanTotalPaddingAndChildGaps current) childGap
+        nextGrowContainerCount =
+          scanGrowContainerCount current
+            + if isFill childSizing then 1 else 0
+        resizableChild =
+          [ childIndex
+          | not (isPercent childSizing)
+          , not (isFixed childSizing)
+          , textNodeCanResize child
+          ]
+        queuedChild =
+          [ childIndex
+          | not (nodeIsText child)
+          , not (null (flatNodeChildren childFlatNode))
+          ]
+        textNode =
+          [ childIndex
+          | collectPhaseNodes
+          , nodeIsText child
+          ]
+        aspectNode =
+          [ childIndex
+          | collectPhaseNodes
+          , not (nodeIsText child)
+          , nodeHasAspectRatio child
+          ]
+    (percentLayout, percentInnerContentSize) =
+      foldl expandPercentChild (source, scanInnerContentSize scan) parentChildren
+    expandPercentChild (currentLayout, innerContentSize) childIndex =
+      case nodeAxisSizing axis child of
+        Percent percent ->
+          ( updateMissingAspectFlat childIndex $
+              modifyFlatLayoutNode childIndex (updateNodeAxisDimension axis percentSize) currentLayout
+          , if sizingAlongAxis then clayAdd innerContentSize percentSize else innerContentSize
+          )
+          where
+            percentSize = clayMul (claySub parentSize (scanTotalPaddingAndChildGaps scan)) percent
+        _ -> (currentLayout, innerContentSize)
+      where
+        child = flatLayoutNodeAt childIndex currentLayout
+    distributeParentSpace currentLayout innerContentSize
+      | sizingAlongAxis && sizeToDistribute < 0 && nodeClipsAxis axis parent =
+          currentLayout
+      | sizingAlongAxis && sizeToDistribute < 0 =
+          distributeFlatNodes CompressNodes axis sizeToDistribute currentLayout (scanResizableChildren scan)
+      | sizingAlongAxis && sizeToDistribute > 0 && scanGrowContainerCount scan > 0 =
+          distributeFlatNodes GrowNodes axis sizeToDistribute currentLayout growChildren
+      | sizingAlongAxis =
+          currentLayout
+      | otherwise =
+          resolveFlatCrossAxisChildren axis parent parentSize parentPadding innerContentSize currentLayout (scanResizableChildren scan)
+      where
+        sizeToDistribute = claySub (claySub parentSize parentPadding) innerContentSize
+        growChildren =
+          filter
+            (\childIndex -> isFill (nodeAxisSizing axis (flatLayoutNodeAt childIndex currentLayout)))
+            (scanResizableChildren scan)
+
+nodeAxisSizing :: Axis -> LayoutNode measureM placed -> AxisSizing
+nodeAxisSizing axis =
+  axisSizing axis . nodeSizing
+
+nodeIsText :: LayoutNode measureM placed -> Bool
+nodeIsText LayoutNode {nodeContent = TextContent _} = True
+nodeIsText _ = False
+
+nodeHasAspectRatio :: LayoutNode measureM placed -> Bool
+nodeHasAspectRatio node =
+  case nodeAspectRatio node of
+    Just ratio -> ratio /= 0
+    Nothing -> False
+
+updateMissingAspectFlat :: Int -> FlatLayout measureM placed -> FlatLayout measureM placed
+updateMissingAspectFlat index =
+  modifyFlatLayoutNode index updateMissingAspectDimension
+
+resolveFlatCrossAxisChildren :: Axis -> LayoutNode measureM placed -> Double -> Double -> Double -> FlatLayout measureM placed -> [Int] -> FlatLayout measureM placed
+resolveFlatCrossAxisChildren axis parent parentSize parentPadding innerContentSize =
+  foldl resolve
+  where
+    maxSize
+      | nodeClipsAxis axis parent = max visibleMaxSize innerContentSize
+      | otherwise = visibleMaxSize
+    visibleMaxSize = claySub parentSize parentPadding
+    resolve currentLayout childIndex =
+      modifyFlatLayoutNode childIndex resize currentLayout
+      where
+        child = flatLayoutNodeAt childIndex currentLayout
+        childSizing = nodeAxisSizing axis child
+        minSize = axisSize axis (nodeMinDimensions child)
+        resize childNode =
+          updateNodeAxisDimension axis resolvedSize childNode
+        resolvedSize =
+          max minSize $
+            min maxSize $
+              if isFill childSizing
+                then min maxSize (nodeAxisMax axis child)
+                else axisSize axis (nodeDimensions child)
+
+distributeFlatNodes :: DistributionMode -> Axis -> Double -> FlatLayout measureM placed -> [Int] -> FlatLayout measureM placed
+distributeFlatNodes mode axis remaining layout activeIndices
+  | distributionComplete mode remaining = layout
+  | null activeIndices = layout
+  | otherwise =
+      distributeFlatNodes mode axis remainingAfterPass layoutAfterPass activeAfterPass
+  where
+    (frontierSize, resizeAmount) = flatDistributionStep mode axis remaining layout activeIndices
+    (remainingAfterPass, layoutAfterPass, activeAfterPass) =
+      applyFlatDistributionPass mode axis frontierSize resizeAmount remaining layout activeIndices
+
+applyFlatDistributionPass :: DistributionMode -> Axis -> Double -> Double -> Double -> FlatLayout measureM placed -> [Int] -> (Double, FlatLayout measureM placed, [Int])
+applyFlatDistributionPass mode axis frontierSize resizeAmount =
+  step 0
+  where
+    step position remaining layout activeIndices
+      | position >= length activeIndices = (remaining, layout, activeIndices)
+      | not (clayFloatEqual previousSize frontierSize) =
+          step (position + 1) remaining layout activeIndices
+      | otherwise =
+          step nextPosition nextRemaining nextLayout nextActiveIndices
+      where
+        childIndex = activeIndices !! position
+        child = flatLayoutNodeAt childIndex layout
+        previousSize = axisSize axis (nodeDimensions child)
+        bound = distributionBound mode axis child
+        newSize = applyDistribution mode previousSize resizeAmount bound
+        nextRemaining = claySub remaining (claySub newSize previousSize)
+        nextLayout = modifyFlatLayoutNode childIndex (updateNodeAxisDimension axis newSize) layout
+        atBound = distributionAtBound mode newSize bound
+        nextActiveIndices =
+          if atBound
+            then removeSwapbackAt position activeIndices
+            else activeIndices
+        nextPosition =
+          if atBound
+            then position
+            else position + 1
+
+flatDistributionStep :: DistributionMode -> Axis -> Double -> FlatLayout measureM placed -> [Int] -> (Double, Double)
+flatDistributionStep GrowNodes axis remaining layout activeIndices =
+  (smallest, min widthToAdd (clayDiv remaining (fromIntegral (length activeIndices))))
+  where
+    (smallest, _secondSmallest, widthToAdd) =
+      foldl inspect (clayMaxFloat, clayMaxFloat, remaining) activeIndices
+    inspect (smallestSoFar, secondSmallestSoFar, widthToAddSoFar) childIndex
+      | clayFloatEqual childSize smallestSoFar =
+          (smallestSoFar, secondSmallestSoFar, widthToAddSoFar)
+      | childSize < smallestSoFar =
+          (childSize, smallestSoFar, widthToAddSoFar)
+      | childSize > smallestSoFar =
+          let secondSmallest = min secondSmallestSoFar childSize
+           in (smallestSoFar, secondSmallest, claySub secondSmallest smallestSoFar)
+      | otherwise =
+          (smallestSoFar, secondSmallestSoFar, widthToAddSoFar)
+      where
+        childSize = axisSize axis (nodeDimensions (flatLayoutNodeAt childIndex layout))
+flatDistributionStep CompressNodes axis remaining layout activeIndices =
+  (largest, max widthToAdd (clayDiv remaining (fromIntegral (length activeIndices))))
+  where
+    (largest, _secondLargest, widthToAdd) =
+      foldl inspect (0, 0, remaining) activeIndices
+    inspect (largestSoFar, secondLargestSoFar, widthToAddSoFar) childIndex
+      | clayFloatEqual childSize largestSoFar =
+          (largestSoFar, secondLargestSoFar, widthToAddSoFar)
+      | childSize > largestSoFar =
+          (childSize, largestSoFar, widthToAddSoFar)
+      | childSize < largestSoFar =
+          let secondLargest = max secondLargestSoFar childSize
+           in (largestSoFar, secondLargest, claySub secondLargest largestSoFar)
+      | otherwise =
+          (largestSoFar, secondLargestSoFar, widthToAddSoFar)
+      where
+        childSize = axisSize axis (nodeDimensions (flatLayoutNodeAt childIndex layout))
+
+wrapTextNodesFlat :: [Int] -> FlatLayout measureM placed -> FlatLayout measureM placed
+wrapTextNodesFlat indices layout =
+  foldl (\current index -> modifyFlatLayoutNode index wrap current) layout indices
+  where
+    wrap node =
+      node
+        { nodeContent = wrappedContent
+        , nodeDimensions = wrappedDimensions
+        }
+      where
+        wrappedContent =
+          case nodeContent node of
+            TextContent textNode -> TextContent (wrapTextNode (sizeWidth (nodeDimensions node)) textNode)
+            other -> other
+        wrappedDimensions =
+          case wrappedContent of
+            TextContent textNode ->
+              (nodeDimensions node) {sizeHeight = clayMul (textNodeLineHeight textNode) (fromIntegral (length (textNodeLines textNode)))}
+            _ -> nodeDimensions node
+
+scaleAspectHeightsFlat :: [Int] -> FlatLayout measureM placed -> FlatLayout measureM placed
+scaleAspectHeightsFlat indices layout =
+  foldl (\current index -> modifyFlatLayoutNode index adjust current) layout indices
+  where
+    adjust node =
+      case nodeAspectRatio node of
+        Just ratio
+          | ratio /= 0 ->
+              node
+                { nodeDimensions = setSizeAxis Vertical aspectHeight (nodeDimensions node)
+                , nodeHeightMaxOverride = Just aspectHeight
+                }
+          where
+            aspectHeight = clayDiv (sizeWidth (nodeDimensions node)) ratio
+        _ -> node
+
+scaleAspectWidthsFlat :: [Int] -> FlatLayout measureM placed -> FlatLayout measureM placed
+scaleAspectWidthsFlat indices layout =
+  foldl (\current index -> modifyFlatLayoutNode index adjust current) layout indices
+  where
+    adjust node =
+      case nodeAspectRatio node of
+        Just ratio ->
+          updateNodeAxisDimension Horizontal (clayMul ratio (sizeHeight (nodeDimensions node))) node
+        Nothing -> node
+
+propagateResolvedHeightsFlat :: FlatLayout measureM placed -> FlatLayout measureM placed
+propagateResolvedHeightsFlat layout =
+  foldl propagateOne layout (reverse [0 .. length (flatLayoutNodes layout) - 1])
+  where
+    propagateOne current index
+      | nodeIsText node = current
+      | null children = current
+      | boxDirection config == LeftToRight =
+          modifyFlatLayoutNode index resizeRow current
+      | otherwise =
+          modifyFlatLayoutNode index resizeColumn current
+      where
+        flatNode = flatNodeAt index current
+        node = flatNodeLayout flatNode
+        children = flatNodeChildren flatNode
+        config = nodeConfig node
+        resizeRow currentNode =
+          foldl resizeForChild currentNode children
+        resizeForChild currentNode childIndex =
+          currentNode
+            { nodeDimensions =
+                (nodeDimensions currentNode)
+                  { sizeHeight =
+                      normalizeClayDimension $
+                        clampNodeHeight currentNode $
+                          max
+                            (sizeHeight (nodeDimensions currentNode))
+                            ( clayAdd
+                                (clayAdd (sizeHeight (nodeDimensions (flatLayoutNodeAt childIndex current))) (insetTop (boxPadding config)))
+                                (insetBottom (boxPadding config))
+                            )
+                  }
+            }
+        resizeColumn currentNode =
+          currentNode
+            { nodeDimensions =
+                (nodeDimensions currentNode)
+                  { sizeHeight =
+                      normalizeClayDimension $
+                        clampNodeHeight currentNode $
+                          clayAdd
+                            ( clayAdd
+                                (clayAdd (insetTop (boxPadding config)) (insetBottom (boxPadding config)))
+                                (claySum [sizeHeight (nodeDimensions (flatLayoutNodeAt childIndex current)) | childIndex <- children])
+                            )
+                            (gapSize (boxGap config) children)
+                  }
+            }
 
 overrideRootSize :: Maybe Size -> LayoutNode measureM placed -> LayoutNode measureM placed
 overrideRootSize Nothing node = node
@@ -341,7 +775,7 @@ closeNode node =
 closeContainer :: LayoutNode measureM placed -> LayoutNode measureM placed
 closeContainer node =
   node
-    { nodeDimensions = expandSize boxInsets contentSize
+    { nodeDimensions = clayExpandSize boxInsets contentSize
     , nodeMinDimensions = closeContainerMinDimensions config minContentSize
     }
   where
@@ -363,11 +797,11 @@ closeContainerMinDimensions config contentSize =
     minPrimary =
       if boxClipsAxis primaryAxis config
         then axisPadding primaryAxis boxInsets
-        else axisSize primaryAxis contentSize + axisPadding primaryAxis boxInsets
+        else clayAdd (axisSize primaryAxis contentSize) (axisPadding primaryAxis boxInsets)
     minCross =
       if boxClipsAxis crossAxis config
         then 0
-        else axisSize crossAxis contentSize + axisPadding crossAxis boxInsets
+        else clayAdd (axisSize crossAxis contentSize) (axisPadding crossAxis boxInsets)
 
 containerContentSize :: Direction -> Double -> [Size] -> Size
 containerContentSize direction gap sizes =
@@ -375,7 +809,7 @@ containerContentSize direction gap sizes =
   where
     primaryAxis = directionAxis direction
     crossAxis = otherAxis primaryAxis
-    primarySize = sum (axisSize primaryAxis <$> sizes) + gapSize gap sizes
+    primarySize = clayAdd (claySum (axisSize primaryAxis <$> sizes)) (gapSize gap sizes)
     crossSize = maximumOrZero (axisSize crossAxis <$> sizes)
 
 closeNodeSizing :: LayoutNode measureM placed -> LayoutNode measureM placed
@@ -401,81 +835,6 @@ updateMissingAspectDimension node =
           node {nodeDimensions = fillMissingAspectDimension ratio (nodeDimensions node)}
     _ -> node
 
-sizeContainersAlongAxis :: Axis -> LayoutNode measureM placed -> LayoutNode measureM placed
-sizeContainersAlongAxis axis node =
-  mapNodeChildren (sizeContainersAlongAxis axis) (node {nodeChildren = sizedChildren})
-  where
-    sizedChildren = resolveAxisChildren axis node
-
-resolveAxisChildren :: Axis -> LayoutNode measureM placed -> [LayoutNode measureM placed]
-resolveAxisChildren axis parent =
-  if sizingAlongAxis
-    then resolveMainAxisChildren axis parent percentChildren
-    else resolveCrossAxisChildren axis parent innerContentSize percentChildren
-  where
-    config = nodeConfig parent
-    children = nodeChildren parent
-    parentSize = axisSize axis (nodeDimensions parent)
-    parentPadding = axisPadding axis (boxPadding config)
-    sizingAlongAxis = axis == directionAxis (boxDirection config)
-    gapTotal
-      | sizingAlongAxis = gapSize (boxGap config) children
-      | otherwise = 0
-    totalPaddingAndChildGaps = parentPadding + gapTotal
-    innerContentSize =
-      if sizingAlongAxis
-        then sum [axisSize axis (nodeDimensions child) | child <- children, not (isPercent (axisSizing axis (nodeSizing child)))] + gapTotal
-        else maximumOrZero (axisSize axis . nodeDimensions <$> children)
-    percentChildren =
-      [ case axisSizing axis (nodeSizing child) of
-          Percent percent -> updateMissingAspectDimension (updateNodeAxisDimension axis ((parentSize - totalPaddingAndChildGaps) * percent) child)
-          _ -> child
-      | child <- children
-      ]
-resolveMainAxisChildren :: Axis -> LayoutNode measureM placed -> [LayoutNode measureM placed] -> [LayoutNode measureM placed]
-resolveMainAxisChildren axis parent children
-  | sizeToDistribute < 0 && not (nodeClipsAxis axis parent) =
-      distributeCompressNodes axis sizeToDistribute baseChildren resizableIndices
-  | sizeToDistribute > 0 && not (null growIndices) =
-      distributeGrowNodes axis sizeToDistribute baseChildren growIndices
-  | otherwise = baseChildren
-  where
-    config = nodeConfig parent
-    parentSize = axisSize axis (nodeDimensions parent)
-    parentPadding = axisPadding axis (boxPadding config)
-    baseChildren = children
-    baseInnerContentSize =
-      sum (axisSize axis . nodeDimensions <$> baseChildren)
-        + gapSize (boxGap config) baseChildren
-    sizeToDistribute = parentSize - parentPadding - baseInnerContentSize
-    resizableIndices =
-      [index | (index, child) <- zip [0 ..] children, nodeCanResizeAlongAxis axis child]
-    growIndices =
-      [index | (index, child) <- zip [0 ..] children, isFill (axisSizing axis (nodeSizing child))]
-
-resolveCrossAxisChildren :: Axis -> LayoutNode measureM placed -> Double -> [LayoutNode measureM placed] -> [LayoutNode measureM placed]
-resolveCrossAxisChildren axis parent innerContentSize children =
-  [ resolve child | child <- children ]
-  where
-    config = nodeConfig parent
-    parentSize = axisSize axis (nodeDimensions parent)
-    parentPadding = axisPadding axis (boxPadding config)
-    maxSize
-      | nodeClipsAxis axis parent = max visibleMaxSize innerContentSize
-      | otherwise = visibleMaxSize
-    visibleMaxSize = parentSize - parentPadding
-    resolve child
-      | not (nodeCanResizeAlongAxis axis child) =
-          child
-      | isFill sizing =
-          updateNodeAxisDimension axis (max minSize (min maxSize (nodeAxisMax axis child))) child
-      | otherwise =
-          updateNodeAxisDimension axis (max minSize (min size maxSize)) child
-      where
-        sizing = axisSizing axis (nodeSizing child)
-        size = axisSize axis (nodeDimensions child)
-        minSize = axisSize axis (nodeMinDimensions child)
-
 clampNodeHeight :: LayoutNode measureM placed -> Double -> Double
 clampNodeHeight node value =
   clampMax (nodeAxisMax Vertical node) (clampMin (nodeHeightMinForPropagation node) value)
@@ -490,89 +849,6 @@ nodeHeightMinForPropagation node =
     Nothing -> axisMin sizing
   where
     sizing = sizingHeight (nodeSizing node)
-
-propagateResolvedHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
-propagateResolvedHeights =
-  postOrder resize
-  where
-    resize current
-      | null (nodeChildren current) = current
-      | boxDirection config == LeftToRight =
-          current
-            { nodeDimensions =
-                (nodeDimensions current)
-                  { sizeHeight =
-                      clampNodeHeight current $
-                        maximum
-                          ( sizeHeight (nodeDimensions current)
-                              : [ sizeHeight (nodeDimensions child)
-                                    + insetTop (boxPadding config)
-                                    + insetBottom (boxPadding config)
-                                | child <- nodeChildren current
-                                ]
-                          )
-                  }
-            }
-      | otherwise =
-          current
-            { nodeDimensions =
-                (nodeDimensions current)
-                  { sizeHeight =
-                      clampNodeHeight current $
-                        insetTop (boxPadding config)
-                          + insetBottom (boxPadding config)
-                          + sum (sizeHeight . nodeDimensions <$> nodeChildren current)
-                          + gapSize (boxGap config) (nodeChildren current)
-                  }
-            }
-      where
-        config = nodeConfig current
-
-wrapTextNodes :: LayoutNode measureM placed -> LayoutNode measureM placed
-wrapTextNodes =
-  postOrder wrap
-  where
-    wrap node =
-      node
-        { nodeContent = wrappedContent
-        , nodeDimensions = wrappedDimensions
-        }
-      where
-        wrappedContent =
-          case nodeContent node of
-            TextContent textNode -> TextContent (wrapTextNode (sizeWidth (nodeDimensions node)) textNode)
-            other -> other
-        wrappedDimensions =
-          case wrappedContent of
-            TextContent textNode ->
-              (nodeDimensions node) {sizeHeight = textNodeLineHeight textNode * fromIntegral (length (textNodeLines textNode))}
-            _ -> nodeDimensions node
-
-scaleAspectHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
-scaleAspectHeights =
-  postOrder adjust
-  where
-    adjust current =
-      case nodeAspectRatio current of
-        Just ratio
-          | ratio /= 0 ->
-              current
-                { nodeDimensions = setSizeAxis Vertical aspectHeight (nodeDimensions current)
-                , nodeHeightMaxOverride = Just aspectHeight
-                }
-          where
-            aspectHeight = sizeWidth (nodeDimensions current) / ratio
-        _ -> current
-
-scaleAspectWidths :: LayoutNode measureM placed -> LayoutNode measureM placed
-scaleAspectWidths =
-  postOrder adjust
-  where
-    adjust current =
-      case nodeAspectRatio current of
-        Just ratio ->
-          updateNodeAxisDimension Horizontal (ratio * sizeHeight (nodeDimensions current)) current
-        Nothing -> current
 
 placeLayoutNode :: (Monad measureM, Monoid placed) => Point -> LayoutNode measureM placed -> measureM placed
 placeLayoutNode point node = do
@@ -829,9 +1105,9 @@ axisSize Vertical = sizeHeight
 
 setSizeAxis :: Axis -> Double -> Size -> Size
 setSizeAxis Horizontal value size =
-  size {sizeWidth = value}
+  size {sizeWidth = normalizeClayDimension value}
 setSizeAxis Vertical value size =
-  size {sizeHeight = value}
+  size {sizeHeight = normalizeClayDimension value}
 
 sizeFromAxes :: Axis -> Double -> Double -> Size
 sizeFromAxes Horizontal primarySize crossSize =
@@ -877,108 +1153,37 @@ offsetPoint Point {pointX = offsetX, pointY = offsetY} Point {pointX, pointY} =
   Point (pointX + offsetX) (pointY + offsetY)
 
 axisPadding :: Axis -> Insets -> Double
-axisPadding Horizontal Insets {insetLeft, insetRight} = insetLeft + insetRight
-axisPadding Vertical Insets {insetTop, insetBottom} = insetTop + insetBottom
+axisPadding Horizontal Insets {insetLeft, insetRight} = clayAdd insetLeft insetRight
+axisPadding Vertical Insets {insetTop, insetBottom} = clayAdd insetTop insetBottom
 
 shrinkSize :: Insets -> Size -> Size
 shrinkSize Insets {insetTop, insetRight, insetBottom, insetLeft} Size {sizeWidth, sizeHeight} =
   Size
-    { sizeWidth = sizeWidth - insetLeft - insetRight
-    , sizeHeight = sizeHeight - insetTop - insetBottom
+    { sizeWidth = claySub (claySub sizeWidth insetLeft) insetRight
+    , sizeHeight = claySub (claySub sizeHeight insetTop) insetBottom
     }
 
 closeAxisSize :: AxisSizing -> Double -> Double
 closeAxisSize sizing value =
   case stripClamp sizing of
     Percent {} -> 0
-    _ -> clampAxis sizing value
+    _ -> normalizeClayDimension (clampAxis sizing value)
 
 closeAxisMinSize :: AxisSizing -> Double -> Double
 closeAxisMinSize sizing value =
   case stripClamp sizing of
     Percent {} -> value
-    _ -> clampAxis sizing value
-
-distributeGrowNodes :: Axis -> Double -> [LayoutNode measureM placed] -> [Int] -> [LayoutNode measureM placed]
-distributeGrowNodes =
-  distributeNodes GrowNodes
-
-distributeCompressNodes :: Axis -> Double -> [LayoutNode measureM placed] -> [Int] -> [LayoutNode measureM placed]
-distributeCompressNodes =
-  distributeNodes CompressNodes
+    _ -> normalizeClayDimension (clampAxis sizing value)
 
 data DistributionMode
   = GrowNodes
   | CompressNodes
-
-distributeNodes :: DistributionMode -> Axis -> Double -> [LayoutNode measureM placed] -> [Int] -> [LayoutNode measureM placed]
-distributeNodes mode axis remaining nodes activeIndices
-  | distributionComplete mode remaining = nodes
-  | null activeIndices = nodes
-  | otherwise = distributeNodes mode axis remainingAfterAdd nodesAfterAdd activeAfterAdd
-  where
-    sizes = axisSize axis . nodeDimensions <$> nodes
-    (frontierSize, resizeAmount) = distributionStep mode remaining sizes activeIndices
-    (remainingAfterAdd, nodesAfterAdd, activeAfterAdd) =
-      foldr addResizeStep (remaining, nodes, []) activeIndices
-    addResizeStep index (remainingSoFar, nodesSoFar, activeSoFar)
-      | not (clayFloatEqual (nodeAxisSize index nodesSoFar) frontierSize) =
-          (remainingSoFar, nodesSoFar, index : activeSoFar)
-      | otherwise =
-          let previousSize = nodeAxisSize index nodesSoFar
-              bound = distributionBound mode axis (nodesSoFar !! index)
-              newSize = applyDistribution mode previousSize resizeAmount bound
-              newNodes =
-                replaceAt index (updateNodeAxisDimension axis newSize (nodesSoFar !! index)) nodesSoFar
-              newRemaining = remainingSoFar - (newSize - previousSize)
-              newActive =
-                if distributionAtBound mode newSize bound
-                  then activeSoFar
-                  else index : activeSoFar
-           in (newRemaining, newNodes, newActive)
-    nodeAxisSize index = axisSize axis . nodeDimensions . (!! index)
 
 distributionComplete :: DistributionMode -> Double -> Bool
 distributionComplete GrowNodes remaining =
   remaining <= clayEpsilon
 distributionComplete CompressNodes remaining =
   remaining >= negate clayEpsilon
-
-distributionStep :: DistributionMode -> Double -> [Double] -> [Int] -> (Double, Double)
-distributionStep GrowNodes remaining sizes activeIndices =
-  (smallest, min widthToAdd (remaining / fromIntegral (length activeIndices)))
-  where
-    (smallest, _secondSmallest, widthToAdd) =
-      foldl inspect (clayMaxFloat, clayMaxFloat, remaining) activeIndices
-    inspect (smallestSoFar, secondSmallestSoFar, widthToAddSoFar) index
-      | clayFloatEqual childSize smallestSoFar =
-          (smallestSoFar, secondSmallestSoFar, widthToAddSoFar)
-      | childSize < smallestSoFar =
-          (childSize, smallestSoFar, widthToAddSoFar)
-      | childSize > smallestSoFar =
-          let secondSmallest = min secondSmallestSoFar childSize
-           in (smallestSoFar, secondSmallest, secondSmallest - smallestSoFar)
-      | otherwise =
-          (smallestSoFar, secondSmallestSoFar, widthToAddSoFar)
-      where
-        childSize = sizes !! index
-distributionStep CompressNodes remaining sizes activeIndices =
-  (largest, max widthToAdd (remaining / fromIntegral (length activeIndices)))
-  where
-    (largest, _secondLargest, widthToAdd) =
-      foldl inspect (0, 0, remaining) activeIndices
-    inspect (largestSoFar, secondLargestSoFar, widthToAddSoFar) index
-      | clayFloatEqual childSize largestSoFar =
-          (largestSoFar, secondLargestSoFar, widthToAddSoFar)
-      | childSize > largestSoFar =
-          (childSize, largestSoFar, widthToAddSoFar)
-      | childSize < largestSoFar =
-          let secondLargest = max secondLargestSoFar childSize
-           in (largestSoFar, secondLargest, secondLargest - largestSoFar)
-      | otherwise =
-          (largestSoFar, secondLargestSoFar, widthToAddSoFar)
-      where
-        childSize = sizes !! index
 
 distributionBound :: DistributionMode -> Axis -> LayoutNode measureM placed -> Double
 distributionBound GrowNodes axis node =
@@ -988,9 +1193,9 @@ distributionBound CompressNodes axis node =
 
 applyDistribution :: DistributionMode -> Double -> Double -> Double -> Double
 applyDistribution GrowNodes previousSize resizeAmount bound =
-  min (previousSize + resizeAmount) bound
+  min (clayAdd previousSize resizeAmount) bound
 applyDistribution CompressNodes previousSize resizeAmount bound =
-  max (previousSize + resizeAmount) bound
+  max (clayAdd previousSize resizeAmount) bound
 
 distributionAtBound :: DistributionMode -> Double -> Double -> Bool
 distributionAtBound GrowNodes size bound =
@@ -1015,15 +1220,6 @@ isPercent sizing =
   case stripClamp sizing of
     Percent {} -> True
     _ -> False
-
-isResizable :: AxisSizing -> Bool
-isResizable sizing =
-  not (isFixed sizing || isPercent sizing)
-
-nodeCanResizeAlongAxis :: Axis -> LayoutNode measureM placed -> Bool
-nodeCanResizeAlongAxis axis node =
-  isResizable (axisSizing axis (nodeSizing node))
-    && textNodeCanResize node
 
 textNodeCanResize :: LayoutNode measureM placed -> Bool
 textNodeCanResize LayoutNode {nodeContent = TextContent textNode} =
@@ -1084,6 +1280,13 @@ replaceAt :: Int -> item -> [item] -> [item]
 replaceAt index value items =
   take index items <> [value] <> drop (index + 1) items
 
+removeSwapbackAt :: Int -> [item] -> [item]
+removeSwapbackAt index items
+  | index == lastIndex = take index items
+  | otherwise = take index items <> [last items] <> drop (index + 1) (take lastIndex items)
+  where
+    lastIndex = length items - 1
+
 clayEpsilon :: Double
 clayEpsilon = 0.01
 
@@ -1096,11 +1299,50 @@ clayFloatEqual left right =
   where
     difference = left - right
 
+normalizeClayDimension :: Double -> Double
+normalizeClayDimension =
+  clayFloatToDouble . doubleToClayFloat
+
+doubleToClayFloat :: Double -> Float
+doubleToClayFloat =
+  realToFrac
+
+clayFloatToDouble :: Float -> Double
+clayFloatToDouble =
+  realToFrac
+
+clayAdd :: Double -> Double -> Double
+clayAdd left right =
+  clayFloatToDouble (doubleToClayFloat left + doubleToClayFloat right)
+
+claySub :: Double -> Double -> Double
+claySub left right =
+  clayFloatToDouble (doubleToClayFloat left - doubleToClayFloat right)
+
+clayMul :: Double -> Double -> Double
+clayMul left right =
+  clayFloatToDouble (doubleToClayFloat left * doubleToClayFloat right)
+
+clayDiv :: Double -> Double -> Double
+clayDiv left right =
+  clayFloatToDouble (doubleToClayFloat left / doubleToClayFloat right)
+
+claySum :: [Double] -> Double
+claySum =
+  foldl clayAdd 0
+
+clayExpandSize :: Insets -> Size -> Size
+clayExpandSize Insets {insetTop, insetRight, insetBottom, insetLeft} Size {sizeWidth, sizeHeight} =
+  Size
+    { sizeWidth = clayAdd (clayAdd sizeWidth insetLeft) insetRight
+    , sizeHeight = clayAdd (clayAdd sizeHeight insetTop) insetBottom
+    }
+
 fillMissingAspectDimension :: Double -> Size -> Size
 fillMissingAspectDimension ratio size@Size {sizeWidth, sizeHeight}
   | ratio == 0 = size
-  | dimensionIsMissing sizeWidth && not (dimensionIsMissing sizeHeight) = Size (sizeHeight * ratio) sizeHeight
-  | not (dimensionIsMissing sizeWidth) && dimensionIsMissing sizeHeight = Size sizeWidth (sizeWidth / ratio)
+  | dimensionIsMissing sizeWidth && not (dimensionIsMissing sizeHeight) = Size (clayMul sizeHeight ratio) sizeHeight
+  | not (dimensionIsMissing sizeWidth) && dimensionIsMissing sizeHeight = Size sizeWidth (clayDiv sizeWidth ratio)
   | otherwise = size
 
 dimensionIsMissing :: Double -> Bool
@@ -1122,7 +1364,7 @@ crossAlignmentOffset CrossEnd available child = available - child
 
 gapSize :: Double -> [item] -> Double
 gapSize gap items =
-  gap * fromIntegral (max 0 (length items - 1))
+  clayMul gap (fromIntegral (max 0 (length items - 1)))
 
 maximumOrZero :: [Double] -> Double
 maximumOrZero [] = 0
