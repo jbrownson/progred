@@ -908,34 +908,52 @@ closeAxisMinSize sizing value =
     _ -> clampAxis sizing value
 
 distributeGrowNodes :: Axis -> Double -> [LayoutNode measureM placed] -> [Int] -> [LayoutNode measureM placed]
-distributeGrowNodes axis remaining nodes activeIndices
-  | remaining <= clayEpsilon = nodes
+distributeGrowNodes =
+  distributeNodes GrowNodes
+
+distributeCompressNodes :: Axis -> Double -> [LayoutNode measureM placed] -> [Int] -> [LayoutNode measureM placed]
+distributeCompressNodes =
+  distributeNodes CompressNodes
+
+data DistributionMode
+  = GrowNodes
+  | CompressNodes
+
+distributeNodes :: DistributionMode -> Axis -> Double -> [LayoutNode measureM placed] -> [Int] -> [LayoutNode measureM placed]
+distributeNodes mode axis remaining nodes activeIndices
+  | distributionComplete mode remaining = nodes
   | null activeIndices = nodes
-  | otherwise = distributeGrowNodes axis remainingAfterAdd nodesAfterAdd activeAfterAdd
+  | otherwise = distributeNodes mode axis remainingAfterAdd nodesAfterAdd activeAfterAdd
   where
     sizes = axisSize axis . nodeDimensions <$> nodes
-    (smallest, growAmount) = growStep remaining sizes activeIndices
+    (frontierSize, resizeAmount) = distributionStep mode remaining sizes activeIndices
     (remainingAfterAdd, nodesAfterAdd, activeAfterAdd) =
-      foldr addGrowStep (remaining, nodes, []) activeIndices
-    addGrowStep index (remainingSoFar, nodesSoFar, activeSoFar)
-      | not (clayFloatEqual (nodeAxisSize index nodesSoFar) smallest) =
+      foldr addResizeStep (remaining, nodes, []) activeIndices
+    addResizeStep index (remainingSoFar, nodesSoFar, activeSoFar)
+      | not (clayFloatEqual (nodeAxisSize index nodesSoFar) frontierSize) =
           (remainingSoFar, nodesSoFar, index : activeSoFar)
       | otherwise =
           let previousSize = nodeAxisSize index nodesSoFar
-              maxSize = nodeAxisMax axis (nodesSoFar !! index)
-              grown = previousSize + growAmount
-              newSize = min grown maxSize
-              newNodes = replaceAt index (updateNodeAxisDimension axis newSize (nodesSoFar !! index)) nodesSoFar
+              bound = distributionBound mode axis (nodesSoFar !! index)
+              newSize = applyDistribution mode previousSize resizeAmount bound
+              newNodes =
+                replaceAt index (updateNodeAxisDimension axis newSize (nodesSoFar !! index)) nodesSoFar
               newRemaining = remainingSoFar - (newSize - previousSize)
               newActive =
-                if newSize >= maxSize
+                if distributionAtBound mode newSize bound
                   then activeSoFar
                   else index : activeSoFar
            in (newRemaining, newNodes, newActive)
     nodeAxisSize index = axisSize axis . nodeDimensions . (!! index)
 
-growStep :: Double -> [Double] -> [Int] -> (Double, Double)
-growStep remaining sizes activeIndices =
+distributionComplete :: DistributionMode -> Double -> Bool
+distributionComplete GrowNodes remaining =
+  remaining <= clayEpsilon
+distributionComplete CompressNodes remaining =
+  remaining >= negate clayEpsilon
+
+distributionStep :: DistributionMode -> Double -> [Double] -> [Int] -> (Double, Double)
+distributionStep GrowNodes remaining sizes activeIndices =
   (smallest, min widthToAdd (remaining / fromIntegral (length activeIndices)))
   where
     (smallest, _secondSmallest, widthToAdd) =
@@ -952,36 +970,7 @@ growStep remaining sizes activeIndices =
           (smallestSoFar, secondSmallestSoFar, widthToAddSoFar)
       where
         childSize = sizes !! index
-
-distributeCompressNodes :: Axis -> Double -> [LayoutNode measureM placed] -> [Int] -> [LayoutNode measureM placed]
-distributeCompressNodes axis remaining nodes activeIndices
-  | remaining >= negate clayEpsilon = nodes
-  | null activeIndices = nodes
-  | otherwise = distributeCompressNodes axis remainingAfterAdd nodesAfterAdd activeAfterAdd
-  where
-    sizes = axisSize axis . nodeDimensions <$> nodes
-    (largest, shrinkAmount) = compressStep remaining sizes activeIndices
-    (remainingAfterAdd, nodesAfterAdd, activeAfterAdd) =
-      foldr addCompressStep (remaining, nodes, []) activeIndices
-    addCompressStep index (remainingSoFar, nodesSoFar, activeSoFar)
-      | not (clayFloatEqual (nodeAxisSize index nodesSoFar) largest) =
-          (remainingSoFar, nodesSoFar, index : activeSoFar)
-      | otherwise =
-          let previousSize = nodeAxisSize index nodesSoFar
-              minSize = axisSize axis (nodeMinDimensions (nodesSoFar !! index))
-              shrunk = previousSize + shrinkAmount
-              newSize = max shrunk minSize
-              newNodes = replaceAt index (updateNodeAxisDimension axis newSize (nodesSoFar !! index)) nodesSoFar
-              newRemaining = remainingSoFar - (newSize - previousSize)
-              newActive =
-                if newSize <= minSize
-                  then activeSoFar
-                  else index : activeSoFar
-           in (newRemaining, newNodes, newActive)
-    nodeAxisSize index = axisSize axis . nodeDimensions . (!! index)
-
-compressStep :: Double -> [Double] -> [Int] -> (Double, Double)
-compressStep remaining sizes activeIndices =
+distributionStep CompressNodes remaining sizes activeIndices =
   (largest, max widthToAdd (remaining / fromIntegral (length activeIndices)))
   where
     (largest, _secondLargest, widthToAdd) =
@@ -998,6 +987,24 @@ compressStep remaining sizes activeIndices =
           (largestSoFar, secondLargestSoFar, widthToAddSoFar)
       where
         childSize = sizes !! index
+
+distributionBound :: DistributionMode -> Axis -> LayoutNode measureM placed -> Double
+distributionBound GrowNodes axis node =
+  nodeAxisMax axis node
+distributionBound CompressNodes axis node =
+  axisSize axis (nodeMinDimensions node)
+
+applyDistribution :: DistributionMode -> Double -> Double -> Double -> Double
+applyDistribution GrowNodes previousSize resizeAmount bound =
+  min (previousSize + resizeAmount) bound
+applyDistribution CompressNodes previousSize resizeAmount bound =
+  max (previousSize + resizeAmount) bound
+
+distributionAtBound :: DistributionMode -> Double -> Double -> Bool
+distributionAtBound GrowNodes size bound =
+  size >= bound
+distributionAtBound CompressNodes size bound =
+  size <= bound
 
 isFill :: AxisSizing -> Bool
 isFill sizing =
