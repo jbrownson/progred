@@ -1,15 +1,12 @@
 module Halay.Geometry
-  ( Constraints (..)
-  , Insets (..)
+  ( Insets (..)
   , Point (..)
   , Rect (..)
   , Size (..)
   , expandSize
-  , insetConstraints
   , insetRect
   , rectContains
   , sizeRectAt
-  , unconstrained
   ) where
 
 data Point = Point
@@ -40,15 +37,6 @@ data Insets = Insets
   }
   deriving (Eq, Show)
 
-data Constraints = Constraints
-  { maxWidth :: Maybe Double
-  , maxHeight :: Maybe Double
-  }
-  deriving (Eq, Show)
-
-unconstrained :: Constraints
-unconstrained = Constraints Nothing Nothing
-
 rectContains :: Rect -> Double -> Double -> Bool
 rectContains Rect {x, y, width, height} px py =
   px >= x
@@ -71,16 +59,6 @@ expandSize Insets {insetTop, insetRight, insetBottom, insetLeft} Size {sizeWidth
     { sizeWidth = sizeWidth + insetLeft + insetRight
     , sizeHeight = sizeHeight + insetTop + insetBottom
     }
-
-insetConstraints :: Insets -> Constraints -> Constraints
-insetConstraints Insets {insetTop, insetRight, insetBottom, insetLeft} Constraints {maxWidth, maxHeight} =
-  Constraints
-    { maxWidth = shrink (insetLeft + insetRight) <$> maxWidth
-    , maxHeight = shrink (insetTop + insetBottom) <$> maxHeight
-    }
-  where
-    shrink inset value =
-      max 0 (value - inset)
 
 sizeRectAt :: Point -> Size -> Rect
 sizeRectAt Point {pointX, pointY} Size {sizeWidth, sizeHeight} =

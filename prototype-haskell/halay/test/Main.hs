@@ -1462,10 +1462,10 @@ placedRectsWithRoot :: Halay Identity Placements -> [(String, Rect)]
 placedRectsWithRoot layout =
   ("root", Rect 0 0 (sizeWidth size) (sizeHeight size)) : rects
   where
-    (size, Placements rects) = runIdentity (placeAt unconstrained (Point 0 0) layout)
+    (size, Placements rects) = runIdentity (placeAt (Point 0 0) layout)
 
 placedRects :: Halay Identity Placements -> [(String, Rect)]
 placedRects layout =
   rects
   where
-    (_size, Placements rects) = runIdentity (placeAt unconstrained (Point 0 0) layout)
+    (_size, Placements rects) = runIdentity (placeAt (Point 0 0) layout)

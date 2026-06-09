@@ -32,11 +32,10 @@ initialModel = Model
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport _model = do
   Canvas.fillRect viewportRect "#fbfbfa"
-  _ <- placeHalay viewportConstraints viewportRect sampleLayout
+  _ <- placeHalay viewportRect sampleLayout
   pure mempty
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
-    viewportConstraints = Constraints (Just (viewportWidth viewport)) (Just (viewportHeight viewport))
     sampleLayout =
       box
         defaultBox

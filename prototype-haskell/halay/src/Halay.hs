@@ -121,13 +121,17 @@ data LayoutNode measureM placed = LayoutNode
   { nodeConfig :: BoxConfig
   , nodeAspectRatio :: Maybe Double
   , nodeHeightMaxOverride :: Maybe Double
-  , nodeIntrinsicSize :: Maybe Size
-  , nodeText :: Maybe (TextNode measureM placed)
+  , nodeContent :: NodeContent measureM placed
   , nodePlacers :: [Rect -> measureM placed]
   , nodeChildren :: [LayoutNode measureM placed]
   , nodeDimensions :: Size
   , nodeMinDimensions :: Size
   }
+
+data NodeContent measureM placed
+  = Container
+  | Intrinsic Size
+  | TextContent (TextNode measureM placed)
 
 data TextNode measureM placed = TextNode
   { textNodeText :: String
@@ -186,7 +190,7 @@ leafWithSizing sizing measure place =
     makeNode intrinsicSize =
       emptyNode
         { nodeConfig = defaultBox {boxWidth = sizingWidth sizing, boxHeight = sizingHeight sizing}
-        , nodeIntrinsicSize = Just intrinsicSize
+        , nodeContent = Intrinsic intrinsicSize
         , nodePlacers = [place]
         }
 
@@ -196,13 +200,7 @@ text config string =
     measured <- measureTextNode config string
     pure
       emptyNode
-        { nodeText = Just measured
-        , nodeDimensions = textNodePreferredSize measured
-        , nodeMinDimensions =
-            Size
-              { sizeWidth = textNodeMinWidth measured
-              , sizeHeight = textNodeLineHeight measured
-              }
+        { nodeContent = TextContent measured
         }
 
 sized :: Functor measureM => Sizing -> Halay measureM placed -> Halay measureM placed
@@ -220,19 +218,19 @@ aspectRatio ratio child =
   Halay $
     setNodeAspectRatio ratio <$> buildHalay child
 
-placeHalay :: (Monad measureM, Monoid placed) => Constraints -> Rect -> Halay measureM placed -> measureM placed
-placeHalay constraints rect halay = do
-  measured <- measureHalay halay constraints
+placeHalay :: (Monad measureM, Monoid placed) => Rect -> Halay measureM placed -> measureM placed
+placeHalay rect halay = do
+  measured <- measureHalay halay
   placeMeasured measured rect
 
-placeAt :: (Monad measureM, Monoid placed) => Constraints -> Point -> Halay measureM placed -> measureM (Size, placed)
-placeAt constraints point halay = do
-  measured <- measureHalay halay constraints
+placeAt :: (Monad measureM, Monoid placed) => Point -> Halay measureM placed -> measureM (Size, placed)
+placeAt point halay = do
+  measured <- measureHalay halay
   placed <- placeMeasured measured (sizeRectAt point (measuredSize measured))
   pure (measuredSize measured, placed)
 
-measureHalay :: (Monad measureM, Monoid placed) => Halay measureM placed -> Constraints -> measureM (Measured measureM placed)
-measureHalay halay _constraints = do
+measureHalay :: (Monad measureM, Monoid placed) => Halay measureM placed -> measureM (Measured measureM placed)
+measureHalay halay = do
   source <- buildHalay halay
   let measuredNode = layoutNode Nothing source
   pure
@@ -277,8 +275,7 @@ emptyNode =
     { nodeConfig = defaultBox
     , nodeAspectRatio = Nothing
     , nodeHeightMaxOverride = Nothing
-    , nodeIntrinsicSize = Nothing
-    , nodeText = Nothing
+    , nodeContent = Container
     , nodePlacers = []
     , nodeChildren = []
     , nodeDimensions = Size 0 0
@@ -300,6 +297,10 @@ addNodePlacer place node =
 mapNodeChildren :: (LayoutNode measureM placed -> LayoutNode measureM placed) -> LayoutNode measureM placed -> LayoutNode measureM placed
 mapNodeChildren change node =
   node {nodeChildren = change <$> nodeChildren node}
+
+postOrder :: (LayoutNode measureM placed -> LayoutNode measureM placed) -> LayoutNode measureM placed -> LayoutNode measureM placed
+postOrder change node =
+  change (mapNodeChildren (postOrder change) node)
 
 nodeSizing :: LayoutNode measureM placed -> Sizing
 nodeSizing LayoutNode {nodeConfig = BoxConfig {boxWidth, boxHeight}} =
@@ -325,28 +326,25 @@ closeNode node =
   closeNodeAspect (closeNodeSizing closed)
   where
     closedChildren = closeNode <$> nodeChildren node
+    withClosedChildren = node {nodeChildren = closedChildren}
     closed =
-      case nodeText node of
-        Just textNode ->
-          node
-            { nodeChildren = closedChildren
-            , nodeDimensions = textNodePreferredSize textNode
+      case nodeContent node of
+        TextContent textNode ->
+          withClosedChildren
+            { nodeDimensions = textNodePreferredSize textNode
             , nodeMinDimensions =
                 Size
                   { sizeWidth = textNodeMinWidth textNode
                   , sizeHeight = textNodeLineHeight textNode
                   }
             }
-        Nothing ->
-          case nodeIntrinsicSize node of
-            Just intrinsicSize ->
-              node
-                { nodeChildren = closedChildren
-                , nodeDimensions = intrinsicSize
-                , nodeMinDimensions = intrinsicSize
-                }
-            Nothing ->
-              closeContainer node {nodeChildren = closedChildren}
+        Intrinsic intrinsicSize ->
+          withClosedChildren
+            { nodeDimensions = intrinsicSize
+            , nodeMinDimensions = intrinsicSize
+            }
+        Container ->
+          closeContainer withClosedChildren
 
 closeContainer :: LayoutNode measureM placed -> LayoutNode measureM placed
 closeContainer node =
@@ -502,10 +500,9 @@ nodeHeightMinForPropagation node =
     sizing = boxHeight (nodeConfig node)
 
 propagateResolvedHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
-propagateResolvedHeights node =
-  resize (mapNodeChildren propagateResolvedHeights node)
+propagateResolvedHeights =
+  postOrder resize
   where
-    config = nodeConfig node
     resize current
       | null (nodeChildren current) = current
       | boxDirection config == LeftToRight =
@@ -536,26 +533,32 @@ propagateResolvedHeights node =
                           + gapSize (boxGap config) (nodeChildren current)
                   }
             }
+      where
+        config = nodeConfig current
 
 wrapTextNodes :: LayoutNode measureM placed -> LayoutNode measureM placed
-wrapTextNodes node =
-  mapNodeChildren
-    wrapTextNodes
-    node
-      { nodeText = wrappedText
-      , nodeDimensions = wrappedDimensions
-      }
+wrapTextNodes =
+  postOrder wrap
   where
-    wrappedText = wrapTextNode (sizeWidth (nodeDimensions node)) <$> nodeText node
-    wrappedDimensions =
-      case wrappedText of
-        Nothing -> nodeDimensions node
-        Just textNode ->
-          (nodeDimensions node) {sizeHeight = textNodeLineHeight textNode * fromIntegral (length (textNodeLines textNode))}
+    wrap node =
+      node
+        { nodeContent = wrappedContent
+        , nodeDimensions = wrappedDimensions
+        }
+      where
+        wrappedContent =
+          case nodeContent node of
+            TextContent textNode -> TextContent (wrapTextNode (sizeWidth (nodeDimensions node)) textNode)
+            other -> other
+        wrappedDimensions =
+          case wrappedContent of
+            TextContent textNode ->
+              (nodeDimensions node) {sizeHeight = textNodeLineHeight textNode * fromIntegral (length (textNodeLines textNode))}
+            _ -> nodeDimensions node
 
 scaleAspectHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
-scaleAspectHeights node =
-  adjust (mapNodeChildren scaleAspectHeights node)
+scaleAspectHeights =
+  postOrder adjust
   where
     adjust current =
       case nodeAspectRatio current of
@@ -570,8 +573,8 @@ scaleAspectHeights node =
         _ -> current
 
 scaleAspectWidths :: LayoutNode measureM placed -> LayoutNode measureM placed
-scaleAspectWidths node =
-  adjust (mapNodeChildren scaleAspectWidths node)
+scaleAspectWidths =
+  postOrder adjust
   where
     adjust current =
       case nodeAspectRatio current of
@@ -595,9 +598,11 @@ placeOwnNode point@Point {pointX, pointY} node = do
     place placed next = (placed <>) <$> next rect
 
 placeTextNode :: (Monad measureM, Monoid placed) => Point -> LayoutNode measureM placed -> measureM placed
-placeTextNode _ LayoutNode {nodeText = Nothing} =
+placeTextNode _ LayoutNode {nodeContent = Container} =
   pure mempty
-placeTextNode Point {pointX, pointY} LayoutNode {nodeText = Just textNode, nodeDimensions = Size {sizeWidth}} =
+placeTextNode _ LayoutNode {nodeContent = Intrinsic _} =
+  pure mempty
+placeTextNode Point {pointX, pointY} LayoutNode {nodeContent = TextContent textNode, nodeDimensions = Size {sizeWidth}} =
   snd <$> foldM placeLine (pointY + lineHeightOffset, mempty) (zip [0 ..] (textNodeLines textNode))
   where
     lineHeight = textNodeLineHeight textNode
@@ -1022,9 +1027,9 @@ nodeCanResizeAlongAxis axis node =
     && textNodeCanResize node
 
 textNodeCanResize :: LayoutNode measureM placed -> Bool
-textNodeCanResize LayoutNode {nodeText = Nothing} = True
-textNodeCanResize LayoutNode {nodeText = Just textNode} =
+textNodeCanResize LayoutNode {nodeContent = TextContent textNode} =
   textWrapMode (textNodeConfig textNode) == TextWrapWords
+textNodeCanResize _ = True
 
 stripClamp :: AxisSizing -> AxisSizing
 stripClamp (Clamp _ _ sizing) = stripClamp sizing

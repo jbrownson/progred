@@ -20,7 +20,7 @@ renderRawDocument Document {documentRoot, documentGraph} point =
 
 renderRawGraph :: Canvas.Canvas renderM => Graph -> UUID -> Point -> renderM Double
 renderRawGraph graph root point = do
-  (size, ()) <- placeAt unconstrained point (rawNode graph Set.empty root)
+  (size, ()) <- placeAt point (rawNode graph Set.empty root)
   pure (pointY point + sizeHeight size)
 
 rawDocument :: Canvas.Canvas renderM => Document -> Halay renderM ()
