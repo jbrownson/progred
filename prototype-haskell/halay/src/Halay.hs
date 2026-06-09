@@ -297,6 +297,10 @@ addNodePlacer :: (Rect -> measureM placed) -> LayoutNode measureM placed -> Layo
 addNodePlacer place node =
   node {nodePlacers = place : nodePlacers node}
 
+mapNodeChildren :: (LayoutNode measureM placed -> LayoutNode measureM placed) -> LayoutNode measureM placed -> LayoutNode measureM placed
+mapNodeChildren change node =
+  node {nodeChildren = change <$> nodeChildren node}
+
 nodeSizing :: LayoutNode measureM placed -> Sizing
 nodeSizing LayoutNode {nodeConfig = BoxConfig {boxWidth, boxHeight}} =
   Sizing boxWidth boxHeight
@@ -356,75 +360,42 @@ closeContainer node =
     boxInsets = boxPadding config
     childSizes = nodeDimensions <$> children
     childMinSizes = nodeMinDimensions <$> children
-    contentSize =
-      case boxDirection config of
-        LeftToRight ->
-          Size
-            { sizeWidth = sum (sizeWidth <$> childSizes) + gapSize (boxGap config) children
-            , sizeHeight = maximumOrZero (sizeHeight <$> childSizes)
-            }
-        TopToBottom ->
-          Size
-            { sizeWidth = maximumOrZero (sizeWidth <$> childSizes)
-            , sizeHeight = sum (sizeHeight <$> childSizes) + gapSize (boxGap config) children
-            }
-    minContentSize =
-      case boxDirection config of
-        LeftToRight ->
-          Size
-            { sizeWidth = sum (sizeWidth <$> childMinSizes) + gapSize (boxGap config) children
-            , sizeHeight = maximumOrZero (sizeHeight <$> childMinSizes)
-            }
-        TopToBottom ->
-          Size
-            { sizeWidth = maximumOrZero (sizeWidth <$> childMinSizes)
-            , sizeHeight = sum (sizeHeight <$> childMinSizes) + gapSize (boxGap config) children
-            }
+    contentSize = containerContentSize (boxDirection config) (boxGap config) childSizes
+    minContentSize = containerContentSize (boxDirection config) (boxGap config) childMinSizes
 
 closeContainerMinDimensions :: BoxConfig -> Size -> Size
-closeContainerMinDimensions config Size {sizeWidth, sizeHeight} =
-  case boxDirection config of
-    LeftToRight ->
-      Size
-        { sizeWidth =
-            if clipHorizontal (boxClip config)
-              then insetLeft boxInsets + insetRight boxInsets
-              else sizeWidth + insetLeft boxInsets + insetRight boxInsets
-        , sizeHeight =
-            if clipVertical (boxClip config)
-              then 0
-              else sizeHeight + insetTop boxInsets + insetBottom boxInsets
-        }
-    TopToBottom ->
-      Size
-        { sizeWidth =
-            if clipHorizontal (boxClip config)
-              then 0
-              else sizeWidth + insetLeft boxInsets + insetRight boxInsets
-        , sizeHeight =
-            if clipVertical (boxClip config)
-              then insetTop boxInsets + insetBottom boxInsets
-              else sizeHeight + insetTop boxInsets + insetBottom boxInsets
-        }
+closeContainerMinDimensions config contentSize =
+  sizeFromAxes primaryAxis minPrimary minCross
   where
+    primaryAxis = directionAxis (boxDirection config)
+    crossAxis = otherAxis primaryAxis
     boxInsets = boxPadding config
+    minPrimary =
+      if boxClipsAxis primaryAxis config
+        then axisPadding primaryAxis boxInsets
+        else axisSize primaryAxis contentSize + axisPadding primaryAxis boxInsets
+    minCross =
+      if boxClipsAxis crossAxis config
+        then 0
+        else axisSize crossAxis contentSize + axisPadding crossAxis boxInsets
+
+containerContentSize :: Direction -> Double -> [Size] -> Size
+containerContentSize direction gap sizes =
+  sizeFromAxes primaryAxis primarySize crossSize
+  where
+    primaryAxis = directionAxis direction
+    crossAxis = otherAxis primaryAxis
+    primarySize = sum (axisSize primaryAxis <$> sizes) + gapSize gap sizes
+    crossSize = maximumOrZero (axisSize crossAxis <$> sizes)
 
 closeNodeSizing :: LayoutNode measureM placed -> LayoutNode measureM placed
 closeNodeSizing node =
   node
-    { nodeDimensions =
-        Size
-          { sizeWidth = closeAxisSize (boxWidth config) (sizeWidth dimensions)
-          , sizeHeight = closeAxisSize (boxHeight config) (sizeHeight dimensions)
-          }
-    , nodeMinDimensions =
-        Size
-          { sizeWidth = closeAxisMinSize (boxWidth config) (sizeWidth minDimensions)
-          , sizeHeight = closeAxisMinSize (boxHeight config) (sizeHeight minDimensions)
-          }
+    { nodeDimensions = mapSizeAxes (\axis -> closeAxisSize (axisSizing axis sizing)) dimensions
+    , nodeMinDimensions = mapSizeAxes (\axis -> closeAxisMinSize (axisSizing axis sizing)) minDimensions
     }
   where
-    config = nodeConfig node
+    sizing = nodeSizing node
     dimensions = nodeDimensions node
     minDimensions = nodeMinDimensions node
 
@@ -442,7 +413,7 @@ updateMissingAspectDimension node =
 
 sizeContainersAlongAxis :: Axis -> LayoutNode measureM placed -> LayoutNode measureM placed
 sizeContainersAlongAxis axis node =
-  node {nodeChildren = sizeContainersAlongAxis axis <$> sizedChildren}
+  mapNodeChildren (sizeContainersAlongAxis axis) (node {nodeChildren = sizedChildren})
   where
     sizedChildren = resolveAxisChildren axis node
 
@@ -456,7 +427,7 @@ resolveAxisChildren axis parent =
     children = nodeChildren parent
     parentSize = axisSize axis (nodeDimensions parent)
     parentPadding = axisPadding axis (boxPadding config)
-    sizingAlongAxis = axisIsAlongDirection axis (boxDirection config)
+    sizingAlongAxis = axis == directionAxis (boxDirection config)
     gapTotal
       | sizingAlongAxis = gapSize (boxGap config) children
       | otherwise = 0
@@ -507,7 +478,7 @@ resolveCrossAxisChildren axis parent innerContentSize children =
       | not (nodeCanResizeAlongAxis axis child) =
           child
       | isFill sizing =
-          updateNodeAxisDimension axis (max minSize (min (min maxSize (nodeAxisMax axis child)) maxSize)) child
+          updateNodeAxisDimension axis (max minSize (min maxSize (nodeAxisMax axis child))) child
       | otherwise =
           updateNodeAxisDimension axis (max minSize (min size maxSize)) child
       where
@@ -532,9 +503,8 @@ nodeHeightMinForPropagation node =
 
 propagateResolvedHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
 propagateResolvedHeights node =
-  resize (node {nodeChildren = propagatedChildren})
+  resize (mapNodeChildren propagateResolvedHeights node)
   where
-    propagatedChildren = propagateResolvedHeights <$> nodeChildren node
     config = nodeConfig node
     resize current
       | null (nodeChildren current) = current
@@ -569,11 +539,12 @@ propagateResolvedHeights node =
 
 wrapTextNodes :: LayoutNode measureM placed -> LayoutNode measureM placed
 wrapTextNodes node =
-  node
-    { nodeText = wrappedText
-    , nodeChildren = wrapTextNodes <$> nodeChildren node
-    , nodeDimensions = wrappedDimensions
-    }
+  mapNodeChildren
+    wrapTextNodes
+    node
+      { nodeText = wrappedText
+      , nodeDimensions = wrappedDimensions
+      }
   where
     wrappedText = wrapTextNode (sizeWidth (nodeDimensions node)) <$> nodeText node
     wrappedDimensions =
@@ -584,14 +555,14 @@ wrapTextNodes node =
 
 scaleAspectHeights :: LayoutNode measureM placed -> LayoutNode measureM placed
 scaleAspectHeights node =
-  adjust node {nodeChildren = scaleAspectHeights <$> nodeChildren node}
+  adjust (mapNodeChildren scaleAspectHeights node)
   where
     adjust current =
       case nodeAspectRatio current of
         Just ratio
           | ratio /= 0 ->
               current
-                { nodeDimensions = (nodeDimensions current) {sizeHeight = aspectHeight}
+                { nodeDimensions = setSizeAxis Vertical aspectHeight (nodeDimensions current)
                 , nodeHeightMaxOverride = Just aspectHeight
                 }
           where
@@ -600,12 +571,12 @@ scaleAspectHeights node =
 
 scaleAspectWidths :: LayoutNode measureM placed -> LayoutNode measureM placed
 scaleAspectWidths node =
-  adjust node {nodeChildren = scaleAspectWidths <$> nodeChildren node}
+  adjust (mapNodeChildren scaleAspectWidths node)
   where
     adjust current =
       case nodeAspectRatio current of
         Just ratio ->
-          current {nodeDimensions = (nodeDimensions current) {sizeWidth = ratio * sizeHeight (nodeDimensions current)}}
+          updateNodeAxisDimension Horizontal (ratio * sizeHeight (nodeDimensions current)) current
         Nothing -> current
 
 placeLayoutNode :: (Monad measureM, Monoid placed) => Point -> LayoutNode measureM placed -> measureM placed
@@ -646,10 +617,7 @@ placeChildren Point {pointX, pointY} node =
   snd <$> foldM placeChild (startingPrimary, mempty) (nodeChildren node)
   where
     config = nodeConfig node
-    primaryAxis =
-      case boxDirection config of
-        LeftToRight -> Horizontal
-        TopToBottom -> Vertical
+    primaryAxis = directionAxis (boxDirection config)
     crossAxis = otherAxis primaryAxis
     boxInsets = boxPadding config
     inner =
@@ -854,30 +822,50 @@ otherAxis :: Axis -> Axis
 otherAxis Horizontal = Vertical
 otherAxis Vertical = Horizontal
 
+directionAxis :: Direction -> Axis
+directionAxis LeftToRight = Horizontal
+directionAxis TopToBottom = Vertical
+
 axisSize :: Axis -> Size -> Double
 axisSize Horizontal = sizeWidth
 axisSize Vertical = sizeHeight
+
+setSizeAxis :: Axis -> Double -> Size -> Size
+setSizeAxis Horizontal value size =
+  size {sizeWidth = value}
+setSizeAxis Vertical value size =
+  size {sizeHeight = value}
+
+sizeFromAxes :: Axis -> Double -> Double -> Size
+sizeFromAxes Horizontal primarySize crossSize =
+  Size primarySize crossSize
+sizeFromAxes Vertical primarySize crossSize =
+  Size crossSize primarySize
+
+mapSizeAxes :: (Axis -> Double -> Double) -> Size -> Size
+mapSizeAxes change size =
+  Size
+    { sizeWidth = change Horizontal (sizeWidth size)
+    , sizeHeight = change Vertical (sizeHeight size)
+    }
 
 axisSizing :: Axis -> Sizing -> AxisSizing
 axisSizing Horizontal = sizingWidth
 axisSizing Vertical = sizingHeight
 
 updateNodeAxisDimension :: Axis -> Double -> LayoutNode measureM placed -> LayoutNode measureM placed
-updateNodeAxisDimension Horizontal value node =
-  node {nodeDimensions = (nodeDimensions node) {sizeWidth = value}}
-updateNodeAxisDimension Vertical value node =
-  node {nodeDimensions = (nodeDimensions node) {sizeHeight = value}}
+updateNodeAxisDimension axis value node =
+  node {nodeDimensions = setSizeAxis axis value (nodeDimensions node)}
 
-axisIsAlongDirection :: Axis -> Direction -> Bool
-axisIsAlongDirection Horizontal LeftToRight = True
-axisIsAlongDirection Vertical TopToBottom = True
-axisIsAlongDirection _ _ = False
+boxClipsAxis :: Axis -> BoxConfig -> Bool
+boxClipsAxis Horizontal config =
+  clipHorizontal (boxClip config)
+boxClipsAxis Vertical config =
+  clipVertical (boxClip config)
 
 nodeClipsAxis :: Axis -> LayoutNode measureM placed -> Bool
-nodeClipsAxis Horizontal node =
-  clipHorizontal (boxClip (nodeConfig node))
-nodeClipsAxis Vertical node =
-  clipVertical (boxClip (nodeConfig node))
+nodeClipsAxis axis node =
+  boxClipsAxis axis (nodeConfig node)
 
 nodeChildOffset :: LayoutNode measureM placed -> Point
 nodeChildOffset node =
