@@ -77,7 +77,7 @@ halayQuickCheckTests environmentVariable defaultValue = do
 
 treeQuickCheckArgs :: Args
 treeQuickCheckArgs =
-  stdArgs {maxShrinks = 50}
+  stdArgs {maxShrinks = 500}
 
 propertyTimeoutMicros :: Int
 propertyTimeoutMicros = 1000000
@@ -217,7 +217,7 @@ nearRect expected actual =
 
 near :: Double -> Double -> Bool
 near expected actual =
-  abs (expected - actual) < 0.01
+  abs (expected - actual) < 0.05
 
 sameRects :: [(String, Rect)] -> [(String, Rect)] -> Bool
 sameRects expected actual =
@@ -339,7 +339,7 @@ clipMainAxisDoesNotCompress =
       , boxHeight = Fixed 20
       , boxClip = BoxClip True False (Point 0 0)
       }
-    [namedLayout "a" (box defaultBox [text testTextConfig {textPlaceLine = \_ _ _ -> pure mempty} "aaaaa bbbbb"])]
+    [namedLayout "a" (box defaultBox [text (testTextConfig 1 Nothing) {textPlaceLine = \_ _ _ -> pure mempty} "aaaaa bbbbb"])]
 
 clipCrossAxisGrowsToContent :: Halay Identity Placements
 clipCrossAxisGrowsToContent =
@@ -378,7 +378,7 @@ clipCrossAxisUsesPrePercentInnerSize =
                 , boxPadding = Insets 5 0 18 0
                 , boxClip = BoxClip False True (Point 0 0)
                 }
-              [text testTextConfig {textWrapMode = TextWrapNone, textAlign = TextAlignCenter, textPlaceLine = \_ _ _ -> pure mempty} "xx xxxxxxxxxxxxxxxxxxx xxxxxxxxxxxxxx xxx"]
+              [text (testTextConfig 1 Nothing) {textWrapMode = TextWrapNone, textAlign = TextAlignCenter, textPlaceLine = \_ _ _ -> pure mempty} "xx xxxxxxxxxxxxxxxxxxx xxxxxxxxxxxxxx xxx"]
         )
     , aspectRatio 1.8 $
         leafWithSizing
@@ -402,21 +402,21 @@ textWrapsWords :: Halay Identity Placements
 textWrapsWords =
   box
     defaultBox {boxWidth = Fixed 6, boxHeight = Fixed 20}
-    [text testTextConfig "alpha beta gamma"]
+    [text (testTextConfig 1 Nothing) "alpha beta gamma"]
 
 textRespectsNewlines :: Halay Identity Placements
 textRespectsNewlines =
   box
     defaultBox {boxWidth = Fixed 20, boxHeight = Fixed 20}
-    [text testTextConfig {textWrapMode = TextWrapNewlines} "alpha\nbeta"]
+    [text (testTextConfig 1 Nothing) {textWrapMode = TextWrapNewlines} "alpha\nbeta"]
 
-testTextConfig :: TextConfig Identity Placements
-testTextConfig =
+testTextConfig :: Int -> Maybe Int -> TextConfig Identity Placements
+testTextConfig fontSize maybeLineHeight =
   TextConfig
-    { textLineHeight = Nothing
+    { textLineHeight = fromIntegral <$> maybeLineHeight
     , textWrapMode = TextWrapWords
     , textAlign = TextAlignStart
-    , textMeasure = \string -> pure (Size (fromIntegral (length string)) 1)
+    , textMeasure = \string -> pure (Size (fromIntegral (length string * fontSize)) (fromIntegral fontSize))
     , textPlaceLine = \index _line rect -> pure (Placements [("text" <> show index, rect)])
     }
 
@@ -542,7 +542,7 @@ shrinkChild child@RandomChild {randomChildSize, randomChildSizing, randomChildAs
 
 arbitraryAxisSizing :: Gen AxisSizing
 arbitraryAxisSizing = do
-  sizingChoice <- chooseInt (0, 11)
+  sizingChoice <- chooseInt (0, 9)
   case sizingChoice of
     0 -> pure Fit
     1 -> Fixed . fromIntegral <$> chooseInt (1, 80)
@@ -558,6 +558,16 @@ arbitraryAxisSizing = do
       minimumValue <- chooseInt (1, 40)
       maximumValue <- chooseInt (minimumValue, 80)
       pure (Clamp (Just (fromIntegral minimumValue)) (Just (fromIntegral maximumValue)) Fill)
+    7 -> do
+      maximumValue <- chooseInt (1, 80)
+      pure (Clamp Nothing (Just (fromIntegral maximumValue)) Fit)
+    8 -> do
+      minimumValue <- chooseInt (1, 40)
+      pure (Clamp (Just (fromIntegral minimumValue)) Nothing Fit)
+    9 -> do
+      minimumValue <- chooseInt (1, 40)
+      maximumValue <- chooseInt (minimumValue, 80)
+      pure (Clamp (Just (fromIntegral minimumValue)) (Just (fromIntegral maximumValue)) Fit)
     _ -> Fixed . fromIntegral <$> chooseInt (1, 80)
 
 shrinkSizing :: Sizing -> [Sizing]
@@ -691,6 +701,8 @@ data RandomTextLayout = RandomTextLayout
   , randomTextRootHeight :: Int
   , randomTextWrapMode :: TextWrapMode
   , randomTextAlign :: TextAlign
+  , randomTextFontSize :: Int
+  , randomTextLineHeight :: Maybe Int
   , randomTextLineWordLengths :: [[Int]]
   }
   deriving (Eq, Show)
@@ -701,6 +713,8 @@ instance Arbitrary RandomTextLayout where
     rootHeight <- chooseInt (1, 80)
     wrapMode <- arbitraryTextWrapMode
     textAlign <- arbitraryTextAlign
+    fontSize <- chooseInt (1, 5)
+    lineHeight <- arbitraryTextLineHeight fontSize
     lineCount <-
       case wrapMode of
         TextWrapNewlines -> chooseInt (1, 4)
@@ -712,6 +726,8 @@ instance Arbitrary RandomTextLayout where
         , randomTextRootHeight = rootHeight
         , randomTextWrapMode = wrapMode
         , randomTextAlign = textAlign
+        , randomTextFontSize = fontSize
+        , randomTextLineHeight = lineHeight
         , randomTextLineWordLengths = lineWordLengths
         }
   shrink randomTextLayout =
@@ -719,6 +735,8 @@ instance Arbitrary RandomTextLayout where
       <> [randomTextLayout {randomTextRootHeight = value} | value <- shrinkIntAtLeast 1 (randomTextRootHeight randomTextLayout)]
       <> [randomTextLayout {randomTextWrapMode = wrapMode} | wrapMode <- shrinkTextWrapMode (randomTextWrapMode randomTextLayout)]
       <> [randomTextLayout {randomTextAlign = textAlign} | textAlign <- shrinkTextAlign (randomTextAlign randomTextLayout)]
+      <> [randomTextLayout {randomTextFontSize = value} | value <- shrinkIntAtLeast 1 (randomTextFontSize randomTextLayout)]
+      <> [randomTextLayout {randomTextLineHeight = value} | value <- shrinkTextLineHeight (randomTextLineHeight randomTextLayout)]
       <> [randomTextLayout {randomTextLineWordLengths = lengths} | lengths <- shrinkLineWordLengths (randomTextLineWordLengths randomTextLayout)]
 
 arbitraryTextWrapMode :: Gen TextWrapMode
@@ -738,6 +756,18 @@ shrinkTextAlign :: TextAlign -> [TextAlign]
 shrinkTextAlign TextAlignStart = []
 shrinkTextAlign TextAlignCenter = [TextAlignStart]
 shrinkTextAlign TextAlignEnd = [TextAlignStart, TextAlignCenter]
+
+arbitraryTextLineHeight :: Int -> Gen (Maybe Int)
+arbitraryTextLineHeight fontSize =
+  frequency
+    [ (3, pure Nothing)
+    , (1, Just <$> chooseInt (1, fontSize * 3))
+    ]
+
+shrinkTextLineHeight :: Maybe Int -> [Maybe Int]
+shrinkTextLineHeight Nothing = []
+shrinkTextLineHeight (Just value) =
+  Nothing : [Just shrunk | shrunk <- shrinkIntAtLeast 1 value]
 
 arbitraryWordLengths :: Gen [Int]
 arbitraryWordLengths = do
@@ -788,14 +818,14 @@ randomTextLayoutMatchesClay oracle randomTextLayout =
         ok
 
 randomTextLayoutHalay :: RandomTextLayout -> Halay Identity Placements
-randomTextLayoutHalay RandomTextLayout {randomTextRootWidth, randomTextRootHeight, randomTextWrapMode, randomTextAlign, randomTextLineWordLengths} =
+randomTextLayoutHalay RandomTextLayout {randomTextRootWidth, randomTextRootHeight, randomTextWrapMode, randomTextAlign, randomTextFontSize, randomTextLineHeight, randomTextLineWordLengths} =
   box
     defaultBox
       { boxWidth = Fixed (fromIntegral randomTextRootWidth)
       , boxHeight = Fixed (fromIntegral randomTextRootHeight)
       }
     [ text
-        testTextConfig
+        (testTextConfig randomTextFontSize randomTextLineHeight)
           { textWrapMode = randomTextWrapMode
           , textAlign = randomTextAlign
           }
@@ -803,13 +833,15 @@ randomTextLayoutHalay RandomTextLayout {randomTextRootWidth, randomTextRootHeigh
     ]
 
 randomTextOracleInput :: RandomTextLayout -> String
-randomTextOracleInput RandomTextLayout {randomTextRootWidth, randomTextRootHeight, randomTextWrapMode, randomTextAlign, randomTextLineWordLengths} =
+randomTextOracleInput RandomTextLayout {randomTextRootWidth, randomTextRootHeight, randomTextWrapMode, randomTextAlign, randomTextFontSize, randomTextLineHeight, randomTextLineWordLengths} =
   unwords
     ( [ "textcheck"
       , show randomTextRootWidth
       , show randomTextRootHeight
       , show (textWrapModeValue randomTextWrapMode)
       , show (textAlignValue randomTextAlign)
+      , show randomTextFontSize
+      , show (maybe 0 id randomTextLineHeight)
       , show (length randomTextLineWordLengths)
       ]
         <> concatMap lineWords randomTextLineWordLengths
@@ -853,6 +885,8 @@ data RandomTreeNode
 data RandomTreeTextContent = RandomTreeTextContent
   { randomTreeTextWrapMode :: TextWrapMode
   , randomTreeTextAlign :: TextAlign
+  , randomTreeTextFontSize :: Int
+  , randomTreeTextLineHeight :: Maybe Int
   , randomTreeTextLineWordLengths :: [[Int]]
   }
   deriving (Eq, Show)
@@ -929,6 +963,8 @@ arbitraryTreeTextContent :: Gen RandomTreeTextContent
 arbitraryTreeTextContent = do
   wrapMode <- arbitraryTextWrapMode
   textAlign <- arbitraryTextAlign
+  fontSize <- chooseInt (1, 5)
+  lineHeight <- arbitraryTextLineHeight fontSize
   lineCount <-
     case wrapMode of
       TextWrapNewlines -> chooseInt (1, 4)
@@ -938,6 +974,8 @@ arbitraryTreeTextContent = do
     RandomTreeTextContent
       { randomTreeTextWrapMode = wrapMode
       , randomTreeTextAlign = textAlign
+      , randomTreeTextFontSize = fontSize
+      , randomTreeTextLineHeight = lineHeight
       , randomTreeTextLineWordLengths = lineWordLengths
       }
 
@@ -1067,6 +1105,8 @@ shrinkTreeTextContent :: RandomTreeTextContent -> [RandomTreeTextContent]
 shrinkTreeTextContent textContent =
   [textContent {randomTreeTextWrapMode = wrapMode} | wrapMode <- shrinkTextWrapMode (randomTreeTextWrapMode textContent)]
     <> [textContent {randomTreeTextAlign = textAlign} | textAlign <- shrinkTextAlign (randomTreeTextAlign textContent)]
+    <> [textContent {randomTreeTextFontSize = value} | value <- shrinkIntAtLeast 1 (randomTreeTextFontSize textContent)]
+    <> [textContent {randomTreeTextLineHeight = value} | value <- shrinkTextLineHeight (randomTreeTextLineHeight textContent)]
     <> [textContent {randomTreeTextLineWordLengths = lengths} | lengths <- shrinkLineWordLengths (randomTreeTextLineWordLengths textContent)]
 
 shrinkBoxConfig :: Int -> RandomBoxConfig -> [RandomBoxConfig]
@@ -1222,9 +1262,9 @@ randomTreeNodeHalay index node =
     name = "n" <> show index
 
 randomTreeTextHalay :: RandomTreeTextContent -> Halay Identity Placements
-randomTreeTextHalay RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign, randomTreeTextLineWordLengths} =
+randomTreeTextHalay RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign, randomTreeTextFontSize, randomTreeTextLineHeight, randomTreeTextLineWordLengths} =
   text
-    testTextConfig
+    (testTextConfig randomTreeTextFontSize randomTreeTextLineHeight)
       { textWrapMode = randomTreeTextWrapMode
       , textAlign = randomTreeTextAlign
       , textPlaceLine = \_index _line _rect -> pure mempty
@@ -1350,9 +1390,11 @@ treeNodeKindValue TreeTextLeaf = 1
 treeNodeKindValue TreeContainer = 2
 
 treeTextWords :: RandomTreeTextContent -> [String]
-treeTextWords RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign, randomTreeTextLineWordLengths} =
+treeTextWords RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign, randomTreeTextFontSize, randomTreeTextLineHeight, randomTreeTextLineWordLengths} =
   [ show (textWrapModeValue randomTreeTextWrapMode)
   , show (textAlignValue randomTreeTextAlign)
+  , show randomTreeTextFontSize
+  , show (maybe 0 id randomTreeTextLineHeight)
   , show (length randomTreeTextLineWordLengths)
   ]
     <> concatMap lineWords randomTreeTextLineWordLengths

@@ -108,6 +108,41 @@ negative-inner-size cases that can make the Clay oracle nonterminate;
 in practice, that means recursive random padding is only generated on
 fixed-size axes.
 
+Halay is intended to track Clay's layout model, not Clay's full UI
+framework surface. Current-scope Clay features are layout-affecting
+configuration: sizing, padding, child gaps, direction, child alignment,
+aspect ratio, text measurement/wrapping as input to layout, and clipping
+with `childOffset`. `clip.childOffset` is the current Clay mechanism for
+scroll-like child positioning; the deprecated `.scroll` config should
+not be ported.
+
+Aspect ratio is covered for the direct cases we currently rely on, but
+recursive fuzzing still exposes mismatches in Clay's deeper
+aspect/percent/grow interactions around compressed or collapsed parents.
+Do not paper over those with generator filters; the next step there is a
+more faithful port of Clay's aspect passes.
+
+Ignore Clay features that only generate render commands or manage
+retained interaction state when asking what remains for Halay. That
+includes background colors, overlay colors, corner radius, borders,
+images, custom render commands, user data, hover/click helpers,
+pointer-over APIs, and Clay-managed scroll helpers. Puri should draw
+borders/backgrounds/etc. from Halay's placed rectangles instead of
+encoding those as layout concepts.
+
+Likewise, do not port Clay's ID-attached floating element system into
+Halay just to support popups or overlays. Floating UI can be modeled as
+independent Halay layouts placed into overlay rectangles by the caller;
+those overlays do not affect parent layout and do not need Clay's
+retained ID machinery.
+
+Ignore Clay transitions for now as well. Clay transitions are a retained
+animation system keyed by element IDs: they compare old and new bounding
+boxes across frames, keep exiting elements alive, and interpolate
+positions, sizes, colors, and border widths. Halay/Puri do not rely on
+Clay-style IDs to connect rectangles to views, so animation should be a
+separate layer later if needed, not part of the layout port.
+
 If this prototype does grow a layout layer, keep three concerns separate:
 
 1. Box layout: Nic Barker's C Clay layout library is still a good source

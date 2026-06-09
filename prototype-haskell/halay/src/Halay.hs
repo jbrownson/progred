@@ -133,6 +133,7 @@ data TextNode measureM placed = TextNode
   { textNodeText :: String
   , textNodeConfig :: TextConfig measureM placed
   , textNodePreferredSize :: Size
+  , textNodeNaturalLineHeight :: Double
   , textNodeMinWidth :: Double
   , textNodeSpaceWidth :: Double
   , textNodeTokens :: [TextToken]
@@ -626,9 +627,10 @@ placeTextNode :: (Monad measureM, Monoid placed) => Point -> LayoutNode measureM
 placeTextNode _ LayoutNode {nodeText = Nothing} =
   pure mempty
 placeTextNode Point {pointX, pointY} LayoutNode {nodeText = Just textNode, nodeDimensions = Size {sizeWidth}} =
-  snd <$> foldM placeLine (pointY, mempty) (zip [0 ..] (textNodeLines textNode))
+  snd <$> foldM placeLine (pointY + lineHeightOffset, mempty) (zip [0 ..] (textNodeLines textNode))
   where
     lineHeight = textNodeLineHeight textNode
+    lineHeightOffset = (lineHeight - textNodeNaturalLineHeight textNode) / 2
     TextConfig {textPlaceLine, textAlign} = textNodeConfig textNode
     placeLine (lineY, placed) (lineIndex, TextLine {lineText, lineWidth}) = do
       next <- textPlaceLine lineIndex lineText (Rect (pointX + alignOffset lineWidth) lineY lineWidth lineHeight)
@@ -679,6 +681,7 @@ measureTextNode config string = do
       { textNodeText = string
       , textNodeConfig = config
       , textNodePreferredSize = Size (measurementWidth measurement) (lineHeight measurement)
+      , textNodeNaturalLineHeight = measurementHeight measurement
       , textNodeMinWidth = measurementMinWidth measurement
       , textNodeSpaceWidth = sizeWidth spaceSize
       , textNodeTokens = measurementTokens measurement
@@ -1110,10 +1113,7 @@ fillMissingAspectDimension ratio size@Size {sizeWidth, sizeHeight}
 
 dimensionIsMissing :: Double -> Bool
 dimensionIsMissing value =
-  abs value < numericZeroEpsilon
-
-numericZeroEpsilon :: Double
-numericZeroEpsilon = 1e-9
+  value == 0
 
 mainAlignmentOffset :: MainAlign -> Double -> Double
 mainAlignmentOffset MainStart _extra = 0

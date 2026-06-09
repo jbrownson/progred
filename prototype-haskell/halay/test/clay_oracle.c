@@ -13,7 +13,7 @@ static void handle_clay_error(Clay_ErrorData error_data) {
 static Clay_Dimensions measure_text(Clay_StringSlice text, Clay_TextElementConfig *config, void *user_data) {
     (void)user_data;
     return (Clay_Dimensions) {
-        .width = (float)text.length,
+        .width = (float)(text.length * (config->fontSize > 0 ? config->fontSize : 1)),
         .height = config->fontSize > 0 ? (float)config->fontSize : 1.0f,
     };
 }
@@ -659,8 +659,10 @@ static void add_intrinsic_leaf(float width, float height) {
 static void add_text_leaf(const char *case_name) {
     int wrap_mode_value;
     int text_align_value;
+    unsigned int font_size;
+    unsigned int line_height;
     int line_count;
-    if (scanf("%d %d %d", &wrap_mode_value, &text_align_value, &line_count) != 3) {
+    if (scanf("%d %d %u %u %d", &wrap_mode_value, &text_align_value, &font_size, &line_height, &line_count) != 5) {
         fprintf(stderr, "missing tree text payload in %s\n", case_name);
         exit(1);
     }
@@ -669,7 +671,8 @@ static void add_text_leaf(const char *case_name) {
     CLAY_TEXT(
         clay_string_from_cstring(text_buffer),
         CLAY_TEXT_CONFIG({
-            .fontSize = 1,
+            .fontSize = font_size,
+            .lineHeight = line_height,
             .wrapMode = text_wrap_mode_from_int(wrap_mode_value),
             .textAlignment = text_align_from_int(text_align_value),
         }));
@@ -860,8 +863,10 @@ static void run_text_stdin_cases(void) {
     float root_height;
     int wrap_mode_value;
     int text_align_value;
+    unsigned int font_size;
+    unsigned int line_height;
     int line_count;
-    while (scanf("%63s %f %f %d %d %d", case_name, &root_width, &root_height, &wrap_mode_value, &text_align_value, &line_count) == 6) {
+    while (scanf("%63s %f %f %d %d %u %u %d", case_name, &root_width, &root_height, &wrap_mode_value, &text_align_value, &font_size, &line_height, &line_count) == 8) {
         char text_buffer[512];
         read_text_buffer(case_name, line_count, text_buffer, sizeof(text_buffer));
         Clay_BeginLayout();
@@ -869,7 +874,8 @@ static void run_text_stdin_cases(void) {
             CLAY_TEXT(
                 clay_string_from_cstring(text_buffer),
                 CLAY_TEXT_CONFIG({
-                    .fontSize = 1,
+                    .fontSize = font_size,
+                    .lineHeight = line_height,
                     .wrapMode = text_wrap_mode_from_int(wrap_mode_value),
                     .textAlignment = text_align_from_int(text_align_value),
                 }));
