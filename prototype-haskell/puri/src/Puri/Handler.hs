@@ -65,6 +65,8 @@ onKey :: KeyHandler actionM -> Handler actionM
 onKey handler =
   mempty {keyHandlers = [handler]}
 
+-- Pointer handlers run last-registered first so the topmost-drawn widget
+-- wins hit testing; key handlers keep registration order (focus order).
 handlePointer
   :: Monad actionM
   => PointerEvent
