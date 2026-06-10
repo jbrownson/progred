@@ -7,28 +7,28 @@ import GHC.Wasm.Prim (JSString (JSString), fromJSString)
 import qualified Main
 import qualified Puri.KeyCode as KeyCode
 
-foreign export javascript "start"
+foreign export javascript "start sync"
   start :: IO ()
 
-foreign export javascript "onClick"
+foreign export javascript "onClick sync"
   onClick :: Word32 -> IO ()
 
-foreign export javascript "onKeyDown"
+foreign export javascript "onKeyDown sync"
   onKeyDown :: Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 
-foreign export javascript "onTextInput"
+foreign export javascript "onTextInput sync"
   onTextInput :: JSString -> IO ()
 
-foreign export javascript "onPointerDown"
+foreign export javascript "onPointerDown sync"
   onPointerDown :: Double -> Double -> IO ()
 
-foreign export javascript "onPointerMove"
+foreign export javascript "onPointerMove sync"
   onPointerMove :: Double -> Double -> IO ()
 
-foreign export javascript "onPointerUp"
+foreign export javascript "onPointerUp sync"
   onPointerUp :: Double -> Double -> IO ()
 
-foreign export javascript "onResize"
+foreign export javascript "onResize sync"
   onResize :: Double -> Double -> IO ()
 
 start :: IO ()
