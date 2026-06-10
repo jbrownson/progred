@@ -6,6 +6,7 @@ import Control.Exception (evaluate)
 import Control.Monad (forM_, unless)
 import Data.Functor.Identity
 import Data.List (intercalate, mapAccumL)
+import Data.Maybe (fromMaybe)
 import Halay
 import System.Directory (getTemporaryDirectory)
 import System.Environment (lookupEnv)
@@ -26,6 +27,7 @@ import Test.QuickCheck
   , maxSuccess
   , quickCheckWithResult
   , Result (..)
+  , shrinkList
   , stdArgs
   , vectorOf
   )
@@ -268,41 +270,41 @@ growMainAxis =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 20), boxGap = 10}
     [ named "a" (Size 20 10)
-    , sized (Sizing Fill (Fixed 10)) (named "b" (Size 0 10))
+    , sized (Sizing (Fill unbounded) (Fixed 10)) (named "b" (Size 0 10))
     ]
 
 growCrossAxis :: Halay Identity Placements
 growCrossAxis =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 50)}
-    [sized (Sizing (Fixed 10) Fill) (named "a" (Size 10 0))]
+    [sized (Sizing (Fixed 10) (Fill unbounded)) (named "a" (Size 10 0))]
 
 clampGrow :: Halay Identity Placements
 clampGrow =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 20)}
     [ named "a" (Size 20 10)
-    , sized (Sizing (Clamp Nothing (Just 30) Fill) (Fixed 10)) (named "b" (Size 0 10))
+    , sized (Sizing (Fill (MinMax Nothing (Just 30))) (Fixed 10)) (named "b" (Size 0 10))
     ]
 
 aspectRatioWidthDrivesHeight :: Halay Identity Placements
 aspectRatioWidthDrivesHeight =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 100)}
-    [aspectRatio 2 (sized (Sizing (Fixed 40) Fit) (named "a" (Size 0 0)))]
+    [aspectRatio 2 (sized (Sizing (Fixed 40) (Fit unbounded)) (named "a" (Size 0 0)))]
 
 aspectRatioHeightDrivesWidth :: Halay Identity Placements
 aspectRatioHeightDrivesWidth =
   box
     defaultBox {boxDirection = TopToBottom, boxSizing = Sizing (Fixed 100) (Fixed 100)}
-    [aspectRatio 2 (sized (Sizing Fit (Fixed 30)) (named "a" (Size 0 0)))]
+    [aspectRatio 2 (sized (Sizing (Fit unbounded) (Fixed 30)) (named "a" (Size 0 0)))]
 
 unequalGrowMainAxis :: Halay Identity Placements
 unequalGrowMainAxis =
   box
     defaultBox {boxDirection = TopToBottom, boxSizing = Sizing (Fixed 1) (Fixed 4)}
-    [ sized (Sizing Fit Fill) (named "a" (Size 1 1))
-    , sized (Sizing Fit Fill) (named "b" (Size 1 2))
+    [ sized (Sizing (Fit unbounded) (Fill unbounded)) (named "a" (Size 1 1))
+    , sized (Sizing (Fit unbounded) (Fill unbounded)) (named "b" (Size 1 2))
     ]
 
 nestedBoxPositionsChildren :: Halay Identity Placements
@@ -346,7 +348,7 @@ clipCrossAxisGrowsToContent =
       , boxClip = BoxClip False True (Point 0 0)
       }
     [ sized
-        (Sizing Fit Fill)
+        (Sizing (Fit unbounded) (Fill unbounded))
         ( namedLayout "a" $
             box
               defaultBox {boxClip = BoxClip False True (Point 0 0)}
@@ -365,7 +367,7 @@ clipCrossAxisUsesPrePercentInnerSize =
       , boxClip = BoxClip True True (Point 0 0)
       }
     [ sized
-        (Sizing Fill (Fixed 67))
+        (Sizing (Fill unbounded) (Fixed 67))
         ( namedLayout "a" $
             box
               defaultBox
@@ -515,17 +517,8 @@ shrinkSizeAtLeast minWidth minHeight Size {sizeWidth, sizeHeight} =
     <> [Size sizeWidth value | value <- shrinkDoubleAtLeast minHeight sizeHeight]
 
 shrinkChildren :: [RandomChild] -> [[RandomChild]]
-shrinkChildren [] = []
-shrinkChildren [_] = []
-shrinkChildren children =
-  filter (not . null) (dropOne children) <> shrinkOne children
-  where
-    dropOne (child : remaining) = remaining : [child : shrunk | shrunk <- dropOne remaining]
-    dropOne [] = []
-    shrinkOne [] = []
-    shrinkOne (child : remaining) =
-      [shrunkChild : remaining | shrunkChild <- shrinkChild child]
-        <> [child : shrunkRemaining | shrunkRemaining <- shrinkOne remaining]
+shrinkChildren =
+  filter (not . null) . shrinkList shrinkChild
 
 shrinkChild :: RandomChild -> [RandomChild]
 shrinkChild child@RandomChild {randomChildSize, randomChildSizing, randomChildAspectRatio} =
@@ -538,31 +531,28 @@ arbitraryAxisSizing :: Gen AxisSizing
 arbitraryAxisSizing = do
   sizingChoice <- chooseInt (0, 9)
   case sizingChoice of
-    0 -> pure Fit
+    0 -> pure (Fit unbounded)
     1 -> Fixed . fromIntegral <$> chooseInt (1, 80)
-    2 -> pure Fill
+    2 -> pure (Fill unbounded)
     3 -> Percent . (/ 100) . fromIntegral <$> chooseInt (1, 100)
-    4 -> do
-      maximumValue <- chooseInt (1, 80)
-      pure (Clamp Nothing (Just (fromIntegral maximumValue)) Fill)
-    5 -> do
-      minimumValue <- chooseInt (1, 40)
-      pure (Clamp (Just (fromIntegral minimumValue)) Nothing Fill)
-    6 -> do
-      minimumValue <- chooseInt (1, 40)
-      maximumValue <- chooseInt (minimumValue, 80)
-      pure (Clamp (Just (fromIntegral minimumValue)) (Just (fromIntegral maximumValue)) Fill)
-    7 -> do
-      maximumValue <- chooseInt (1, 80)
-      pure (Clamp Nothing (Just (fromIntegral maximumValue)) Fit)
-    8 -> do
-      minimumValue <- chooseInt (1, 40)
-      pure (Clamp (Just (fromIntegral minimumValue)) Nothing Fit)
-    9 -> do
-      minimumValue <- chooseInt (1, 40)
-      maximumValue <- chooseInt (minimumValue, 80)
-      pure (Clamp (Just (fromIntegral minimumValue)) (Just (fromIntegral maximumValue)) Fit)
+    4 -> Fill <$> arbitraryMaxOnly
+    5 -> Fill <$> arbitraryMinOnly
+    6 -> Fill <$> arbitraryMinMax
+    7 -> Fit <$> arbitraryMaxOnly
+    8 -> Fit <$> arbitraryMinOnly
+    9 -> Fit <$> arbitraryMinMax
     _ -> Fixed . fromIntegral <$> chooseInt (1, 80)
+  where
+    arbitraryMaxOnly = do
+      maximumValue <- chooseInt (1, 80)
+      pure (MinMax Nothing (Just (fromIntegral maximumValue)))
+    arbitraryMinOnly = do
+      minimumValue <- chooseInt (1, 40)
+      pure (MinMax (Just (fromIntegral minimumValue)) Nothing)
+    arbitraryMinMax = do
+      minimumValue <- chooseInt (1, 40)
+      maximumValue <- chooseInt (minimumValue, 80)
+      pure (MinMax (Just (fromIntegral minimumValue)) (Just (fromIntegral maximumValue)))
 
 shrinkSizing :: Sizing -> [Sizing]
 shrinkSizing Sizing {sizingWidth, sizingHeight} =
@@ -570,15 +560,20 @@ shrinkSizing Sizing {sizingWidth, sizingHeight} =
     <> [Sizing sizingWidth height | height <- shrinkAxisSizing sizingHeight]
 
 shrinkAxisSizing :: AxisSizing -> [AxisSizing]
-shrinkAxisSizing Fit = []
+shrinkAxisSizing (Fit (MinMax Nothing Nothing)) = []
+shrinkAxisSizing (Fit minMax) =
+  Fit unbounded : [Fit shrunk | shrunk <- shrinkMinMax minMax]
 shrinkAxisSizing (Fixed value) =
-  Fit : [Fixed shrunk | shrunk <- shrinkDoubleAtLeast 1 value]
-shrinkAxisSizing Fill =
-  [Fit]
+  Fit unbounded : [Fixed shrunk | shrunk <- shrinkDoubleAtLeast 1 value]
+shrinkAxisSizing (Fill minMax) =
+  Fit unbounded : Fit minMax : [Fill shrunk | shrunk <- shrinkMinMax minMax]
 shrinkAxisSizing (Percent value) =
-  Fit : [Percent shrunk | NonNegative shrunk <- shrink (NonNegative value), shrunk > 0, shrunk <= 1]
-shrinkAxisSizing (Clamp minValue maxValue sizing) =
-  sizing : [Clamp minValue maxValue shrunk | shrunk <- shrinkAxisSizing sizing]
+  Fit unbounded : [Percent shrunk | NonNegative shrunk <- shrink (NonNegative value), shrunk > 0, shrunk <= 1]
+
+shrinkMinMax :: MinMax -> [MinMax]
+shrinkMinMax (MinMax maybeMin maybeMax) =
+  [MinMax Nothing maybeMax | Just _ <- [maybeMin]]
+    <> [MinMax maybeMin Nothing | Just _ <- [maybeMax]]
 
 shrinkAspectRatio :: Maybe Double -> [Double]
 shrinkAspectRatio Nothing = []
@@ -771,29 +766,12 @@ arbitraryWordLengths = do
   vectorOf wordCount (chooseInt (1, 20))
 
 shrinkLineWordLengths :: [[Int]] -> [[[Int]]]
-shrinkLineWordLengths [] = []
-shrinkLineWordLengths lengths =
-  filter (not . null) (dropOne lengths) <> shrinkOne lengths
-  where
-    dropOne (line : remaining) = remaining : [line : shrunk | shrunk <- dropOne remaining]
-    dropOne [] = []
-    shrinkOne [] = []
-    shrinkOne (line : remaining) =
-      [shrunkLine : remaining | shrunkLine <- shrinkWordLengths line]
-        <> [line : shrunkRemaining | shrunkRemaining <- shrinkOne remaining]
+shrinkLineWordLengths =
+  filter (not . null) . shrinkList shrinkWordLengths
 
 shrinkWordLengths :: [Int] -> [[Int]]
-shrinkWordLengths [] = []
-shrinkWordLengths [_] = []
-shrinkWordLengths lengths =
-  filter (not . null) (dropOne lengths) <> shrinkOne lengths
-  where
-    dropOne (lengthValue : remaining) = remaining : [lengthValue : shrunk | shrunk <- dropOne remaining]
-    dropOne [] = []
-    shrinkOne [] = []
-    shrinkOne (lengthValue : remaining) =
-      [shrunkLength : remaining | shrunkLength <- shrinkIntAtLeast 1 lengthValue]
-        <> [lengthValue : shrunkRemaining | shrunkRemaining <- shrinkOne remaining]
+shrinkWordLengths =
+  filter (not . null) . shrinkList (shrinkIntAtLeast 1)
 
 randomTextLayoutMatchesClay :: FilePath -> RandomTextLayout -> Property
 randomTextLayoutMatchesClay oracle randomTextLayout =
@@ -839,7 +817,7 @@ randomTextOracleInput RandomTextLayout {randomTextRootWidth, randomTextRootHeigh
       , show (textWrapModeValue randomTextWrapMode)
       , show (textAlignValue randomTextAlign)
       , show randomTextFontSize
-      , show (maybe 0 id randomTextLineHeight)
+      , show (fromMaybe 0 randomTextLineHeight)
       , show (length randomTextLineWordLengths)
       ]
         <> concatMap lineWords randomTextLineWordLengths
@@ -1069,17 +1047,8 @@ arbitraryGapForMainAxis childCount direction sizing =
     _ -> pure 0
 
 shrinkTreeChildren :: [RandomTreeNode] -> [[RandomTreeNode]]
-shrinkTreeChildren [] = []
-shrinkTreeChildren [_] = []
-shrinkTreeChildren children =
-  filter (not . null) (dropOne children) <> shrinkOne children
-  where
-    dropOne (child : remaining) = remaining : [child : shrunk | shrunk <- dropOne remaining]
-    dropOne [] = []
-    shrinkOne [] = []
-    shrinkOne (child : remaining) =
-      [shrunkChild : remaining | shrunkChild <- shrinkTreeNode child]
-        <> [child : shrunkRemaining | shrunkRemaining <- shrinkOne remaining]
+shrinkTreeChildren =
+  filter (not . null) . shrinkList shrinkTreeNode
 
 shrinkTreeNode :: RandomTreeNode -> [RandomTreeNode]
 shrinkTreeNode (RandomTreeLeaf size sizing aspect) =
@@ -1391,7 +1360,7 @@ treeTextWords RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign
   [ show (textWrapModeValue randomTreeTextWrapMode)
   , show (textAlignValue randomTreeTextAlign)
   , show randomTreeTextFontSize
-  , show (maybe 0 id randomTreeTextLineHeight)
+  , show (fromMaybe 0 randomTreeTextLineHeight)
   , show (length randomTreeTextLineWordLengths)
   ]
     <> concatMap lineWords randomTreeTextLineWordLengths
@@ -1413,43 +1382,40 @@ alignValue AlignEnd = 2
 
 axisSizingValueType :: AxisSizing -> Int
 axisSizingValueType sizing =
-  case stripClamp sizing of
-    Fit -> 0
+  case sizing of
+    Fit {} -> 0
     Fixed {} -> 1
-    Fill -> 2
+    Fill {} -> 2
     Percent {} -> 3
-    Clamp {} -> 0
 
 axisSizingValue :: AxisSizing -> Double
 axisSizingValue sizing =
-  case stripClamp sizing of
+  case sizing of
     Fixed value -> value
     Percent value -> value
     _ -> 0
 
 axisSizingMin :: AxisSizing -> Double
 axisSizingMin sizing =
-  case sizing of
-    Clamp (Just value) _ _ -> value
-    Fixed value -> value
+  case sizingBounds sizing of
+    MinMax (Just value) _ -> value
     _ -> 0
 
 axisSizingMax :: AxisSizing -> Double
 axisSizingMax sizing =
-  case sizing of
-    Clamp _ (Just value) _ -> value
-    Fixed value -> value
+  case sizingBounds sizing of
+    MinMax _ (Just value) -> value
     _ -> 0
 
-fixedAxisSize :: AxisSizing -> Maybe Double
-fixedAxisSize sizing =
-  case stripClamp sizing of
-    Fixed value -> Just value
-    _ -> Nothing
+sizingBounds :: AxisSizing -> MinMax
+sizingBounds (Fit minMax) = minMax
+sizingBounds (Fill minMax) = minMax
+sizingBounds (Fixed value) = MinMax (Just value) (Just value)
+sizingBounds (Percent _) = unbounded
 
-stripClamp :: AxisSizing -> AxisSizing
-stripClamp (Clamp _ _ sizing) = stripClamp sizing
-stripClamp sizing = sizing
+fixedAxisSize :: AxisSizing -> Maybe Double
+fixedAxisSize (Fixed value) = Just value
+fixedAxisSize _ = Nothing
 
 named :: String -> Size -> Halay Identity Placements
 named name size =

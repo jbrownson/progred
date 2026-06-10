@@ -41,7 +41,7 @@ view viewport _model = do
         defaultBox
           { boxDirection = TopToBottom
           , boxPadding = Insets 12 12 12 12
-          , boxSizing = Sizing Fill Fill
+          , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
           }
         [rawDocument sampleDocument]
 
