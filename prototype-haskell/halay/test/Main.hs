@@ -52,30 +52,42 @@ instance Monoid Placements where
 
 main :: IO ()
 main = do
-  flatQuickCheckTestCount <- halayQuickCheckTests "HALAY_QUICKCHECK_TESTS" 100
-  textQuickCheckTestCount <- halayQuickCheckTests "HALAY_TEXT_QUICKCHECK_TESTS" 100
-  treeQuickCheckTestCount <- halayQuickCheckTests "HALAY_TREE_QUICKCHECK_TESTS" 20
+  flatArgs <- fuzzArgs stdArgs "HALAY_QUICKCHECK" 100
+  textArgs <- fuzzArgs stdArgs "HALAY_TEXT_QUICKCHECK" 100
+  treeArgs <- fuzzArgs treeQuickCheckArgs "HALAY_TREE_QUICKCHECK" 20
   oracle <- compileClayOracle
   clayRects <- runClayOracle oracle
   forM_ conformanceCases (assertClayCase clayRects)
-  assertQuickCheckSuccess "flat Halay/Clay conformance" =<< quickCheckWithResult stdArgs {maxSuccess = flatQuickCheckTestCount} (randomLayoutMatchesClay oracle)
-  assertQuickCheckSuccess "text Halay/Clay conformance" =<< quickCheckWithResult stdArgs {maxSuccess = textQuickCheckTestCount} (randomTextLayoutMatchesClay oracle)
-  assertQuickCheckSuccess "tree Halay/Clay conformance" =<< quickCheckWithResult treeQuickCheckArgs {maxSuccess = treeQuickCheckTestCount} (randomTreeLayoutMatchesClay oracle)
+  assertQuickCheckSuccess "flat Halay/Clay conformance" "HALAY_QUICKCHECK_REPLAY" =<< quickCheckWithResult flatArgs (randomLayoutMatchesClay oracle)
+  assertQuickCheckSuccess "text Halay/Clay conformance" "HALAY_TEXT_QUICKCHECK_REPLAY" =<< quickCheckWithResult textArgs (randomTextLayoutMatchesClay oracle)
+  assertQuickCheckSuccess "tree Halay/Clay conformance" "HALAY_TREE_QUICKCHECK_REPLAY" =<< quickCheckWithResult treeArgs (randomTreeLayoutMatchesClay oracle)
 
-assertQuickCheckSuccess :: String -> Result -> IO ()
-assertQuickCheckSuccess name result =
+assertQuickCheckSuccess :: String -> String -> Result -> IO ()
+assertQuickCheckSuccess name replayVariable result =
   case result of
     Success {} -> pure ()
+    Failure {usedSeed, usedSize} ->
+      fail
+        ( "QuickCheck "
+            <> name
+            <> " failed; rerun with "
+            <> replayVariable
+            <> "="
+            <> show (show (usedSeed, usedSize))
+        )
     _ -> fail ("QuickCheck " <> name <> " failed")
 
-halayQuickCheckTests :: String -> Int -> IO Int
-halayQuickCheckTests environmentVariable defaultValue = do
-  maybeValue <- lookupEnv environmentVariable
+-- <prefix>_TESTS sets the case count; <prefix>_REPLAY takes the
+-- "(seed, size)" printed by a failure and makes it the first case run.
+fuzzArgs :: Args -> String -> Int -> IO Args
+fuzzArgs baseArgs prefix defaultCount = do
+  maybeCount <- lookupEnv (prefix <> "_TESTS")
+  maybeReplay <- lookupEnv (prefix <> "_REPLAY")
   pure
-    ( case maybeValue >>= readMaybe of
-        Just value -> value
-        Nothing -> defaultValue
-    )
+    baseArgs
+      { maxSuccess = fromMaybe defaultCount (maybeCount >>= readMaybe)
+      , replay = maybeReplay >>= readMaybe
+      }
 
 treeQuickCheckArgs :: Args
 treeQuickCheckArgs =

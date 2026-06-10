@@ -99,6 +99,13 @@ For a larger randomized sweep against the vendored Clay oracle:
 HALAY_QUICKCHECK_TESTS=5000 HALAY_TEXT_QUICKCHECK_TESTS=5000 HALAY_TREE_QUICKCHECK_TESTS=5000 cabal --config-file=.cache/cabal/config test halay-tests
 ```
 
+A fuzz failure prints a `(seed, size)` pair; pass it back through the
+matching `HALAY_*_QUICKCHECK_REPLAY` variable to make that case the first
+one run. Deep-fuzz mismatches have shown up at roughly one in fifty
+thousand tree cases even on known-good states, so treat rare failures as
+repro material (capture the replay seed) rather than as immediate
+regressions.
+
 The oracle compiles `halay/test/clay_oracle.c`, which includes the
 vendored Clay header, and QuickCheck compares Halay placements against
 Clay placements while shrinking failures to small repros. Randomized
@@ -121,6 +128,14 @@ recursive fuzzing still exposes mismatches in Clay's deeper
 aspect/percent/grow interactions around compressed or collapsed parents.
 Do not paper over those with generator filters; the next step there is a
 more faithful port of Clay's aspect passes.
+
+Some Clay behavior that Halay mirrors comes from C memory layout rather
+than layout intent: Clay's sizing union overlays `percent` on
+`minMax.min`, so percent-sized parents clamp oddly during height
+propagation (Clay can collapse them to zero), and the aspect pass writes
+heights through that union as `minMax.max`. These puns are load-bearing
+for oracle conformance; diverging from them is a deliberate decision to
+make against the fuzzer, not a cleanup.
 
 Ignore Clay features that only generate render commands or manage
 retained interaction state when asking what remains for Halay. That
