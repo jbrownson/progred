@@ -1,7 +1,7 @@
 module Progred.MapGraph
   ( MapGraph
-  , NodeDelta
-  , MapGraphDelta
+  , NodeDelta (..)
+  , MapGraphDelta (..)
   , mapGraph
   , applyDelta
   , setEdgeDelta
@@ -9,14 +9,40 @@ module Progred.MapGraph
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import Data.Maybe (fromMaybe)
 import Data.UUID.Types (UUID)
 import Progred.Graph (Edges, Graph, Value)
 
 type MapGraph = Map UUID Edges
 
-type NodeDelta = Map UUID (Maybe Value)
+-- nodeDeltaResets drops the node's existing edges before the edge edits
+-- apply (deleting the node when no edits follow), so deltas stay closed
+-- under sequential composition: delete-then-edit is reset-with-edits.
+data NodeDelta = NodeDelta
+  { nodeDeltaResets :: Bool
+  , nodeDeltaEdges :: Map UUID (Maybe Value)
+  }
+  deriving (Eq, Show)
 
-type MapGraphDelta = Map UUID (Maybe NodeDelta)
+newtype MapGraphDelta = MapGraphDelta (Map UUID NodeDelta)
+  deriving (Eq, Show)
+
+-- applyDelta (d1 <> d2) == applyDelta d2 . applyDelta d1
+instance Semigroup NodeDelta where
+  earlier <> later
+    | nodeDeltaResets later = later
+    | otherwise =
+        NodeDelta
+          { nodeDeltaResets = nodeDeltaResets earlier
+          , nodeDeltaEdges = Map.union (nodeDeltaEdges later) (nodeDeltaEdges earlier)
+          }
+
+instance Semigroup MapGraphDelta where
+  MapGraphDelta earlier <> MapGraphDelta later =
+    MapGraphDelta (Map.unionWith (<>) earlier later)
+
+instance Monoid MapGraphDelta where
+  mempty = MapGraphDelta Map.empty
 
 mapGraph :: MapGraph -> Graph
 mapGraph nodes source =
@@ -24,25 +50,20 @@ mapGraph nodes source =
 
 setEdgeDelta :: UUID -> UUID -> Value -> MapGraphDelta
 setEdgeDelta source label value =
-  Map.singleton source (Just (Map.singleton label (Just value)))
+  MapGraphDelta (Map.singleton source (NodeDelta False (Map.singleton label (Just value))))
 
 applyDelta :: MapGraphDelta -> MapGraph -> MapGraph
-applyDelta delta graph =
+applyDelta (MapGraphDelta delta) graph =
   Map.foldlWithKey' applyNodeDelta graph delta
 
-applyNodeDelta :: MapGraph -> UUID -> Maybe NodeDelta -> MapGraph
-applyNodeDelta graph source maybeDelta =
-  case maybeDelta of
-    Nothing -> Map.delete source graph
-    Just delta -> Map.alter (applyExistingNode delta) source graph
-  where
-    applyExistingNode delta Nothing =
-      Just (applyNodeDeltaToEdges delta Map.empty)
-    applyExistingNode delta (Just edges) =
-      Just (applyNodeDeltaToEdges delta edges)
+applyNodeDelta :: MapGraph -> UUID -> NodeDelta -> MapGraph
+applyNodeDelta graph source NodeDelta {nodeDeltaResets, nodeDeltaEdges}
+  | nodeDeltaResets && Map.null nodeDeltaEdges = Map.delete source graph
+  | nodeDeltaResets = Map.insert source (applyEdgeDeltas nodeDeltaEdges Map.empty) graph
+  | otherwise = Map.alter (Just . applyEdgeDeltas nodeDeltaEdges . fromMaybe Map.empty) source graph
 
-applyNodeDeltaToEdges :: NodeDelta -> Edges -> Edges
-applyNodeDeltaToEdges delta edges =
+applyEdgeDeltas :: Map UUID (Maybe Value) -> Edges -> Edges
+applyEdgeDeltas delta edges =
   Map.foldlWithKey' applyEdgeDelta edges delta
 
 applyEdgeDelta :: Edges -> UUID -> Maybe Value -> Edges
