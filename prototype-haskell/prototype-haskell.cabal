@@ -42,7 +42,8 @@ library puri
     Puri.Viewport
     Puri.Widget
     Puri.Widgets.Button
-    Puri.Widgets.TextBox
+    Puri.Widgets.Frame
+    Puri.Widgets.LineEdit
   other-modules:
     Puri.Platform
   hs-source-dirs:   puri/src

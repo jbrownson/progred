@@ -4,6 +4,7 @@ module Puri.KeyCode
   , down
   , end
   , enter
+  , escape
   , home
   , left
   , right
@@ -14,10 +15,11 @@ module Puri.KeyCode
 
 import Data.Word (Word32)
 
-backspace, tab, enter, space, home, end, left, up, right, down, delete :: Word32
+backspace, tab, enter, escape, space, home, end, left, up, right, down, delete :: Word32
 backspace = 8
 tab = 9
 enter = 13
+escape = 27
 space = 32
 home = 36
 end = 35
