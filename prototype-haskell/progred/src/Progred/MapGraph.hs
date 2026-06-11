@@ -4,6 +4,7 @@ module Progred.MapGraph
   , MapGraphDelta
   , mapGraph
   , applyDelta
+  , setEdgeDelta
   ) where
 
 import Data.Map.Strict (Map)
@@ -20,6 +21,10 @@ type MapGraphDelta = Map UUID (Maybe NodeDelta)
 mapGraph :: MapGraph -> Graph
 mapGraph nodes source =
   Map.lookup source nodes
+
+setEdgeDelta :: UUID -> UUID -> Value -> MapGraphDelta
+setEdgeDelta source label value =
+  Map.singleton source (Just (Map.singleton label (Just value)))
 
 applyDelta :: MapGraphDelta -> MapGraph -> MapGraph
 applyDelta delta graph =

@@ -144,7 +144,7 @@
           return;
         }
 
-        if (["Tab", "Enter", " ", "Backspace", "Delete", "Home", "End", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(event.key)) {
+        if (["Tab", "Enter", "Escape", " ", "Backspace", "Delete", "Home", "End", "ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(event.key)) {
           event.preventDefault();
           inst.exports.onKeyDown(
             event.keyCode,

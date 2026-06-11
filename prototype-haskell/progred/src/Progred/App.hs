@@ -6,13 +6,14 @@ module Progred.App
   , view
   ) where
 
-import Control.Monad.Trans.State.Strict (State, runState)
+import Control.Monad.Trans.State.Strict (State, modify, runState)
 import qualified Data.Map.Strict as Map
 import Data.Word (Word32)
 import qualified Data.UUID.Types as UUID
 import Halay
 import Progred.Document
 import Progred.Graph
+import Progred.MapGraph (MapGraphDelta, applyDelta)
 import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
@@ -20,6 +21,9 @@ import Puri.Viewport
 import System.Random (mkStdGen, randoms)
 
 data Model = Model
+  { modelDocument :: Document
+  , modelFocus :: Maybe Focus
+  }
 
 type AppM = State Model
 
@@ -27,23 +31,55 @@ runAppM :: AppM a -> Model -> (a, Model)
 runAppM = runState
 
 initialModel :: Model
-initialModel = Model
+initialModel =
+  Model
+    { modelDocument = sampleDocument
+    , modelFocus = Nothing
+    }
+
+applyEdit :: MapGraphDelta -> AppM ()
+applyEdit delta =
+  modify editModel
+  where
+    editModel model =
+      model {modelDocument = editDocument (modelDocument model)}
+    editDocument document =
+      document {documentGraph = applyDelta delta (documentGraph document)}
+
+setFocus :: Maybe Focus -> AppM ()
+setFocus focus =
+  modify (\model -> model {modelFocus = focus})
 
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
-view viewport _model = do
+view viewport model = do
   Canvas.fillRect viewportRect "#fbfbfa"
-  _ <- placeHalay viewportRect sampleLayout
-  pure mempty
+  placeHalay viewportRect documentLayout
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
-    sampleLayout =
-      box
-        defaultBox
-          { boxDirection = TopToBottom
-          , boxPadding = Insets 12 12 12 12
-          , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
-          }
-        [rawDocument sampleDocument]
+    env =
+      RawEnv
+        { rawApplyEdit = applyEdit
+        , rawClearFocus = setFocus Nothing
+        }
+    cursor =
+      FocusCursor
+        { focusHere = modelFocus model
+        , installFocus = setFocus . Just
+        }
+    documentLayout =
+      decorate unfocusOnClick $
+        box
+          defaultBox
+            { boxDirection = TopToBottom
+            , boxPadding = Insets 12 12 12 12
+            , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
+            }
+          [rawDocument env cursor (modelDocument model)]
+    unfocusOnClick _rect =
+      pure $ onPointer $ \event ->
+        case event of
+          PointerDown {} -> Just (setFocus Nothing)
+          _ -> Nothing
 
 sampleDocument :: Document
 sampleDocument =

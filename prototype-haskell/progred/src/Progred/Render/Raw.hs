@@ -1,10 +1,12 @@
 module Progred.Render.Raw
-  ( rawDocument
-  , renderRawDocument
-  , renderRawGraph
+  ( Focus (..)
+  , FocusCursor (..)
+  , RawEnv (..)
+  , rawDocument
   ) where
 
 import Data.Map.Strict (toList)
+import Data.Maybe (isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Halay
@@ -13,22 +15,48 @@ import Progred.Graph
 import Progred.MapGraph
 import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
+import Puri.Handler
+import Puri.Widgets.Frame
+import Puri.Widgets.LineEdit
 
-renderRawDocument :: Canvas.Canvas renderM => Document -> Point -> renderM Double
-renderRawDocument Document {documentRoot, documentGraph} point =
-  renderRawGraph (mapGraph documentGraph) documentRoot point
+-- Focus is a selection chain through the projection tree: each branch
+-- point holds which child the chain continues into. It is never compared
+-- or looked up — descent peels it apart (a spot is focused when the
+-- remainder reaches it), and installing focus rebuilds the chain through
+-- the installers each branch wraps on the way down. One chain in the
+-- model means exactly one focus, and occurrences of a shared node are
+-- distinct because they sit under different steps.
+data Focus
+  = FocusChild Int Focus
+  | FocusText EditView
+  deriving (Show)
 
-renderRawGraph :: Canvas.Canvas renderM => Graph -> UUID -> Point -> renderM Double
-renderRawGraph graph root point = do
-  (size, ()) <- placeAt point (rawNode graph Set.empty root)
-  pure (pointY point + sizeHeight size)
+data FocusCursor actionM = FocusCursor
+  { focusHere :: Maybe Focus
+  , installFocus :: Focus -> actionM ()
+  }
 
-rawDocument :: Canvas.Canvas renderM => Document -> Halay renderM ()
-rawDocument Document {documentRoot, documentGraph} =
-  rawNode (mapGraph documentGraph) Set.empty documentRoot
+childCursor :: Int -> FocusCursor actionM -> FocusCursor actionM
+childCursor index cursor =
+  FocusCursor
+    { focusHere =
+        case focusHere cursor of
+          Just (FocusChild step rest) | step == index -> Just rest
+          _ -> Nothing
+    , installFocus = installFocus cursor . FocusChild index
+    }
 
-rawNode :: Canvas.Canvas renderM => Graph -> Set UUID -> UUID -> Halay renderM ()
-rawNode graph visited uuid =
+data RawEnv actionM = RawEnv
+  { rawApplyEdit :: MapGraphDelta -> actionM ()
+  , rawClearFocus :: actionM ()
+  }
+
+rawDocument :: (Applicative actionM, Canvas.Canvas renderM) => RawEnv actionM -> FocusCursor actionM -> Document -> Halay renderM (Handler actionM)
+rawDocument env cursor Document {documentRoot, documentGraph} =
+  rawNode env cursor (mapGraph documentGraph) Set.empty documentRoot
+
+rawNode :: (Applicative actionM, Canvas.Canvas renderM) => RawEnv actionM -> FocusCursor actionM -> Graph -> Set UUID -> UUID -> Halay renderM (Handler actionM)
+rawNode env cursor graph visited uuid =
   if Set.member uuid visited
     then rowWithGap 8 [identiconPlay uuid, textPlay "#8a5a00" "..."]
     else case graph uuid of
@@ -36,39 +64,81 @@ rawNode graph visited uuid =
       Just edges ->
         column
           [ identiconPlay uuid
-          , box rawIndentBox [rawEdges graph (Set.insert uuid visited) (toList edges)]
+          , box rawIndentBox [rawEdges env cursor graph (Set.insert uuid visited) uuid (toList edges)]
           ]
 
-rawEdges :: Canvas.Canvas renderM => Graph -> Set UUID -> [(UUID, Value)] -> Halay renderM ()
-rawEdges graph visited =
-  column . fmap rawEdge
+rawEdges :: (Applicative actionM, Canvas.Canvas renderM) => RawEnv actionM -> FocusCursor actionM -> Graph -> Set UUID -> UUID -> [(UUID, Value)] -> Halay renderM (Handler actionM)
+rawEdges env cursor graph visited source edges =
+  column (rawEdge <$> zip [0 ..] edges)
   where
-    rawEdge (label, value) =
-      rowWithGap valueGap [rawEdgeLabel label, rawValue graph visited value]
+    rawEdge (index, (label, value)) =
+      rowWithGap
+        valueGap
+        [ rawEdgeLabel label
+        , rawValue env (childCursor index cursor) (rawApplyEdit env . setEdgeDelta source label) graph visited value
+        ]
 
-rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM ()
+rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM (Handler actionM)
 rawEdgeLabel label =
   rowWithGap arrowGap [identiconPlay label, arrowPlay]
 
-rawValue :: Canvas.Canvas renderM => Graph -> Set UUID -> Value -> Halay renderM ()
-rawValue graph visited value =
+rawValue :: (Applicative actionM, Canvas.Canvas renderM) => RawEnv actionM -> FocusCursor actionM -> (Value -> actionM ()) -> Graph -> Set UUID -> Value -> Halay renderM (Handler actionM)
+rawValue env cursor setValue graph visited value =
   case value of
-    VRef uuid -> rawNode graph visited uuid
-    VString string -> textPlay "#20242a" (show string)
-    VInt integer -> textPlay "#365f9f" (show integer)
-    VFloat double -> textPlay "#365f9f" (show double)
-    VBool bool -> textPlay "#7a3fa0" (if bool then "true" else "false")
-    VList values -> rawList graph visited values
+    VRef uuid -> rawNode env cursor graph visited uuid
+    VString string -> stringBox env cursor (setValue . VString) string
+    VInt integer -> textPlay numberColor (show integer)
+    VFloat double -> textPlay numberColor (show double)
+    VBool bool -> textPlay boolColor (if bool then "true" else "false")
+    VList values -> rawList env cursor setValue graph visited values
 
-rawList :: Canvas.Canvas renderM => Graph -> Set UUID -> [Value] -> Halay renderM ()
-rawList _ _ [] =
-  textPlay "#68707c" "[]"
-rawList graph visited values =
+rawList :: (Applicative actionM, Canvas.Canvas renderM) => RawEnv actionM -> FocusCursor actionM -> (Value -> actionM ()) -> Graph -> Set UUID -> [Value] -> Halay renderM (Handler actionM)
+rawList _ _ _ _ _ [] =
+  textPlay listColor "[]"
+rawList env cursor setValue graph visited values =
   column
-    [ textPlay "#68707c" "["
-    , box rawIndentBox [column (rawValue graph visited <$> values)]
-    , textPlay "#68707c" "]"
+    [ textPlay listColor "["
+    , box rawIndentBox [column (rawElement <$> zip [0 ..] values)]
+    , textPlay listColor "]"
     ]
+  where
+    rawElement (index, element) =
+      rawValue env (childCursor index cursor) (setValue . setElementAt index) graph visited element
+    setElementAt index element =
+      VList (take index values <> [element] <> drop (index + 1) values)
+
+stringBox :: (Applicative actionM, Canvas.Canvas renderM) => RawEnv actionM -> FocusCursor actionM -> (String -> actionM ()) -> String -> Halay renderM (Handler actionM)
+stringBox env cursor setString string =
+  framed (stringFrame (isJust view)) (lineEdit stringLineStyle string view change)
+  where
+    view =
+      case focusHere cursor of
+        Just (FocusText editView) -> Just editView
+        _ -> Nothing
+    change newString newView =
+      setString newString *> maybe (rawClearFocus env) (installFocus cursor . FocusText) newView
+
+stringFrame :: Bool -> Frame
+stringFrame focused =
+  Frame
+    { framePadding = Insets 0 0 0 0
+    , frameInsets = Insets 0 0 boxBottomGap 0
+    , frameColor = if focused then focusColor else boxBorderColor
+    }
+
+stringLineStyle :: LineStyle
+stringLineStyle =
+  LineStyle
+    { lineHeight = rowHeight
+    , lineBaseline = textBaseline
+    , lineAscent = textAscent
+    , lineDescent = textDescent
+    , linePadding = boxPad
+    , lineMinWidth = minBoxTextWidth
+    , lineTextColor = stringColor
+    , lineCaretColor = focusColor
+    , lineSelectionColor = selectionColor
+    }
 
 rawIndentBox :: BoxConfig
 rawIndentBox =
@@ -77,39 +147,39 @@ rawIndentBox =
     , boxPadding = Insets 0 0 0 indent
     }
 
-identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM ()
+identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM (Handler actionM)
 identiconPlay uuid =
-  leaf (pure (Size iconSize lineHeight)) draw
+  leaf (pure (Size iconSize rowHeight)) draw
   where
     draw Rect {x, y} =
-      identicon uuid (Rect x y iconSize iconSize)
+      mempty <$ identicon uuid (Rect x y iconSize iconSize)
 
-textPlay :: Canvas.Canvas renderM => String -> String -> Halay renderM ()
+textPlay :: Canvas.Canvas renderM => String -> String -> Halay renderM (Handler actionM)
 textPlay color string =
   text config string
   where
     config =
       TextConfig
-        { textLineHeight = Just lineHeight
+        { textLineHeight = Just rowHeight
         , textWrapMode = TextWrapWords
         , textAlign = TextAlignStart
-        , textMeasure = \line -> Size <$> Canvas.measureText line <*> pure lineHeight
+        , textMeasure = \line -> Size <$> Canvas.measureText line <*> pure rowHeight
         , textPlaceLine = \_lineIndex line Rect {x, y} ->
-            Canvas.fillText (Point x (y + textBaseline)) color line
+            mempty <$ Canvas.fillText (Point x (y + textBaseline)) color line
         }
 
-arrowPlay :: Canvas.Canvas renderM => Halay renderM ()
+arrowPlay :: Canvas.Canvas renderM => Halay renderM (Handler actionM)
 arrowPlay =
-  leaf (pure (Size arrowWidth lineHeight)) draw
+  leaf (pure (Size arrowWidth rowHeight)) draw
   where
     draw Rect {x, y} =
-      drawArrow (Point x (y + iconSize / 2))
+      mempty <$ drawArrow (Point x (y + iconSize / 2))
 
 iconSize :: Double
 iconSize = 20
 
-lineHeight :: Double
-lineHeight = 26
+rowHeight :: Double
+rowHeight = 26
 
 textBaseline :: Double
 textBaseline = 16
@@ -126,6 +196,42 @@ drawArrow Point {pointX, pointY} = do
 
 arrowColor :: String
 arrowColor = "#68707c"
+
+stringColor :: String
+stringColor = "#20242a"
+
+numberColor :: String
+numberColor = "#365f9f"
+
+boolColor :: String
+boolColor = "#7a3fa0"
+
+listColor :: String
+listColor = "#68707c"
+
+focusColor :: String
+focusColor = "#0a84ff"
+
+boxBorderColor :: String
+boxBorderColor = "#c8ccd2"
+
+boxPad :: Double
+boxPad = 5
+
+boxBottomGap :: Double
+boxBottomGap = 4
+
+textAscent :: Double
+textAscent = 12
+
+textDescent :: Double
+textDescent = 2
+
+selectionColor :: String
+selectionColor = "#cfe3ff"
+
+minBoxTextWidth :: Double
+minBoxTextWidth = 6
 
 arrowStemWidth :: Double
 arrowStemWidth = 10
