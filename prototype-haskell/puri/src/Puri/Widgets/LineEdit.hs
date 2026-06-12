@@ -22,7 +22,7 @@ data EditView = EditView
   , editSelectionOffset :: Int
   , editDragging :: Bool
   }
-  deriving (Show)
+  deriving (Eq, Show)
 
 data LineStyle = LineStyle
   { lineHeight :: Double

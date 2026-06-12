@@ -4,66 +4,111 @@ module Main
 
 import qualified Data.Map.Strict as Map
 import qualified Data.UUID.Types as UUID
+import Progred.Document
+import Progred.Editor
 import Progred.Graph
-import Progred.MapGraph
-import Progred.Render.Raw
+import Progred.MapGraph (MapGraph)
 import Puri.Widgets.LineEdit (EditView (..))
 import Test.QuickCheck
 
 main :: IO ()
 main = do
-  result <- quickCheckWithResult stdArgs {maxSuccess = 1000} propTransportTracksValue
-  case result of
-    Success {} -> pure ()
-    _ -> fail "focus transport law failed"
-
--- Transport must keep the chain on the same value: write a sentinel at
--- the chain's target, apply the delta, and the transported chain must
--- still address the sentinel (or be dropped).
-propTransportTracksValue :: Property
-propTransportTracksValue =
-  forAll genCase check
+  run "setEdge" (propToolTracksValue genSetEdge)
+  run "deleteEdge" (propToolTracksValue genDeleteEdge)
+  run "editString" propEditStringWritesAndFocuses
   where
-    check (graph, focus, delta) =
-      case writeAt graph rootId focus sentinel of
-        Nothing -> counterexample "generated chain did not resolve" False
-        Just instrumented ->
-          let transported = transportFocus instrumented rootId delta focus
-              after = applyDelta delta instrumented
-           in case transported of
-                Nothing -> property True
-                Just focus' ->
-                  counterexample
-                    ("focus:      " <> show focus <> "\ntransported: " <> show focus' <> "\nresolved:   " <> show (readAt after rootId focus'))
-                    (readAt after rootId focus' == Just sentinel)
+    run name prop = do
+      result <- quickCheckWithResult stdArgs {maxSuccess = 1000} prop
+      case result of
+        Success {} -> pure ()
+        _ -> fail (name <> ": law failed")
+
+-- Every tool must keep focus on the same value: write a sentinel at the
+-- focused path's target, apply the tool, and surviving focus must still
+-- address the sentinel (or have been dropped).
+propToolTracksValue :: (MapGraph -> Gen (Editor -> Editor)) -> Property
+propToolTracksValue genTool =
+  forAllBlind genCase check
+  where
+    genCase = do
+      graph <- genGraph
+      path <- genPath graph
+      tool <- genTool graph
+      pure (graph, path, tool)
+    check (graph, path, tool) =
+      counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
+        case writeAt graph rootId path sentinel of
+          Nothing -> counterexample "generated path did not resolve" False
+          Just instrumented ->
+            let edited = tool Editor {editorDocument = Document rootId instrumented, editorFocus = Just (Focus path restingView)}
+             in case editorFocus edited of
+                  Nothing -> property True
+                  Just (Focus path' _) ->
+                    counterexample
+                      ("survived: " <> show path')
+                      (readAt (documentGraph (editorDocument edited)) rootId path' == Just sentinel)
+
+-- editString must write the string at the path and leave focus exactly
+-- as the widget asked.
+propEditStringWritesAndFocuses :: Property
+propEditStringWritesAndFocuses =
+  forAllBlind genCase check
+  where
+    genCase = do
+      graph <- genGraph
+      path <- genPath graph
+      string <- elements ["x", "yz", "hello"]
+      view <- genView
+      pure (graph, path, string, view)
+    check (graph, path, string, view) =
+      counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
+        let edited = editString path string view Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingView)}
+         in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
+              .&&. (editorFocus edited === (Focus path <$> view))
+    genView =
+      oneof
+        [ pure Nothing
+        , Just <$> (EditView <$> chooseInt (0, 8) <*> chooseInt (-4, 4) <*> arbitrary)
+        ]
 
 sentinel :: Value
 sentinel = VString "##sentinel##"
 
--- Independent resolver (separate from transportFocus) so the property
--- checks two implementations against each other.
-readAt :: MapGraph -> UUID -> Focus -> Maybe Value
-readAt graph node focus =
-  case focus of
-    FocusText _ -> Nothing
-    FocusEdge label rest -> do
+restingView :: EditView
+restingView = EditView 0 0 False
+
+genSetEdge :: MapGraph -> Gen (Editor -> Editor)
+genSetEdge _graph =
+  setEdge <$> elements nodePool <*> elements labelPool <*> genValue
+
+genDeleteEdge :: MapGraph -> Gen (Editor -> Editor)
+genDeleteEdge _graph =
+  deleteEdge <$> elements nodePool <*> elements labelPool
+
+-- Independent resolver (separate from the tools' own path walk) so the
+-- properties check two implementations against each other.
+readAt :: MapGraph -> UUID -> [UUID] -> Maybe Value
+readAt graph node path =
+  case path of
+    [] -> Nothing
+    label : rest -> do
       edges <- Map.lookup node graph
       value <- Map.lookup label edges
-      case (value, rest) of
-        (_, FocusText _) -> Just value
-        (VRef target, _) -> readAt graph target rest
+      case (rest, value) of
+        ([], _) -> Just value
+        (_, VRef target) -> readAt graph target rest
         _ -> Nothing
 
-writeAt :: MapGraph -> UUID -> Focus -> Value -> Maybe MapGraph
-writeAt graph node focus newValue =
-  case focus of
-    FocusText _ -> Nothing
-    FocusEdge label rest -> do
+writeAt :: MapGraph -> UUID -> [UUID] -> Value -> Maybe MapGraph
+writeAt graph node path newValue =
+  case path of
+    [] -> Nothing
+    label : rest -> do
       edges <- Map.lookup node graph
       value <- Map.lookup label edges
-      case (value, rest) of
-        (VString _, FocusText _) -> Just (Map.insert node (Map.insert label newValue edges) graph)
-        (VRef target, _) -> writeAt graph target rest newValue
+      case (rest, value) of
+        ([], VString _) -> Just (Map.insert node (Map.insert label newValue edges) graph)
+        (_, VRef target) -> writeAt graph target rest newValue
         _ -> Nothing
 
 nodePool :: [UUID]
@@ -79,13 +124,6 @@ uuidsFrom :: Int -> Int -> [UUID]
 uuidsFrom start count =
   [UUID.fromWords (fromIntegral seed) 0 0 1 | seed <- [start .. start + count - 1]]
 
-genCase :: Gen (MapGraph, Focus, MapGraphDelta)
-genCase = do
-  graph <- genGraph
-  focus <- genFocus graph
-  delta <- genDelta graph
-  pure (graph, focus, delta)
-
 genGraph :: Gen MapGraph
 genGraph = do
   nodes <- sublistOf nodePool `suchThat` elem rootId
@@ -96,7 +134,7 @@ genGraph = do
       edges <- traverse genEdge labels
       anchor <- genEdge (head labelPool)
       -- fromList is right-biased; the anchor must win so every node keeps
-      -- a string edge and the focus walk always terminates.
+      -- a string edge and the path walk always terminates.
       pure (node, Map.fromList (edges <> [forceString anchor]))
     genEdge label = (,) label <$> genValue
     forceString (label, _) = (label, VString "anchor")
@@ -110,10 +148,10 @@ genValue =
     , (2, VRef <$> elements nodePool)
     ]
 
--- Random walk mirroring the projection's structure, bounded against
--- cycles, retried until it ends at a string.
-genFocus :: MapGraph -> Gen Focus
-genFocus graph =
+-- Random walk to a string spot, bounded against cycles, retried until
+-- it lands.
+genPath :: MapGraph -> Gen [UUID]
+genPath graph =
   walkNode rootId (8 :: Int) `suchThatMap` id
   where
     walkNode node fuel =
@@ -121,24 +159,7 @@ genFocus graph =
         Nothing -> pure Nothing
         Just edges -> do
           (label, value) <- elements (Map.toList edges)
-          fmap (FocusEdge label) <$> walkValue value fuel
-    walkValue value fuel =
-      case value of
-        VString _ -> pure (Just (FocusText (EditView 0 0 False)))
-        VRef target | fuel > 0 -> walkNode target (fuel - 1)
-        _ -> pure Nothing
-
-genDelta :: MapGraph -> Gen MapGraphDelta
-genDelta graph = do
-  node <- elements (Map.keys graph)
-  nodeDelta <-
-    oneof
-      [ pure (NodeDelta True Map.empty)
-      , edgeDelta
-      ]
-  pure (MapGraphDelta (Map.singleton node nodeDelta))
-  where
-    edgeDelta = do
-      label <- elements labelPool
-      change <- oneof [pure Nothing, Just <$> genValue]
-      pure (NodeDelta False (Map.singleton label change))
+          case value of
+            VString _ -> pure (Just [label])
+            VRef target | fuel > 0 -> fmap (label :) <$> walkNode target (fuel - 1)
+            _ -> pure Nothing

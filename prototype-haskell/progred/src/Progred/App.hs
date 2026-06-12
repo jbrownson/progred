@@ -1,6 +1,6 @@
 module Progred.App
   ( AppM
-  , Model (..)
+  , Model
   , initialModel
   , runAppM
   , view
@@ -13,18 +13,17 @@ import qualified Data.UUID.Types as UUID
 import Halay
 import Progred.Builtins
 import Progred.Document
+import Progred.Editor
 import Progred.Graph
-import Progred.MapGraph (MapGraphDelta, applyDelta)
+import Progred.Projection
+import Progred.Render.List
 import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import Puri.Viewport
 import System.Random (mkStdGen, randoms)
 
-data Model = Model
-  { modelDocument :: Document
-  , modelFocus :: Maybe Focus
-  }
+type Model = Editor
 
 type AppM = State Model
 
@@ -33,27 +32,10 @@ runAppM = runState
 
 initialModel :: Model
 initialModel =
-  Model
-    { modelDocument = sampleDocument
-    , modelFocus = Nothing
+  Editor
+    { editorDocument = sampleDocument
+    , editorFocus = Nothing
     }
-
-applyEdit :: MapGraphDelta -> AppM ()
-applyEdit delta =
-  modify editModel
-  where
-    editModel model =
-      model
-        { modelDocument = document {documentGraph = applyDelta delta graph}
-        , modelFocus = transportFocus graph (documentRoot document) delta =<< modelFocus model
-        }
-      where
-        document = modelDocument model
-        graph = documentGraph document
-
-setFocus :: Maybe Focus -> AppM ()
-setFocus focus =
-  modify (\model -> model {modelFocus = focus})
 
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
@@ -61,16 +43,6 @@ view viewport model = do
   placeHalay viewportRect documentLayout
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
-    env =
-      RawEnv
-        { rawApplyEdit = applyEdit
-        , rawClearFocus = setFocus Nothing
-        }
-    cursor =
-      FocusCursor
-        { focusHere = modelFocus model
-        , installFocus = setFocus . Just
-        }
     documentLayout =
       decorate unfocusOnClick $
         box
@@ -79,11 +51,11 @@ view viewport model = do
             , boxPadding = Insets 12 12 12 12
             , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
             }
-          [rawDocument env cursor (modelDocument model)]
+          [projectDocument [listLayer] rawLayer (editorDocument model) modify (editorFocus model)]
     unfocusOnClick _rect =
       pure $ onPointer $ \event ->
         case event of
-          PointerDown {} -> Just (setFocus Nothing)
+          PointerDown {} -> Just (modify (setFocus Nothing))
           _ -> Nothing
 
 sampleDocument :: Document

@@ -80,8 +80,11 @@ library progred
     Progred.App
     Progred.Builtins
     Progred.Document
+    Progred.Editor
     Progred.Graph
     Progred.MapGraph
+    Progred.Projection
+    Progred.Render.List
     Progred.Render.Raw
     Progred.Widgets.Identicon
   hs-source-dirs:   progred/src

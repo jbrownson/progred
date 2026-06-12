@@ -2,8 +2,6 @@ module Progred.Graph
   ( UUID
   , Value (..)
   , Edges
-  , Node
-  , Graph
   ) where
 
 import Data.Map.Strict (Map)
@@ -18,7 +16,3 @@ data Value
   deriving (Eq, Show)
 
 type Edges = Map UUID Value
-
-type Node = Edges
-
-type Graph = UUID -> Maybe Node
