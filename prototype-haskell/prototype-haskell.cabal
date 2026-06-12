@@ -60,11 +60,25 @@ library puri
   else
     hs-source-dirs: puri/platform/stub
 
+test-suite progred-tests
+  import:           warnings
+  type:             exitcode-stdio-1.0
+  main-is:          Main.hs
+  hs-source-dirs:   progred/test
+  default-language: GHC2021
+  build-depends:
+    , QuickCheck >= 2.14 && < 2.16
+    , base >= 4.18 && < 4.23
+    , containers >= 0.6 && < 0.8
+    , prototype-haskell:progred
+    , prototype-haskell:puri
+    , uuid-types >= 1.0 && < 1.1
+
 library progred
   import:           warnings
   exposed-modules:
     Progred.App
-    Progred.BuiltinLabels
+    Progred.Builtins
     Progred.Document
     Progred.Graph
     Progred.MapGraph

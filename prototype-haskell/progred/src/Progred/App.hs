@@ -11,6 +11,7 @@ import qualified Data.Map.Strict as Map
 import Data.Word (Word32)
 import qualified Data.UUID.Types as UUID
 import Halay
+import Progred.Builtins
 import Progred.Document
 import Progred.Graph
 import Progred.MapGraph (MapGraphDelta, applyDelta)
@@ -42,9 +43,13 @@ applyEdit delta =
   modify editModel
   where
     editModel model =
-      model {modelDocument = editDocument (modelDocument model)}
-    editDocument document =
-      document {documentGraph = applyDelta delta (documentGraph document)}
+      model
+        { modelDocument = document {documentGraph = applyDelta delta graph}
+        , modelFocus = transportFocus graph (documentRoot document) delta =<< modelFocus model
+        }
+      where
+        document = modelDocument model
+        graph = documentGraph document
 
 setFocus :: Maybe Focus -> AppM ()
 setFocus focus =
@@ -89,25 +94,29 @@ sampleDocument =
         Map.fromList
           [ ( uuid 0
             , node
-                [ (uuid 3, VString "raw graph")
+                [ (nameLabel, VString "raw graph")
                 , (uuid 4, VInt 42)
                 , (uuid 5, VBool True)
                 , (uuid 6, ref 1)
-                , (uuid 7, VList [VString "alpha", VFloat 3.14, ref 2])
+                , (uuid 7, ref 11)
                 ]
             )
           , ( uuid 1
             , node
-                [ (uuid 3, VString "child")
+                [ (nameLabel, VString "child")
                 , (uuid 8, ref 0)
                 ]
             )
           , ( uuid 2
             , node
-                [ (uuid 3, VString "loop")
+                [ (nameLabel, VString "loop")
                 , (uuid 8, ref 2)
                 ]
             )
+          , (uuid 11, cons (VString "alpha") (ref 12))
+          , (uuid 12, cons (VFloat 3.14) (ref 13))
+          , (uuid 13, cons (ref 2) (VRef nilNode))
+          , (nilNode, node [(nameLabel, VString "nil")])
           ]
     }
   where
@@ -115,6 +124,8 @@ sampleDocument =
     uuid index = uuids !! index
     uuids = seededUUIDs 20260607
     node = Map.fromList
+    cons element rest =
+      node [(headLabel, element), (tailLabel, rest)]
 
 seededUUIDs :: Int -> [UUID]
 seededUUIDs seed = wordsToUUIDs (randoms (mkStdGen seed))

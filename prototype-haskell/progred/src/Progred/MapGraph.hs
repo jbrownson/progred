@@ -1,9 +1,10 @@
 module Progred.MapGraph
   ( MapGraph
-  , NodeDelta (..)
   , MapGraphDelta (..)
+  , NodeDelta (..)
   , mapGraph
   , applyDelta
+  , deleteEdgeDelta
   , setEdgeDelta
   ) where
 
@@ -34,7 +35,7 @@ instance Semigroup NodeDelta where
     | otherwise =
         NodeDelta
           { nodeDeltaResets = nodeDeltaResets earlier
-          , nodeDeltaEdges = Map.union (nodeDeltaEdges later) (nodeDeltaEdges earlier)
+          , nodeDeltaEdges = Map.unionWith (\_ late -> late) (nodeDeltaEdges earlier) (nodeDeltaEdges later)
           }
 
 instance Semigroup MapGraphDelta where
@@ -50,7 +51,15 @@ mapGraph nodes source =
 
 setEdgeDelta :: UUID -> UUID -> Value -> MapGraphDelta
 setEdgeDelta source label value =
-  MapGraphDelta (Map.singleton source (NodeDelta False (Map.singleton label (Just value))))
+  edgeDelta source label (Just value)
+
+deleteEdgeDelta :: UUID -> UUID -> MapGraphDelta
+deleteEdgeDelta source label =
+  edgeDelta source label Nothing
+
+edgeDelta :: UUID -> UUID -> Maybe Value -> MapGraphDelta
+edgeDelta source label slot =
+  MapGraphDelta (Map.singleton source (NodeDelta False (Map.singleton label slot)))
 
 applyDelta :: MapGraphDelta -> MapGraph -> MapGraph
 applyDelta (MapGraphDelta delta) graph =
@@ -67,7 +76,5 @@ applyEdgeDeltas delta edges =
   Map.foldlWithKey' applyEdgeDelta edges delta
 
 applyEdgeDelta :: Edges -> UUID -> Maybe Value -> Edges
-applyEdgeDelta edges label maybeTarget =
-  case maybeTarget of
-    Nothing -> Map.delete label edges
-    Just target -> Map.insert label target edges
+applyEdgeDelta edges label slot =
+  Map.alter (const slot) label edges

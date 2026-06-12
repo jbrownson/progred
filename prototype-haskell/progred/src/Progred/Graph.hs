@@ -15,7 +15,6 @@ data Value
   | VString String
   | VInt Integer
   | VFloat Double
-  | VList [Value]
   deriving (Eq, Show)
 
 type Edges = Map UUID Value
