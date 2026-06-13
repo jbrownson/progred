@@ -16,9 +16,9 @@ import Puri.Handler
 -- Projects cons chains as bracketed lists. Declines anything that isn't
 -- a well-formed chain (cells with exactly head and tail, ending at nil,
 -- acyclic) so the fallback keeps every malformed detail visible.
-listProjection :: Canvas.Canvas renderM => Projection actionM renderM
+listProjection :: Canvas.Canvas renderM => PartialProjection actionM renderM
 listProjection =
-  Projection projectList
+  PartialProjection projectList
 
 projectList :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
 projectList env cursor =

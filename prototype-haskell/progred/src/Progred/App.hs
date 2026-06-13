@@ -52,8 +52,8 @@ view viewport model = do
             , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
             }
           [projectDocument (listProjection `over` rawProjection) (editorDocument model) modify (editorFocus model)]
-    unfocusOnClick _rect =
-      pure $ onPointer $ \event ->
+    unfocusOnClick =
+      const $ pure $ onPointer $ \event ->
         case event of
           PointerDown {} -> Just (modify (setFocus Nothing))
           _ -> Nothing

@@ -1,8 +1,8 @@
 module Progred.Projection
   ( Cursor (..)
   , Env (..)
-  , Projection (..)
-  , TotalProjection
+  , PartialProjection (..)
+  , Projection
   , over
   , projectDocument
   , stepCursor
@@ -16,26 +16,27 @@ import Progred.Editor
 import Progred.Graph
 import Puri.Handler
 
--- A projection may decline a spot; composition takes the first that
--- accepts. Children recurse through envProject, so every child is
--- offered the whole composition again. A complete composition needs a
--- total projection at the bottom, which only `over` can provide.
-newtype Projection actionM renderM = Projection
-  { project :: Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
+-- A Projection maps a spot to a layout and always succeeds. A
+-- PartialProjection may decline; its Monoid composes by first
+-- acceptance, and `over` lays one across a Projection to fill the
+-- declined spots. Children recurse through envProject, so every child
+-- is offered the whole composition again.
+type Projection actionM renderM = Env actionM renderM -> Cursor -> Halay renderM (Handler actionM)
+
+newtype PartialProjection actionM renderM = PartialProjection
+  { tryProject :: Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
   }
 
-type TotalProjection actionM renderM = Env actionM renderM -> Cursor -> Halay renderM (Handler actionM)
-
-instance Semigroup (Projection actionM renderM) where
+instance Semigroup (PartialProjection actionM renderM) where
   earlier <> later =
-    Projection (\env cursor -> project earlier env cursor <|> project later env cursor)
+    PartialProjection (\env cursor -> tryProject earlier env cursor <|> tryProject later env cursor)
 
-instance Monoid (Projection actionM renderM) where
-  mempty = Projection (\_ _ -> Nothing)
+instance Monoid (PartialProjection actionM renderM) where
+  mempty = PartialProjection (\_ _ -> Nothing)
 
-over :: Projection actionM renderM -> TotalProjection actionM renderM -> TotalProjection actionM renderM
-over projection total env cursor =
-  fromMaybe (total env cursor) (project projection env cursor)
+over :: PartialProjection actionM renderM -> Projection actionM renderM -> Projection actionM renderM
+over partial total env cursor =
+  fromMaybe (total env cursor) (tryProject partial env cursor)
 
 data Env actionM renderM = Env
   { envDocument :: Document
@@ -52,7 +53,7 @@ data Cursor = Cursor
   }
 
 projectDocument
-  :: TotalProjection actionM renderM
+  :: Projection actionM renderM
   -> Document
   -> ((Editor -> Editor) -> actionM ())
   -> Maybe Focus

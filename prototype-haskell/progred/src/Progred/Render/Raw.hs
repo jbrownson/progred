@@ -18,7 +18,7 @@ import Puri.Widgets.LineEdit
 
 -- The total projection at the bottom of every composition: assumes
 -- nothing, renders whatever the spot holds, placeholders included.
-rawProjection :: Canvas.Canvas renderM => TotalProjection actionM renderM
+rawProjection :: Canvas.Canvas renderM => Projection actionM renderM
 rawProjection env cursor =
   case walkPath (envDocument env) (cursorPath cursor) of
     Nothing -> textPlay missingColor "<missing>"
