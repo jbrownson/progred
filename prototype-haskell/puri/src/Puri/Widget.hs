@@ -1,24 +1,20 @@
 module Puri.Widget
-  ( Widget
-  , WidgetActions (..)
+  ( Widget (..)
   , WidgetFocus (..)
+  , renderWidget
   , widgetIsFocused
   ) where
 
 import Puri.Handler
 import Puri.Geometry
 
-type Widget state actionM renderM =
-  state
-    -> Rect
-    -> WidgetFocus
-    -> WidgetActions state actionM
-    -> renderM (Handler actionM)
-
-data WidgetActions state actionM = WidgetActions
-  { widgetFocusSelf :: actionM ()
-  , widgetSetState :: state -> actionM ()
+newtype Widget props actionM renderM = Widget
+  { runWidget :: props -> Rect -> renderM (Handler actionM)
   }
+
+renderWidget :: Widget props actionM renderM -> props -> Rect -> renderM (Handler actionM)
+renderWidget =
+  runWidget
 
 data WidgetFocus
   = WidgetFocused

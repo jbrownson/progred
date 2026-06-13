@@ -1,17 +1,20 @@
 module Puri.Widgets.LineEdit
-  ( LineEditState (..)
+  ( LineEditProps (..)
+  , LineEditState (..)
   , LineStyle (..)
   , lineEdit
+  , lineEditSize
   ) where
 
 import Control.Monad (when)
 import Data.List (minimumBy)
 import Data.Maybe (fromMaybe, isJust)
 import Data.Ord (comparing)
-import Halay
 import qualified Puri.Canvas as Canvas
+import Puri.Geometry
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
+import Puri.Widget
 
 -- Caret and selection of a line edit, as absolute indices into the
 -- text. The text itself stays with the caller; the caret is the active
@@ -37,27 +40,30 @@ data LineStyle = LineStyle
   , lineSelectionColor :: String
   }
 
+data LineEditProps actionM = LineEditProps
+  { lineEditText :: String
+  , lineEditState :: Maybe LineEditState
+  , lineEditChange :: String -> Maybe LineEditState -> actionM ()
+  }
+
 -- The change callback reports the widget's complete desired state: the
 -- text and the state (Nothing to defocus). The caller owns where each
 -- part lives.
-lineEdit
-  :: Canvas.Canvas renderM
-  => LineStyle
-  -> String
-  -> Maybe LineEditState
-  -> (String -> Maybe LineEditState -> actionM ())
-  -> Halay renderM renderM (Handler actionM)
-lineEdit style string maybeState change =
-  leaf measure place
-  where
-    state = fromMaybe (collapsed 0) maybeState
-    measure = do
-      textWidth <- Canvas.measureText string
-      pure (Size (max (lineMinWidth style) textWidth + 2 * linePadding style) (lineHeight style))
-    place rect = do
-      caretPositions <- measureCaretPositions string
-      drawLine style (isJust maybeState) string state rect caretPositions
-      pure (editHandler style string state (isJust maybeState) change rect caretPositions)
+lineEdit :: Canvas.Canvas renderM => LineStyle -> Widget (LineEditProps actionM) actionM renderM
+lineEdit style =
+  Widget $ \props rect -> do
+    let string = lineEditText props
+    let maybeState = lineEditState props
+    let state = fromMaybe (collapsed 0) maybeState
+    let focused = isJust maybeState
+    caretPositions <- measureCaretPositions string
+    drawLine style focused string state rect caretPositions
+    pure (editHandler style string state focused (lineEditChange props) rect caretPositions)
+
+lineEditSize :: Canvas.Canvas measureM => LineStyle -> String -> measureM Size
+lineEditSize style string = do
+  textWidth <- Canvas.measureText string
+  pure (Size (max (lineMinWidth style) textWidth + 2 * linePadding style) (lineHeight style))
 
 editHandler
   :: LineStyle

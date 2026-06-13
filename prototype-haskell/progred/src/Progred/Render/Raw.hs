@@ -12,9 +12,10 @@ import Progred.Graph
 import Progred.Projection
 import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
+import Puri.Halay (lineEdit)
 import Puri.Handler
 import Puri.Widgets.Frame
-import Puri.Widgets.LineEdit
+import Puri.Widgets.LineEdit (LineStyle (..))
 
 -- The total projection at the bottom of every composition: assumes
 -- nothing, renders whatever the spot holds, placeholders included.

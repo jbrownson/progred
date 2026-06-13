@@ -49,9 +49,9 @@ data Handler actionM = Handler
   , keyHandler :: KeyHandler actionM
   }
 
--- Composition tries the later-combined handler first. Halay combines
--- own before children, so the deepest (topmost-drawn) handler wins both
--- hit testing and key delivery; unclaimed events fall outward.
+-- Composition tries the later-combined handler first. Containers can combine
+-- their own handler before child handlers so the deepest/topmost handler wins;
+-- unclaimed events fall outward.
 instance Semigroup (Handler actionM) where
   earlier <> later =
     Handler

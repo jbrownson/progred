@@ -52,7 +52,6 @@ library puri
     Puri.Viewport
     Puri.Widget
     Puri.Widgets.Button
-    Puri.Widgets.Frame
     Puri.Widgets.LineEdit
   other-modules:
     Puri.Platform
@@ -60,7 +59,6 @@ library puri
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
-    , prototype-haskell:halay
     , prototype-haskell:uig
 
   if os(wasi)
@@ -70,6 +68,18 @@ library puri
 
   else
     hs-source-dirs: puri/platform/stub
+
+library puri-halay
+  import:           warnings
+  exposed-modules:
+    Puri.Halay
+    Puri.Widgets.Frame
+  hs-source-dirs:   puri-halay/src
+  default-language: GHC2021
+  build-depends:
+    , base >= 4.18 && < 4.23
+    , prototype-haskell:halay
+    , prototype-haskell:puri
 
 test-suite progred-tests
   import:           warnings
@@ -105,6 +115,7 @@ library progred
     , containers >= 0.6 && < 0.8
     , prototype-haskell:halay
     , prototype-haskell:puri
+    , prototype-haskell:puri-halay
     , random >= 1.2 && < 1.4
     , transformers >= 0.5 && < 0.7
     , uuid-types >= 1.0 && < 1.1

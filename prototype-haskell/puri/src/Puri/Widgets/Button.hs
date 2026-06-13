@@ -1,7 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Puri.Widgets.Button
-  ( button
+  ( ButtonProps (..)
+  , button
   ) where
 
 import Control.Monad (when)
@@ -11,34 +12,40 @@ import qualified Puri.Canvas as Canvas
 import qualified Puri.KeyCode as KeyCode
 import Puri.Widget
 
-button
-  :: (Applicative actionM, Canvas.Canvas renderM)
-  => actionM ()
-  -> (WidgetFocus -> renderM ())
-  -> Widget () actionM renderM
-button activate content _ rect focus actions = do
-  content focus
-  when (widgetIsFocused focus) (Canvas.strokeRect rect focusColor 2)
-  pure $
-    mconcat
-      [ onPointer $ \case
-        PointerDown {pointerX, pointerY} ->
-          if rectContains rect pointerX pointerY
-            then Just (widgetFocusSelf actions *> activate)
+data ButtonProps actionM renderM = ButtonProps
+  { buttonActivate :: actionM ()
+  , buttonContent :: WidgetFocus -> renderM ()
+  , buttonFocus :: WidgetFocus
+  , buttonFocusSelf :: actionM ()
+  }
+
+button :: (Applicative actionM, Canvas.Canvas renderM) => Widget (ButtonProps actionM renderM) actionM renderM
+button =
+  Widget $ \props rect -> do
+    let focus = buttonFocus props
+    buttonContent props focus
+    when (widgetIsFocused focus) (Canvas.strokeRect rect focusColor 2)
+    pure $
+      mconcat
+        [ onPointer $ \case
+          PointerDown {pointerX, pointerY} ->
+            if rectContains rect pointerX pointerY
+              then Just (buttonFocusSelf props *> buttonActivate props)
+              else Nothing
+          _ -> Nothing
+        , onKey $ \event ->
+          if widgetIsFocused focus
+            then keyActivate (buttonActivate props) event
             else Nothing
-        _ -> Nothing
-      , onKey $ \event ->
-        if widgetIsFocused focus
-          then keyActivate event
-          else Nothing
-      ]
-  where
-    keyActivate event =
-      case event of
-        KeyCode _modifiers code
-          | code == KeyCode.enter -> Just activate
-          | code == KeyCode.space -> Just activate
-        _ -> Nothing
+        ]
+
+keyActivate :: actionM () -> KeyEvent -> Maybe (actionM ())
+keyActivate activate event =
+  case event of
+    KeyCode _modifiers code
+      | code == KeyCode.enter -> Just activate
+      | code == KeyCode.space -> Just activate
+    _ -> Nothing
 
 focusColor :: String
 focusColor =
