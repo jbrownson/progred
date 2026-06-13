@@ -791,11 +791,16 @@ static void add_text_leaf(const char *case_name) {
         fprintf(stderr, "missing tree text payload in %s\n", case_name);
         exit(1);
     }
+    // Isolate generated text nodes in Clay's measurement cache. Clay hashes
+    // text contents and font fields into a 32-bit key, and repeated synthetic
+    // x-patterns can collide; fontId does not affect this oracle's measurement.
+    int font_id = tree_text_count + 1;
     char *text_buffer = allocate_tree_text_buffer(case_name);
     read_text_buffer(case_name, line_count, text_buffer, TREE_TEXT_LENGTH);
     CLAY_TEXT(
         clay_string_from_cstring(text_buffer),
         CLAY_TEXT_CONFIG({
+            .fontId = font_id,
             .fontSize = font_size,
             .lineHeight = line_height,
             .wrapMode = text_wrap_mode_from_int(wrap_mode_value),

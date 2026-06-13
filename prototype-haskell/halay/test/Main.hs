@@ -58,6 +58,7 @@ main = do
   oracle <- compileClayOracle
   clayRects <- runClayOracle oracle
   forM_ conformanceCases (assertClayCase clayRects)
+  forM_ treeRegressionCases (assertTreeRegressionCase oracle)
   assertQuickCheckSuccess "flat Halay/Clay conformance" "HALAY_QUICKCHECK_REPLAY" =<< quickCheckWithResult flatArgs (randomLayoutMatchesClay oracle)
   assertQuickCheckSuccess "text Halay/Clay conformance" "HALAY_TEXT_QUICKCHECK_REPLAY" =<< quickCheckWithResult textArgs (randomTextLayoutMatchesClay oracle)
   assertQuickCheckSuccess "tree Halay/Clay conformance" "HALAY_TREE_QUICKCHECK_REPLAY" =<< quickCheckWithResult treeArgs (randomTreeLayoutMatchesClay oracle)
@@ -177,6 +178,11 @@ data ConformanceCase = ConformanceCase
   , conformanceLayout :: Halay Identity Identity Placements
   }
 
+data TreeRegressionCase = TreeRegressionCase
+  { treeRegressionName :: String
+  , treeRegressionLayout :: RandomTreeLayout
+  }
+
 conformanceCases :: [ConformanceCase]
 conformanceCases =
   [ ConformanceCase "row_gap_and_padding" rowGapAndPadding
@@ -211,6 +217,15 @@ assertClayCase clayRects ConformanceCase {conformanceName, conformanceLayout} =
   where
     expected = [(clayId rect, clayRect rect) | rect <- clayRects, clayCase rect == conformanceName]
     actual = placedRectsWithRoot conformanceLayout
+
+assertTreeRegressionCase :: FilePath -> TreeRegressionCase -> IO ()
+assertTreeRegressionCase oracle treeRegression = do
+  clayRects <- runClayOracleTreeStdin oracle (randomTreeOracleInput layout)
+  let expected = [(clayId rect, clayRect rect) | rect <- clayRects, clayCase rect == "treecheck"]
+  let actual = placedRects (randomTreeLayoutHalay layout)
+  assertRectsEqual (treeRegressionName treeRegression) expected actual
+  where
+    layout = treeRegressionLayout treeRegression
 
 assertRectsEqual :: String -> [(String, Rect)] -> [(String, Rect)] -> IO ()
 assertRectsEqual name expected actual =
@@ -976,6 +991,57 @@ data RandomBoxConfig = RandomBoxConfig
   , randomBoxChildOffset :: Point
   }
   deriving (Eq, Show)
+
+treeRegressionCases :: [TreeRegressionCase]
+treeRegressionCases =
+  [ TreeRegressionCase "tree_text_measurement_cache_collision" treeTextMeasurementCacheCollision
+  ]
+
+treeTextMeasurementCacheCollision :: RandomTreeLayout
+treeTextMeasurementCacheCollision =
+  RandomTreeLayout
+    { randomTreeRootConfig =
+        plainRandomBoxConfig
+          { randomBoxSizing = Sizing (Fixed 500) (Fixed 100)
+          }
+    , randomTreeRootSize = Size 500 100
+    , randomTreeChildren =
+        [ RandomTreeText
+            plainRandomBoxConfig
+            Nothing
+            RandomTreeTextContent
+              { randomTreeTextWrapMode = TextWrapNone
+              , randomTreeTextAlign = TextAlignCenter
+              , randomTreeTextFontSize = 5
+              , randomTreeTextLineHeight = Just 1
+              , randomTreeTextLineWordLengths = [[7, 7, 17]]
+              }
+        , RandomTreeText
+            plainRandomBoxConfig
+            Nothing
+            RandomTreeTextContent
+              { randomTreeTextWrapMode = TextWrapNone
+              , randomTreeTextAlign = TextAlignEnd
+              , randomTreeTextFontSize = 5
+              , randomTreeTextLineHeight = Nothing
+              , randomTreeTextLineWordLengths = [[17]]
+              }
+        ]
+    }
+
+plainRandomBoxConfig :: RandomBoxConfig
+plainRandomBoxConfig =
+  RandomBoxConfig
+    { randomBoxDirection = LeftToRight
+    , randomBoxPadding = Insets 0 0 0 0
+    , randomBoxGap = 0
+    , randomBoxAlignX = AlignStart
+    , randomBoxAlignY = AlignStart
+    , randomBoxSizing = Sizing (Fit unbounded) (Fit unbounded)
+    , randomBoxClipHorizontal = False
+    , randomBoxClipVertical = False
+    , randomBoxChildOffset = Point 0 0
+    }
 
 instance Arbitrary RandomTreeLayout where
   arbitrary = do
