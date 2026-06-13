@@ -103,9 +103,9 @@ width, and finally place each line with `textPlaceLine`.
 
 Use `sized` to change a node's width/height sizing, `decorate` to attach
 extra placement output to a node, and `aspectRatio` to constrain layout
-boxes. Raw text nodes deliberately skip Halay's aspect-ratio passes
-because text has its own width-sensitive wrapping behavior; wrap text in
-a `box` when the containing text box should be aspect-constrained.
+boxes. Clay applies aspect ratio to layout elements, while text is
+width-sensitive content inside those elements; wrap text in a `box` when
+the containing text box should be aspect-constrained.
 
 Run the Halay conformance tests with:
 

@@ -58,8 +58,6 @@ main = do
   oracle <- compileClayOracle
   clayRects <- runClayOracle oracle
   forM_ conformanceCases (assertClayCase clayRects)
-  assertMeasuredSize "raw_text_ignores_aspect_ratio" (Size 10 1) rawTextIgnoresAspectRatio
-  assertMeasuredSize "boxed_text_uses_aspect_ratio" (Size 10 5) boxedTextUsesAspectRatio
   assertQuickCheckSuccess "flat Halay/Clay conformance" "HALAY_QUICKCHECK_REPLAY" =<< quickCheckWithResult flatArgs (randomLayoutMatchesClay oracle)
   assertQuickCheckSuccess "text Halay/Clay conformance" "HALAY_TEXT_QUICKCHECK_REPLAY" =<< quickCheckWithResult textArgs (randomTextLayoutMatchesClay oracle)
   assertQuickCheckSuccess "tree Halay/Clay conformance" "HALAY_TREE_QUICKCHECK_REPLAY" =<< quickCheckWithResult treeArgs (randomTreeLayoutMatchesClay oracle)
@@ -190,6 +188,7 @@ conformanceCases =
   , ConformanceCase "clamp_grow" clampGrow
   , ConformanceCase "aspect_ratio_width_drives_height" aspectRatioWidthDrivesHeight
   , ConformanceCase "aspect_ratio_height_drives_width" aspectRatioHeightDrivesWidth
+  , ConformanceCase "aspect_ratio_text_box" aspectRatioTextBox
   , ConformanceCase "unequal_grow_main_axis" unequalGrowMainAxis
   , ConformanceCase "nested_box_positions_children" nestedBoxPositionsChildren
   , ConformanceCase "overflow_cross_center" overflowCrossCenter
@@ -241,25 +240,6 @@ sameRects expected actual =
   where
     sameEntry (expectedName, expectedRect) (actualName, actualRect) =
       expectedName == actualName && nearRect expectedRect actualRect
-
-assertMeasuredSize :: String -> Size -> Halay Identity Identity Placements -> IO ()
-assertMeasuredSize name expected layout =
-  unless (nearSize expected actual) $
-    error
-      ( "Halay invariant failed: "
-          <> name
-          <> "\nexpected size: "
-          <> show expected
-          <> "\nactual size:   "
-          <> show actual
-      )
-  where
-    actual = measuredSize (runIdentity (measureHalay layout))
-
-nearSize :: Size -> Size -> Bool
-nearSize expected actual =
-  near (sizeWidth expected) (sizeWidth actual)
-    && near (sizeHeight expected) (sizeHeight actual)
 
 rowGapAndPadding :: Halay Identity Identity Placements
 rowGapAndPadding =
@@ -331,6 +311,17 @@ aspectRatioHeightDrivesWidth =
   box
     defaultBox {boxDirection = TopToBottom, boxSizing = Sizing (Fixed 100) (Fixed 100)}
     [aspectRatio 2 (sized (Sizing (Fit unbounded) (Fixed 30)) (named "a" (Size 0 0)))]
+
+aspectRatioTextBox :: Halay Identity Identity Placements
+aspectRatioTextBox =
+  box
+    defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 100)}
+    [ aspectRatio 2 $
+        namedLayout "a" $
+          box
+            defaultBox {boxSizing = Sizing (Fixed 10) (Fit unbounded)}
+            [text (testTextConfig 1 Nothing) {textPlaceLine = \_ _ _ -> pure mempty} "alpha beta"]
+    ]
 
 unequalGrowMainAxis :: Halay Identity Identity Placements
 unequalGrowMainAxis =
@@ -438,17 +429,6 @@ textRespectsNewlines =
   box
     defaultBox {boxSizing = Sizing (Fixed 20) (Fixed 20)}
     [text (testTextConfig 1 Nothing) {textWrapMode = TextWrapNewlines} "alpha\nbeta"]
-
-rawTextIgnoresAspectRatio :: Halay Identity Identity Placements
-rawTextIgnoresAspectRatio =
-  aspectRatio 2 (text (testTextConfig 1 Nothing) "alpha beta")
-
-boxedTextUsesAspectRatio :: Halay Identity Identity Placements
-boxedTextUsesAspectRatio =
-  aspectRatio 2 $
-    box
-      defaultBox {boxSizing = Sizing (Fixed 10) (Fit unbounded)}
-      [text (testTextConfig 1 Nothing) "alpha beta"]
 
 testTextConfig :: Int -> Maybe Int -> TextConfig Identity Identity Placements
 testTextConfig fontSize maybeLineHeight =

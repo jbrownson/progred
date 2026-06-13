@@ -253,6 +253,24 @@ static void aspect_ratio_height_drives_width(void) {
     emit_case("aspect_ratio_height_drives_width", ids, 2);
 }
 
+static void aspect_ratio_text_box(void) {
+    const char *ids[] = {"root", "a"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {.layout = {.sizing = fixed_size(100, 100)}}) {
+        CLAY(CLAY_ID("a"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_FIXED(10),
+                },
+            },
+            .aspectRatio = {.aspectRatio = 2.0f},
+        }) {
+            CLAY_TEXT(CLAY_STRING("alpha beta"), CLAY_TEXT_CONFIG({.fontSize = 1}));
+        }
+    }
+    emit_case("aspect_ratio_text_box", ids, 2);
+}
+
 static void unequal_grow_main_axis(void) {
     const char *ids[] = {"root", "a", "b"};
     Clay_BeginLayout();
@@ -999,6 +1017,7 @@ int main(int argc, char **argv) {
     clamp_grow();
     aspect_ratio_width_drives_height();
     aspect_ratio_height_drives_width();
+    aspect_ratio_text_box();
     unequal_grow_main_axis();
     nested_box_positions_children();
     overflow_cross_center();

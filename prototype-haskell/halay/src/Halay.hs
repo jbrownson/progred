@@ -230,9 +230,9 @@ decorate place child =
   Halay $
     addNodePlacer place <$> buildHalay child
 
--- | Constrain a layout box to an aspect ratio. Raw text nodes deliberately
--- ignore aspect ratio during the aspect passes; wrap text in a box when the
--- containing box should be aspect-constrained.
+-- | Constrain a layout box to an aspect ratio. Clay applies aspect ratio to
+-- layout elements; wrap text in a box when the containing text box should be
+-- aspect-constrained.
 aspectRatio :: Functor measureM => Double -> Halay measureM placeM placed -> Halay measureM placeM placed
 aspectRatio ratio child =
   Halay $
