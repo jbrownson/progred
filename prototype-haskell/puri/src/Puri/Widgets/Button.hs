@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Puri.Widgets.Button
-  ( ButtonProps (..)
+  ( Button (..)
   , button
   ) where
 
@@ -12,16 +12,16 @@ import qualified Puri.Canvas as Canvas
 import qualified Puri.KeyCode as KeyCode
 import Puri.Widget
 
-data ButtonProps actionM renderM = ButtonProps
+data Button actionM renderM = Button
   { buttonActivate :: actionM ()
   , buttonContent :: Bool -> Rect -> renderM ()
   , buttonFocused :: Bool
   , buttonFocus :: actionM ()
   }
 
-button :: (Applicative actionM, Canvas.Canvas renderM) => Widget (ButtonProps actionM renderM) actionM renderM
-button =
-  Widget $ \props rect -> do
+button :: (Applicative actionM, Canvas.Canvas renderM) => Button actionM renderM -> Widget actionM renderM
+button props =
+  Widget $ \rect -> do
     buttonContent props (buttonFocused props) rect
     when (buttonFocused props) (Canvas.strokeRect rect focusColor 2)
     pure $

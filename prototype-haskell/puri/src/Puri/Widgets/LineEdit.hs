@@ -56,9 +56,9 @@ data LineEdit actionM = LineEdit
 -- The change callback reports the widget's complete desired value: the
 -- text and the focus-local selection. The caller owns where each part
 -- lives.
-lineEdit :: Canvas.Canvas renderM => Widget (LineEdit actionM) actionM renderM
-lineEdit =
-  Widget $ \edit rect -> do
+lineEdit :: Canvas.Canvas renderM => LineEdit actionM -> Widget actionM renderM
+lineEdit edit =
+  Widget $ \rect -> do
     let style = lineEditStyle edit
     let string = lineEditText edit
     let focus = lineEditFocus edit

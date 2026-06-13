@@ -13,11 +13,10 @@ import Puri.Widgets (LineEditFocus, LineStyle)
 halayWidget
   :: Applicative measureM
   => measureM Size
-  -> Widget props actionM placeM
-  -> props
+  -> Widget actionM placeM
   -> Halay measureM placeM (Handler actionM)
-halayWidget measure widget props =
-  leaf measure (renderWidget widget props)
+halayWidget measure widget =
+  leaf measure (renderWidget widget)
 
 lineEdit
   :: Canvas.Canvas renderM
@@ -29,8 +28,7 @@ lineEdit
 lineEdit style string focus change =
   halayWidget
     (Widgets.lineEditSize edit)
-    Widgets.lineEdit
-    edit
+    (Widgets.lineEdit edit)
   where
     edit =
       Widgets.LineEdit

@@ -6,10 +6,10 @@ module Puri.Widget
 import Puri.Handler
 import Puri.Geometry
 
-newtype Widget props actionM renderM = Widget
-  { runWidget :: props -> Rect -> renderM (Handler actionM)
+newtype Widget actionM renderM = Widget
+  { runWidget :: Rect -> renderM (Handler actionM)
   }
 
-renderWidget :: Widget props actionM renderM -> props -> Rect -> renderM (Handler actionM)
+renderWidget :: Widget actionM renderM -> Rect -> renderM (Handler actionM)
 renderWidget =
   runWidget
