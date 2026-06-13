@@ -11,6 +11,8 @@ module Puri.Handler
   , onPointer
   ) where
 
+import Control.Applicative ((<|>))
+import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
 
 data PointerEvent
@@ -43,54 +45,47 @@ type PointerHandler actionM = PointerEvent -> Maybe (actionM ())
 type KeyHandler actionM = KeyEvent -> Maybe (actionM ())
 
 data Handler actionM = Handler
-  { pointerHandlers :: [PointerHandler actionM]
-  , keyHandlers :: [KeyHandler actionM]
+  { pointerHandler :: PointerHandler actionM
+  , keyHandler :: KeyHandler actionM
   }
 
+-- Composition tries the later-combined handler first. Halay combines
+-- own before children, so the deepest (topmost-drawn) handler wins both
+-- hit testing and key delivery; unclaimed events fall outward.
 instance Semigroup (Handler actionM) where
-  left <> right =
+  earlier <> later =
     Handler
-      { pointerHandlers = pointerHandlers left <> pointerHandlers right
-      , keyHandlers = keyHandlers left <> keyHandlers right
+      { pointerHandler = firstClaim (pointerHandler later) (pointerHandler earlier)
+      , keyHandler = firstClaim (keyHandler later) (keyHandler earlier)
       }
 
 instance Monoid (Handler actionM) where
-  mempty = Handler [] []
+  mempty = Handler (const Nothing) (const Nothing)
+
+firstClaim :: (event -> Maybe action) -> (event -> Maybe action) -> event -> Maybe action
+firstClaim first second event =
+  first event <|> second event
 
 onPointer :: PointerHandler actionM -> Handler actionM
 onPointer handler =
-  mempty {pointerHandlers = [handler]}
+  mempty {pointerHandler = handler}
 
 onKey :: KeyHandler actionM -> Handler actionM
 onKey handler =
-  mempty {keyHandlers = [handler]}
+  mempty {keyHandler = handler}
 
--- Pointer handlers run last-registered first so the topmost-drawn widget
--- wins hit testing; key handlers keep registration order (focus order).
 handlePointer
-  :: Monad actionM
+  :: Applicative actionM
   => PointerEvent
   -> Handler actionM
   -> actionM ()
 handlePointer event handler =
-  runFirst event (reverse (pointerHandlers handler))
+  fromMaybe (pure ()) (pointerHandler handler event)
 
 handleKey
-  :: Monad actionM
+  :: Applicative actionM
   => KeyEvent
   -> Handler actionM
   -> actionM ()
 handleKey event handler =
-  runFirst event (keyHandlers handler)
-
-runFirst
-  :: Monad m
-  => event
-  -> [event -> Maybe (m ())]
-  -> m ()
-runFirst _event [] =
-  pure ()
-runFirst event (handler : rest) =
-  case handler event of
-    Nothing -> runFirst event rest
-    Just action -> action
+  fromMaybe (pure ()) (keyHandler handler event)
