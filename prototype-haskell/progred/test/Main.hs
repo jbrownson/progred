@@ -8,7 +8,7 @@ import Progred.Document
 import Progred.Editor
 import Progred.Graph
 import Progred.MapGraph (MapGraph)
-import Puri.Widgets (LineEditSelection (..))
+import Puri.Widgets (LineEditFocus (..), LineEditSelection (..))
 import Test.QuickCheck
 
 main :: IO ()
@@ -58,18 +58,28 @@ propEditStringWritesAndFocuses =
       graph <- genGraph
       path <- genPath graph
       string <- elements ["x", "yz", "hello"]
-      maybeState <- genMaybeState
-      pure (graph, path, string, maybeState)
-    check (graph, path, string, maybeState) =
+      lineFocus <- genLineEditFocus
+      pure (graph, path, string, lineFocus)
+    check (graph, path, string, lineFocus) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let edited = editString path string maybeState Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
+        let edited = editString path string lineFocus Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
          in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
-              .&&. (editorFocus edited === (Focus path <$> maybeState))
-    genMaybeState =
+              .&&. (editorFocus edited === expectedFocus path lineFocus)
+    genLineEditFocus =
       oneof
-        [ pure Nothing
-        , Just <$> (LineEditSelection <$> chooseInt (0, 8) <*> chooseInt (0, 8) <*> arbitrary)
+        [ pure LineEditUnfocused
+        , LineEditFocused <$> genLineEditSelection
         ]
+
+genLineEditSelection :: Gen LineEditSelection
+genLineEditSelection =
+  LineEditSelection <$> chooseInt (0, 8) <*> chooseInt (0, 8) <*> arbitrary
+
+expectedFocus :: [UUID] -> LineEditFocus -> Maybe Focus
+expectedFocus path lineFocus =
+  case lineFocus of
+    LineEditUnfocused -> Nothing
+    LineEditFocused selection -> Just (Focus path selection)
 
 restingState :: LineEditSelection
 restingState = LineEditSelection 0 0 False

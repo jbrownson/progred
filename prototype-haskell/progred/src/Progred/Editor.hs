@@ -10,7 +10,7 @@ module Progred.Editor
 import Progred.Document
 import Progred.Graph
 import Progred.MapGraph
-import Puri.Widgets (LineEditSelection)
+import Puri.Widgets (LineEditFocus (..), LineEditSelection)
 
 -- Focus is the focused spot: the label path from the document root and
 -- the text selection at its target. Occurrences of a shared node are
@@ -43,16 +43,22 @@ setFocus focus editor =
 -- A line edit reports its whole desired value, so this writes the
 -- string and places the text selection in one step; writing the edge drops
 -- the focus that crossed it, so the two must not be done separately.
-editString :: [UUID] -> String -> Maybe LineEditSelection -> Editor -> Editor
-editString path string maybeSelection editor =
+editString :: [UUID] -> String -> LineEditFocus -> Editor -> Editor
+editString path string lineFocus editor =
   case target of
     Nothing -> editor
     Just (source, label) ->
-      (setFocus (Focus path <$> maybeSelection) . setEdge source label (VString string)) editor
+      (setFocus (focusAt path lineFocus) . setEdge source label (VString string)) editor
   where
     target = do
       (nodes, _) <- walkPath (editorDocument editor) path
       (,) <$> lastMaybe nodes <*> lastMaybe path
+
+focusAt :: [UUID] -> LineEditFocus -> Maybe Focus
+focusAt path lineFocus =
+  case lineFocus of
+    LineEditUnfocused -> Nothing
+    LineEditFocused selection -> Just (Focus path selection)
 
 editGraph :: (MapGraph -> MapGraph) -> Editor -> Editor
 editGraph change editor =

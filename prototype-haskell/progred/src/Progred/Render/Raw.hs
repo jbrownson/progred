@@ -4,7 +4,6 @@ module Progred.Render.Raw
   ) where
 
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust)
 import Halay
 import Progred.Document
 import Progred.Editor
@@ -14,7 +13,7 @@ import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
 import Puri.Halay (lineEdit)
 import Puri.Handler
-import Puri.Widgets (LineStyle (..))
+import Puri.Widgets (LineEditFocus (..), LineStyle (..))
 import Puri.Widgets.Frame
 
 -- The total projection at the bottom of every composition: assumes
@@ -55,14 +54,20 @@ rawEdgeLabel label =
 
 stringBox :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> String -> Halay renderM renderM (Handler actionM)
 stringBox env cursor string =
-  framed (stringFrame (isJust maybeState)) (lineEdit stringLineStyle string maybeState change)
+  framed (stringFrame (isLineEditFocused focus)) (lineEdit stringLineStyle string focus change)
   where
-    maybeState =
+    focus =
       case cursorFocus cursor of
-        Just (Focus [] state) -> Just state
-        _ -> Nothing
-    change newString newState =
-      envEdit env (editString (cursorPath cursor) newString newState)
+        Just (Focus [] selection) -> LineEditFocused selection
+        _ -> LineEditUnfocused
+    change newString newFocus =
+      envEdit env (editString (cursorPath cursor) newString newFocus)
+
+isLineEditFocused :: LineEditFocus -> Bool
+isLineEditFocused focus =
+  case focus of
+    LineEditUnfocused -> False
+    LineEditFocused _selection -> True
 
 stringFrame :: Bool -> Frame
 stringFrame focused =
