@@ -46,7 +46,7 @@ lineEdit
   -> String
   -> Maybe LineEditState
   -> (String -> Maybe LineEditState -> actionM ())
-  -> Halay renderM (Handler actionM)
+  -> Halay renderM renderM (Handler actionM)
 lineEdit style string maybeState change =
   leaf measure place
   where

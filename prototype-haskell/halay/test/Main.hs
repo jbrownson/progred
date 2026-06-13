@@ -174,7 +174,7 @@ parseClayOracle =
 
 data ConformanceCase = ConformanceCase
   { conformanceName :: String
-  , conformanceLayout :: Halay Identity Placements
+  , conformanceLayout :: Halay Identity Identity Placements
   }
 
 conformanceCases :: [ConformanceCase]
@@ -240,7 +240,7 @@ sameRects expected actual =
     sameEntry (expectedName, expectedRect) (actualName, actualRect) =
       expectedName == actualName && nearRect expectedRect actualRect
 
-rowGapAndPadding :: Halay Identity Placements
+rowGapAndPadding :: Halay Identity Identity Placements
 rowGapAndPadding =
   box
     defaultBox
@@ -249,7 +249,7 @@ rowGapAndPadding =
       }
     [named "a" (Size 10 5), named "b" (Size 20 8)]
 
-columnGapAndPadding :: Halay Identity Placements
+columnGapAndPadding :: Halay Identity Identity Placements
 columnGapAndPadding =
   box
     defaultBox
@@ -259,7 +259,7 @@ columnGapAndPadding =
       }
     [named "a" (Size 10 5), named "b" (Size 20 8)]
 
-fixedBoxCentersChild :: Halay Identity Placements
+fixedBoxCentersChild :: Halay Identity Identity Placements
 fixedBoxCentersChild =
   box
     defaultBox
@@ -269,7 +269,7 @@ fixedBoxCentersChild =
       }
     [named "a" (Size 20 10)]
 
-percentChild :: Halay Identity Placements
+percentChild :: Halay Identity Identity Placements
 percentChild =
   box
     defaultBox {boxSizing = Sizing (Fixed 200) (Fixed 20)}
@@ -277,7 +277,7 @@ percentChild =
     , named "b" (Size 20 10)
     ]
 
-growMainAxis :: Halay Identity Placements
+growMainAxis :: Halay Identity Identity Placements
 growMainAxis =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 20), boxGap = 10}
@@ -285,13 +285,13 @@ growMainAxis =
     , sized (Sizing (Fill unbounded) (Fixed 10)) (named "b" (Size 0 10))
     ]
 
-growCrossAxis :: Halay Identity Placements
+growCrossAxis :: Halay Identity Identity Placements
 growCrossAxis =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 50)}
     [sized (Sizing (Fixed 10) (Fill unbounded)) (named "a" (Size 10 0))]
 
-clampGrow :: Halay Identity Placements
+clampGrow :: Halay Identity Identity Placements
 clampGrow =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 20)}
@@ -299,19 +299,19 @@ clampGrow =
     , sized (Sizing (Fill (MinMax Nothing (Just 30))) (Fixed 10)) (named "b" (Size 0 10))
     ]
 
-aspectRatioWidthDrivesHeight :: Halay Identity Placements
+aspectRatioWidthDrivesHeight :: Halay Identity Identity Placements
 aspectRatioWidthDrivesHeight =
   box
     defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 100)}
     [aspectRatio 2 (sized (Sizing (Fixed 40) (Fit unbounded)) (named "a" (Size 0 0)))]
 
-aspectRatioHeightDrivesWidth :: Halay Identity Placements
+aspectRatioHeightDrivesWidth :: Halay Identity Identity Placements
 aspectRatioHeightDrivesWidth =
   box
     defaultBox {boxDirection = TopToBottom, boxSizing = Sizing (Fixed 100) (Fixed 100)}
     [aspectRatio 2 (sized (Sizing (Fit unbounded) (Fixed 30)) (named "a" (Size 0 0)))]
 
-unequalGrowMainAxis :: Halay Identity Placements
+unequalGrowMainAxis :: Halay Identity Identity Placements
 unequalGrowMainAxis =
   box
     defaultBox {boxDirection = TopToBottom, boxSizing = Sizing (Fixed 1) (Fixed 4)}
@@ -319,7 +319,7 @@ unequalGrowMainAxis =
     , sized (Sizing (Fit unbounded) (Fill unbounded)) (named "b" (Size 1 2))
     ]
 
-nestedBoxPositionsChildren :: Halay Identity Placements
+nestedBoxPositionsChildren :: Halay Identity Identity Placements
 nestedBoxPositionsChildren =
   box
     defaultBox
@@ -337,13 +337,13 @@ nestedBoxPositionsChildren =
     , named "c" (Size 15 7)
     ]
 
-overflowCrossCenter :: Halay Identity Placements
+overflowCrossCenter :: Halay Identity Identity Placements
 overflowCrossCenter =
   box
     defaultBox {boxSizing = Sizing (Fixed 10) (Fixed 10), boxCrossAlign = CrossCenter}
     [named "a" (Size 5 20)]
 
-clipMainAxisDoesNotCompress :: Halay Identity Placements
+clipMainAxisDoesNotCompress :: Halay Identity Identity Placements
 clipMainAxisDoesNotCompress =
   box
     defaultBox
@@ -352,7 +352,7 @@ clipMainAxisDoesNotCompress =
       }
     [namedLayout "a" (box defaultBox [text (testTextConfig 1 Nothing) {textPlaceLine = \_ _ _ -> pure mempty} "aaaaa bbbbb"])]
 
-clipCrossAxisGrowsToContent :: Halay Identity Placements
+clipCrossAxisGrowsToContent :: Halay Identity Identity Placements
 clipCrossAxisGrowsToContent =
   box
     defaultBox
@@ -368,7 +368,7 @@ clipCrossAxisGrowsToContent =
         )
     ]
 
-clipCrossAxisUsesPrePercentInnerSize :: Halay Identity Placements
+clipCrossAxisUsesPrePercentInnerSize :: Halay Identity Identity Placements
 clipCrossAxisUsesPrePercentInnerSize =
   box
     defaultBox
@@ -396,7 +396,7 @@ clipCrossAxisUsesPrePercentInnerSize =
           (\rect -> pure (Placements [("b", rect)]))
     ]
 
-clipChildOffsetPlacesChildren :: Halay Identity Placements
+clipChildOffsetPlacesChildren :: Halay Identity Identity Placements
 clipChildOffsetPlacesChildren =
   box
     defaultBox
@@ -406,19 +406,19 @@ clipChildOffsetPlacesChildren =
       }
     [named "a" (Size 10 10)]
 
-textWrapsWords :: Halay Identity Placements
+textWrapsWords :: Halay Identity Identity Placements
 textWrapsWords =
   box
     defaultBox {boxSizing = Sizing (Fixed 6) (Fixed 20)}
     [text (testTextConfig 1 Nothing) "alpha beta gamma"]
 
-textRespectsNewlines :: Halay Identity Placements
+textRespectsNewlines :: Halay Identity Identity Placements
 textRespectsNewlines =
   box
     defaultBox {boxSizing = Sizing (Fixed 20) (Fixed 20)}
     [text (testTextConfig 1 Nothing) {textWrapMode = TextWrapNewlines} "alpha\nbeta"]
 
-testTextConfig :: Int -> Maybe Int -> TextConfig Identity Placements
+testTextConfig :: Int -> Maybe Int -> TextConfig Identity Identity Placements
 testTextConfig fontSize maybeLineHeight =
   TextConfig
     { textLineHeight = fromIntegral <$> maybeLineHeight
@@ -618,7 +618,7 @@ randomLayoutMatchesClay oracle randomLayout =
         )
         ok
 
-randomLayoutHalay :: RandomLayout -> Halay Identity Placements
+randomLayoutHalay :: RandomLayout -> Halay Identity Identity Placements
 randomLayoutHalay randomLayout =
   box
     defaultBox
@@ -634,7 +634,7 @@ randomLayoutHalay randomLayout =
       }
     [randomChildHalay childName child | (childName, child) <- zip childNames (randomChildren randomLayout)]
 
-randomChildHalay :: String -> RandomChild -> Halay Identity Placements
+randomChildHalay :: String -> RandomChild -> Halay Identity Identity Placements
 randomChildHalay childName RandomChild {randomChildSize, randomChildSizing, randomChildAspectRatio} =
   case randomChildAspectRatio of
     Nothing -> sized randomChildSizing (named childName randomChildSize)
@@ -803,7 +803,7 @@ randomTextLayoutMatchesClay oracle randomTextLayout =
         )
         ok
 
-randomTextLayoutHalay :: RandomTextLayout -> Halay Identity Placements
+randomTextLayoutHalay :: RandomTextLayout -> Halay Identity Identity Placements
 randomTextLayoutHalay RandomTextLayout {randomTextRootWidth, randomTextRootHeight, randomTextWrapMode, randomTextAlign, randomTextFontSize, randomTextLineHeight, randomTextLineWordLengths} =
   box
     defaultBox
@@ -1213,7 +1213,7 @@ randomTreeLayoutMatchesClay oracle randomTree =
                 )
                 ok
 
-randomTreeLayoutHalay :: RandomTreeLayout -> Halay Identity Placements
+randomTreeLayoutHalay :: RandomTreeLayout -> Halay Identity Identity Placements
 randomTreeLayoutHalay RandomTreeLayout {randomTreeRootConfig, randomTreeRootSize, randomTreeChildren} =
   namedLayout "root" $
     box (boxConfigFromRandom rootConfig)
@@ -1227,7 +1227,7 @@ randomTreeLayoutHalay RandomTreeLayout {randomTreeRootConfig, randomTreeRootSize
               (Fixed (sizeHeight randomTreeRootSize))
         }
 
-randomTreeNodeHalay :: Int -> RandomTreeNode -> (Int, Halay Identity Placements)
+randomTreeNodeHalay :: Int -> RandomTreeNode -> (Int, Halay Identity Identity Placements)
 randomTreeNodeHalay index node =
   case node of
     RandomTreeLeaf size sizing maybeAspect ->
@@ -1240,7 +1240,7 @@ randomTreeNodeHalay index node =
   where
     name = "n" <> show index
 
-randomTreeTextHalay :: RandomTreeTextContent -> Halay Identity Placements
+randomTreeTextHalay :: RandomTreeTextContent -> Halay Identity Identity Placements
 randomTreeTextHalay RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTextAlign, randomTreeTextFontSize, randomTreeTextLineHeight, randomTreeTextLineWordLengths} =
   text
     (testTextConfig randomTreeTextFontSize randomTreeTextLineHeight)
@@ -1250,11 +1250,11 @@ randomTreeTextHalay RandomTreeTextContent {randomTreeTextWrapMode, randomTreeTex
       }
     (linesText randomTreeTextLineWordLengths)
 
-withAspect :: Maybe Double -> Halay Identity Placements -> Halay Identity Placements
+withAspect :: Maybe Double -> Halay Identity Identity Placements -> Halay Identity Identity Placements
 withAspect Nothing layout = layout
 withAspect (Just ratio) layout = aspectRatio ratio layout
 
-namedLayout :: String -> Halay Identity Placements -> Halay Identity Placements
+namedLayout :: String -> Halay Identity Identity Placements -> Halay Identity Identity Placements
 namedLayout name =
   decorate (\rect -> pure (Placements [(name, rect)]))
 
@@ -1429,18 +1429,24 @@ fixedAxisSize :: AxisSizing -> Maybe Double
 fixedAxisSize (Fixed value) = Just value
 fixedAxisSize _ = Nothing
 
-named :: String -> Size -> Halay Identity Placements
+named :: String -> Size -> Halay Identity Identity Placements
 named name size =
   leaf (pure size) (\rect -> pure (Placements [(name, rect)]))
 
-placedRectsWithRoot :: Halay Identity Placements -> [(String, Rect)]
+placedRectsWithRoot :: Halay Identity Identity Placements -> [(String, Rect)]
 placedRectsWithRoot layout =
   ("root", Rect 0 0 (sizeWidth size) (sizeHeight size)) : rects
   where
     (size, Placements rects) = runIdentity (placeAt (Point 0 0) layout)
 
-placedRects :: Halay Identity Placements -> [(String, Rect)]
+placedRects :: Halay Identity Identity Placements -> [(String, Rect)]
 placedRects layout =
   rects
   where
     (_size, Placements rects) = runIdentity (placeAt (Point 0 0) layout)
+
+placeAt :: (Monad measureM, Monoid placed) => Point -> Halay measureM measureM placed -> measureM (Size, placed)
+placeAt point layout = do
+  measured <- measureHalay layout
+  placed <- placeMeasured measured (sizeRectAt point (measuredSize measured))
+  pure (measuredSize measured, placed)

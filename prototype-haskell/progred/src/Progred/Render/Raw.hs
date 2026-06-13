@@ -24,7 +24,7 @@ rawProjection env cursor =
     Nothing -> textPlay missingColor "<missing>"
     Just (nodes, value) -> rawValue env cursor nodes value
 
-rawValue :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> [UUID] -> Value -> Halay renderM (Handler actionM)
+rawValue :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> [UUID] -> Value -> Halay renderM renderM (Handler actionM)
 rawValue env cursor nodes value =
   case value of
     VRef target
@@ -35,7 +35,7 @@ rawValue env cursor nodes value =
     VFloat double -> textPlay numberColor (show double)
     VBool bool -> textPlay boolColor (if bool then "true" else "false")
 
-rawNode :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Halay renderM (Handler actionM)
+rawNode :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
 rawNode env cursor target =
   case Map.lookup target (documentGraph (envDocument env)) of
     Nothing -> rowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"]
@@ -48,11 +48,11 @@ rawNode env cursor target =
     rawEdge (label, _value) =
       rowWithGap valueGap [rawEdgeLabel label, envProject env (stepCursor label cursor)]
 
-rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM (Handler actionM)
+rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 rawEdgeLabel label =
   rowWithGap arrowGap [identiconPlay label, arrowPlay]
 
-stringBox :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> String -> Halay renderM (Handler actionM)
+stringBox :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> String -> Halay renderM renderM (Handler actionM)
 stringBox env cursor string =
   framed (stringFrame (isJust maybeState)) (lineEdit stringLineStyle string maybeState change)
   where
@@ -92,14 +92,14 @@ rawIndentBox =
     , boxPadding = Insets 0 0 0 indent
     }
 
-identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM (Handler actionM)
+identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 identiconPlay uuid =
   leaf (pure (Size iconSize rowHeight)) draw
   where
     draw Rect {x, y} =
       mempty <$ identicon uuid (Rect x y iconSize iconSize)
 
-textPlay :: Canvas.Canvas renderM => String -> String -> Halay renderM (Handler actionM)
+textPlay :: Canvas.Canvas renderM => String -> String -> Halay renderM renderM (Handler actionM)
 textPlay color string =
   text config string
   where
@@ -113,7 +113,7 @@ textPlay color string =
             mempty <$ Canvas.fillText (Point x (y + textBaseline)) color line
         }
 
-arrowPlay :: Canvas.Canvas renderM => Halay renderM (Handler actionM)
+arrowPlay :: Canvas.Canvas renderM => Halay renderM renderM (Handler actionM)
 arrowPlay =
   leaf (pure (Size arrowWidth rowHeight)) draw
   where

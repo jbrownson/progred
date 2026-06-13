@@ -40,7 +40,8 @@ initialModel =
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
   Canvas.fillRect viewportRect "#fbfbfa"
-  placeHalay viewportRect documentLayout
+  measured <- measureHalay documentLayout
+  placeMeasured measured viewportRect
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
     documentLayout =

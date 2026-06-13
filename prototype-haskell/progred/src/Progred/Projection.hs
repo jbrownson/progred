@@ -21,10 +21,10 @@ import Puri.Handler
 -- acceptance, and `over` lays one across a Projection to fill the
 -- declined spots. Children recurse through envProject, so every child
 -- is offered the whole composition again.
-type Projection actionM renderM = Env actionM renderM -> Cursor -> Halay renderM (Handler actionM)
+type Projection actionM renderM = Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM)
 
 newtype PartialProjection actionM renderM = PartialProjection
-  { tryProject :: Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
+  { tryProject :: Env actionM renderM -> Cursor -> Maybe (Halay renderM renderM (Handler actionM))
   }
 
 instance Semigroup (PartialProjection actionM renderM) where
@@ -41,7 +41,7 @@ over partial total env cursor =
 data Env actionM renderM = Env
   { envDocument :: Document
   , envEdit :: (Editor -> Editor) -> actionM ()
-  , envProject :: Cursor -> Halay renderM (Handler actionM)
+  , envProject :: Cursor -> Halay renderM renderM (Handler actionM)
   }
 
 -- A spot in the document: the label path that leads there and the focus
@@ -57,7 +57,7 @@ projectDocument
   -> Document
   -> ((Editor -> Editor) -> actionM ())
   -> Maybe Focus
-  -> Halay renderM (Handler actionM)
+  -> Halay renderM renderM (Handler actionM)
 projectDocument total document edit focus =
   apply (Cursor [] focus)
   where

@@ -20,7 +20,7 @@ listProjection :: Canvas.Canvas renderM => PartialProjection actionM renderM
 listProjection =
   PartialProjection projectList
 
-projectList :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
+projectList :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Maybe (Halay renderM renderM (Handler actionM))
 projectList env cursor =
   render <$> elements [] cursor
   where

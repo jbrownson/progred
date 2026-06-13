@@ -14,7 +14,7 @@ data Frame = Frame
   , frameColor :: String
   }
 
-framed :: (Canvas.Canvas renderM, Monoid placed) => Frame -> Halay renderM placed -> Halay renderM placed
+framed :: (Applicative measureM, Canvas.Canvas placeM, Monoid placed) => Frame -> Halay measureM placeM placed -> Halay measureM placeM placed
 framed frame child =
   decorate drawBorder (padding (framePadding frame) child)
   where
