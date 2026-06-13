@@ -14,27 +14,26 @@ import Puri.Widget
 
 data ButtonProps actionM renderM = ButtonProps
   { buttonActivate :: actionM ()
-  , buttonContent :: WidgetFocus -> renderM ()
-  , buttonFocus :: WidgetFocus
-  , buttonFocusSelf :: actionM ()
+  , buttonContent :: Bool -> Rect -> renderM ()
+  , buttonFocused :: Bool
+  , buttonFocus :: actionM ()
   }
 
 button :: (Applicative actionM, Canvas.Canvas renderM) => Widget (ButtonProps actionM renderM) actionM renderM
 button =
   Widget $ \props rect -> do
-    let focus = buttonFocus props
-    buttonContent props focus
-    when (widgetIsFocused focus) (Canvas.strokeRect rect focusColor 2)
+    buttonContent props (buttonFocused props) rect
+    when (buttonFocused props) (Canvas.strokeRect rect focusColor 2)
     pure $
       mconcat
         [ onPointer $ \case
           PointerDown {pointerX, pointerY} ->
             if rectContains rect pointerX pointerY
-              then Just (buttonFocusSelf props *> buttonActivate props)
+              then Just (buttonFocus props *> buttonActivate props)
               else Nothing
           _ -> Nothing
         , onKey $ \event ->
-          if widgetIsFocused focus
+          if buttonFocused props
             then keyActivate (buttonActivate props) event
             else Nothing
         ]

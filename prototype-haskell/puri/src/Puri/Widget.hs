@@ -1,8 +1,6 @@
 module Puri.Widget
   ( Widget (..)
-  , WidgetFocus (..)
   , renderWidget
-  , widgetIsFocused
   ) where
 
 import Puri.Handler
@@ -15,13 +13,3 @@ newtype Widget props actionM renderM = Widget
 renderWidget :: Widget props actionM renderM -> props -> Rect -> renderM (Handler actionM)
 renderWidget =
   runWidget
-
-data WidgetFocus
-  = WidgetFocused
-  | WidgetUnfocused
-
-widgetIsFocused :: WidgetFocus -> Bool
-widgetIsFocused WidgetFocused =
-  True
-widgetIsFocused WidgetUnfocused =
-  False

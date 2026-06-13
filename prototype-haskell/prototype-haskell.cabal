@@ -45,12 +45,13 @@ library puri
   import:           warnings
   exposed-modules:
     Puri.Canvas
+    Puri.Core
     Puri.Handler
     Puri.Geometry
     Puri.KeyCode
-    Puri.Lens
     Puri.Viewport
     Puri.Widget
+    Puri.Widgets
     Puri.Widgets.Button
     Puri.Widgets.LineEdit
   other-modules:

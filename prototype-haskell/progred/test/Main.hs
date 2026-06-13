@@ -8,7 +8,7 @@ import Progred.Document
 import Progred.Editor
 import Progred.Graph
 import Progred.MapGraph (MapGraph)
-import Puri.Widgets.LineEdit (LineEditState (..))
+import Puri.Widgets (LineEditSelection (..))
 import Test.QuickCheck
 
 main :: IO ()
@@ -68,11 +68,11 @@ propEditStringWritesAndFocuses =
     genMaybeState =
       oneof
         [ pure Nothing
-        , Just <$> (LineEditState <$> chooseInt (0, 8) <*> chooseInt (0, 8) <*> arbitrary)
+        , Just <$> (LineEditSelection <$> chooseInt (0, 8) <*> chooseInt (0, 8) <*> arbitrary)
         ]
 
-restingState :: LineEditState
-restingState = LineEditState 0 0 False
+restingState :: LineEditSelection
+restingState = LineEditSelection 0 0 False
 
 sentinel :: Value
 sentinel = VString "##sentinel##"

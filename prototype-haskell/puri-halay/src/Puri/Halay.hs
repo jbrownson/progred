@@ -7,8 +7,8 @@ import Halay
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import Puri.Widget
-import qualified Puri.Widgets.LineEdit as LineEdit
-import Puri.Widgets.LineEdit (LineEditState, LineStyle)
+import qualified Puri.Widgets as Widgets
+import Puri.Widgets (LineEditSelection, LineStyle)
 
 halayWidget
   :: Applicative measureM
@@ -23,11 +23,19 @@ lineEdit
   :: Canvas.Canvas renderM
   => LineStyle
   -> String
-  -> Maybe LineEditState
-  -> (String -> Maybe LineEditState -> actionM ())
+  -> Maybe LineEditSelection
+  -> (String -> Maybe LineEditSelection -> actionM ())
   -> Halay renderM renderM (Handler actionM)
-lineEdit style string state change =
+lineEdit style string selection change =
   halayWidget
-    (LineEdit.lineEditSize style string)
-    (LineEdit.lineEdit style)
-    (LineEdit.LineEditProps string state change)
+    (Widgets.lineEditSize edit)
+    Widgets.lineEdit
+    edit
+  where
+    edit =
+      Widgets.LineEdit
+        { Widgets.lineEditStyle = style
+        , Widgets.lineEditText = string
+        , Widgets.lineEditSelection = selection
+        , Widgets.lineEditChange = change
+        }

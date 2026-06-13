@@ -1,6 +1,6 @@
 module Puri.Widgets.LineEdit
-  ( LineEditProps (..)
-  , LineEditState (..)
+  ( LineEdit (..)
+  , LineEditSelection (..)
   , LineStyle (..)
   , lineEdit
   , lineEditSize
@@ -21,7 +21,7 @@ import Puri.Widget
 -- end of the selection and the anchor its other end (equal when there
 -- is no selection). Indices are clamped against the text wherever read,
 -- so they never need to stay in sync with it.
-data LineEditState = LineEditState
+data LineEditSelection = LineEditSelection
   { editCaret :: Int
   , editAnchor :: Int
   , editDragging :: Bool
@@ -40,41 +40,45 @@ data LineStyle = LineStyle
   , lineSelectionColor :: String
   }
 
-data LineEditProps actionM = LineEditProps
-  { lineEditText :: String
-  , lineEditState :: Maybe LineEditState
-  , lineEditChange :: String -> Maybe LineEditState -> actionM ()
+data LineEdit actionM = LineEdit
+  { lineEditStyle :: LineStyle
+  , lineEditText :: String
+  , lineEditSelection :: Maybe LineEditSelection
+  , lineEditChange :: String -> Maybe LineEditSelection -> actionM ()
   }
 
--- The change callback reports the widget's complete desired state: the
--- text and the state (Nothing to defocus). The caller owns where each
--- part lives.
-lineEdit :: Canvas.Canvas renderM => LineStyle -> Widget (LineEditProps actionM) actionM renderM
-lineEdit style =
-  Widget $ \props rect -> do
-    let string = lineEditText props
-    let maybeState = lineEditState props
-    let state = fromMaybe (collapsed 0) maybeState
-    let focused = isJust maybeState
+-- The change callback reports the widget's complete desired value: the
+-- text and the selection (Nothing to defocus). The caller owns where
+-- each part lives.
+lineEdit :: Canvas.Canvas renderM => Widget (LineEdit actionM) actionM renderM
+lineEdit =
+  Widget $ \edit rect -> do
+    let style = lineEditStyle edit
+    let string = lineEditText edit
+    let maybeSelection = lineEditSelection edit
+    let selection = fromMaybe (collapsed 0) maybeSelection
+    let focused = isJust maybeSelection
     caretPositions <- measureCaretPositions string
-    drawLine style focused string state rect caretPositions
-    pure (editHandler style string state focused (lineEditChange props) rect caretPositions)
+    drawLine style focused string selection rect caretPositions
+    pure (editHandler style string selection focused (lineEditChange edit) rect caretPositions)
 
-lineEditSize :: Canvas.Canvas measureM => LineStyle -> String -> measureM Size
-lineEditSize style string = do
+lineEditSize :: Canvas.Canvas measureM => LineEdit actionM -> measureM Size
+lineEditSize edit = do
+  let style = lineEditStyle edit
+  let string = lineEditText edit
   textWidth <- Canvas.measureText string
   pure (Size (max (lineMinWidth style) textWidth + 2 * linePadding style) (lineHeight style))
 
 editHandler
   :: LineStyle
   -> String
-  -> LineEditState
+  -> LineEditSelection
   -> Bool
-  -> (String -> Maybe LineEditState -> actionM ())
+  -> (String -> Maybe LineEditSelection -> actionM ())
   -> Rect
   -> [(Int, Double)]
   -> Handler actionM
-editHandler style string state focused change rect caretPositions =
+editHandler style string selection focused change rect caretPositions =
   Handler
     { pointerHandler = pointer
     , keyHandler = if focused then key else const Nothing
@@ -88,90 +92,90 @@ editHandler style string state focused change rect caretPositions =
           | rectContains rect pointerX pointerY ->
               Just (change string (Just (startDragAt (caretAt pointerX))))
         PointerMove {pointerX}
-          | editDragging state ->
-              Just (change string (Just (continueDragAt (caretAt pointerX) state)))
+          | editDragging selection ->
+              Just (change string (Just (continueDragAt (caretAt pointerX) selection)))
         PointerUp {}
-          | editDragging state ->
-              Just (change string (Just state {editDragging = False}))
+          | editDragging selection ->
+              Just (change string (Just selection {editDragging = False}))
         _ -> Nothing
     key event =
       case event of
         KeyCode _modifiers code
           | code == KeyCode.enter || code == KeyCode.escape ->
               Just (change string Nothing)
-        _ -> report <$> keyEdit string event state
-    report (newString, newState) = change newString (Just newState)
+        _ -> report <$> keyEdit string event selection
+    report (newString, newSelection) = change newString (Just newSelection)
 
-keyEdit :: String -> KeyEvent -> LineEditState -> Maybe (String, LineEditState)
-keyEdit string event state =
+keyEdit :: String -> KeyEvent -> LineEditSelection -> Maybe (String, LineEditSelection)
+keyEdit string event selection =
   case event of
-    TextInput inserted -> Just (insertString inserted string state)
+    TextInput inserted -> Just (insertString inserted string selection)
     KeyCode modifiers code
-      | code == KeyCode.space -> Just (insertString " " string state)
-      | code == KeyCode.backspace -> Just (deleteBackward string state)
-      | code == KeyCode.delete -> Just (deleteForward string state)
-      | code == KeyCode.left -> Just (string, moveCaret (keyShift modifiers) (-1) string state)
-      | code == KeyCode.right -> Just (string, moveCaret (keyShift modifiers) 1 string state)
+      | code == KeyCode.space -> Just (insertString " " string selection)
+      | code == KeyCode.backspace -> Just (deleteBackward string selection)
+      | code == KeyCode.delete -> Just (deleteForward string selection)
+      | code == KeyCode.left -> Just (string, moveCaret (keyShift modifiers) (-1) string selection)
+      | code == KeyCode.right -> Just (string, moveCaret (keyShift modifiers) 1 string selection)
       | code == KeyCode.home -> Just (string, collapsed 0)
       | code == KeyCode.end -> Just (string, collapsed (length string))
     _ -> Nothing
 
-insertString :: String -> String -> LineEditState -> (String, LineEditState)
-insertString inserted string state =
+insertString :: String -> String -> LineEditSelection -> (String, LineEditSelection)
+insertString inserted string selection =
   (take lo string <> inserted <> drop hi string, collapsed (lo + length inserted))
   where
-    (lo, hi) = selectionBounds string state
+    (lo, hi) = selectionBounds string selection
 
-deleteBackward :: String -> LineEditState -> (String, LineEditState)
-deleteBackward string state
+deleteBackward :: String -> LineEditSelection -> (String, LineEditSelection)
+deleteBackward string selection
   | lo /= hi = (take lo string <> drop hi string, collapsed lo)
   | lo == 0 = (string, collapsed 0)
   | otherwise = (take (lo - 1) string <> drop lo string, collapsed (lo - 1))
   where
-    (lo, hi) = selectionBounds string state
+    (lo, hi) = selectionBounds string selection
 
-deleteForward :: String -> LineEditState -> (String, LineEditState)
-deleteForward string state
+deleteForward :: String -> LineEditSelection -> (String, LineEditSelection)
+deleteForward string selection
   | lo /= hi = (take lo string <> drop hi string, collapsed lo)
   | otherwise = (take lo string <> drop (lo + 1) string, collapsed lo)
   where
-    (lo, hi) = selectionBounds string state
+    (lo, hi) = selectionBounds string selection
 
-moveCaret :: Bool -> Int -> String -> LineEditState -> LineEditState
-moveCaret extending delta string state =
-  LineEditState
+moveCaret :: Bool -> Int -> String -> LineEditSelection -> LineEditSelection
+moveCaret extending delta string selection =
+  LineEditSelection
     { editCaret = moved
-    , editAnchor = if extending then clampIndex string (editAnchor state) else moved
+    , editAnchor = if extending then clampIndex string (editAnchor selection) else moved
     , editDragging = False
     }
   where
-    moved = clampIndex string (clampIndex string (editCaret state) + delta)
+    moved = clampIndex string (clampIndex string (editCaret selection) + delta)
 
-startDragAt :: Int -> LineEditState
+startDragAt :: Int -> LineEditSelection
 startDragAt index =
-  LineEditState index index True
+  LineEditSelection index index True
 
-continueDragAt :: Int -> LineEditState -> LineEditState
-continueDragAt index state =
-  state {editCaret = index}
+continueDragAt :: Int -> LineEditSelection -> LineEditSelection
+continueDragAt index selection =
+  selection {editCaret = index}
 
-collapsed :: Int -> LineEditState
+collapsed :: Int -> LineEditSelection
 collapsed index =
-  LineEditState index index False
+  LineEditSelection index index False
 
-selectionBounds :: String -> LineEditState -> (Int, Int)
-selectionBounds string state =
+selectionBounds :: String -> LineEditSelection -> (Int, Int)
+selectionBounds string selection =
   (min caret anchor, max caret anchor)
   where
-    caret = clampIndex string (editCaret state)
-    anchor = clampIndex string (editAnchor state)
+    caret = clampIndex string (editCaret selection)
+    anchor = clampIndex string (editAnchor selection)
 
 clampIndex :: String -> Int -> Int
 clampIndex string index =
   max 0 (min (length string) index)
 
-drawLine :: Canvas.Canvas renderM => LineStyle -> Bool -> String -> LineEditState -> Rect -> [(Int, Double)] -> renderM ()
-drawLine style focused string state Rect {x, y} caretPositions = do
+drawLine :: Canvas.Canvas renderM => LineStyle -> Bool -> String -> LineEditSelection -> Rect -> [(Int, Double)] -> renderM ()
+drawLine style focused string selection Rect {x, y} caretPositions = do
   when (focused && lo /= hi) drawSelection
   Canvas.fillText (Point textX (y + lineBaseline style)) (lineTextColor style) string
   when focused drawCaret
@@ -179,8 +183,8 @@ drawLine style focused string state Rect {x, y} caretPositions = do
     textX = x + linePadding style
     selectionTop = y + lineBaseline style - lineAscent style
     selectionHeight = lineAscent style + lineDescent style
-    (lo, hi) = selectionBounds string state
-    caret = clampIndex string (editCaret state)
+    (lo, hi) = selectionBounds string selection
+    caret = clampIndex string (editCaret selection)
     drawSelection =
       Canvas.fillRect
         (Rect (textX + caretXAt caretPositions lo) selectionTop (caretXAt caretPositions hi - caretXAt caretPositions lo) selectionHeight)
