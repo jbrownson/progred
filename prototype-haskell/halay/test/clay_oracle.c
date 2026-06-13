@@ -99,6 +99,28 @@ static void emit_case(const char *case_name, const char **ids, int id_count) {
     }
 }
 
+static void emit_case_with_text_commands(const char *case_name, const char **ids, int id_count) {
+    Clay_RenderCommandArray commands = Clay_EndLayout(0);
+    for (int i = 0; i < id_count; i++) {
+        emit_rect(case_name, ids[i]);
+    }
+    int text_index = 0;
+    for (int32_t i = 0; i < commands.length; i++) {
+        Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
+        if (command->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT) {
+            printf(
+                "%s text%d %.4f %.4f %.4f %.4f\n",
+                case_name,
+                text_index,
+                command->boundingBox.x,
+                command->boundingBox.y,
+                command->boundingBox.width,
+                command->boundingBox.height);
+            text_index++;
+        }
+    }
+}
+
 static void row_gap_and_padding(void) {
     const char *ids[] = {"root", "a", "b"};
     Clay_BeginLayout();
@@ -271,6 +293,38 @@ static void aspect_ratio_text_box(void) {
     emit_case("aspect_ratio_text_box", ids, 2);
 }
 
+static void aspect_ratio_percent_width(void) {
+    const char *ids[] = {"root", "a"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {.layout = {.sizing = fixed_size(200, 100)}}) {
+        CLAY(CLAY_ID("a"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_PERCENT(0.5f),
+                },
+            },
+            .aspectRatio = {.aspectRatio = 2.0f},
+        }) {}
+    }
+    emit_case("aspect_ratio_percent_width", ids, 2);
+}
+
+static void aspect_ratio_fill_max_width(void) {
+    const char *ids[] = {"root", "a"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {.layout = {.sizing = fixed_size(100, 50)}}) {
+        CLAY(CLAY_ID("a"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_GROW(10, 30),
+                },
+            },
+            .aspectRatio = {.aspectRatio = 3.0f},
+        }) {}
+    }
+    emit_case("aspect_ratio_fill_max_width", ids, 2);
+}
+
 static void unequal_grow_main_axis(void) {
     const char *ids[] = {"root", "a", "b"};
     Clay_BeginLayout();
@@ -341,6 +395,18 @@ static void clip_main_axis_does_not_compress(void) {
         }
     }
     emit_case("clip_main_axis_does_not_compress", ids, 2);
+}
+
+static void clip_text_wraps_lines(void) {
+    const char *ids[] = {"root"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {
+        .layout = {.sizing = fixed_size(8, 20)},
+        .clip = {.horizontal = true},
+    }) {
+        CLAY_TEXT(CLAY_STRING("alpha beta gamma"), CLAY_TEXT_CONFIG({.fontSize = 1}));
+    }
+    emit_case_with_text_commands("clip_text_wraps_lines", ids, 1);
 }
 
 static void clip_cross_axis_grows_to_content(void) {
@@ -432,24 +498,65 @@ static void clip_child_offset_places_children(void) {
     emit_case("clip_child_offset_places_children", ids, 2);
 }
 
-static void emit_text_commands(const char *case_name) {
-    Clay_RenderCommandArray commands = Clay_EndLayout(0);
-    emit_rect(case_name, "root");
-    int text_index = 0;
-    for (int32_t i = 0; i < commands.length; i++) {
-        Clay_RenderCommand *command = Clay_RenderCommandArray_Get(&commands, i);
-        if (command->commandType == CLAY_RENDER_COMMAND_TYPE_TEXT) {
-            printf(
-                "%s text%d %.4f %.4f %.4f %.4f\n",
-                case_name,
-                text_index,
-                command->boundingBox.x,
-                command->boundingBox.y,
-                command->boundingBox.width,
-                command->boundingBox.height);
-            text_index++;
+static void clip_child_offset_nested(void) {
+    const char *ids[] = {"root", "a", "b", "c"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {
+        .layout = {
+            .sizing = fixed_size(60, 50),
+            .padding = {.left = 5, .top = 6},
+        },
+        .clip = {
+            .horizontal = true,
+            .vertical = true,
+            .childOffset = {-4, 8},
+        },
+    }) {
+        CLAY(CLAY_ID("a"), {
+            .layout = {
+                .padding = {.left = 3, .top = 2},
+                .childGap = 4,
+            },
+        }) {
+            CLAY(CLAY_ID("b"), {.layout = {.sizing = fixed_size(10, 8)}}) {}
+            CLAY(CLAY_ID("c"), {.layout = {.sizing = fixed_size(7, 6)}}) {}
         }
     }
+    emit_case("clip_child_offset_nested", ids, 4);
+}
+
+static void text_align_in_padded_box(void) {
+    const char *ids[] = {"root", "a"};
+    Clay_BeginLayout();
+    CLAY(CLAY_ID("root"), {
+        .layout = {
+            .sizing = fixed_size(40, 30),
+            .padding = {.left = 5, .right = 3, .top = 4, .bottom = 2},
+            .childAlignment = {.y = CLAY_ALIGN_Y_CENTER},
+        },
+    }) {
+        CLAY(CLAY_ID("a"), {
+            .layout = {
+                .sizing = {
+                    .width = CLAY_SIZING_FIXED(16),
+                },
+            },
+        }) {
+            CLAY_TEXT(
+                CLAY_STRING("abc"),
+                CLAY_TEXT_CONFIG({
+                    .fontSize = 1,
+                    .wrapMode = CLAY_TEXT_WRAP_NONE,
+                    .textAlignment = CLAY_TEXT_ALIGN_RIGHT,
+                }));
+        }
+    }
+    emit_case_with_text_commands("text_align_in_padded_box", ids, 2);
+}
+
+static void emit_text_commands(const char *case_name) {
+    const char *ids[] = {"root"};
+    emit_case_with_text_commands(case_name, ids, 1);
 }
 
 static void text_wraps_words(void) {
@@ -1018,13 +1125,18 @@ int main(int argc, char **argv) {
     aspect_ratio_width_drives_height();
     aspect_ratio_height_drives_width();
     aspect_ratio_text_box();
+    aspect_ratio_percent_width();
+    aspect_ratio_fill_max_width();
     unequal_grow_main_axis();
     nested_box_positions_children();
     overflow_cross_center();
     clip_main_axis_does_not_compress();
+    clip_text_wraps_lines();
     clip_cross_axis_grows_to_content();
     clip_cross_axis_uses_pre_percent_inner_size();
     clip_child_offset_places_children();
+    clip_child_offset_nested();
+    text_align_in_padded_box();
     text_wraps_words();
     text_respects_newlines();
     return 0;

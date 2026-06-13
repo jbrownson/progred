@@ -189,13 +189,18 @@ conformanceCases =
   , ConformanceCase "aspect_ratio_width_drives_height" aspectRatioWidthDrivesHeight
   , ConformanceCase "aspect_ratio_height_drives_width" aspectRatioHeightDrivesWidth
   , ConformanceCase "aspect_ratio_text_box" aspectRatioTextBox
+  , ConformanceCase "aspect_ratio_percent_width" aspectRatioPercentWidth
+  , ConformanceCase "aspect_ratio_fill_max_width" aspectRatioFillMaxWidth
   , ConformanceCase "unequal_grow_main_axis" unequalGrowMainAxis
   , ConformanceCase "nested_box_positions_children" nestedBoxPositionsChildren
   , ConformanceCase "overflow_cross_center" overflowCrossCenter
   , ConformanceCase "clip_main_axis_does_not_compress" clipMainAxisDoesNotCompress
+  , ConformanceCase "clip_text_wraps_lines" clipTextWrapsLines
   , ConformanceCase "clip_cross_axis_grows_to_content" clipCrossAxisGrowsToContent
   , ConformanceCase "clip_cross_axis_uses_pre_percent_inner_size" clipCrossAxisUsesPrePercentInnerSize
   , ConformanceCase "clip_child_offset_places_children" clipChildOffsetPlacesChildren
+  , ConformanceCase "clip_child_offset_nested" clipChildOffsetNested
+  , ConformanceCase "text_align_in_padded_box" textAlignInPaddedBox
   , ConformanceCase "text_wraps_words" textWrapsWords
   , ConformanceCase "text_respects_newlines" textRespectsNewlines
   ]
@@ -323,6 +328,28 @@ aspectRatioTextBox =
             [text (testTextConfig 1 Nothing) {textPlaceLine = \_ _ _ -> pure mempty} "alpha beta"]
     ]
 
+aspectRatioPercentWidth :: Halay Identity Identity Placements
+aspectRatioPercentWidth =
+  box
+    defaultBox {boxSizing = Sizing (Fixed 200) (Fixed 100)}
+    [ aspectRatio 2 $
+        leafWithSizing
+          (Sizing (Percent 0.5) (Fit unbounded))
+          (pure (Size 0 0))
+          (\rect -> pure (Placements [("a", rect)]))
+    ]
+
+aspectRatioFillMaxWidth :: Halay Identity Identity Placements
+aspectRatioFillMaxWidth =
+  box
+    defaultBox {boxSizing = Sizing (Fixed 100) (Fixed 50)}
+    [ aspectRatio 3 $
+        leafWithSizing
+          (Sizing (Fill (MinMax (Just 10) (Just 30))) (Fit unbounded))
+          (pure (Size 0 0))
+          (\rect -> pure (Placements [("a", rect)]))
+    ]
+
 unequalGrowMainAxis :: Halay Identity Identity Placements
 unequalGrowMainAxis =
   box
@@ -363,6 +390,15 @@ clipMainAxisDoesNotCompress =
       , boxClip = BoxClip True False (Point 0 0)
       }
     [namedLayout "a" (box defaultBox [text (testTextConfig 1 Nothing) {textPlaceLine = \_ _ _ -> pure mempty} "aaaaa bbbbb"])]
+
+clipTextWrapsLines :: Halay Identity Identity Placements
+clipTextWrapsLines =
+  box
+    defaultBox
+      { boxSizing = Sizing (Fixed 8) (Fixed 20)
+      , boxClip = BoxClip True False (Point 0 0)
+      }
+    [text (testTextConfig 1 Nothing) "alpha beta gamma"]
 
 clipCrossAxisGrowsToContent :: Halay Identity Identity Placements
 clipCrossAxisGrowsToContent =
@@ -417,6 +453,43 @@ clipChildOffsetPlacesChildren =
       , boxClip = BoxClip True True (Point (-3) 7)
       }
     [named "a" (Size 10 10)]
+
+clipChildOffsetNested :: Halay Identity Identity Placements
+clipChildOffsetNested =
+  box
+    defaultBox
+      { boxSizing = Sizing (Fixed 60) (Fixed 50)
+      , boxPadding = Insets 6 0 0 5
+      , boxClip = BoxClip True True (Point (-4) 8)
+      }
+    [ namedLayout "a" $
+        box
+          defaultBox
+            { boxPadding = Insets 2 0 0 3
+            , boxGap = 4
+            }
+          [named "b" (Size 10 8), named "c" (Size 7 6)]
+    ]
+
+textAlignInPaddedBox :: Halay Identity Identity Placements
+textAlignInPaddedBox =
+  box
+    defaultBox
+      { boxSizing = Sizing (Fixed 40) (Fixed 30)
+      , boxPadding = Insets 4 3 2 5
+      , boxCrossAlign = CrossCenter
+      }
+    [ namedLayout "a" $
+        box
+          defaultBox {boxSizing = Sizing (Fixed 16) (Fit unbounded)}
+          [ text
+              (testTextConfig 1 Nothing)
+                { textWrapMode = TextWrapNone
+                , textAlign = TextAlignEnd
+                }
+              "abc"
+          ]
+    ]
 
 textWrapsWords :: Halay Identity Identity Placements
 textWrapsWords =
