@@ -51,7 +51,7 @@ view viewport model = do
             , boxPadding = Insets 12 12 12 12
             , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
             }
-          [projectDocument [listLayer] rawLayer (editorDocument model) modify (editorFocus model)]
+          [projectDocument (listProjection `over` rawProjection) (editorDocument model) modify (editorFocus model)]
     unfocusOnClick _rect =
       pure $ onPointer $ \event ->
         case event of

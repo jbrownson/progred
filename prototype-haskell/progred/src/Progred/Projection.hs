@@ -1,12 +1,14 @@
 module Progred.Projection
   ( Cursor (..)
   , Env (..)
-  , Layer
+  , Projection (..)
+  , TotalProjection
+  , over
   , projectDocument
   , stepCursor
   ) where
 
-import Data.Foldable (asum)
+import Control.Applicative ((<|>))
 import Data.Maybe (fromMaybe)
 import Halay
 import Progred.Document
@@ -14,16 +16,32 @@ import Progred.Editor
 import Progred.Graph
 import Puri.Handler
 
--- A projection is a stack of layers. Each layer may decline a spot; the
--- total fallback at the bottom may not. Layers render children through
--- envProject so every child is offered to the whole stack again.
+-- A projection may decline a spot; composition takes the first that
+-- accepts. Children recurse through envProject, so every child is
+-- offered the whole composition again. A complete composition needs a
+-- total projection at the bottom, which only `over` can provide.
+newtype Projection actionM renderM = Projection
+  { project :: Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
+  }
+
+type TotalProjection actionM renderM = Env actionM renderM -> Cursor -> Halay renderM (Handler actionM)
+
+instance Semigroup (Projection actionM renderM) where
+  earlier <> later =
+    Projection (\env cursor -> project earlier env cursor <|> project later env cursor)
+
+instance Monoid (Projection actionM renderM) where
+  mempty = Projection (\_ _ -> Nothing)
+
+over :: Projection actionM renderM -> TotalProjection actionM renderM -> TotalProjection actionM renderM
+over projection total env cursor =
+  fromMaybe (total env cursor) (project projection env cursor)
+
 data Env actionM renderM = Env
   { envDocument :: Document
   , envEdit :: (Editor -> Editor) -> actionM ()
   , envProject :: Cursor -> Halay renderM (Handler actionM)
   }
-
-type Layer actionM renderM = Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
 
 -- A spot in the document: the label path that leads there and the focus
 -- remainder peeled while descending. Spots need not resolve to anything
@@ -34,18 +52,16 @@ data Cursor = Cursor
   }
 
 projectDocument
-  :: [Layer actionM renderM]
-  -> (Env actionM renderM -> Cursor -> Halay renderM (Handler actionM))
+  :: TotalProjection actionM renderM
   -> Document
   -> ((Editor -> Editor) -> actionM ())
   -> Maybe Focus
   -> Halay renderM (Handler actionM)
-projectDocument layers fallback document edit focus =
-  project (Cursor [] focus)
+projectDocument total document edit focus =
+  apply (Cursor [] focus)
   where
-    env = Env {envDocument = document, envEdit = edit, envProject = project}
-    project cursor =
-      fromMaybe (fallback env cursor) (asum [layer env cursor | layer <- layers])
+    env = Env {envDocument = document, envEdit = edit, envProject = apply}
+    apply = total env
 
 stepCursor :: UUID -> Cursor -> Cursor
 stepCursor label cursor =

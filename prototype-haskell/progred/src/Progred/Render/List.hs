@@ -1,5 +1,5 @@
 module Progred.Render.List
-  ( listLayer
+  ( listProjection
   ) where
 
 import Data.List (intersperse)
@@ -11,12 +11,17 @@ import Progred.Graph
 import Progred.Projection
 import Progred.Render.Raw (textPlay)
 import qualified Puri.Canvas as Canvas
+import Puri.Handler
 
 -- Projects cons chains as bracketed lists. Declines anything that isn't
 -- a well-formed chain (cells with exactly head and tail, ending at nil,
 -- acyclic) so the fallback keeps every malformed detail visible.
-listLayer :: Canvas.Canvas renderM => Layer actionM renderM
-listLayer env cursor =
+listProjection :: Canvas.Canvas renderM => Projection actionM renderM
+listProjection =
+  Projection projectList
+
+projectList :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Maybe (Halay renderM (Handler actionM))
+projectList env cursor =
   render <$> elements [] cursor
   where
     document = envDocument env

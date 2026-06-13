@@ -1,5 +1,5 @@
 module Progred.Render.Raw
-  ( rawLayer
+  ( rawProjection
   , textPlay
   ) where
 
@@ -16,10 +16,10 @@ import Puri.Handler
 import Puri.Widgets.Frame
 import Puri.Widgets.LineEdit
 
--- The total fallback at the bottom of every projection stack: assumes
--- nothing and renders whatever the spot holds, placeholders included.
-rawLayer :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM (Handler actionM)
-rawLayer env cursor =
+-- The total projection at the bottom of every composition: assumes
+-- nothing, renders whatever the spot holds, placeholders included.
+rawProjection :: Canvas.Canvas renderM => TotalProjection actionM renderM
+rawProjection env cursor =
   case walkPath (envDocument env) (cursorPath cursor) of
     Nothing -> textPlay missingColor "<missing>"
     Just (nodes, value) -> rawValue env cursor nodes value
