@@ -16,7 +16,7 @@ halayWidget
   -> Widget actionM placeM
   -> Halay measureM placeM (Handler actionM)
 halayWidget measure widget =
-  leaf measure (renderWidget widget)
+  leaf measure widget
 
 lineEdit
   :: Canvas.Canvas renderM

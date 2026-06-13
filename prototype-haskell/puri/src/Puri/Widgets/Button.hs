@@ -20,23 +20,22 @@ data Button actionM renderM = Button
   }
 
 button :: (Applicative actionM, Canvas.Canvas renderM) => Button actionM renderM -> Widget actionM renderM
-button props =
-  Widget $ \rect -> do
-    buttonContent props (buttonFocused props) rect
-    when (buttonFocused props) (Canvas.strokeRect rect focusColor 2)
-    pure $
-      mconcat
-        [ onPointer $ \case
-          PointerDown {pointerX, pointerY} ->
-            if rectContains rect pointerX pointerY
-              then Just (buttonFocus props *> buttonActivate props)
-              else Nothing
-          _ -> Nothing
-        , onKey $ \event ->
-          if buttonFocused props
-            then keyActivate (buttonActivate props) event
+button props rect = do
+  buttonContent props (buttonFocused props) rect
+  when (buttonFocused props) (Canvas.strokeRect rect focusColor 2)
+  pure $
+    mconcat
+      [ onPointer $ \case
+        PointerDown {pointerX, pointerY} ->
+          if rectContains rect pointerX pointerY
+            then Just (buttonFocus props *> buttonActivate props)
             else Nothing
-        ]
+        _ -> Nothing
+      , onKey $ \event ->
+        if buttonFocused props
+          then keyActivate (buttonActivate props) event
+          else Nothing
+      ]
 
 keyActivate :: actionM () -> KeyEvent -> Maybe (actionM ())
 keyActivate activate event =

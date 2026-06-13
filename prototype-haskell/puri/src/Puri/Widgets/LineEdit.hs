@@ -57,16 +57,15 @@ data LineEdit actionM = LineEdit
 -- text and the focus-local selection. The caller owns where each part
 -- lives.
 lineEdit :: Canvas.Canvas renderM => LineEdit actionM -> Widget actionM renderM
-lineEdit edit =
-  Widget $ \rect -> do
-    let style = lineEditStyle edit
-    let string = lineEditText edit
-    let focus = lineEditFocus edit
-    let selection = focusSelection focus
-    let focused = isFocused focus
-    caretPositions <- measureCaretPositions string
-    drawLine style focused string selection rect caretPositions
-    pure (editHandler style string selection focused (lineEditChange edit) rect caretPositions)
+lineEdit edit rect = do
+  let style = lineEditStyle edit
+  let string = lineEditText edit
+  let focus = lineEditFocus edit
+  let selection = focusSelection focus
+  let focused = isFocused focus
+  caretPositions <- measureCaretPositions string
+  drawLine style focused string selection rect caretPositions
+  pure (editHandler style string selection focused (lineEditChange edit) rect caretPositions)
 
 lineEditSize :: Canvas.Canvas measureM => LineEdit actionM -> measureM Size
 lineEditSize edit = do

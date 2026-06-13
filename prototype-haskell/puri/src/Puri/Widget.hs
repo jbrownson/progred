@@ -1,15 +1,9 @@
 module Puri.Widget
-  ( Widget (..)
-  , renderWidget
+  ( Widget
   ) where
 
 import Puri.Handler
 import Puri.Geometry
 
-newtype Widget actionM renderM = Widget
-  { runWidget :: Rect -> renderM (Handler actionM)
-  }
-
-renderWidget :: Widget actionM renderM -> Rect -> renderM (Handler actionM)
-renderWidget =
-  runWidget
+type Widget actionM renderM =
+  Rect -> renderM (Handler actionM)
