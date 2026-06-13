@@ -6,8 +6,8 @@ import Data.List (intersperse)
 import qualified Data.Map.Strict as Map
 import Halay
 import Progred.Builtins
-import Progred.Document
 import Progred.Graph
+import Progred.GraphContext
 import Progred.Projection
 import Progred.Render.Raw (textPlay)
 import qualified Puri.Canvas as Canvas
@@ -24,15 +24,15 @@ projectList :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Maybe (
 projectList env cursor =
   render <$> elements [] cursor
   where
-    document = envDocument env
+    context = envContext env
     elements seen spot = do
-      (_, value) <- walkPath document (cursorPath spot)
+      value <- resolvePath context (cursorPath spot)
       case value of
         VRef node
           | node == nilNode -> Just []
           | node `elem` seen -> Nothing
           | otherwise -> do
-              edges <- Map.lookup node (documentGraph document)
+              edges <- lookupNode context node
               if Map.size edges == 2 && Map.member headLabel edges && Map.member tailLabel edges
                 then (stepCursor headLabel spot :) <$> elements (node : seen) (stepCursor tailLabel spot)
                 else Nothing

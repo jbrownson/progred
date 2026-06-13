@@ -5,24 +5,24 @@ module Progred.Render.Raw
 
 import qualified Data.Map.Strict as Map
 import Halay
-import Progred.Document
 import Progred.Editor
 import Progred.Graph
+import Progred.GraphContext
 import Progred.Projection
 import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
 import Puri.Halay (lineEdit)
 import Puri.Handler
-import Puri.Widgets (LineEditFocus (..), LineStyle (..))
+import Puri.Widgets (LineEditInteraction (..), LineStyle (..))
 import Puri.Widgets.Frame
 
 -- The total projection at the bottom of every composition: assumes
 -- nothing, renders whatever the spot holds, placeholders included.
 rawProjection :: Canvas.Canvas renderM => Projection actionM renderM
 rawProjection env cursor =
-  case walkPath (envDocument env) (cursorPath cursor) of
+  case walkPath (envContext env) (cursorPath cursor) of
     Nothing -> textPlay missingColor "<missing>"
-    Just (nodes, value) -> rawValue env cursor nodes value
+    Just PathWalk {walkedNodes = nodes, walkedValue = value} -> rawValue env cursor nodes value
 
 rawValue :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> [UUID] -> Value -> Halay renderM renderM (Handler actionM)
 rawValue env cursor nodes value =
@@ -37,7 +37,7 @@ rawValue env cursor nodes value =
 
 rawNode :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
 rawNode env cursor target =
-  case Map.lookup target (documentGraph (envDocument env)) of
+  case lookupNode (envContext env) target of
     Nothing -> rowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"]
     Just edges ->
       column
@@ -54,20 +54,24 @@ rawEdgeLabel label =
 
 stringBox :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> String -> Halay renderM renderM (Handler actionM)
 stringBox env cursor string =
-  framed (stringFrame (isLineEditFocused focus)) (lineEdit stringLineStyle string focus change)
+  framed (stringFrame (isLineEditFocused interaction)) (lineEdit stringLineStyle string interaction)
   where
-    focus =
+    path = cursorPath cursor
+    interaction =
       case cursorFocus cursor of
-        Just (Focus [] selection) -> LineEditFocused selection
-        _ -> LineEditUnfocused
-    change newString newFocus =
-      envEdit env (editString (cursorPath cursor) newString newFocus)
+        Just (Focus [] selection) ->
+          LineEditFocused
+            selection
+            (\newString newSelection -> envEdit env (editString path newString newSelection))
+            (envEdit env (blurString path))
+        _ ->
+          LineEditUnfocused (\selection -> envEdit env (focusString path selection))
 
-isLineEditFocused :: LineEditFocus -> Bool
-isLineEditFocused focus =
-  case focus of
-    LineEditUnfocused -> False
-    LineEditFocused _selection -> True
+isLineEditFocused :: LineEditInteraction actionM -> Bool
+isLineEditFocused interaction =
+  case interaction of
+    LineEditUnfocused _focus -> False
+    LineEditFocused _selection _change _blur -> True
 
 stringFrame :: Bool -> Frame
 stringFrame focused =

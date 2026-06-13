@@ -7,8 +7,9 @@ import qualified Data.UUID.Types as UUID
 import Progred.Document
 import Progred.Editor
 import Progred.Graph
+import Progred.GraphContext
 import Progred.MapGraph (MapGraph)
-import Puri.Widgets (LineEditFocus (..), LineEditSelection (..))
+import Puri.Widgets (LineEditSelection (..))
 import Test.QuickCheck
 
 main :: IO ()
@@ -16,6 +17,8 @@ main = do
   run "setEdge" (propToolTracksValue genSetEdge)
   run "deleteEdge" (propToolTracksValue genDeleteEdge)
   run "editString" propEditStringWritesAndFocuses
+  run "blurString" propBlurStringOnlyClearsMatchingPath
+  run "graphContext" propGraphContextUsesLibraries
   where
     run name prop = do
       result <- quickCheckWithResult stdArgs {maxSuccess = 1000} prop
@@ -58,28 +61,65 @@ propEditStringWritesAndFocuses =
       graph <- genGraph
       path <- genPath graph
       string <- elements ["x", "yz", "hello"]
-      lineFocus <- genLineEditFocus
-      pure (graph, path, string, lineFocus)
-    check (graph, path, string, lineFocus) =
+      selection <- genLineEditSelection
+      pure (graph, path, string, selection)
+    check (graph, path, string, selection) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let edited = editString path string lineFocus Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
+        let edited = editString path string selection Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
          in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
-              .&&. (editorFocus edited === expectedFocus path lineFocus)
-    genLineEditFocus =
-      oneof
-        [ pure LineEditUnfocused
-        , LineEditFocused <$> genLineEditSelection
+              .&&. (editorFocus edited === Just (Focus path selection))
+
+propBlurStringOnlyClearsMatchingPath :: Property
+propBlurStringOnlyClearsMatchingPath =
+  forAllBlind genCase check
+  where
+    genCase = do
+      graph <- genGraph
+      path <- genPath graph
+      pure (graph, path)
+    check (graph, path) =
+      counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
+        let editor = Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
+            otherPath = path <> [head labelPool]
+         in (editorFocus (blurString path editor) === Nothing)
+              .&&. (editorFocus (blurString otherPath editor) === Just (Focus path restingState))
+
+propGraphContextUsesLibraries :: Property
+propGraphContextUsesLibraries =
+  conjoin
+    [ resolvePath libraryContext [toLibraryLabel, valueLabel] === Just (VString "library")
+    , resolvePath documentWinsContext [toLibraryLabel, valueLabel] === Just (VString "document")
+    , resolvePath documentWinsContext [toLibraryLabel, libraryOnlyLabel] === Nothing
+    ]
+  where
+    root = UUID.fromWords 900 0 0 1
+    libraryNode = UUID.fromWords 901 0 0 1
+    toLibraryLabel = UUID.fromWords 902 0 0 1
+    valueLabel = UUID.fromWords 903 0 0 1
+    libraryOnlyLabel = UUID.fromWords 904 0 0 1
+    rootGraph =
+      Map.fromList
+        [ (root, Map.fromList [(toLibraryLabel, VRef libraryNode)])
         ]
+    libraryGraph =
+      Map.fromList
+        [ ( libraryNode
+          , Map.fromList
+              [ (valueLabel, VString "library")
+              , (libraryOnlyLabel, VString "library only")
+              ]
+          )
+        ]
+    documentOverrideGraph =
+      Map.insert libraryNode (Map.fromList [(valueLabel, VString "document")]) rootGraph
+    libraryContext =
+      documentContext (Document root rootGraph) [libraryGraph]
+    documentWinsContext =
+      documentContext (Document root documentOverrideGraph) [libraryGraph]
 
 genLineEditSelection :: Gen LineEditSelection
 genLineEditSelection =
   LineEditSelection <$> chooseInt (0, 8) <*> chooseInt (0, 8) <*> arbitrary
-
-expectedFocus :: [UUID] -> LineEditFocus -> Maybe Focus
-expectedFocus path lineFocus =
-  case lineFocus of
-    LineEditUnfocused -> Nothing
-    LineEditFocused selection -> Just (Focus path selection)
 
 restingState :: LineEditSelection
 restingState = LineEditSelection 0 0 False
@@ -89,11 +129,15 @@ sentinel = VString "##sentinel##"
 
 genSetEdge :: MapGraph -> Gen (Editor -> Editor)
 genSetEdge _graph =
-  setEdge <$> elements nodePool <*> elements labelPool <*> genValue
+  setEdge <$> genAnyEdge <*> genValue
 
 genDeleteEdge :: MapGraph -> Gen (Editor -> Editor)
 genDeleteEdge _graph =
-  deleteEdge <$> elements nodePool <*> elements labelPool
+  deleteEdge <$> genAnyEdge
+
+genAnyEdge :: Gen Edge
+genAnyEdge =
+  Edge <$> elements nodePool <*> elements labelPool
 
 -- Independent resolver (separate from the tools' own path walk) so the
 -- properties check two implementations against each other.

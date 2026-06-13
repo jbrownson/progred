@@ -1,16 +1,19 @@
 module Progred.Editor
   ( Editor (..)
   , Focus (..)
+  , blurString
   , deleteEdge
   , editString
+  , focusString
   , setEdge
   , setFocus
   ) where
 
 import Progred.Document
 import Progred.Graph
+import Progred.GraphContext
 import Progred.MapGraph
-import Puri.Widgets (LineEditFocus (..), LineEditSelection)
+import Puri.Widgets (LineEditSelection)
 
 -- Focus is the focused spot: the label path from the document root and
 -- the text selection at its target. Occurrences of a shared node are
@@ -28,37 +31,36 @@ data Editor = Editor
 -- transient data attached to paths) truthful. Editing the graph any other way
 -- means owning that coherence yourself. Touched edges drop the state
 -- that crossed them.
-setEdge :: UUID -> UUID -> Value -> Editor -> Editor
-setEdge source label value =
-  editGraph (setEdgeValue source label value) . dropCrossing source label
+setEdge :: Edge -> Value -> Editor -> Editor
+setEdge edge value =
+  editGraph (setEdgeValue edge value) . dropCrossing edge
 
-deleteEdge :: UUID -> UUID -> Editor -> Editor
-deleteEdge source label =
-  editGraph (deleteEdgeValue source label) . dropCrossing source label
+deleteEdge :: Edge -> Editor -> Editor
+deleteEdge edge =
+  editGraph (deleteEdgeValue edge) . dropCrossing edge
 
 setFocus :: Maybe Focus -> Editor -> Editor
 setFocus focus editor =
   editor {editorFocus = focus}
 
--- A line edit reports its whole desired value, so this writes the
--- string and places the text selection in one step; writing the edge drops
--- the focus that crossed it, so the two must not be done separately.
-editString :: [UUID] -> String -> LineEditFocus -> Editor -> Editor
-editString path string lineFocus editor =
-  case target of
-    Nothing -> editor
-    Just (source, label) ->
-      (setFocus (focusAt path lineFocus) . setEdge source label (VString string)) editor
-  where
-    target = do
-      (nodes, _) <- walkPath (editorDocument editor) path
-      (,) <$> lastMaybe nodes <*> lastMaybe path
+focusString :: [UUID] -> LineEditSelection -> Editor -> Editor
+focusString path selection =
+  setFocus (Just (Focus path selection))
 
-focusAt :: [UUID] -> LineEditFocus -> Maybe Focus
-focusAt path lineFocus =
-  case lineFocus of
-    LineEditUnfocused -> Nothing
-    LineEditFocused selection -> Just (Focus path selection)
+blurString :: [UUID] -> Editor -> Editor
+blurString path editor =
+  case editorFocus editor of
+    Just (Focus focusedPath _) | focusedPath == path -> setFocus Nothing editor
+    _ -> editor
+
+-- Writing the edge drops focus that crossed it, so string edits pair the
+-- graph write and the replacement selection in one operation.
+editString :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
+editString path string selection editor =
+  case pathEdge (editorContext editor) path of
+    Nothing -> editor
+    Just edge ->
+      (focusString path selection . setEdge edge (VString string)) editor
 
 editGraph :: (MapGraph -> MapGraph) -> Editor -> Editor
 editGraph change editor =
@@ -66,18 +68,18 @@ editGraph change editor =
   where
     document = editorDocument editor
 
+editorContext :: Editor -> GraphContext
+editorContext editor =
+  documentContext (editorDocument editor) []
+
 -- Drops focus if its path crosses the touched edge or no longer
 -- resolves at all.
-dropCrossing :: UUID -> UUID -> Editor -> Editor
-dropCrossing source label editor =
+dropCrossing :: Edge -> Editor -> Editor
+dropCrossing edge editor =
   editor {editorFocus = kept =<< editorFocus editor}
   where
     kept focus@(Focus path _) = do
-      (nodes, _) <- walkPath (editorDocument editor) path
-      if (source, label) `elem` zip nodes path
+      PathWalk {walkedNodes = nodes} <- walkPath (editorContext editor) path
+      if edge `elem` zipWith Edge nodes path
         then Nothing
         else Just focus
-
-lastMaybe :: [item] -> Maybe item
-lastMaybe =
-  foldl (\_ item -> Just item) Nothing

@@ -8,7 +8,7 @@ import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import Puri.Widget
 import qualified Puri.Widgets as Widgets
-import Puri.Widgets (LineEditFocus, LineStyle)
+import Puri.Widgets (LineEditInteraction, LineStyle)
 
 halayWidget
   :: Applicative measureM
@@ -22,10 +22,9 @@ lineEdit
   :: Canvas.Canvas renderM
   => LineStyle
   -> String
-  -> LineEditFocus
-  -> (String -> LineEditFocus -> actionM ())
+  -> LineEditInteraction actionM
   -> Halay renderM renderM (Handler actionM)
-lineEdit style string focus change =
+lineEdit style string interaction =
   halayWidget
     (Widgets.lineEditSize edit)
     (Widgets.lineEdit edit)
@@ -34,6 +33,5 @@ lineEdit style string focus change =
       Widgets.LineEdit
         { Widgets.lineEditStyle = style
         , Widgets.lineEditText = string
-        , Widgets.lineEditFocus = focus
-        , Widgets.lineEditChange = change
+        , Widgets.lineEditInteraction = interaction
         }

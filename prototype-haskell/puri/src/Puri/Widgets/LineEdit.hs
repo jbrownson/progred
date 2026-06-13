@@ -1,6 +1,6 @@
 module Puri.Widgets.LineEdit
   ( LineEdit (..)
-  , LineEditFocus (..)
+  , LineEditInteraction (..)
   , LineEditSelection (..)
   , LineStyle (..)
   , lineEdit
@@ -29,10 +29,9 @@ data LineEditSelection = LineEditSelection
   }
   deriving (Eq, Show)
 
-data LineEditFocus
-  = LineEditUnfocused
-  | LineEditFocused LineEditSelection
-  deriving (Eq, Show)
+data LineEditInteraction actionM
+  = LineEditUnfocused (LineEditSelection -> actionM ())
+  | LineEditFocused LineEditSelection (String -> LineEditSelection -> actionM ()) (actionM ())
 
 data LineStyle = LineStyle
   { lineHeight :: Double
@@ -49,23 +48,22 @@ data LineStyle = LineStyle
 data LineEdit actionM = LineEdit
   { lineEditStyle :: LineStyle
   , lineEditText :: String
-  , lineEditFocus :: LineEditFocus
-  , lineEditChange :: String -> LineEditFocus -> actionM ()
+  , lineEditInteraction :: LineEditInteraction actionM
   }
 
--- The change callback reports the widget's complete desired value: the
--- text and the focus-local selection. The caller owns where each part
--- lives.
+-- Focused and unfocused line edits expose different callbacks: an
+-- unfocused edit can only request focus, while a focused edit can
+-- change text/selection or blur itself.
 lineEdit :: Canvas.Canvas renderM => LineEdit actionM -> Widget actionM renderM
 lineEdit edit rect = do
   let style = lineEditStyle edit
   let string = lineEditText edit
-  let focus = lineEditFocus edit
-  let selection = focusSelection focus
-  let focused = isFocused focus
+  let interaction = lineEditInteraction edit
+  let selection = interactionSelection interaction
+  let focused = interactionFocused interaction
   caretPositions <- measureCaretPositions string
   drawLine style focused string selection rect caretPositions
-  pure (editHandler style string selection focused (lineEditChange edit) rect caretPositions)
+  pure (editHandler style string interaction rect caretPositions)
 
 lineEditSize :: Canvas.Canvas measureM => LineEdit actionM -> measureM Size
 lineEditSize edit = do
@@ -77,51 +75,59 @@ lineEditSize edit = do
 editHandler
   :: LineStyle
   -> String
-  -> LineEditSelection
-  -> Bool
-  -> (String -> LineEditFocus -> actionM ())
+  -> LineEditInteraction actionM
   -> Rect
   -> [(Int, Double)]
   -> Handler actionM
-editHandler style string selection focused change rect caretPositions =
+editHandler style string interaction rect caretPositions =
   Handler
     { pointerHandler = pointer
-    , keyHandler = if focused then key else const Nothing
+    , keyHandler = key
     }
   where
+    selection = interactionSelection interaction
     textX = x rect + linePadding style
     caretAt pointerX = closestCaretIndex caretPositions (pointerX - textX)
     pointer event =
       case event of
         PointerDown {pointerX, pointerY}
           | rectContains rect pointerX pointerY ->
-              Just (change string (LineEditFocused (startDragAt (caretAt pointerX))))
+              Just (focusAt (caretAt pointerX))
         PointerMove {pointerX}
-          | editDragging selection ->
-              Just (change string (LineEditFocused (continueDragAt (caretAt pointerX) selection)))
+          | LineEditFocused _selection change _blur <- interaction
+          , editDragging selection ->
+              Just (change string (continueDragAt (caretAt pointerX) selection))
         PointerUp {}
-          | editDragging selection ->
-              Just (change string (LineEditFocused (selection {editDragging = False})))
+          | LineEditFocused _selection change _blur <- interaction
+          , editDragging selection ->
+              Just (change string (selection {editDragging = False}))
         _ -> Nothing
     key event =
-      case event of
-        KeyCode _modifiers code
-          | code == KeyCode.enter || code == KeyCode.escape ->
-              Just (change string LineEditUnfocused)
-        _ -> report <$> keyEdit string event selection
-    report (newString, newSelection) = change newString (LineEditFocused newSelection)
+      case interaction of
+        LineEditUnfocused _focus -> Nothing
+        LineEditFocused _selection change blur ->
+          case event of
+            KeyCode _modifiers code
+              | code == KeyCode.enter || code == KeyCode.escape ->
+                  Just blur
+            _ -> report change <$> keyEdit string event selection
+    focusAt newCaret =
+      case interaction of
+        LineEditUnfocused focus -> focus (startDragAt newCaret)
+        LineEditFocused _selection change _blur -> change string (startDragAt newCaret)
+    report change (newString, newSelection) = change newString newSelection
 
-focusSelection :: LineEditFocus -> LineEditSelection
-focusSelection focus =
-  case focus of
-    LineEditUnfocused -> collapsed 0
-    LineEditFocused selection -> selection
+interactionSelection :: LineEditInteraction actionM -> LineEditSelection
+interactionSelection interaction =
+  case interaction of
+    LineEditUnfocused _focus -> collapsed 0
+    LineEditFocused selection _change _blur -> selection
 
-isFocused :: LineEditFocus -> Bool
-isFocused focus =
-  case focus of
-    LineEditUnfocused -> False
-    LineEditFocused _selection -> True
+interactionFocused :: LineEditInteraction actionM -> Bool
+interactionFocused interaction =
+  case interaction of
+    LineEditUnfocused _focus -> False
+    LineEditFocused _selection _change _blur -> True
 
 keyEdit :: String -> KeyEvent -> LineEditSelection -> Maybe (String, LineEditSelection)
 keyEdit string event selection =

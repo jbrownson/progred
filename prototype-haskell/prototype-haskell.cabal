@@ -104,6 +104,7 @@ library progred
     Progred.Document
     Progred.Editor
     Progred.Graph
+    Progred.GraphContext
     Progred.MapGraph
     Progred.Projection
     Progred.Render.List

@@ -4,6 +4,7 @@ module Progred.Projection
   , PartialProjection (..)
   , Projection
   , over
+  , projectContext
   , projectDocument
   , stepCursor
   ) where
@@ -14,6 +15,7 @@ import Halay
 import Progred.Document
 import Progred.Editor
 import Progred.Graph
+import Progred.GraphContext
 import Puri.Handler
 
 -- A Projection maps a spot to a layout and always succeeds. A
@@ -39,7 +41,7 @@ over partial total env cursor =
   fromMaybe (total env cursor) (tryProject partial env cursor)
 
 data Env actionM renderM = Env
-  { envDocument :: Document
+  { envContext :: GraphContext
   , envEdit :: (Editor -> Editor) -> actionM ()
   , envProject :: Cursor -> Halay renderM renderM (Handler actionM)
   }
@@ -59,9 +61,18 @@ projectDocument
   -> Maybe Focus
   -> Halay renderM renderM (Handler actionM)
 projectDocument total document edit focus =
+  projectContext total (documentContext document []) edit focus
+
+projectContext
+  :: Projection actionM renderM
+  -> GraphContext
+  -> ((Editor -> Editor) -> actionM ())
+  -> Maybe Focus
+  -> Halay renderM renderM (Handler actionM)
+projectContext total context edit focus =
   apply (Cursor [] focus)
   where
-    env = Env {envDocument = document, envEdit = edit, envProject = apply}
+    env = Env {envContext = context, envEdit = edit, envProject = apply}
     apply = total env
 
 stepCursor :: UUID -> Cursor -> Cursor
