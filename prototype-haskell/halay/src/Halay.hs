@@ -104,6 +104,8 @@ data TextAlign
   | TextAlignEnd
   deriving (Eq, Show)
 
+-- | Text backend hooks. Measurement runs while Halay is discovering sizes;
+-- placement runs later, after each line has a final rectangle.
 data TextConfig measureM placeM placed = TextConfig
   { textLineHeight :: Maybe Double
   , textWrapMode :: TextWrapMode
@@ -112,12 +114,14 @@ data TextConfig measureM placeM placed = TextConfig
   , textPlaceLine :: Int -> String -> Rect -> placeM placed
   }
 
--- Measurement and placement are separate phases: measureM can query intrinsic
--- sizes such as text metrics, while placeM runs only after final rects exist.
+-- | A concrete layout tree. Measurement and placement are separate phases:
+-- @measureM@ can query intrinsic sizes such as text metrics, while @placeM@
+-- runs only after final rects exist.
 newtype Halay measureM placeM placed = Halay
   { buildHalay :: measureM (LayoutNode measureM placeM placed)
   }
 
+-- | A measured layout plus the final placement callback for a chosen rect.
 data Measured placeM placed = Measured
   { measuredSize :: Size
   , placeMeasured :: Rect -> placeM placed
@@ -183,6 +187,9 @@ fixed :: (Applicative measureM, Applicative placeM) => Size -> placed -> Halay m
 fixed size placed =
   leafWithSizing (Sizing (Fixed (sizeWidth size)) (Fixed (sizeHeight size))) (pure size) (const (pure placed))
 
+-- | An opaque intrinsic-size node. Halay measures the size once and later
+-- passes the final rect to the placement callback; it cannot inspect or
+-- reflow the leaf's contents.
 leaf :: Applicative measureM => measureM Size -> (Rect -> placeM placed) -> Halay measureM placeM placed
 leaf =
   leafWithSizing defaultSizing
@@ -199,6 +206,9 @@ leafWithSizing sizing measure place =
         , nodePlacers = [place]
         }
 
+-- | A width-sensitive text node. Halay measures tokens up front, chooses line
+-- breaks after horizontal sizing has produced an available width, and places
+-- each final line with 'textPlaceLine'.
 text :: Monad measureM => TextConfig measureM placeM placed -> String -> Halay measureM placeM placed
 text config string =
   Halay $ do
@@ -208,21 +218,28 @@ text config string =
         { nodeContent = TextContent measured
         }
 
+-- | Override the sizing strategy for a layout node.
 sized :: Functor measureM => Sizing -> Halay measureM placeM placed -> Halay measureM placeM placed
 sized sizing child =
   Halay $
     setNodeSizing sizing <$> buildHalay child
 
+-- | Add a placement callback to a node without changing its layout.
 decorate :: Functor measureM => (Rect -> placeM placed) -> Halay measureM placeM placed -> Halay measureM placeM placed
 decorate place child =
   Halay $
     addNodePlacer place <$> buildHalay child
 
+-- | Constrain a layout box to an aspect ratio. Raw text nodes deliberately
+-- ignore aspect ratio during the aspect passes; wrap text in a box when the
+-- containing box should be aspect-constrained.
 aspectRatio :: Functor measureM => Double -> Halay measureM placeM placed -> Halay measureM placeM placed
 aspectRatio ratio child =
   Halay $
     setNodeAspectRatio ratio <$> buildHalay child
 
+-- | Measure a concrete layout tree. The returned 'Measured' can be placed into
+-- any final rect, which may cause width-sensitive content such as text to wrap.
 measureHalay :: (Monad measureM, Monad placeM, Monoid placed) => Halay measureM placeM placed -> measureM (Measured placeM placed)
 measureHalay halay = do
   source <- buildHalay halay

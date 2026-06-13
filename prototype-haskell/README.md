@@ -87,6 +87,26 @@ kept as its own Cabal library so it can eventually move out of this repo
 if the direction holds up. `puri` re-exports its geometry types, and
 Progred uses Halay to place the current raw graph projection.
 
+Halay's public API describes one concrete layout tree. `measureHalay`
+first builds and measures that tree in `measureM`, returning a `Measured`
+value with a preferred `measuredSize`. The caller then chooses a final
+rectangle and runs `placeMeasured`, which invokes placement callbacks in
+`placeM`. In Progred those monads are currently the same rendering monad,
+but Halay keeps them separate so a standalone backend can allow text
+measurement without also allowing drawing.
+
+`leaf` is intentionally opaque: it supplies one intrinsic `Size` and a
+placement callback that receives the final `Rect`. `text` is not just a
+leaf helper. Text nodes measure words and natural line height up front,
+then choose line breaks after horizontal sizing has produced an available
+width, and finally place each line with `textPlaceLine`.
+
+Use `sized` to change a node's width/height sizing, `decorate` to attach
+extra placement output to a node, and `aspectRatio` to constrain layout
+boxes. Raw text nodes deliberately skip Halay's aspect-ratio passes
+because text has its own width-sensitive wrapping behavior; wrap text in
+a `box` when the containing text box should be aspect-constrained.
+
 Run the Halay conformance tests with:
 
 ```sh
