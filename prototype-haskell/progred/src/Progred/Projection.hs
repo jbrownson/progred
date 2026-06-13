@@ -3,10 +3,13 @@ module Progred.Projection
   , Env (..)
   , PartialProjection (..)
   , Projection
+  , ResolvedCursor (..)
+  , descend
+  , descendCursor
   , over
   , projectContext
   , projectDocument
-  , stepCursor
+  , resolveCursor
   ) where
 
 import Control.Applicative ((<|>))
@@ -54,6 +57,12 @@ data Cursor = Cursor
   , cursorFocus :: Maybe Focus
   }
 
+data ResolvedCursor = ResolvedCursor
+  { resolvedCursor :: Cursor
+  , resolvedNodes :: [UUID]
+  , resolvedValue :: Value
+  }
+
 projectDocument
   :: Projection actionM renderM
   -> Document
@@ -75,12 +84,29 @@ projectContext total context edit focus =
     env = Env {envContext = context, envEdit = edit, envProject = apply}
     apply = total env
 
-stepCursor :: UUID -> Cursor -> Cursor
-stepCursor label cursor =
+resolveCursor :: Env actionM renderM -> Cursor -> Maybe ResolvedCursor
+resolveCursor env cursor = do
+  PathWalk {walkedNodes = nodes, walkedValue = value} <- walkPath (envContext env) (cursorPath cursor)
+  pure
+    ResolvedCursor
+      { resolvedCursor = cursor
+      , resolvedNodes = nodes
+      , resolvedValue = value
+      }
+
+descend :: Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
+descend env cursor label =
+  envProject env (descendCursor label cursor)
+
+descendCursor :: UUID -> Cursor -> Cursor
+descendCursor label cursor =
   Cursor
     { cursorPath = cursorPath cursor <> [label]
-    , cursorFocus =
-        case cursorFocus cursor of
-          Just (Focus (step : rest) state) | step == label -> Just (Focus rest state)
-          _ -> Nothing
+    , cursorFocus = stepFocus label =<< cursorFocus cursor
     }
+
+stepFocus :: UUID -> Focus -> Maybe Focus
+stepFocus label focus =
+  case focusPath focus of
+    step : rest | step == label -> Just focus {focusPath = rest}
+    _ -> Nothing

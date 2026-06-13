@@ -26,15 +26,15 @@ projectList env cursor =
   where
     context = envContext env
     elements seen spot = do
-      value <- resolvePath context (cursorPath spot)
-      case value of
+      resolved <- resolveCursor env spot
+      case resolvedValue resolved of
         VRef node
           | node == nilNode -> Just []
           | node `elem` seen -> Nothing
           | otherwise -> do
               edges <- lookupNode context node
               if Map.size edges == 2 && Map.member headLabel edges && Map.member tailLabel edges
-                then (stepCursor headLabel spot :) <$> elements (node : seen) (stepCursor tailLabel spot)
+                then (descendCursor headLabel spot :) <$> elements (node : seen) (descendCursor tailLabel spot)
                 else Nothing
         _ -> Nothing
     render [] = textPlay listColor "[]"

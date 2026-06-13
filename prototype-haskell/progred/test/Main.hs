@@ -18,6 +18,7 @@ main = do
   run "deleteEdge" (propToolTracksValue genDeleteEdge)
   run "editString" propEditStringWritesAndFocuses
   run "blurString" propBlurStringOnlyClearsMatchingPath
+  run "deleteFocusedEdge" propDeleteFocusedEdgeDeletesEdge
   run "graphContext" propGraphContextUsesLibraries
   where
     run name prop = do
@@ -43,7 +44,7 @@ propToolTracksValue genTool =
         case writeAt graph rootId path sentinel of
           Nothing -> counterexample "generated path did not resolve" False
           Just instrumented ->
-            let edited = tool Editor {editorDocument = Document rootId instrumented, editorFocus = Just (Focus path restingState)}
+            let edited = tool Editor {editorDocument = Document rootId instrumented, editorFocus = Just (Focus path (testFocusState restingState))}
              in case editorFocus edited of
                   Nothing -> property True
                   Just (Focus path' _) ->
@@ -65,9 +66,9 @@ propEditStringWritesAndFocuses =
       pure (graph, path, string, selection)
     check (graph, path, string, selection) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let edited = editString path string selection Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
+        let edited = editString path string selection Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path (testFocusState restingState))}
          in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
-              .&&. (editorFocus edited === Just (Focus path selection))
+              .&&. (editorFocus edited === Just (Focus path (testFocusState selection)))
 
 propBlurStringOnlyClearsMatchingPath :: Property
 propBlurStringOnlyClearsMatchingPath =
@@ -79,10 +80,29 @@ propBlurStringOnlyClearsMatchingPath =
       pure (graph, path)
     check (graph, path) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let editor = Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
+        let editor = Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path (testFocusState restingState))}
             otherPath = path <> [head labelPool]
          in (editorFocus (blurString path editor) === Nothing)
-              .&&. (editorFocus (blurString otherPath editor) === Just (Focus path restingState))
+              .&&. (editorFocus (blurString otherPath editor) === Just (Focus path (testFocusState restingState)))
+
+propDeleteFocusedEdgeDeletesEdge :: Property
+propDeleteFocusedEdgeDeletesEdge =
+  forAllBlind genCase check
+  where
+    genCase = do
+      graph <- genGraph
+      path <- genPath graph
+      pure (graph, path)
+    check (graph, path) =
+      counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
+        let focusedEditor = Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path (testFocusState restingState))}
+            unfocusedEditor = Editor {editorDocument = Document rootId graph, editorFocus = Nothing}
+            deleted = deleteFocusedEdge focusedEditor
+            ignored = deleteFocusedEdge unfocusedEditor
+         in (readAt (documentGraph (editorDocument deleted)) rootId path === Nothing)
+              .&&. (editorFocus deleted === Nothing)
+              .&&. (documentGraph (editorDocument ignored) === graph)
+              .&&. (editorFocus ignored === Nothing)
 
 propGraphContextUsesLibraries :: Property
 propGraphContextUsesLibraries =
@@ -124,6 +144,10 @@ genLineEditSelection =
 restingState :: LineEditSelection
 restingState = LineEditSelection 0 0 False
 
+testFocusState :: LineEditSelection -> FocusState
+testFocusState selection =
+  defaultFocusState {focusStringSelection = selection}
+
 sentinel :: Value
 sentinel = VString "##sentinel##"
 
@@ -145,9 +169,9 @@ readAt :: MapGraph -> UUID -> [UUID] -> Maybe Value
 readAt graph node path =
   case path of
     [] -> Nothing
-    label : rest -> do
+    edgeLabel : rest -> do
       edges <- Map.lookup node graph
-      value <- Map.lookup label edges
+      value <- Map.lookup edgeLabel edges
       case (rest, value) of
         ([], _) -> Just value
         (_, VRef target) -> readAt graph target rest
@@ -157,11 +181,11 @@ writeAt :: MapGraph -> UUID -> [UUID] -> Value -> Maybe MapGraph
 writeAt graph node path newValue =
   case path of
     [] -> Nothing
-    label : rest -> do
+    edgeLabel : rest -> do
       edges <- Map.lookup node graph
-      value <- Map.lookup label edges
+      value <- Map.lookup edgeLabel edges
       case (rest, value) of
-        ([], VString _) -> Just (Map.insert node (Map.insert label newValue edges) graph)
+        ([], VString _) -> Just (Map.insert node (Map.insert edgeLabel newValue edges) graph)
         (_, VRef target) -> writeAt graph target rest newValue
         _ -> Nothing
 
@@ -190,8 +214,8 @@ genGraph = do
       -- fromList is right-biased; the anchor must win so every node keeps
       -- a string edge and the path walk always terminates.
       pure (node, Map.fromList (edges <> [forceString anchor]))
-    genEdge label = (,) label <$> genValue
-    forceString (label, _) = (label, VString "anchor")
+    genEdge edgeLabel = (,) edgeLabel <$> genValue
+    forceString (edgeLabel, _) = (edgeLabel, VString "anchor")
 
 genValue :: Gen Value
 genValue =
@@ -212,8 +236,8 @@ genPath graph =
       case Map.lookup node graph of
         Nothing -> pure Nothing
         Just edges -> do
-          (label, value) <- elements (Map.toList edges)
+          (edgeLabel, value) <- elements (Map.toList edges)
           case value of
-            VString _ -> pure (Just [label])
-            VRef target | fuel > 0 -> fmap (label :) <$> walkNode target (fuel - 1)
+            VString _ -> pure (Just [edgeLabel])
+            VRef target | fuel > 0 -> fmap (edgeLabel :) <$> walkNode target (fuel - 1)
             _ -> pure Nothing

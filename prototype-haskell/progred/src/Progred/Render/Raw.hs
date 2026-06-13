@@ -1,5 +1,6 @@
 module Progred.Render.Raw
-  ( rawProjection
+  ( focusedProjection
+  , rawProjection
   , textPlay
   ) where
 
@@ -20,20 +21,45 @@ import Puri.Widgets.Frame
 -- nothing, renders whatever the spot holds, placeholders included.
 rawProjection :: Canvas.Canvas renderM => Projection actionM renderM
 rawProjection env cursor =
-  case walkPath (envContext env) (cursorPath cursor) of
+  case resolveCursor env cursor of
     Nothing -> textPlay missingColor "<missing>"
-    Just PathWalk {walkedNodes = nodes, walkedValue = value} -> rawValue env cursor nodes value
+    Just resolved -> rawValue env resolved
 
-rawValue :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> [UUID] -> Value -> Halay renderM renderM (Handler actionM)
-rawValue env cursor nodes value =
-  case value of
+focusedProjection :: Canvas.Canvas renderM => Projection actionM renderM -> Projection actionM renderM
+focusedProjection projection env cursor =
+  focusCursor cursor (projection env cursor)
+
+focusCursor :: Canvas.Canvas renderM => Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+focusCursor cursor child =
+  case cursorFocus cursor of
+    Just focus | null (focusPath focus) ->
+      decorate drawFocusBackground child
+    _ -> child
+
+drawFocusBackground :: Canvas.Canvas renderM => Rect -> renderM (Handler actionM)
+drawFocusBackground rect = do
+  Canvas.fillRect focusRect focusBackgroundColor
+  Canvas.strokeRect focusRect focusColor 1
+  pure mempty
+  where
+    focusRect = inflateRect 3 2 rect
+
+inflateRect :: Double -> Double -> Rect -> Rect
+inflateRect dx dy Rect {x, y, width, height} =
+  Rect (x - dx) (y - dy) (width + dx * 2) (height + dy * 2)
+
+rawValue :: Canvas.Canvas renderM => Env actionM renderM -> ResolvedCursor -> Halay renderM renderM (Handler actionM)
+rawValue env resolved =
+  case resolvedValue resolved of
     VRef target
-      | target `elem` nodes -> rowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."]
-      | otherwise -> rawNode env cursor target
+      | target `elem` resolvedNodes resolved -> rowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."]
+      | otherwise -> rawNode env (resolvedCursor resolved) target
     VString string -> stringBox env cursor string
     VInt integer -> textPlay numberColor (show integer)
     VFloat double -> textPlay numberColor (show double)
     VBool bool -> textPlay boolColor (if bool then "true" else "false")
+  where
+    cursor = resolvedCursor resolved
 
 rawNode :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
 rawNode env cursor target =
@@ -46,7 +72,27 @@ rawNode env cursor target =
         ]
   where
     rawEdge (label, _value) =
-      rowWithGap valueGap [rawEdgeLabel label, envProject env (stepCursor label cursor)]
+      edgeRow env cursor label
+
+edgeRow
+  :: Canvas.Canvas renderM
+  => Env actionM renderM
+  -> Cursor
+  -> UUID
+  -> Halay renderM renderM (Handler actionM)
+edgeRow env cursor label =
+  decorate place $
+    rowWithGap valueGap [rawEdgeLabel label, descend env cursor label]
+  where
+    path = cursorPath (descendCursor label cursor)
+    place rect = do
+      pure $
+        onPointer $ \event ->
+          case event of
+            PointerDown {pointerX, pointerY}
+              | rectContains rect pointerX pointerY ->
+                  Just (envEdit env (focusEdge path))
+            _ -> Nothing
 
 rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 rawEdgeLabel label =
@@ -59,9 +105,9 @@ stringBox env cursor string =
     path = cursorPath cursor
     interaction =
       case cursorFocus cursor of
-        Just (Focus [] selection) ->
+        Just focus | null (focusPath focus) ->
           LineEditFocused
-            selection
+            (focusStringSelection (focusState focus))
             (\newString newSelection -> envEdit env (editString path newString newSelection))
             (envEdit env (blurString path))
         _ ->
@@ -169,6 +215,9 @@ repeatColor = "#8a5a00"
 
 focusColor :: String
 focusColor = "#0a84ff"
+
+focusBackgroundColor :: String
+focusBackgroundColor = "#eaf3ff"
 
 boxBorderColor :: String
 boxBorderColor = "#c8ccd2"

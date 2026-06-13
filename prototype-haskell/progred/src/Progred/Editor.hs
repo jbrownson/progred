@@ -1,9 +1,13 @@
 module Progred.Editor
   ( Editor (..)
   , Focus (..)
+  , FocusState (..)
   , blurString
+  , defaultFocusState
   , deleteEdge
+  , deleteFocusedEdge
   , editString
+  , focusEdge
   , focusString
   , setEdge
   , setFocus
@@ -13,14 +17,27 @@ import Progred.Document
 import Progred.Graph
 import Progred.GraphContext
 import Progred.MapGraph
-import Puri.Widgets (LineEditSelection)
+import Puri.Widgets (LineEditSelection (..))
 
--- Focus is the focused spot: the label path from the document root and
--- the text selection at its target. Occurrences of a shared node are
--- distinct because they are reached along different paths.
-data Focus
-  = Focus [UUID] LineEditSelection
+-- Focus is the focused spot by path from the document root. Occurrences
+-- of a shared node are distinct because they are reached along different
+-- paths.
+data Focus = Focus
+  { focusPath :: [UUID]
+  , focusState :: FocusState
+  }
   deriving (Eq, Show)
+
+data FocusState = FocusState
+  { focusStringSelection :: LineEditSelection
+  }
+  deriving (Eq, Show)
+
+defaultFocusState :: FocusState
+defaultFocusState =
+  FocusState
+    { focusStringSelection = LineEditSelection 0 0 False
+    }
 
 data Editor = Editor
   { editorDocument :: Document
@@ -44,13 +61,19 @@ setFocus focus editor =
   editor {editorFocus = focus}
 
 focusString :: [UUID] -> LineEditSelection -> Editor -> Editor
-focusString path selection =
-  setFocus (Just (Focus path selection))
+focusString path selection editor =
+  setFocus (Just (Focus path state)) editor
+  where
+    state = (stateForPath path (editorFocus editor)) {focusStringSelection = selection}
+
+focusEdge :: [UUID] -> Editor -> Editor
+focusEdge path editor =
+  setFocus (Just (Focus path (stateForPath path (editorFocus editor)))) editor
 
 blurString :: [UUID] -> Editor -> Editor
 blurString path editor =
   case editorFocus editor of
-    Just (Focus focusedPath _) | focusedPath == path -> setFocus Nothing editor
+    Just focus | focusPath focus == path -> setFocus Nothing editor
     _ -> editor
 
 -- Writing the edge drops focus that crossed it, so string edits pair the
@@ -61,6 +84,18 @@ editString path string selection editor =
     Nothing -> editor
     Just edge ->
       (focusString path selection . setEdge edge (VString string)) editor
+
+deleteFocusedEdge :: Editor -> Editor
+deleteFocusedEdge editor =
+  case editorFocus editor of
+    Just focus -> deletePathEdge (focusPath focus) editor
+    _ -> editor
+
+deletePathEdge :: [UUID] -> Editor -> Editor
+deletePathEdge path editor =
+  case pathEdge (editorContext editor) path of
+    Nothing -> editor
+    Just edge -> deleteEdge edge editor
 
 editGraph :: (MapGraph -> MapGraph) -> Editor -> Editor
 editGraph change editor =
@@ -78,8 +113,14 @@ dropCrossing :: Edge -> Editor -> Editor
 dropCrossing edge editor =
   editor {editorFocus = kept =<< editorFocus editor}
   where
-    kept focus@(Focus path _) = do
-      PathWalk {walkedNodes = nodes} <- walkPath (editorContext editor) path
-      if edge `elem` zipWith Edge nodes path
+    kept focus = do
+      PathWalk {walkedNodes = nodes} <- walkPath (editorContext editor) (focusPath focus)
+      if edge `elem` zipWith Edge nodes (focusPath focus)
         then Nothing
         else Just focus
+
+stateForPath :: [UUID] -> Maybe Focus -> FocusState
+stateForPath path maybeFocus =
+  case maybeFocus of
+    Just focus | focusPath focus == path -> focusState focus
+    _ -> defaultFocusState

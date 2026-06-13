@@ -20,6 +20,7 @@ import Progred.Render.List
 import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
+import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
 import System.Random (mkStdGen, randoms)
 
@@ -45,19 +46,30 @@ view viewport model = do
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
     documentLayout =
-      decorate unfocusOnClick $
+      decorate appHandler $
         box
           defaultBox
             { boxDirection = TopToBottom
             , boxPadding = Insets 12 12 12 12
             , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
             }
-          [projectDocument (listProjection `over` rawProjection) (editorDocument model) modify (editorFocus model)]
-    unfocusOnClick =
-      const $ pure $ onPointer $ \event ->
-        case event of
-          PointerDown {} -> Just (modify (setFocus Nothing))
-          _ -> Nothing
+          [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument model) modify (editorFocus model)]
+    appHandler _rect =
+      pure $
+        onPointer
+          ( \event ->
+              case event of
+                PointerDown {} -> Just (modify (setFocus Nothing))
+                _ -> Nothing
+          )
+          <> onKey
+            ( \event ->
+                case event of
+                  KeyCode _modifiers code
+                    | code == KeyCode.delete || code == KeyCode.backspace ->
+                        Just (modify deleteFocusedEdge)
+                  _ -> Nothing
+            )
 
 sampleDocument :: Document
 sampleDocument =
