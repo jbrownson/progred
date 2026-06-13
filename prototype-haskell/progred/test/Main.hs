@@ -8,7 +8,7 @@ import Progred.Document
 import Progred.Editor
 import Progred.Graph
 import Progred.MapGraph (MapGraph)
-import Puri.Widgets.LineEdit (EditView (..))
+import Puri.Widgets.LineEdit (LineEditState (..))
 import Test.QuickCheck
 
 main :: IO ()
@@ -40,7 +40,7 @@ propToolTracksValue genTool =
         case writeAt graph rootId path sentinel of
           Nothing -> counterexample "generated path did not resolve" False
           Just instrumented ->
-            let edited = tool Editor {editorDocument = Document rootId instrumented, editorFocus = Just (Focus path restingView)}
+            let edited = tool Editor {editorDocument = Document rootId instrumented, editorFocus = Just (Focus path restingState)}
              in case editorFocus edited of
                   Nothing -> property True
                   Just (Focus path' _) ->
@@ -58,24 +58,24 @@ propEditStringWritesAndFocuses =
       graph <- genGraph
       path <- genPath graph
       string <- elements ["x", "yz", "hello"]
-      view <- genView
-      pure (graph, path, string, view)
-    check (graph, path, string, view) =
+      maybeState <- genMaybeState
+      pure (graph, path, string, maybeState)
+    check (graph, path, string, maybeState) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let edited = editString path string view Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingView)}
+        let edited = editString path string maybeState Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path restingState)}
          in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
-              .&&. (editorFocus edited === (Focus path <$> view))
-    genView =
+              .&&. (editorFocus edited === (Focus path <$> maybeState))
+    genMaybeState =
       oneof
         [ pure Nothing
-        , Just <$> (EditView <$> chooseInt (0, 8) <*> chooseInt (-4, 4) <*> arbitrary)
+        , Just <$> (LineEditState <$> chooseInt (0, 8) <*> chooseInt (0, 8) <*> arbitrary)
         ]
+
+restingState :: LineEditState
+restingState = LineEditState 0 0 False
 
 sentinel :: Value
 sentinel = VString "##sentinel##"
-
-restingView :: EditView
-restingView = EditView 0 0 False
 
 genSetEdge :: MapGraph -> Gen (Editor -> Editor)
 genSetEdge _graph =

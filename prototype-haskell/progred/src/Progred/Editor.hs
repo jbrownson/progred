@@ -10,13 +10,13 @@ module Progred.Editor
 import Progred.Document
 import Progred.Graph
 import Progred.MapGraph
-import Puri.Widgets.LineEdit (EditView)
+import Puri.Widgets.LineEdit (LineEditState)
 
 -- Focus is the focused spot: the label path from the document root and
 -- the text-edit state at its target. Occurrences of a shared node are
 -- distinct because they are reached along different paths.
 data Focus
-  = Focus [UUID] EditView
+  = Focus [UUID] LineEditState
   deriving (Eq, Show)
 
 data Editor = Editor
@@ -43,12 +43,12 @@ setFocus focus editor =
 -- A line edit reports its whole desired state, so this writes the
 -- string and places the text cursor in one step; writing the edge drops
 -- the focus that crossed it, so the two must not be done separately.
-editString :: [UUID] -> String -> Maybe EditView -> Editor -> Editor
-editString path string view editor =
+editString :: [UUID] -> String -> Maybe LineEditState -> Editor -> Editor
+editString path string maybeState editor =
   case target of
     Nothing -> editor
     Just (source, label) ->
-      (setFocus (Focus path <$> view) . setEdge source label (VString string)) editor
+      (setFocus (Focus path <$> maybeState) . setEdge source label (VString string)) editor
   where
     target = do
       (nodes, _) <- walkPath (editorDocument editor) path

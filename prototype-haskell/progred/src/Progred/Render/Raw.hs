@@ -54,14 +54,14 @@ rawEdgeLabel label =
 
 stringBox :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> String -> Halay renderM (Handler actionM)
 stringBox env cursor string =
-  framed (stringFrame (isJust view)) (lineEdit stringLineStyle string view change)
+  framed (stringFrame (isJust maybeState)) (lineEdit stringLineStyle string maybeState change)
   where
-    view =
+    maybeState =
       case cursorFocus cursor of
-        Just (Focus [] editView) -> Just editView
+        Just (Focus [] state) -> Just state
         _ -> Nothing
-    change newString newView =
-      envEdit env (editString (cursorPath cursor) newString newView)
+    change newString newState =
+      envEdit env (editString (cursorPath cursor) newString newState)
 
 stringFrame :: Bool -> Frame
 stringFrame focused =

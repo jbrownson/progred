@@ -70,6 +70,6 @@ stepCursor label cursor =
     { cursorPath = cursorPath cursor <> [label]
     , cursorFocus =
         case cursorFocus cursor of
-          Just (Focus (step : rest) view) | step == label -> Just (Focus rest view)
+          Just (Focus (step : rest) state) | step == label -> Just (Focus rest state)
           _ -> Nothing
     }
