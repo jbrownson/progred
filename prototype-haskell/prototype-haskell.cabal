@@ -8,6 +8,15 @@ common warnings
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates
                -Wincomplete-uni-patterns -Wpartial-fields -Wredundant-constraints
 
+library uig
+  import:           warnings
+  exposed-modules:
+    UIG
+  hs-source-dirs:   uig/src
+  default-language: GHC2021
+  build-depends:
+    , base >= 4.18 && < 4.23
+
 library halay
   import:           warnings
   exposed-modules:
@@ -17,6 +26,7 @@ library halay
   default-language: GHC2021
   build-depends:
     , base >= 4.18 && < 4.23
+    , prototype-haskell:uig
 
 test-suite halay-tests
   import:           warnings
@@ -51,6 +61,7 @@ library puri
   build-depends:
     , base >= 4.18 && < 4.23
     , prototype-haskell:halay
+    , prototype-haskell:uig
 
   if os(wasi)
     hs-source-dirs: puri/platform/wasm

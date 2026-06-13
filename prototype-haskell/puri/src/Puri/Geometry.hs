@@ -1,5 +1,5 @@
 module Puri.Geometry
-  ( module Halay.Geometry
+  ( module UIG
   ) where
 
-import Halay.Geometry
+import UIG
