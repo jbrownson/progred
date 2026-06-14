@@ -2,17 +2,25 @@ module Progred.Editor
   ( Editor (..)
   , Focus (..)
   , FocusState (..)
+  , NumberEdit (..)
+  , blurValue
   , blurString
   , defaultFocusState
   , deleteEdge
   , deleteFocusedEdge
+  , editFloat
+  , editInt
   , editString
   , focusEdge
+  , focusNumber
   , focusString
+  , parseFloatValue
+  , parseIntValue
   , setEdge
   , setFocus
   ) where
 
+import Text.Read (readMaybe)
 import Progred.Document
 import Progred.Graph
 import Progred.GraphContext
@@ -30,6 +38,13 @@ data Focus = Focus
 
 data FocusState = FocusState
   { focusStringSelection :: LineEditSelection
+  , focusNumberEdit :: Maybe NumberEdit
+  }
+  deriving (Eq, Show)
+
+data NumberEdit = NumberEdit
+  { numberEditText :: String
+  , numberEditSelection :: LineEditSelection
   }
   deriving (Eq, Show)
 
@@ -37,6 +52,7 @@ defaultFocusState :: FocusState
 defaultFocusState =
   FocusState
     { focusStringSelection = LineEditSelection 0 0 False
+    , focusNumberEdit = Nothing
     }
 
 data Editor = Editor
@@ -70,11 +86,21 @@ focusEdge :: [UUID] -> Editor -> Editor
 focusEdge path editor =
   setFocus (Just (Focus path (stateForPath path (editorFocus editor)))) editor
 
-blurString :: [UUID] -> Editor -> Editor
-blurString path editor =
+focusNumber :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
+focusNumber path string selection editor =
+  setFocus (Just (Focus path state)) editor
+  where
+    state = (stateForPath path (editorFocus editor)) {focusNumberEdit = Just (NumberEdit string selection)}
+
+blurValue :: [UUID] -> Editor -> Editor
+blurValue path editor =
   case editorFocus editor of
     Just focus | focusPath focus == path -> setFocus Nothing editor
     _ -> editor
+
+blurString :: [UUID] -> Editor -> Editor
+blurString =
+  blurValue
 
 -- Writing the edge drops focus that crossed it, so string edits pair the
 -- graph write and the replacement selection in one operation.
@@ -84,6 +110,31 @@ editString path string selection editor =
     Nothing -> editor
     Just edge ->
       (focusString path selection . setEdge edge (VString string)) editor
+
+editInt :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
+editInt =
+  editNumber parseIntValue
+
+editFloat :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
+editFloat =
+  editNumber parseFloatValue
+
+parseIntValue :: String -> Maybe Value
+parseIntValue string =
+  VInt <$> (readMaybe string :: Maybe Integer)
+
+parseFloatValue :: String -> Maybe Value
+parseFloatValue string =
+  VFloat <$> (readMaybe string :: Maybe Double)
+
+editNumber :: (String -> Maybe Value) -> [UUID] -> String -> LineEditSelection -> Editor -> Editor
+editNumber parse path string selection editor =
+  case pathEdge (editorContext editor) path of
+    Nothing -> editor
+    Just edge ->
+      case parse string of
+        Just value -> (focusNumber path string selection . setEdge edge value) editor
+        Nothing -> focusNumber path string selection editor
 
 deleteFocusedEdge :: Editor -> Editor
 deleteFocusedEdge editor =

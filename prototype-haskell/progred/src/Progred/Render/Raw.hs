@@ -14,7 +14,7 @@ import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
 import Puri.Halay (lineEdit)
 import Puri.Handler
-import Puri.Widgets (LineEditInteraction (..), LineStyle (..))
+import Puri.Widgets (LineEditInteraction (..), LineEditSelection (..), LineStyle (..))
 import Puri.Widgets.Frame
 
 -- The total projection at the bottom of every composition: assumes
@@ -55,8 +55,8 @@ rawValue env resolved =
       | target `elem` resolvedNodes resolved -> rowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."]
       | otherwise -> rawNode env (resolvedCursor resolved) target
     VString string -> stringBox env cursor string
-    VInt integer -> textPlay numberColor (show integer)
-    VFloat double -> textPlay numberColor (show double)
+    VInt integer -> numberBox env cursor (show integer) parseIntValue editInt
+    VFloat double -> numberBox env cursor (show double) parseFloatValue editFloat
     VBool bool -> textPlay boolColor (if bool then "true" else "false")
   where
     cursor = resolvedCursor resolved
@@ -113,6 +113,45 @@ stringBox env cursor string =
         _ ->
           LineEditUnfocused (\selection -> envEdit env (focusString path selection))
 
+numberBox
+  :: Canvas.Canvas renderM
+  => Env actionM renderM
+  -> Cursor
+  -> String
+  -> (String -> Maybe Value)
+  -> ([UUID] -> String -> LineEditSelection -> Editor -> Editor)
+  -> Halay renderM renderM (Handler actionM)
+numberBox env cursor string parse change =
+  framed (stringFrame focused) (lineEdit (numberLineStyle (isValidNumber editText)) editText interaction)
+  where
+    path = cursorPath cursor
+    isValidNumber candidate =
+      case parse candidate of
+        Just _ -> True
+        Nothing -> False
+    (focused, editText, interaction) =
+      case cursorFocus cursor of
+        Just focus | null (focusPath focus) ->
+          let edit = numberEditOrDefault string (focusState focus)
+           in ( True
+              , numberEditText edit
+              , LineEditFocused
+                  (numberEditSelection edit)
+                  (\newString newSelection -> envEdit env (change path newString newSelection))
+                  (envEdit env (blurValue path))
+              )
+        _ ->
+          ( False
+          , string
+          , LineEditUnfocused (\selection -> envEdit env (focusNumber path string selection))
+          )
+
+numberEditOrDefault :: String -> FocusState -> NumberEdit
+numberEditOrDefault string state =
+  case focusNumberEdit state of
+    Just edit -> edit
+    Nothing -> NumberEdit string (LineEditSelection (length string) (length string) False)
+
 isLineEditFocused :: LineEditInteraction actionM -> Bool
 isLineEditFocused interaction =
   case interaction of
@@ -139,6 +178,12 @@ stringLineStyle =
     , lineTextColor = stringColor
     , lineCaretColor = focusColor
     , lineSelectionColor = selectionColor
+    }
+
+numberLineStyle :: Bool -> LineStyle
+numberLineStyle valid =
+  stringLineStyle
+    { lineTextColor = if valid then numberColor else invalidNumberColor
     }
 
 rawIndentBox :: BoxConfig
@@ -209,6 +254,9 @@ boolColor = "#7a3fa0"
 
 missingColor :: String
 missingColor = "#9a2d2d"
+
+invalidNumberColor :: String
+invalidNumberColor = "#b42318"
 
 repeatColor :: String
 repeatColor = "#8a5a00"

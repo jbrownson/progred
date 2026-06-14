@@ -17,6 +17,8 @@ main = do
   run "setEdge" (propToolTracksValue genSetEdge)
   run "deleteEdge" (propToolTracksValue genDeleteEdge)
   run "editString" propEditStringWritesAndFocuses
+  run "editInt" propEditIntBuffersInvalidAndCommitsValid
+  run "editFloat" propEditFloatBuffersInvalidAndCommitsValid
   run "blurString" propBlurStringOnlyClearsMatchingPath
   run "deleteFocusedEdge" propDeleteFocusedEdgeDeletesEdge
   run "graphContext" propGraphContextUsesLibraries
@@ -69,6 +71,34 @@ propEditStringWritesAndFocuses =
         let edited = editString path string selection Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path (testFocusState restingState))}
          in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
               .&&. (editorFocus edited === Just (Focus path (testFocusState selection)))
+
+propEditIntBuffersInvalidAndCommitsValid :: Property
+propEditIntBuffersInvalidAndCommitsValid =
+  conjoin
+    [ readAt (documentGraph (editorDocument validEdit)) rootId [numberLabel] === Just (VInt 42)
+    , editorFocus validEdit === Just (Focus [numberLabel] (testNumberState "42" selection))
+    , readAt (documentGraph (editorDocument invalidEdit)) rootId [numberLabel] === Just (VInt 1)
+    , editorFocus invalidEdit === Just (Focus [numberLabel] (testNumberState "-" selection))
+    ]
+  where
+    selection = LineEditSelection 2 2 False
+    editor = Editor {editorDocument = Document rootId numberGraph, editorFocus = Nothing}
+    validEdit = editInt [numberLabel] "42" selection editor
+    invalidEdit = editInt [numberLabel] "-" selection editor
+
+propEditFloatBuffersInvalidAndCommitsValid :: Property
+propEditFloatBuffersInvalidAndCommitsValid =
+  conjoin
+    [ readAt (documentGraph (editorDocument validEdit)) rootId [numberLabel] === Just (VFloat 2.5)
+    , editorFocus validEdit === Just (Focus [numberLabel] (testNumberState "2.5" selection))
+    , readAt (documentGraph (editorDocument invalidEdit)) rootId [numberLabel] === Just (VFloat 1.5)
+    , editorFocus invalidEdit === Just (Focus [numberLabel] (testNumberState "nope" selection))
+    ]
+  where
+    selection = LineEditSelection 3 3 False
+    editor = Editor {editorDocument = Document rootId floatGraph, editorFocus = Nothing}
+    validEdit = editFloat [numberLabel] "2.5" selection editor
+    invalidEdit = editFloat [numberLabel] "nope" selection editor
 
 propBlurStringOnlyClearsMatchingPath :: Property
 propBlurStringOnlyClearsMatchingPath =
@@ -148,8 +178,23 @@ testFocusState :: LineEditSelection -> FocusState
 testFocusState selection =
   defaultFocusState {focusStringSelection = selection}
 
+testNumberState :: String -> LineEditSelection -> FocusState
+testNumberState string selection =
+  defaultFocusState {focusNumberEdit = Just (NumberEdit string selection)}
+
 sentinel :: Value
 sentinel = VString "##sentinel##"
+
+numberLabel :: UUID.UUID
+numberLabel = UUID.fromWords 700 0 0 1
+
+numberGraph :: MapGraph
+numberGraph =
+  Map.fromList [(rootId, Map.fromList [(numberLabel, VInt 1)])]
+
+floatGraph :: MapGraph
+floatGraph =
+  Map.fromList [(rootId, Map.fromList [(numberLabel, VFloat 1.5)])]
 
 genSetEdge :: MapGraph -> Gen (Editor -> Editor)
 genSetEdge _graph =
