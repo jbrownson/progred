@@ -4,11 +4,19 @@ module Main
 
 import qualified Data.Map.Strict as Map
 import qualified Data.UUID.Types as UUID
+import Control.Monad.Trans.State.Strict (execState, modify)
+import Halay
+import Progred.Builtins
 import Progred.Document
 import Progred.Editor
 import Progred.Graph
 import Progred.GraphContext
 import Progred.MapGraph (MapGraph)
+import Progred.Projection
+import Progred.Render.List
+import Progred.Render.Raw
+import qualified Puri.Canvas as Canvas
+import Puri.Handler
 import Puri.Widgets (LineEditSelection (..))
 import Test.QuickCheck
 
@@ -22,6 +30,7 @@ main = do
   run "blurString" propBlurStringOnlyClearsMatchingPath
   run "deleteFocusedEdge" propDeleteFocusedEdgeDeletesEdge
   run "graphContext" propGraphContextUsesLibraries
+  run "listItemFocus" propListNodeItemFocusesListElement
   where
     run name prop = do
       result <- quickCheckWithResult stdArgs {maxSuccess = 1000} prop
@@ -167,6 +176,59 @@ propGraphContextUsesLibraries =
     documentWinsContext =
       documentContext (Document root documentOverrideGraph) [libraryGraph]
 
+propListNodeItemFocusesListElement :: Property
+propListNodeItemFocusesListElement =
+  editorFocus clicked === Just (Focus thirdItemPath defaultFocusState)
+  where
+    clicked =
+      execState
+        (handlePointer (PointerDown 205 25) handler)
+        Editor {editorDocument = listItemDocument, editorFocus = Nothing}
+    handler =
+      runTestRender $ do
+        measured <- measureHalay listItemLayout
+        placeMeasured measured (Rect 0 0 800 600)
+    listItemLayout =
+      projectDocument
+        (focusedProjection (listProjection `over` rawProjection))
+        listItemDocument
+        modify
+        Nothing
+
+newtype TestRender a = TestRender
+  { runTestRender :: a
+  }
+
+instance Functor TestRender where
+  fmap change (TestRender value) =
+    TestRender (change value)
+
+instance Applicative TestRender where
+  pure =
+    TestRender
+  TestRender change <*> TestRender value =
+    TestRender (change value)
+
+instance Monad TestRender where
+  TestRender value >>= next =
+    next value
+
+instance Canvas.Canvas TestRender where
+  clearCanvas _viewport = pure ()
+  fillRect _rect _color = pure ()
+  strokeRect _rect _color _lineWidth = pure ()
+  fillText _point _color _text = pure ()
+  fillTextMiddle _point _color _text = pure ()
+  measureText string =
+    pure
+      Canvas.TextMetrics
+        { Canvas.textWidth = fromIntegral (length string) * 8
+        , Canvas.textActualBoundingBoxAscent = 10
+        , Canvas.textActualBoundingBoxDescent = 3
+        , Canvas.textFontBoundingBoxAscent = 11
+        , Canvas.textFontBoundingBoxDescent = 3
+        }
+
 genLineEditSelection :: Gen LineEditSelection
 genLineEditSelection =
   LineEditSelection <$> chooseInt (0, 8) <*> chooseInt (0, 8) <*> arbitrary
@@ -195,6 +257,42 @@ numberGraph =
 floatGraph :: MapGraph
 floatGraph =
   Map.fromList [(rootId, Map.fromList [(numberLabel, VFloat 1.5)])]
+
+thirdItemPath :: [UUID]
+thirdItemPath =
+  [listLabel, tailLabel, tailLabel, headLabel]
+
+listItemDocument :: Document
+listItemDocument =
+  Document rootId listItemGraph
+
+listItemGraph :: MapGraph
+listItemGraph =
+  Map.fromList
+    [ (rootId, Map.fromList [(listLabel, VRef listCell1)])
+    , (listCell1, cons (VString "alpha") (VRef listCell2))
+    , (listCell2, cons (VInt 2) (VRef listCell3))
+    , (listCell3, cons (VRef listItemNode) (VRef nilNode))
+    , (listItemNode, Map.fromList [(nameLabel, VString "node")])
+    ]
+  where
+    cons headValue tailValue =
+      Map.fromList [(headLabel, headValue), (tailLabel, tailValue)]
+
+listLabel :: UUID
+listLabel = UUID.fromWords 800 0 0 1
+
+listCell1 :: UUID
+listCell1 = UUID.fromWords 801 0 0 1
+
+listCell2 :: UUID
+listCell2 = UUID.fromWords 802 0 0 1
+
+listCell3 :: UUID
+listCell3 = UUID.fromWords 803 0 0 1
+
+listItemNode :: UUID
+listItemNode = UUID.fromWords 804 0 0 1
 
 genSetEdge :: MapGraph -> Gen (Editor -> Editor)
 genSetEdge _graph =

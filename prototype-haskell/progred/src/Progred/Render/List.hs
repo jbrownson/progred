@@ -41,7 +41,9 @@ projectList env cursor =
     render spots =
       inlineRowWithGap
         listGap
-        ([textPlay listColor "["] <> intersperse (textPlay listColor ",") (envProject env <$> spots) <> [textPlay listColor "]"])
+        ([textPlay listColor "["] <> intersperse (textPlay listColor ",") (projectItem <$> spots) <> [textPlay listColor "]"])
+    projectItem spot =
+      focusableEdge env spot (envProject env spot)
 
 listColor :: String
 listColor = "#68707c"

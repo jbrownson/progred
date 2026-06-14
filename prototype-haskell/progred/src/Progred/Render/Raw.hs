@@ -84,18 +84,10 @@ edgeRow
   -> UUID
   -> Halay renderM renderM (Handler actionM)
 edgeRow env cursor label =
-  decorate place $
-    inlineRowWithGap valueGap [rawEdgeLabel label, descend env cursor label]
+  focusableEdge env childCursor $
+    inlineRowWithGap valueGap [rawEdgeLabel label, envProject env childCursor]
   where
-    path = cursorPath (descendCursor label cursor)
-    place rect = do
-      pure $
-        onPointer $ \event ->
-          case event of
-            PointerDown {pointerX, pointerY}
-              | rectContains rect pointerX pointerY ->
-                  Just (envEdit env (focusEdge path))
-            _ -> Nothing
+    childCursor = descendCursor label cursor
 
 rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 rawEdgeLabel label =

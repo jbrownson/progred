@@ -6,6 +6,7 @@ module Progred.Projection
   , ResolvedCursor (..)
   , descend
   , descendCursor
+  , focusableEdge
   , over
   , projectContext
   , projectDocument
@@ -104,6 +105,21 @@ descendCursor label cursor =
     { cursorPath = cursorPath cursor <> [label]
     , cursorFocus = stepFocus label =<< cursorFocus cursor
     }
+
+focusableEdge :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+focusableEdge env cursor child
+  | null path = child
+  | otherwise = decorate place child
+  where
+    path = cursorPath cursor
+    place rect =
+      pure $
+        onPointer $ \event ->
+          case event of
+            PointerDown {pointerX, pointerY}
+              | rectContains rect pointerX pointerY ->
+                  Just (envEdit env (focusEdge path))
+            _ -> Nothing
 
 stepFocus :: UUID -> Focus -> Maybe Focus
 stepFocus label focus =
