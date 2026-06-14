@@ -3,6 +3,7 @@ module Progred.App
   , Model
   , initialModel
   , runAppM
+  , toggleDebugLayoutRects
   , view
   ) where
 
@@ -24,7 +25,10 @@ import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
 import System.Random (mkStdGen, randoms)
 
-type Model = Editor
+data Model = Model
+  { modelEditor :: Editor
+  , modelDebugLayoutRects :: Bool
+  }
 
 type AppM = State Model
 
@@ -33,10 +37,23 @@ runAppM = runState
 
 initialModel :: Model
 initialModel =
-  Editor
-    { editorDocument = sampleDocument
-    , editorFocus = Nothing
+  Model
+    { modelEditor =
+        Editor
+          { editorDocument = sampleDocument
+          , editorFocus = Nothing
+          }
+    , modelDebugLayoutRects = False
     }
+
+toggleDebugLayoutRects :: AppM ()
+toggleDebugLayoutRects =
+  modify
+    ( \model ->
+        model
+          { modelDebugLayoutRects = not (modelDebugLayoutRects model)
+          }
+    )
 
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
@@ -45,8 +62,9 @@ view viewport model = do
   placeMeasured measured viewportRect
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
+    editor = modelEditor model
     documentLayout =
-      withLayoutDebug $
+      withLayoutDebug (modelDebugLayoutRects model) $
         decorate appHandler $
           box
             defaultBox
@@ -54,13 +72,18 @@ view viewport model = do
               , boxPadding = Insets 12 12 12 12
               , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
               }
-            [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument model) modify (editorFocus model)]
+            [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument editor) editEditor (editorFocus editor)]
+    editEditor change =
+      modify
+        ( \current ->
+            current {modelEditor = change (modelEditor current)}
+        )
     appHandler _rect =
       pure $
         onPointer
           ( \event ->
               case event of
-                PointerDown {} -> Just (modify (setFocus Nothing))
+                PointerDown {} -> Just (editEditor (setFocus Nothing))
                 _ -> Nothing
           )
           <> onKey
@@ -68,13 +91,13 @@ view viewport model = do
                 case event of
                   KeyCode _modifiers code
                     | code == KeyCode.delete || code == KeyCode.backspace ->
-                        Just (modify deleteFocusedEdge)
+                        Just (editEditor deleteFocusedEdge)
                   _ -> Nothing
             )
 
-withLayoutDebug :: Canvas.Canvas renderM => Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
-withLayoutDebug layout
-  | debugLayoutRects = debugRects drawDebugRect layout
+withLayoutDebug :: Canvas.Canvas renderM => Bool -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+withLayoutDebug enabled layout
+  | enabled = debugRects drawDebugRect layout
   | otherwise = layout
 
 drawDebugRect :: Canvas.Canvas renderM => Int -> Rect -> renderM (Handler actionM)
@@ -85,9 +108,6 @@ drawDebugRect depth rect = do
 debugRectColor :: Int -> String
 debugRectColor depth =
   debugRectColors !! (depth `mod` length debugRectColors)
-
-debugLayoutRects :: Bool
-debugLayoutRects = False
 
 debugRectColors :: [String]
 debugRectColors =

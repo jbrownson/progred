@@ -177,10 +177,7 @@ stringFrame focused =
 stringLineStyle :: LineStyle
 stringLineStyle =
   LineStyle
-    { lineHeight = boxHeight
-    , lineBaseline = textBaseline
-    , lineAscent = textAscent
-    , lineDescent = textDescent
+    { lineVerticalPadding = scalarVerticalPadding
     , linePadding = boxPad
     , lineMinWidth = minBoxTextWidth
     , lineTextColor = stringColor
@@ -214,13 +211,18 @@ textPlay color string =
   where
     config =
       TextConfig
-        { textLineHeight = Just boxHeight
+        { textLineHeight = Nothing
         , textWrapMode = TextWrapWords
         , textAlign = TextAlignStart
-        , textMeasure = \line -> Size <$> Canvas.measureText line <*> pure boxHeight
-        , textPlaceLine = \_lineIndex line Rect {x, y} ->
-            mempty <$ Canvas.fillText (Point x (y + textBaseline)) color line
+        , textMeasure = measureTextLine
+        , textPlaceLine = \_lineIndex line Rect {x, y} -> do
+            metrics <- Canvas.measureText textMetricSample
+            mempty <$ Canvas.fillText (Point x (y + Canvas.textFontBoundingBoxAscent metrics)) color line
         }
+    measureTextLine line = do
+      textMetrics <- Canvas.measureText line
+      lineMetrics <- Canvas.measureText textMetricSample
+      pure (Size (Canvas.textWidth textMetrics) (textMetricHeight lineMetrics))
 
 arrowPlay :: Canvas.Canvas renderM => Halay renderM renderM (Handler actionM)
 arrowPlay =
@@ -231,9 +233,6 @@ arrowPlay =
 
 iconSize :: Double
 iconSize = 20
-
-textBaseline :: Double
-textBaseline = 16
 
 indent :: Double
 indent = 28
@@ -278,14 +277,15 @@ boxBorderColor = "#c8ccd2"
 boxPad :: Double
 boxPad = 5
 
-boxHeight :: Double
-boxHeight = 22
+scalarVerticalPadding :: Double
+scalarVerticalPadding = 2
 
-textAscent :: Double
-textAscent = 12
+textMetricSample :: String
+textMetricSample = "Mg"
 
-textDescent :: Double
-textDescent = 2
+textMetricHeight :: Canvas.TextMetrics -> Double
+textMetricHeight metrics =
+  Canvas.textFontBoundingBoxAscent metrics + Canvas.textFontBoundingBoxDescent metrics
 
 selectionColor :: String
 selectionColor = "#cfe3ff"

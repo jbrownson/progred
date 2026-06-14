@@ -7,7 +7,16 @@ module Puri.Platform
   , getCanvasWidth
   , measureText
   , strokeRect
+  , TextMetrics (..)
   ) where
+
+data TextMetrics = TextMetrics
+  { textWidth :: Double
+  , textActualBoundingBoxAscent :: Double
+  , textActualBoundingBoxDescent :: Double
+  , textFontBoundingBoxAscent :: Double
+  , textFontBoundingBoxDescent :: Double
+  }
 
 clearCanvas :: Double -> Double -> IO ()
 clearCanvas = undefined
@@ -30,5 +39,5 @@ getCanvasWidth = undefined
 getCanvasHeight :: IO Double
 getCanvasHeight = undefined
 
-measureText :: String -> IO Double
+measureText :: String -> IO TextMetrics
 measureText = undefined

@@ -34,10 +34,7 @@ data LineEditInteraction actionM
   | LineEditFocused LineEditSelection (String -> LineEditSelection -> actionM ()) (actionM ())
 
 data LineStyle = LineStyle
-  { lineHeight :: Double
-  , lineBaseline :: Double
-  , lineAscent :: Double
-  , lineDescent :: Double
+  { lineVerticalPadding :: Double
   , linePadding :: Double
   , lineMinWidth :: Double
   , lineTextColor :: String
@@ -61,16 +58,18 @@ lineEdit edit rect = do
   let interaction = lineEditInteraction edit
   let selection = interactionSelection interaction
   let focused = interactionFocused interaction
+  lineMetrics <- Canvas.measureText lineMetricSample
   caretPositions <- measureCaretPositions string
-  drawLine style focused string selection rect caretPositions
+  drawLine style focused string selection rect lineMetrics caretPositions
   pure (editHandler style string interaction rect caretPositions)
 
 lineEditSize :: Canvas.Canvas measureM => LineEdit actionM -> measureM Size
 lineEditSize edit = do
   let style = lineEditStyle edit
   let string = lineEditText edit
-  textWidth <- Canvas.measureText string
-  pure (Size (max (lineMinWidth style) textWidth + 2 * linePadding style) (lineHeight style))
+  textMetrics <- Canvas.measureText string
+  lineMetrics <- Canvas.measureText lineMetricSample
+  pure (Size (max (lineMinWidth style) (Canvas.textWidth textMetrics) + 2 * linePadding style) (lineBoxHeight style lineMetrics))
 
 editHandler
   :: LineStyle
@@ -197,15 +196,15 @@ clampIndex :: String -> Int -> Int
 clampIndex string index =
   max 0 (min (length string) index)
 
-drawLine :: Canvas.Canvas renderM => LineStyle -> Bool -> String -> LineEditSelection -> Rect -> [(Int, Double)] -> renderM ()
-drawLine style focused string selection Rect {x, y} caretPositions = do
+drawLine :: Canvas.Canvas renderM => LineStyle -> Bool -> String -> LineEditSelection -> Rect -> Canvas.TextMetrics -> [(Int, Double)] -> renderM ()
+drawLine style focused string selection Rect {x, y} lineMetrics caretPositions = do
   when (focused && lo /= hi) drawSelection
-  Canvas.fillText (Point textX (y + lineBaseline style)) (lineTextColor style) string
+  Canvas.fillText (Point textX (y + lineBaseline style lineMetrics)) (lineTextColor style) string
   when focused drawCaret
   where
     textX = x + linePadding style
-    selectionTop = y + lineBaseline style - lineAscent style
-    selectionHeight = lineAscent style + lineDescent style
+    selectionTop = y + lineVerticalPadding style
+    selectionHeight = lineFontHeight lineMetrics
     (lo, hi) = selectionBounds string selection
     caret = clampIndex string (editCaret selection)
     drawSelection =
@@ -222,8 +221,23 @@ measureCaretPositions string =
   traverse measureIndex [0 .. length string]
   where
     measureIndex index = do
-      prefixWidth <- Canvas.measureText (take index string)
-      pure (index, prefixWidth)
+      prefixMetrics <- Canvas.measureText (take index string)
+      pure (index, Canvas.textWidth prefixMetrics)
+
+lineMetricSample :: String
+lineMetricSample = "Mg"
+
+lineBaseline :: LineStyle -> Canvas.TextMetrics -> Double
+lineBaseline style metrics =
+  lineVerticalPadding style + Canvas.textFontBoundingBoxAscent metrics
+
+lineBoxHeight :: LineStyle -> Canvas.TextMetrics -> Double
+lineBoxHeight style metrics =
+  lineFontHeight metrics + 2 * lineVerticalPadding style
+
+lineFontHeight :: Canvas.TextMetrics -> Double
+lineFontHeight metrics =
+  Canvas.textFontBoundingBoxAscent metrics + Canvas.textFontBoundingBoxDescent metrics
 
 closestCaretIndex :: [(Int, Double)] -> Double -> Int
 closestCaretIndex caretPositions targetX =

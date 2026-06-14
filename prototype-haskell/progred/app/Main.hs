@@ -6,6 +6,7 @@ module Main
   , onPointerUp
   , onResize
   , onTextInput
+  , toggleLayoutDebugRects
   ) where
 
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
@@ -53,11 +54,8 @@ onPointerUp px py =
   dispatchPointer (PointerUp px py)
 
 dispatchPointer :: PointerEvent -> IO ()
-dispatchPointer event = do
-  Runtime {runtimeModel = model, runtimeHandler = handler} <- readIORef runtime
-  let (_, updated) = runAppM (handlePointer event handler) model
-  writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
-  renderState
+dispatchPointer event =
+  dispatchRuntime (\handler -> handlePointer event handler)
 
 onKeyDown :: Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onKeyDown keyCode shift alt ctrl meta =
@@ -77,9 +75,17 @@ onTextInput string =
   dispatchKey (TextInput string)
 
 dispatchKey :: KeyEvent -> IO ()
-dispatchKey event = do
+dispatchKey event =
+  dispatchRuntime (\handler -> handleKey event handler)
+
+toggleLayoutDebugRects :: IO ()
+toggleLayoutDebugRects =
+  dispatchRuntime (\_handler -> toggleDebugLayoutRects)
+
+dispatchRuntime :: (Handler AppM -> AppM ()) -> IO ()
+dispatchRuntime action = do
   Runtime {runtimeModel = model, runtimeHandler = handler} <- readIORef runtime
-  let (_, updated) = runAppM (handleKey event handler) model
+  let (_, updated) = runAppM (action handler) model
   writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
   renderState
 

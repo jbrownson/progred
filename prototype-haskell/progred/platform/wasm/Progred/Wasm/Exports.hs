@@ -19,6 +19,9 @@ foreign export javascript "onKeyDown sync"
 foreign export javascript "onTextInput sync"
   onTextInput :: JSString -> IO ()
 
+foreign export javascript "toggleLayoutDebugRects sync"
+  toggleLayoutDebugRects :: IO ()
+
 foreign export javascript "onPointerDown sync"
   onPointerDown :: Double -> Double -> IO ()
 
@@ -43,6 +46,10 @@ onKeyDown = Main.onKeyDown
 onTextInput :: JSString -> IO ()
 onTextInput =
   Main.onTextInput . fromJSString
+
+toggleLayoutDebugRects :: IO ()
+toggleLayoutDebugRects =
+  Main.toggleLayoutDebugRects
 
 onPointerDown :: Double -> Double -> IO ()
 onPointerDown = Main.onPointerDown

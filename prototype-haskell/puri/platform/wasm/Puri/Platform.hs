@@ -9,9 +9,18 @@ module Puri.Platform
   , getCanvasWidth
   , measureText
   , strokeRect
+  , TextMetrics (..)
   ) where
 
 import GHC.Wasm.Prim (JSString (JSString), JSVal, toJSString)
+
+data TextMetrics = TextMetrics
+  { textWidth :: Double
+  , textActualBoundingBoxAscent :: Double
+  , textActualBoundingBoxDescent :: Double
+  , textFontBoundingBoxAscent :: Double
+  , textFontBoundingBoxDescent :: Double
+  }
 
 -- JSFFI imports. The GHC WASM backend turns "javascript" foreign
 -- imports into WASM imports the JS host can wire up.
@@ -32,6 +41,18 @@ foreign import javascript unsafe "window.puriCanvas.fillTextMiddle($1, $2, $3, $
 
 foreign import javascript unsafe "window.puriCanvas.measureText($1)"
   jsMeasureText :: JSVal -> IO Double
+
+foreign import javascript unsafe "window.puriCanvas.measureTextActualAscent($1)"
+  jsMeasureTextActualAscent :: JSVal -> IO Double
+
+foreign import javascript unsafe "window.puriCanvas.measureTextActualDescent($1)"
+  jsMeasureTextActualDescent :: JSVal -> IO Double
+
+foreign import javascript unsafe "window.puriCanvas.measureTextFontAscent($1)"
+  jsMeasureTextFontAscent :: JSVal -> IO Double
+
+foreign import javascript unsafe "window.puriCanvas.measureTextFontDescent($1)"
+  jsMeasureTextFontDescent :: JSVal -> IO Double
 
 foreign import javascript unsafe "window.puriCanvas.width()"
   getCanvasWidth :: IO Double
@@ -59,7 +80,20 @@ fillTextMiddle x y color string =
   case (toJSString color, toJSString string) of
     (JSString colorString, JSString textString) -> jsFillTextMiddle x y colorString textString
 
-measureText :: String -> IO Double
+measureText :: String -> IO TextMetrics
 measureText string =
   case toJSString string of
-    JSString textString -> jsMeasureText textString
+    JSString textString -> do
+      width <- jsMeasureText textString
+      actualAscent <- jsMeasureTextActualAscent textString
+      actualDescent <- jsMeasureTextActualDescent textString
+      fontAscent <- jsMeasureTextFontAscent textString
+      fontDescent <- jsMeasureTextFontDescent textString
+      pure
+        TextMetrics
+          { textWidth = width
+          , textActualBoundingBoxAscent = actualAscent
+          , textActualBoundingBoxDescent = actualDescent
+          , textFontBoundingBoxAscent = fontAscent
+          , textFontBoundingBoxDescent = fontDescent
+          }
