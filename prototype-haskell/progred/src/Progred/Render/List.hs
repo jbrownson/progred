@@ -9,7 +9,7 @@ import Progred.Builtins
 import Progred.Graph
 import Progred.GraphContext
 import Progred.Projection
-import Progred.Render.Raw (textPlay)
+import Progred.Render.Raw (inlineRowWithGap, textPlay)
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
 
@@ -39,7 +39,7 @@ projectList env cursor =
         _ -> Nothing
     render [] = textPlay listColor "[]"
     render spots =
-      rowWithGap
+      inlineRowWithGap
         listGap
         ([textPlay listColor "["] <> intersperse (textPlay listColor ",") (envProject env <$> spots) <> [textPlay listColor "]"])
 

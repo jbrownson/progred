@@ -17,6 +17,7 @@ module Halay
   , column
   , columnWithGap
   , decorate
+  , debugRects
   , defaultBox
   , empty
   , fixed
@@ -229,6 +230,16 @@ decorate :: Functor measureM => (Rect -> placeM placed) -> Halay measureM placeM
 decorate place child =
   Halay $
     addNodePlacer place <$> buildHalay child
+
+-- | Add a placement callback to every layout node. Useful for debug overlays
+-- that need to visualize the actual rects Halay computed.
+debugRects :: Functor measureM => (Int -> Rect -> placeM placed) -> Halay measureM placeM placed -> Halay measureM placeM placed
+debugRects place child =
+  Halay $
+    addDebug 0 <$> buildHalay child
+  where
+    addDebug depth node =
+      addNodePlacer (place depth) node {nodeChildren = addDebug (depth + 1) <$> nodeChildren node}
 
 -- | Constrain a layout box to an aspect ratio. Clay applies aspect ratio to
 -- layout elements; wrap text in a box when the containing text box should be

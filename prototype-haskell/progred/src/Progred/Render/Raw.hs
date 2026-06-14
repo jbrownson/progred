@@ -1,5 +1,6 @@
 module Progred.Render.Raw
   ( focusedProjection
+  , inlineRowWithGap
   , rawProjection
   , textPlay
   ) where
@@ -27,32 +28,34 @@ rawProjection env cursor =
 
 focusedProjection :: Canvas.Canvas renderM => Projection actionM renderM -> Projection actionM renderM
 focusedProjection projection env cursor =
-  focusCursor cursor (projection env cursor)
+  focusCursor env cursor (projection env cursor)
 
-focusCursor :: Canvas.Canvas renderM => Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
-focusCursor cursor child =
+focusCursor :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+focusCursor env cursor child =
   case cursorFocus cursor of
-    Just focus | null (focusPath focus) ->
+    Just focus | null (focusPath focus) && shouldDrawFocusBackground env cursor ->
       decorate drawFocusBackground child
     _ -> child
 
+shouldDrawFocusBackground :: Env actionM renderM -> Cursor -> Bool
+shouldDrawFocusBackground env cursor =
+  case resolvedValue <$> resolveCursor env cursor of
+    Just (VString _) -> False
+    Just (VInt _) -> False
+    Just (VFloat _) -> False
+    _ -> True
+
 drawFocusBackground :: Canvas.Canvas renderM => Rect -> renderM (Handler actionM)
 drawFocusBackground rect = do
-  Canvas.fillRect focusRect focusBackgroundColor
-  Canvas.strokeRect focusRect focusColor 1
+  Canvas.fillRect rect focusBackgroundColor
+  Canvas.strokeRect rect focusColor 1
   pure mempty
-  where
-    focusRect = inflateRect 3 2 rect
-
-inflateRect :: Double -> Double -> Rect -> Rect
-inflateRect dx dy Rect {x, y, width, height} =
-  Rect (x - dx) (y - dy) (width + dx * 2) (height + dy * 2)
 
 rawValue :: Canvas.Canvas renderM => Env actionM renderM -> ResolvedCursor -> Halay renderM renderM (Handler actionM)
 rawValue env resolved =
   case resolvedValue resolved of
     VRef target
-      | target `elem` resolvedNodes resolved -> rowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."]
+      | target `elem` resolvedNodes resolved -> inlineRowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."]
       | otherwise -> rawNode env (resolvedCursor resolved) target
     VString string -> stringBox env cursor string
     VInt integer -> numberBox env cursor (show integer) parseIntValue editInt
@@ -64,7 +67,7 @@ rawValue env resolved =
 rawNode :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
 rawNode env cursor target =
   case lookupNode (envContext env) target of
-    Nothing -> rowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"]
+    Nothing -> inlineRowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"]
     Just edges ->
       column
         [ identiconPlay target
@@ -82,7 +85,7 @@ edgeRow
   -> Halay renderM renderM (Handler actionM)
 edgeRow env cursor label =
   decorate place $
-    rowWithGap valueGap [rawEdgeLabel label, descend env cursor label]
+    inlineRowWithGap valueGap [rawEdgeLabel label, descend env cursor label]
   where
     path = cursorPath (descendCursor label cursor)
     place rect = do
@@ -96,7 +99,11 @@ edgeRow env cursor label =
 
 rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 rawEdgeLabel label =
-  rowWithGap arrowGap [identiconPlay label, arrowPlay]
+  inlineRowWithGap arrowGap [identiconPlay label, arrowPlay]
+
+inlineRowWithGap :: Applicative measureM => Double -> [Halay measureM placeM placed] -> Halay measureM placeM placed
+inlineRowWithGap gap =
+  box defaultBox {boxDirection = LeftToRight, boxGap = gap, boxCrossAlign = CrossCenter}
 
 stringBox :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> String -> Halay renderM renderM (Handler actionM)
 stringBox env cursor string =
@@ -162,14 +169,15 @@ stringFrame :: Bool -> Frame
 stringFrame focused =
   Frame
     { framePadding = Insets 0 0 0 0
-    , frameInsets = Insets 0 0 boxBottomGap 0
+    , frameInsets = Insets 0 0 0 0
+    , frameBackground = if focused then Just focusBackgroundColor else Nothing
     , frameColor = if focused then focusColor else boxBorderColor
     }
 
 stringLineStyle :: LineStyle
 stringLineStyle =
   LineStyle
-    { lineHeight = rowHeight
+    { lineHeight = boxHeight
     , lineBaseline = textBaseline
     , lineAscent = textAscent
     , lineDescent = textDescent
@@ -195,7 +203,7 @@ rawIndentBox =
 
 identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 identiconPlay uuid =
-  leaf (pure (Size iconSize rowHeight)) draw
+  leaf (pure (Size iconSize iconSize)) draw
   where
     draw Rect {x, y} =
       mempty <$ identicon uuid (Rect x y iconSize iconSize)
@@ -206,26 +214,23 @@ textPlay color string =
   where
     config =
       TextConfig
-        { textLineHeight = Just rowHeight
+        { textLineHeight = Just boxHeight
         , textWrapMode = TextWrapWords
         , textAlign = TextAlignStart
-        , textMeasure = \line -> Size <$> Canvas.measureText line <*> pure rowHeight
+        , textMeasure = \line -> Size <$> Canvas.measureText line <*> pure boxHeight
         , textPlaceLine = \_lineIndex line Rect {x, y} ->
             mempty <$ Canvas.fillText (Point x (y + textBaseline)) color line
         }
 
 arrowPlay :: Canvas.Canvas renderM => Halay renderM renderM (Handler actionM)
 arrowPlay =
-  leaf (pure (Size arrowWidth rowHeight)) draw
+  leaf (pure (Size arrowWidth iconSize)) draw
   where
     draw Rect {x, y} =
       mempty <$ drawArrow (Point x (y + iconSize / 2))
 
 iconSize :: Double
 iconSize = 20
-
-rowHeight :: Double
-rowHeight = 26
 
 textBaseline :: Double
 textBaseline = 16
@@ -273,8 +278,8 @@ boxBorderColor = "#c8ccd2"
 boxPad :: Double
 boxPad = 5
 
-boxBottomGap :: Double
-boxBottomGap = 4
+boxHeight :: Double
+boxHeight = 22
 
 textAscent :: Double
 textAscent = 12

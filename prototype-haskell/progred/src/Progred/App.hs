@@ -46,14 +46,15 @@ view viewport model = do
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
     documentLayout =
-      decorate appHandler $
-        box
-          defaultBox
-            { boxDirection = TopToBottom
-            , boxPadding = Insets 12 12 12 12
-            , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
-            }
-          [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument model) modify (editorFocus model)]
+      withLayoutDebug $
+        decorate appHandler $
+          box
+            defaultBox
+              { boxDirection = TopToBottom
+              , boxPadding = Insets 12 12 12 12
+              , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
+              }
+            [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument model) modify (editorFocus model)]
     appHandler _rect =
       pure $
         onPointer
@@ -70,6 +71,32 @@ view viewport model = do
                         Just (modify deleteFocusedEdge)
                   _ -> Nothing
             )
+
+withLayoutDebug :: Canvas.Canvas renderM => Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+withLayoutDebug layout
+  | debugLayoutRects = debugRects drawDebugRect layout
+  | otherwise = layout
+
+drawDebugRect :: Canvas.Canvas renderM => Int -> Rect -> renderM (Handler actionM)
+drawDebugRect depth rect = do
+  Canvas.strokeRect rect (debugRectColor depth) 1
+  pure mempty
+
+debugRectColor :: Int -> String
+debugRectColor depth =
+  debugRectColors !! (depth `mod` length debugRectColors)
+
+debugLayoutRects :: Bool
+debugLayoutRects = False
+
+debugRectColors :: [String]
+debugRectColors =
+  [ "#ff3860"
+  , "#2f80ed"
+  , "#00a676"
+  , "#f2994a"
+  , "#9b51e0"
+  ]
 
 sampleDocument :: Document
 sampleDocument =
