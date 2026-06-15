@@ -4,7 +4,7 @@ module Main
 
 import qualified Data.Map.Strict as Map
 import qualified Data.UUID.Types as UUID
-import Control.Monad.Trans.State.Strict (execState, modify)
+import Control.Monad.Trans.State.Strict (State, execState, modify)
 import Halay
 import Progred.Builtins
 import Progred.Document
@@ -31,6 +31,7 @@ main = do
   run "deleteFocusedEdge" propDeleteFocusedEdgeDeletesEdge
   run "graphContext" propGraphContextUsesLibraries
   run "listItemFocus" propListNodeItemFocusesListElement
+  run "listItemDelete" propListNodeItemDeleteSplicesList
   where
     run name prop = do
       result <- quickCheckWithResult stdArgs {maxSuccess = 1000} prop
@@ -186,14 +187,34 @@ propListNodeItemFocusesListElement =
         Editor {editorDocument = listItemDocument, editorFocus = Nothing}
     handler =
       runTestRender $ do
-        measured <- measureHalay listItemLayout
+        measured <- measureHalay (listItemLayout Nothing)
         placeMeasured measured (Rect 0 0 800 600)
-    listItemLayout =
-      projectDocument
-        (focusedProjection (listProjection `over` rawProjection))
-        listItemDocument
-        modify
-        Nothing
+
+propListNodeItemDeleteSplicesList :: Property
+propListNodeItemDeleteSplicesList =
+  conjoin
+    [ resolvePath deletedContext [listLabel, tailLabel, tailLabel] === Just (VRef nilNode)
+    , editorFocus deleted === Nothing
+    ]
+  where
+    deleted =
+      execState
+        (handleDelete handler)
+        Editor {editorDocument = listItemDocument, editorFocus = Just (Focus thirdItemPath defaultFocusState)}
+    deletedContext =
+      documentContext (editorDocument deleted) []
+    handler =
+      runTestRender $ do
+        measured <- measureHalay (listItemLayout (Just (Focus thirdItemPath defaultFocusState)))
+        placeMeasured measured (Rect 0 0 800 600)
+
+listItemLayout :: Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
+listItemLayout focus =
+  projectDocument
+    (focusedProjection (listProjection `over` rawProjection))
+    listItemDocument
+    modify
+    focus
 
 newtype TestRender a = TestRender
   { runTestRender :: a

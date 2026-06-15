@@ -21,7 +21,6 @@ import Progred.Render.List
 import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
-import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
 import System.Random (mkStdGen, randoms)
 
@@ -86,14 +85,7 @@ view viewport model = do
                 PointerDown {} -> Just (editEditor (setFocus Nothing))
                 _ -> Nothing
           )
-          <> onKey
-            ( \event ->
-                case event of
-                  KeyCode _modifiers code
-                    | code == KeyCode.delete || code == KeyCode.backspace ->
-                        Just (editEditor deleteFocusedEdge)
-                  _ -> Nothing
-            )
+          <> onDelete (editEditor deleteFocusedEdge)
 
 withLayoutDebug :: Canvas.Canvas renderM => Bool -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 withLayoutDebug enabled layout

@@ -6,6 +6,7 @@ import Data.List (intersperse)
 import qualified Data.Map.Strict as Map
 import Halay
 import Progred.Builtins
+import Progred.Editor
 import Progred.Graph
 import Progred.GraphContext
 import Progred.Projection
@@ -43,7 +44,14 @@ projectList env cursor =
         listGap
         ([textPlay listColor "["] <> intersperse (textPlay listColor ",") (projectItem <$> spots) <> [textPlay listColor "]"])
     projectItem spot =
-      focusableEdge env spot (envProject env spot)
+      deleteListItem env spot (focusableEdge env spot (envProject env spot))
+
+deleteListItem :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+deleteListItem env spot child =
+  case cursorFocus spot of
+    Just focus | null (focusPath focus) ->
+      decorate (const (pure (onDelete (envEdit env (spliceListItem (cursorPath spot)))))) child
+    _ -> child
 
 listColor :: String
 listColor = "#68707c"

@@ -79,7 +79,7 @@ editHandler
   -> [(Int, Double)]
   -> Handler actionM
 editHandler style string interaction rect caretPositions =
-  Handler
+  mempty
     { pointerHandler = pointer
     , keyHandler = key
     }

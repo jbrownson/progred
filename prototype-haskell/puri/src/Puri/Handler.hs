@@ -5,8 +5,10 @@ module Puri.Handler
   , KeyModifiers (..)
   , PointerEvent (..)
   , PointerHandler
+  , handleDelete
   , handleKey
   , handlePointer
+  , onDelete
   , onKey
   , onPointer
   ) where
@@ -47,6 +49,7 @@ type KeyHandler actionM = KeyEvent -> Maybe (actionM ())
 data Handler actionM = Handler
   { pointerHandler :: PointerHandler actionM
   , keyHandler :: KeyHandler actionM
+  , deleteHandler :: Maybe (actionM ())
   }
 
 -- Composition tries the later-combined handler first. Containers can combine
@@ -57,10 +60,11 @@ instance Semigroup (Handler actionM) where
     Handler
       { pointerHandler = firstClaim (pointerHandler later) (pointerHandler earlier)
       , keyHandler = firstClaim (keyHandler later) (keyHandler earlier)
+      , deleteHandler = deleteHandler later <|> deleteHandler earlier
       }
 
 instance Monoid (Handler actionM) where
-  mempty = Handler (const Nothing) (const Nothing)
+  mempty = Handler (const Nothing) (const Nothing) Nothing
 
 firstClaim :: (event -> Maybe action) -> (event -> Maybe action) -> event -> Maybe action
 firstClaim first second event =
@@ -73,6 +77,10 @@ onPointer handler =
 onKey :: KeyHandler actionM -> Handler actionM
 onKey handler =
   mempty {keyHandler = handler}
+
+onDelete :: actionM () -> Handler actionM
+onDelete action =
+  mempty {deleteHandler = Just action}
 
 handlePointer
   :: Applicative actionM
@@ -89,3 +97,10 @@ handleKey
   -> actionM ()
 handleKey event handler =
   fromMaybe (pure ()) (keyHandler handler event)
+
+handleDelete
+  :: Applicative actionM
+  => Handler actionM
+  -> actionM ()
+handleDelete handler =
+  fromMaybe (pure ()) (deleteHandler handler)

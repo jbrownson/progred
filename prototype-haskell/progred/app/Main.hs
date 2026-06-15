@@ -13,6 +13,7 @@ import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32)
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
+import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
 import Progred.App
 import System.IO.Unsafe (unsafePerformIO)
@@ -76,7 +77,19 @@ onTextInput string =
 
 dispatchKey :: KeyEvent -> IO ()
 dispatchKey event =
-  dispatchRuntime (\handler -> handleKey event handler)
+  dispatchRuntime $ \handler ->
+    case keyHandler handler event of
+      Just action -> action
+      Nothing
+        | isDeleteKey event -> handleDelete handler
+        | otherwise -> pure ()
+
+isDeleteKey :: KeyEvent -> Bool
+isDeleteKey event =
+  case event of
+    KeyCode _modifiers code ->
+      code == KeyCode.delete || code == KeyCode.backspace
+    _ -> False
 
 toggleLayoutDebugRects :: IO ()
 toggleLayoutDebugRects =

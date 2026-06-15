@@ -18,9 +18,12 @@ module Progred.Editor
   , parseIntValue
   , setEdge
   , setFocus
+  , spliceListItem
   ) where
 
+import qualified Data.Map.Strict as Map
 import Text.Read (readMaybe)
+import Progred.Builtins
 import Progred.Document
 import Progred.Graph
 import Progred.GraphContext
@@ -147,6 +150,27 @@ deletePathEdge path editor =
   case pathEdge (editorContext editor) path of
     Nothing -> editor
     Just edge -> deleteEdge edge editor
+
+spliceListItem :: [UUID] -> Editor -> Editor
+spliceListItem path editor =
+  case listItemCellPath path of
+    Nothing -> editor
+    Just cellPath ->
+      case (pathEdge context cellPath, resolvePath context cellPath) of
+        (Just linkEdge, Just (VRef cellNode)) ->
+          case lookupNode context cellNode >>= Map.lookup tailLabel of
+            Just next -> setEdge linkEdge next editor
+            Nothing -> editor
+        _ -> editor
+  where
+    context = editorContext editor
+
+listItemCellPath :: [UUID] -> Maybe [UUID]
+listItemCellPath path =
+  case reverse path of
+    label : reversedCellPath
+      | label == headLabel -> Just (reverse reversedCellPath)
+    _ -> Nothing
 
 editGraph :: (MapGraph -> MapGraph) -> Editor -> Editor
 editGraph change editor =
