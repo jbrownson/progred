@@ -24,7 +24,9 @@ import Puri.Widgets.Frame
 rawProjection :: (Canvas.Canvas renderM, Monad actionM) => Projection actionM renderM
 rawProjection env cursor =
   case resolveCursor env cursor of
-    Nothing -> rootActions env cursor (textPlay missingColor "<missing>")
+    Nothing
+      | null (cursorPath cursor) -> rootPlaceholder env cursor
+      | otherwise -> textPlay missingColor "<missing>"
     Just resolved -> rawValue env resolved
 
 focusedProjection :: Canvas.Canvas renderM => Projection actionM renderM -> Projection actionM renderM
@@ -131,19 +133,58 @@ pendingEdgeRow env cursor label pending =
 
 rawPendingInsert :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> PendingEdit -> Halay renderM renderM (Handler actionM)
 rawPendingInsert env cursor label pending =
-  framed rawPendingFrame $
-    decorate submitKeys $
-      lineEdit rawPendingLineStyle currentText interaction
+  rawPendingText True currentText interaction commit cancel
   where
     parentPath = cursorPath cursor
     path = parentPath <> [label]
     currentText = pendingEditText pending
     selection = pendingEditSelection pending
+    cancel = envEdit env (cancelPending path)
     interaction =
       LineEditFocused
         selection
         (\newText newSelection -> envEdit env (focusPending path newText newSelection))
-        (envEdit env (cancelPending path))
+        cancel
+    commit =
+      envEdit env (insertStringEdge parentPath label currentText (selectionAtEnd currentText))
+
+rootPlaceholder :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM)
+rootPlaceholder env cursor =
+  rawPendingText focused currentText interaction commit cancel
+  where
+    path = cursorPath cursor
+    cancel = envEdit env (cancelPending path)
+    commit = envEdit env (editString path currentText (selectionAtEnd currentText))
+    (focused, currentText, interaction) =
+      case cursorFocus cursor of
+        Just focus | null (focusPath focus) ->
+          let pending = pendingEditOrDefault (focusState focus)
+           in ( True
+              , pendingEditText pending
+              , LineEditFocused
+                  (pendingEditSelection pending)
+                  (\newText newSelection -> envEdit env (focusPending path newText newSelection))
+                  cancel
+              )
+        _ ->
+          ( False
+          , ""
+          , LineEditUnfocused (\selection -> envEdit env (focusPending path "" selection))
+          )
+
+rawPendingText
+  :: Canvas.Canvas renderM
+  => Bool
+  -> String
+  -> LineEditInteraction actionM
+  -> actionM ()
+  -> actionM ()
+  -> Halay renderM renderM (Handler actionM)
+rawPendingText focused currentText interaction commit cancel =
+  framed (rawPendingFrame focused) $
+    decorate submitKeys $
+      lineEdit rawPendingLineStyle currentText interaction
+  where
     submitKeys _rect =
       pure $
         onKey $ \event ->
@@ -152,10 +193,8 @@ rawPendingInsert env cursor label pending =
               | code == KeyCode.enter && not (hasModifier modifiers) ->
                   Just commit
               | code == KeyCode.escape ->
-                  Just (envEdit env (cancelPending path))
+                  Just cancel
             _ -> Nothing
-    commit =
-      envEdit env (insertStringEdge parentPath label currentText (selectionAtEnd currentText))
 
 activePending :: Cursor -> Maybe (UUID, PendingEdit)
 activePending cursor =
@@ -224,6 +263,12 @@ numberEditOrDefault string state =
     Just edit -> edit
     Nothing -> NumberEdit string (LineEditSelection (length string) (length string) False)
 
+pendingEditOrDefault :: FocusState -> PendingEdit
+pendingEditOrDefault state =
+  case focusPendingEdit state of
+    Just pending -> pending
+    Nothing -> PendingEdit "" emptySelection
+
 hasModifier :: KeyModifiers -> Bool
 hasModifier modifiers =
   keyShift modifiers || keyAlt modifiers || keyCtrl modifiers || keyMeta modifiers
@@ -268,9 +313,9 @@ numberLineStyle valid =
     { lineTextColor = if valid then numberColor else invalidNumberColor
     }
 
-rawPendingFrame :: Frame
-rawPendingFrame =
-  (stringFrame True) {frameBackground = Just "#fff9e8"}
+rawPendingFrame :: Bool -> Frame
+rawPendingFrame focused =
+  (stringFrame focused) {frameBackground = if focused then Just "#fff9e8" else Nothing}
 
 rawPendingLineStyle :: LineStyle
 rawPendingLineStyle =

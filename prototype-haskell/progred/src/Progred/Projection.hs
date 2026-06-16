@@ -128,7 +128,7 @@ focusableSpot env cursor child =
           case event of
             PointerDown {pointerX, pointerY}
               | rectContains rect pointerX pointerY ->
-                  Just (envEdit env (focusEdge path))
+                  Just (envEdit env (focusSpot path))
             _ -> Nothing
 
 stepFocus :: UUID -> Focus -> Maybe Focus

@@ -13,7 +13,7 @@ module Progred.Editor
   , editFloat
   , editInt
   , editString
-  , focusEdge
+  , focusSpot
   , focusNumber
   , focusPending
   , insertStringEdge
@@ -96,17 +96,25 @@ focusString :: [UUID] -> LineEditSelection -> Editor -> Editor
 focusString path selection editor =
   setFocus (Just (Focus path state)) editor
   where
-    state = (stateForPath path (editorFocus editor)) {focusStringSelection = selection}
+    state =
+      (stateForPath path (editorFocus editor))
+        { focusStringSelection = selection
+        , focusPendingEdit = Nothing
+        }
 
-focusEdge :: [UUID] -> Editor -> Editor
-focusEdge path editor =
+focusSpot :: [UUID] -> Editor -> Editor
+focusSpot path editor =
   setFocus (Just (Focus path (stateForPath path (editorFocus editor)))) editor
 
 focusNumber :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
 focusNumber path string selection editor =
   setFocus (Just (Focus path state)) editor
   where
-    state = (stateForPath path (editorFocus editor)) {focusNumberEdit = Just (NumberEdit string selection)}
+    state =
+      (stateForPath path (editorFocus editor))
+        { focusNumberEdit = Just (NumberEdit string selection)
+        , focusPendingEdit = Nothing
+        }
 
 focusPending :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
 focusPending path string selection editor =

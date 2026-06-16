@@ -41,6 +41,7 @@ main = do
   run "listBeforeFirstInsert" propListNodeInsertBeforeFirstCommitsString
   run "listItemInsert" propListNodeItemInsertCommitsString
   run "rootFocus" propRootNodeFocusesOnClick
+  run "rootPlaceholderInsert" propRootPlaceholderCommitsString
   run "rawNodeInsertNested" propRawNodeInsertCommitsNestedString
   run "rawNodeInsertSibling" propRawEdgeInsertCommitsSiblingString
   where
@@ -343,6 +344,32 @@ propRootNodeFocusesOnClick =
         (handlePointer (PointerDown 10 10) (rawInsertHandler Nothing))
         Editor {editorDocument = rawInsertDocument, editorFocus = Nothing}
 
+propRootPlaceholderCommitsString :: Property
+propRootPlaceholderCommitsString =
+  conjoin
+    [ editorFocus focused === Just (Focus [] (testPendingState "" dragSelection))
+    , editorFocus typed === Just (Focus [] (testPendingState "root" rootSelection))
+    , documentRoot (editorDocument inserted) === Just (VString "root")
+    , editorFocus inserted === Just (Focus [] (testFocusState rootSelection))
+    ]
+  where
+    focused =
+      execState
+        (handlePointer (PointerDown 10 10) (rawDocumentHandler emptyRootDocument Nothing))
+        Editor {editorDocument = emptyRootDocument, editorFocus = Nothing}
+    typed =
+      execState
+        (handleKey (TextInput "root") (rawDocumentHandler emptyRootDocument (editorFocus focused)))
+        focused
+    inserted =
+      execState
+        (handleKey enterKey (rawDocumentHandler emptyRootDocument (editorFocus typed)))
+        typed
+    dragSelection =
+      LineEditSelection 0 0 True
+    rootSelection =
+      selectionAtEnd "root"
+
 propRawNodeInsertCommitsNestedString :: Property
 propRawNodeInsertCommitsNestedString =
   conjoin
@@ -412,15 +439,19 @@ listItemLayout focus =
 
 rawInsertHandler :: Maybe Focus -> Handler (State Editor)
 rawInsertHandler focus =
+  rawDocumentHandler rawInsertDocument focus
+
+rawDocumentHandler :: Document -> Maybe Focus -> Handler (State Editor)
+rawDocumentHandler document focus =
   runTestRender $ do
-    measured <- measureHalay (rawInsertLayout focus)
+    measured <- measureHalay (rawDocumentLayout document focus)
     placeMeasured measured (Rect 0 0 800 600)
 
-rawInsertLayout :: Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
-rawInsertLayout focus =
+rawDocumentLayout :: Document -> Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
+rawDocumentLayout document focus =
   projectDocument
     (focusedProjection rawProjection)
-    rawInsertDocument
+    document
     modify
     (pure rawInsertedLabel)
     focus
@@ -581,6 +612,10 @@ structuralListCell = UUID.fromWords 806 0 0 1
 rawInsertDocument :: Document
 rawInsertDocument =
   testDocument rawInsertGraph
+
+emptyRootDocument :: Document
+emptyRootDocument =
+  Document Nothing rawInsertGraph
 
 testDocument :: MapGraph -> Document
 testDocument =
