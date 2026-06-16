@@ -6,11 +6,14 @@ module Puri.Handler
   , PointerEvent (..)
   , PointerHandler
   , handleDelete
+  , handleInsert
   , handleKey
   , handlePointer
   , onDelete
+  , onInsert
   , onKey
   , onPointer
+  , onPointerCapture
   ) where
 
 import Control.Applicative ((<|>))
@@ -47,9 +50,11 @@ type PointerHandler actionM = PointerEvent -> Maybe (actionM ())
 type KeyHandler actionM = KeyEvent -> Maybe (actionM ())
 
 data Handler actionM = Handler
-  { pointerHandler :: PointerHandler actionM
+  { pointerCaptureHandler :: PointerHandler actionM
+  , pointerHandler :: PointerHandler actionM
   , keyHandler :: KeyHandler actionM
   , deleteHandler :: Maybe (actionM ())
+  , insertHandler :: Maybe (actionM ())
   }
 
 -- Composition tries the later-combined handler first. Containers can combine
@@ -58,13 +63,15 @@ data Handler actionM = Handler
 instance Semigroup (Handler actionM) where
   earlier <> later =
     Handler
-      { pointerHandler = firstClaim (pointerHandler later) (pointerHandler earlier)
+      { pointerCaptureHandler = firstClaim (pointerCaptureHandler later) (pointerCaptureHandler earlier)
+      , pointerHandler = firstClaim (pointerHandler later) (pointerHandler earlier)
       , keyHandler = firstClaim (keyHandler later) (keyHandler earlier)
       , deleteHandler = deleteHandler later <|> deleteHandler earlier
+      , insertHandler = insertHandler later <|> insertHandler earlier
       }
 
 instance Monoid (Handler actionM) where
-  mempty = Handler (const Nothing) (const Nothing) Nothing
+  mempty = Handler (const Nothing) (const Nothing) (const Nothing) Nothing Nothing
 
 firstClaim :: (event -> Maybe action) -> (event -> Maybe action) -> event -> Maybe action
 firstClaim first second event =
@@ -74,6 +81,10 @@ onPointer :: PointerHandler actionM -> Handler actionM
 onPointer handler =
   mempty {pointerHandler = handler}
 
+onPointerCapture :: PointerHandler actionM -> Handler actionM
+onPointerCapture handler =
+  mempty {pointerCaptureHandler = handler}
+
 onKey :: KeyHandler actionM -> Handler actionM
 onKey handler =
   mempty {keyHandler = handler}
@@ -82,13 +93,17 @@ onDelete :: actionM () -> Handler actionM
 onDelete action =
   mempty {deleteHandler = Just action}
 
+onInsert :: actionM () -> Handler actionM
+onInsert action =
+  mempty {insertHandler = Just action}
+
 handlePointer
   :: Applicative actionM
   => PointerEvent
   -> Handler actionM
   -> actionM ()
 handlePointer event handler =
-  fromMaybe (pure ()) (pointerHandler handler event)
+  fromMaybe (pure ()) (pointerCaptureHandler handler event <|> pointerHandler handler event)
 
 handleKey
   :: Applicative actionM
@@ -104,3 +119,10 @@ handleDelete
   -> actionM ()
 handleDelete handler =
   fromMaybe (pure ()) (deleteHandler handler)
+
+handleInsert
+  :: Applicative actionM
+  => Handler actionM
+  -> actionM ()
+handleInsert handler =
+  fromMaybe (pure ()) (insertHandler handler)

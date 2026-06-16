@@ -7,7 +7,7 @@ module Progred.App
   , view
   ) where
 
-import Control.Monad.Trans.State.Strict (State, modify, runState)
+import Control.Monad.Trans.State.Strict (State, modify, runState, state)
 import qualified Data.Map.Strict as Map
 import Data.Word (Word32)
 import qualified Data.UUID.Types as UUID
@@ -27,6 +27,7 @@ import System.Random (mkStdGen, randoms)
 data Model = Model
   { modelEditor :: Editor
   , modelDebugLayoutRects :: Bool
+  , modelFreshUUIDs :: [UUID]
   }
 
 type AppM = State Model
@@ -43,6 +44,7 @@ initialModel =
           , editorFocus = Nothing
           }
     , modelDebugLayoutRects = False
+    , modelFreshUUIDs = seededUUIDs 20260615
     }
 
 toggleDebugLayoutRects :: AppM ()
@@ -71,12 +73,17 @@ view viewport model = do
               , boxPadding = Insets 12 12 12 12
               , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
               }
-            [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument editor) editEditor (editorFocus editor)]
+            [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument editor) editEditor freshUUID (editorFocus editor)]
     editEditor change =
       modify
         ( \current ->
             current {modelEditor = change (modelEditor current)}
         )
+    freshUUID =
+      state $ \current ->
+        case modelFreshUUIDs current of
+          fresh : rest -> (fresh, current {modelFreshUUIDs = rest})
+          [] -> error "fresh UUID supply unexpectedly exhausted"
     appHandler _rect =
       pure $
         onPointer

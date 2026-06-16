@@ -3,8 +3,10 @@ module Progred.Editor
   , Focus (..)
   , FocusState (..)
   , NumberEdit (..)
+  , PendingEdit (..)
   , blurValue
   , blurString
+  , cancelPending
   , defaultFocusState
   , deleteEdge
   , deleteFocusedEdge
@@ -13,7 +15,9 @@ module Progred.Editor
   , editString
   , focusEdge
   , focusNumber
+  , focusPending
   , focusString
+  , insertListString
   , parseFloatValue
   , parseIntValue
   , setEdge
@@ -42,6 +46,7 @@ data Focus = Focus
 data FocusState = FocusState
   { focusStringSelection :: LineEditSelection
   , focusNumberEdit :: Maybe NumberEdit
+  , focusPendingEdit :: Maybe PendingEdit
   }
   deriving (Eq, Show)
 
@@ -51,11 +56,18 @@ data NumberEdit = NumberEdit
   }
   deriving (Eq, Show)
 
+data PendingEdit = PendingEdit
+  { pendingEditText :: String
+  , pendingEditSelection :: LineEditSelection
+  }
+  deriving (Eq, Show)
+
 defaultFocusState :: FocusState
 defaultFocusState =
   FocusState
     { focusStringSelection = LineEditSelection 0 0 False
     , focusNumberEdit = Nothing
+    , focusPendingEdit = Nothing
     }
 
 data Editor = Editor
@@ -95,6 +107,15 @@ focusNumber path string selection editor =
   where
     state = (stateForPath path (editorFocus editor)) {focusNumberEdit = Just (NumberEdit string selection)}
 
+focusPending :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
+focusPending path string selection editor =
+  setFocus (Just (Focus path state)) editor
+  where
+    state =
+      (stateForPath path (editorFocus editor))
+        { focusPendingEdit = Just (PendingEdit string selection)
+        }
+
 blurValue :: [UUID] -> Editor -> Editor
 blurValue path editor =
   case editorFocus editor of
@@ -103,6 +124,10 @@ blurValue path editor =
 
 blurString :: [UUID] -> Editor -> Editor
 blurString =
+  blurValue
+
+cancelPending :: [UUID] -> Editor -> Editor
+cancelPending =
   blurValue
 
 -- Writing the edge drops focus that crossed it, so string edits pair the
@@ -162,6 +187,19 @@ spliceListItem path editor =
             Just next -> setEdge linkEdge next editor
             Nothing -> editor
         _ -> editor
+  where
+    context = editorContext editor
+
+insertListString :: [UUID] -> UUID -> String -> LineEditSelection -> Editor -> Editor
+insertListString path newCell string selection editor =
+  case (pathEdge context path, resolvePath context path) of
+    (Just linkEdge, Just oldTail) ->
+      ( focusString (path <> [headLabel]) selection
+          . editGraph (Map.insert newCell (Map.fromList [(headLabel, VString string), (tailLabel, oldTail)]))
+          . setEdge linkEdge (VRef newCell)
+      )
+        editor
+    _ -> editor
   where
     context = editorContext editor
 

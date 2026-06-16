@@ -47,6 +47,7 @@ over partial total env cursor =
 data Env actionM renderM = Env
   { envContext :: GraphContext
   , envEdit :: (Editor -> Editor) -> actionM ()
+  , envFreshUUID :: actionM UUID
   , envProject :: Cursor -> Halay renderM renderM (Handler actionM)
   }
 
@@ -68,21 +69,23 @@ projectDocument
   :: Projection actionM renderM
   -> Document
   -> ((Editor -> Editor) -> actionM ())
+  -> actionM UUID
   -> Maybe Focus
   -> Halay renderM renderM (Handler actionM)
-projectDocument total document edit focus =
-  projectContext total (documentContext document []) edit focus
+projectDocument total document edit fresh focus =
+  projectContext total (documentContext document []) edit fresh focus
 
 projectContext
   :: Projection actionM renderM
   -> GraphContext
   -> ((Editor -> Editor) -> actionM ())
+  -> actionM UUID
   -> Maybe Focus
   -> Halay renderM renderM (Handler actionM)
-projectContext total context edit focus =
+projectContext total context edit fresh focus =
   apply (Cursor [] focus)
   where
-    env = Env {envContext = context, envEdit = edit, envProject = apply}
+    env = Env {envContext = context, envEdit = edit, envFreshUUID = fresh, envProject = apply}
     apply = total env
 
 resolveCursor :: Env actionM renderM -> Cursor -> Maybe ResolvedCursor

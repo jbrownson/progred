@@ -4,7 +4,7 @@ module Main
 
 import qualified Data.Map.Strict as Map
 import qualified Data.UUID.Types as UUID
-import Control.Monad.Trans.State.Strict (State, execState, modify)
+import Control.Monad.Trans.State.Strict (State, execState, modify, put)
 import Halay
 import Progred.Builtins
 import Progred.Document
@@ -17,6 +17,7 @@ import Progred.Render.List
 import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
+import qualified Puri.KeyCode as KeyCode
 import Puri.Widgets (LineEditSelection (..))
 import Test.QuickCheck
 
@@ -30,8 +31,10 @@ main = do
   run "blurString" propBlurStringOnlyClearsMatchingPath
   run "deleteFocusedEdge" propDeleteFocusedEdgeDeletesEdge
   run "graphContext" propGraphContextUsesLibraries
+  run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listItemFocus" propListNodeItemFocusesListElement
   run "listItemDelete" propListNodeItemDeleteSplicesList
+  run "listItemInsert" propListNodeItemInsertCommitsString
   where
     run name prop = do
       result <- quickCheckWithResult stdArgs {maxSuccess = 1000} prop
@@ -177,18 +180,24 @@ propGraphContextUsesLibraries =
     documentWinsContext =
       documentContext (Document root documentOverrideGraph) [libraryGraph]
 
+propPointerCapturePrecedesNormalPointer :: Property
+propPointerCapturePrecedesNormalPointer =
+  execState (handlePointer (PointerDown 0 0) handler) "" === "capture"
+  where
+    handler =
+      onPointerCapture (\_event -> Just (put "capture"))
+        <> onPointer (\_event -> Just (put "normal"))
+
 propListNodeItemFocusesListElement :: Property
 propListNodeItemFocusesListElement =
   editorFocus clicked === Just (Focus thirdItemPath defaultFocusState)
   where
     clicked =
       execState
-        (handlePointer (PointerDown 205 25) handler)
+        (handlePointer (PointerDown 260 25) handler)
         Editor {editorDocument = listItemDocument, editorFocus = Nothing}
     handler =
-      runTestRender $ do
-        measured <- measureHalay (listItemLayout Nothing)
-        placeMeasured measured (Rect 0 0 800 600)
+      listItemHandler Nothing
 
 propListNodeItemDeleteSplicesList :: Property
 propListNodeItemDeleteSplicesList =
@@ -204,9 +213,41 @@ propListNodeItemDeleteSplicesList =
     deletedContext =
       documentContext (editorDocument deleted) []
     handler =
-      runTestRender $ do
-        measured <- measureHalay (listItemLayout (Just (Focus thirdItemPath defaultFocusState)))
-        placeMeasured measured (Rect 0 0 800 600)
+      listItemHandler (Just (Focus thirdItemPath defaultFocusState))
+
+propListNodeItemInsertCommitsString :: Property
+propListNodeItemInsertCommitsString =
+  conjoin
+    [ editorFocus pending === Just (Focus afterThirdItemPath (testPendingState "" emptySelection))
+    , editorFocus typed === Just (Focus afterThirdItemPath (testPendingState "omega" omegaSelection))
+    , resolvePath insertedContext afterThirdItemPath === Just (VRef listInsertedCell)
+    , resolvePath insertedContext (afterThirdItemPath <> [headLabel]) === Just (VString "omega")
+    , resolvePath insertedContext (afterThirdItemPath <> [tailLabel]) === Just (VRef nilNode)
+    , editorFocus inserted === Just (Focus (afterThirdItemPath <> [headLabel]) (testFocusState omegaSelection))
+    ]
+  where
+    pending =
+      execState
+        (handleInsert (listItemHandler (Just (Focus thirdItemPath defaultFocusState))))
+        Editor {editorDocument = listItemDocument, editorFocus = Just (Focus thirdItemPath defaultFocusState)}
+    typed =
+      execState
+        (handleKey (TextInput "omega") (listItemHandler (editorFocus pending)))
+        pending
+    inserted =
+      execState
+        (handleKey enterKey (listItemHandler (editorFocus typed)))
+        typed
+    insertedContext =
+      documentContext (editorDocument inserted) []
+    omegaSelection =
+      selectionAtEnd "omega"
+
+listItemHandler :: Maybe Focus -> Handler (State Editor)
+listItemHandler focus =
+  runTestRender $ do
+    measured <- measureHalay (listItemLayout focus)
+    placeMeasured measured (Rect 0 0 800 600)
 
 listItemLayout :: Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
 listItemLayout focus =
@@ -214,6 +255,7 @@ listItemLayout focus =
     (focusedProjection (listProjection `over` rawProjection))
     listItemDocument
     modify
+    (pure listInsertedCell)
     focus
 
 newtype TestRender a = TestRender
@@ -265,6 +307,31 @@ testNumberState :: String -> LineEditSelection -> FocusState
 testNumberState string selection =
   defaultFocusState {focusNumberEdit = Just (NumberEdit string selection)}
 
+testPendingState :: String -> LineEditSelection -> FocusState
+testPendingState string selection =
+  defaultFocusState {focusPendingEdit = Just (PendingEdit string selection)}
+
+selectionAtEnd :: String -> LineEditSelection
+selectionAtEnd string =
+  LineEditSelection (length string) (length string) False
+
+emptySelection :: LineEditSelection
+emptySelection =
+  LineEditSelection 0 0 False
+
+enterKey :: KeyEvent
+enterKey =
+  KeyCode noModifiers KeyCode.enter
+
+noModifiers :: KeyModifiers
+noModifiers =
+  KeyModifiers
+    { keyShift = False
+    , keyAlt = False
+    , keyCtrl = False
+    , keyMeta = False
+    }
+
 sentinel :: Value
 sentinel = VString "##sentinel##"
 
@@ -282,6 +349,10 @@ floatGraph =
 thirdItemPath :: [UUID]
 thirdItemPath =
   [listLabel, tailLabel, tailLabel, headLabel]
+
+afterThirdItemPath :: [UUID]
+afterThirdItemPath =
+  [listLabel, tailLabel, tailLabel, tailLabel]
 
 listItemDocument :: Document
 listItemDocument =
@@ -314,6 +385,9 @@ listCell3 = UUID.fromWords 803 0 0 1
 
 listItemNode :: UUID
 listItemNode = UUID.fromWords 804 0 0 1
+
+listInsertedCell :: UUID
+listInsertedCell = UUID.fromWords 805 0 0 1
 
 genSetEdge :: MapGraph -> Gen (Editor -> Editor)
 genSetEdge _graph =

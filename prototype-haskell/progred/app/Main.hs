@@ -82,6 +82,7 @@ dispatchKey event =
       Just action -> action
       Nothing
         | isDeleteKey event -> handleDelete handler
+        | isInsertKey event -> handleInsert handler
         | otherwise -> pure ()
 
 isDeleteKey :: KeyEvent -> Bool
@@ -90,6 +91,17 @@ isDeleteKey event =
     KeyCode _modifiers code ->
       code == KeyCode.delete || code == KeyCode.backspace
     _ -> False
+
+isInsertKey :: KeyEvent -> Bool
+isInsertKey event =
+  case event of
+    KeyCode modifiers code ->
+      code == KeyCode.enter && not (hasModifier modifiers)
+    _ -> False
+
+hasModifier :: KeyModifiers -> Bool
+hasModifier modifiers =
+  keyShift modifiers || keyAlt modifiers || keyCtrl modifiers || keyMeta modifiers
 
 toggleLayoutDebugRects :: IO ()
 toggleLayoutDebugRects =

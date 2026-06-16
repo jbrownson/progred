@@ -33,7 +33,7 @@ focusedProjection projection env cursor =
 focusCursor :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 focusCursor env cursor child =
   case cursorFocus cursor of
-    Just focus | null (focusPath focus) && shouldDrawFocusBackground env cursor ->
+    Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing && shouldDrawFocusBackground env cursor ->
       decorate drawFocusBackground child
     _ -> child
 
