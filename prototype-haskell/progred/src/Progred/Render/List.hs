@@ -232,7 +232,7 @@ bracketMinHeight :: Double
 bracketMinHeight = 20
 
 bracketStroke :: Double
-bracketStroke = 2
+bracketStroke = 1.5
 
 bracketTick :: Double
 bracketTick = 6
