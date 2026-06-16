@@ -28,13 +28,18 @@ main = do
   run "editString" propEditStringWritesAndFocuses
   run "editInt" propEditIntBuffersInvalidAndCommitsValid
   run "editFloat" propEditFloatBuffersInvalidAndCommitsValid
+  run "insertStringEdge" propInsertStringEdgeWritesAndFocuses
   run "blurString" propBlurStringOnlyClearsMatchingPath
   run "deleteFocusedEdge" propDeleteFocusedEdgeDeletesEdge
   run "graphContext" propGraphContextUsesLibraries
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
+  run "listProjectionRequiresIsa" propListProjectionRequiresIsa
   run "listItemFocus" propListNodeItemFocusesListElement
   run "listItemDelete" propListNodeItemDeleteSplicesList
+  run "listBeforeFirstInsert" propListNodeInsertBeforeFirstCommitsString
   run "listItemInsert" propListNodeItemInsertCommitsString
+  run "rawNodeInsertNested" propRawNodeInsertCommitsNestedString
+  run "rawNodeInsertSibling" propRawEdgeInsertCommitsSiblingString
   where
     run name prop = do
       result <- quickCheckWithResult stdArgs {maxSuccess = 1000} prop
@@ -113,6 +118,20 @@ propEditFloatBuffersInvalidAndCommitsValid =
     validEdit = editFloat [numberLabel] "2.5" selection editor
     invalidEdit = editFloat [numberLabel] "nope" selection editor
 
+propInsertStringEdgeWritesAndFocuses :: Property
+propInsertStringEdgeWritesAndFocuses =
+  conjoin
+    [ resolvePath editedContext [rawChildLabel, rawInsertedLabel] === Just (VString "delta")
+    , editorFocus edited === Just (Focus [rawChildLabel, rawInsertedLabel] (testFocusState deltaSelection))
+    ]
+  where
+    deltaSelection = selectionAtEnd "delta"
+    edited =
+      insertStringEdge [rawChildLabel] rawInsertedLabel "delta" deltaSelection $
+        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawChildLabel] defaultFocusState)}
+    editedContext =
+      documentContext (editorDocument edited) []
+
 propBlurStringOnlyClearsMatchingPath :: Property
 propBlurStringOnlyClearsMatchingPath =
   forAllBlind genCase check
@@ -188,6 +207,21 @@ propPointerCapturePrecedesNormalPointer =
       onPointerCapture (\_event -> Just (put "capture"))
         <> onPointer (\_event -> Just (put "normal"))
 
+propListProjectionRequiresIsa :: Property
+propListProjectionRequiresIsa =
+  case tryProject listProjection env (Cursor [listLabel] Nothing) of
+    Nothing -> property True
+    Just _ -> counterexample "structural head/tail node without isa projected as a list" False
+  where
+    env :: Env (State Editor) TestRender
+    env =
+      Env
+        { envContext = documentContext structuralListDocument []
+        , envEdit = const (pure ())
+        , envFreshUUID = pure listInsertedCell
+        , envProject = const empty
+        }
+
 propListNodeItemFocusesListElement :: Property
 propListNodeItemFocusesListElement =
   editorFocus clicked === Just (Focus thirdItemPath defaultFocusState)
@@ -215,12 +249,42 @@ propListNodeItemDeleteSplicesList =
     handler =
       listItemHandler (Just (Focus thirdItemPath defaultFocusState))
 
+propListNodeInsertBeforeFirstCommitsString :: Property
+propListNodeInsertBeforeFirstCommitsString =
+  conjoin
+    [ editorFocus pending === Just (Focus beforeFirstItemPendingPath (testPendingState "" emptySelection))
+    , editorFocus typed === Just (Focus beforeFirstItemPendingPath (testPendingState "zero" zeroSelection))
+    , resolvePath insertedContext [listLabel] === Just (VRef listInsertedCell)
+    , resolvePath insertedContext [listLabel, isaLabel] === Just (VRef listConsNode)
+    , resolvePath insertedContext [listLabel, headLabel] === Just (VString "zero")
+    , resolvePath insertedContext [listLabel, tailLabel] === Just (VRef listCell1)
+    , editorFocus inserted === Just (Focus [listLabel, headLabel] (testFocusState zeroSelection))
+    ]
+  where
+    pending =
+      execState
+        (handleInsert (listItemHandler (Just (Focus [listLabel] defaultFocusState))))
+        Editor {editorDocument = listItemDocument, editorFocus = Just (Focus [listLabel] defaultFocusState)}
+    typed =
+      execState
+        (handleKey (TextInput "zero") (listItemHandler (editorFocus pending)))
+        pending
+    inserted =
+      execState
+        (handleKey enterKey (listItemHandler (editorFocus typed)))
+        typed
+    insertedContext =
+      documentContext (editorDocument inserted) []
+    zeroSelection =
+      selectionAtEnd "zero"
+
 propListNodeItemInsertCommitsString :: Property
 propListNodeItemInsertCommitsString =
   conjoin
-    [ editorFocus pending === Just (Focus afterThirdItemPath (testPendingState "" emptySelection))
-    , editorFocus typed === Just (Focus afterThirdItemPath (testPendingState "omega" omegaSelection))
+    [ editorFocus pending === Just (Focus afterThirdItemPendingPath (testPendingState "" emptySelection))
+    , editorFocus typed === Just (Focus afterThirdItemPendingPath (testPendingState "omega" omegaSelection))
     , resolvePath insertedContext afterThirdItemPath === Just (VRef listInsertedCell)
+    , resolvePath insertedContext (afterThirdItemPath <> [isaLabel]) === Just (VRef listConsNode)
     , resolvePath insertedContext (afterThirdItemPath <> [headLabel]) === Just (VString "omega")
     , resolvePath insertedContext (afterThirdItemPath <> [tailLabel]) === Just (VRef nilNode)
     , editorFocus inserted === Just (Focus (afterThirdItemPath <> [headLabel]) (testFocusState omegaSelection))
@@ -243,6 +307,58 @@ propListNodeItemInsertCommitsString =
     omegaSelection =
       selectionAtEnd "omega"
 
+propRawNodeInsertCommitsNestedString :: Property
+propRawNodeInsertCommitsNestedString =
+  conjoin
+    [ editorFocus pending === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingState "" emptySelection))
+    , editorFocus typed === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingState "delta" deltaSelection))
+    , resolvePath insertedContext [rawChildLabel, rawInsertedLabel] === Just (VString "delta")
+    , editorFocus inserted === Just (Focus [rawChildLabel, rawInsertedLabel] (testFocusState deltaSelection))
+    ]
+  where
+    pending =
+      execState
+        (handleInsert (rawInsertHandler (Just (Focus [rawChildLabel] defaultFocusState))))
+        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawChildLabel] defaultFocusState)}
+    typed =
+      execState
+        (handleKey (TextInput "delta") (rawInsertHandler (editorFocus pending)))
+        pending
+    inserted =
+      execState
+        (handleKey enterKey (rawInsertHandler (editorFocus typed)))
+        typed
+    insertedContext =
+      documentContext (editorDocument inserted) []
+    deltaSelection =
+      selectionAtEnd "delta"
+
+propRawEdgeInsertCommitsSiblingString :: Property
+propRawEdgeInsertCommitsSiblingString =
+  conjoin
+    [ editorFocus pending === Just (Focus [rawInsertedLabel] (testPendingState "" emptySelection))
+    , editorFocus typed === Just (Focus [rawInsertedLabel] (testPendingState "epsilon" epsilonSelection))
+    , resolvePath insertedContext [rawInsertedLabel] === Just (VString "epsilon")
+    , editorFocus inserted === Just (Focus [rawInsertedLabel] (testFocusState epsilonSelection))
+    ]
+  where
+    pending =
+      execState
+        (handleInsert (rawInsertHandler (Just (Focus [rawBoolLabel] defaultFocusState))))
+        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawBoolLabel] defaultFocusState)}
+    typed =
+      execState
+        (handleKey (TextInput "epsilon") (rawInsertHandler (editorFocus pending)))
+        pending
+    inserted =
+      execState
+        (handleKey enterKey (rawInsertHandler (editorFocus typed)))
+        typed
+    insertedContext =
+      documentContext (editorDocument inserted) []
+    epsilonSelection =
+      selectionAtEnd "epsilon"
+
 listItemHandler :: Maybe Focus -> Handler (State Editor)
 listItemHandler focus =
   runTestRender $ do
@@ -256,6 +372,21 @@ listItemLayout focus =
     listItemDocument
     modify
     (pure listInsertedCell)
+    focus
+
+rawInsertHandler :: Maybe Focus -> Handler (State Editor)
+rawInsertHandler focus =
+  runTestRender $ do
+    measured <- measureHalay (rawInsertLayout focus)
+    placeMeasured measured (Rect 0 0 800 600)
+
+rawInsertLayout :: Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
+rawInsertLayout focus =
+  projectDocument
+    (focusedProjection rawProjection)
+    rawInsertDocument
+    modify
+    (pure rawInsertedLabel)
     focus
 
 newtype TestRender a = TestRender
@@ -354,6 +485,14 @@ afterThirdItemPath :: [UUID]
 afterThirdItemPath =
   [listLabel, tailLabel, tailLabel, tailLabel]
 
+beforeFirstItemPendingPath :: [UUID]
+beforeFirstItemPendingPath =
+  [listLabel, listBeforeLabel]
+
+afterThirdItemPendingPath :: [UUID]
+afterThirdItemPendingPath =
+  afterThirdItemPath <> [listBeforeLabel]
+
 listItemDocument :: Document
 listItemDocument =
   Document rootId listItemGraph
@@ -369,7 +508,18 @@ listItemGraph =
     ]
   where
     cons headValue tailValue =
-      Map.fromList [(headLabel, headValue), (tailLabel, tailValue)]
+      Map.fromList [(isaLabel, VRef listConsNode), (headLabel, headValue), (tailLabel, tailValue)]
+
+structuralListDocument :: Document
+structuralListDocument =
+  Document rootId structuralListGraph
+
+structuralListGraph :: MapGraph
+structuralListGraph =
+  Map.fromList
+    [ (rootId, Map.fromList [(listLabel, VRef structuralListCell)])
+    , (structuralListCell, Map.fromList [(headLabel, VString "alpha"), (tailLabel, VRef nilNode)])
+    ]
 
 listLabel :: UUID
 listLabel = UUID.fromWords 800 0 0 1
@@ -388,6 +538,37 @@ listItemNode = UUID.fromWords 804 0 0 1
 
 listInsertedCell :: UUID
 listInsertedCell = UUID.fromWords 805 0 0 1
+
+structuralListCell :: UUID
+structuralListCell = UUID.fromWords 806 0 0 1
+
+rawInsertDocument :: Document
+rawInsertDocument =
+  Document rootId rawInsertGraph
+
+rawInsertGraph :: MapGraph
+rawInsertGraph =
+  Map.fromList
+    [ ( rootId
+      , Map.fromList
+          [ (rawChildLabel, VRef rawInsertNode)
+          , (rawBoolLabel, VBool True)
+          ]
+      )
+    , (rawInsertNode, Map.fromList [(nameLabel, VString "child")])
+    ]
+
+rawChildLabel :: UUID
+rawChildLabel = UUID.fromWords 810 0 0 1
+
+rawBoolLabel :: UUID
+rawBoolLabel = UUID.fromWords 811 0 0 1
+
+rawInsertNode :: UUID
+rawInsertNode = UUID.fromWords 812 0 0 1
+
+rawInsertedLabel :: UUID
+rawInsertedLabel = UUID.fromWords 813 0 0 1
 
 genSetEdge :: MapGraph -> Gen (Editor -> Editor)
 genSetEdge _graph =

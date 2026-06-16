@@ -156,7 +156,7 @@ sampleDocument =
     uuids = seededUUIDs 20260607
     node = Map.fromList
     cons element rest =
-      node [(headLabel, element), (tailLabel, rest)]
+      node [(isaLabel, VRef listConsNode), (headLabel, element), (tailLabel, rest)]
 
 seededUUIDs :: Int -> [UUID]
 seededUUIDs seed = wordsToUUIDs (randoms (mkStdGen seed))

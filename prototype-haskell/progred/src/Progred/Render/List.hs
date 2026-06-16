@@ -17,9 +17,9 @@ import qualified Puri.KeyCode as KeyCode
 import Puri.Widgets (LineEditInteraction (..), LineEditSelection (..), LineStyle (..))
 import Puri.Widgets.Frame
 
--- Projects cons chains as bracketed lists. Declines anything that isn't
--- a well-formed chain (cells with exactly head and tail, ending at nil,
--- acyclic) so the fallback keeps every malformed detail visible.
+-- Projects explicit cons chains as bracketed lists. Cons cells opt in with
+-- isa -> listConsNode; nilNode is the shared empty-list terminator.
+-- Malformed chains decline so the fallback keeps the details visible.
 listProjection :: (Canvas.Canvas renderM, Monad actionM) => PartialProjection actionM renderM
 listProjection =
   PartialProjection projectList
@@ -37,7 +37,7 @@ projectList env cursor =
           | node `elem` seen -> Nothing
           | otherwise -> do
               edges <- lookupNode context node
-              if Map.size edges == 2 && Map.member headLabel edges && Map.member tailLabel edges
+              if isListCons edges
                 then
                   let after = descendCursor tailLabel spot
                    in (ListItem (descendCursor headLabel spot) after :) <$> elements (node : seen) after
@@ -85,7 +85,7 @@ listActions :: Applicative renderM => Env actionM renderM -> Cursor -> Halay ren
 listActions env cursor child =
   case cursorFocus cursor of
     Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing ->
-      decorate (const (pure (onInsert (envEdit env (focusPending (cursorPath cursor) "" emptySelection))))) child
+      decorate (const (pure (onInsert (envEdit env (focusPending (listPendingPath (cursorPath cursor)) "" emptySelection))))) child
     _ -> child
 
 listItemActions :: Applicative renderM => Env actionM renderM -> ListItem -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
@@ -96,7 +96,7 @@ listItemActions env item child =
         ( const $
             pure $
               onDelete (envEdit env (spliceListItem (cursorPath (listItemHead item))))
-                <> onInsert (envEdit env (focusPending (cursorPath (listItemAfter item)) "" emptySelection))
+                <> onInsert (envEdit env (focusPending (listPendingPath (cursorPath (listItemAfter item))) "" emptySelection))
         )
         child
     _ -> child
@@ -142,7 +142,7 @@ drawBracket side Rect {x, y, width, height} = do
 activePending :: Cursor -> Maybe PendingEdit
 activePending cursor =
   case cursorFocus cursor of
-    Just focus | null (focusPath focus) -> focusPendingEdit (focusState focus)
+    Just focus | focusPath focus == [listBeforeLabel] -> focusPendingEdit (focusState focus)
     _ -> Nothing
 
 insertionAnchor :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM)
@@ -158,7 +158,7 @@ insertionAnchorHandler env cursor rect =
     case event of
       PointerDown {pointerX, pointerY}
         | rectContains (expandHorizontal insertOverlap rect) pointerX pointerY ->
-            Just (envEdit env (focusPending path "" emptySelection))
+            Just (envEdit env (focusPending (listPendingPath path) "" emptySelection))
       _ -> Nothing
   where
     path = cursorPath cursor
@@ -173,14 +173,15 @@ pendingInsert env cursor pending =
     decorate submitKeys $
       lineEdit pendingLineStyle currentText interaction
   where
-    path = cursorPath cursor
+    linkPath = cursorPath cursor
+    pendingPath = listPendingPath linkPath
     currentText = pendingEditText pending
     selection = pendingEditSelection pending
     interaction =
       LineEditFocused
         selection
-        (\newText newSelection -> envEdit env (focusPending path newText newSelection))
-        (envEdit env (cancelPending path))
+        (\newText newSelection -> envEdit env (focusPending pendingPath newText newSelection))
+        (envEdit env (cancelPending pendingPath))
     submitKeys _rect =
       pure $
         onKey $ \event ->
@@ -189,11 +190,21 @@ pendingInsert env cursor pending =
               | code == KeyCode.enter && not (hasModifier modifiers) ->
                   Just commit
               | code == KeyCode.escape ->
-                  Just (envEdit env (cancelPending path))
+                  Just (envEdit env (cancelPending pendingPath))
             _ -> Nothing
     commit = do
       cell <- envFreshUUID env
-      envEdit env (insertListString path cell currentText (selectionAtEnd currentText))
+      envEdit env (insertListString linkPath cell currentText (selectionAtEnd currentText))
+
+isListCons :: Edges -> Bool
+isListCons edges =
+  Map.lookup isaLabel edges == Just (VRef listConsNode)
+    && Map.member headLabel edges
+    && Map.member tailLabel edges
+
+listPendingPath :: [UUID] -> [UUID]
+listPendingPath path =
+  path <> [listBeforeLabel]
 
 hasModifier :: KeyModifiers -> Bool
 hasModifier modifiers =

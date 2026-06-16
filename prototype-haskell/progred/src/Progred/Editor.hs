@@ -16,6 +16,7 @@ module Progred.Editor
   , focusEdge
   , focusNumber
   , focusPending
+  , insertStringEdge
   , focusString
   , insertListString
   , parseFloatValue
@@ -195,13 +196,23 @@ insertListString path newCell string selection editor =
   case (pathEdge context path, resolvePath context path) of
     (Just linkEdge, Just oldTail) ->
       ( focusString (path <> [headLabel]) selection
-          . editGraph (Map.insert newCell (Map.fromList [(headLabel, VString string), (tailLabel, oldTail)]))
+          . editGraph (Map.insert newCell (Map.fromList [(isaLabel, VRef listConsNode), (headLabel, VString string), (tailLabel, oldTail)]))
           . setEdge linkEdge (VRef newCell)
       )
         editor
     _ -> editor
   where
     context = editorContext editor
+
+insertStringEdge :: [UUID] -> UUID -> String -> LineEditSelection -> Editor -> Editor
+insertStringEdge parentPath label string selection editor =
+  case resolvePath (editorContext editor) parentPath of
+    Just (VRef parent) ->
+      ( focusString (parentPath <> [label]) selection
+          . setEdge (Edge parent label) (VString string)
+      )
+        editor
+    _ -> editor
 
 listItemCellPath :: [UUID] -> Maybe [UUID]
 listItemCellPath path =

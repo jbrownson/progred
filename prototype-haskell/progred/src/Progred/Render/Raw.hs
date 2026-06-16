@@ -15,12 +15,13 @@ import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
 import Puri.Halay (lineEdit)
 import Puri.Handler
+import qualified Puri.KeyCode as KeyCode
 import Puri.Widgets (LineEditInteraction (..), LineEditSelection (..), LineStyle (..))
 import Puri.Widgets.Frame
 
 -- The total projection at the bottom of every composition: assumes
 -- nothing, renders whatever the spot holds, placeholders included.
-rawProjection :: Canvas.Canvas renderM => Projection actionM renderM
+rawProjection :: (Canvas.Canvas renderM, Monad actionM) => Projection actionM renderM
 rawProjection env cursor =
   case resolveCursor env cursor of
     Nothing -> textPlay missingColor "<missing>"
@@ -51,7 +52,7 @@ drawFocusBackground rect = do
   Canvas.strokeRect rect focusColor 1
   pure mempty
 
-rawValue :: Canvas.Canvas renderM => Env actionM renderM -> ResolvedCursor -> Halay renderM renderM (Handler actionM)
+rawValue :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> ResolvedCursor -> Halay renderM renderM (Handler actionM)
 rawValue env resolved =
   case resolvedValue resolved of
     VRef target
@@ -64,34 +65,100 @@ rawValue env resolved =
   where
     cursor = resolvedCursor resolved
 
-rawNode :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
+rawNode :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
 rawNode env cursor target =
   case lookupNode (envContext env) target of
     Nothing -> inlineRowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"]
     Just edges ->
-      column
-        [ identiconPlay target
-        , box rawIndentBox [column (rawEdge <$> Map.toList edges)]
-        ]
+      rawNodeActions env cursor $
+        column
+          [ identiconPlay target
+          , box rawIndentBox [column ((rawEdge <$> Map.toList edges) <> pendingRows)]
+          ]
   where
     rawEdge (label, _value) =
       edgeRow env cursor label
+    pendingRows =
+      case activePending cursor of
+        Just (label, pending) -> [pendingEdgeRow env cursor label pending]
+        Nothing -> []
+
+rawNodeActions :: (Applicative renderM, Monad actionM) => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+rawNodeActions env cursor child =
+  case cursorFocus cursor of
+    Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing ->
+      decorate (const (pure (onInsert (startPendingEdge env (cursorPath cursor))))) child
+    _ -> child
 
 edgeRow
-  :: Canvas.Canvas renderM
+  :: (Canvas.Canvas renderM, Monad actionM)
   => Env actionM renderM
   -> Cursor
   -> UUID
   -> Halay renderM renderM (Handler actionM)
 edgeRow env cursor label =
-  focusableEdge env childCursor $
-    rowWithGap valueGap [rawEdgeLabel label, envProject env childCursor]
+  rawEdgeActions env cursor childCursor $
+    focusableEdge env childCursor $
+      rowWithGap valueGap [rawEdgeLabel label, envProject env childCursor]
   where
     childCursor = descendCursor label cursor
+
+rawEdgeActions :: (Applicative renderM, Monad actionM) => Env actionM renderM -> Cursor -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+rawEdgeActions env parentCursor childCursor child =
+  case cursorFocus childCursor of
+    Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing ->
+      decorate (const (pure (onInsert (startPendingEdge env (cursorPath parentCursor))))) child
+    _ -> child
+
+startPendingEdge :: Monad actionM => Env actionM renderM -> [UUID] -> actionM ()
+startPendingEdge env parentPath = do
+  label <- envFreshUUID env
+  envEdit env (focusPending (parentPath <> [label]) "" emptySelection)
 
 rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 rawEdgeLabel label =
   inlineRowWithGap arrowGap [identiconPlay label, arrowPlay]
+
+pendingEdgeRow :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> PendingEdit -> Halay renderM renderM (Handler actionM)
+pendingEdgeRow env cursor label pending =
+  rowWithGap valueGap [rawEdgeLabel label, rawPendingInsert env cursor label pending]
+
+rawPendingInsert :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> PendingEdit -> Halay renderM renderM (Handler actionM)
+rawPendingInsert env cursor label pending =
+  framed rawPendingFrame $
+    decorate submitKeys $
+      lineEdit rawPendingLineStyle currentText interaction
+  where
+    parentPath = cursorPath cursor
+    path = parentPath <> [label]
+    currentText = pendingEditText pending
+    selection = pendingEditSelection pending
+    interaction =
+      LineEditFocused
+        selection
+        (\newText newSelection -> envEdit env (focusPending path newText newSelection))
+        (envEdit env (cancelPending path))
+    submitKeys _rect =
+      pure $
+        onKey $ \event ->
+          case event of
+            KeyCode modifiers code
+              | code == KeyCode.enter && not (hasModifier modifiers) ->
+                  Just commit
+              | code == KeyCode.escape ->
+                  Just (envEdit env (cancelPending path))
+            _ -> Nothing
+    commit =
+      envEdit env (insertStringEdge parentPath label currentText (selectionAtEnd currentText))
+
+activePending :: Cursor -> Maybe (UUID, PendingEdit)
+activePending cursor =
+  case cursorFocus cursor of
+    Just focus ->
+      case (focusPath focus, focusPendingEdit (focusState focus)) of
+        ([label], Just pending) -> Just (label, pending)
+        _ -> Nothing
+    _ -> Nothing
 
 inlineRowWithGap :: Applicative measureM => Double -> [Halay measureM placeM placed] -> Halay measureM placeM placed
 inlineRowWithGap gap =
@@ -151,6 +218,18 @@ numberEditOrDefault string state =
     Just edit -> edit
     Nothing -> NumberEdit string (LineEditSelection (length string) (length string) False)
 
+hasModifier :: KeyModifiers -> Bool
+hasModifier modifiers =
+  keyShift modifiers || keyAlt modifiers || keyCtrl modifiers || keyMeta modifiers
+
+selectionAtEnd :: String -> LineEditSelection
+selectionAtEnd string =
+  LineEditSelection (length string) (length string) False
+
+emptySelection :: LineEditSelection
+emptySelection =
+  LineEditSelection 0 0 False
+
 isLineEditFocused :: LineEditInteraction actionM -> Bool
 isLineEditFocused interaction =
   case interaction of
@@ -182,6 +261,14 @@ numberLineStyle valid =
   stringLineStyle
     { lineTextColor = if valid then numberColor else invalidNumberColor
     }
+
+rawPendingFrame :: Frame
+rawPendingFrame =
+  (stringFrame True) {frameBackground = Just "#fff9e8"}
+
+rawPendingLineStyle :: LineStyle
+rawPendingLineStyle =
+  stringLineStyle {lineMinWidth = 32}
 
 rawIndentBox :: BoxConfig
 rawIndentBox =
