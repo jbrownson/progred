@@ -132,6 +132,15 @@
         inst.exports.toggleLayoutDebugRects();
       }
 
+      function eventModifiers(event) {
+        return [
+          event.shiftKey ? 1 : 0,
+          event.altKey ? 1 : 0,
+          event.ctrlKey ? 1 : 0,
+          event.metaKey ? 1 : 0,
+        ];
+      }
+
       window.progred = {
         ...(window.progred ?? {}),
         toggleLayoutDebugRects,
@@ -146,13 +155,13 @@
         const rect = canvas.getBoundingClientRect();
         canvas.focus();
         canvas.setPointerCapture(event.pointerId);
-        inst.exports.onPointerDown(event.clientX - rect.left, event.clientY - rect.top);
+        inst.exports.onPointerDown(event.clientX - rect.left, event.clientY - rect.top, ...eventModifiers(event));
       });
 
       canvas.addEventListener("pointermove", event => {
         if (!canvas.hasPointerCapture(event.pointerId)) return;
         const rect = canvas.getBoundingClientRect();
-        inst.exports.onPointerMove(event.clientX - rect.left, event.clientY - rect.top);
+        inst.exports.onPointerMove(event.clientX - rect.left, event.clientY - rect.top, ...eventModifiers(event));
       });
 
       canvas.addEventListener("pointerup", event => {
@@ -160,7 +169,7 @@
         if (canvas.hasPointerCapture(event.pointerId)) {
           canvas.releasePointerCapture(event.pointerId);
         }
-        inst.exports.onPointerUp(event.clientX - rect.left, event.clientY - rect.top);
+        inst.exports.onPointerUp(event.clientX - rect.left, event.clientY - rect.top, ...eventModifiers(event));
       });
 
       canvas.addEventListener("keydown", event => {
@@ -180,10 +189,7 @@
           event.preventDefault();
           inst.exports.onKeyDown(
             event.keyCode,
-            event.shiftKey ? 1 : 0,
-            event.altKey ? 1 : 0,
-            event.ctrlKey ? 1 : 0,
-            event.metaKey ? 1 : 0,
+            ...eventModifiers(event),
           );
         }
       });

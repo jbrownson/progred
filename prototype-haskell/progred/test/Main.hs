@@ -39,9 +39,11 @@ main = do
   run "listItemFocus" propListNodeItemFocusesListElement
   run "listItemDelete" propListNodeItemDeleteSplicesList
   run "listBeforeFirstInsert" propListNodeInsertBeforeFirstCommitsString
+  run "listBeforeFirstRefInsert" propListNodeInsertBeforeFirstCommitsRef
   run "listItemInsert" propListNodeItemInsertCommitsString
   run "rootFocus" propRootNodeFocusesOnClick
   run "rootPlaceholderInsert" propRootPlaceholderCommitsString
+  run "commandClickNodeRef" propCommandClickNodeReplacesPendingRawEdgeWithRef
   run "rawNodeInsertNested" propRawNodeInsertCommitsNestedString
   run "rawNodeInsertSibling" propRawEdgeInsertCommitsSiblingString
   where
@@ -229,7 +231,7 @@ propGraphContextUsesLibraries =
 
 propPointerCapturePrecedesNormalPointer :: Property
 propPointerCapturePrecedesNormalPointer =
-  execState (handlePointer (PointerDown 0 0) handler) "" === "capture"
+  execState (handlePointer (PointerDown 0 0 noModifiers) handler) "" === "capture"
   where
     handler =
       onPointerCapture (\_event -> Just (put "capture"))
@@ -256,7 +258,7 @@ propListNodeItemFocusesListElement =
   where
     clicked =
       execState
-        (handlePointer (PointerDown 260 25) handler)
+        (handlePointer (PointerDown 260 25 noModifiers) handler)
         Editor {editorDocument = listItemDocument, editorFocus = Nothing}
     handler =
       listItemHandler Nothing
@@ -306,6 +308,25 @@ propListNodeInsertBeforeFirstCommitsString =
     zeroSelection =
       selectionAtEnd "zero"
 
+propListNodeInsertBeforeFirstCommitsRef :: Property
+propListNodeInsertBeforeFirstCommitsRef =
+  conjoin
+    [ resolvePath insertedContext [listLabel] === Just (VRef listInsertedCell)
+    , resolvePath insertedContext [listLabel, isaLabel] === Just (VRef listConsNode)
+    , resolvePath insertedContext [listLabel, headLabel] === Just (VRef listItemNode)
+    , resolvePath insertedContext [listLabel, tailLabel] === Just (VRef listCell1)
+    , editorFocus inserted === Just (Focus [listLabel, headLabel] defaultFocusState)
+    ]
+  where
+    inserted =
+      replaceFocusedSpot listInsertedCell (VRef listItemNode)
+        Editor
+          { editorDocument = listItemDocument
+          , editorFocus = Just (Focus beforeFirstItemPendingPath (testPendingState "" emptySelection))
+          }
+    insertedContext =
+      documentContext (editorDocument inserted) []
+
 propListNodeItemInsertCommitsString :: Property
 propListNodeItemInsertCommitsString =
   conjoin
@@ -341,7 +362,7 @@ propRootNodeFocusesOnClick =
   where
     clicked =
       execState
-        (handlePointer (PointerDown 10 10) (rawInsertHandler Nothing))
+        (handlePointer (PointerDown 10 10 noModifiers) (rawInsertHandler Nothing))
         Editor {editorDocument = rawInsertDocument, editorFocus = Nothing}
 
 propRootPlaceholderCommitsString :: Property
@@ -355,7 +376,7 @@ propRootPlaceholderCommitsString =
   where
     focused =
       execState
-        (handlePointer (PointerDown 10 10) (rawDocumentHandler emptyRootDocument Nothing))
+        (handlePointer (PointerDown 10 10 noModifiers) (rawDocumentHandler emptyRootDocument Nothing))
         Editor {editorDocument = emptyRootDocument, editorFocus = Nothing}
     typed =
       execState
@@ -369,6 +390,22 @@ propRootPlaceholderCommitsString =
       LineEditSelection 0 0 True
     rootSelection =
       selectionAtEnd "root"
+
+propCommandClickNodeReplacesPendingRawEdgeWithRef :: Property
+propCommandClickNodeReplacesPendingRawEdgeWithRef =
+  conjoin
+    [ resolvePath clickedContext [rawInsertedLabel] === Just (VRef rootId)
+    , editorFocus clicked === Just (Focus [rawInsertedLabel] defaultFocusState)
+    ]
+  where
+    clicked =
+      execState
+        (handlePointer (PointerDown 10 10 commandModifiers) (rawInsertHandler focus))
+        Editor {editorDocument = rawInsertDocument, editorFocus = focus}
+    focus =
+      Just (Focus [rawInsertedLabel] (testPendingState "" emptySelection))
+    clickedContext =
+      documentContext (editorDocument clicked) []
 
 propRawNodeInsertCommitsNestedString :: Property
 propRawNodeInsertCommitsNestedString =
@@ -529,6 +566,10 @@ noModifiers =
     , keyCtrl = False
     , keyMeta = False
     }
+
+commandModifiers :: KeyModifiers
+commandModifiers =
+  noModifiers {keyMeta = True}
 
 sentinel :: Value
 sentinel = VString "##sentinel##"

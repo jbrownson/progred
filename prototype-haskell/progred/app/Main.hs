@@ -42,17 +42,17 @@ onResize :: Double -> Double -> IO ()
 onResize _width _height =
   renderState
 
-onPointerDown :: Double -> Double -> IO ()
-onPointerDown px py =
-  dispatchPointer (PointerDown px py)
+onPointerDown :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
+onPointerDown px py shift alt ctrl meta =
+  dispatchPointer (PointerDown px py (keyModifiers shift alt ctrl meta))
 
-onPointerMove :: Double -> Double -> IO ()
-onPointerMove px py =
-  dispatchPointer (PointerMove px py)
+onPointerMove :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
+onPointerMove px py shift alt ctrl meta =
+  dispatchPointer (PointerMove px py (keyModifiers shift alt ctrl meta))
 
-onPointerUp :: Double -> Double -> IO ()
-onPointerUp px py =
-  dispatchPointer (PointerUp px py)
+onPointerUp :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
+onPointerUp px py shift alt ctrl meta =
+  dispatchPointer (PointerUp px py (keyModifiers shift alt ctrl meta))
 
 dispatchPointer :: PointerEvent -> IO ()
 dispatchPointer event =

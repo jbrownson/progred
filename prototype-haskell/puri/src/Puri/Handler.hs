@@ -24,14 +24,17 @@ data PointerEvent
   = PointerDown
   { pointerX :: Double
   , pointerY :: Double
+  , pointerModifiers :: KeyModifiers
   }
   | PointerMove
   { pointerX :: Double
   , pointerY :: Double
+  , pointerModifiers :: KeyModifiers
   }
   | PointerUp
   { pointerX :: Double
   , pointerY :: Double
+  , pointerModifiers :: KeyModifiers
   }
 
 data KeyModifiers = KeyModifiers

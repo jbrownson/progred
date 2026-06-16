@@ -58,7 +58,8 @@ rawValue :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> Res
 rawValue env resolved =
   case resolvedValue resolved of
     VRef target
-      | target `elem` resolvedNodes resolved -> inlineRowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."]
+      | target `elem` resolvedNodes resolved ->
+          nodeReferenceActions env target (inlineRowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."])
       | otherwise -> rawNode env (resolvedCursor resolved) target
     VString string -> stringBox env cursor string
     VInt integer -> numberBox env cursor (show integer) parseIntValue editInt
@@ -70,14 +71,15 @@ rawValue env resolved =
 rawNode :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
 rawNode env cursor target =
   case lookupNode (envContext env) target of
-    Nothing -> inlineRowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"]
+    Nothing -> nodeReferenceActions env target (inlineRowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"])
     Just edges ->
-      rootActions env cursor $
-        rawNodeActions env cursor $
-          column
-            [ identiconPlay target
-            , box rawIndentBox [column ((rawEdge <$> Map.toList edges) <> pendingRows)]
-            ]
+      nodeReferenceActions env target $
+        rootActions env cursor $
+          rawNodeActions env cursor $
+            column
+              [ identiconPlay target
+              , box rawIndentBox [column ((rawEdge <$> Map.toList edges) <> pendingRows)]
+              ]
   where
     rawEdge (label, _value) =
       edgeRow env cursor label
@@ -85,6 +87,26 @@ rawNode env cursor target =
       case activePending cursor of
         Just (label, pending) -> [pendingEdgeRow env cursor label pending]
         Nothing -> []
+
+nodeReferenceActions
+  :: (Applicative renderM, Monad actionM)
+  => Env actionM renderM
+  -> UUID
+  -> Halay renderM renderM (Handler actionM)
+  -> Halay renderM renderM (Handler actionM)
+nodeReferenceActions env target child =
+  decorate place child
+  where
+    place rect =
+      pure $
+        onPointerCapture $ \event ->
+          case event of
+            PointerDown {pointerX, pointerY, pointerModifiers}
+              | keyMeta pointerModifiers && rectContains rect pointerX pointerY ->
+                  Just $ do
+                    cell <- envFreshUUID env
+                    envEdit env (replaceFocusedSpot cell (VRef target))
+            _ -> Nothing
 
 rootActions :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 rootActions env cursor child

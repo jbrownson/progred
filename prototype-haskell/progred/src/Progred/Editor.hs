@@ -21,6 +21,7 @@ module Progred.Editor
   , insertListString
   , parseFloatValue
   , parseIntValue
+  , replaceFocusedSpot
   , setEdge
   , setFocus
   , spliceListItem
@@ -104,7 +105,9 @@ focusString path selection editor =
 
 focusSpot :: [UUID] -> Editor -> Editor
 focusSpot path editor =
-  setFocus (Just (Focus path (stateForPath path (editorFocus editor)))) editor
+  setFocus (Just (Focus path state)) editor
+  where
+    state = (stateForPath path (editorFocus editor)) {focusPendingEdit = Nothing}
 
 focusNumber :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
 focusNumber path string selection editor =
@@ -210,16 +213,51 @@ spliceListItem path editor =
 
 insertListString :: [UUID] -> UUID -> String -> LineEditSelection -> Editor -> Editor
 insertListString path newCell string selection editor =
+  insertListCell
+    path
+    newCell
+    (VString string)
+    (focusString (path <> [headLabel]) selection)
+    editor
+
+insertListValue :: [UUID] -> UUID -> Value -> Editor -> Editor
+insertListValue path newCell value =
+  insertListCell path newCell value (focusSpot (path <> [headLabel]))
+
+insertListCell :: [UUID] -> UUID -> Value -> (Editor -> Editor) -> Editor -> Editor
+insertListCell path newCell value focus editor =
   case (pathEdge context path, resolvePath context path) of
     (Just linkEdge, Just oldTail) ->
-      ( focusString (path <> [headLabel]) selection
-          . editGraph (Map.insert newCell (Map.fromList [(isaLabel, VRef listConsNode), (headLabel, VString string), (tailLabel, oldTail)]))
+      ( focus
+          . editGraph
+            ( Map.insert
+                newCell
+                (Map.fromList [(isaLabel, VRef listConsNode), (headLabel, value), (tailLabel, oldTail)])
+            )
           . setEdge linkEdge (VRef newCell)
       )
         editor
     _ -> editor
   where
     context = editorContext editor
+
+replaceFocusedSpot :: UUID -> Value -> Editor -> Editor
+replaceFocusedSpot newCell value editor =
+  case editorFocus editor of
+    Nothing -> editor
+    Just focus -> replacePathValue newCell (focusPath focus) value editor
+
+replacePathValue :: UUID -> [UUID] -> Value -> Editor -> Editor
+replacePathValue newCell path value editor =
+  case path of
+    [] -> (focusSpot path . setRoot (Just value)) editor
+    _ ->
+      case listPendingLinkPath path of
+        Just linkPath -> insertListValue linkPath newCell value editor
+        Nothing ->
+          case edgeForWrite (editorContext editor) path of
+            Just edge -> (focusSpot path . setEdge edge value) editor
+            Nothing -> editor
 
 insertStringEdge :: [UUID] -> UUID -> String -> LineEditSelection -> Editor -> Editor
 insertStringEdge parentPath label string selection editor =
@@ -237,6 +275,25 @@ listItemCellPath path =
     label : reversedCellPath
       | label == headLabel -> Just (reverse reversedCellPath)
     _ -> Nothing
+
+listPendingLinkPath :: [UUID] -> Maybe [UUID]
+listPendingLinkPath path =
+  case reverse path of
+    label : reversedLinkPath
+      | label == listBeforeLabel -> Just (reverse reversedLinkPath)
+    _ -> Nothing
+
+edgeForWrite :: GraphContext -> [UUID] -> Maybe Edge
+edgeForWrite context path = do
+  (parentPath, label) <- unsnoc path
+  VRef parent <- resolvePath context parentPath
+  pure Edge {edgeSource = parent, edgeLabel = label}
+
+unsnoc :: [item] -> Maybe ([item], item)
+unsnoc items =
+  case reverse items of
+    item : reversedRest -> Just (reverse reversedRest, item)
+    [] -> Nothing
 
 editGraph :: (MapGraph -> MapGraph) -> Editor -> Editor
 editGraph change editor =

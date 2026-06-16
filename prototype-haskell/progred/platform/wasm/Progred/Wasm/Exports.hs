@@ -23,13 +23,13 @@ foreign export javascript "toggleLayoutDebugRects sync"
   toggleLayoutDebugRects :: IO ()
 
 foreign export javascript "onPointerDown sync"
-  onPointerDown :: Double -> Double -> IO ()
+  onPointerDown :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 
 foreign export javascript "onPointerMove sync"
-  onPointerMove :: Double -> Double -> IO ()
+  onPointerMove :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 
 foreign export javascript "onPointerUp sync"
-  onPointerUp :: Double -> Double -> IO ()
+  onPointerUp :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 
 foreign export javascript "onResize sync"
   onResize :: Double -> Double -> IO ()
@@ -51,13 +51,13 @@ toggleLayoutDebugRects :: IO ()
 toggleLayoutDebugRects =
   Main.toggleLayoutDebugRects
 
-onPointerDown :: Double -> Double -> IO ()
+onPointerDown :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onPointerDown = Main.onPointerDown
 
-onPointerMove :: Double -> Double -> IO ()
+onPointerMove :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onPointerMove = Main.onPointerMove
 
-onPointerUp :: Double -> Double -> IO ()
+onPointerUp :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onPointerUp = Main.onPointerUp
 
 onResize :: Double -> Double -> IO ()
