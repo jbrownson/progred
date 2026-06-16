@@ -85,7 +85,7 @@ edgeRow
   -> Halay renderM renderM (Handler actionM)
 edgeRow env cursor label =
   focusableEdge env childCursor $
-    inlineRowWithGap valueGap [rawEdgeLabel label, envProject env childCursor]
+    rowWithGap valueGap [rawEdgeLabel label, envProject env childCursor]
   where
     childCursor = descendCursor label cursor
 
