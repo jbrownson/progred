@@ -444,8 +444,8 @@ propRawEdgeInsertCommitsSiblingString =
   where
     pending =
       execState
-        (handleInsert (rawInsertHandler (Just (Focus [rawBoolLabel] defaultFocusState))))
-        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawBoolLabel] defaultFocusState)}
+        (handleInsert (rawInsertHandler (Just (Focus [rawStringLabel] defaultFocusState))))
+        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawStringLabel] defaultFocusState)}
     typed =
       execState
         (handleKey (TextInput "epsilon") (rawInsertHandler (editorFocus pending)))
@@ -668,7 +668,7 @@ rawInsertGraph =
     [ ( rootId
       , Map.fromList
           [ (rawChildLabel, VRef rawInsertNode)
-          , (rawBoolLabel, VBool True)
+          , (rawStringLabel, VString "existing")
           ]
       )
     , (rawInsertNode, Map.fromList [(nameLabel, VString "child")])
@@ -677,8 +677,8 @@ rawInsertGraph =
 rawChildLabel :: UUID
 rawChildLabel = UUID.fromWords 810 0 0 1
 
-rawBoolLabel :: UUID
-rawBoolLabel = UUID.fromWords 811 0 0 1
+rawStringLabel :: UUID
+rawStringLabel = UUID.fromWords 811 0 0 1
 
 rawInsertNode :: UUID
 rawInsertNode = UUID.fromWords 812 0 0 1
@@ -757,7 +757,6 @@ genValue =
   frequency
     [ (3, VString <$> elements ["a", "bb", "ccc"])
     , (1, VInt <$> arbitrary)
-    , (1, VBool <$> arbitrary)
     , (2, VRef <$> elements nodePool)
     ]
 

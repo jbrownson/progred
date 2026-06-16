@@ -16,7 +16,6 @@ data Edge = Edge
 
 data Value
   = VRef UUID
-  | VBool Bool
   | VString String
   | VInt Integer
   | VFloat Double

@@ -127,7 +127,7 @@ sampleDocument =
             , node
                 [ (nameLabel, VString "raw graph")
                 , (uuid 4, VInt 42)
-                , (uuid 5, VBool True)
+                , (uuid 5, VString "flag")
                 , (uuid 6, ref 1)
                 , (uuid 7, ref 11)
                 ]

@@ -64,7 +64,6 @@ rawValue env resolved =
     VString string -> stringBox env cursor string
     VInt integer -> numberBox env cursor (show integer) parseIntValue editInt
     VFloat double -> numberBox env cursor (show double) parseFloatValue editFloat
-    VBool bool -> textPlay boolColor (if bool then "true" else "false")
   where
     cursor = resolvedCursor resolved
 
@@ -404,9 +403,6 @@ stringColor = "#20242a"
 
 numberColor :: String
 numberColor = "#365f9f"
-
-boolColor :: String
-boolColor = "#7a3fa0"
 
 missingColor :: String
 missingColor = "#9a2d2d"
