@@ -13,7 +13,7 @@ import Progred.Graph
 import Progred.MapGraph
 
 data GraphContext = GraphContext
-  { contextRoot :: UUID
+  { contextRoot :: Maybe Value
   , contextGraph :: MapGraph
   , contextLibraries :: [MapGraph]
   }
@@ -35,10 +35,11 @@ lookupNode context node =
         library : rest -> Map.lookup node library <|> firstLibraryHit rest
 
 -- Resolves a path from the root: the nodes entered at each step and the
--- value at the end. The root spot is a ref to the context root.
+-- value at the end. The root spot is stored directly on the document.
 walkPath :: GraphContext -> [UUID] -> Maybe PathWalk
-walkPath context =
-  go [] (VRef (contextRoot context))
+walkPath context path = do
+  root <- contextRoot context
+  go [] root path
   where
     go nodes value [] = Just PathWalk {walkedNodes = reverse nodes, walkedValue = value}
     go nodes (VRef node) (label : rest) = do

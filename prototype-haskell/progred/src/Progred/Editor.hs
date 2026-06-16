@@ -9,7 +9,7 @@ module Progred.Editor
   , cancelPending
   , defaultFocusState
   , deleteEdge
-  , deleteFocusedEdge
+  , deleteFocusedSpot
   , editFloat
   , editInt
   , editString
@@ -135,10 +135,13 @@ cancelPending =
 -- graph write and the replacement selection in one operation.
 editString :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
 editString path string selection editor =
-  case pathEdge (editorContext editor) path of
-    Nothing -> editor
-    Just edge ->
-      (focusString path selection . setEdge edge (VString string)) editor
+  case path of
+    [] -> (focusString path selection . setRoot (Just (VString string))) editor
+    _ ->
+      case pathEdge (editorContext editor) path of
+        Nothing -> editor
+        Just edge ->
+          (focusString path selection . setEdge edge (VString string)) editor
 
 editInt :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
 editInt =
@@ -158,24 +161,30 @@ parseFloatValue string =
 
 editNumber :: (String -> Maybe Value) -> [UUID] -> String -> LineEditSelection -> Editor -> Editor
 editNumber parse path string selection editor =
-  case pathEdge (editorContext editor) path of
-    Nothing -> editor
-    Just edge ->
-      case parse string of
-        Just value -> (focusNumber path string selection . setEdge edge value) editor
-        Nothing -> focusNumber path string selection editor
+  case parse string of
+    Just value ->
+      case path of
+        [] -> (focusNumber path string selection . setRoot (Just value)) editor
+        _ ->
+          case pathEdge (editorContext editor) path of
+            Nothing -> editor
+            Just edge -> (focusNumber path string selection . setEdge edge value) editor
+    Nothing -> focusNumber path string selection editor
 
-deleteFocusedEdge :: Editor -> Editor
-deleteFocusedEdge editor =
+deleteFocusedSpot :: Editor -> Editor
+deleteFocusedSpot editor =
   case editorFocus editor of
-    Just focus -> deletePathEdge (focusPath focus) editor
+    Just focus -> deletePath (focusPath focus) editor
     _ -> editor
 
-deletePathEdge :: [UUID] -> Editor -> Editor
-deletePathEdge path editor =
-  case pathEdge (editorContext editor) path of
-    Nothing -> editor
-    Just edge -> deleteEdge edge editor
+deletePath :: [UUID] -> Editor -> Editor
+deletePath path editor =
+  case path of
+    [] -> clearRoot editor
+    _ ->
+      case pathEdge (editorContext editor) path of
+        Nothing -> editor
+        Just edge -> deleteEdge edge editor
 
 spliceListItem :: [UUID] -> Editor -> Editor
 spliceListItem path editor =
@@ -226,6 +235,16 @@ editGraph change editor =
   editor {editorDocument = document {documentGraph = change (documentGraph document)}}
   where
     document = editorDocument editor
+
+setRoot :: Maybe Value -> Editor -> Editor
+setRoot root editor =
+  editor {editorDocument = document {documentRoot = root}}
+  where
+    document = editorDocument editor
+
+clearRoot :: Editor -> Editor
+clearRoot =
+  setFocus Nothing . setRoot Nothing
 
 editorContext :: Editor -> GraphContext
 editorContext editor =

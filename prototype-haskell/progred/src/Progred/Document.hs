@@ -8,7 +8,7 @@ import Progred.GraphContext
 import Progred.MapGraph
 
 data Document = Document
-  { documentRoot :: UUID
+  { documentRoot :: Maybe Value
   , documentGraph :: MapGraph
   }
 

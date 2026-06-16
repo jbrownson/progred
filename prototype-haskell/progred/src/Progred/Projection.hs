@@ -7,6 +7,7 @@ module Progred.Projection
   , descend
   , descendCursor
   , focusableEdge
+  , focusableSpot
   , over
   , projectContext
   , projectDocument
@@ -112,7 +113,13 @@ descendCursor label cursor =
 focusableEdge :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 focusableEdge env cursor child
   | null path = child
-  | otherwise = decorate place child
+  | otherwise = focusableSpot env cursor child
+  where
+    path = cursorPath cursor
+
+focusableSpot :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+focusableSpot env cursor child =
+  decorate place child
   where
     path = cursorPath cursor
     place rect =

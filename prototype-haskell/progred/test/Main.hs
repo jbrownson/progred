@@ -26,11 +26,13 @@ main = do
   run "setEdge" (propToolTracksValue genSetEdge)
   run "deleteEdge" (propToolTracksValue genDeleteEdge)
   run "editString" propEditStringWritesAndFocuses
+  run "editRootString" propEditRootStringWritesDocumentRoot
   run "editInt" propEditIntBuffersInvalidAndCommitsValid
   run "editFloat" propEditFloatBuffersInvalidAndCommitsValid
   run "insertStringEdge" propInsertStringEdgeWritesAndFocuses
   run "blurString" propBlurStringOnlyClearsMatchingPath
-  run "deleteFocusedEdge" propDeleteFocusedEdgeDeletesEdge
+  run "deleteFocusedSpotEdge" propDeleteFocusedSpotDeletesEdge
+  run "deleteFocusedSpotRoot" propDeleteFocusedSpotClearsDocumentRoot
   run "graphContext" propGraphContextUsesLibraries
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listProjectionRequiresIsa" propListProjectionRequiresIsa
@@ -38,6 +40,7 @@ main = do
   run "listItemDelete" propListNodeItemDeleteSplicesList
   run "listBeforeFirstInsert" propListNodeInsertBeforeFirstCommitsString
   run "listItemInsert" propListNodeItemInsertCommitsString
+  run "rootFocus" propRootNodeFocusesOnClick
   run "rawNodeInsertNested" propRawNodeInsertCommitsNestedString
   run "rawNodeInsertSibling" propRawEdgeInsertCommitsSiblingString
   where
@@ -64,7 +67,7 @@ propToolTracksValue genTool =
         case writeAt graph rootId path sentinel of
           Nothing -> counterexample "generated path did not resolve" False
           Just instrumented ->
-            let edited = tool Editor {editorDocument = Document rootId instrumented, editorFocus = Just (Focus path (testFocusState restingState))}
+            let edited = tool Editor {editorDocument = testDocument instrumented, editorFocus = Just (Focus path (testFocusState restingState))}
              in case editorFocus edited of
                   Nothing -> property True
                   Just (Focus path' _) ->
@@ -86,9 +89,21 @@ propEditStringWritesAndFocuses =
       pure (graph, path, string, selection)
     check (graph, path, string, selection) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let edited = editString path string selection Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path (testFocusState restingState))}
+        let edited = editString path string selection Editor {editorDocument = testDocument graph, editorFocus = Just (Focus path (testFocusState restingState))}
          in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
               .&&. (editorFocus edited === Just (Focus path (testFocusState selection)))
+
+propEditRootStringWritesDocumentRoot :: Property
+propEditRootStringWritesDocumentRoot =
+  conjoin
+    [ documentRoot (editorDocument edited) === Just (VString "root")
+    , editorFocus edited === Just (Focus [] (testFocusState selection))
+    ]
+  where
+    selection = selectionAtEnd "root"
+    edited =
+      editString [] "root" selection $
+        Editor {editorDocument = testDocument numberGraph, editorFocus = Just (Focus [] defaultFocusState)}
 
 propEditIntBuffersInvalidAndCommitsValid :: Property
 propEditIntBuffersInvalidAndCommitsValid =
@@ -100,7 +115,7 @@ propEditIntBuffersInvalidAndCommitsValid =
     ]
   where
     selection = LineEditSelection 2 2 False
-    editor = Editor {editorDocument = Document rootId numberGraph, editorFocus = Nothing}
+    editor = Editor {editorDocument = testDocument numberGraph, editorFocus = Nothing}
     validEdit = editInt [numberLabel] "42" selection editor
     invalidEdit = editInt [numberLabel] "-" selection editor
 
@@ -114,7 +129,7 @@ propEditFloatBuffersInvalidAndCommitsValid =
     ]
   where
     selection = LineEditSelection 3 3 False
-    editor = Editor {editorDocument = Document rootId floatGraph, editorFocus = Nothing}
+    editor = Editor {editorDocument = testDocument floatGraph, editorFocus = Nothing}
     validEdit = editFloat [numberLabel] "2.5" selection editor
     invalidEdit = editFloat [numberLabel] "nope" selection editor
 
@@ -142,13 +157,13 @@ propBlurStringOnlyClearsMatchingPath =
       pure (graph, path)
     check (graph, path) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let editor = Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path (testFocusState restingState))}
+        let editor = Editor {editorDocument = testDocument graph, editorFocus = Just (Focus path (testFocusState restingState))}
             otherPath = path <> [head labelPool]
          in (editorFocus (blurString path editor) === Nothing)
               .&&. (editorFocus (blurString otherPath editor) === Just (Focus path (testFocusState restingState)))
 
-propDeleteFocusedEdgeDeletesEdge :: Property
-propDeleteFocusedEdgeDeletesEdge =
+propDeleteFocusedSpotDeletesEdge :: Property
+propDeleteFocusedSpotDeletesEdge =
   forAllBlind genCase check
   where
     genCase = do
@@ -157,14 +172,26 @@ propDeleteFocusedEdgeDeletesEdge =
       pure (graph, path)
     check (graph, path) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let focusedEditor = Editor {editorDocument = Document rootId graph, editorFocus = Just (Focus path (testFocusState restingState))}
-            unfocusedEditor = Editor {editorDocument = Document rootId graph, editorFocus = Nothing}
-            deleted = deleteFocusedEdge focusedEditor
-            ignored = deleteFocusedEdge unfocusedEditor
+        let focusedEditor = Editor {editorDocument = testDocument graph, editorFocus = Just (Focus path (testFocusState restingState))}
+            unfocusedEditor = Editor {editorDocument = testDocument graph, editorFocus = Nothing}
+            deleted = deleteFocusedSpot focusedEditor
+            ignored = deleteFocusedSpot unfocusedEditor
          in (readAt (documentGraph (editorDocument deleted)) rootId path === Nothing)
               .&&. (editorFocus deleted === Nothing)
               .&&. (documentGraph (editorDocument ignored) === graph)
               .&&. (editorFocus ignored === Nothing)
+
+propDeleteFocusedSpotClearsDocumentRoot :: Property
+propDeleteFocusedSpotClearsDocumentRoot =
+  conjoin
+    [ documentRoot (editorDocument deleted) === Nothing
+    , documentGraph (editorDocument deleted) === rawInsertGraph
+    , editorFocus deleted === Nothing
+    ]
+  where
+    deleted =
+      deleteFocusedSpot
+        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [] defaultFocusState)}
 
 propGraphContextUsesLibraries :: Property
 propGraphContextUsesLibraries =
@@ -195,9 +222,9 @@ propGraphContextUsesLibraries =
     documentOverrideGraph =
       Map.insert libraryNode (Map.fromList [(valueLabel, VString "document")]) rootGraph
     libraryContext =
-      documentContext (Document root rootGraph) [libraryGraph]
+      documentContext (Document (Just (VRef root)) rootGraph) [libraryGraph]
     documentWinsContext =
-      documentContext (Document root documentOverrideGraph) [libraryGraph]
+      documentContext (Document (Just (VRef root)) documentOverrideGraph) [libraryGraph]
 
 propPointerCapturePrecedesNormalPointer :: Property
 propPointerCapturePrecedesNormalPointer =
@@ -306,6 +333,15 @@ propListNodeItemInsertCommitsString =
       documentContext (editorDocument inserted) []
     omegaSelection =
       selectionAtEnd "omega"
+
+propRootNodeFocusesOnClick :: Property
+propRootNodeFocusesOnClick =
+  editorFocus clicked === Just (Focus [] defaultFocusState)
+  where
+    clicked =
+      execState
+        (handlePointer (PointerDown 10 10) (rawInsertHandler Nothing))
+        Editor {editorDocument = rawInsertDocument, editorFocus = Nothing}
 
 propRawNodeInsertCommitsNestedString :: Property
 propRawNodeInsertCommitsNestedString =
@@ -495,7 +531,7 @@ afterThirdItemPendingPath =
 
 listItemDocument :: Document
 listItemDocument =
-  Document rootId listItemGraph
+  testDocument listItemGraph
 
 listItemGraph :: MapGraph
 listItemGraph =
@@ -512,7 +548,7 @@ listItemGraph =
 
 structuralListDocument :: Document
 structuralListDocument =
-  Document rootId structuralListGraph
+  testDocument structuralListGraph
 
 structuralListGraph :: MapGraph
 structuralListGraph =
@@ -544,7 +580,11 @@ structuralListCell = UUID.fromWords 806 0 0 1
 
 rawInsertDocument :: Document
 rawInsertDocument =
-  Document rootId rawInsertGraph
+  testDocument rawInsertGraph
+
+testDocument :: MapGraph -> Document
+testDocument =
+  Document (Just (VRef rootId))
 
 rawInsertGraph :: MapGraph
 rawInsertGraph =

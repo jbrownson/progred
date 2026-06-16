@@ -24,7 +24,7 @@ import Puri.Widgets.Frame
 rawProjection :: (Canvas.Canvas renderM, Monad actionM) => Projection actionM renderM
 rawProjection env cursor =
   case resolveCursor env cursor of
-    Nothing -> textPlay missingColor "<missing>"
+    Nothing -> rootActions env cursor (textPlay missingColor "<missing>")
     Just resolved -> rawValue env resolved
 
 focusedProjection :: Canvas.Canvas renderM => Projection actionM renderM -> Projection actionM renderM
@@ -70,11 +70,12 @@ rawNode env cursor target =
   case lookupNode (envContext env) target of
     Nothing -> inlineRowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"]
     Just edges ->
-      rawNodeActions env cursor $
-        column
-          [ identiconPlay target
-          , box rawIndentBox [column ((rawEdge <$> Map.toList edges) <> pendingRows)]
-          ]
+      rootActions env cursor $
+        rawNodeActions env cursor $
+          column
+            [ identiconPlay target
+            , box rawIndentBox [column ((rawEdge <$> Map.toList edges) <> pendingRows)]
+            ]
   where
     rawEdge (label, _value) =
       edgeRow env cursor label
@@ -82,6 +83,11 @@ rawNode env cursor target =
       case activePending cursor of
         Just (label, pending) -> [pendingEdgeRow env cursor label pending]
         Nothing -> []
+
+rootActions :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+rootActions env cursor child
+  | null (cursorPath cursor) = focusableSpot env cursor child
+  | otherwise = child
 
 rawNodeActions :: (Applicative renderM, Monad actionM) => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 rawNodeActions env cursor child =

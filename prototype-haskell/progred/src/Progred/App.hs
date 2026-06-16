@@ -92,7 +92,7 @@ view viewport model = do
                 PointerDown {} -> Just (editEditor (setFocus Nothing))
                 _ -> Nothing
           )
-          <> onDelete (editEditor deleteFocusedEdge)
+          <> onDelete (editEditor deleteFocusedSpot)
 
 withLayoutDebug :: Canvas.Canvas renderM => Bool -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 withLayoutDebug enabled layout
@@ -120,7 +120,7 @@ debugRectColors =
 sampleDocument :: Document
 sampleDocument =
   Document
-    { documentRoot = uuid 0
+    { documentRoot = Just (ref 0)
     , documentGraph =
         Map.fromList
           [ ( uuid 0
