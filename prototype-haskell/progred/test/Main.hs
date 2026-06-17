@@ -18,7 +18,7 @@ import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
-import Puri.Widgets (LineEditSelection (..))
+import Puri.Widgets (LineEditSelection (..), emptyLineEditSelection, lineEditSelectionAtEnd)
 import Test.QuickCheck
 
 main :: IO ()
@@ -103,7 +103,7 @@ propEditRootStringWritesDocumentRoot =
     , editorFocus edited === Just (Focus [] (testFocusState selection))
     ]
   where
-    selection = selectionAtEnd "root"
+    selection = lineEditSelectionAtEnd "root"
     edited =
       editString [] "root" selection $
         Editor {editorDocument = testDocument numberGraph, editorFocus = Just (Focus [] defaultFocusState)}
@@ -143,7 +143,7 @@ propInsertStringEdgeWritesAndFocuses =
     , editorFocus edited === Just (Focus [rawChildLabel, rawInsertedLabel] (testFocusState deltaSelection))
     ]
   where
-    deltaSelection = selectionAtEnd "delta"
+    deltaSelection = lineEditSelectionAtEnd "delta"
     edited =
       insertStringEdge [rawChildLabel] rawInsertedLabel "delta" deltaSelection $
         Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawChildLabel] defaultFocusState)}
@@ -282,7 +282,7 @@ propListNodeItemDeleteSplicesList =
 propListNodeInsertBeforeFirstCommitsString :: Property
 propListNodeInsertBeforeFirstCommitsString =
   conjoin
-    [ editorFocus pending === Just (Focus beforeFirstItemPendingPath (testPendingState "" emptySelection))
+    [ editorFocus pending === Just (Focus beforeFirstItemPendingPath (testPendingState "" emptyLineEditSelection))
     , editorFocus typed === Just (Focus beforeFirstItemPendingPath (testPendingState "zero" zeroSelection))
     , resolvePath insertedContext [listLabel] === Just (VRef listInsertedCell)
     , resolvePath insertedContext [listLabel, isaLabel] === Just (VRef listConsNode)
@@ -306,7 +306,7 @@ propListNodeInsertBeforeFirstCommitsString =
     insertedContext =
       documentContext (editorDocument inserted) []
     zeroSelection =
-      selectionAtEnd "zero"
+      lineEditSelectionAtEnd "zero"
 
 propListNodeInsertBeforeFirstCommitsRef :: Property
 propListNodeInsertBeforeFirstCommitsRef =
@@ -322,7 +322,7 @@ propListNodeInsertBeforeFirstCommitsRef =
       replaceFocusedSpot listInsertedCell (VRef listItemNode)
         Editor
           { editorDocument = listItemDocument
-          , editorFocus = Just (Focus beforeFirstItemPendingPath (testPendingState "" emptySelection))
+          , editorFocus = Just (Focus beforeFirstItemPendingPath (testPendingState "" emptyLineEditSelection))
           }
     insertedContext =
       documentContext (editorDocument inserted) []
@@ -330,7 +330,7 @@ propListNodeInsertBeforeFirstCommitsRef =
 propListNodeItemInsertCommitsString :: Property
 propListNodeItemInsertCommitsString =
   conjoin
-    [ editorFocus pending === Just (Focus afterThirdItemPendingPath (testPendingState "" emptySelection))
+    [ editorFocus pending === Just (Focus afterThirdItemPendingPath (testPendingState "" emptyLineEditSelection))
     , editorFocus typed === Just (Focus afterThirdItemPendingPath (testPendingState "omega" omegaSelection))
     , resolvePath insertedContext afterThirdItemPath === Just (VRef listInsertedCell)
     , resolvePath insertedContext (afterThirdItemPath <> [isaLabel]) === Just (VRef listConsNode)
@@ -354,7 +354,7 @@ propListNodeItemInsertCommitsString =
     insertedContext =
       documentContext (editorDocument inserted) []
     omegaSelection =
-      selectionAtEnd "omega"
+      lineEditSelectionAtEnd "omega"
 
 propRootNodeFocusesOnClick :: Property
 propRootNodeFocusesOnClick =
@@ -389,7 +389,7 @@ propRootPlaceholderCommitsString =
     dragSelection =
       LineEditSelection 0 0 True
     rootSelection =
-      selectionAtEnd "root"
+      lineEditSelectionAtEnd "root"
 
 propCommandClickNodeReplacesPendingRawEdgeWithRef :: Property
 propCommandClickNodeReplacesPendingRawEdgeWithRef =
@@ -403,14 +403,14 @@ propCommandClickNodeReplacesPendingRawEdgeWithRef =
         (handlePointer (PointerDown 10 10 commandModifiers) (rawInsertHandler focus))
         Editor {editorDocument = rawInsertDocument, editorFocus = focus}
     focus =
-      Just (Focus [rawInsertedLabel] (testPendingState "" emptySelection))
+      Just (Focus [rawInsertedLabel] (testPendingState "" emptyLineEditSelection))
     clickedContext =
       documentContext (editorDocument clicked) []
 
 propRawNodeInsertCommitsNestedString :: Property
 propRawNodeInsertCommitsNestedString =
   conjoin
-    [ editorFocus pending === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingState "" emptySelection))
+    [ editorFocus pending === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingState "" emptyLineEditSelection))
     , editorFocus typed === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingState "delta" deltaSelection))
     , resolvePath insertedContext [rawChildLabel, rawInsertedLabel] === Just (VString "delta")
     , editorFocus inserted === Just (Focus [rawChildLabel, rawInsertedLabel] (testFocusState deltaSelection))
@@ -431,12 +431,12 @@ propRawNodeInsertCommitsNestedString =
     insertedContext =
       documentContext (editorDocument inserted) []
     deltaSelection =
-      selectionAtEnd "delta"
+      lineEditSelectionAtEnd "delta"
 
 propRawEdgeInsertCommitsSiblingString :: Property
 propRawEdgeInsertCommitsSiblingString =
   conjoin
-    [ editorFocus pending === Just (Focus [rawInsertedLabel] (testPendingState "" emptySelection))
+    [ editorFocus pending === Just (Focus [rawInsertedLabel] (testPendingState "" emptyLineEditSelection))
     , editorFocus typed === Just (Focus [rawInsertedLabel] (testPendingState "epsilon" epsilonSelection))
     , resolvePath insertedContext [rawInsertedLabel] === Just (VString "epsilon")
     , editorFocus inserted === Just (Focus [rawInsertedLabel] (testFocusState epsilonSelection))
@@ -457,7 +457,7 @@ propRawEdgeInsertCommitsSiblingString =
     insertedContext =
       documentContext (editorDocument inserted) []
     epsilonSelection =
-      selectionAtEnd "epsilon"
+      lineEditSelectionAtEnd "epsilon"
 
 listItemHandler :: Maybe Focus -> Handler (State Editor)
 listItemHandler focus =
@@ -545,14 +545,6 @@ testNumberState string selection =
 testPendingState :: String -> LineEditSelection -> FocusState
 testPendingState string selection =
   defaultFocusState {focusPendingEdit = Just (PendingEdit string selection)}
-
-selectionAtEnd :: String -> LineEditSelection
-selectionAtEnd string =
-  LineEditSelection (length string) (length string) False
-
-emptySelection :: LineEditSelection
-emptySelection =
-  LineEditSelection 0 0 False
 
 enterKey :: KeyEvent
 enterKey =

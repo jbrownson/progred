@@ -14,7 +14,7 @@ import qualified Puri.Canvas as Canvas
 import Puri.Halay (lineEdit)
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
-import Puri.Widgets (LineEditInteraction (..), LineEditSelection (..), LineStyle (..))
+import Puri.Widgets (LineEditInteraction (..), LineStyle (..), emptyLineEditSelection, lineEditSelectionAtEnd)
 import Puri.Widgets.Frame
 
 -- Projects explicit cons chains as bracketed lists. Cons cells opt in with
@@ -45,10 +45,9 @@ projectList env cursor =
         _ -> Nothing
     render items =
       listActions env cursor $
-        padding listPadding $
-          inlineRowWithGap
-            0
-            (renderItems cursor items)
+        inlineRowWithGap
+          0
+          (renderItems cursor items)
     renderItems before [] =
       emptyList env before
     renderItems before (item : rest) =
@@ -85,7 +84,7 @@ listActions :: Applicative renderM => Env actionM renderM -> Cursor -> Halay ren
 listActions env cursor child =
   case cursorFocus cursor of
     Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing ->
-      decorate (const (pure (onInsert (envEdit env (focusPending (listPendingPath (cursorPath cursor)) "" emptySelection))))) child
+      decorate (const (pure (onInsert (envEdit env (focusPending (listPendingPath (cursorPath cursor)) "" emptyLineEditSelection))))) child
     _ -> child
 
 listItemActions :: Applicative renderM => Env actionM renderM -> ListItem -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
@@ -96,7 +95,7 @@ listItemActions env item child =
         ( const $
             pure $
               onDelete (envEdit env (spliceListItem (cursorPath (listItemHead item))))
-                <> onInsert (envEdit env (focusPending (listPendingPath (cursorPath (listItemAfter item))) "" emptySelection))
+                <> onInsert (envEdit env (focusPending (listPendingPath (cursorPath (listItemAfter item))) "" emptyLineEditSelection))
         )
         child
     _ -> child
@@ -158,7 +157,7 @@ insertionAnchorHandler env cursor rect =
     case event of
       PointerDown {pointerX, pointerY}
         | rectContains (expandHorizontal insertOverlap rect) pointerX pointerY ->
-            Just (envEdit env (focusPending (listPendingPath path) "" emptySelection))
+            Just (envEdit env (focusPending (listPendingPath path) "" emptyLineEditSelection))
       _ -> Nothing
   where
     path = cursorPath cursor
@@ -189,12 +188,10 @@ pendingInsert env cursor pending =
             KeyCode modifiers code
               | code == KeyCode.enter && not (hasModifier modifiers) ->
                   Just commit
-              | code == KeyCode.escape ->
-                  Just (envEdit env (cancelPending pendingPath))
             _ -> Nothing
     commit = do
       cell <- envFreshUUID env
-      envEdit env (insertListString linkPath cell currentText (selectionAtEnd currentText))
+      envEdit env (insertListString linkPath cell currentText (lineEditSelectionAtEnd currentText))
 
 isListCons :: Edges -> Bool
 isListCons edges =
@@ -205,18 +202,6 @@ isListCons edges =
 listPendingPath :: [UUID] -> [UUID]
 listPendingPath path =
   path <> [listBeforeLabel]
-
-hasModifier :: KeyModifiers -> Bool
-hasModifier modifiers =
-  keyShift modifiers || keyAlt modifiers || keyCtrl modifiers || keyMeta modifiers
-
-selectionAtEnd :: String -> LineEditSelection
-selectionAtEnd string =
-  LineEditSelection (length string) (length string) False
-
-emptySelection :: LineEditSelection
-emptySelection =
-  LineEditSelection 0 0 False
 
 listColor :: String
 listColor = "#68707c"
@@ -247,10 +232,6 @@ bracketStroke = 1.5
 
 bracketTick :: Double
 bracketTick = 6
-
-listPadding :: Insets
-listPadding =
-  Insets 2 3 2 3
 
 pendingFrame :: Frame
 pendingFrame =

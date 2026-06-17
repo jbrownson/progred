@@ -3,7 +3,9 @@ module Puri.Widgets.LineEdit
   , LineEditInteraction (..)
   , LineEditSelection (..)
   , LineStyle (..)
+  , emptyLineEditSelection
   , lineEdit
+  , lineEditSelectionAtEnd
   , lineEditSize
   ) where
 
@@ -47,6 +49,14 @@ data LineEdit actionM = LineEdit
   , lineEditText :: String
   , lineEditInteraction :: LineEditInteraction actionM
   }
+
+emptyLineEditSelection :: LineEditSelection
+emptyLineEditSelection =
+  collapsed 0
+
+lineEditSelectionAtEnd :: String -> LineEditSelection
+lineEditSelectionAtEnd string =
+  collapsed (length string)
 
 -- Focused and unfocused line edits expose different callbacks: an
 -- unfocused edit can only request focus, while a focused edit can
@@ -107,7 +117,7 @@ editHandler style string interaction rect caretPositions =
         LineEditFocused _selection change blur ->
           case event of
             KeyCode _modifiers code
-              | code == KeyCode.enter || code == KeyCode.escape ->
+              | code == KeyCode.enter ->
                   Just blur
             _ -> report change <$> keyEdit string event selection
     focusAt newCaret =

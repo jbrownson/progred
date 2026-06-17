@@ -16,7 +16,7 @@ import qualified Puri.Canvas as Canvas
 import Puri.Halay (lineEdit)
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
-import Puri.Widgets (LineEditInteraction (..), LineEditSelection (..), LineStyle (..))
+import Puri.Widgets (LineEditInteraction (..), LineEditSelection, LineStyle (..), emptyLineEditSelection, lineEditSelectionAtEnd)
 import Puri.Widgets.Frame
 
 -- The total projection at the bottom of every composition: assumes
@@ -128,7 +128,7 @@ edgeRow
 edgeRow env cursor label =
   rawEdgeActions env cursor childCursor $
     focusableEdge env childCursor $
-      rowWithGap valueGap [rawEdgeLabel label, envProject env childCursor]
+      rowWithGap valueGap [rawEdgeLabel label, rawChild (envProject env childCursor)]
   where
     childCursor = descendCursor label cursor
 
@@ -142,7 +142,7 @@ rawEdgeActions env parentCursor childCursor child =
 startPendingEdge :: Monad actionM => Env actionM renderM -> [UUID] -> actionM ()
 startPendingEdge env parentPath = do
   label <- envFreshUUID env
-  envEdit env (focusPending (parentPath <> [label]) "" emptySelection)
+  envEdit env (focusPending (parentPath <> [label]) "" emptyLineEditSelection)
 
 rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 rawEdgeLabel label =
@@ -150,11 +150,15 @@ rawEdgeLabel label =
 
 pendingEdgeRow :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> PendingEdit -> Halay renderM renderM (Handler actionM)
 pendingEdgeRow env cursor label pending =
-  rowWithGap valueGap [rawEdgeLabel label, rawPendingInsert env cursor label pending]
+  rowWithGap valueGap [rawEdgeLabel label, rawChild (rawPendingInsert env cursor label pending)]
+
+rawChild :: Applicative measureM => Halay measureM placeM placed -> Halay measureM placeM placed
+rawChild =
+  padding rawChildPadding
 
 rawPendingInsert :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> PendingEdit -> Halay renderM renderM (Handler actionM)
 rawPendingInsert env cursor label pending =
-  rawPendingText True currentText interaction commit cancel
+  rawPendingText True currentText interaction commit
   where
     parentPath = cursorPath cursor
     path = parentPath <> [label]
@@ -167,15 +171,15 @@ rawPendingInsert env cursor label pending =
         (\newText newSelection -> envEdit env (focusPending path newText newSelection))
         cancel
     commit =
-      envEdit env (insertStringEdge parentPath label currentText (selectionAtEnd currentText))
+      envEdit env (insertStringEdge parentPath label currentText (lineEditSelectionAtEnd currentText))
 
 rootPlaceholder :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM)
 rootPlaceholder env cursor =
-  rawPendingText focused currentText interaction commit cancel
+  rawPendingText focused currentText interaction commit
   where
     path = cursorPath cursor
     cancel = envEdit env (cancelPending path)
-    commit = envEdit env (editString path currentText (selectionAtEnd currentText))
+    commit = envEdit env (editString path currentText (lineEditSelectionAtEnd currentText))
     (focused, currentText, interaction) =
       case cursorFocus cursor of
         Just focus | null (focusPath focus) ->
@@ -199,9 +203,8 @@ rawPendingText
   -> String
   -> LineEditInteraction actionM
   -> actionM ()
-  -> actionM ()
   -> Halay renderM renderM (Handler actionM)
-rawPendingText focused currentText interaction commit cancel =
+rawPendingText focused currentText interaction commit =
   framed (rawPendingFrame focused) $
     decorate submitKeys $
       lineEdit rawPendingLineStyle currentText interaction
@@ -213,8 +216,6 @@ rawPendingText focused currentText interaction commit cancel =
             KeyCode modifiers code
               | code == KeyCode.enter && not (hasModifier modifiers) ->
                   Just commit
-              | code == KeyCode.escape ->
-                  Just cancel
             _ -> Nothing
 
 activePending :: Cursor -> Maybe (UUID, PendingEdit)
@@ -282,25 +283,13 @@ numberEditOrDefault :: String -> FocusState -> NumberEdit
 numberEditOrDefault string state =
   case focusNumberEdit state of
     Just edit -> edit
-    Nothing -> NumberEdit string (LineEditSelection (length string) (length string) False)
+    Nothing -> NumberEdit string (lineEditSelectionAtEnd string)
 
 pendingEditOrDefault :: FocusState -> PendingEdit
 pendingEditOrDefault state =
   case focusPendingEdit state of
     Just pending -> pending
-    Nothing -> PendingEdit "" emptySelection
-
-hasModifier :: KeyModifiers -> Bool
-hasModifier modifiers =
-  keyShift modifiers || keyAlt modifiers || keyCtrl modifiers || keyMeta modifiers
-
-selectionAtEnd :: String -> LineEditSelection
-selectionAtEnd string =
-  LineEditSelection (length string) (length string) False
-
-emptySelection :: LineEditSelection
-emptySelection =
-  LineEditSelection 0 0 False
+    Nothing -> PendingEdit "" emptyLineEditSelection
 
 isLineEditFocused :: LineEditInteraction actionM -> Bool
 isLineEditFocused interaction =
@@ -348,6 +337,10 @@ rawIndentBox =
     { boxDirection = TopToBottom
     , boxPadding = Insets 0 0 0 indent
     }
+
+rawChildPadding :: Insets
+rawChildPadding =
+  Insets 2 3 2 3
 
 identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 identiconPlay uuid =

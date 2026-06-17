@@ -99,10 +99,6 @@ isInsertKey event =
       code == KeyCode.enter && not (hasModifier modifiers)
     _ -> False
 
-hasModifier :: KeyModifiers -> Bool
-hasModifier modifiers =
-  keyShift modifiers || keyAlt modifiers || keyCtrl modifiers || keyMeta modifiers
-
 toggleLayoutDebugRects :: IO ()
 toggleLayoutDebugRects =
   dispatchRuntime (\_handler -> toggleDebugLayoutRects)

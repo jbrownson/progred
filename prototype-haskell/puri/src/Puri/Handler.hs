@@ -9,6 +9,7 @@ module Puri.Handler
   , handleInsert
   , handleKey
   , handlePointer
+  , hasModifier
   , onDelete
   , onInsert
   , onKey
@@ -47,6 +48,10 @@ data KeyModifiers = KeyModifiers
 data KeyEvent
   = KeyCode KeyModifiers Word32
   | TextInput String
+
+hasModifier :: KeyModifiers -> Bool
+hasModifier modifiers =
+  keyShift modifiers || keyAlt modifiers || keyCtrl modifiers || keyMeta modifiers
 
 type PointerHandler actionM = PointerEvent -> Maybe (actionM ())
 
