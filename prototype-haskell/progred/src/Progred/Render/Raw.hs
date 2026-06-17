@@ -57,35 +57,51 @@ drawFocusBackground rect = do
 rawValue :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> ResolvedCursor -> Halay renderM renderM (Handler actionM)
 rawValue env resolved =
   case resolvedValue resolved of
-    VRef target
-      | target `elem` resolvedNodes resolved ->
-          nodeReferenceActions env target (inlineRowWithGap valueGap [identiconPlay target, textPlay repeatColor "..."])
-      | otherwise -> rawNode env (resolvedCursor resolved) target
+    VRef target -> rawNode env (resolvedCursor resolved) target (target `elem` resolvedNodes resolved)
     VString string -> stringBox env cursor string
     VInt integer -> numberBox env cursor (show integer) parseIntValue editInt
     VFloat double -> numberBox env cursor (show double) parseFloatValue editFloat
   where
     cursor = resolvedCursor resolved
 
-rawNode :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> Cursor -> UUID -> Halay renderM renderM (Handler actionM)
-rawNode env cursor target =
+rawNode :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> Cursor -> UUID -> Bool -> Halay renderM renderM (Handler actionM)
+rawNode env cursor target collapsedByDefault =
   case lookupNode (envContext env) target of
     Nothing -> nodeReferenceActions env target (inlineRowWithGap valueGap [identiconPlay target, textPlay missingColor "<missing>"])
     Just edges ->
       nodeReferenceActions env target $
         rootActions env cursor $
           rawNodeActions env cursor $
-            column
-              [ identiconPlay target
-              , box rawIndentBox [column ((rawEdge <$> Map.toList edges) <> pendingRows)]
-              ]
+            if visibleCollapsed
+              then rawNodeHeader env cursor target edges visibleCollapsed
+              else
+                column
+                  [ rawNodeHeader env cursor target edges visibleCollapsed
+                  , box rawIndentBox [column ((rawEdge <$> Map.toList edges) <> pendingRows)]
+                  ]
   where
+    collapsed =
+      case envCollapseState env (cursorPath cursor) of
+        Just explicit -> explicit
+        Nothing -> collapsedByDefault
+    activeRawPending = activePending cursor
+    visibleCollapsed = collapsed && activeRawPending == Nothing
     rawEdge (label, _value) =
       edgeRow env cursor label
     pendingRows =
-      case activePending cursor of
+      case activeRawPending of
         Just (label, pending) -> [pendingEdgeRow env cursor label pending]
         Nothing -> []
+
+rawNodeHeader :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Edges -> Bool -> Halay renderM renderM (Handler actionM)
+rawNodeHeader env cursor target edges displayedCollapsed
+  | Map.null edges = identiconPlay target
+  | otherwise =
+      inlineRowWithGap
+        collapseHeaderGap
+        [ identiconPlay target
+        , collapseToggle env cursor displayedCollapsed
+        ]
 
 nodeReferenceActions
   :: (Applicative renderM, Monad actionM)
@@ -142,7 +158,7 @@ rawEdgeActions env parentCursor childCursor child =
 startPendingEdge :: Monad actionM => Env actionM renderM -> [UUID] -> actionM ()
 startPendingEdge env parentPath = do
   label <- envFreshUUID env
-  envEdit env (focusPending (parentPath <> [label]) "" emptyLineEditSelection)
+  envEdit env (focusPending (parentPath <> [label]) "" emptyLineEditSelection . setCollapsed parentPath False)
 
 rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
 rawEdgeLabel label =
@@ -155,6 +171,59 @@ pendingEdgeRow env cursor label pending =
 rawChild :: Applicative measureM => Halay measureM placeM placed -> Halay measureM placeM placed
 rawChild =
   padding rawChildPadding
+
+collapseToggle :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Bool -> Halay renderM renderM (Handler actionM)
+collapseToggle env cursor collapsed =
+  leaf (pure (Size collapseToggleWidth iconSize)) draw
+  where
+    path = cursorPath cursor
+    draw rect = do
+      drawCollapseToggle collapsed rect
+      pure $
+        onPointerCapture $ \event ->
+          case event of
+            PointerDown {pointerX, pointerY}
+              | rectContains rect pointerX pointerY ->
+                  Just (envEdit env (setCollapsed path (not collapsed)))
+            _ -> Nothing
+
+drawCollapseToggle :: Canvas.Canvas renderM => Bool -> Rect -> renderM ()
+drawCollapseToggle collapsed rect =
+  if collapsed
+    then drawRightDisclosure rect
+    else drawDownDisclosure rect
+
+drawRightDisclosure :: Canvas.Canvas renderM => Rect -> renderM ()
+drawRightDisclosure Rect {x, y, width, height} =
+  mapM_ drawStep disclosureSteps
+  where
+    left = x + (width - disclosureHeight) / 2
+    centerY = y + height / 2
+    stepWidth = disclosureHeight / fromIntegral disclosureStepCount
+    drawStep index =
+      Canvas.fillRect (Rect stepX stepY stepWidth stepSpan) collapseColor
+      where
+        step = fromIntegral index
+        progress = (fromIntegral disclosureStepCount - step - 0.5) / fromIntegral disclosureStepCount
+        stepSpan = max 1 (disclosureSide * progress)
+        stepX = left + step * stepWidth
+        stepY = centerY - stepSpan / 2
+
+drawDownDisclosure :: Canvas.Canvas renderM => Rect -> renderM ()
+drawDownDisclosure Rect {x, y, width, height} =
+  mapM_ drawStep disclosureSteps
+  where
+    centerX = x + width / 2
+    top = y + (height - disclosureHeight) / 2
+    stepHeight = disclosureHeight / fromIntegral disclosureStepCount
+    drawStep index =
+      Canvas.fillRect (Rect stepX stepY stepSpan stepHeight) collapseColor
+      where
+        step = fromIntegral index
+        progress = (fromIntegral disclosureStepCount - step - 0.5) / fromIntegral disclosureStepCount
+        stepSpan = max 1 (disclosureSide * progress)
+        stepX = centerX - stepSpan / 2
+        stepY = top + step * stepHeight
 
 rawPendingInsert :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> PendingEdit -> Halay renderM renderM (Handler actionM)
 rawPendingInsert env cursor label pending =
@@ -378,6 +447,25 @@ arrowPlay =
 iconSize :: Double
 iconSize = 20
 
+collapseToggleWidth :: Double
+collapseToggleWidth = 14
+
+collapseHeaderGap :: Double
+collapseHeaderGap = 4
+
+disclosureSide :: Double
+disclosureSide = 6
+
+disclosureHeight :: Double
+disclosureHeight = disclosureSide * sqrt 3 / 2
+
+disclosureStepCount :: Int
+disclosureStepCount = 6
+
+disclosureSteps :: [Int]
+disclosureSteps =
+  [0 .. disclosureStepCount - 1]
+
 indent :: Double
 indent = 28
 
@@ -403,8 +491,8 @@ missingColor = "#9a2d2d"
 invalidNumberColor :: String
 invalidNumberColor = "#b42318"
 
-repeatColor :: String
-repeatColor = "#8a5a00"
+collapseColor :: String
+collapseColor = "#68707c"
 
 focusColor :: String
 focusColor = "#0a84ff"

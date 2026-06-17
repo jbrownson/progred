@@ -19,12 +19,17 @@ module Progred.Editor
   , insertStringEdge
   , focusString
   , insertListString
+  , collapseState
+  , isCollapsed
+  , newEditor
   , parseFloatValue
   , parseIntValue
   , replaceFocusedSpot
   , setEdge
+  , setCollapsed
   , setFocus
   , spliceListItem
+  , toggleCollapsed
   ) where
 
 import qualified Data.Map.Strict as Map
@@ -34,6 +39,7 @@ import Progred.Document
 import Progred.Graph
 import Progred.GraphContext
 import Progred.MapGraph
+import qualified Progred.PathTrie as PathTrie
 import Puri.Widgets (LineEditSelection (..))
 
 -- Focus is the focused spot by path from the document root. Occurrences
@@ -75,12 +81,20 @@ defaultFocusState =
 data Editor = Editor
   { editorDocument :: Document
   , editorFocus :: Maybe Focus
+  , editorCollapse :: PathTrie.PathTrie Bool
   }
 
--- Tools pair a graph edit with the sync that keeps focus (later: any
--- transient data attached to paths) truthful. Editing the graph any other way
--- means owning that coherence yourself. Touched edges drop the state
--- that crossed them.
+newEditor :: Document -> Editor
+newEditor document =
+  Editor
+    { editorDocument = document
+    , editorFocus = Nothing
+    , editorCollapse = PathTrie.empty
+    }
+
+-- Tools pair a graph edit with the sync that keeps focus truthful. Collapse
+-- state is path-indexed too, but intentionally survives graph edits until we
+-- have a clearer policy for syncing transient path state.
 setEdge :: Edge -> Value -> Editor -> Editor
 setEdge edge value =
   editGraph (setEdgeValue edge value) . dropCrossing edge
@@ -92,6 +106,26 @@ deleteEdge edge =
 setFocus :: Maybe Focus -> Editor -> Editor
 setFocus focus editor =
   editor {editorFocus = focus}
+
+isCollapsed :: [UUID] -> Editor -> Bool
+isCollapsed path editor =
+  case collapseState path editor of
+    Just True -> True
+    _ -> False
+
+collapseState :: [UUID] -> Editor -> Maybe Bool
+collapseState path editor =
+  PathTrie.lookupPath path (editorCollapse editor)
+
+setCollapsed :: [UUID] -> Bool -> Editor -> Editor
+setCollapsed path collapsed editor =
+  editor
+    { editorCollapse = PathTrie.insertPath path collapsed (editorCollapse editor)
+    }
+
+toggleCollapsed :: [UUID] -> Editor -> Editor
+toggleCollapsed path editor =
+  setCollapsed path (not (isCollapsed path editor)) editor
 
 focusString :: [UUID] -> LineEditSelection -> Editor -> Editor
 focusString path selection editor =

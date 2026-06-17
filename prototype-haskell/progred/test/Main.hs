@@ -33,6 +33,7 @@ main = do
   run "blurString" propBlurStringOnlyClearsMatchingPath
   run "deleteFocusedSpotEdge" propDeleteFocusedSpotDeletesEdge
   run "deleteFocusedSpotRoot" propDeleteFocusedSpotClearsDocumentRoot
+  run "toggleCollapse" propToggleCollapseTracksPath
   run "graphContext" propGraphContextUsesLibraries
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listProjectionRequiresIsa" propListProjectionRequiresIsa
@@ -44,6 +45,7 @@ main = do
   run "rootFocus" propRootNodeFocusesOnClick
   run "rootPlaceholderInsert" propRootPlaceholderCommitsString
   run "commandClickNodeRef" propCommandClickNodeReplacesPendingRawEdgeWithRef
+  run "rawCycleProjection" propRawCycleProjectsCollapsedAndExpanded
   run "rawNodeInsertNested" propRawNodeInsertCommitsNestedString
   run "rawNodeInsertSibling" propRawEdgeInsertCommitsSiblingString
   where
@@ -70,7 +72,7 @@ propToolTracksValue genTool =
         case writeAt graph rootId path sentinel of
           Nothing -> counterexample "generated path did not resolve" False
           Just instrumented ->
-            let edited = tool Editor {editorDocument = testDocument instrumented, editorFocus = Just (Focus path (testFocusState restingState))}
+            let edited = tool (testEditor (testDocument instrumented) (Just (Focus path (testFocusState restingState))))
              in case editorFocus edited of
                   Nothing -> property True
                   Just (Focus path' _) ->
@@ -92,7 +94,7 @@ propEditStringWritesAndFocuses =
       pure (graph, path, string, selection)
     check (graph, path, string, selection) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let edited = editString path string selection Editor {editorDocument = testDocument graph, editorFocus = Just (Focus path (testFocusState restingState))}
+        let edited = editString path string selection (testEditor (testDocument graph) (Just (Focus path (testFocusState restingState))))
          in (readAt (documentGraph (editorDocument edited)) rootId path === Just (VString string))
               .&&. (editorFocus edited === Just (Focus path (testFocusState selection)))
 
@@ -106,7 +108,7 @@ propEditRootStringWritesDocumentRoot =
     selection = lineEditSelectionAtEnd "root"
     edited =
       editString [] "root" selection $
-        Editor {editorDocument = testDocument numberGraph, editorFocus = Just (Focus [] defaultFocusState)}
+        testEditor (testDocument numberGraph) (Just (Focus [] defaultFocusState))
 
 propEditIntBuffersInvalidAndCommitsValid :: Property
 propEditIntBuffersInvalidAndCommitsValid =
@@ -118,7 +120,7 @@ propEditIntBuffersInvalidAndCommitsValid =
     ]
   where
     selection = LineEditSelection 2 2 False
-    editor = Editor {editorDocument = testDocument numberGraph, editorFocus = Nothing}
+    editor = testEditor (testDocument numberGraph) Nothing
     validEdit = editInt [numberLabel] "42" selection editor
     invalidEdit = editInt [numberLabel] "-" selection editor
 
@@ -132,7 +134,7 @@ propEditFloatBuffersInvalidAndCommitsValid =
     ]
   where
     selection = LineEditSelection 3 3 False
-    editor = Editor {editorDocument = testDocument floatGraph, editorFocus = Nothing}
+    editor = testEditor (testDocument floatGraph) Nothing
     validEdit = editFloat [numberLabel] "2.5" selection editor
     invalidEdit = editFloat [numberLabel] "nope" selection editor
 
@@ -146,7 +148,7 @@ propInsertStringEdgeWritesAndFocuses =
     deltaSelection = lineEditSelectionAtEnd "delta"
     edited =
       insertStringEdge [rawChildLabel] rawInsertedLabel "delta" deltaSelection $
-        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawChildLabel] defaultFocusState)}
+        testEditor rawInsertDocument (Just (Focus [rawChildLabel] defaultFocusState))
     editedContext =
       documentContext (editorDocument edited) []
 
@@ -160,7 +162,7 @@ propBlurStringOnlyClearsMatchingPath =
       pure (graph, path)
     check (graph, path) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let editor = Editor {editorDocument = testDocument graph, editorFocus = Just (Focus path (testFocusState restingState))}
+        let editor = testEditor (testDocument graph) (Just (Focus path (testFocusState restingState)))
             otherPath = path <> [head labelPool]
          in (editorFocus (blurString path editor) === Nothing)
               .&&. (editorFocus (blurString otherPath editor) === Just (Focus path (testFocusState restingState)))
@@ -175,8 +177,8 @@ propDeleteFocusedSpotDeletesEdge =
       pure (graph, path)
     check (graph, path) =
       counterexample ("graph: " <> show graph <> "\npath: " <> show path) $
-        let focusedEditor = Editor {editorDocument = testDocument graph, editorFocus = Just (Focus path (testFocusState restingState))}
-            unfocusedEditor = Editor {editorDocument = testDocument graph, editorFocus = Nothing}
+        let focusedEditor = testEditor (testDocument graph) (Just (Focus path (testFocusState restingState)))
+            unfocusedEditor = testEditor (testDocument graph) Nothing
             deleted = deleteFocusedSpot focusedEditor
             ignored = deleteFocusedSpot unfocusedEditor
          in (readAt (documentGraph (editorDocument deleted)) rootId path === Nothing)
@@ -194,7 +196,21 @@ propDeleteFocusedSpotClearsDocumentRoot =
   where
     deleted =
       deleteFocusedSpot
-        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [] defaultFocusState)}
+        (testEditor rawInsertDocument (Just (Focus [] defaultFocusState)))
+
+propToggleCollapseTracksPath :: Property
+propToggleCollapseTracksPath =
+  conjoin
+    [ isCollapsed [rawChildLabel] editor === False
+    , isCollapsed [rawChildLabel] collapsed === True
+    , isCollapsed [rawStringLabel] collapsed === False
+    , isCollapsed [rawChildLabel] expanded === False
+    , collapseState [rawChildLabel] expanded === Just False
+    ]
+  where
+    editor = newEditor rawInsertDocument
+    collapsed = toggleCollapsed [rawChildLabel] editor
+    expanded = toggleCollapsed [rawChildLabel] collapsed
 
 propGraphContextUsesLibraries :: Property
 propGraphContextUsesLibraries =
@@ -249,6 +265,7 @@ propListProjectionRequiresIsa =
         { envContext = documentContext structuralListDocument []
         , envEdit = const (pure ())
         , envFreshUUID = pure listInsertedCell
+        , envCollapseState = const Nothing
         , envProject = const empty
         }
 
@@ -259,7 +276,7 @@ propListNodeItemFocusesListElement =
     clicked =
       execState
         (handlePointer (PointerDown 260 25 noModifiers) handler)
-        Editor {editorDocument = listItemDocument, editorFocus = Nothing}
+        (testEditor listItemDocument Nothing)
     handler =
       listItemHandler Nothing
 
@@ -273,7 +290,7 @@ propListNodeItemDeleteSplicesList =
     deleted =
       execState
         (handleDelete handler)
-        Editor {editorDocument = listItemDocument, editorFocus = Just (Focus thirdItemPath defaultFocusState)}
+        (testEditor listItemDocument (Just (Focus thirdItemPath defaultFocusState)))
     deletedContext =
       documentContext (editorDocument deleted) []
     handler =
@@ -294,7 +311,7 @@ propListNodeInsertBeforeFirstCommitsString =
     pending =
       execState
         (handleInsert (listItemHandler (Just (Focus [listLabel] defaultFocusState))))
-        Editor {editorDocument = listItemDocument, editorFocus = Just (Focus [listLabel] defaultFocusState)}
+        (testEditor listItemDocument (Just (Focus [listLabel] defaultFocusState)))
     typed =
       execState
         (handleKey (TextInput "zero") (listItemHandler (editorFocus pending)))
@@ -320,10 +337,7 @@ propListNodeInsertBeforeFirstCommitsRef =
   where
     inserted =
       replaceFocusedSpot listInsertedCell (VRef listItemNode)
-        Editor
-          { editorDocument = listItemDocument
-          , editorFocus = Just (Focus beforeFirstItemPendingPath (testPendingState "" emptyLineEditSelection))
-          }
+        (testEditor listItemDocument (Just (Focus beforeFirstItemPendingPath (testPendingState "" emptyLineEditSelection))))
     insertedContext =
       documentContext (editorDocument inserted) []
 
@@ -342,7 +356,7 @@ propListNodeItemInsertCommitsString =
     pending =
       execState
         (handleInsert (listItemHandler (Just (Focus thirdItemPath defaultFocusState))))
-        Editor {editorDocument = listItemDocument, editorFocus = Just (Focus thirdItemPath defaultFocusState)}
+        (testEditor listItemDocument (Just (Focus thirdItemPath defaultFocusState)))
     typed =
       execState
         (handleKey (TextInput "omega") (listItemHandler (editorFocus pending)))
@@ -363,7 +377,7 @@ propRootNodeFocusesOnClick =
     clicked =
       execState
         (handlePointer (PointerDown 10 10 noModifiers) (rawInsertHandler Nothing))
-        Editor {editorDocument = rawInsertDocument, editorFocus = Nothing}
+        (testEditor rawInsertDocument Nothing)
 
 propRootPlaceholderCommitsString :: Property
 propRootPlaceholderCommitsString =
@@ -377,7 +391,7 @@ propRootPlaceholderCommitsString =
     focused =
       execState
         (handlePointer (PointerDown 10 10 noModifiers) (rawDocumentHandler emptyRootDocument Nothing))
-        Editor {editorDocument = emptyRootDocument, editorFocus = Nothing}
+        (testEditor emptyRootDocument Nothing)
     typed =
       execState
         (handleKey (TextInput "root") (rawDocumentHandler emptyRootDocument (editorFocus focused)))
@@ -401,11 +415,18 @@ propCommandClickNodeReplacesPendingRawEdgeWithRef =
     clicked =
       execState
         (handlePointer (PointerDown 10 10 commandModifiers) (rawInsertHandler focus))
-        Editor {editorDocument = rawInsertDocument, editorFocus = focus}
+        (testEditor rawInsertDocument focus)
     focus =
       Just (Focus [rawInsertedLabel] (testPendingState "" emptyLineEditSelection))
     clickedContext =
       documentContext (editorDocument clicked) []
+
+propRawCycleProjectsCollapsedAndExpanded :: Property
+propRawCycleProjectsCollapsedAndExpanded =
+  conjoin
+    [ rawEditorHandler (newEditor cycleDocument) `seq` property True
+    , rawEditorHandler (setCollapsed [cycleLabel] False (newEditor cycleDocument)) `seq` property True
+    ]
 
 propRawNodeInsertCommitsNestedString :: Property
 propRawNodeInsertCommitsNestedString =
@@ -419,7 +440,7 @@ propRawNodeInsertCommitsNestedString =
     pending =
       execState
         (handleInsert (rawInsertHandler (Just (Focus [rawChildLabel] defaultFocusState))))
-        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawChildLabel] defaultFocusState)}
+        (testEditor rawInsertDocument (Just (Focus [rawChildLabel] defaultFocusState)))
     typed =
       execState
         (handleKey (TextInput "delta") (rawInsertHandler (editorFocus pending)))
@@ -445,7 +466,7 @@ propRawEdgeInsertCommitsSiblingString =
     pending =
       execState
         (handleInsert (rawInsertHandler (Just (Focus [rawStringLabel] defaultFocusState))))
-        Editor {editorDocument = rawInsertDocument, editorFocus = Just (Focus [rawStringLabel] defaultFocusState)}
+        (testEditor rawInsertDocument (Just (Focus [rawStringLabel] defaultFocusState)))
     typed =
       execState
         (handleKey (TextInput "epsilon") (rawInsertHandler (editorFocus pending)))
@@ -484,6 +505,12 @@ rawDocumentHandler document focus =
     measured <- measureHalay (rawDocumentLayout document focus)
     placeMeasured measured (Rect 0 0 800 600)
 
+rawEditorHandler :: Editor -> Handler (State Editor)
+rawEditorHandler editor =
+  runTestRender $ do
+    measured <- measureHalay (rawEditorLayout editor)
+    placeMeasured measured (Rect 0 0 800 600)
+
 rawDocumentLayout :: Document -> Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
 rawDocumentLayout document focus =
   projectDocument
@@ -492,6 +519,14 @@ rawDocumentLayout document focus =
     modify
     (pure rawInsertedLabel)
     focus
+
+rawEditorLayout :: Editor -> Halay TestRender TestRender (Handler (State Editor))
+rawEditorLayout editor =
+  projectEditor
+    (focusedProjection rawProjection)
+    editor
+    modify
+    (pure rawInsertedLabel)
 
 newtype TestRender a = TestRender
   { runTestRender :: a
@@ -533,6 +568,10 @@ genLineEditSelection =
 
 restingState :: LineEditSelection
 restingState = LineEditSelection 0 0 False
+
+testEditor :: Document -> Maybe Focus -> Editor
+testEditor document focus =
+  (newEditor document) {editorFocus = focus}
 
 testFocusState :: LineEditSelection -> FocusState
 testFocusState selection =
@@ -677,6 +716,24 @@ rawInsertNode = UUID.fromWords 812 0 0 1
 
 rawInsertedLabel :: UUID
 rawInsertedLabel = UUID.fromWords 813 0 0 1
+
+cycleDocument :: Document
+cycleDocument =
+  testDocument cycleGraph
+
+cycleGraph :: MapGraph
+cycleGraph =
+  Map.fromList
+    [ ( rootId
+      , Map.fromList
+          [ (nameLabel, VString "cycle")
+          , (cycleLabel, VRef rootId)
+          ]
+      )
+    ]
+
+cycleLabel :: UUID
+cycleLabel = UUID.fromWords 814 0 0 1
 
 genSetEdge :: MapGraph -> Gen (Editor -> Editor)
 genSetEdge _graph =

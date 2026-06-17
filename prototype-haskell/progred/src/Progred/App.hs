@@ -40,10 +40,7 @@ initialModel :: Model
 initialModel =
   Model
     { modelEditor =
-        Editor
-          { editorDocument = sampleDocument
-          , editorFocus = Nothing
-          }
+        newEditor sampleDocument
     , modelDebugLayoutRects = False
     , modelFreshUUIDs = seededUUIDs 20260615
     }
@@ -74,7 +71,7 @@ view viewport model = do
               , boxPadding = Insets 12 12 12 12
               , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
               }
-            [projectDocument (focusedProjection (listProjection `over` rawProjection)) (editorDocument editor) editEditor freshUUID (editorFocus editor)]
+            [projectEditor (focusedProjection (listProjection `over` rawProjection)) editor editEditor freshUUID]
     editEditor change =
       modify
         ( \current ->

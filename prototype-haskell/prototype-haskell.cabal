@@ -108,6 +108,7 @@ library progred
     Progred.Graph
     Progred.GraphContext
     Progred.MapGraph
+    Progred.PathTrie
     Progred.Projection
     Progred.Render.List
     Progred.Render.Raw

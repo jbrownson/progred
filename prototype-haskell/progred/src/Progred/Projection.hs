@@ -11,6 +11,7 @@ module Progred.Projection
   , over
   , projectContext
   , projectDocument
+  , projectEditor
   , resolveCursor
   ) where
 
@@ -49,6 +50,7 @@ data Env actionM renderM = Env
   { envContext :: GraphContext
   , envEdit :: (Editor -> Editor) -> actionM ()
   , envFreshUUID :: actionM UUID
+  , envCollapseState :: [UUID] -> Maybe Bool
   , envProject :: Cursor -> Halay renderM renderM (Handler actionM)
   }
 
@@ -76,6 +78,15 @@ projectDocument
 projectDocument total document edit fresh focus =
   projectContext total (documentContext document []) edit fresh focus
 
+projectEditor
+  :: Projection actionM renderM
+  -> Editor
+  -> ((Editor -> Editor) -> actionM ())
+  -> actionM UUID
+  -> Halay renderM renderM (Handler actionM)
+projectEditor total editor edit fresh =
+  projectContextWith total (documentContext (editorDocument editor) []) edit fresh (editorFocus editor) (`collapseState` editor)
+
 projectContext
   :: Projection actionM renderM
   -> GraphContext
@@ -84,9 +95,27 @@ projectContext
   -> Maybe Focus
   -> Halay renderM renderM (Handler actionM)
 projectContext total context edit fresh focus =
+  projectContextWith total context edit fresh focus (const Nothing)
+
+projectContextWith
+  :: Projection actionM renderM
+  -> GraphContext
+  -> ((Editor -> Editor) -> actionM ())
+  -> actionM UUID
+  -> Maybe Focus
+  -> ([UUID] -> Maybe Bool)
+  -> Halay renderM renderM (Handler actionM)
+projectContextWith total context edit fresh focus pathCollapseState =
   apply (Cursor [] focus)
   where
-    env = Env {envContext = context, envEdit = edit, envFreshUUID = fresh, envProject = apply}
+    env =
+      Env
+        { envContext = context
+        , envEdit = edit
+        , envFreshUUID = fresh
+        , envCollapseState = pathCollapseState
+        , envProject = apply
+        }
     apply = total env
 
 resolveCursor :: Env actionM renderM -> Cursor -> Maybe ResolvedCursor
