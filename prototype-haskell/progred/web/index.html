@@ -41,6 +41,17 @@
         clear(width, height) {
           context.clearRect(0, 0, width, height);
         },
+        save() {
+          context.save();
+        },
+        restore() {
+          context.restore();
+        },
+        clipRect(x, y, width, height) {
+          context.beginPath();
+          context.rect(x, y, width, height);
+          context.clip();
+        },
         fillRect(x, y, width, height, color) {
           context.fillStyle = color;
           context.fillRect(x, y, width, height);

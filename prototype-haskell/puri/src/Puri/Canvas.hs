@@ -7,12 +7,14 @@ module Puri.Canvas
     , measureText
     , strokeLine
     , strokeRect
+    , withClip
     )
   , TextMetrics (..)
   , getViewport
   ) where
 
 import qualified Puri.Platform as Platform
+import Control.Exception (bracket_)
 import Puri.Geometry
 import Puri.Viewport
 
@@ -23,6 +25,7 @@ class Monad m => Canvas m where
   fillText :: Point -> String -> String -> m ()
   fillTextMiddle :: Point -> String -> String -> m ()
   strokeLine :: Point -> Point -> String -> Double -> m ()
+  withClip :: Rect -> m a -> m a
   measureText :: String -> m TextMetrics
 
 data TextMetrics = TextMetrics
@@ -46,6 +49,8 @@ instance Canvas IO where
     Platform.fillTextMiddle pointX pointY
   strokeLine Point {pointX = x1, pointY = y1} Point {pointX = x2, pointY = y2} =
     Platform.strokeLine x1 y1 x2 y2
+  withClip Rect {x, y, width, height} =
+    bracket_ (Platform.save *> Platform.clipRect x y width height) Platform.restore
   measureText =
     fmap fromPlatformTextMetrics . Platform.measureText
 

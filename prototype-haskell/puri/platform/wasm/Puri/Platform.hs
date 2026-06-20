@@ -2,12 +2,15 @@
 
 module Puri.Platform
   ( clearCanvas
+  , clipRect
   , fillRect
   , fillText
   , fillTextMiddle
   , getCanvasHeight
   , getCanvasWidth
   , measureText
+  , restore
+  , save
   , strokeLine
   , strokeRect
   , TextMetrics (..)
@@ -27,6 +30,15 @@ data TextMetrics = TextMetrics
 -- imports into WASM imports the JS host can wire up.
 foreign import javascript unsafe "window.puriCanvas.clear($1, $2)"
   clearCanvas :: Double -> Double -> IO ()
+
+foreign import javascript unsafe "window.puriCanvas.save()"
+  save :: IO ()
+
+foreign import javascript unsafe "window.puriCanvas.restore()"
+  restore :: IO ()
+
+foreign import javascript unsafe "window.puriCanvas.clipRect($1, $2, $3, $4)"
+  clipRect :: Double -> Double -> Double -> Double -> IO ()
 
 foreign import javascript unsafe "window.puriCanvas.fillRect($1, $2, $3, $4, $5)"
   jsFillRect :: Double -> Double -> Double -> Double -> JSVal -> IO ()

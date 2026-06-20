@@ -1,11 +1,14 @@
 module Puri.Platform
   ( clearCanvas
+  , clipRect
   , fillRect
   , fillText
   , fillTextMiddle
   , getCanvasHeight
   , getCanvasWidth
   , measureText
+  , restore
+  , save
   , strokeLine
   , strokeRect
   , TextMetrics (..)
@@ -21,6 +24,15 @@ data TextMetrics = TextMetrics
 
 clearCanvas :: Double -> Double -> IO ()
 clearCanvas = undefined
+
+save :: IO ()
+save = undefined
+
+restore :: IO ()
+restore = undefined
+
+clipRect :: Double -> Double -> Double -> Double -> IO ()
+clipRect = undefined
 
 fillRect :: Double -> Double -> Double -> Double -> String -> IO ()
 fillRect = undefined
