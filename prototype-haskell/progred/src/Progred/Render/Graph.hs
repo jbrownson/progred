@@ -10,7 +10,7 @@ module Progred.Render.Graph
   , GraphSelection (..)
   , GraphSelectionStrength (..)
   , GraphSnapshot (..)
-  , secondarySelectionUUID
+  , treeSecondaryHighlight
   , GraphSelectedEdge (..)
   , GraphSelectedNode (..)
   , GraphViewport (..)
@@ -48,6 +48,7 @@ import Progred.Document
 import Progred.Editor
 import Progred.Graph
 import Progred.GraphContext
+import Progred.Projection (SecondaryHighlight (..))
 import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
@@ -358,22 +359,37 @@ focusedEdge context focus = do
   Focus {focusPath} <- focus
   pathEdge context focusPath
 
-secondarySelectionUUID :: Editor -> Maybe GraphSelection -> Maybe UUID
-secondarySelectionUUID editor graphSelection =
-  case graphSelection of
-    Just (GraphSelectNode (GraphUUID uuid)) -> Just uuid
-    Just (GraphSelectNode _) -> Nothing
-    Just (GraphSelectEdge _ _) -> Nothing
-    Nothing -> focusedUUID editor
-  where
-    focusedUUID current = do
-      focus <- editorFocus current
-      let document = editorDocument current
-          context = documentContext document []
-      key <- focusedNodeKey document context (Just focus)
-      case key of
-        GraphUUID uuid -> Just uuid
-        _ -> Nothing
+treeSecondaryHighlight :: Editor -> Maybe GraphSelection -> Maybe SecondaryHighlight
+treeSecondaryHighlight editor graphSelection =
+  let document = editorDocument editor
+      context = documentContext document []
+   in case graphSelection of
+        Just (GraphSelectNode key) -> secondaryForNode context key
+        Just (GraphSelectEdge source label) ->
+          SecondarySpot . (++ [label]) <$> pathToNodeKey context source
+        Nothing -> focusedHighlight document context editor
+
+secondaryForNode :: GraphContext -> GraphNodeKey -> Maybe SecondaryHighlight
+secondaryForNode context key =
+  case key of
+    GraphRoot -> Just (SecondarySpot [])
+    GraphUUID uuid -> Just (SecondaryNode uuid)
+    GraphScalar scalarKey ->
+      SecondarySpot <$> firstPathMatching context ((== scalarKey) . scalarValueKey)
+
+pathToNodeKey :: GraphContext -> GraphNodeKey -> Maybe [UUID]
+pathToNodeKey context key =
+  case key of
+    GraphRoot -> Just []
+    GraphUUID node -> shortestPathToRef context node
+    GraphScalar scalarKey ->
+      firstPathMatching context ((== scalarKey) . scalarValueKey)
+
+focusedHighlight :: Document -> GraphContext -> Editor -> Maybe SecondaryHighlight
+focusedHighlight document context editor = do
+  focus <- editorFocus editor
+  key <- focusedNodeKey document context (Just focus)
+  secondaryForNode context key
 
 stepGraphLayout :: GraphSnapshot -> GraphLayout -> GraphLayout
 stepGraphLayout snapshot layout =

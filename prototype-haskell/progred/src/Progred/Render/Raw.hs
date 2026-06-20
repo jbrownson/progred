@@ -42,13 +42,21 @@ focusCursor env cursor child =
 
 secondaryCursor :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 secondaryCursor env cursor child =
-  case (envSecondarySelection env, resolveCursor env cursor, cursorFocus cursor) of
-    (Just uuid, Just resolved, _)
-      | resolvedValue resolved == VRef uuid
-      , not (spotHasPrimaryFocus cursor) ->
+  case (envSecondaryHighlight env, cursorFocus cursor) of
+    (Just highlight, _)
+      | not (spotHasPrimaryFocus cursor)
+      , secondaryMatches highlight env cursor ->
           decorate drawSecondaryBackground child
     _ -> child
   where
+    secondaryMatches highlight spotEnv spot =
+      case highlight of
+        SecondaryNode uuid ->
+          case resolveCursor spotEnv spot of
+            Just resolved -> resolvedValue resolved == VRef uuid
+            Nothing -> False
+        SecondarySpot path ->
+          cursorPath spot == path
     spotHasPrimaryFocus spot =
       case cursorFocus spot of
         Just focus -> null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing

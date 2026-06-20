@@ -1,14 +1,17 @@
 module Progred.GraphContext
   ( GraphContext (..)
   , PathWalk (..)
+  , firstPathMatching
   , lookupNode
   , pathEdge
   , resolvePath
+  , shortestPathToRef
   , walkPath
   ) where
 
 import Control.Applicative ((<|>))
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Progred.Graph
 import Progred.MapGraph
 
@@ -60,3 +63,44 @@ pathEdge context path = do
 lastMaybe :: [item] -> Maybe item
 lastMaybe =
   foldl (\_ item -> Just item) Nothing
+
+shortestPathToRef :: GraphContext -> UUID -> Maybe [UUID]
+shortestPathToRef context target = do
+  root <- contextRoot context
+  breadthFirst Set.empty [([], root)]
+  where
+    breadthFirst _ [] = Nothing
+    breadthFirst visited ((path, value) : queue) =
+      case value of
+        VRef node
+          | node == target -> Just path
+          | Set.member node visited -> breadthFirst visited queue
+          | otherwise -> do
+              edges <- lookupNode context node
+              let nextStates =
+                    [ (path ++ [label], next)
+                    | (label, next) <- Map.toList edges
+                    ]
+              breadthFirst (Set.insert node visited) (queue ++ nextStates)
+        _ -> breadthFirst visited queue
+
+firstPathMatching :: GraphContext -> (Value -> Bool) -> Maybe [UUID]
+firstPathMatching context predicate = do
+  root <- contextRoot context
+  breadthFirst Set.empty [([], root)]
+  where
+    breadthFirst _ [] = Nothing
+    breadthFirst visited ((path, value) : queue)
+      | predicate value = Just path
+      | otherwise =
+          case value of
+            VRef node
+              | Set.member node visited -> breadthFirst visited queue
+              | otherwise -> do
+                  edges <- lookupNode context node
+                  let nextStates =
+                        [ (path ++ [label], next)
+                        | (label, next) <- Map.toList edges
+                        ]
+                  breadthFirst (Set.insert node visited) (queue ++ nextStates)
+            _ -> breadthFirst visited queue

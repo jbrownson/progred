@@ -8,6 +8,7 @@ import Control.Monad.Trans.State.Strict (State, execState, modify, put)
 import Data.List (find)
 import Data.Maybe (isJust)
 import Halay
+import Progred.App
 import Progred.Builtins
 import Progred.Document
 import Progred.Editor
@@ -54,6 +55,9 @@ main = do
   run "graphPanelPan" propGraphPanelPanMovesViewport
   run "graphPanelWheelZoom" propGraphPanelWheelZoomsViewport
   run "graphPanelWheelPan" propGraphPanelWheelPansTrackpad
+  run "treeSecondaryEdge" propTreeSecondaryHighlightEdge
+  run "clearActiveSelection" propClearActiveSelectionClearsGraph
+  run "treeFocusSelection" propTreeFocusReplacesGraphSelection
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listProjectionRequiresIsa" propListProjectionRequiresIsa
   run "listItemFocus" propListNodeItemFocusesListElement
@@ -597,6 +601,37 @@ propGraphPanelWheelZoomsViewport =
         )
         emptyGraphInteractionTest
 
+propTreeSecondaryHighlightEdge :: Property
+propTreeSecondaryHighlightEdge =
+  treeSecondaryHighlight (newEditor rawInsertDocument) (Just (GraphSelectEdge (GraphUUID rootId) rawChildLabel))
+    === Just (SecondarySpot [rawChildLabel])
+
+propClearActiveSelectionClearsGraph :: Property
+propClearActiveSelectionClearsGraph =
+  conjoin
+    [ modelActiveSelection cleared === ActiveNone
+    , editorFocus (modelEditor cleared) === Nothing
+    ]
+  where
+    graphSelected =
+      initialModel
+        { modelActiveSelection = ActiveGraph (GraphSelectNode (GraphUUID rawInsertNode))
+        , modelEditor =
+            setFocus (Just (Focus [rawChildLabel] defaultFocusState)) (newEditor rawInsertDocument)
+        }
+    (_, cleared) = runAppM clearActiveSelection graphSelected
+
+propTreeFocusReplacesGraphSelection :: Property
+propTreeFocusReplacesGraphSelection =
+  activeSelectionAfterEdit
+    (newEditor rawInsertDocument)
+    focused
+    (ActiveGraph (GraphSelectNode (GraphUUID rootId)))
+    === ActiveDocument (Focus [rawChildLabel] defaultFocusState)
+  where
+    focused =
+      setFocus (Just (Focus [rawChildLabel] defaultFocusState)) (newEditor rawInsertDocument)
+
 propGraphPanelWheelPansTrackpad :: Property
 propGraphPanelWheelPansTrackpad =
   graphViewportPan (graphInteractionTestViewport panned) === Point (-10.2) (-6.8)
@@ -637,7 +672,7 @@ propListProjectionRequiresIsa =
         , envEdit = const (pure ())
         , envFreshUUID = pure listInsertedCell
         , envCollapseState = const Nothing
-        , envSecondarySelection = Nothing
+        , envSecondaryHighlight = Nothing
         , envProject = const empty
         }
 

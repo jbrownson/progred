@@ -1,6 +1,9 @@
 module Progred.App
-  ( AppM
-  , Model
+  ( ActiveSelection (..)
+  , AppM
+  , Model (..)
+  , activeSelectionAfterEdit
+  , clearActiveSelection
   , initialModel
   , runAppM
   , stepGraphLayoutFrame
@@ -153,7 +156,7 @@ view viewport model = do
             editor
             editEditor
             freshUUID
-            (GraphView.secondarySelectionUUID editor (activeGraphSelection (modelActiveSelection model)))
+            (GraphView.treeSecondaryHighlight editor (activeGraphSelection (modelActiveSelection model)))
         ]
     graphLayout =
       GraphView.graphPanel
@@ -293,7 +296,7 @@ view viewport model = do
         onPointer
           ( \event ->
               case event of
-                PointerDown {} -> Just (editEditor (setFocus Nothing))
+                PointerDown {} -> Just clearActiveSelection
                 _ -> Nothing
           )
           <> onDelete (editEditor deleteFocusedSpot)
@@ -301,9 +304,13 @@ view viewport model = do
             ( \event ->
                 case event of
                   KeyCode _modifiers code
-                    | code == KeyCode.escape -> Just (editEditor (setFocus Nothing))
+                    | code == KeyCode.escape -> Just clearActiveSelection
                   _ -> Nothing
             )
+
+clearActiveSelection :: AppM ()
+clearActiveSelection =
+  modify (applyActiveSelection ActiveNone)
 
 activeGraphSelection :: ActiveSelection -> Maybe GraphView.GraphSelection
 activeGraphSelection selection =

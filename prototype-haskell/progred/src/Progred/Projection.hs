@@ -4,6 +4,7 @@ module Progred.Projection
   , PartialProjection (..)
   , Projection
   , ResolvedCursor (..)
+  , SecondaryHighlight (..)
   , descend
   , descendCursor
   , focusableEdge
@@ -46,12 +47,17 @@ over :: PartialProjection actionM renderM -> Projection actionM renderM -> Proje
 over partial total env cursor =
   fromMaybe (total env cursor) (tryProject partial env cursor)
 
+data SecondaryHighlight
+  = SecondaryNode UUID
+  | SecondarySpot [UUID]
+  deriving (Eq, Show)
+
 data Env actionM renderM = Env
   { envContext :: GraphContext
   , envEdit :: (Editor -> Editor) -> actionM ()
   , envFreshUUID :: actionM UUID
   , envCollapseState :: [UUID] -> Maybe Bool
-  , envSecondarySelection :: Maybe UUID
+  , envSecondaryHighlight :: Maybe SecondaryHighlight
   , envProject :: Cursor -> Halay renderM renderM (Handler actionM)
   }
 
@@ -84,7 +90,7 @@ projectEditor
   -> Editor
   -> ((Editor -> Editor) -> actionM ())
   -> actionM UUID
-  -> Maybe UUID
+  -> Maybe SecondaryHighlight
   -> Halay renderM renderM (Handler actionM)
 projectEditor total editor edit fresh secondary =
   projectContextWith total (documentContext (editorDocument editor) []) edit fresh (editorFocus editor) (`collapseState` editor) secondary
@@ -106,7 +112,7 @@ projectContextWith
   -> actionM UUID
   -> Maybe Focus
   -> ([UUID] -> Maybe Bool)
-  -> Maybe UUID
+  -> Maybe SecondaryHighlight
   -> Halay renderM renderM (Handler actionM)
 projectContextWith total context edit fresh focus pathCollapseState secondary =
   apply (Cursor [] focus)
@@ -117,7 +123,7 @@ projectContextWith total context edit fresh focus pathCollapseState secondary =
         , envEdit = edit
         , envFreshUUID = fresh
         , envCollapseState = pathCollapseState
-        , envSecondarySelection = secondary
+        , envSecondaryHighlight = secondary
         , envProject = apply
         }
     apply = total env
