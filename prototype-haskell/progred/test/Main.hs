@@ -39,6 +39,7 @@ main = do
   run "graphSnapshot" propGraphSnapshotIncludesDocumentStructure
   run "graphSnapshotFocus" propGraphSnapshotHighlightsFocusedEdgeAndNode
   run "graphLayout" propGraphLayoutTracksSnapshotNodes
+  run "graphPanelDrag" propGraphPanelDragStartsAndMovesNode
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listProjectionRequiresIsa" propListProjectionRequiresIsa
   run "listItemFocus" propListNodeItemFocusesListElement
@@ -291,6 +292,29 @@ propGraphLayoutTracksSnapshotNodes =
       stepGraphLayout snapshot emptyGraphLayout
     emptied =
       stepGraphLayout (GraphSnapshot [] [] Nothing Nothing) stepped
+
+propGraphPanelDragStartsAndMovesNode :: Property
+propGraphPanelDragStartsAndMovesNode =
+  conjoin
+    [ graphDragTestDrag afterDown === Just expectedDrag
+    , graphDragTestMoved afterMove === Just (Point 10 15)
+    , graphDragTestEnded afterUp === True
+    ]
+  where
+    afterDown =
+      execState
+        (handlePointer (PointerDown 160 120 noModifiers) (graphDragHandler Nothing))
+        emptyGraphDragTest
+    afterMove =
+      execState
+        (handlePointer (PointerMove 170 135 noModifiers) (graphDragHandler (graphDragTestDrag afterDown)))
+        afterDown
+    afterUp =
+      execState
+        (handlePointer (PointerUp 170 135 noModifiers) (graphDragHandler (graphDragTestDrag afterDown)))
+        afterMove
+    expectedDrag =
+      GraphDrag (GraphUUID rootId) (Point 0 0) (Point 0 0)
 
 propPointerCapturePrecedesNormalPointer :: Property
 propPointerCapturePrecedesNormalPointer =
@@ -575,6 +599,33 @@ rawEditorLayout editor =
     modify
     (pure rawInsertedLabel)
 
+data GraphDragTest = GraphDragTest
+  { graphDragTestDrag :: Maybe GraphDrag
+  , graphDragTestMoved :: Maybe Point
+  , graphDragTestEnded :: Bool
+  }
+  deriving (Eq, Show)
+
+emptyGraphDragTest :: GraphDragTest
+emptyGraphDragTest =
+  GraphDragTest Nothing Nothing False
+
+graphDragHandler :: Maybe GraphDrag -> Handler (State GraphDragTest)
+graphDragHandler drag =
+  runTestRender $ do
+    measured <-
+      measureHalay $
+        graphPanel
+          (graphSnapshot (newEditor rawInsertDocument))
+          emptyGraphLayout
+          GraphPanelActions
+            { graphPanelDrag = drag
+            , graphPanelDragStart = \newDrag -> modify (\state -> state {graphDragTestDrag = Just newDrag})
+            , graphPanelDragMove = \position -> modify (\state -> state {graphDragTestMoved = Just position})
+            , graphPanelDragEnd = modify (\state -> state {graphDragTestEnded = True})
+            }
+    placeMeasured measured (Rect 0 0 320 240)
+
 newtype TestRender a = TestRender
   { runTestRender :: a
   }
@@ -600,6 +651,7 @@ instance Canvas.Canvas TestRender where
   strokeLine _start _end _color _lineWidth = pure ()
   fillText _point _color _text = pure ()
   fillTextMiddle _point _color _text = pure ()
+  withClip _rect action = action
   measureText string =
     pure
       Canvas.TextMetrics

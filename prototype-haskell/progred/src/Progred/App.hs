@@ -33,6 +33,7 @@ data Model = Model
   , modelDebugLayoutRects :: Bool
   , modelShowGraph :: Bool
   , modelGraphLayout :: GraphView.GraphLayout
+  , modelGraphDrag :: Maybe GraphView.GraphDrag
   , modelFreshUUIDs :: [UUID]
   }
 
@@ -49,6 +50,7 @@ initialModel =
     , modelDebugLayoutRects = False
     , modelShowGraph = False
     , modelGraphLayout = GraphView.emptyGraphLayout
+    , modelGraphDrag = Nothing
     , modelFreshUUIDs = seededUUIDs 20260615
     }
 
@@ -67,6 +69,7 @@ toggleGraphView =
     ( \model ->
         model
           { modelShowGraph = not (modelShowGraph model)
+          , modelGraphDrag = Nothing
           }
     )
 
@@ -76,9 +79,11 @@ stepGraphLayoutFrame =
     if modelShowGraph model
       then
         let snapshot = GraphView.graphSnapshot (modelEditor model)
-            layout = GraphView.stepGraphLayout snapshot (modelGraphLayout model)
+            currentLayout = modelGraphLayout model
+            steppedLayout = GraphView.stepGraphLayout snapshot currentLayout
+            layout = preserveGraphDrag (modelGraphDrag model) currentLayout steppedLayout
          in (True, model {modelGraphLayout = layout})
-      else (False, model)
+      else (False, model {modelGraphDrag = Nothing})
 
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
@@ -116,6 +121,12 @@ view viewport model = do
       GraphView.graphPanel
         (GraphView.graphSnapshot editor)
         (modelGraphLayout model)
+        GraphView.GraphPanelActions
+          { GraphView.graphPanelDrag = modelGraphDrag model
+          , GraphView.graphPanelDragStart = startGraphDrag
+          , GraphView.graphPanelDragMove = moveGraphDrag
+          , GraphView.graphPanelDragEnd = endGraphDrag
+          }
     editEditor change =
       modify
         ( \current ->
@@ -126,6 +137,30 @@ view viewport model = do
         case modelFreshUUIDs current of
           fresh : rest -> (fresh, current {modelFreshUUIDs = rest})
           [] -> error "fresh UUID supply unexpectedly exhausted"
+    startGraphDrag drag =
+      modify $ \current ->
+        current
+          { modelGraphDrag = Just drag
+          , modelGraphLayout =
+              GraphView.moveGraphNode
+                (GraphView.graphDragNode drag)
+                (GraphView.graphDragPosition drag)
+                (modelGraphLayout current)
+          }
+    moveGraphDrag position =
+      modify $ \current ->
+        case modelGraphDrag current of
+          Just drag ->
+            current
+              { modelGraphLayout =
+                  GraphView.moveGraphNode
+                    (GraphView.graphDragNode drag)
+                    position
+                    (modelGraphLayout current)
+              }
+          Nothing -> current
+    endGraphDrag =
+      modify (\current -> current {modelGraphDrag = Nothing})
     appHandler _rect =
       pure $
         onPointer
@@ -142,6 +177,15 @@ view viewport model = do
                     | code == KeyCode.escape -> Just (editEditor (setFocus Nothing))
                   _ -> Nothing
             )
+
+preserveGraphDrag :: Maybe GraphView.GraphDrag -> GraphView.GraphLayout -> GraphView.GraphLayout -> GraphView.GraphLayout
+preserveGraphDrag drag current stepped =
+  case drag of
+    Nothing -> stepped
+    Just GraphView.GraphDrag {GraphView.graphDragNode = draggedNode} ->
+      case GraphView.graphLayoutPosition draggedNode current of
+        Just position -> GraphView.moveGraphNode draggedNode position stepped
+        Nothing -> stepped
 
 withLayoutDebug :: Canvas.Canvas renderM => Bool -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 withLayoutDebug enabled layout

@@ -1,16 +1,20 @@
 module Progred.Render.Graph
   ( GraphEdge (..)
+  , GraphDrag (..)
   , GraphLayout (..)
   , GraphNode (..)
   , GraphNodeKey (..)
+  , GraphPanelActions (..)
   , GraphSelectionStrength (..)
   , GraphSnapshot (..)
   , GraphSelectedEdge (..)
   , GraphSelectedNode (..)
   , emptyGraphLayout
   , graphLayoutNodeCount
+  , graphLayoutPosition
   , graphPanel
   , graphSnapshot
+  , moveGraphNode
   , stepGraphLayout
   ) where
 
@@ -88,6 +92,20 @@ data GraphLayout = GraphLayout
   }
   deriving (Eq, Show)
 
+data GraphDrag = GraphDrag
+  { graphDragNode :: GraphNodeKey
+  , graphDragOffset :: Point
+  , graphDragPosition :: Point
+  }
+  deriving (Eq, Show)
+
+data GraphPanelActions actionM = GraphPanelActions
+  { graphPanelDrag :: Maybe GraphDrag
+  , graphPanelDragStart :: GraphDrag -> actionM ()
+  , graphPanelDragMove :: Point -> actionM ()
+  , graphPanelDragEnd :: actionM ()
+  }
+
 emptyGraphLayout :: GraphLayout
 emptyGraphLayout =
   GraphLayout
@@ -98,6 +116,17 @@ emptyGraphLayout =
 graphLayoutNodeCount :: GraphLayout -> Int
 graphLayoutNodeCount =
   Map.size . graphLayoutPositions
+
+graphLayoutPosition :: GraphNodeKey -> GraphLayout -> Maybe Point
+graphLayoutPosition key =
+  Map.lookup key . graphLayoutPositions
+
+moveGraphNode :: GraphNodeKey -> Point -> GraphLayout -> GraphLayout
+moveGraphNode key position layout =
+  layout
+    { graphLayoutPositions = Map.insert key position (graphLayoutPositions layout)
+    , graphLayoutVelocities = Map.insert key (Point 0 0) (graphLayoutVelocities layout)
+    }
 
 graphSnapshot :: Editor -> GraphSnapshot
 graphSnapshot editor =
@@ -337,13 +366,68 @@ addForce :: GraphNodeKey -> Point -> Map GraphNodeKey Point -> Map GraphNodeKey 
 addForce key force =
   Map.adjust (pointAdd force) key
 
-graphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphLayout -> Halay renderM renderM (Handler actionM)
-graphPanel snapshot layout =
+graphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphLayout -> GraphPanelActions actionM -> Halay renderM renderM (Handler actionM)
+graphPanel snapshot layout actions =
   leafWithSizing panelSizing (pure (Size 320 240)) draw
   where
     draw rect = do
-      drawGraphPanel snapshot (syncGraphLayout snapshot layout) rect
-      pure mempty
+      let syncedLayout = syncGraphLayout snapshot layout
+      drawGraphPanel snapshot syncedLayout rect
+      graphPanelHandler snapshot syncedLayout actions rect
+
+graphPanelHandler :: Canvas.Canvas renderM => GraphSnapshot -> GraphLayout -> GraphPanelActions actionM -> Rect -> renderM (Handler actionM)
+graphPanelHandler snapshot layout actions rect = do
+  nodeSizes <- traverse nodeSize (graphSnapshotNodes snapshot)
+  let sizesByKey = Map.fromList [(graphNodeKey node, size) | (node, size) <- zip (graphSnapshotNodes snapshot) nodeSizes]
+      graphPositions = graphLayoutPositions layout
+      screenPositions = screenPoint rect <$> graphPositions
+  pure $
+    onPointerCapture $ \event ->
+      case event of
+        PointerDown {pointerX, pointerY}
+          | rectContains rect pointerX pointerY ->
+              graphPanelDragStart actions
+                <$> hitGraphNode snapshot sizesByKey graphPositions screenPositions (Point pointerX pointerY) (pointerGraphPoint rect pointerX pointerY)
+        PointerMove {pointerX, pointerY}
+          | Just activeDrag <- graphPanelDrag actions ->
+              Just (graphPanelDragMove actions (dragGraphPoint rect activeDrag pointerX pointerY))
+        PointerUp {}
+          | Just _ <- graphPanelDrag actions ->
+              Just (graphPanelDragEnd actions)
+        _ -> Nothing
+
+hitGraphNode
+  :: GraphSnapshot
+  -> Map GraphNodeKey Size
+  -> Map GraphNodeKey Point
+  -> Map GraphNodeKey Point
+  -> Point
+  -> Point
+  -> Maybe GraphDrag
+hitGraphNode snapshot sizesByKey graphPositions screenPositions pointer graphPointer =
+  foldr hit Nothing (graphSnapshotNodes snapshot)
+  where
+    hit node found =
+      found <|> do
+        let key = graphNodeKey node
+        center <- Map.lookup key screenPositions
+        size <- Map.lookup key sizesByKey
+        if rectContains (centeredRect center size) (pointX pointer) (pointY pointer)
+          then do
+            graphPosition <- Map.lookup key graphPositions
+            Just (GraphDrag key (pointSub graphPosition graphPointer) graphPosition)
+          else Nothing
+
+dragGraphPoint :: Rect -> GraphDrag -> Double -> Double -> Point
+dragGraphPoint rect drag pointerX pointerY =
+  pointAdd (pointerGraphPoint rect pointerX pointerY) (graphDragOffset drag)
+
+pointerGraphPoint :: Rect -> Double -> Double -> Point
+pointerGraphPoint rect pointerX pointerY =
+  Point
+    { pointX = pointerX - x rect - width rect / 2
+    , pointY = pointerY - y rect - height rect / 2
+    }
 
 drawGraphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphLayout -> Rect -> renderM ()
 drawGraphPanel snapshot layout rect = do
@@ -354,8 +438,9 @@ drawGraphPanel snapshot layout rect = do
       screenPositions = screenPoint rect <$> graphLayoutPositions layout
       selectedEdges = graphSnapshotSelectedEdge snapshot
       selectedNodes = graphSnapshotSelectedNode snapshot
-  mapM_ (drawGraphEdge snapshot sizesByKey screenPositions selectedEdges) (graphSnapshotEdges snapshot)
-  mapM_ (drawGraphNode screenPositions sizesByKey selectedNodes) (graphSnapshotNodes snapshot)
+  Canvas.withClip rect $ do
+    mapM_ (drawGraphEdge snapshot sizesByKey screenPositions selectedEdges) (graphSnapshotEdges snapshot)
+    mapM_ (drawGraphNode screenPositions sizesByKey selectedNodes) (graphSnapshotNodes snapshot)
 
 drawGraphEdge
   :: Canvas.Canvas renderM
@@ -370,7 +455,7 @@ drawGraphEdge snapshot sizesByKey positions selected edge =
     (Just source, Just target) ->
       if graphEdgeSource edge == graphEdgeTarget edge
         then drawSelfLoop source selectedStrength edge
-        else drawStraightEdge source target selectedStrength edge
+        else drawNodeEdge source target selectedStrength edge
     _ -> pure ()
   where
     selectedStrength =
@@ -380,32 +465,49 @@ drawGraphEdge snapshot sizesByKey positions selected edge =
         _ -> Nothing
     edgeOffset =
       parallelEdgeOffset snapshot edge
-    drawStraightEdge source target strength currentEdge = do
+    drawNodeEdge source target strength currentEdge = do
       let direction = pointSub target source
           perpendicular = pointPerp (pointNormalize direction)
           offset = pointScale perpendicular edgeOffset
           shiftedSource = pointAdd source offset
           shiftedTarget = pointAdd target offset
-          start = clipNode sizesByKey (graphEdgeSource currentEdge) shiftedSource shiftedTarget
-          end = clipNode sizesByKey (graphEdgeTarget currentEdge) shiftedTarget shiftedSource
-          labelPoint = midpoint start end
           color = edgeColor strength
           lineWidth = edgeLineWidth strength
-      Canvas.strokeLine start end color lineWidth
-      drawArrowhead end (pointSub end start) color lineWidth
-      drawEdgeLabel currentEdge labelPoint strength
+      if abs edgeOffset < epsilon
+        then do
+          let start = clipEdgeEndpoint sizesByKey (graphEdgeSource currentEdge) source shiftedSource shiftedTarget
+              end = clipEdgeEndpoint sizesByKey (graphEdgeTarget currentEdge) target shiftedTarget shiftedSource
+              labelPoint = midpoint start end
+          Canvas.strokeLine start end color lineWidth
+          drawArrowhead end (pointSub end start) color lineWidth
+          drawEdgeLabel currentEdge labelPoint strength
+        else do
+          let canonicalDirection =
+                if graphEdgeSource currentEdge <= graphEdgeTarget currentEdge
+                  then pointNormalize (pointSub target source)
+                  else pointNormalize (pointSub source target)
+              control = pointAdd (midpoint source target) (pointScale (pointPerp canonicalDirection) edgeOffset)
+              start = clipToRect source (nodeHalfSize sizesByKey (graphEdgeSource currentEdge)) control
+              end = clipToRect target (nodeHalfSize sizesByKey (graphEdgeTarget currentEdge)) control
+              labelPoint = quadraticPoint start control end 0.5
+          drawQuadratic start control end color lineWidth
+          drawArrowhead end (pointSub end control) color lineWidth
+          drawEdgeLabel currentEdge labelPoint strength
     drawSelfLoop center strength currentEdge = do
-      let size = Map.findWithDefault (Size nodeMinWidth nodeHeight) (graphEdgeSource currentEdge) sizesByKey
-          top = Point (pointX center) (pointY center - sizeHeight size / 2 - 34 - abs edgeOffset)
-          left = Point (pointX center - sizeWidth size / 2 - 26 - abs edgeOffset / 2) (pointY center)
-          right = Point (pointX center + sizeWidth size / 2 + 26 + abs edgeOffset / 2) (pointY center)
+      let size = nodeSizeByKey sizesByKey (graphEdgeSource currentEdge)
+          half = nodeHalfSize sizesByKey (graphEdgeSource currentEdge)
+          loopHeight = sizeHeight size * 2 + 24 + abs edgeOffset
+          loopWidth = sizeWidth size * 0.75 + 22 + abs edgeOffset / 2
+          cp1 = pointAdd center (Point (negate loopWidth) (negate loopHeight))
+          cp2 = pointAdd center (Point loopWidth (negate loopHeight))
+          start = clipToRect center half cp1
+          end = clipToRect center half cp2
+          labelPoint = cubicPoint start cp1 cp2 end 0.5
           color = edgeColor strength
           lineWidth = edgeLineWidth strength
-      Canvas.strokeLine left top color lineWidth
-      Canvas.strokeLine top right color lineWidth
-      Canvas.strokeLine right center color lineWidth
-      drawArrowhead center (pointSub center right) color lineWidth
-      drawEdgeLabel currentEdge top strength
+      drawCubic start cp1 cp2 end color lineWidth
+      drawArrowhead end (pointSub end cp2) color lineWidth
+      drawEdgeLabel currentEdge labelPoint strength
 
 drawEdgeLabel :: Canvas.Canvas renderM => GraphEdge -> Point -> Maybe GraphSelectionStrength -> renderM ()
 drawEdgeLabel edge point strength = do
@@ -482,12 +584,19 @@ graphNodeShowsIdenticon node =
     (Just _, Nothing) -> True
     _ -> False
 
-clipNode :: Map GraphNodeKey Size -> GraphNodeKey -> Point -> Point -> Point
-clipNode sizesByKey key center target =
-  clipToRect center half target
+nodeSizeByKey :: Map GraphNodeKey Size -> GraphNodeKey -> Size
+nodeSizeByKey sizesByKey key =
+  Map.findWithDefault (Size nodeMinWidth nodeHeight) key sizesByKey
+
+nodeHalfSize :: Map GraphNodeKey Size -> GraphNodeKey -> Point
+nodeHalfSize sizesByKey key =
+  Point (sizeWidth size / 2) (sizeHeight size / 2)
   where
-    size = Map.findWithDefault (Size nodeMinWidth nodeHeight) key sizesByKey
-    half = Point (sizeWidth size / 2) (sizeHeight size / 2)
+    size = nodeSizeByKey sizesByKey key
+
+clipEdgeEndpoint :: Map GraphNodeKey Size -> GraphNodeKey -> Point -> Point -> Point -> Point
+clipEdgeEndpoint sizesByKey key nodeCenter linePoint lineTarget =
+  clipLineToRect nodeCenter (nodeHalfSize sizesByKey key) linePoint lineTarget
 
 clipToRect :: Point -> Point -> Point -> Point
 clipToRect center half target
@@ -506,6 +615,122 @@ clipToRect center half target
         then maxFinite
         else pointY half / abs (pointY direction)
     scaleFactor = min scaleX scaleY
+
+clipLineToRect :: Point -> Point -> Point -> Point -> Point
+clipLineToRect center half from target =
+  case candidates of
+    candidate : _ -> pointAt candidate
+    [] -> clipToRect center half target
+  where
+    direction = pointSub target from
+    pointAt t =
+      pointAdd from (pointScale direction t)
+    candidates =
+      sortOn
+        id
+        (verticalCandidates <> horizontalCandidates)
+    verticalCandidates =
+      sideCandidates
+        (pointX direction)
+        (pointX from)
+        (pointX center)
+        (pointX half)
+        (pointY from)
+        (pointY direction)
+        (pointY center)
+        (pointY half)
+    horizontalCandidates =
+      sideCandidates
+        (pointY direction)
+        (pointY from)
+        (pointY center)
+        (pointY half)
+        (pointX from)
+        (pointX direction)
+        (pointX center)
+        (pointX half)
+
+sideCandidates :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> [Double]
+sideCandidates primaryDirection primaryFrom primaryCenter primaryHalf secondaryFrom secondaryDirection secondaryCenter secondaryHalf
+  | abs primaryDirection < epsilon = []
+  | otherwise =
+      filter validCandidate $
+        [ (primaryCenter - primaryHalf - primaryFrom) / primaryDirection
+        , (primaryCenter + primaryHalf - primaryFrom) / primaryDirection
+        ]
+  where
+    validCandidate t =
+      t >= 0
+        && let secondary = secondaryFrom + t * secondaryDirection
+            in secondary >= secondaryCenter - secondaryHalf - epsilon
+                && secondary <= secondaryCenter + secondaryHalf + epsilon
+
+drawQuadratic :: Canvas.Canvas renderM => Point -> Point -> Point -> String -> Double -> renderM ()
+drawQuadratic start control end color lineWidth =
+  mapM_ drawSegment (zip points (drop 1 points))
+  where
+    points =
+      [ quadraticPoint start control end (fromIntegral index / fromIntegral curveSegments)
+      | index <- [0 .. curveSegments]
+      ]
+    drawSegment (from, to) =
+      Canvas.strokeLine from to color lineWidth
+
+quadraticPoint :: Point -> Point -> Point -> Double -> Point
+quadraticPoint start control end t =
+  Point
+    { pointX =
+        quadraticCoordinate
+          (pointX start)
+          (pointX control)
+          (pointX end)
+    , pointY =
+        quadraticCoordinate
+          (pointY start)
+          (pointY control)
+          (pointY end)
+    }
+  where
+    mt = 1 - t
+    quadraticCoordinate startValue controlValue endValue =
+      mt * mt * startValue
+        + 2 * mt * t * controlValue
+        + t * t * endValue
+
+drawCubic :: Canvas.Canvas renderM => Point -> Point -> Point -> Point -> String -> Double -> renderM ()
+drawCubic start cp1 cp2 end color lineWidth =
+  mapM_ drawSegment (zip points (drop 1 points))
+  where
+    points =
+      [ cubicPoint start cp1 cp2 end (fromIntegral index / fromIntegral curveSegments)
+      | index <- [0 .. curveSegments]
+      ]
+    drawSegment (from, to) =
+      Canvas.strokeLine from to color lineWidth
+
+cubicPoint :: Point -> Point -> Point -> Point -> Double -> Point
+cubicPoint start cp1 cp2 end t =
+  Point
+    { pointX =
+        cubicCoordinate
+          (pointX start)
+          (pointX cp1)
+          (pointX cp2)
+          (pointX end)
+    , pointY =
+        cubicCoordinate
+          (pointY start)
+          (pointY cp1)
+          (pointY cp2)
+          (pointY end)
+    }
+  where
+    mt = 1 - t
+    cubicCoordinate startValue cp1Value cp2Value endValue =
+      mt * mt * mt * startValue
+        + 3 * mt * mt * t * cp1Value
+        + 3 * mt * t * t * cp2Value
+        + t * t * t * endValue
 
 drawArrowhead :: Canvas.Canvas renderM => Point -> Point -> String -> Double -> renderM ()
 drawArrowhead tip direction color lineWidth = do
@@ -690,6 +915,9 @@ epsilon = 0.001
 
 maxFinite :: Double
 maxFinite = 1.0e12
+
+curveSegments :: Int
+curveSegments = 20
 
 nodePadding :: Double
 nodePadding = 7
