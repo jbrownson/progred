@@ -31,7 +31,7 @@ rawProjection env cursor =
 
 focusedProjection :: Canvas.Canvas renderM => Projection actionM renderM -> Projection actionM renderM
 focusedProjection projection env cursor =
-  focusCursor env cursor (projection env cursor)
+  secondaryCursor env cursor (focusCursor env cursor (projection env cursor))
 
 focusCursor :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 focusCursor env cursor child =
@@ -39,6 +39,26 @@ focusCursor env cursor child =
     Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing && shouldDrawFocusBackground env cursor ->
       decorate drawFocusBackground child
     _ -> child
+
+secondaryCursor :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+secondaryCursor env cursor child =
+  case (envSecondarySelection env, resolveCursor env cursor, cursorFocus cursor) of
+    (Just uuid, Just resolved, _)
+      | resolvedValue resolved == VRef uuid
+      , not (spotHasPrimaryFocus cursor) ->
+          decorate drawSecondaryBackground child
+    _ -> child
+  where
+    spotHasPrimaryFocus spot =
+      case cursorFocus spot of
+        Just focus -> null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing
+        Nothing -> False
+
+drawSecondaryBackground :: Canvas.Canvas renderM => Rect -> renderM (Handler actionM)
+drawSecondaryBackground rect = do
+  Canvas.fillRect rect secondaryFocusBackgroundColor
+  Canvas.strokeRect rect secondaryFocusColor 1
+  pure mempty
 
 shouldDrawFocusBackground :: Env actionM renderM -> Cursor -> Bool
 shouldDrawFocusBackground env cursor =
@@ -499,6 +519,12 @@ focusColor = "#0a84ff"
 
 focusBackgroundColor :: String
 focusBackgroundColor = "#eaf3ff"
+
+secondaryFocusColor :: String
+secondaryFocusColor = "#777777"
+
+secondaryFocusBackgroundColor :: String
+secondaryFocusBackgroundColor = "#f3f3f3"
 
 boxBorderColor :: String
 boxBorderColor = "#c8ccd2"

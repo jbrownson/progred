@@ -51,6 +51,7 @@ data Env actionM renderM = Env
   , envEdit :: (Editor -> Editor) -> actionM ()
   , envFreshUUID :: actionM UUID
   , envCollapseState :: [UUID] -> Maybe Bool
+  , envSecondarySelection :: Maybe UUID
   , envProject :: Cursor -> Halay renderM renderM (Handler actionM)
   }
 
@@ -83,9 +84,10 @@ projectEditor
   -> Editor
   -> ((Editor -> Editor) -> actionM ())
   -> actionM UUID
+  -> Maybe UUID
   -> Halay renderM renderM (Handler actionM)
-projectEditor total editor edit fresh =
-  projectContextWith total (documentContext (editorDocument editor) []) edit fresh (editorFocus editor) (`collapseState` editor)
+projectEditor total editor edit fresh secondary =
+  projectContextWith total (documentContext (editorDocument editor) []) edit fresh (editorFocus editor) (`collapseState` editor) secondary
 
 projectContext
   :: Projection actionM renderM
@@ -95,7 +97,7 @@ projectContext
   -> Maybe Focus
   -> Halay renderM renderM (Handler actionM)
 projectContext total context edit fresh focus =
-  projectContextWith total context edit fresh focus (const Nothing)
+  projectContextWith total context edit fresh focus (const Nothing) Nothing
 
 projectContextWith
   :: Projection actionM renderM
@@ -104,8 +106,9 @@ projectContextWith
   -> actionM UUID
   -> Maybe Focus
   -> ([UUID] -> Maybe Bool)
+  -> Maybe UUID
   -> Halay renderM renderM (Handler actionM)
-projectContextWith total context edit fresh focus pathCollapseState =
+projectContextWith total context edit fresh focus pathCollapseState secondary =
   apply (Cursor [] focus)
   where
     env =
@@ -114,6 +117,7 @@ projectContextWith total context edit fresh focus pathCollapseState =
         , envEdit = edit
         , envFreshUUID = fresh
         , envCollapseState = pathCollapseState
+        , envSecondarySelection = secondary
         , envProject = apply
         }
     apply = total env

@@ -5,6 +5,7 @@ module Main
 import qualified Data.Map.Strict as Map
 import qualified Data.UUID.Types as UUID
 import Control.Monad.Trans.State.Strict (State, execState, modify, put)
+import Data.List (find)
 import Halay
 import Progred.Builtins
 import Progred.Document
@@ -38,6 +39,10 @@ main = do
   run "graphContext" propGraphContextUsesLibraries
   run "graphSnapshot" propGraphSnapshotIncludesDocumentStructure
   run "graphSnapshotFocus" propGraphSnapshotHighlightsFocusedEdgeAndNode
+  run "graphSnapshotSelection" propGraphSnapshotHighlightsGraphSelection
+  run "graphPanelSelect" propGraphPanelClickSelectsNode
+  run "graphPanelSelectEdge" propGraphPanelClickSelectsEdge
+  run "graphPanelClear" propGraphPanelClickClearsSelection
   run "graphLayout" propGraphLayoutTracksSnapshotNodes
   run "graphPanelDrag" propGraphPanelDragStartsAndMovesNode
   run "graphPanelPan" propGraphPanelPanMovesViewport
@@ -264,7 +269,7 @@ propGraphSnapshotIncludesDocumentStructure =
     ]
   where
     snapshot =
-      graphSnapshot (newEditor rawInsertDocument)
+      graphSnapshot (newEditor rawInsertDocument) Nothing
     nodeKeys =
       graphNodeKey <$> graphSnapshotNodes snapshot
     isChildEdge edge =
@@ -280,7 +285,19 @@ propGraphSnapshotHighlightsFocusedEdgeAndNode =
     ]
   where
     snapshot =
-      graphSnapshot (testEditor rawInsertDocument (Just (Focus [rawChildLabel] defaultFocusState)))
+      graphSnapshot (testEditor rawInsertDocument (Just (Focus [rawChildLabel] defaultFocusState))) Nothing
+
+propGraphSnapshotHighlightsGraphSelection :: Property
+propGraphSnapshotHighlightsGraphSelection =
+  conjoin
+    [ graphSnapshotSelectedNode snapshot === Just (GraphSelectedNode (GraphUUID rawInsertNode) GraphSelectionPrimary)
+    , graphSnapshotSelectedEdge edgeSnapshot === Just (GraphSelectedEdge (GraphUUID rootId) rawChildLabel GraphSelectionPrimary)
+    ]
+  where
+    snapshot =
+      graphSnapshot (newEditor rawInsertDocument) (Just (GraphSelectNode (GraphUUID rawInsertNode)))
+    edgeSnapshot =
+      graphSnapshot (newEditor rawInsertDocument) (Just (GraphSelectEdge (GraphUUID rootId) rawChildLabel))
 
 propGraphLayoutTracksSnapshotNodes :: Property
 propGraphLayoutTracksSnapshotNodes =
@@ -290,7 +307,7 @@ propGraphLayoutTracksSnapshotNodes =
     ]
   where
     snapshot =
-      graphSnapshot (newEditor rawInsertDocument)
+      graphSnapshot (newEditor rawInsertDocument) Nothing
     stepped =
       stepGraphLayout snapshot emptyGraphLayout
     emptied =
@@ -318,6 +335,51 @@ propGraphPanelDragStartsAndMovesNode =
         afterMove
     expectedDrag =
       GraphDrag (GraphUUID rootId) (Point 0 0) (Point 0 0)
+
+propGraphPanelClickSelectsNode :: Property
+propGraphPanelClickSelectsNode =
+  graphInteractionTestSelection afterUp === Just (GraphSelectNode (GraphUUID rootId))
+  where
+    afterDown =
+      execState
+        (handlePointer (PointerDown 160 120 noModifiers) (graphInteractionHandler emptyGraphInteractionTest))
+        emptyGraphInteractionTest
+    afterUp =
+      execState
+        (handlePointer (PointerUp 160 120 noModifiers) (graphInteractionHandler afterDown))
+        afterDown
+
+propGraphPanelClickSelectsEdge :: Property
+propGraphPanelClickSelectsEdge =
+  graphInteractionTestSelection afterUp
+    === Just (GraphSelectEdge (GraphUUID rootId) rawChildLabel)
+  where
+    Point {pointX, pointY} = graphEdgeLabelClickPoint
+    afterDown =
+      execState
+        (handlePointer (PointerDown pointX pointY noModifiers) (graphInteractionHandler emptyGraphInteractionTest))
+        emptyGraphInteractionTest
+    afterUp =
+      execState
+        (handlePointer (PointerUp pointX pointY noModifiers) (graphInteractionHandler afterDown))
+        afterDown
+
+propGraphPanelClickClearsSelection :: Property
+propGraphPanelClickClearsSelection =
+  graphInteractionTestSelection afterUp === Nothing
+  where
+    selected =
+      emptyGraphInteractionTest
+        { graphInteractionTestSelection = Just (GraphSelectNode (GraphUUID rootId))
+        }
+    afterDown =
+      execState
+        (handlePointer (PointerDown 10 10 noModifiers) (graphInteractionHandler selected))
+        selected
+    afterUp =
+      execState
+        (handlePointer (PointerUp 10 10 noModifiers) (graphInteractionHandler afterDown))
+        afterDown
 
 propGraphPanelPanMovesViewport :: Property
 propGraphPanelPanMovesViewport =
@@ -401,6 +463,7 @@ propListProjectionRequiresIsa =
         , envEdit = const (pure ())
         , envFreshUUID = pure listInsertedCell
         , envCollapseState = const Nothing
+        , envSecondarySelection = Nothing
         , envProject = const empty
         }
 
@@ -662,30 +725,55 @@ rawEditorLayout editor =
     editor
     modify
     (pure rawInsertedLabel)
+    Nothing
 
 data GraphDragTest = GraphDragTest
   { graphDragTestDrag :: Maybe GraphDrag
   , graphDragTestMoved :: Maybe Point
   , graphDragTestEnded :: Bool
+  , graphDragTestSelection :: Maybe GraphSelection
   }
   deriving (Eq, Show)
 
 emptyGraphDragTest :: GraphDragTest
 emptyGraphDragTest =
-  GraphDragTest Nothing Nothing False
+  GraphDragTest Nothing Nothing False Nothing
 
 data GraphInteractionTest = GraphInteractionTest
   { graphInteractionTestDrag :: Maybe GraphDrag
   , graphInteractionTestMoved :: Maybe Point
   , graphInteractionTestEnded :: Bool
   , graphInteractionTestPan :: Maybe GraphPan
+  , graphInteractionTestEdgePress :: Maybe GraphEdge
   , graphInteractionTestViewport :: GraphViewport
+  , graphInteractionTestPointerOrigin :: Maybe Point
+  , graphInteractionTestPointerMoved :: Bool
+  , graphInteractionTestSelection :: Maybe GraphSelection
   }
   deriving (Eq, Show)
 
 emptyGraphInteractionTest :: GraphInteractionTest
 emptyGraphInteractionTest =
-  GraphInteractionTest Nothing Nothing False Nothing emptyGraphViewport
+  GraphInteractionTest Nothing Nothing False Nothing Nothing emptyGraphViewport Nothing False Nothing
+
+graphEdgeLabelClickPoint :: Point
+graphEdgeLabelClickPoint =
+  runTestRender $ do
+    let snapshot = graphSnapshot (newEditor rawInsertDocument) Nothing
+        layout = stepGraphLayout snapshot emptyGraphLayout
+    nodeSizes <- traverse nodeSize (graphSnapshotNodes snapshot)
+    hits <-
+      graphEdgeLabelHitAreas snapshot emptyGraphViewport layout (Rect 0 0 320 240) nodeSizes
+    case
+      find
+        ( \GraphEdgeLabelHit {graphEdgeLabelHitEdge = edge} ->
+            graphEdgeSource edge == GraphUUID rootId && graphEdgeLabel edge == rawChildLabel
+        )
+        hits
+      of
+      Just GraphEdgeLabelHit {graphEdgeLabelHitRect = rect} ->
+        pure (Point (x rect + width rect / 2) (y rect + height rect / 2))
+      Nothing -> error "expected child edge label hit area"
 
 graphDragHandler :: Maybe GraphDrag -> Handler (State GraphDragTest)
 graphDragHandler drag =
@@ -693,20 +781,28 @@ graphDragHandler drag =
     measured <-
       measureHalay $
         graphPanel
-          (graphSnapshot (newEditor rawInsertDocument))
+          (graphSnapshot (newEditor rawInsertDocument) Nothing)
           emptyGraphViewport
           emptyGraphLayout
           GraphPanelActions
             { graphPanelDrag = drag
             , graphPanelPan = Nothing
+            , graphPanelEdgePress = Nothing
             , graphPanelViewport = emptyGraphViewport
+            , graphPanelPointerOrigin = Nothing
+            , graphPanelPointerMoved = False
             , graphPanelDragStart = \newDrag -> modify (\state -> state {graphDragTestDrag = Just newDrag})
             , graphPanelDragMove = \position -> modify (\state -> state {graphDragTestMoved = Just position})
             , graphPanelDragEnd = modify (\state -> state {graphDragTestEnded = True})
             , graphPanelPanStart = \_ -> pure ()
             , graphPanelPanMove = \_ -> pure ()
             , graphPanelPanEnd = pure ()
+            , graphPanelEdgePressStart = \_ -> pure ()
+            , graphPanelEdgePressEnd = pure ()
             , graphPanelSetViewport = \_ -> pure ()
+            , graphPanelInteractionStart = \_ -> pure ()
+            , graphPanelInteractionMove = \_ -> pure ()
+            , graphPanelSetSelection = \selection -> modify (\state -> state {graphDragTestSelection = selection})
             }
     placeMeasured measured (Rect 0 0 320 240)
 
@@ -716,13 +812,16 @@ graphInteractionHandler state =
     measured <-
       measureHalay $
         graphPanel
-          (graphSnapshot (newEditor rawInsertDocument))
+          (graphSnapshot (newEditor rawInsertDocument) Nothing)
           (graphInteractionTestViewport state)
           emptyGraphLayout
           GraphPanelActions
             { graphPanelDrag = graphInteractionTestDrag state
             , graphPanelPan = graphInteractionTestPan state
+            , graphPanelEdgePress = graphInteractionTestEdgePress state
             , graphPanelViewport = graphInteractionTestViewport state
+            , graphPanelPointerOrigin = graphInteractionTestPointerOrigin state
+            , graphPanelPointerMoved = graphInteractionTestPointerMoved state
             , graphPanelDragStart = \newDrag -> modify (\current -> current {graphInteractionTestDrag = Just newDrag})
             , graphPanelDragMove = \position -> modify (\current -> current {graphInteractionTestMoved = Just position})
             , graphPanelDragEnd = modify (\current -> current {graphInteractionTestEnded = True, graphInteractionTestDrag = Nothing})
@@ -738,7 +837,21 @@ graphInteractionHandler state =
                         Nothing -> current
                   )
             , graphPanelPanEnd = modify (\current -> current {graphInteractionTestPan = Nothing})
+            , graphPanelEdgePressStart = \edge -> modify (\current -> current {graphInteractionTestEdgePress = Just edge})
+            , graphPanelEdgePressEnd = modify (\current -> current {graphInteractionTestEdgePress = Nothing})
             , graphPanelSetViewport = \viewport -> modify (\current -> current {graphInteractionTestViewport = viewport})
+            , graphPanelInteractionStart = \pointer ->
+                modify (\current -> current {graphInteractionTestPointerOrigin = Just pointer, graphInteractionTestPointerMoved = False})
+            , graphPanelInteractionMove = \pointer ->
+                modify
+                  ( \current ->
+                      case (graphInteractionTestPointerOrigin current, graphInteractionTestPointerMoved current) of
+                        (Just origin, False)
+                          | graphPointerExceededClickThreshold origin pointer ->
+                              current {graphInteractionTestPointerMoved = True}
+                        _ -> current
+                  )
+            , graphPanelSetSelection = \selection -> modify (\current -> current {graphInteractionTestSelection = selection})
             }
     placeMeasured measured (Rect 0 0 320 240)
 

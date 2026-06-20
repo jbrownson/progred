@@ -1,17 +1,23 @@
 module Progred.Render.Graph
   ( GraphEdge (..)
   , GraphDrag (..)
+  , GraphEdgeLabelHit (..)
   , GraphLayout (..)
   , GraphNode (..)
   , GraphNodeKey (..)
   , GraphPan (..)
   , GraphPanelActions (..)
+  , GraphSelection (..)
   , GraphSelectionStrength (..)
   , GraphSnapshot (..)
+  , secondarySelectionUUID
   , GraphSelectedEdge (..)
   , GraphSelectedNode (..)
   , GraphViewport (..)
   , applyGraphWheel
+  , graphClickMoveThreshold
+  , graphPointerExceededClickThreshold
+  , graphEdgeLabelHitAreas
   , emptyGraphLayout
   , emptyGraphViewport
   , graphLayoutNodeCount
@@ -20,10 +26,13 @@ module Progred.Render.Graph
   , graphSnapshot
   , moveGraphNode
   , moveGraphPan
+  , nodeSize
   , stepGraphLayout
   ) where
 
 import Control.Applicative ((<|>))
+import Control.Monad (guard)
+import Data.Maybe (catMaybes)
 import Data.Bits ((.&.), shiftR, xor)
 import Data.Char (ord)
 import Data.Functor ((<&>))
@@ -63,6 +72,11 @@ data GraphEdge = GraphEdge
   , graphEdgeTarget :: GraphNodeKey
   , graphEdgeTitle :: Maybe String
   }
+  deriving (Eq, Show)
+
+data GraphSelection
+  = GraphSelectNode GraphNodeKey
+  | GraphSelectEdge GraphNodeKey UUID
   deriving (Eq, Show)
 
 data GraphSelectionStrength
@@ -115,17 +129,31 @@ data GraphPan = GraphPan
   }
   deriving (Eq, Show)
 
+data GraphEdgeLabelHit = GraphEdgeLabelHit
+  { graphEdgeLabelHitEdge :: GraphEdge
+  , graphEdgeLabelHitRect :: Rect
+  }
+  deriving (Eq, Show)
+
 data GraphPanelActions actionM = GraphPanelActions
   { graphPanelDrag :: Maybe GraphDrag
   , graphPanelPan :: Maybe GraphPan
+  , graphPanelEdgePress :: Maybe GraphEdge
   , graphPanelViewport :: GraphViewport
+  , graphPanelPointerOrigin :: Maybe Point
+  , graphPanelPointerMoved :: Bool
   , graphPanelDragStart :: GraphDrag -> actionM ()
   , graphPanelDragMove :: Point -> actionM ()
   , graphPanelDragEnd :: actionM ()
   , graphPanelPanStart :: Point -> actionM ()
   , graphPanelPanMove :: Point -> actionM ()
   , graphPanelPanEnd :: actionM ()
+  , graphPanelEdgePressStart :: GraphEdge -> actionM ()
+  , graphPanelEdgePressEnd :: actionM ()
   , graphPanelSetViewport :: GraphViewport -> actionM ()
+  , graphPanelInteractionStart :: Point -> actionM ()
+  , graphPanelInteractionMove :: Point -> actionM ()
+  , graphPanelSetSelection :: Maybe GraphSelection -> actionM ()
   }
 
 emptyGraphViewport :: GraphViewport
@@ -157,12 +185,12 @@ moveGraphNode key position layout =
     , graphLayoutVelocities = Map.insert key (Point 0 0) (graphLayoutVelocities layout)
     }
 
-graphSnapshot :: Editor -> GraphSnapshot
-graphSnapshot editor =
-  documentGraphSnapshot (editorDocument editor) (editorFocus editor)
+graphSnapshot :: Editor -> Maybe GraphSelection -> GraphSnapshot
+graphSnapshot editor graphSelection =
+  documentGraphSnapshot (editorDocument editor) (editorFocus editor) graphSelection
 
-documentGraphSnapshot :: Document -> Maybe Focus -> GraphSnapshot
-documentGraphSnapshot document focus =
+documentGraphSnapshot :: Document -> Maybe Focus -> Maybe GraphSelection -> GraphSnapshot
+documentGraphSnapshot document focus graphSelection =
   GraphSnapshot
     { graphSnapshotNodes = orderedNodes nodes
     , graphSnapshotEdges = edges
@@ -188,11 +216,20 @@ documentGraphSnapshot document focus =
     nodes =
       markRoot rootKey (Map.unionsWith mergeNode [rootNodes, graphNodes, edgeNodes])
     selectedNode =
-      focusedNodeKey document context focus <&> \key ->
-        GraphSelectedNode key GraphSelectionSecondary
+      case graphSelection of
+        Just (GraphSelectNode key) -> Just (GraphSelectedNode key GraphSelectionPrimary)
+        Nothing ->
+          focusedNodeKey document context focus <&> \key ->
+            GraphSelectedNode key GraphSelectionSecondary
+        Just (GraphSelectEdge _ _) -> Nothing
     selectedEdge =
-      focusedEdge context focus <&> \Edge {edgeSource, edgeLabel} ->
-        GraphSelectedEdge (GraphUUID edgeSource) edgeLabel GraphSelectionSecondary
+      case graphSelection of
+        Just (GraphSelectEdge source label) ->
+          Just (GraphSelectedEdge source label GraphSelectionPrimary)
+        Nothing ->
+          focusedEdge context focus <&> \Edge {edgeSource, edgeLabel} ->
+            GraphSelectedEdge (GraphUUID edgeSource) edgeLabel GraphSelectionSecondary
+        Just (GraphSelectNode _) -> Nothing
 
     collectSource (nodeMap, edgeList) (source, sourceEdges) =
       foldl (collectEdge source) (nodeMap, edgeList) (Map.toList sourceEdges)
@@ -302,6 +339,23 @@ focusedEdge context focus = do
   Focus {focusPath} <- focus
   pathEdge context focusPath
 
+secondarySelectionUUID :: Editor -> Maybe GraphSelection -> Maybe UUID
+secondarySelectionUUID editor graphSelection =
+  case graphSelection of
+    Just (GraphSelectNode (GraphUUID uuid)) -> Just uuid
+    Just (GraphSelectNode _) -> Nothing
+    Just (GraphSelectEdge _ _) -> Nothing
+    Nothing -> focusedUUID editor
+  where
+    focusedUUID current = do
+      focus <- editorFocus current
+      let document = editorDocument current
+          context = documentContext document []
+      key <- focusedNodeKey document context (Just focus)
+      case key of
+        GraphUUID uuid -> Just uuid
+        _ -> Nothing
+
 stepGraphLayout :: GraphSnapshot -> GraphLayout -> GraphLayout
 stepGraphLayout snapshot layout =
   integrateForces snapshot synced
@@ -395,7 +449,24 @@ addForce :: GraphNodeKey -> Point -> Map GraphNodeKey Point -> Map GraphNodeKey 
 addForce key force =
   Map.adjust (pointAdd force) key
 
-graphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphViewport -> GraphLayout -> GraphPanelActions actionM -> Halay renderM renderM (Handler actionM)
+finishGraphInteraction :: Monad actionM => GraphPanelActions actionM -> Maybe GraphSelection -> actionM ()
+finishGraphInteraction actions selection
+  | graphPanelPointerMoved actions = pure ()
+  | otherwise = graphPanelSetSelection actions selection
+
+graphClickMoveThreshold :: Double
+graphClickMoveThreshold = 2
+
+graphPointerExceededClickThreshold :: Point -> Point -> Bool
+graphPointerExceededClickThreshold origin pointer =
+  let Point {pointX = x0, pointY = y0} = origin
+      Point {pointX = x1, pointY = y1} = pointer
+      threshold = graphClickMoveThreshold
+      dx = x1 - x0
+      dy = y1 - y0
+   in dx * dx + dy * dy > threshold * threshold
+
+graphPanel :: (Canvas.Canvas renderM, Monad actionM) => GraphSnapshot -> GraphViewport -> GraphLayout -> GraphPanelActions actionM -> Halay renderM renderM (Handler actionM)
 graphPanel snapshot viewport layout actions =
   leafWithSizing panelSizing (pure (Size 320 240)) draw
   where
@@ -405,9 +476,10 @@ graphPanel snapshot viewport layout actions =
       handler <- graphPanelHandler snapshot viewport syncedLayout actions rect
       pure (handler <> graphPanelWheelHandler actions rect)
 
-graphPanelHandler :: Canvas.Canvas renderM => GraphSnapshot -> GraphViewport -> GraphLayout -> GraphPanelActions actionM -> Rect -> renderM (Handler actionM)
+graphPanelHandler :: (Canvas.Canvas renderM, Monad actionM) => GraphSnapshot -> GraphViewport -> GraphLayout -> GraphPanelActions actionM -> Rect -> renderM (Handler actionM)
 graphPanelHandler snapshot viewport layout actions rect = do
   nodeSizes <- traverse nodeSize (graphSnapshotNodes snapshot)
+  edgeHits <- graphEdgeLabelHitAreas snapshot viewport layout rect nodeSizes
   let zoom = graphViewportZoom viewport
       sizesByKey = Map.fromList [(graphNodeKey node, size) | (node, size) <- zip (graphSnapshotNodes snapshot) nodeSizes]
       screenSizesByKey = fmap (scaleScreenSize zoom) sizesByKey
@@ -418,27 +490,52 @@ graphPanelHandler snapshot viewport layout actions rect = do
       case event of
         PointerDown {pointerX, pointerY}
           | rectContains rect pointerX pointerY ->
-              case
-                hitGraphNode
-                  snapshot
-                  screenSizesByKey
-                  graphPositions
-                  screenPositions
-                  (Point pointerX pointerY)
-                  (pointerGraphPoint viewport rect pointerX pointerY)
-              of
-                Just drag -> Just (graphPanelDragStart actions drag)
-                Nothing -> Just (graphPanelPanStart actions (Point pointerX pointerY))
+              let pointer = Point pointerX pointerY
+               in Just $ do
+                    graphPanelInteractionStart actions pointer
+                    case hitGraphEdge edgeHits pointer of
+                      Just edge -> graphPanelEdgePressStart actions edge
+                      Nothing ->
+                        case
+                          hitGraphNode
+                            snapshot
+                            screenSizesByKey
+                            graphPositions
+                            screenPositions
+                            pointer
+                            (pointerGraphPoint viewport rect pointerX pointerY)
+                          of
+                            Just drag -> graphPanelDragStart actions drag
+                            Nothing -> graphPanelPanStart actions pointer
         PointerMove {pointerX, pointerY}
-          | Just activeDrag <- graphPanelDrag actions ->
-              Just (graphPanelDragMove actions (dragGraphPoint viewport rect activeDrag pointerX pointerY))
-          | Just _ <- graphPanelPan actions ->
-              Just (graphPanelPanMove actions (Point pointerX pointerY))
+          | graphPanelDrag actions /= Nothing
+              || graphPanelPan actions /= Nothing
+              || graphPanelEdgePress actions /= Nothing ->
+              let pointer = Point pointerX pointerY
+               in Just $ do
+                    graphPanelInteractionMove actions pointer
+                    case graphPanelDrag actions of
+                      Just activeDrag ->
+                        graphPanelDragMove actions (dragGraphPoint viewport rect activeDrag pointerX pointerY)
+                      Nothing
+                        | graphPanelPan actions /= Nothing ->
+                            graphPanelPanMove actions pointer
+                      _ -> pure ()
         PointerUp {}
-          | Just _ <- graphPanelDrag actions ->
-              Just (graphPanelDragEnd actions)
+          | Just edge <- graphPanelEdgePress actions ->
+              Just $ do
+                finishGraphInteraction
+                  actions
+                  (Just (GraphSelectEdge (graphEdgeSource edge) (graphEdgeLabel edge)))
+                graphPanelEdgePressEnd actions
+          | Just drag <- graphPanelDrag actions ->
+              Just $ do
+                finishGraphInteraction actions (Just (GraphSelectNode (graphDragNode drag)))
+                graphPanelDragEnd actions
           | Just _ <- graphPanelPan actions ->
-              Just (graphPanelPanEnd actions)
+              Just $ do
+                finishGraphInteraction actions Nothing
+                graphPanelPanEnd actions
         _ -> Nothing
 
 graphPanelWheelHandler :: GraphPanelActions actionM -> Rect -> Handler actionM
@@ -451,6 +548,147 @@ graphPanelWheelHandler actions rect =
               (applyGraphWheel (graphPanelViewport actions) rect event)
           )
       else Nothing
+
+graphEdgeLabelHitAreas
+  :: Canvas.Canvas renderM
+  => GraphSnapshot
+  -> GraphViewport
+  -> GraphLayout
+  -> Rect
+  -> [Size]
+  -> renderM [GraphEdgeLabelHit]
+graphEdgeLabelHitAreas snapshot viewport layout rect nodeSizes = do
+  let sizesByKey = Map.fromList [(graphNodeKey node, size) | (node, size) <- zip (graphSnapshotNodes snapshot) nodeSizes]
+      graphPositions = graphLayoutPositions layout
+      zoom = graphViewportZoom viewport
+  hits <-
+    traverse
+      ( \edge -> do
+          size <- edgeLabelSize edge
+          case graphEdgeGeometry snapshot sizesByKey graphPositions edge of
+            Nothing -> pure Nothing
+            Just geometry ->
+              pure $
+                Just
+                  GraphEdgeLabelHit
+                    { graphEdgeLabelHitEdge = edge
+                    , graphEdgeLabelHitRect =
+                        centeredRect
+                          (screenPoint viewport rect (graphEdgeGeometryLabelPoint geometry))
+                          (scaleScreenSize zoom size)
+                    }
+      )
+      (graphSnapshotEdges snapshot)
+  pure (catMaybes hits)
+
+hitGraphEdge :: [GraphEdgeLabelHit] -> Point -> Maybe GraphEdge
+hitGraphEdge hits pointer =
+  foldr hit Nothing hits
+  where
+    hit GraphEdgeLabelHit {graphEdgeLabelHitEdge, graphEdgeLabelHitRect} found =
+      found <|> do
+        guard (rectContains graphEdgeLabelHitRect (pointX pointer) (pointY pointer))
+        pure graphEdgeLabelHitEdge
+
+data GraphEdgeCurve
+  = GraphEdgeLine Point Point
+  | GraphEdgeQuadratic Point Point Point
+  | GraphEdgeCubic Point Point Point Point
+  deriving (Eq, Show)
+
+data GraphEdgeGeometry = GraphEdgeGeometry
+  { graphEdgeGeometryCurve :: GraphEdgeCurve
+  , graphEdgeGeometryLabelPoint :: Point
+  }
+  deriving (Eq, Show)
+
+graphEdgeGeometry
+  :: GraphSnapshot
+  -> Map GraphNodeKey Size
+  -> Map GraphNodeKey Point
+  -> GraphEdge
+  -> Maybe GraphEdgeGeometry
+graphEdgeGeometry snapshot sizesByKey positions edge =
+  case (Map.lookup (graphEdgeSource edge) positions, Map.lookup (graphEdgeTarget edge) positions) of
+    (Just source, Just target)
+      | graphEdgeSource edge == graphEdgeTarget edge ->
+          Just (selfLoopGeometry snapshot sizesByKey edge source)
+      | otherwise ->
+          Just (nodeEdgeGeometry snapshot sizesByKey edge source target)
+    _ -> Nothing
+
+nodeEdgeGeometry
+  :: GraphSnapshot
+  -> Map GraphNodeKey Size
+  -> GraphEdge
+  -> Point
+  -> Point
+  -> GraphEdgeGeometry
+nodeEdgeGeometry snapshot sizesByKey edge source target =
+  let edgeOffset = parallelEdgeOffset snapshot edge
+   in if abs edgeOffset < epsilon
+        then
+          let start = clipEdgeEndpoint sizesByKey (graphEdgeSource edge) source source target
+              end = clipEdgeEndpoint sizesByKey (graphEdgeTarget edge) target target source
+           in
+            GraphEdgeGeometry
+              { graphEdgeGeometryCurve = GraphEdgeLine start end
+              , graphEdgeGeometryLabelPoint = midpoint start end
+              }
+        else
+          let canonicalDirection =
+                if graphEdgeSource edge <= graphEdgeTarget edge
+                  then pointNormalize (pointSub target source)
+                  else pointNormalize (pointSub source target)
+              control = pointAdd (midpoint source target) (pointScale (pointPerp canonicalDirection) edgeOffset)
+              start = clipToRect source (nodeHalfSize sizesByKey (graphEdgeSource edge)) control
+              end = clipToRect target (nodeHalfSize sizesByKey (graphEdgeTarget edge)) control
+           in
+            GraphEdgeGeometry
+              { graphEdgeGeometryCurve = GraphEdgeQuadratic start control end
+              , graphEdgeGeometryLabelPoint = quadraticPoint start control end 0.5
+              }
+
+selfLoopGeometry :: GraphSnapshot -> Map GraphNodeKey Size -> GraphEdge -> Point -> GraphEdgeGeometry
+selfLoopGeometry snapshot sizesByKey edge center =
+  let edgeOffset = parallelEdgeOffset snapshot edge
+      size = nodeSizeByKey sizesByKey (graphEdgeSource edge)
+      half = nodeHalfSize sizesByKey (graphEdgeSource edge)
+      loopHeight = sizeHeight size * 2 + 24 + abs edgeOffset
+      loopWidth = sizeWidth size * 0.75 + 22 + abs edgeOffset / 2
+      cp1 = pointAdd center (Point (negate loopWidth) (negate loopHeight))
+      cp2 = pointAdd center (Point loopWidth (negate loopHeight))
+      start = clipToRect center half cp1
+      end = clipToRect center half cp2
+   in
+    GraphEdgeGeometry
+      { graphEdgeGeometryCurve = GraphEdgeCubic start cp1 cp2 end
+      , graphEdgeGeometryLabelPoint = cubicPoint start cp1 cp2 end 0.5
+      }
+
+graphEdgeArrowDirection :: GraphEdgeGeometry -> Point
+graphEdgeArrowDirection geometry =
+  case graphEdgeGeometryCurve geometry of
+    GraphEdgeLine start end -> pointSub end start
+    GraphEdgeQuadratic _ control end -> pointSub end control
+    GraphEdgeCubic _ _ cp2 end -> pointSub end cp2
+
+graphEdgeArrowTip :: GraphEdgeGeometry -> Point
+graphEdgeArrowTip geometry =
+  case graphEdgeGeometryCurve geometry of
+    GraphEdgeLine _ end -> end
+    GraphEdgeQuadratic _ _ end -> end
+    GraphEdgeCubic _ _ _ end -> end
+
+edgeLabelSize :: Canvas.Canvas renderM => GraphEdge -> renderM Size
+edgeLabelSize edge = do
+  let textValue = maybe "" truncateNodeText (graphEdgeTitle edge)
+  textMetrics <- Canvas.measureText textValue
+  sample <- Canvas.measureText "Mg"
+  let textWidth = if null textValue then 0 else Canvas.textWidth textMetrics
+      labelWidth = edgeLabelPadding * 2 + edgeLabelIconSize + if null textValue then 0 else labelGap + textWidth
+      labelHeight = max edgeLabelIconSize (metricHeight sample) + edgeLabelPadding * 2
+  pure (Size labelWidth labelHeight)
 
 hitGraphNode
   :: GraphSnapshot
@@ -558,63 +796,27 @@ drawGraphEdge
   -> GraphEdge
   -> renderM ()
 drawGraphEdge snapshot sizesByKey positions selected edge =
-  case (Map.lookup (graphEdgeSource edge) positions, Map.lookup (graphEdgeTarget edge) positions) of
-    (Just source, Just target) ->
-      if graphEdgeSource edge == graphEdgeTarget edge
-        then drawSelfLoop source selectedStrength edge
-        else drawNodeEdge source target selectedStrength edge
-    _ -> pure ()
-  where
-    selectedStrength =
-      case selected of
-        Just GraphSelectedEdge {graphSelectedEdgeSource, graphSelectedEdgeLabel, graphSelectedEdgeStrength}
-          | graphSelectedEdgeSource == graphEdgeSource edge && graphSelectedEdgeLabel == graphEdgeLabel edge -> Just graphSelectedEdgeStrength
-        _ -> Nothing
-    edgeOffset =
-      parallelEdgeOffset snapshot edge
-    drawNodeEdge source target strength currentEdge = do
-      let direction = pointSub target source
-          perpendicular = pointPerp (pointNormalize direction)
-          offset = pointScale perpendicular edgeOffset
-          shiftedSource = pointAdd source offset
-          shiftedTarget = pointAdd target offset
+  case graphEdgeGeometry snapshot sizesByKey positions edge of
+    Nothing -> pure ()
+    Just geometry -> do
+      let strength =
+            case selected of
+              Just GraphSelectedEdge {graphSelectedEdgeSource, graphSelectedEdgeLabel, graphSelectedEdgeStrength}
+                | graphSelectedEdgeSource == graphEdgeSource edge && graphSelectedEdgeLabel == graphEdgeLabel edge ->
+                    Just graphSelectedEdgeStrength
+              _ -> Nothing
           color = edgeColor strength
           lineWidth = edgeLineWidth strength
-      if abs edgeOffset < epsilon
-        then do
-          let start = clipEdgeEndpoint sizesByKey (graphEdgeSource currentEdge) source shiftedSource shiftedTarget
-              end = clipEdgeEndpoint sizesByKey (graphEdgeTarget currentEdge) target shiftedTarget shiftedSource
-              labelPoint = midpoint start end
-          Canvas.strokeLine start end color lineWidth
-          drawArrowhead end (pointSub end start) color lineWidth
-          drawEdgeLabel currentEdge labelPoint strength
-        else do
-          let canonicalDirection =
-                if graphEdgeSource currentEdge <= graphEdgeTarget currentEdge
-                  then pointNormalize (pointSub target source)
-                  else pointNormalize (pointSub source target)
-              control = pointAdd (midpoint source target) (pointScale (pointPerp canonicalDirection) edgeOffset)
-              start = clipToRect source (nodeHalfSize sizesByKey (graphEdgeSource currentEdge)) control
-              end = clipToRect target (nodeHalfSize sizesByKey (graphEdgeTarget currentEdge)) control
-              labelPoint = quadraticPoint start control end 0.5
-          drawQuadratic start control end color lineWidth
-          drawArrowhead end (pointSub end control) color lineWidth
-          drawEdgeLabel currentEdge labelPoint strength
-    drawSelfLoop center strength currentEdge = do
-      let size = nodeSizeByKey sizesByKey (graphEdgeSource currentEdge)
-          half = nodeHalfSize sizesByKey (graphEdgeSource currentEdge)
-          loopHeight = sizeHeight size * 2 + 24 + abs edgeOffset
-          loopWidth = sizeWidth size * 0.75 + 22 + abs edgeOffset / 2
-          cp1 = pointAdd center (Point (negate loopWidth) (negate loopHeight))
-          cp2 = pointAdd center (Point loopWidth (negate loopHeight))
-          start = clipToRect center half cp1
-          end = clipToRect center half cp2
-          labelPoint = cubicPoint start cp1 cp2 end 0.5
-          color = edgeColor strength
-          lineWidth = edgeLineWidth strength
-      drawCubic start cp1 cp2 end color lineWidth
-      drawArrowhead end (pointSub end cp2) color lineWidth
-      drawEdgeLabel currentEdge labelPoint strength
+      drawGraphEdgeCurve geometry color lineWidth
+      drawArrowhead (graphEdgeArrowTip geometry) (graphEdgeArrowDirection geometry) color lineWidth
+      drawEdgeLabel edge (graphEdgeGeometryLabelPoint geometry) strength
+
+drawGraphEdgeCurve :: Canvas.Canvas renderM => GraphEdgeGeometry -> String -> Double -> renderM ()
+drawGraphEdgeCurve geometry color lineWidth =
+  case graphEdgeGeometryCurve geometry of
+    GraphEdgeLine start end -> Canvas.strokeLine start end color lineWidth
+    GraphEdgeQuadratic start control end -> drawQuadratic start control end color lineWidth
+    GraphEdgeCubic start cp1 cp2 end -> drawCubic start cp1 cp2 end color lineWidth
 
 drawEdgeLabel :: Canvas.Canvas renderM => GraphEdge -> Point -> Maybe GraphSelectionStrength -> renderM ()
 drawEdgeLabel edge point strength = do
