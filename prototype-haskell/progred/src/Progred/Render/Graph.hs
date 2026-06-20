@@ -641,8 +641,13 @@ nodeEdgeGeometry snapshot sizesByKey edge source target =
                   then pointNormalize (pointSub target source)
                   else pointNormalize (pointSub source target)
               control = pointAdd (midpoint source target) (pointScale (pointPerp canonicalDirection) edgeOffset)
-              start = clipToRect source (nodeHalfSize sizesByKey (graphEdgeSource edge)) control
-              end = clipToRect target (nodeHalfSize sizesByKey (graphEdgeTarget edge)) control
+              start = source
+              end =
+                clipToRectToward
+                  target
+                  (nodeHalfSize sizesByKey (graphEdgeTarget edge))
+                  control
+                  source
            in
             GraphEdgeGeometry
               { graphEdgeGeometryCurve = GraphEdgeQuadratic start control end
@@ -907,6 +912,12 @@ clipEdgeEndpoint :: Map GraphNodeKey Size -> GraphNodeKey -> Point -> Point -> P
 clipEdgeEndpoint sizesByKey key nodeCenter linePoint lineTarget =
   clipLineToRect nodeCenter (nodeHalfSize sizesByKey key) linePoint lineTarget
 
+clipToRectToward :: Point -> Point -> Point -> Point -> Point
+clipToRectToward center half toward fallback =
+  if pointLengthSq (pointSub toward center) > 1
+    then clipToRect center half toward
+    else clipToRect center half fallback
+
 clipToRect :: Point -> Point -> Point -> Point
 clipToRect center half target
   | abs (pointX direction) < epsilon && abs (pointY direction) < epsilon =
@@ -1054,9 +1065,13 @@ drawArrowhead tip direction color lineWidth = do
 
 parallelEdgeOffset :: GraphSnapshot -> GraphEdge -> Double
 parallelEdgeOffset snapshot edge =
-  case indexes of
-    [] -> 0
-    _ -> (fromIntegral currentIndex - (fromIntegral total - 1) / 2) * parallelEdgeSpacing
+  case pairEdges of
+    [_] -> 0
+    [forward, backward]
+      | isReverseEdgePair forward backward ->
+          bidirectionalEdgeOffset edge parallelEdgeSpacing
+    _ ->
+      (fromIntegral currentIndex - (fromIntegral total - 1) / 2) * parallelEdgeSpacing
   where
     pairKey current =
       canonicalPair (graphEdgeSource current) (graphEdgeTarget current)
@@ -1069,6 +1084,18 @@ parallelEdgeOffset snapshot edge =
         index : _ -> index
         [] -> 0
     total = length pairEdges
+
+isReverseEdgePair :: GraphEdge -> GraphEdge -> Bool
+isReverseEdgePair forward backward =
+  graphEdgeSource forward == graphEdgeTarget backward
+    && graphEdgeTarget forward == graphEdgeSource backward
+    && graphEdgeSource forward /= graphEdgeTarget forward
+
+bidirectionalEdgeOffset :: GraphEdge -> Double -> Double
+bidirectionalEdgeOffset edge spacing =
+  if graphEdgeSource edge <= graphEdgeTarget edge
+    then spacing / 2
+    else -(spacing / 2)
 
 canonicalPair :: GraphNodeKey -> GraphNodeKey -> (GraphNodeKey, GraphNodeKey)
 canonicalPair a b
@@ -1226,7 +1253,7 @@ gravityK :: Double
 gravityK = 0.005
 
 parallelEdgeSpacing :: Double
-parallelEdgeSpacing = 22
+parallelEdgeSpacing = 50
 
 epsilon :: Double
 epsilon = 0.001
