@@ -33,7 +33,9 @@ data Model = Model
   , modelDebugLayoutRects :: Bool
   , modelShowGraph :: Bool
   , modelGraphLayout :: GraphView.GraphLayout
+  , modelGraphViewport :: GraphView.GraphViewport
   , modelGraphDrag :: Maybe GraphView.GraphDrag
+  , modelGraphPan :: Maybe GraphView.GraphPan
   , modelFreshUUIDs :: [UUID]
   }
 
@@ -50,7 +52,9 @@ initialModel =
     , modelDebugLayoutRects = False
     , modelShowGraph = False
     , modelGraphLayout = GraphView.emptyGraphLayout
+    , modelGraphViewport = GraphView.emptyGraphViewport
     , modelGraphDrag = Nothing
+    , modelGraphPan = Nothing
     , modelFreshUUIDs = seededUUIDs 20260615
     }
 
@@ -70,6 +74,7 @@ toggleGraphView =
         model
           { modelShowGraph = not (modelShowGraph model)
           , modelGraphDrag = Nothing
+          , modelGraphPan = Nothing
           }
     )
 
@@ -83,7 +88,7 @@ stepGraphLayoutFrame =
             steppedLayout = GraphView.stepGraphLayout snapshot currentLayout
             layout = preserveGraphDrag (modelGraphDrag model) currentLayout steppedLayout
          in (True, model {modelGraphLayout = layout})
-      else (False, model {modelGraphDrag = Nothing})
+      else (False, model {modelGraphDrag = Nothing, modelGraphPan = Nothing})
 
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
@@ -120,12 +125,19 @@ view viewport model = do
     graphLayout =
       GraphView.graphPanel
         (GraphView.graphSnapshot editor)
+        (modelGraphViewport model)
         (modelGraphLayout model)
         GraphView.GraphPanelActions
           { GraphView.graphPanelDrag = modelGraphDrag model
+          , GraphView.graphPanelPan = modelGraphPan model
+          , GraphView.graphPanelViewport = modelGraphViewport model
           , GraphView.graphPanelDragStart = startGraphDrag
           , GraphView.graphPanelDragMove = moveGraphDrag
           , GraphView.graphPanelDragEnd = endGraphDrag
+          , GraphView.graphPanelPanStart = startGraphPan
+          , GraphView.graphPanelPanMove = moveGraphPan
+          , GraphView.graphPanelPanEnd = endGraphPan
+          , GraphView.graphPanelSetViewport = setGraphViewport
           }
     editEditor change =
       modify
@@ -161,6 +173,23 @@ view viewport model = do
           Nothing -> current
     endGraphDrag =
       modify (\current -> current {modelGraphDrag = Nothing})
+    startGraphPan pointer =
+      modify $ \current ->
+        current
+          { modelGraphPan = Just (GraphView.GraphPan pointer)
+          }
+    moveGraphPan pointer =
+      modify $ \current ->
+        case modelGraphPan current of
+          Just pan ->
+            let (nextViewport, panState) =
+                  GraphView.moveGraphPan pointer (modelGraphViewport current) pan
+             in current {modelGraphViewport = nextViewport, modelGraphPan = Just panState}
+          Nothing -> current
+    endGraphPan =
+      modify (\current -> current {modelGraphPan = Nothing})
+    setGraphViewport nextViewport =
+      modify (\current -> current {modelGraphViewport = nextViewport})
     appHandler _rect =
       pure $
         onPointer

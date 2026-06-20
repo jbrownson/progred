@@ -4,17 +4,22 @@ module Progred.Render.Graph
   , GraphLayout (..)
   , GraphNode (..)
   , GraphNodeKey (..)
+  , GraphPan (..)
   , GraphPanelActions (..)
   , GraphSelectionStrength (..)
   , GraphSnapshot (..)
   , GraphSelectedEdge (..)
   , GraphSelectedNode (..)
+  , GraphViewport (..)
+  , applyGraphWheel
   , emptyGraphLayout
+  , emptyGraphViewport
   , graphLayoutNodeCount
   , graphLayoutPosition
   , graphPanel
   , graphSnapshot
   , moveGraphNode
+  , moveGraphPan
   , stepGraphLayout
   ) where
 
@@ -92,6 +97,12 @@ data GraphLayout = GraphLayout
   }
   deriving (Eq, Show)
 
+data GraphViewport = GraphViewport
+  { graphViewportPan :: Point
+  , graphViewportZoom :: Double
+  }
+  deriving (Eq, Show)
+
 data GraphDrag = GraphDrag
   { graphDragNode :: GraphNodeKey
   , graphDragOffset :: Point
@@ -99,12 +110,30 @@ data GraphDrag = GraphDrag
   }
   deriving (Eq, Show)
 
+data GraphPan = GraphPan
+  { graphPanLastScreen :: Point
+  }
+  deriving (Eq, Show)
+
 data GraphPanelActions actionM = GraphPanelActions
   { graphPanelDrag :: Maybe GraphDrag
+  , graphPanelPan :: Maybe GraphPan
+  , graphPanelViewport :: GraphViewport
   , graphPanelDragStart :: GraphDrag -> actionM ()
   , graphPanelDragMove :: Point -> actionM ()
   , graphPanelDragEnd :: actionM ()
+  , graphPanelPanStart :: Point -> actionM ()
+  , graphPanelPanMove :: Point -> actionM ()
+  , graphPanelPanEnd :: actionM ()
+  , graphPanelSetViewport :: GraphViewport -> actionM ()
   }
+
+emptyGraphViewport :: GraphViewport
+emptyGraphViewport =
+  GraphViewport
+    { graphViewportPan = Point 0 0
+    , graphViewportZoom = 1
+    }
 
 emptyGraphLayout :: GraphLayout
 emptyGraphLayout =
@@ -366,35 +395,62 @@ addForce :: GraphNodeKey -> Point -> Map GraphNodeKey Point -> Map GraphNodeKey 
 addForce key force =
   Map.adjust (pointAdd force) key
 
-graphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphLayout -> GraphPanelActions actionM -> Halay renderM renderM (Handler actionM)
-graphPanel snapshot layout actions =
+graphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphViewport -> GraphLayout -> GraphPanelActions actionM -> Halay renderM renderM (Handler actionM)
+graphPanel snapshot viewport layout actions =
   leafWithSizing panelSizing (pure (Size 320 240)) draw
   where
     draw rect = do
       let syncedLayout = syncGraphLayout snapshot layout
-      drawGraphPanel snapshot syncedLayout rect
-      graphPanelHandler snapshot syncedLayout actions rect
+      drawGraphPanel snapshot viewport syncedLayout rect
+      handler <- graphPanelHandler snapshot viewport syncedLayout actions rect
+      pure (handler <> graphPanelWheelHandler actions rect)
 
-graphPanelHandler :: Canvas.Canvas renderM => GraphSnapshot -> GraphLayout -> GraphPanelActions actionM -> Rect -> renderM (Handler actionM)
-graphPanelHandler snapshot layout actions rect = do
+graphPanelHandler :: Canvas.Canvas renderM => GraphSnapshot -> GraphViewport -> GraphLayout -> GraphPanelActions actionM -> Rect -> renderM (Handler actionM)
+graphPanelHandler snapshot viewport layout actions rect = do
   nodeSizes <- traverse nodeSize (graphSnapshotNodes snapshot)
-  let sizesByKey = Map.fromList [(graphNodeKey node, size) | (node, size) <- zip (graphSnapshotNodes snapshot) nodeSizes]
+  let zoom = graphViewportZoom viewport
+      sizesByKey = Map.fromList [(graphNodeKey node, size) | (node, size) <- zip (graphSnapshotNodes snapshot) nodeSizes]
+      screenSizesByKey = fmap (scaleScreenSize zoom) sizesByKey
       graphPositions = graphLayoutPositions layout
-      screenPositions = screenPoint rect <$> graphPositions
+      screenPositions = screenPoint viewport rect <$> graphPositions
   pure $
     onPointerCapture $ \event ->
       case event of
         PointerDown {pointerX, pointerY}
           | rectContains rect pointerX pointerY ->
-              graphPanelDragStart actions
-                <$> hitGraphNode snapshot sizesByKey graphPositions screenPositions (Point pointerX pointerY) (pointerGraphPoint rect pointerX pointerY)
+              case
+                hitGraphNode
+                  snapshot
+                  screenSizesByKey
+                  graphPositions
+                  screenPositions
+                  (Point pointerX pointerY)
+                  (pointerGraphPoint viewport rect pointerX pointerY)
+              of
+                Just drag -> Just (graphPanelDragStart actions drag)
+                Nothing -> Just (graphPanelPanStart actions (Point pointerX pointerY))
         PointerMove {pointerX, pointerY}
           | Just activeDrag <- graphPanelDrag actions ->
-              Just (graphPanelDragMove actions (dragGraphPoint rect activeDrag pointerX pointerY))
+              Just (graphPanelDragMove actions (dragGraphPoint viewport rect activeDrag pointerX pointerY))
+          | Just _ <- graphPanelPan actions ->
+              Just (graphPanelPanMove actions (Point pointerX pointerY))
         PointerUp {}
           | Just _ <- graphPanelDrag actions ->
               Just (graphPanelDragEnd actions)
+          | Just _ <- graphPanelPan actions ->
+              Just (graphPanelPanEnd actions)
         _ -> Nothing
+
+graphPanelWheelHandler :: GraphPanelActions actionM -> Rect -> Handler actionM
+graphPanelWheelHandler actions rect =
+  onWheel $ \event@Wheel {wheelX, wheelY} ->
+    if rectContains rect wheelX wheelY
+      then
+        Just
+          ( graphPanelSetViewport actions
+              (applyGraphWheel (graphPanelViewport actions) rect event)
+          )
+      else Nothing
 
 hitGraphNode
   :: GraphSnapshot
@@ -418,29 +474,80 @@ hitGraphNode snapshot sizesByKey graphPositions screenPositions pointer graphPoi
             Just (GraphDrag key (pointSub graphPosition graphPointer) graphPosition)
           else Nothing
 
-dragGraphPoint :: Rect -> GraphDrag -> Double -> Double -> Point
-dragGraphPoint rect drag pointerX pointerY =
-  pointAdd (pointerGraphPoint rect pointerX pointerY) (graphDragOffset drag)
+moveGraphPan :: Point -> GraphViewport -> GraphPan -> (GraphViewport, GraphPan)
+moveGraphPan current viewport pan =
+  let delta = pointSub current (graphPanLastScreen pan)
+   in
+    ( viewport {graphViewportPan = pointAdd (graphViewportPan viewport) delta}
+    , pan {graphPanLastScreen = current}
+    )
 
-pointerGraphPoint :: Rect -> Double -> Double -> Point
-pointerGraphPoint rect pointerX pointerY =
-  Point
-    { pointX = pointerX - x rect - width rect / 2
-    , pointY = pointerY - y rect - height rect / 2
+applyGraphWheel :: GraphViewport -> Rect -> WheelEvent -> GraphViewport
+applyGraphWheel viewport rect event =
+  if wheelZooms event
+    then zoomGraphWheel viewport rect event
+    else panGraphWheel viewport event
+
+wheelZooms :: WheelEvent -> Bool
+wheelZooms Wheel {wheelModifiers, wheelDeltaMode} =
+  hasModifier wheelModifiers || wheelDeltaMode /= 0
+
+zoomGraphWheel :: GraphViewport -> Rect -> WheelEvent -> GraphViewport
+zoomGraphWheel viewport rect event@Wheel {wheelX, wheelY, wheelDeltaY} =
+  let graphPosition = pointerGraphPoint viewport rect wheelX wheelY
+      newZoom =
+        clamp graphMinZoom graphMaxZoom
+          (graphViewportZoom viewport * exp (negate wheelDeltaY * wheelZoomFactor event))
+      center = graphPanelCenter rect
+      newPan =
+        pointSub
+          (Point wheelX wheelY)
+          (pointAdd center (pointScale graphPosition newZoom))
+   in
+    GraphViewport
+      { graphViewportPan = newPan
+      , graphViewportZoom = newZoom
+      }
+
+panGraphWheel :: GraphViewport -> WheelEvent -> GraphViewport
+panGraphWheel viewport Wheel {wheelDeltaX, wheelDeltaY} =
+  viewport
+    { graphViewportPan =
+        pointAdd
+          (graphViewportPan viewport)
+          (Point (negate wheelDeltaX * graphWheelPanFactor) (negate wheelDeltaY * graphWheelPanFactor))
     }
 
-drawGraphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphLayout -> Rect -> renderM ()
-drawGraphPanel snapshot layout rect = do
+wheelZoomFactor :: WheelEvent -> Double
+wheelZoomFactor Wheel {wheelModifiers} =
+  if keyCtrl wheelModifiers || keyMeta wheelModifiers
+    then graphTrackpadZoomFactor
+    else graphMouseWheelZoomFactor
+
+dragGraphPoint :: GraphViewport -> Rect -> GraphDrag -> Double -> Double -> Point
+dragGraphPoint viewport rect drag pointerX pointerY =
+  pointAdd (pointerGraphPoint viewport rect pointerX pointerY) (graphDragOffset drag)
+
+pointerGraphPoint :: GraphViewport -> Rect -> Double -> Double -> Point
+pointerGraphPoint viewport rect pointerX pointerY =
+  let center = graphPanelCenter rect
+      screen = Point pointerX pointerY
+   in pointScale (pointSub (pointSub screen center) (graphViewportPan viewport)) (1 / graphViewportZoom viewport)
+
+drawGraphPanel :: Canvas.Canvas renderM => GraphSnapshot -> GraphViewport -> GraphLayout -> Rect -> renderM ()
+drawGraphPanel snapshot viewport layout rect = do
   Canvas.fillRect rect panelBackground
   Canvas.strokeLine (Point (x rect) (y rect)) (Point (x rect) (y rect + height rect)) panelSeparator 1
   nodeSizes <- traverse nodeSize (graphSnapshotNodes snapshot)
   let sizesByKey = Map.fromList [(graphNodeKey node, size) | (node, size) <- zip (graphSnapshotNodes snapshot) nodeSizes]
-      screenPositions = screenPoint rect <$> graphLayoutPositions layout
+      graphPositions = graphLayoutPositions layout
+      transformOrigin = pointAdd (graphPanelCenter rect) (graphViewportPan viewport)
       selectedEdges = graphSnapshotSelectedEdge snapshot
       selectedNodes = graphSnapshotSelectedNode snapshot
-  Canvas.withClip rect $ do
-    mapM_ (drawGraphEdge snapshot sizesByKey screenPositions selectedEdges) (graphSnapshotEdges snapshot)
-    mapM_ (drawGraphNode screenPositions sizesByKey selectedNodes) (graphSnapshotNodes snapshot)
+  Canvas.withClip rect $
+    Canvas.withGraphTransform transformOrigin (graphViewportZoom viewport) $ do
+      mapM_ (drawGraphEdge snapshot sizesByKey graphPositions selectedEdges) (graphSnapshotEdges snapshot)
+      mapM_ (drawGraphNode graphPositions sizesByKey selectedNodes) (graphSnapshotNodes snapshot)
 
 drawGraphEdge
   :: Canvas.Canvas renderM
@@ -574,7 +681,7 @@ nodeSize node = do
       iconWidth = if graphNodeShowsIdenticon node then nodeIconSize else 0
       contentWidth = iconWidth + titleWidth
       contentHeight = max iconWidth (metricHeight sample)
-  pure (Size (max nodeMinWidth (contentWidth + nodePadding * 2)) (max nodeHeight (contentHeight + nodePadding * 2)))
+  pure (Size (contentWidth + nodePadding * 2) (max nodeHeight (contentHeight + nodePadding * 2)))
   where
     textValue = maybe "" truncateNodeText (graphNodeTitle node)
 
@@ -586,7 +693,7 @@ graphNodeShowsIdenticon node =
 
 nodeSizeByKey :: Map GraphNodeKey Size -> GraphNodeKey -> Size
 nodeSizeByKey sizesByKey key =
-  Map.findWithDefault (Size nodeMinWidth nodeHeight) key sizesByKey
+  Map.findWithDefault (Size (nodeIconSize + nodePadding * 2) nodeHeight) key sizesByKey
 
 nodeHalfSize :: Map GraphNodeKey Size -> GraphNodeKey -> Point
 nodeHalfSize sizesByKey key =
@@ -784,12 +891,21 @@ hashString =
     step hash char =
       (hash `xor` fromIntegral (ord char)) * 16777619
 
-screenPoint :: Rect -> Point -> Point
-screenPoint rect point =
+graphPanelCenter :: Rect -> Point
+graphPanelCenter rect =
   Point
-    { pointX = x rect + width rect / 2 + pointX point
-    , pointY = y rect + height rect / 2 + pointY point
+    { pointX = x rect + width rect / 2
+    , pointY = y rect + height rect / 2
     }
+
+scaleScreenSize :: Double -> Size -> Size
+scaleScreenSize zoom size =
+  Size (sizeWidth size * zoom) (sizeHeight size * zoom)
+
+screenPoint :: GraphViewport -> Rect -> Point -> Point
+screenPoint viewport rect point =
+  let center = graphPanelCenter rect
+   in pointAdd center (pointAdd (graphViewportPan viewport) (pointScale point (graphViewportZoom viewport)))
 
 centeredRect :: Point -> Size -> Rect
 centeredRect point size =
@@ -919,14 +1035,26 @@ maxFinite = 1.0e12
 curveSegments :: Int
 curveSegments = 20
 
+graphMinZoom :: Double
+graphMinZoom = 0.1
+
+graphMaxZoom :: Double
+graphMaxZoom = 5
+
+graphWheelPanFactor :: Double
+graphWheelPanFactor = 0.85
+
+graphMouseWheelZoomFactor :: Double
+graphMouseWheelZoomFactor = 0.004
+
+graphTrackpadZoomFactor :: Double
+graphTrackpadZoomFactor = 0.012
+
 nodePadding :: Double
 nodePadding = 7
 
 nodeIconSize :: Double
 nodeIconSize = 24
-
-nodeMinWidth :: Double
-nodeMinWidth = 38
 
 nodeHeight :: Double
 nodeHeight = 34

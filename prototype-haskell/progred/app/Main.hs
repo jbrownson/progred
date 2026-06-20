@@ -6,6 +6,7 @@ module Main
   , onPointerMove
   , onPointerUp
   , onResize
+  , onWheel
   , onTextInput
   , toggleGraphView
   , toggleLayoutDebugRects
@@ -15,7 +16,7 @@ import Control.Monad (when)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32)
 import qualified Puri.Canvas as Canvas
-import Puri.Handler
+import Puri.Handler hiding (onWheel)
 import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
 import Progred.App hiding (toggleGraphView)
@@ -58,9 +59,25 @@ onPointerUp :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onPointerUp px py shift alt ctrl meta =
   dispatchPointer (PointerUp px py (keyModifiers shift alt ctrl meta))
 
+onWheel :: Double -> Double -> Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
+onWheel px py deltaX deltaY deltaMode shift alt ctrl meta =
+  dispatchWheel
+    Wheel
+      { wheelX = px
+      , wheelY = py
+      , wheelDeltaX = deltaX
+      , wheelDeltaY = deltaY
+      , wheelDeltaMode = deltaMode
+      , wheelModifiers = keyModifiers shift alt ctrl meta
+      }
+
 dispatchPointer :: PointerEvent -> IO ()
 dispatchPointer event =
   dispatchRuntime (\handler -> handlePointer event handler)
+
+dispatchWheel :: WheelEvent -> IO ()
+dispatchWheel event =
+  dispatchRuntime (\handler -> handleWheel event handler)
 
 onKeyDown :: Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onKeyDown keyCode shift alt ctrl meta =

@@ -40,6 +40,9 @@ main = do
   run "graphSnapshotFocus" propGraphSnapshotHighlightsFocusedEdgeAndNode
   run "graphLayout" propGraphLayoutTracksSnapshotNodes
   run "graphPanelDrag" propGraphPanelDragStartsAndMovesNode
+  run "graphPanelPan" propGraphPanelPanMovesViewport
+  run "graphPanelWheelZoom" propGraphPanelWheelZoomsViewport
+  run "graphPanelWheelPan" propGraphPanelWheelPansTrackpad
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listProjectionRequiresIsa" propListProjectionRequiresIsa
   run "listItemFocus" propListNodeItemFocusesListElement
@@ -315,6 +318,67 @@ propGraphPanelDragStartsAndMovesNode =
         afterMove
     expectedDrag =
       GraphDrag (GraphUUID rootId) (Point 0 0) (Point 0 0)
+
+propGraphPanelPanMovesViewport :: Property
+propGraphPanelPanMovesViewport =
+  conjoin
+    [ graphInteractionTestPan afterDown === Just (GraphPan (Point 10 10))
+    , graphViewportPan (graphInteractionTestViewport afterMove) === Point 10 15
+    , graphInteractionTestPan afterUp === Nothing
+    ]
+  where
+    afterDown =
+      execState
+        (handlePointer (PointerDown 10 10 noModifiers) (graphInteractionHandler emptyGraphInteractionTest))
+        emptyGraphInteractionTest
+    afterMove =
+      execState
+        (handlePointer (PointerMove 20 25 noModifiers) (graphInteractionHandler afterDown))
+        afterDown
+    afterUp =
+      execState
+        (handlePointer (PointerUp 20 25 noModifiers) (graphInteractionHandler afterMove))
+        afterMove
+
+propGraphPanelWheelZoomsViewport :: Property
+propGraphPanelWheelZoomsViewport =
+  property $
+    graphViewportZoom (graphInteractionTestViewport zoomed)
+      > graphViewportZoom (graphInteractionTestViewport emptyGraphInteractionTest)
+  where
+    zoomed =
+      execState
+        ( handleWheel
+            Wheel
+              { wheelX = 160
+              , wheelY = 120
+              , wheelDeltaX = 0
+              , wheelDeltaY = -100
+              , wheelDeltaMode = 1
+              , wheelModifiers = noModifiers
+              }
+            (graphInteractionHandler emptyGraphInteractionTest)
+        )
+        emptyGraphInteractionTest
+
+propGraphPanelWheelPansTrackpad :: Property
+propGraphPanelWheelPansTrackpad =
+  graphViewportPan (graphInteractionTestViewport panned) === Point (-10.2) (-6.8)
+  where
+    panned =
+      execState
+        ( handleWheel
+            Wheel
+              { wheelX = 160
+              , wheelY = 120
+              , wheelDeltaX = 12
+              , wheelDeltaY = 8
+              , wheelDeltaMode = 0
+              , wheelModifiers = noModifiers
+              }
+            (graphInteractionHandler emptyGraphInteractionTest)
+        )
+        emptyGraphInteractionTest
 
 propPointerCapturePrecedesNormalPointer :: Property
 propPointerCapturePrecedesNormalPointer =
@@ -610,6 +674,19 @@ emptyGraphDragTest :: GraphDragTest
 emptyGraphDragTest =
   GraphDragTest Nothing Nothing False
 
+data GraphInteractionTest = GraphInteractionTest
+  { graphInteractionTestDrag :: Maybe GraphDrag
+  , graphInteractionTestMoved :: Maybe Point
+  , graphInteractionTestEnded :: Bool
+  , graphInteractionTestPan :: Maybe GraphPan
+  , graphInteractionTestViewport :: GraphViewport
+  }
+  deriving (Eq, Show)
+
+emptyGraphInteractionTest :: GraphInteractionTest
+emptyGraphInteractionTest =
+  GraphInteractionTest Nothing Nothing False Nothing emptyGraphViewport
+
 graphDragHandler :: Maybe GraphDrag -> Handler (State GraphDragTest)
 graphDragHandler drag =
   runTestRender $ do
@@ -617,12 +694,51 @@ graphDragHandler drag =
       measureHalay $
         graphPanel
           (graphSnapshot (newEditor rawInsertDocument))
+          emptyGraphViewport
           emptyGraphLayout
           GraphPanelActions
             { graphPanelDrag = drag
+            , graphPanelPan = Nothing
+            , graphPanelViewport = emptyGraphViewport
             , graphPanelDragStart = \newDrag -> modify (\state -> state {graphDragTestDrag = Just newDrag})
             , graphPanelDragMove = \position -> modify (\state -> state {graphDragTestMoved = Just position})
             , graphPanelDragEnd = modify (\state -> state {graphDragTestEnded = True})
+            , graphPanelPanStart = \_ -> pure ()
+            , graphPanelPanMove = \_ -> pure ()
+            , graphPanelPanEnd = pure ()
+            , graphPanelSetViewport = \_ -> pure ()
+            }
+    placeMeasured measured (Rect 0 0 320 240)
+
+graphInteractionHandler :: GraphInteractionTest -> Handler (State GraphInteractionTest)
+graphInteractionHandler state =
+  runTestRender $ do
+    measured <-
+      measureHalay $
+        graphPanel
+          (graphSnapshot (newEditor rawInsertDocument))
+          (graphInteractionTestViewport state)
+          emptyGraphLayout
+          GraphPanelActions
+            { graphPanelDrag = graphInteractionTestDrag state
+            , graphPanelPan = graphInteractionTestPan state
+            , graphPanelViewport = graphInteractionTestViewport state
+            , graphPanelDragStart = \newDrag -> modify (\current -> current {graphInteractionTestDrag = Just newDrag})
+            , graphPanelDragMove = \position -> modify (\current -> current {graphInteractionTestMoved = Just position})
+            , graphPanelDragEnd = modify (\current -> current {graphInteractionTestEnded = True, graphInteractionTestDrag = Nothing})
+            , graphPanelPanStart = \pointer -> modify (\current -> current {graphInteractionTestPan = Just (GraphPan pointer)})
+            , graphPanelPanMove = \pointer ->
+                modify
+                  ( \current ->
+                      case graphInteractionTestPan current of
+                        Just pan ->
+                          let (viewport, panState) =
+                                moveGraphPan pointer (graphInteractionTestViewport current) pan
+                           in current {graphInteractionTestViewport = viewport, graphInteractionTestPan = Just panState}
+                        Nothing -> current
+                  )
+            , graphPanelPanEnd = modify (\current -> current {graphInteractionTestPan = Nothing})
+            , graphPanelSetViewport = \viewport -> modify (\current -> current {graphInteractionTestViewport = viewport})
             }
     placeMeasured measured (Rect 0 0 320 240)
 
@@ -652,6 +768,7 @@ instance Canvas.Canvas TestRender where
   fillText _point _color _text = pure ()
   fillTextMiddle _point _color _text = pure ()
   withClip _rect action = action
+  withGraphTransform _origin _zoom action = action
   measureText string =
     pure
       Canvas.TextMetrics

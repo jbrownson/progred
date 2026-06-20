@@ -40,6 +40,9 @@ foreign export javascript "onPointerUp sync"
 foreign export javascript "onResize sync"
   onResize :: Double -> Double -> IO ()
 
+foreign export javascript "onWheel sync"
+  onWheel :: Double -> Double -> Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
+
 start :: IO ()
 start = Main.main
 
@@ -76,3 +79,6 @@ onPointerUp = Main.onPointerUp
 
 onResize :: Double -> Double -> IO ()
 onResize = Main.onResize
+
+onWheel :: Double -> Double -> Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
+onWheel = Main.onWheel
