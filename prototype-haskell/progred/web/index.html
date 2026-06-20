@@ -47,6 +47,12 @@
         restore() {
           context.restore();
         },
+        translate(x, y) {
+          context.translate(x, y);
+        },
+        scale(x, y) {
+          context.scale(x, y);
+        },
         clipRect(x, y, width, height) {
           context.beginPath();
           context.rect(x, y, width, height);
@@ -201,6 +207,19 @@
         }
         inst.exports.onPointerUp(event.clientX - rect.left, event.clientY - rect.top, ...eventModifiers(event));
       });
+
+      canvas.addEventListener("wheel", event => {
+        event.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        inst.exports.onWheel(
+          event.clientX - rect.left,
+          event.clientY - rect.top,
+          event.deltaX,
+          event.deltaY,
+          event.deltaMode,
+          ...eventModifiers(event),
+        );
+      }, { passive: false });
 
       canvas.addEventListener("keydown", event => {
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "d") {

@@ -9,7 +9,9 @@ module Puri.Platform
   , measureText
   , restore
   , save
+  , scaleCanvas
   , strokeLine
+  , translateCanvas
   , strokeRect
   , TextMetrics (..)
   ) where
@@ -30,6 +32,12 @@ save = undefined
 
 restore :: IO ()
 restore = undefined
+
+translateCanvas :: Double -> Double -> IO ()
+translateCanvas = undefined
+
+scaleCanvas :: Double -> Double -> IO ()
+scaleCanvas = undefined
 
 clipRect :: Double -> Double -> Double -> Double -> IO ()
 clipRect = undefined

@@ -11,7 +11,9 @@ module Puri.Platform
   , measureText
   , restore
   , save
+  , scaleCanvas
   , strokeLine
+  , translateCanvas
   , strokeRect
   , TextMetrics (..)
   ) where
@@ -36,6 +38,12 @@ foreign import javascript unsafe "window.puriCanvas.save()"
 
 foreign import javascript unsafe "window.puriCanvas.restore()"
   restore :: IO ()
+
+foreign import javascript unsafe "window.puriCanvas.translate($1, $2)"
+  translateCanvas :: Double -> Double -> IO ()
+
+foreign import javascript unsafe "window.puriCanvas.scale($1, $2)"
+  scaleCanvas :: Double -> Double -> IO ()
 
 foreign import javascript unsafe "window.puriCanvas.clipRect($1, $2, $3, $4)"
   clipRect :: Double -> Double -> Double -> Double -> IO ()

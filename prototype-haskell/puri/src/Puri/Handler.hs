@@ -5,16 +5,20 @@ module Puri.Handler
   , KeyModifiers (..)
   , PointerEvent (..)
   , PointerHandler
+  , WheelEvent (..)
+  , WheelHandler
   , handleDelete
   , handleInsert
   , handleKey
   , handlePointer
+  , handleWheel
   , hasModifier
   , onDelete
   , onInsert
   , onKey
   , onPointer
   , onPointerCapture
+  , onWheel
   ) where
 
 import Control.Applicative ((<|>))
@@ -45,6 +49,15 @@ data KeyModifiers = KeyModifiers
   , keyMeta :: Bool
   }
 
+data WheelEvent = Wheel
+  { wheelX :: Double
+  , wheelY :: Double
+  , wheelDeltaX :: Double
+  , wheelDeltaY :: Double
+  , wheelDeltaMode :: Word32
+  , wheelModifiers :: KeyModifiers
+  }
+
 data KeyEvent
   = KeyCode KeyModifiers Word32
   | TextInput String
@@ -55,11 +68,14 @@ hasModifier modifiers =
 
 type PointerHandler actionM = PointerEvent -> Maybe (actionM ())
 
+type WheelHandler actionM = WheelEvent -> Maybe (actionM ())
+
 type KeyHandler actionM = KeyEvent -> Maybe (actionM ())
 
 data Handler actionM = Handler
   { pointerCaptureHandler :: PointerHandler actionM
   , pointerHandler :: PointerHandler actionM
+  , wheelHandler :: WheelHandler actionM
   , keyHandler :: KeyHandler actionM
   , deleteHandler :: Maybe (actionM ())
   , insertHandler :: Maybe (actionM ())
@@ -73,13 +89,15 @@ instance Semigroup (Handler actionM) where
     Handler
       { pointerCaptureHandler = firstClaim (pointerCaptureHandler later) (pointerCaptureHandler earlier)
       , pointerHandler = firstClaim (pointerHandler later) (pointerHandler earlier)
+      , wheelHandler = firstClaim (wheelHandler later) (wheelHandler earlier)
       , keyHandler = firstClaim (keyHandler later) (keyHandler earlier)
       , deleteHandler = deleteHandler later <|> deleteHandler earlier
       , insertHandler = insertHandler later <|> insertHandler earlier
       }
 
 instance Monoid (Handler actionM) where
-  mempty = Handler (const Nothing) (const Nothing) (const Nothing) Nothing Nothing
+  mempty =
+    Handler (const Nothing) (const Nothing) (const Nothing) (const Nothing) Nothing Nothing
 
 firstClaim :: (event -> Maybe action) -> (event -> Maybe action) -> event -> Maybe action
 firstClaim first second event =
@@ -92,6 +110,10 @@ onPointer handler =
 onPointerCapture :: PointerHandler actionM -> Handler actionM
 onPointerCapture handler =
   mempty {pointerCaptureHandler = handler}
+
+onWheel :: WheelHandler actionM -> Handler actionM
+onWheel handler =
+  mempty {wheelHandler = handler}
 
 onKey :: KeyHandler actionM -> Handler actionM
 onKey handler =
@@ -112,6 +134,14 @@ handlePointer
   -> actionM ()
 handlePointer event handler =
   fromMaybe (pure ()) (pointerCaptureHandler handler event <|> pointerHandler handler event)
+
+handleWheel
+  :: Applicative actionM
+  => WheelEvent
+  -> Handler actionM
+  -> actionM ()
+handleWheel event handler =
+  fromMaybe (pure ()) (wheelHandler handler event)
 
 handleKey
   :: Applicative actionM

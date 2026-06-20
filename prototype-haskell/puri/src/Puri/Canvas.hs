@@ -8,6 +8,7 @@ module Puri.Canvas
     , strokeLine
     , strokeRect
     , withClip
+    , withGraphTransform
     )
   , TextMetrics (..)
   , getViewport
@@ -26,6 +27,7 @@ class Monad m => Canvas m where
   fillTextMiddle :: Point -> String -> String -> m ()
   strokeLine :: Point -> Point -> String -> Double -> m ()
   withClip :: Rect -> m a -> m a
+  withGraphTransform :: Point -> Double -> m a -> m a
   measureText :: String -> m TextMetrics
 
 data TextMetrics = TextMetrics
@@ -51,6 +53,13 @@ instance Canvas IO where
     Platform.strokeLine x1 y1 x2 y2
   withClip Rect {x, y, width, height} =
     bracket_ (Platform.save *> Platform.clipRect x y width height) Platform.restore
+  withGraphTransform Point {pointX, pointY} zoom =
+    bracket_
+      ( Platform.save
+          *> Platform.translateCanvas pointX pointY
+          *> Platform.scaleCanvas zoom zoom
+      )
+      Platform.restore
   measureText =
     fmap fromPlatformTextMetrics . Platform.measureText
 
