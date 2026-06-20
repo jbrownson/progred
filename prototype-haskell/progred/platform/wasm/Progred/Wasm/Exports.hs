@@ -22,6 +22,12 @@ foreign export javascript "onTextInput sync"
 foreign export javascript "toggleLayoutDebugRects sync"
   toggleLayoutDebugRects :: IO ()
 
+foreign export javascript "toggleGraphView sync"
+  toggleGraphView :: IO ()
+
+foreign export javascript "onAnimationFrame sync"
+  onAnimationFrame :: IO ()
+
 foreign export javascript "onPointerDown sync"
   onPointerDown :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 
@@ -50,6 +56,14 @@ onTextInput =
 toggleLayoutDebugRects :: IO ()
 toggleLayoutDebugRects =
   Main.toggleLayoutDebugRects
+
+toggleGraphView :: IO ()
+toggleGraphView =
+  Main.toggleGraphView
+
+onAnimationFrame :: IO ()
+onAnimationFrame =
+  Main.onAnimationFrame
 
 onPointerDown :: Double -> Double -> Word32 -> Word32 -> Word32 -> Word32 -> IO ()
 onPointerDown = Main.onPointerDown

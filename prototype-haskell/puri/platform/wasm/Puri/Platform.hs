@@ -8,6 +8,7 @@ module Puri.Platform
   , getCanvasHeight
   , getCanvasWidth
   , measureText
+  , strokeLine
   , strokeRect
   , TextMetrics (..)
   ) where
@@ -32,6 +33,9 @@ foreign import javascript unsafe "window.puriCanvas.fillRect($1, $2, $3, $4, $5)
 
 foreign import javascript unsafe "window.puriCanvas.strokeRect($1, $2, $3, $4, $5, $6)"
   jsStrokeRect :: Double -> Double -> Double -> Double -> JSVal -> Double -> IO ()
+
+foreign import javascript unsafe "window.puriCanvas.strokeLine($1, $2, $3, $4, $5, $6)"
+  jsStrokeLine :: Double -> Double -> Double -> Double -> JSVal -> Double -> IO ()
 
 foreign import javascript unsafe "window.puriCanvas.fillText($1, $2, $3, $4)"
   jsFillText :: Double -> Double -> JSVal -> JSVal -> IO ()
@@ -69,6 +73,11 @@ strokeRect :: Double -> Double -> Double -> Double -> String -> Double -> IO ()
 strokeRect x y width height color lineWidth =
   case toJSString color of
     JSString jsString -> jsStrokeRect x y width height jsString lineWidth
+
+strokeLine :: Double -> Double -> Double -> Double -> String -> Double -> IO ()
+strokeLine x1 y1 x2 y2 color lineWidth =
+  case toJSString color of
+    JSString jsString -> jsStrokeLine x1 y1 x2 y2 jsString lineWidth
 
 fillText :: Double -> Double -> String -> String -> IO ()
 fillText x y color string =

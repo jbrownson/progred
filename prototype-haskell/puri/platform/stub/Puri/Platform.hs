@@ -6,6 +6,7 @@ module Puri.Platform
   , getCanvasHeight
   , getCanvasWidth
   , measureText
+  , strokeLine
   , strokeRect
   , TextMetrics (..)
   ) where
@@ -26,6 +27,9 @@ fillRect = undefined
 
 strokeRect :: Double -> Double -> Double -> Double -> String -> Double -> IO ()
 strokeRect = undefined
+
+strokeLine :: Double -> Double -> Double -> Double -> String -> Double -> IO ()
+strokeLine = undefined
 
 fillText :: Double -> Double -> String -> String -> IO ()
 fillText = undefined

@@ -5,6 +5,7 @@ module Puri.Canvas
     , fillText
     , fillTextMiddle
     , measureText
+    , strokeLine
     , strokeRect
     )
   , TextMetrics (..)
@@ -21,6 +22,7 @@ class Monad m => Canvas m where
   strokeRect :: Rect -> String -> Double -> m ()
   fillText :: Point -> String -> String -> m ()
   fillTextMiddle :: Point -> String -> String -> m ()
+  strokeLine :: Point -> Point -> String -> Double -> m ()
   measureText :: String -> m TextMetrics
 
 data TextMetrics = TextMetrics
@@ -42,6 +44,8 @@ instance Canvas IO where
     Platform.fillText pointX pointY
   fillTextMiddle Point {pointX, pointY} =
     Platform.fillTextMiddle pointX pointY
+  strokeLine Point {pointX = x1, pointY = y1} Point {pointX = x2, pointY = y2} =
+    Platform.strokeLine x1 y1 x2 y2
   measureText =
     fmap fromPlatformTextMetrics . Platform.measureText
 

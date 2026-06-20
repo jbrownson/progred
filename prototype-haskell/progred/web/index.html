@@ -50,6 +50,14 @@
           context.lineWidth = lineWidth;
           context.strokeRect(x, y, width, height);
         },
+        strokeLine(x1, y1, x2, y2, color, lineWidth) {
+          context.strokeStyle = color;
+          context.lineWidth = lineWidth;
+          context.beginPath();
+          context.moveTo(x1, y1);
+          context.lineTo(x2, y2);
+          context.stroke();
+        },
         fillText(x, y, color, text) {
           context.fillStyle = color;
           context.font = textFont;
@@ -132,6 +140,16 @@
         inst.exports.toggleLayoutDebugRects();
       }
 
+      function toggleGraphView() {
+        inst.exports.toggleGraphView();
+      }
+
+      function animationFrame() {
+        inst.exports.onAnimationFrame();
+        requestAnimationFrame(animationFrame);
+      }
+      requestAnimationFrame(animationFrame);
+
       function eventModifiers(event) {
         return [
           event.shiftKey ? 1 : 0,
@@ -143,6 +161,7 @@
 
       window.progred = {
         ...(window.progred ?? {}),
+        toggleGraphView,
         toggleLayoutDebugRects,
       };
 
@@ -176,6 +195,12 @@
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "d") {
           event.preventDefault();
           toggleLayoutDebugRects();
+          return;
+        }
+
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "g") {
+          event.preventDefault();
+          toggleGraphView();
           return;
         }
 

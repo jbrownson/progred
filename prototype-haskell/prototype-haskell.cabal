@@ -110,6 +110,7 @@ library progred
     Progred.MapGraph
     Progred.PathTrie
     Progred.Projection
+    Progred.Render.Graph
     Progred.Render.List
     Progred.Render.Raw
     Progred.Widgets.Identicon

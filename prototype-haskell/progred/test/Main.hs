@@ -13,6 +13,7 @@ import Progred.Graph
 import Progred.GraphContext
 import Progred.MapGraph (MapGraph)
 import Progred.Projection
+import Progred.Render.Graph
 import Progred.Render.List
 import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
@@ -35,6 +36,9 @@ main = do
   run "deleteFocusedSpotRoot" propDeleteFocusedSpotClearsDocumentRoot
   run "toggleCollapse" propToggleCollapseTracksPath
   run "graphContext" propGraphContextUsesLibraries
+  run "graphSnapshot" propGraphSnapshotIncludesDocumentStructure
+  run "graphSnapshotFocus" propGraphSnapshotHighlightsFocusedEdgeAndNode
+  run "graphLayout" propGraphLayoutTracksSnapshotNodes
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listProjectionRequiresIsa" propListProjectionRequiresIsa
   run "listItemFocus" propListNodeItemFocusesListElement
@@ -244,6 +248,49 @@ propGraphContextUsesLibraries =
       documentContext (Document (Just (VRef root)) rootGraph) [libraryGraph]
     documentWinsContext =
       documentContext (Document (Just (VRef root)) documentOverrideGraph) [libraryGraph]
+
+propGraphSnapshotIncludesDocumentStructure :: Property
+propGraphSnapshotIncludesDocumentStructure =
+  conjoin
+    [ (GraphUUID rootId `elem` nodeKeys) === True
+    , (GraphUUID rawInsertNode `elem` nodeKeys) === True
+    , any ((== Just "\"existing\"") . graphNodeTitle) (graphSnapshotNodes snapshot) === True
+    , any isChildEdge (graphSnapshotEdges snapshot) === True
+    , any graphNodeRoot (graphSnapshotNodes snapshot) === True
+    ]
+  where
+    snapshot =
+      graphSnapshot (newEditor rawInsertDocument)
+    nodeKeys =
+      graphNodeKey <$> graphSnapshotNodes snapshot
+    isChildEdge edge =
+      graphEdgeSource edge == GraphUUID rootId
+        && graphEdgeLabel edge == rawChildLabel
+        && graphEdgeTarget edge == GraphUUID rawInsertNode
+
+propGraphSnapshotHighlightsFocusedEdgeAndNode :: Property
+propGraphSnapshotHighlightsFocusedEdgeAndNode =
+  conjoin
+    [ graphSnapshotSelectedNode snapshot === Just (GraphSelectedNode (GraphUUID rawInsertNode) GraphSelectionSecondary)
+    , graphSnapshotSelectedEdge snapshot === Just (GraphSelectedEdge (GraphUUID rootId) rawChildLabel GraphSelectionSecondary)
+    ]
+  where
+    snapshot =
+      graphSnapshot (testEditor rawInsertDocument (Just (Focus [rawChildLabel] defaultFocusState)))
+
+propGraphLayoutTracksSnapshotNodes :: Property
+propGraphLayoutTracksSnapshotNodes =
+  conjoin
+    [ graphLayoutNodeCount stepped === length (graphSnapshotNodes snapshot)
+    , graphLayoutNodeCount emptied === 0
+    ]
+  where
+    snapshot =
+      graphSnapshot (newEditor rawInsertDocument)
+    stepped =
+      stepGraphLayout snapshot emptyGraphLayout
+    emptied =
+      stepGraphLayout (GraphSnapshot [] [] Nothing Nothing) stepped
 
 propPointerCapturePrecedesNormalPointer :: Property
 propPointerCapturePrecedesNormalPointer =
@@ -550,6 +597,7 @@ instance Canvas.Canvas TestRender where
   clearCanvas _viewport = pure ()
   fillRect _rect _color = pure ()
   strokeRect _rect _color _lineWidth = pure ()
+  strokeLine _start _end _color _lineWidth = pure ()
   fillText _point _color _text = pure ()
   fillTextMiddle _point _color _text = pure ()
   measureText string =

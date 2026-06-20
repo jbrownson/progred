@@ -1,21 +1,25 @@
 module Main
   ( main
+  , onAnimationFrame
   , onKeyDown
   , onPointerDown
   , onPointerMove
   , onPointerUp
   , onResize
   , onTextInput
+  , toggleGraphView
   , toggleLayoutDebugRects
   ) where
 
+import Control.Monad (when)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Word (Word32)
 import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
-import Progred.App
+import Progred.App hiding (toggleGraphView)
+import qualified Progred.App as App
 import System.IO.Unsafe (unsafePerformIO)
 
 data Runtime = Runtime
@@ -102,6 +106,17 @@ isInsertKey event =
 toggleLayoutDebugRects :: IO ()
 toggleLayoutDebugRects =
   dispatchRuntime (\_handler -> toggleDebugLayoutRects)
+
+toggleGraphView :: IO ()
+toggleGraphView =
+  dispatchRuntime (\_handler -> App.toggleGraphView)
+
+onAnimationFrame :: IO ()
+onAnimationFrame = do
+  Runtime {runtimeModel = model, runtimeHandler = handler} <- readIORef runtime
+  let (changed, updated) = runAppM stepGraphLayoutFrame model
+  writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
+  when changed renderState
 
 dispatchRuntime :: (Handler AppM -> AppM ()) -> IO ()
 dispatchRuntime action = do

@@ -3,7 +3,9 @@ module Progred.App
   , Model
   , initialModel
   , runAppM
+  , stepGraphLayoutFrame
   , toggleDebugLayoutRects
+  , toggleGraphView
   , view
   ) where
 
@@ -17,6 +19,7 @@ import Progred.Document
 import Progred.Editor
 import Progred.Graph
 import Progred.Projection
+import qualified Progred.Render.Graph as GraphView
 import Progred.Render.List
 import Progred.Render.Raw
 import qualified Puri.Canvas as Canvas
@@ -28,6 +31,8 @@ import System.Random (mkStdGen, randoms)
 data Model = Model
   { modelEditor :: Editor
   , modelDebugLayoutRects :: Bool
+  , modelShowGraph :: Bool
+  , modelGraphLayout :: GraphView.GraphLayout
   , modelFreshUUIDs :: [UUID]
   }
 
@@ -42,6 +47,8 @@ initialModel =
     { modelEditor =
         newEditor sampleDocument
     , modelDebugLayoutRects = False
+    , modelShowGraph = False
+    , modelGraphLayout = GraphView.emptyGraphLayout
     , modelFreshUUIDs = seededUUIDs 20260615
     }
 
@@ -54,24 +61,61 @@ toggleDebugLayoutRects =
           }
     )
 
+toggleGraphView :: AppM ()
+toggleGraphView =
+  modify
+    ( \model ->
+        model
+          { modelShowGraph = not (modelShowGraph model)
+          }
+    )
+
+stepGraphLayoutFrame :: AppM Bool
+stepGraphLayoutFrame =
+  state $ \model ->
+    if modelShowGraph model
+      then
+        let snapshot = GraphView.graphSnapshot (modelEditor model)
+            layout = GraphView.stepGraphLayout snapshot (modelGraphLayout model)
+         in (True, model {modelGraphLayout = layout})
+      else (False, model)
+
 view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
   Canvas.fillRect viewportRect "#fbfbfa"
-  measured <- measureHalay documentLayout
+  measured <- measureHalay appLayout
   placeMeasured measured viewportRect
   where
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
     editor = modelEditor model
-    documentLayout =
+    appLayout =
       withLayoutDebug (modelDebugLayoutRects model) $
         decorate appHandler $
+          workspaceLayout
+    workspaceLayout =
+      if modelShowGraph model
+        then
           box
             defaultBox
-              { boxDirection = TopToBottom
-              , boxPadding = Insets 12 12 12 12
+              { boxDirection = LeftToRight
               , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
               }
-            [projectEditor (focusedProjection (listProjection `over` rawProjection)) editor editEditor freshUUID]
+            [ sized (Sizing (Percent 0.6) (Fill unbounded)) documentLayout
+            , sized (Sizing (Percent 0.4) (Fill unbounded)) graphLayout
+            ]
+        else documentLayout
+    documentLayout =
+      box
+        defaultBox
+          { boxDirection = TopToBottom
+          , boxPadding = Insets 12 12 12 12
+          , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
+          }
+        [projectEditor (focusedProjection (listProjection `over` rawProjection)) editor editEditor freshUUID]
+    graphLayout =
+      GraphView.graphPanel
+        (GraphView.graphSnapshot editor)
+        (modelGraphLayout model)
     editEditor change =
       modify
         ( \current ->

@@ -1,5 +1,6 @@
 #[cfg(debug_assertions)]
 const TOGGLE_DEVTOOLS: &str = "toggle-devtools";
+const TOGGLE_GRAPH_VIEW: &str = "toggle-graph-view";
 const TOGGLE_LAYOUT_DEBUG_RECTS: &str = "toggle-layout-debug-rects";
 
 use tauri::menu::CheckMenuItemBuilder;
@@ -18,7 +19,14 @@ fn main() {
                 .accelerator("CmdOrCtrl+Shift+D")
                 .build(app)?;
 
-        let view = SubmenuBuilder::new(app, "View").item(&toggle_layout_debug_rects);
+        let toggle_graph_view = CheckMenuItemBuilder::with_id(TOGGLE_GRAPH_VIEW, "Graph")
+            .checked(false)
+            .accelerator("CmdOrCtrl+Shift+G")
+            .build(app)?;
+
+        let view = SubmenuBuilder::new(app, "View")
+            .item(&toggle_graph_view)
+            .item(&toggle_layout_debug_rects);
 
         #[cfg(debug_assertions)]
         let view = {
@@ -41,6 +49,12 @@ fn main() {
         if event.id() == TOGGLE_LAYOUT_DEBUG_RECTS {
             if let Some(webview) = app.get_webview_window("main") {
                 let _ = webview.eval("window.progred?.toggleLayoutDebugRects?.();");
+            }
+        }
+
+        if event.id() == TOGGLE_GRAPH_VIEW {
+            if let Some(webview) = app.get_webview_window("main") {
+                let _ = webview.eval("window.progred?.toggleGraphView?.();");
             }
         }
 
