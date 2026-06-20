@@ -31,12 +31,12 @@ module Progred.Render.Graph
   ) where
 
 import Control.Applicative ((<|>))
-import Control.Monad (guard)
-import Data.Maybe (catMaybes)
+import Control.Monad (guard, msum)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Bits ((.&.), shiftR, xor)
 import Data.Char (ord)
 import Data.Functor ((<&>))
-import Data.List (sortOn)
+import Data.List (find, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -108,6 +108,7 @@ data GraphSnapshot = GraphSnapshot
 data GraphLayout = GraphLayout
   { graphLayoutPositions :: Map GraphNodeKey Point
   , graphLayoutVelocities :: Map GraphNodeKey Point
+  , graphLayoutSpotTargets :: Map String GraphNodeKey
   }
   deriving (Eq, Show)
 
@@ -168,6 +169,7 @@ emptyGraphLayout =
   GraphLayout
     { graphLayoutPositions = Map.empty
     , graphLayoutVelocities = Map.empty
+    , graphLayoutSpotTargets = Map.empty
     }
 
 graphLayoutNodeCount :: GraphLayout -> Int
@@ -232,7 +234,12 @@ documentGraphSnapshot document focus graphSelection =
         Just (GraphSelectNode _) -> Nothing
 
     collectSource (nodeMap, edgeList) (source, sourceEdges) =
-      foldl (collectEdge source) (nodeMap, edgeList) (Map.toList sourceEdges)
+      foldl
+        (collectEdge source)
+        ( Map.insertWith mergeNode (GraphUUID source) (uuidNode graph source False) nodeMap
+        , edgeList
+        )
+        (Map.toList sourceEdges)
 
     collectEdge source (nodeMap, edgeList) (label, value) =
       ( Map.insertWith mergeNode targetKey (nodeForValue graph targetKey value False) nodeMap
@@ -300,17 +307,28 @@ rootValueKey :: Value -> GraphNodeKey
 rootValueKey value =
   case value of
     VRef node -> GraphUUID node
-    _ -> GraphScalar "root"
+    _ -> GraphScalar (scalarValueKey value)
 
 edgeValueKey :: UUID -> UUID -> Value -> GraphNodeKey
-edgeValueKey source label value =
+edgeValueKey _source _label value =
   case value of
     VRef node -> GraphUUID node
-    _ -> GraphScalar (edgeScalarKey source label)
+    _ -> GraphScalar (scalarValueKey value)
 
-edgeScalarKey :: UUID -> UUID -> String
-edgeScalarKey source label =
+layoutRootSpot :: String
+layoutRootSpot = "root"
+
+layoutSpotKey :: UUID -> UUID -> String
+layoutSpotKey source label =
   UUID.toString source <> "/" <> UUID.toString label
+
+scalarValueKey :: Value -> String
+scalarValueKey value =
+  case value of
+    VString string -> "str:" <> string
+    VInt integer -> "int:" <> show integer
+    VFloat double -> "float:" <> show double
+    VRef node -> "ref:" <> UUID.toString node
 
 valueTitle :: Value -> String
 valueTitle value =
@@ -321,8 +339,9 @@ valueTitle value =
     VFloat double -> show double
 
 focusedNodeKey :: Document -> GraphContext -> Maybe Focus -> Maybe GraphNodeKey
-focusedNodeKey document context focus = do
-  Focus {focusPath} <- focus
+focusedNodeKey document context mFocus = do
+  focus <- mFocus
+  let Focus {focusPath} = focus
   case resolvePath context focusPath of
     Just (VRef node) -> Just (GraphUUID node)
     Just value
@@ -358,34 +377,64 @@ secondarySelectionUUID editor graphSelection =
 
 stepGraphLayout :: GraphSnapshot -> GraphLayout -> GraphLayout
 stepGraphLayout snapshot layout =
-  integrateForces snapshot synced
-  where
-    synced = syncGraphLayout snapshot layout
+  integrateForces snapshot (syncGraphLayout snapshot layout)
 
 syncGraphLayout :: GraphSnapshot -> GraphLayout -> GraphLayout
 syncGraphLayout snapshot layout =
   GraphLayout
     { graphLayoutPositions = positions
     , graphLayoutVelocities = velocities
+    , graphLayoutSpotTargets = spotTargets
     }
   where
     nodes = graphSnapshotNodes snapshot
     keys = graphNodeKey <$> nodes
     keySet = Set.fromList keys
+    spotTargets = graphSnapshotSpotTargets snapshot
     existingPositions = Map.filterWithKey (\key _ -> Set.member key keySet) (graphLayoutPositions layout)
     existingVelocities = Map.filterWithKey (\key _ -> Set.member key keySet) (graphLayoutVelocities layout)
     (positions, velocities) =
-      foldl ensureNode (existingPositions, existingVelocities) (zip [0 :: Int ..] nodes)
-    ensureNode (positionMap, velocityMap) (index, node) =
-      ( Map.insertWith (\_ old -> old) key initialPosition positionMap
+      foldl (ensureNode spotTargets) (existingPositions, existingVelocities) (zip [0 :: Int ..] nodes)
+    ensureNode currentSpotTargets (positionMap, velocityMap) (index, node) =
+      ( Map.insertWith (\_ old -> old) key position positionMap
       , Map.insertWith (\_ old -> old) key (Point 0 0) velocityMap
       )
       where
         key = graphNodeKey node
-        initialPosition =
-          if Map.null positionMap && index == 0
+        position =
+          case Map.lookup key positionMap of
+            Just existing -> existing
+            Nothing ->
+              fromMaybe (initialPosition index) (continuityPosition key currentSpotTargets)
+        initialPosition idx =
+          if Map.null positionMap && idx == 0
             then Point 0 0
-            else deterministicPosition key index
+            else deterministicPosition key idx
+        continuityPosition nodeKey spots =
+          Map.lookup nodeKey (graphLayoutPositions layout)
+            <|> msum
+              [ Map.lookup oldKey (graphLayoutPositions layout)
+              | (spot, newKey) <- Map.toList spots
+              , newKey == nodeKey
+              , Just oldKey <- [Map.lookup spot (graphLayoutSpotTargets layout)]
+              , oldKey /= nodeKey
+              ]
+
+graphSnapshotSpotTargets :: GraphSnapshot -> Map String GraphNodeKey
+graphSnapshotSpotTargets snapshot =
+  Map.unions
+    [ rootSpot
+    , Map.fromList
+        [ (layoutSpotKey source (graphEdgeLabel edge), graphEdgeTarget edge)
+        | edge <- graphSnapshotEdges snapshot
+        , GraphUUID source <- [graphEdgeSource edge]
+        ]
+    ]
+  where
+    rootSpot =
+      case find graphNodeRoot (graphSnapshotNodes snapshot) of
+        Just node -> Map.singleton layoutRootSpot (graphNodeKey node)
+        Nothing -> Map.empty
 
 integrateForces :: GraphSnapshot -> GraphLayout -> GraphLayout
 integrateForces snapshot layout =

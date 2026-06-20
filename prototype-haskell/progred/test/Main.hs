@@ -6,6 +6,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.UUID.Types as UUID
 import Control.Monad.Trans.State.Strict (State, execState, modify, put)
 import Data.List (find)
+import Data.Maybe (isJust)
 import Halay
 import Progred.Builtins
 import Progred.Document
@@ -38,12 +39,17 @@ main = do
   run "toggleCollapse" propToggleCollapseTracksPath
   run "graphContext" propGraphContextUsesLibraries
   run "graphSnapshot" propGraphSnapshotIncludesDocumentStructure
+  run "graphSnapshotDedup" propGraphSnapshotMergesDuplicateValues
+  run "graphSnapshotDedupEdit" propGraphSnapshotDedupWhileEditingMatchingString
+  run "graphSnapshotOrphans" propGraphSnapshotIncludesOrphanNodes
   run "graphSnapshotFocus" propGraphSnapshotHighlightsFocusedEdgeAndNode
   run "graphSnapshotSelection" propGraphSnapshotHighlightsGraphSelection
   run "graphPanelSelect" propGraphPanelClickSelectsNode
   run "graphPanelSelectEdge" propGraphPanelClickSelectsEdge
   run "graphPanelClear" propGraphPanelClickClearsSelection
   run "graphLayout" propGraphLayoutTracksSnapshotNodes
+  run "graphLayoutEdit" propGraphLayoutStableWhileEditingString
+  run "graphLayoutBlur" propGraphLayoutContinuesAfterBlurString
   run "graphPanelDrag" propGraphPanelDragStartsAndMovesNode
   run "graphPanelPan" propGraphPanelPanMovesViewport
   run "graphPanelWheelZoom" propGraphPanelWheelZoomsViewport
@@ -277,6 +283,78 @@ propGraphSnapshotIncludesDocumentStructure =
         && graphEdgeLabel edge == rawChildLabel
         && graphEdgeTarget edge == GraphUUID rawInsertNode
 
+sharedStringLabel :: UUID
+sharedStringLabel = UUID.fromWords 815 0 0 1
+
+sharedStringDocument :: Document
+sharedStringDocument =
+  testDocument sharedStringGraph
+
+sharedStringGraph :: MapGraph
+sharedStringGraph =
+  Map.fromList
+    [ ( rootId
+      , Map.fromList
+          [ (rawStringLabel, VString "shared")
+          , (sharedStringLabel, VString "shared")
+          ]
+      )
+    ]
+
+propGraphSnapshotMergesDuplicateValues :: Property
+propGraphSnapshotMergesDuplicateValues =
+  conjoin
+    [ length scalarNodes === 1
+    , length refNodes === 1
+    , length sharedRefEdges === 2
+    ]
+  where
+    sharedSnapshot =
+      graphSnapshot (newEditor sharedStringDocument) Nothing
+    scalarNodes =
+      [ node
+      | node <- graphSnapshotNodes sharedSnapshot
+      , case graphNodeKey node of
+          GraphScalar _ -> True
+          _ -> False
+      ]
+    refDocument =
+      testDocument
+        ( Map.insert rootId (Map.fromList [(rawChildLabel, VRef rawInsertNode), (sharedStringLabel, VRef rawInsertNode)]) rawInsertGraph
+        )
+    refSnapshot =
+      graphSnapshot (newEditor refDocument) Nothing
+    refNodes =
+      [ node
+      | node <- graphSnapshotNodes refSnapshot
+      , graphNodeKey node == GraphUUID rawInsertNode
+      ]
+    sharedRefEdges =
+      [ edge
+      | edge <- graphSnapshotEdges refSnapshot
+      , graphEdgeTarget edge == GraphUUID rawInsertNode
+      ]
+
+orphanNode :: UUID
+orphanNode = UUID.fromWords 816 0 0 1
+
+orphanDocument :: Document
+orphanDocument =
+  testDocument orphanGraph
+
+orphanGraph :: MapGraph
+orphanGraph =
+  Map.insert orphanNode (Map.fromList [(nameLabel, VString "orphan")]) rawInsertGraph
+
+propGraphSnapshotIncludesOrphanNodes :: Property
+propGraphSnapshotIncludesOrphanNodes =
+  (GraphUUID orphanNode `elem` nodeKeys) === True
+  where
+    snapshot =
+      graphSnapshot (newEditor orphanDocument) Nothing
+    nodeKeys =
+      graphNodeKey <$> graphSnapshotNodes snapshot
+
 propGraphSnapshotHighlightsFocusedEdgeAndNode :: Property
 propGraphSnapshotHighlightsFocusedEdgeAndNode =
   conjoin
@@ -312,6 +390,102 @@ propGraphLayoutTracksSnapshotNodes =
       stepGraphLayout snapshot emptyGraphLayout
     emptied =
       stepGraphLayout (GraphSnapshot [] [] Nothing Nothing) stepped
+
+stringEditingGraph :: String -> MapGraph
+stringEditingGraph string =
+  Map.adjust (Map.insert rawStringLabel (VString string)) rootId rawInsertGraph
+
+stringEditingEditor :: String -> Editor
+stringEditingEditor string =
+  testEditor
+    (testDocument (stringEditingGraph string))
+    (Just (Focus [rawStringLabel] defaultFocusState))
+
+stringEdgeTarget :: GraphSnapshot -> GraphNodeKey
+stringEdgeTarget snapshot =
+  graphEdgeTarget $
+    head
+      [ edge
+      | edge <- graphSnapshotEdges snapshot
+      , graphEdgeLabel edge == rawStringLabel
+      ]
+
+settleLayout :: GraphSnapshot -> GraphLayout -> GraphLayout
+settleLayout snapshot =
+  last . take 24 . iterate (stepGraphLayout snapshot)
+
+pointClose :: Maybe Point -> Maybe Point -> Bool
+pointClose (Just (Point x0 y0)) (Just (Point x1 y1)) =
+  let dx = x1 - x0
+      dy = y1 - y0
+   in dx * dx + dy * dy < 150 * 150
+pointClose _ _ = False
+
+propGraphLayoutStableWhileEditingString :: Property
+propGraphLayoutStableWhileEditingString =
+  conjoin
+    [ isJust initialPosition === True
+    , isJust steppedPosition === True
+    , pointClose initialPosition steppedPosition === True
+    ]
+  where
+    strings = ["e", "ex"]
+    snapshots =
+      [ graphSnapshot (stringEditingEditor string) Nothing
+      | string <- strings
+      ]
+    initialLayout =
+      stepGraphLayout (head snapshots) emptyGraphLayout
+    steppedLayout =
+      stepGraphLayout (last snapshots) initialLayout
+    initialPosition =
+      graphLayoutPosition (stringEdgeTarget (head snapshots)) initialLayout
+    steppedPosition =
+      graphLayoutPosition (stringEdgeTarget (last snapshots)) steppedLayout
+
+propGraphSnapshotDedupWhileEditingMatchingString :: Property
+propGraphSnapshotDedupWhileEditingMatchingString =
+  length scalarNodes === 1
+  where
+    snapshot =
+      graphSnapshot
+        ( testEditor
+            (testDocument sharedStringGraph)
+            (Just (Focus [rawStringLabel] defaultFocusState))
+        )
+        Nothing
+    scalarNodes =
+      [ node
+      | node <- graphSnapshotNodes snapshot
+      , case graphNodeKey node of
+          GraphScalar _ -> True
+          _ -> False
+      ]
+
+propGraphLayoutContinuesAfterBlurString :: Property
+propGraphLayoutContinuesAfterBlurString =
+  pointClose focusedPositionBeforeBlur blurredPosition === True
+  where
+    graph =
+      stringEditingGraph "existing"
+    focusedSnapshot =
+      graphSnapshot
+        (testEditor (testDocument graph) (Just (Focus [rawStringLabel] defaultFocusState)))
+        Nothing
+    blurredSnapshot =
+      graphSnapshot (testEditor (testDocument graph) Nothing) Nothing
+    layoutWhileFocused =
+      settleLayout focusedSnapshot (stepGraphLayout focusedSnapshot emptyGraphLayout)
+    focusedKey =
+      stringEdgeTarget focusedSnapshot
+    focusedPositionBeforeBlur =
+      graphLayoutPosition focusedKey layoutWhileFocused
+    layoutAfterBlur =
+      stepGraphLayout blurredSnapshot layoutWhileFocused
+    blurredKey =
+      stringEdgeTarget blurredSnapshot
+    blurredPosition =
+      graphLayoutPosition blurredKey layoutAfterBlur
 
 propGraphPanelDragStartsAndMovesNode :: Property
 propGraphPanelDragStartsAndMovesNode =
