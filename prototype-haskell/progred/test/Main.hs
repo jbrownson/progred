@@ -56,6 +56,8 @@ main = do
   run "graphPanelWheelZoom" propGraphPanelWheelZoomsViewport
   run "graphPanelWheelPan" propGraphPanelWheelPansTrackpad
   run "treeSecondaryEdge" propTreeSecondaryHighlightEdge
+  run "treeSecondaryString" propTreeSecondaryHighlightString
+  run "treeSecondarySharedString" propTreeSecondaryHighlightSharedString
   run "clearActiveSelection" propClearActiveSelectionClearsGraph
   run "treeFocusSelection" propTreeFocusReplacesGraphSelection
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
@@ -605,6 +607,16 @@ propTreeSecondaryHighlightEdge :: Property
 propTreeSecondaryHighlightEdge =
   treeSecondaryHighlight (newEditor rawInsertDocument) (Just (GraphSelectEdge (GraphUUID rootId) rawChildLabel))
     === Just (SecondarySpot [rawChildLabel])
+
+propTreeSecondaryHighlightString :: Property
+propTreeSecondaryHighlightString =
+  treeSecondaryHighlight (newEditor rawInsertDocument) (Just (GraphSelectNode (GraphScalar (StringKey "existing"))))
+    === Just (SecondaryScalar (StringKey "existing"))
+
+propTreeSecondaryHighlightSharedString :: Property
+propTreeSecondaryHighlightSharedString =
+  treeSecondaryHighlight (newEditor sharedStringDocument) (Just (GraphSelectNode (GraphScalar (StringKey "shared"))))
+    === Just (SecondaryScalar (StringKey "shared"))
 
 propClearActiveSelectionClearsGraph :: Property
 propClearActiveSelectionClearsGraph =

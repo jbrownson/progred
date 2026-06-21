@@ -57,6 +57,13 @@ secondaryCursor env cursor child =
             Nothing -> False
         SecondarySpot path ->
           cursorPath spot == path
+        SecondaryScalar key ->
+          case resolveCursor spotEnv spot of
+            Just resolved ->
+              case resolvedValue resolved of
+                VRef _ -> False
+                value -> valueHasScalarKey value key
+            Nothing -> False
     spotHasPrimaryFocus spot =
       case cursorFocus spot of
         Just focus -> null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing

@@ -50,6 +50,7 @@ over partial total env cursor =
 data SecondaryHighlight
   = SecondaryNode UUID
   | SecondarySpot [UUID]
+  | SecondaryScalar ScalarKey
   deriving (Eq, Show)
 
 data Env actionM renderM = Env

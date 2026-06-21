@@ -56,7 +56,7 @@ import Puri.Handler
 data GraphNodeKey
   = GraphRoot
   | GraphUUID UUID
-  | GraphScalar String
+  | GraphScalar ScalarKey
   deriving (Eq, Ord, Show)
 
 data GraphNode = GraphNode
@@ -305,16 +305,20 @@ uuidName graph node = do
     _ -> Nothing
 
 rootValueKey :: Value -> GraphNodeKey
-rootValueKey value =
-  case value of
-    VRef node -> GraphUUID node
-    _ -> GraphScalar (scalarValueKey value)
+rootValueKey = valueGraphNodeKey
 
 edgeValueKey :: UUID -> UUID -> Value -> GraphNodeKey
-edgeValueKey _source _label value =
+edgeValueKey _source _label = valueGraphNodeKey
+
+valueGraphNodeKey :: Value -> GraphNodeKey
+valueGraphNodeKey value =
   case value of
     VRef node -> GraphUUID node
-    _ -> GraphScalar (scalarValueKey value)
+    _ ->
+      GraphScalar $
+        case scalarKey value of
+          Just key -> key
+          Nothing -> error "valueGraphNodeKey: ref should use GraphUUID"
 
 layoutRootSpot :: String
 layoutRootSpot = "root"
@@ -322,14 +326,6 @@ layoutRootSpot = "root"
 layoutSpotKey :: UUID -> UUID -> String
 layoutSpotKey source label =
   UUID.toString source <> "/" <> UUID.toString label
-
-scalarValueKey :: Value -> String
-scalarValueKey value =
-  case value of
-    VString string -> "str:" <> string
-    VInt integer -> "int:" <> show integer
-    VFloat double -> "float:" <> show double
-    VRef node -> "ref:" <> UUID.toString node
 
 valueTitle :: Value -> String
 valueTitle value =
@@ -375,15 +371,15 @@ secondaryForNode context key =
     GraphRoot -> Just (SecondarySpot [])
     GraphUUID uuid -> Just (SecondaryNode uuid)
     GraphScalar scalarKey ->
-      SecondarySpot <$> firstPathMatching context ((== scalarKey) . scalarValueKey)
+      Just (SecondaryScalar scalarKey)
 
 pathToNodeKey :: GraphContext -> GraphNodeKey -> Maybe [UUID]
 pathToNodeKey context key =
   case key of
     GraphRoot -> Just []
     GraphUUID node -> shortestPathToRef context node
-    GraphScalar scalarKey ->
-      firstPathMatching context ((== scalarKey) . scalarValueKey)
+    GraphScalar key ->
+      firstPathMatching context (`valueHasScalarKey` key)
 
 focusedHighlight :: Document -> GraphContext -> Editor -> Maybe SecondaryHighlight
 focusedHighlight document context editor = do
