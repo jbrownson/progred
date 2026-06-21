@@ -362,20 +362,20 @@ treeSecondaryHighlight editor graphSelection =
         Nothing -> focusedHighlight document context editor
 
 secondaryForNode :: GraphContext -> GraphNodeKey -> Maybe SecondaryHighlight
-secondaryForNode context key =
+secondaryForNode _ key =
   case key of
     GraphRoot -> Just (SecondarySpot [])
     GraphUUID uuid -> Just (SecondaryNode uuid)
-    GraphScalar scalarKey ->
-      Just (SecondaryScalar scalarKey)
+    GraphScalar sk ->
+      Just (SecondaryScalar sk)
 
 pathToNodeKey :: GraphContext -> GraphNodeKey -> Maybe [UUID]
-pathToNodeKey context key =
-  case key of
+pathToNodeKey context nodeKey =
+  case nodeKey of
     GraphRoot -> Just []
     GraphUUID node -> shortestPathToRef context node
-    GraphScalar key ->
-      firstPathMatching context (`valueHasScalarKey` key)
+    GraphScalar sk ->
+      firstPathMatching context (`valueHasScalarKey` sk)
 
 focusedHighlight :: Document -> GraphContext -> Editor -> Maybe SecondaryHighlight
 focusedHighlight document context editor = do
