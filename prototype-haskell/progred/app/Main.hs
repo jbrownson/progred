@@ -131,14 +131,14 @@ toggleGraphView =
 onAnimationFrame :: IO ()
 onAnimationFrame = do
   Runtime {runtimeModel = model, runtimeHandler = handler} <- readIORef runtime
-  let (changed, updated) = runAppM stepGraphLayoutFrame model
+  (changed, updated) <- runAppM stepGraphLayoutFrame model
   writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
   when changed renderState
 
 dispatchRuntime :: (Handler AppM -> AppM ()) -> IO ()
 dispatchRuntime action = do
   Runtime {runtimeModel = model, runtimeHandler = handler} <- readIORef runtime
-  let (_, updated) = runAppM (action handler) model
+  (_, updated) <- runAppM (action handler) model
   writeIORef runtime Runtime {runtimeModel = updated, runtimeHandler = handler}
   renderState
 

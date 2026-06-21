@@ -12,10 +12,9 @@ module Progred.App
   , view
   ) where
 
-import Control.Monad.Trans.State.Strict (State, modify, runState, state)
+import Control.Monad.Trans.State.Strict (StateT, modify, runStateT, state)
+import Progred.FreshUUID (MonadFreshUUID (..), seededUUIDs)
 import qualified Data.Map.Strict as Map
-import Data.Word (Word32)
-import qualified Data.UUID.Types as UUID
 import Halay
 import Progred.Builtins
 import Progred.Document
@@ -29,7 +28,7 @@ import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
-import System.Random (mkStdGen, randoms)
+
 
 data ActiveSelection
   = ActiveDocument Focus
@@ -49,13 +48,12 @@ data Model = Model
   , modelGraphEdgePress :: Maybe GraphView.GraphEdge
   , modelGraphPointerOrigin :: Maybe Point
   , modelGraphPointerMoved :: Bool
-  , modelFreshUUIDs :: [UUID]
   }
 
-type AppM = State Model
+type AppM = StateT Model IO
 
-runAppM :: AppM a -> Model -> (a, Model)
-runAppM = runState
+runAppM :: AppM a -> Model -> IO (a, Model)
+runAppM = runStateT
 
 initialModel :: Model
 initialModel =
@@ -72,7 +70,6 @@ initialModel =
     , modelGraphEdgePress = Nothing
     , modelGraphPointerOrigin = Nothing
     , modelGraphPointerMoved = False
-    , modelFreshUUIDs = seededUUIDs 20260615
     }
 
 toggleDebugLayoutRects :: AppM ()
@@ -155,7 +152,7 @@ view viewport model = do
             (focusedProjection (listProjection `over` rawProjection))
             editor
             editEditor
-            freshUUID
+            freshCell
             (GraphView.treeSecondaryHighlight editor (activeGraphSelection (modelActiveSelection model)))
         ]
     graphLayout =
@@ -183,6 +180,8 @@ view viewport model = do
           , GraphView.graphPanelInteractionMove = moveGraphInteraction
           , GraphView.graphPanelSetSelection = setGraphSelection
           }
+    freshCell :: AppM UUID
+    freshCell = freshUUID
     editEditor change =
       modify
         ( \current ->
@@ -194,11 +193,6 @@ view viewport model = do
                     (modelActiveSelection current)
              in applyActiveSelection selection (current {modelEditor = after})
         )
-    freshUUID =
-      state $ \current ->
-        case modelFreshUUIDs current of
-          fresh : rest -> (fresh, current {modelFreshUUIDs = rest})
-          [] -> error "fresh UUID supply unexpectedly exhausted"
     startGraphDrag drag =
       modify $ \current ->
         current
@@ -409,11 +403,3 @@ sampleDocument =
     node = Map.fromList
     cons element rest =
       node [(isaLabel, VRef listConsNode), (headLabel, element), (tailLabel, rest)]
-
-seededUUIDs :: Int -> [UUID]
-seededUUIDs seed = wordsToUUIDs (randoms (mkStdGen seed))
-
-wordsToUUIDs :: [Word32] -> [UUID]
-wordsToUUIDs (word0 : word1 : word2 : word3 : rest) =
-  UUID.fromWords word0 word1 word2 word3 : wordsToUUIDs rest
-wordsToUUIDs _ = []

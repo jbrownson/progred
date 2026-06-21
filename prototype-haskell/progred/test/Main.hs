@@ -620,18 +620,19 @@ propTreeSecondaryHighlightSharedString =
 
 propClearActiveSelectionClearsGraph :: Property
 propClearActiveSelectionClearsGraph =
-  conjoin
-    [ modelActiveSelection cleared === ActiveNone
-    , editorFocus (modelEditor cleared) === Nothing
-    ]
-  where
-    graphSelected =
-      initialModel
-        { modelActiveSelection = ActiveGraph (GraphSelectNode (GraphUUID rawInsertNode))
-        , modelEditor =
-            setFocus (Just (Focus [rawChildLabel] defaultFocusState)) (newEditor rawInsertDocument)
-        }
-    (_, cleared) = runAppM clearActiveSelection graphSelected
+  ioProperty $ do
+    let graphSelected =
+          initialModel
+            { modelActiveSelection = ActiveGraph (GraphSelectNode (GraphUUID rawInsertNode))
+            , modelEditor =
+                setFocus (Just (Focus [rawChildLabel] defaultFocusState)) (newEditor rawInsertDocument)
+            }
+    (_, cleared) <- runAppM clearActiveSelection graphSelected
+    return $
+      conjoin
+        [ modelActiveSelection cleared === ActiveNone
+        , editorFocus (modelEditor cleared) === Nothing
+        ]
 
 propTreeFocusReplacesGraphSelection :: Property
 propTreeFocusReplacesGraphSelection =

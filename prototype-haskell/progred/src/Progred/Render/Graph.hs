@@ -59,6 +59,11 @@ data GraphNodeKey
   | GraphScalar ScalarKey
   deriving (Eq, Ord, Show)
 
+data LayoutSpot
+  = LayoutRootSpot
+  | LayoutEdgeSpot UUID UUID
+  deriving (Eq, Ord, Show)
+
 data GraphNode = GraphNode
   { graphNodeKey :: GraphNodeKey
   , graphNodeUUID :: Maybe UUID
@@ -109,7 +114,7 @@ data GraphSnapshot = GraphSnapshot
 data GraphLayout = GraphLayout
   { graphLayoutPositions :: Map GraphNodeKey Point
   , graphLayoutVelocities :: Map GraphNodeKey Point
-  , graphLayoutSpotTargets :: Map String GraphNodeKey
+  , graphLayoutSpotTargets :: Map LayoutSpot GraphNodeKey
   }
   deriving (Eq, Show)
 
@@ -314,18 +319,9 @@ valueGraphNodeKey :: Value -> GraphNodeKey
 valueGraphNodeKey value =
   case value of
     VRef node -> GraphUUID node
-    _ ->
-      GraphScalar $
-        case scalarKey value of
-          Just key -> key
-          Nothing -> error "valueGraphNodeKey: ref should use GraphUUID"
-
-layoutRootSpot :: String
-layoutRootSpot = "root"
-
-layoutSpotKey :: UUID -> UUID -> String
-layoutSpotKey source label =
-  UUID.toString source <> "/" <> UUID.toString label
+    VString string -> GraphScalar (StringKey string)
+    VInt integer -> GraphScalar (IntKey integer)
+    VFloat double -> GraphScalar (FloatKey double)
 
 valueTitle :: Value -> String
 valueTitle value =
@@ -432,12 +428,12 @@ syncGraphLayout snapshot layout =
               , oldKey /= nodeKey
               ]
 
-graphSnapshotSpotTargets :: GraphSnapshot -> Map String GraphNodeKey
+graphSnapshotSpotTargets :: GraphSnapshot -> Map LayoutSpot GraphNodeKey
 graphSnapshotSpotTargets snapshot =
   Map.unions
     [ rootSpot
     , Map.fromList
-        [ (layoutSpotKey source (graphEdgeLabel edge), graphEdgeTarget edge)
+        [ (LayoutEdgeSpot source (graphEdgeLabel edge), graphEdgeTarget edge)
         | edge <- graphSnapshotEdges snapshot
         , GraphUUID source <- [graphEdgeSource edge]
         ]
@@ -445,7 +441,7 @@ graphSnapshotSpotTargets snapshot =
   where
     rootSpot =
       case find graphNodeRoot (graphSnapshotNodes snapshot) of
-        Just node -> Map.singleton layoutRootSpot (graphNodeKey node)
+        Just node -> Map.singleton LayoutRootSpot (graphNodeKey node)
         Nothing -> Map.empty
 
 integrateForces :: GraphSnapshot -> GraphLayout -> GraphLayout
