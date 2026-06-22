@@ -62,7 +62,9 @@ lineEditSelectionAtEnd string =
 -- unfocused edit can only request focus, while a focused edit can
 -- change text/selection or blur itself.
 lineEdit :: Canvas.Canvas renderM => LineEdit actionM -> Widget actionM renderM
-lineEdit edit rect = do
+lineEdit edit placement = do
+  let rect = placementRect placement
+  let hitRect = clipRect placement
   let style = lineEditStyle edit
   let string = lineEditText edit
   let interaction = lineEditInteraction edit
@@ -71,7 +73,7 @@ lineEdit edit rect = do
   lineMetrics <- Canvas.measureText lineMetricSample
   caretPositions <- measureCaretPositions string
   drawLine style focused string selection rect lineMetrics caretPositions
-  pure (editHandler style string interaction rect caretPositions)
+  pure (editHandler style string interaction hitRect caretPositions)
 
 lineEditSize :: Canvas.Canvas measureM => LineEdit actionM -> measureM Size
 lineEditSize edit = do

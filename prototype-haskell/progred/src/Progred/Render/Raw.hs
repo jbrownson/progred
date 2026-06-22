@@ -69,8 +69,9 @@ secondaryCursor env cursor child =
         Just focus -> null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing
         Nothing -> False
 
-drawSecondaryBackground :: Canvas.Canvas renderM => Rect -> renderM (Handler actionM)
-drawSecondaryBackground rect = do
+drawSecondaryBackground :: Canvas.Canvas renderM => Placement -> renderM (Handler actionM)
+drawSecondaryBackground placement = do
+  let rect = placementRect placement
   Canvas.fillRect rect secondaryFocusBackgroundColor
   Canvas.strokeRect rect secondaryFocusColor 1
   pure mempty
@@ -83,8 +84,9 @@ shouldDrawFocusBackground env cursor =
     Just (VFloat _) -> False
     _ -> True
 
-drawFocusBackground :: Canvas.Canvas renderM => Rect -> renderM (Handler actionM)
-drawFocusBackground rect = do
+drawFocusBackground :: Canvas.Canvas renderM => Placement -> renderM (Handler actionM)
+drawFocusBackground placement = do
+  let rect = placementRect placement
   Canvas.fillRect rect focusBackgroundColor
   Canvas.strokeRect rect focusColor 1
   pure mempty
@@ -147,16 +149,17 @@ nodeReferenceActions
 nodeReferenceActions env target child =
   decorate place child
   where
-    place rect =
-      pure $
-        onPointerCapture $ \event ->
-          case event of
-            PointerDown {pointerX, pointerY, pointerModifiers}
-              | keyMeta pointerModifiers && rectContains rect pointerX pointerY ->
-                  Just $ do
-                    cell <- envFreshUUID env
-                    envEdit env (replaceFocusedSpot cell (VRef target))
-            _ -> Nothing
+    place placement =
+      let rect = clipRect placement
+       in pure $
+            onPointerCapture $ \event ->
+              case event of
+                PointerDown {pointerX, pointerY, pointerModifiers}
+                  | keyMeta pointerModifiers && rectContains rect pointerX pointerY ->
+                      Just $ do
+                        cell <- envFreshUUID env
+                        envEdit env (replaceFocusedSpot cell (VRef target))
+                _ -> Nothing
 
 rootActions :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 rootActions env cursor child
@@ -212,13 +215,15 @@ collapseToggle env cursor collapsed =
   leaf (pure (Size collapseToggleWidth iconSize)) draw
   where
     path = cursorPath cursor
-    draw rect = do
+    draw placement = do
+      let rect = placementRect placement
+      let hitRect = clipRect placement
       drawCollapseToggle collapsed rect
       pure $
         onPointerCapture $ \event ->
           case event of
             PointerDown {pointerX, pointerY}
-              | rectContains rect pointerX pointerY ->
+              | rectContains hitRect pointerX pointerY ->
                   Just (envEdit env (setCollapsed path (not collapsed)))
             _ -> Nothing
 
@@ -450,8 +455,9 @@ identiconPlay :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler
 identiconPlay uuid =
   leaf (pure (Size iconSize iconSize)) draw
   where
-    draw Rect {x, y} =
-      mempty <$ identicon uuid (Rect x y iconSize iconSize)
+    draw placement =
+      let Rect {x, y} = placementRect placement
+       in mempty <$ identicon uuid (Rect x y iconSize iconSize)
 
 textPlay :: Canvas.Canvas renderM => String -> String -> Halay renderM renderM (Handler actionM)
 textPlay color string =
@@ -476,8 +482,9 @@ arrowPlay :: Canvas.Canvas renderM => Halay renderM renderM (Handler actionM)
 arrowPlay =
   leaf (pure (Size arrowWidth iconSize)) draw
   where
-    draw Rect {x, y} =
-      mempty <$ drawArrow (Point x (y + iconSize / 2))
+    draw placement =
+      let Rect {x, y} = placementRect placement
+       in mempty <$ drawArrow (Point x (y + iconSize / 2))
 
 iconSize :: Double
 iconSize = 20

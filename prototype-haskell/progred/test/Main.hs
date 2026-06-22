@@ -4,7 +4,7 @@ module Main
 
 import qualified Data.Map.Strict as Map
 import qualified Data.UUID.Types as UUID
-import Control.Monad.Trans.State.Strict (State, execState, modify, put)
+import Control.Monad.Trans.State.Strict (State, execState, gets, modify, put)
 import Data.List (find)
 import Data.Maybe (isJust)
 import Halay
@@ -23,6 +23,12 @@ import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
 import Puri.Widgets (LineEditSelection (..), emptyLineEditSelection, lineEditSelectionAtEnd)
+import Puri.Widgets.ScrollViewport
+  ( ScrollPlacementTrace (..)
+  , clampScrollOffset
+  , scrollViewport
+  , traceScrollPlacement
+  )
 import Test.QuickCheck
 
 main :: IO ()
@@ -73,6 +79,14 @@ main = do
   run "rawCycleProjection" propRawCycleProjectsCollapsedAndExpanded
   run "rawNodeInsertNested" propRawNodeInsertCommitsNestedString
   run "rawNodeInsertSibling" propRawEdgeInsertCommitsSiblingString
+  run "scrollClamp" propClampScrollOffset
+  run "scrollWheelInside" propScrollViewportWheelInsideViewport
+  run "scrollWheelTrackpad" propScrollViewportTrackpadScrollDirection
+  run "scrollWheelAccumulates" propScrollViewportWheelAccumulates
+  run "scrollWheelClamp" propScrollViewportWheelClampsToContent
+  run "scrollChildPlacementY" propScrollChildPlacementYMoves
+  run "scrollClipViewportClamp" propScrollClipViewportClampsOffset
+  run "scrollClampUsesClipNotLayoutRect" propScrollClampUsesClipNotLayoutRect
   where
     run name prop = do
       result <- quickCheckWithResult stdArgs {maxSuccess = 1000} prop
@@ -874,6 +888,196 @@ propRawNodeInsertCommitsNestedString =
     deltaSelection =
       lineEditSelectionAtEnd "delta"
 
+propClampScrollOffset :: Property
+propClampScrollOffset =
+  conjoin
+    [ pointY (clampScrollOffset (Point 0 50) viewport (Size 100 200)) === 50
+    , pointY (clampScrollOffset (Point 0 150) viewport (Size 100 200)) === 100
+    , pointY (clampScrollOffset (Point 0 (-10)) viewport (Size 100 200)) === 0
+    , pointX (clampScrollOffset (Point 50 0) viewport (Size 200 100)) === 50
+    , pointX (clampScrollOffset (Point 150 0) viewport (Size 200 100)) === 100
+    , pointX (clampScrollOffset (Point (-10) 0) viewport (Size 200 100)) === 0
+    ]
+  where
+    viewport = Rect 0 0 100 100
+
+data ScrollTest = ScrollTest
+  { scrollTestOffset :: Point
+  }
+  deriving (Eq, Show)
+
+emptyScrollTest :: ScrollTest
+emptyScrollTest =
+  ScrollTest (Point 0 0)
+
+scrollTestViewport :: Rect
+scrollTestViewport =
+  Rect 0 0 200 100
+
+scrollTestHandler :: Point -> Handler (State ScrollTest)
+scrollTestHandler =
+  scrollTestHandlerWithContent scrollTestContent
+
+scrollTestContent :: Halay TestRender TestRender (Handler (State ScrollTest))
+scrollTestContent =
+  column [leaf (pure (Size 100 300)) (\_ -> pure mempty)]
+
+scrollTestHandlerWithContent
+  :: Halay TestRender TestRender (Handler (State ScrollTest))
+  -> Point
+  -> Handler (State ScrollTest)
+scrollTestHandlerWithContent content offset =
+  runTestRender $ do
+    measured <-
+      measureHalay
+        ( scrollViewport
+            (pure offset)
+            (gets scrollTestOffset)
+            (\next -> modify (\state -> state {scrollTestOffset = next}))
+            content
+        )
+    placeMeasured measured (rootPlacement scrollTestViewport)
+
+propScrollViewportWheelInsideViewport :: Property
+propScrollViewportWheelInsideViewport =
+  scrollTestOffset afterWheel === Point 0 16
+  where
+    afterWheel =
+      execState
+        (handleWheel scrollWheelInside (scrollTestHandler (Point 0 0)))
+        emptyScrollTest
+    scrollWheelInside =
+      Wheel
+        { wheelX = 100
+        , wheelY = 50
+        , wheelDeltaX = 0
+        , wheelDeltaY = -1
+        , wheelDeltaMode = 1
+        , wheelModifiers = noModifiers
+        }
+
+propScrollViewportTrackpadScrollDirection :: Property
+propScrollViewportTrackpadScrollDirection =
+  scrollTestOffset afterWheel === Point 0 3
+  where
+    afterWheel =
+      execState
+        (handleWheel scrollWheelTrackpad (scrollTestHandler (Point 0 0)))
+        emptyScrollTest
+    scrollWheelTrackpad =
+      Wheel
+        { wheelX = 100
+        , wheelY = 50
+        , wheelDeltaX = 0
+        , wheelDeltaY = 3
+        , wheelDeltaMode = 0
+        , wheelModifiers = noModifiers
+        }
+
+propScrollViewportWheelAccumulates :: Property
+propScrollViewportWheelAccumulates =
+  scrollTestOffset afterWheels === Point 0 32
+  where
+    handler = scrollTestHandler (Point 0 0)
+    scrollWheelInside =
+      Wheel
+        { wheelX = 100
+        , wheelY = 50
+        , wheelDeltaX = 0
+        , wheelDeltaY = -1
+        , wheelDeltaMode = 1
+        , wheelModifiers = noModifiers
+        }
+    afterWheels =
+      execState
+        ( do
+            handleWheel scrollWheelInside handler
+            handleWheel scrollWheelInside handler
+        )
+        emptyScrollTest
+
+propScrollViewportWheelClampsToContent :: Property
+propScrollViewportWheelClampsToContent =
+  pointY (scrollTestOffset afterWheel) === 200
+  where
+    afterWheel =
+      execState
+        (handleWheel scrollWheelClamp (scrollTestHandler (Point 0 250)))
+        emptyScrollTest
+    scrollWheelClamp =
+      Wheel
+        { wheelX = 100
+        , wheelY = 50
+        , wheelDeltaX = 0
+        , wheelDeltaY = -100
+        , wheelDeltaMode = 1
+        , wheelModifiers = noModifiers
+        }
+
+scrollTestContentIO :: Halay IO IO (Handler IO)
+scrollTestContentIO =
+  column [leaf (pure (Size 100 300)) (\_ -> pure mempty)]
+
+propScrollChildPlacementYMoves :: Property
+propScrollChildPlacementYMoves =
+  ioProperty $ do
+    origin <- traceScrollPlacement scrollTestViewport (Point 0 0) scrollTestContentIO
+    scrolled <- traceScrollPlacement scrollTestViewport (Point 0 32) scrollTestContentIO
+    let Rect {y = originY} = scrollTraceChildRect origin
+    let Rect {y = scrolledY} = scrollTraceChildRect scrolled
+    pure $
+      counterexample
+        ("origin=" <> show origin <> " scrolled=" <> show scrolled)
+        ( conjoin
+            [ property (scrolledY < originY)
+            , pointY (scrollTraceAppliedOffset scrolled) === 32
+            ]
+        )
+
+scrollClipTestViewport :: Rect
+scrollClipTestViewport =
+  Rect 0 0 200 100
+
+scrollClipTestLayout :: Halay IO IO (Handler IO)
+scrollClipTestLayout =
+  box
+    defaultBox
+      { boxDirection = TopToBottom
+      , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
+      }
+    [ scrollViewport
+        (pure (Point 0 32))
+        (pure (Point 0 32))
+        (const (pure ()))
+        scrollTestContentIO
+    ]
+
+propScrollClipViewportClampsOffset :: Property
+propScrollClipViewportClampsOffset =
+  ioProperty $ do
+    trace <- traceScrollPlacement scrollClipTestViewport (Point 0 32) scrollClipTestLayout
+    let layoutHeight = sizeHeight (scrollTraceLayoutContentSize trace)
+    let clipHeight = height (scrollTraceViewportClip trace)
+    let maxScrollY = max 0 (layoutHeight - clipHeight)
+    pure $
+      counterexample (show trace) $
+        conjoin
+          [ pointY (scrollTraceAppliedOffset trace) === min 32 maxScrollY
+          , pointY (scrollTraceChildOffset trace) === negate (min 32 maxScrollY)
+          , y (scrollTraceChildRect trace) === negate (min 32 maxScrollY)
+          ]
+
+propScrollClampUsesClipNotLayoutRect :: Property
+propScrollClampUsesClipNotLayoutRect =
+  let viewportClip = Rect 0 0 998 196
+      layoutRect = Rect 0 0 998 265
+      content = Size 998 265
+      offset = Point 0 69
+   in conjoin
+        [ pointY (clampScrollOffset offset viewportClip content) === 69
+        , pointY (clampScrollOffset offset layoutRect content) === 0
+        ]
+
 propRawEdgeInsertCommitsSiblingString :: Property
 propRawEdgeInsertCommitsSiblingString =
   conjoin
@@ -904,7 +1108,7 @@ listItemHandler :: Maybe Focus -> Handler (State Editor)
 listItemHandler focus =
   runTestRender $ do
     measured <- measureHalay (listItemLayout focus)
-    placeMeasured measured (Rect 0 0 800 600)
+    placeMeasured measured (rootPlacement (Rect 0 0 800 600))
 
 listItemLayout :: Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
 listItemLayout focus =
@@ -923,13 +1127,13 @@ rawDocumentHandler :: Document -> Maybe Focus -> Handler (State Editor)
 rawDocumentHandler document focus =
   runTestRender $ do
     measured <- measureHalay (rawDocumentLayout document focus)
-    placeMeasured measured (Rect 0 0 800 600)
+    placeMeasured measured (rootPlacement (Rect 0 0 800 600))
 
 rawEditorHandler :: Editor -> Handler (State Editor)
 rawEditorHandler editor =
   runTestRender $ do
     measured <- measureHalay (rawEditorLayout editor)
-    placeMeasured measured (Rect 0 0 800 600)
+    placeMeasured measured (rootPlacement (Rect 0 0 800 600))
 
 rawDocumentLayout :: Document -> Maybe Focus -> Halay TestRender TestRender (Handler (State Editor))
 rawDocumentLayout document focus =
@@ -1026,7 +1230,7 @@ graphDragHandler drag =
             , graphPanelInteractionMove = \_ -> pure ()
             , graphPanelSetSelection = \selection -> modify (\state -> state {graphDragTestSelection = selection})
             }
-    placeMeasured measured (Rect 0 0 320 240)
+    placeMeasured measured (rootPlacement (Rect 0 0 320 240))
 
 graphInteractionHandler :: GraphInteractionTest -> Handler (State GraphInteractionTest)
 graphInteractionHandler state =
@@ -1075,7 +1279,7 @@ graphInteractionHandler state =
                   )
             , graphPanelSetSelection = \selection -> modify (\current -> current {graphInteractionTestSelection = selection})
             }
-    placeMeasured measured (Rect 0 0 320 240)
+    placeMeasured measured (rootPlacement (Rect 0 0 320 240))
 
 newtype TestRender a = TestRender
   { runTestRender :: a

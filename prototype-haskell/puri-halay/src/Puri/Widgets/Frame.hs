@@ -24,6 +24,6 @@ framed frame child =
     withBackground =
       case frameBackground frame of
         Nothing -> id
-        Just color -> decorate (\rect -> mempty <$ Canvas.fillRect (frameRect rect) color)
-    drawBorder rect =
-      mempty <$ Canvas.strokeRect (frameRect rect) (frameColor frame) 1
+        Just color -> decorate (\placement -> mempty <$ Canvas.fillRect (frameRect (placementRect placement)) color)
+    drawBorder placement =
+      mempty <$ Canvas.strokeRect (frameRect (placementRect placement)) (frameColor frame) 1

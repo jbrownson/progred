@@ -6,8 +6,21 @@ const TOGGLE_LAYOUT_DEBUG_RECTS: &str = "toggle-layout-debug-rects";
 use tauri::menu::CheckMenuItemBuilder;
 #[cfg(debug_assertions)]
 use tauri::menu::MenuItemBuilder;
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
+use tauri::menu::{MenuBuilder, MenuItemKind, SubmenuBuilder};
 use tauri::Manager;
+
+fn toggle_menu_check(app: &tauri::AppHandle, item_id: &str) {
+    let Some(menu) = app.menu() else {
+        return;
+    };
+    let Some(item) = menu.get(item_id) else {
+        return;
+    };
+    if let MenuItemKind::Check(check_item) = item {
+        let next = !check_item.is_checked().unwrap_or(false);
+        let _ = check_item.set_checked(next);
+    }
+}
 
 fn main() {
     let builder = tauri::Builder::default().setup(|app| {
@@ -50,21 +63,24 @@ fn main() {
             if let Some(webview) = app.get_webview_window("main") {
                 let _ = webview.eval("window.progred?.toggleLayoutDebugRects?.();");
             }
+            toggle_menu_check(app, TOGGLE_LAYOUT_DEBUG_RECTS);
         }
 
         if event.id() == TOGGLE_GRAPH_VIEW {
             if let Some(webview) = app.get_webview_window("main") {
                 let _ = webview.eval("window.progred?.toggleGraphView?.();");
             }
+            toggle_menu_check(app, TOGGLE_GRAPH_VIEW);
         }
 
         #[cfg(debug_assertions)]
         if event.id() == TOGGLE_DEVTOOLS {
-            let webview = app.get_webview_window("main").unwrap();
-            if webview.is_devtools_open() {
-                webview.close_devtools();
-            } else {
-                webview.open_devtools();
+            if let Some(webview) = app.get_webview_window("main") {
+                if webview.is_devtools_open() {
+                    let _ = webview.close_devtools();
+                } else {
+                    let _ = webview.open_devtools();
+                }
             }
         }
     });

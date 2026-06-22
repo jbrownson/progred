@@ -162,14 +162,15 @@ focusableSpot env cursor child =
   decorate place child
   where
     path = cursorPath cursor
-    place rect =
-      pure $
-        onPointer $ \event ->
-          case event of
-            PointerDown {pointerX, pointerY}
-              | rectContains rect pointerX pointerY ->
-                  Just (envEdit env (focusSpot path))
-            _ -> Nothing
+    place placement =
+      let rect = clipRect placement
+       in pure $
+            onPointer $ \event ->
+              case event of
+                PointerDown {pointerX, pointerY}
+                  | rectContains rect pointerX pointerY ->
+                      Just (envEdit env (focusSpot path))
+                _ -> Nothing
 
 stepFocus :: UUID -> Focus -> Maybe Focus
 stepFocus label focus =

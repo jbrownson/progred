@@ -8,14 +8,17 @@ module Halay
   , MainAlign (..)
   , Measured (..)
   , MinMax (..)
+  , PlaceKids
   , Sizing (..)
   , TextAlign (..)
   , TextConfig (..)
   , TextWrapMode (..)
   , aspectRatio
   , box
+  , container
   , column
   , columnWithGap
+  , containerLaidOutChildSize
   , decorate
   , debugRects
   , defaultBox
@@ -86,6 +89,8 @@ data BoxConfig = BoxConfig
   }
   deriving (Eq, Show)
 
+-- boxClip is layout overflow only; render clipping uses Placement.clipRect and
+-- explicit Canvas.withClip at placement sites (e.g. scroll).
 data BoxClip = BoxClip
   { clipHorizontal :: Bool
   , clipVertical :: Bool
@@ -122,10 +127,13 @@ newtype Halay measureM placeM placed = Halay
   { buildHalay :: measureM (LayoutNode measureM placeM placed)
   }
 
+type PlaceKids placeM placed =
+  Point -> placeM placed
+
 -- | A measured layout plus the final placement callback for a chosen rect.
 data Measured placeM placed = Measured
   { measuredSize :: Size
-  , placeMeasured :: Rect -> placeM placed
+  , placeMeasured :: Placement -> placeM placed
   }
 
 data LayoutNode measureM placeM placed = LayoutNode
@@ -133,7 +141,7 @@ data LayoutNode measureM placeM placed = LayoutNode
   , nodeAspectRatio :: Maybe Double
   , nodeHeightMaxOverride :: Maybe Double
   , nodeContent :: NodeContent measureM placeM placed
-  , nodePlacers :: [Rect -> placeM placed]
+  , nodePlacers :: [Placement -> placeM placed]
   , nodeChildren :: [LayoutNode measureM placeM placed]
   , nodeDimensions :: Size
   , nodeMinDimensions :: Size
@@ -141,6 +149,7 @@ data LayoutNode measureM placeM placed = LayoutNode
 
 data NodeContent measureM placeM placed
   = Container
+  | ControlledContainer (Placement -> LayoutNode measureM placeM placed -> PlaceKids placeM placed -> placeM placed)
   | Intrinsic Size
   | TextContent (TextNode measureM placeM placed)
 
@@ -191,11 +200,11 @@ fixed size placed =
 -- | An opaque intrinsic-size node. Halay measures the size once and later
 -- passes the final rect to the placement callback; it cannot inspect or
 -- reflow the leaf's contents.
-leaf :: Applicative measureM => measureM Size -> (Rect -> placeM placed) -> Halay measureM placeM placed
+leaf :: Applicative measureM => measureM Size -> (Placement -> placeM placed) -> Halay measureM placeM placed
 leaf =
   leafWithSizing defaultSizing
 
-leafWithSizing :: Applicative measureM => Sizing -> measureM Size -> (Rect -> placeM placed) -> Halay measureM placeM placed
+leafWithSizing :: Applicative measureM => Sizing -> measureM Size -> (Placement -> placeM placed) -> Halay measureM placeM placed
 leafWithSizing sizing measure place =
   Halay $
     makeNode <$> measure
@@ -226,14 +235,14 @@ sized sizing child =
     setNodeSizing sizing <$> buildHalay child
 
 -- | Add a placement callback to a node without changing its layout.
-decorate :: Functor measureM => (Rect -> placeM placed) -> Halay measureM placeM placed -> Halay measureM placeM placed
+decorate :: Functor measureM => (Placement -> placeM placed) -> Halay measureM placeM placed -> Halay measureM placeM placed
 decorate place child =
   Halay $
     addNodePlacer place <$> buildHalay child
 
 -- | Add a placement callback to every layout node. Useful for debug overlays
 -- that need to visualize the actual rects Halay computed.
-debugRects :: Functor measureM => (Int -> Rect -> placeM placed) -> Halay measureM placeM placed -> Halay measureM placeM placed
+debugRects :: Functor measureM => (Int -> Placement -> placeM placed) -> Halay measureM placeM placed -> Halay measureM placeM placed
 debugRects place child =
   Halay $
     addDebug 0 <$> buildHalay child
@@ -258,8 +267,8 @@ measureHalay halay = do
   pure
     Measured
       { measuredSize = nodeDimensions measuredNode
-      , placeMeasured = \rect ->
-          placeLayoutNode (Point (x rect) (y rect)) (layoutNode (Just (Size (width rect) (height rect))) source)
+      , placeMeasured = \placement ->
+          placeLayoutNode placement (layoutNode (Just (sizeFromPlacement placement)) source)
       }
 
 row :: Applicative measureM => [Halay measureM placeM placed] -> Halay measureM placeM placed
@@ -290,6 +299,31 @@ box config children =
     makeBox childNodes =
       emptyNode {nodeConfig = config, nodeChildren = childNodes}
 
+containerLaidOutChildSize :: LayoutNode measureM placeM placed -> Size
+containerLaidOutChildSize node =
+  case nodeChildren node of
+    child : _ ->
+      nodeDimensions child
+    [] ->
+      Size 0 0
+
+container
+  :: Applicative measureM
+  => BoxConfig
+  -> (Placement -> LayoutNode measureM placeM placed -> PlaceKids placeM placed -> placeM placed)
+  -> [Halay measureM placeM placed]
+  -> Halay measureM placeM placed
+container config placeContainer children =
+  Halay $
+    makeContainer <$> traverse buildHalay children
+  where
+    makeContainer childNodes =
+      emptyNode
+        { nodeConfig = config
+        , nodeContent = ControlledContainer placeContainer
+        , nodeChildren = childNodes
+        }
+
 emptyNode :: LayoutNode measureM placeM placed
 emptyNode =
   LayoutNode
@@ -311,9 +345,14 @@ setNodeAspectRatio :: Double -> LayoutNode measureM placeM placed -> LayoutNode 
 setNodeAspectRatio ratio node =
   node {nodeAspectRatio = Just ratio}
 
-addNodePlacer :: (Rect -> placeM placed) -> LayoutNode measureM placeM placed -> LayoutNode measureM placeM placed
+addNodePlacer :: (Placement -> placeM placed) -> LayoutNode measureM placeM placed -> LayoutNode measureM placeM placed
 addNodePlacer place node =
   node {nodePlacers = place : nodePlacers node}
+
+sizeFromPlacement :: Placement -> Size
+sizeFromPlacement placement =
+  let Rect {width, height} = placementRect placement
+   in Size width height
 
 nodeSizing :: LayoutNode measureM placeM placed -> Sizing
 nodeSizing LayoutNode {nodeConfig = BoxConfig {boxSizing}} =
@@ -644,6 +683,8 @@ closeNode node =
             }
         Container ->
           closeContainer withClosedChildren
+        ControlledContainer _ ->
+          closeContainer withClosedChildren
 
 closeContainer :: LayoutNode measureM placeM placed -> LayoutNode measureM placeM placed
 closeContainer node =
@@ -723,29 +764,46 @@ nodeHeightMinForPropagation node =
   where
     sizing = sizingHeight (nodeSizing node)
 
-placeLayoutNode :: (Monad placeM, Monoid placed) => Point -> LayoutNode measureM placeM placed -> placeM placed
-placeLayoutNode point node = do
-  own <- placeOwnNode point node
-  children <- placeChildren point node
+placeLayoutNode :: (Monad placeM, Monoid placed) => Placement -> LayoutNode measureM placeM placed -> placeM placed
+placeLayoutNode placement node = do
+  own <- placeOwnNode placement node
+  children <-
+    case nodeContent node of
+      ControlledContainer placeContainer ->
+        placeContainer
+          placement
+          node
+          ( \childOffset ->
+              placeChildren (clip (placementRect placement) placement) node childOffset
+          )
+      _ ->
+        placeChildren placement node (nodeChildOffset node)
   pure (own <> children)
 
-placeOwnNode :: (Monad placeM, Monoid placed) => Point -> LayoutNode measureM placeM placed -> placeM placed
-placeOwnNode point@Point {pointX, pointY} node = do
+nodeClips :: LayoutNode measureM placeM placed -> Bool
+nodeClips node =
+  let BoxClip {clipHorizontal, clipVertical} = boxClip (nodeConfig node)
+   in clipHorizontal || clipVertical
+
+placeOwnNode :: (Monad placeM, Monoid placed) => Placement -> LayoutNode measureM placeM placed -> placeM placed
+placeOwnNode placement node = do
   placed <- foldM place mempty (reverse (nodePlacers node))
-  textPlaced <- placeTextNode point node
+  textPlaced <- placeTextNode placement node
   pure (placed <> textPlaced)
   where
-    rect = Rect pointX pointY (sizeWidth (nodeDimensions node)) (sizeHeight (nodeDimensions node))
-    place placed next = (placed <>) <$> next rect
+    place accumulated next = (accumulated <>) <$> next placement
 
-placeTextNode :: (Monad placeM, Monoid placed) => Point -> LayoutNode measureM placeM placed -> placeM placed
+placeTextNode :: (Monad placeM, Monoid placed) => Placement -> LayoutNode measureM placeM placed -> placeM placed
 placeTextNode _ LayoutNode {nodeContent = Container} =
+  pure mempty
+placeTextNode _ LayoutNode {nodeContent = ControlledContainer _} =
   pure mempty
 placeTextNode _ LayoutNode {nodeContent = Intrinsic _} =
   pure mempty
-placeTextNode Point {pointX, pointY} LayoutNode {nodeContent = TextContent textNode, nodeDimensions = Size {sizeWidth}} =
+placeTextNode placement LayoutNode {nodeContent = TextContent textNode, nodeDimensions = Size {sizeWidth}} =
   snd <$> foldM placeLine (pointY + lineHeightOffset, mempty) (zip [0 ..] (textNodeLines textNode))
   where
+    Rect {x = pointX, y = pointY} = placementRect placement
     lineHeight = textNodeLineHeight textNode
     lineHeightOffset = (lineHeight - textNodeNaturalLineHeight textNode) / 2
     TextConfig {textPlaceLine, textAlign} = textNodeConfig textNode
@@ -758,31 +816,43 @@ placeTextNode Point {pointX, pointY} LayoutNode {nodeContent = TextContent textN
         TextAlignCenter -> (sizeWidth - lineWidth) / 2
         TextAlignEnd -> sizeWidth - lineWidth
 
-placeChildren :: (Monad placeM, Monoid placed) => Point -> LayoutNode measureM placeM placed -> placeM placed
-placeChildren Point {pointX, pointY} node =
+placeChildren :: (Monad placeM, Monoid placed) => Placement -> LayoutNode measureM placeM placed -> Point -> placeM placed
+placeChildren placement node childOffset =
   snd <$> foldM placeChild (startingPrimary, mempty) (nodeChildren node)
   where
     config = nodeConfig node
     primaryAxis = directionAxis (boxDirection config)
     crossAxis = otherAxis primaryAxis
     boxInsets = boxPadding config
-    inner =
-      insetRect
-        boxInsets
-        (Rect pointX pointY (sizeWidth (nodeDimensions node)) (sizeHeight (nodeDimensions node)))
+    rect = placementRect placement
+    inner = insetRect boxInsets rect
     childSizes = nodeDimensions <$> nodeChildren node
     contentPrimary = sum (axisSize primaryAxis <$> childSizes) + gapSize (boxGap config) childSizes
-    extraPrimary = max 0 (axisSize primaryAxis (nodeDimensions node) - axisPadding primaryAxis boxInsets - contentPrimary)
+    placementSize = sizeFromPlacement placement
+    extraPrimary = max 0 (axisSize primaryAxis placementSize - axisPadding primaryAxis boxInsets - contentPrimary)
     startingPrimary = rectAxisPosition primaryAxis inner + mainAlignmentOffset (boxMainAlign config) extraPrimary
-    childOffset = nodeChildOffset node
+    childPlacement childPoint childSize =
+      let childRect = sizeRectAt (offsetPoint childOffset childPoint) childSize
+          base =
+            placement
+              { placementRect = childRect
+              , clipRect = intersectRect childRect (clipRect placement)
+              }
+       in if nodeClips node then clip (placementRect placement) base else base
     placeChild (primaryPosition, placed) child = do
       let childSize = nodeDimensions child
       let childPrimary = axisSize primaryAxis childSize
       let childCross = axisSize crossAxis childSize
       let crossPosition =
             rectAxisPosition crossAxis inner
-              + crossAlignmentOffset (boxCrossAlign config) (axisSize crossAxis (shrinkSize boxInsets (nodeDimensions node))) childCross
-      next <- placeLayoutNode (offsetPoint childOffset (pointFromAxes primaryAxis primaryPosition crossPosition)) child
+              + crossAlignmentOffset (boxCrossAlign config) (axisSize crossAxis (shrinkSize boxInsets placementSize)) childCross
+      next <-
+        placeLayoutNode
+          ( childPlacement
+              (pointFromAxes primaryAxis primaryPosition crossPosition)
+              childSize
+          )
+          child
       pure (primaryPosition + childPrimary + boxGap config, placed <> next)
 
 measureTextNode :: Monad measureM => TextConfig measureM placeM placed -> String -> measureM (TextNode measureM placeM placed)

@@ -25,43 +25,64 @@ data TextMetrics = TextMetrics
   }
 
 clearCanvas :: Double -> Double -> IO ()
-clearCanvas = undefined
+clearCanvas _ _ =
+  pure ()
 
 save :: IO ()
-save = undefined
+save =
+  pure ()
 
 restore :: IO ()
-restore = undefined
+restore =
+  pure ()
 
 translateCanvas :: Double -> Double -> IO ()
-translateCanvas = undefined
+translateCanvas _ _ =
+  pure ()
 
 scaleCanvas :: Double -> Double -> IO ()
-scaleCanvas = undefined
+scaleCanvas _ _ =
+  pure ()
 
 clipRect :: Double -> Double -> Double -> Double -> IO ()
-clipRect = undefined
+clipRect _ _ _ _ =
+  pure ()
 
 fillRect :: Double -> Double -> Double -> Double -> String -> IO ()
-fillRect = undefined
+fillRect _ _ _ _ _ =
+  pure ()
 
 strokeRect :: Double -> Double -> Double -> Double -> String -> Double -> IO ()
-strokeRect = undefined
+strokeRect _ _ _ _ _ _ =
+  pure ()
 
 strokeLine :: Double -> Double -> Double -> Double -> String -> Double -> IO ()
-strokeLine = undefined
+strokeLine _ _ _ _ _ _ =
+  pure ()
 
 fillText :: Double -> Double -> String -> String -> IO ()
-fillText = undefined
+fillText _ _ _ _ =
+  pure ()
 
 fillTextMiddle :: Double -> Double -> String -> String -> IO ()
-fillTextMiddle = undefined
+fillTextMiddle _ _ _ _ =
+  pure ()
 
 getCanvasWidth :: IO Double
-getCanvasWidth = undefined
+getCanvasWidth =
+  pure 800
 
 getCanvasHeight :: IO Double
-getCanvasHeight = undefined
+getCanvasHeight =
+  pure 600
 
 measureText :: String -> IO TextMetrics
-measureText = undefined
+measureText string =
+  pure
+    TextMetrics
+      { textWidth = fromIntegral (length string) * 8
+      , textActualBoundingBoxAscent = 10
+      , textActualBoundingBoxDescent = 3
+      , textFontBoundingBoxAscent = 11
+      , textFontBoundingBoxDescent = 3
+      }

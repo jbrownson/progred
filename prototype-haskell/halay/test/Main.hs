@@ -351,7 +351,7 @@ aspectRatioPercentWidth =
         leafWithSizing
           (Sizing (Percent 0.5) (Fit unbounded))
           (pure (Size 0 0))
-          (\rect -> pure (Placements [("a", rect)]))
+          (\placement -> pure (Placements [("a", placementRect placement)]))
     ]
 
 aspectRatioFillMaxWidth :: Halay Identity Identity Placements
@@ -362,7 +362,7 @@ aspectRatioFillMaxWidth =
         leafWithSizing
           (Sizing (Fill (MinMax (Just 10) (Just 30))) (Fit unbounded))
           (pure (Size 0 0))
-          (\rect -> pure (Placements [("a", rect)]))
+          (\placement -> pure (Placements [("a", placementRect placement)]))
     ]
 
 unequalGrowMainAxis :: Halay Identity Identity Placements
@@ -456,7 +456,7 @@ clipCrossAxisUsesPrePercentInnerSize =
         leafWithSizing
           (Sizing (Percent 0.84) (Fixed 31))
           (pure (Size 3 26))
-          (\rect -> pure (Placements [("b", rect)]))
+          (\placement -> pure (Placements [("b", placementRect placement)]))
     ]
 
 clipChildOffsetPlacesChildren :: Halay Identity Identity Placements
@@ -1407,7 +1407,7 @@ withAspect (Just ratio) layout = aspectRatio ratio layout
 
 namedLayout :: String -> Halay Identity Identity Placements -> Halay Identity Identity Placements
 namedLayout name =
-  decorate (\rect -> pure (Placements [(name, rect)]))
+  decorate (\placement -> pure (Placements [(name, placementRect placement)]))
 
 boxConfigFromRandom :: RandomBoxConfig -> BoxConfig
 boxConfigFromRandom RandomBoxConfig {randomBoxDirection, randomBoxPadding, randomBoxGap, randomBoxAlignX, randomBoxAlignY, randomBoxSizing, randomBoxClipHorizontal, randomBoxClipVertical, randomBoxChildOffset} =
@@ -1582,7 +1582,7 @@ fixedAxisSize _ = Nothing
 
 named :: String -> Size -> Halay Identity Identity Placements
 named name size =
-  leaf (pure size) (\rect -> pure (Placements [(name, rect)]))
+  leaf (pure size) (\placement -> pure (Placements [(name, placementRect placement)]))
 
 placedRectsWithRoot :: Halay Identity Identity Placements -> [(String, Rect)]
 placedRectsWithRoot layout =
@@ -1599,5 +1599,5 @@ placedRects layout =
 placeAt :: (Monad measureM, Monoid placed) => Point -> Halay measureM measureM placed -> measureM (Size, placed)
 placeAt point layout = do
   measured <- measureHalay layout
-  placed <- placeMeasured measured (sizeRectAt point (measuredSize measured))
+  placed <- placeMeasured measured (rootPlacement (sizeRectAt point (measuredSize measured)))
   pure (measuredSize measured, placed)

@@ -120,8 +120,8 @@ bracket :: Canvas.Canvas renderM => BracketSide -> Halay renderM renderM (Handle
 bracket side =
   leafWithSizing bracketSizing (pure (Size bracketWidth bracketMinHeight)) draw
   where
-    draw rect =
-      mempty <$ drawBracket side rect
+    draw placement =
+      mempty <$ drawBracket side (placementRect placement)
 
 drawBracket :: Canvas.Canvas renderM => BracketSide -> Rect -> renderM ()
 drawBracket side Rect {x, y, width, height} = do
@@ -148,8 +148,8 @@ insertionAnchor :: Applicative renderM => Env actionM renderM -> Cursor -> Halay
 insertionAnchor env cursor =
   leafWithSizing anchorSizing (pure (Size 0 0)) draw
   where
-    draw rect =
-      pure (insertionAnchorHandler env cursor rect)
+    draw placement =
+      pure (insertionAnchorHandler env cursor (placementRect placement))
 
 insertionAnchorHandler :: Env actionM renderM -> Cursor -> Rect -> Handler actionM
 insertionAnchorHandler env cursor rect =

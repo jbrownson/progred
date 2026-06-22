@@ -75,6 +75,7 @@ library puri-halay
   exposed-modules:
     Puri.Halay
     Puri.Widgets.Frame
+    Puri.Widgets.ScrollViewport
   hs-source-dirs:   puri-halay/src
   default-language: GHC2021
   build-depends:
@@ -95,6 +96,7 @@ test-suite progred-tests
     , prototype-haskell:halay
     , prototype-haskell:progred
     , prototype-haskell:puri
+    , prototype-haskell:puri-halay
     , transformers >= 0.5 && < 0.7
     , uuid-types >= 1.0 && < 1.1
 

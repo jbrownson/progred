@@ -1,11 +1,15 @@
 module UIG
   ( Insets (..)
+  , Placement (..)
   , Point (..)
   , Rect (..)
   , Size (..)
   , expandSize
   , insetRect
+  , intersectRect
+  , clip
   , rectContains
+  , rootPlacement
   , sizeRectAt
   ) where
 
@@ -37,6 +41,20 @@ data Insets = Insets
   }
   deriving (Eq, Show)
 
+data Placement = Placement
+  { placementRect :: Rect
+  , clipRect :: Rect
+  }
+  deriving (Eq, Show)
+
+rootPlacement :: Rect -> Placement
+rootPlacement rect =
+  Placement rect rect
+
+clip :: Rect -> Placement -> Placement
+clip bounds placement =
+  placement {clipRect = intersectRect bounds (clipRect placement)}
+
 rectContains :: Rect -> Double -> Double -> Bool
 rectContains Rect {x, y, width, height} px py =
   px >= x
@@ -63,3 +81,11 @@ expandSize Insets {insetTop, insetRight, insetBottom, insetLeft} Size {sizeWidth
 sizeRectAt :: Point -> Size -> Rect
 sizeRectAt Point {pointX, pointY} Size {sizeWidth, sizeHeight} =
   Rect pointX pointY sizeWidth sizeHeight
+
+intersectRect :: Rect -> Rect -> Rect
+intersectRect Rect {x = leftX, y = topY, width = leftWidth, height = topHeight} Rect {x = rightX, y = rightY, width = rightWidth, height = rightHeight} =
+  let x = max leftX rightX
+      y = max topY rightY
+      right = min (leftX + leftWidth) (rightX + rightWidth)
+      bottom = min (topY + topHeight) (rightY + rightHeight)
+   in Rect x y (max 0 (right - x)) (max 0 (bottom - y))

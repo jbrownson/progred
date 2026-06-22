@@ -527,7 +527,8 @@ graphPanel :: (Canvas.Canvas renderM, Monad actionM) => GraphSnapshot -> GraphVi
 graphPanel snapshot viewport layout actions =
   leafWithSizing panelSizing (pure (Size 320 240)) draw
   where
-    draw rect = do
+    draw placement = do
+      let rect = placementRect placement
       let syncedLayout = syncGraphLayout snapshot layout
       drawGraphPanel snapshot viewport syncedLayout rect
       handler <- graphPanelHandler snapshot viewport syncedLayout actions rect

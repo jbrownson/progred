@@ -12,7 +12,9 @@ module Progred.App
   , view
   ) where
 
-import Control.Monad.Trans.State.Strict (StateT, modify, runStateT, state)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans.State.Strict (StateT, evalStateT, gets, modify, runStateT, state)
+
 import Progred.FreshUUID (MonadFreshUUID (..), seededUUIDs)
 import qualified Data.Map.Strict as Map
 import Halay
@@ -28,6 +30,7 @@ import qualified Puri.Canvas as Canvas
 import Puri.Handler
 import qualified Puri.KeyCode as KeyCode
 import Puri.Viewport
+import Puri.Widgets.ScrollViewport (scrollViewport)
 
 
 data ActiveSelection
@@ -48,6 +51,7 @@ data Model = Model
   , modelGraphEdgePress :: Maybe GraphView.GraphEdge
   , modelGraphPointerOrigin :: Maybe Point
   , modelGraphPointerMoved :: Bool
+  , modelDocumentScroll :: Point
   }
 
 type AppM = StateT Model IO
@@ -70,6 +74,7 @@ initialModel =
     , modelGraphEdgePress = Nothing
     , modelGraphPointerOrigin = Nothing
     , modelGraphPointerMoved = False
+    , modelDocumentScroll = Point 0 0
     }
 
 toggleDebugLayoutRects :: AppM ()
@@ -117,44 +122,59 @@ stepGraphLayoutFrame =
             }
         )
 
-view :: Canvas.Canvas renderM => Viewport -> Model -> renderM (Handler AppM)
+view :: (Canvas.Canvas renderM, MonadIO renderM) => Viewport -> Model -> renderM (Handler AppM)
 view viewport model = do
   Canvas.fillRect viewportRect "#fbfbfa"
-  measured <- measureHalay appLayout
-  placeMeasured measured viewportRect
+  measured <- measureHalay (appLayout model)
+  handler <- placeMeasured measured (rootPlacement viewportRect)
+  pure handler
   where
+    getPlacementOffset = liftIO (evalStateT (gets modelDocumentScroll) model)
     viewportRect = Rect 0 0 (viewportWidth viewport) (viewportHeight viewport)
     editor = modelEditor model
-    appLayout =
-      withLayoutDebug (modelDebugLayoutRects model) $
+    editorContent =
+      projectEditor
+        (focusedProjection (listProjection `over` rawProjection))
+        editor
+        editEditor
+        freshCell
+        (GraphView.treeSecondaryHighlight editor (activeGraphSelection (modelActiveSelection model)))
+    appLayout current =
+      withLayoutDebug (modelDebugLayoutRects current) $
         decorate appHandler $
-          workspaceLayout
-    workspaceLayout =
-      if modelShowGraph model
+          workspaceLayout current
+    workspaceLayout current =
+      if modelShowGraph current
         then
           box
             defaultBox
               { boxDirection = LeftToRight
               , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
               }
-            [ sized (Sizing (Percent 0.6) (Fill unbounded)) documentLayout
+            [ sized (Sizing (Percent 0.6) (Fill unbounded)) (documentLayout current)
             , sized (Sizing (Percent 0.4) (Fill unbounded)) graphLayout
             ]
-        else documentLayout
-    documentLayout =
+        else documentLayout current
+    documentLayout _current =
+      box
+        defaultBox
+          { boxDirection = TopToBottom
+          , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
+          }
+        [ scrollViewport
+            getPlacementOffset
+            (gets modelDocumentScroll)
+            setDocumentScroll
+            documentContent
+        ]
+    documentContent =
       box
         defaultBox
           { boxDirection = TopToBottom
           , boxPadding = Insets 12 12 12 12
-          , boxSizing = Sizing (Fill unbounded) (Fill unbounded)
+          , boxSizing = Sizing (Fill unbounded) (Fit unbounded)
           }
-        [ projectEditor
-            (focusedProjection (listProjection `over` rawProjection))
-            editor
-            editEditor
-            freshCell
-            (GraphView.treeSecondaryHighlight editor (activeGraphSelection (modelActiveSelection model)))
-        ]
+        [editorContent]
     graphLayout =
       GraphView.graphPanel
         (GraphView.graphSnapshot editor (activeGraphSelection (modelActiveSelection model)))
@@ -182,6 +202,8 @@ view viewport model = do
           }
     freshCell :: AppM UUID
     freshCell = freshUUID
+    setDocumentScroll offset =
+      modify (\current -> current {modelDocumentScroll = offset})
     editEditor change =
       modify
         ( \current ->
@@ -285,7 +307,7 @@ view viewport model = do
             case modelActiveSelection current of
               ActiveGraph _ -> applyActiveSelection ActiveNone current
               _ -> current
-    appHandler _rect =
+    appHandler _placement =
       pure $
         onPointer
           ( \event ->
@@ -345,9 +367,9 @@ withLayoutDebug enabled layout
   | enabled = debugRects drawDebugRect layout
   | otherwise = layout
 
-drawDebugRect :: Canvas.Canvas renderM => Int -> Rect -> renderM (Handler actionM)
-drawDebugRect depth rect = do
-  Canvas.strokeRect rect (debugRectColor depth) 1
+drawDebugRect :: Canvas.Canvas renderM => Int -> Placement -> renderM (Handler actionM)
+drawDebugRect depth placement = do
+  Canvas.strokeRect (placementRect placement) (debugRectColor depth) 1
   pure mempty
 
 debugRectColor :: Int -> String

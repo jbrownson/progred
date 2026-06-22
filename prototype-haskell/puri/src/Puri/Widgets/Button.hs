@@ -20,14 +20,16 @@ data Button actionM renderM = Button
   }
 
 button :: (Applicative actionM, Canvas.Canvas renderM) => Button actionM renderM -> Widget actionM renderM
-button props rect = do
+button props placement = do
+  let rect = placementRect placement
+  let hitRect = clipRect placement
   buttonContent props (buttonFocused props) rect
   when (buttonFocused props) (Canvas.strokeRect rect focusColor 2)
   pure $
     mconcat
       [ onPointer $ \case
         PointerDown {pointerX, pointerY} ->
-          if rectContains rect pointerX pointerY
+          if rectContains hitRect pointerX pointerY
             then Just (buttonFocus props *> buttonActivate props)
             else Nothing
         _ -> Nothing
