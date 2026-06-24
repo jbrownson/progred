@@ -3,7 +3,6 @@ module Progred.App
   , AppM
   , Model (..)
   , activeSelectionAfterEdit
-  , cancelEscape
   , clearActiveSelection
   , deleteActiveSelection
   , initialModel
@@ -326,7 +325,7 @@ view viewport model = do
             ( \event ->
                 case event of
                   KeyCode _modifiers code
-                    | code == KeyCode.escape -> Just cancelEscape
+                    | code == KeyCode.escape -> Just clearActiveSelection
                   _ -> Nothing
             )
 
@@ -351,24 +350,9 @@ deleteActiveSelection = do
     _ ->
       modify (editEditorModel deleteFocusedSpot)
 
-cancelEscape :: AppM ()
-cancelEscape =
-  modify $ \model ->
-    case edgeComposeParent (editorFocus (modelEditor model)) of
-      Just _ ->
-        model
-          { modelActiveSelection = ActiveNone
-          , modelEditor = cancelEdgeCompose (modelEditor model)
-          }
-      Nothing -> applyActiveSelection ActiveNone model
-
 clearActiveSelection :: AppM ()
 clearActiveSelection =
-  modify $ \model ->
-    case editorFocus (modelEditor model) of
-      Just Focus {focusState = FocusState {focusUnderSelection = Just _}} ->
-        model {modelActiveSelection = ActiveNone}
-      _ -> applyActiveSelection ActiveNone model
+  modify (applyActiveSelection ActiveNone)
 
 activeGraphSelection :: ActiveSelection -> Maybe GraphView.GraphSelection
 activeGraphSelection selection =
