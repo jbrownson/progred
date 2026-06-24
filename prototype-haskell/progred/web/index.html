@@ -234,6 +234,15 @@
           return;
         }
 
+        if (!event.metaKey && !event.ctrlKey && event.key === ",") {
+          event.preventDefault();
+          inst.exports.onKeyDown(
+            event.keyCode,
+            ...eventModifiers(event),
+          );
+          return;
+        }
+
         if (!event.metaKey && !event.ctrlKey && event.key.length === 1 && event.key !== " ") {
           event.preventDefault();
           inst.exports.onTextInput(event.key);

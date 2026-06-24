@@ -145,6 +145,7 @@ keyEdit string event selection =
   case event of
     TextInput inserted -> Just (insertString inserted string selection)
     KeyCode modifiers code
+      | code == KeyCode.comma -> Just (insertString "," string selection)
       | code == KeyCode.space -> Just (insertString " " string selection)
       | code == KeyCode.backspace -> Just (deleteBackward string selection)
       | code == KeyCode.delete -> Just (deleteForward string selection)

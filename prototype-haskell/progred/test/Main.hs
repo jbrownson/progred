@@ -43,6 +43,12 @@ main = do
   run "blurString" propBlurStringOnlyClearsMatchingPath
   run "deleteFocusedSpotEdge" propDeleteFocusedSpotDeletesEdge
   run "deleteFocusedSpotRoot" propDeleteFocusedSpotClearsDocumentRoot
+  run "deleteGraphSelectionEdge" propDeleteGraphSelectionDeletesEdge
+  run "deleteGraphSelectionNode" propDeleteGraphSelectionDeletesNodeEdges
+  run "deleteGraphSelectionRoot" propDeleteGraphSelectionClearsDocumentRoot
+  run "deleteGraphSelectionScalar" propDeleteGraphSelectionDeletesScalarEdges
+  run "deleteGraphSelectionNoOp" propDeleteGraphSelectionIgnoresMissingEdge
+  run "deleteActiveGraphSelection" propDeleteActiveGraphSelectionClearsSelection
   run "toggleCollapse" propToggleCollapseTracksPath
   run "graphContext" propGraphContextUsesLibraries
   run "graphSnapshot" propGraphSnapshotIncludesDocumentStructure
@@ -64,6 +70,7 @@ main = do
   run "treeSecondaryEdge" propTreeSecondaryHighlightEdge
   run "treeSecondaryString" propTreeSecondaryHighlightString
   run "treeSecondarySharedString" propTreeSecondaryHighlightSharedString
+  run "treeSecondaryUnderSelection" propTreeSecondaryHighlightSuppressesUnderSelection
   run "clearActiveSelection" propClearActiveSelectionClearsGraph
   run "treeFocusSelection" propTreeFocusReplacesGraphSelection
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
@@ -73,9 +80,14 @@ main = do
   run "listBeforeFirstInsert" propListNodeInsertBeforeFirstCommitsString
   run "listBeforeFirstRefInsert" propListNodeInsertBeforeFirstCommitsRef
   run "listItemInsert" propListNodeItemInsertCommitsString
+  run "listItemEnterCompose" propListNodeItemEnterStartsEdgeCompose
   run "rootFocus" propRootNodeFocusesOnClick
   run "rootPlaceholderInsert" propRootPlaceholderCommitsString
   run "commandClickNodeRef" propCommandClickNodeReplacesPendingRawEdgeWithRef
+  run "commandClickEdgeLabel" propCommandClickLabelChoosesEdgeComposeLabel
+  run "chooseExistingEdgeLabel" propChooseExistingEdgeLabelFocusesSpot
+  run "commandClickNodeLabel" propCommandClickNodeChoosesEdgeComposeLabel
+  run "graphComposePickNode" propGraphComposePickSelectsNodeRef
   run "rawCycleProjection" propRawCycleProjectsCollapsedAndExpanded
   run "rawNodeInsertNested" propRawNodeInsertCommitsNestedString
   run "rawNodeInsertSibling" propRawEdgeInsertCommitsSiblingString
@@ -236,6 +248,85 @@ propDeleteFocusedSpotClearsDocumentRoot =
     deleted =
       deleteFocusedSpot
         (testEditor rawInsertDocument (Just (Focus [] defaultFocusState)))
+
+propDeleteGraphSelectionDeletesEdge :: Property
+propDeleteGraphSelectionDeletesEdge =
+  conjoin
+    [ readAt (documentGraph (editorDocument deleted)) rootId [rawChildLabel] === Nothing
+    , readAt (documentGraph (editorDocument deleted)) rootId [rawStringLabel] === Just (VString "existing")
+    , documentRoot (editorDocument deleted) === Just (VRef rootId)
+    ]
+  where
+    deleted =
+      deleteGraphSelection
+        (GraphSelectEdge (GraphUUID rootId) rawChildLabel)
+        (newEditor rawInsertDocument)
+
+propDeleteGraphSelectionDeletesNodeEdges :: Property
+propDeleteGraphSelectionDeletesNodeEdges =
+  conjoin
+    [ readAt (documentGraph (editorDocument deleted)) rootId [rawChildLabel] === Nothing
+    , readAt (documentGraph (editorDocument deleted)) rootId [rawStringLabel] === Just (VString "existing")
+    , Map.lookup rawInsertNode (documentGraph (editorDocument deleted)) === Just Map.empty
+    , documentRoot (editorDocument deleted) === Just (VRef rootId)
+    ]
+  where
+    deleted =
+      deleteGraphSelection
+        (GraphSelectNode (GraphUUID rawInsertNode))
+        (newEditor rawInsertDocument)
+
+propDeleteGraphSelectionClearsDocumentRoot :: Property
+propDeleteGraphSelectionClearsDocumentRoot =
+  conjoin
+    [ documentRoot (editorDocument deleted) === Nothing
+    , Map.lookup rootId (documentGraph (editorDocument deleted)) === Just Map.empty
+    , Map.lookup rawInsertNode (documentGraph (editorDocument deleted))
+        === Just (Map.fromList [(nameLabel, VString "child")])
+    ]
+  where
+    deleted =
+      deleteGraphSelection
+        (GraphSelectNode (GraphUUID rootId))
+        (newEditor rawInsertDocument)
+
+propDeleteGraphSelectionDeletesScalarEdges :: Property
+propDeleteGraphSelectionDeletesScalarEdges =
+  conjoin
+    [ readAt (documentGraph (editorDocument deleted)) rootId [rawStringLabel] === Nothing
+    , readAt (documentGraph (editorDocument deleted)) rootId [sharedStringLabel] === Nothing
+    , documentRoot (editorDocument deleted) === Just (VRef rootId)
+    ]
+  where
+    deleted =
+      deleteGraphSelection
+        (GraphSelectNode (GraphScalar (StringKey "shared")))
+        (newEditor sharedStringDocument)
+
+propDeleteGraphSelectionIgnoresMissingEdge :: Property
+propDeleteGraphSelectionIgnoresMissingEdge =
+  documentGraph (editorDocument deleted) === rawInsertGraph
+  where
+    deleted =
+      deleteGraphSelection
+        (GraphSelectEdge (GraphUUID rootId) rawInsertedLabel)
+        (newEditor rawInsertDocument)
+
+propDeleteActiveGraphSelectionClearsSelection :: Property
+propDeleteActiveGraphSelectionClearsSelection =
+  ioProperty $ do
+    let graphSelected =
+          initialModel
+            { modelActiveSelection = ActiveGraph (GraphSelectEdge (GraphUUID rootId) rawChildLabel)
+            , modelEditor = newEditor rawInsertDocument
+            }
+    (_, afterDelete) <- runAppM deleteActiveSelection graphSelected
+    return $
+      conjoin
+        [ modelActiveSelection afterDelete === ActiveNone
+        , readAt (documentGraph (editorDocument (modelEditor afterDelete))) rootId [rawChildLabel] === Nothing
+        , editorFocus (modelEditor afterDelete) === Nothing
+        ]
 
 propToggleCollapseTracksPath :: Property
 propToggleCollapseTracksPath =
@@ -632,6 +723,19 @@ propTreeSecondaryHighlightSharedString =
   treeSecondaryHighlight (newEditor sharedStringDocument) (Just (GraphSelectNode (GraphScalar (StringKey "shared"))))
     === Just (SecondaryScalar (StringKey "shared"))
 
+propTreeSecondaryHighlightSuppressesUnderSelection :: Property
+propTreeSecondaryHighlightSuppressesUnderSelection =
+  conjoin
+    [ treeSecondaryHighlight labelCompose Nothing === Nothing
+    , treeSecondaryHighlight valueCompose Nothing === Nothing
+    , treeSecondaryHighlight labelCompose (Just (GraphSelectNode (GraphUUID rawInsertNode))) === Nothing
+    ]
+  where
+    labelCompose =
+      testEditor rawInsertDocument (Just (Focus [] (testPendingLabelState "" emptyLineEditSelection)))
+    valueCompose =
+      testEditor rawInsertDocument (Just (Focus [rawChildLabel] (testPendingValueState "" emptyLineEditSelection)))
+
 propClearActiveSelectionClearsGraph :: Property
 propClearActiveSelectionClearsGraph =
   ioProperty $ do
@@ -699,6 +803,7 @@ propListProjectionRequiresIsa =
         , envEdit = const (pure ())
         , envFreshUUID = pure listInsertedCell
         , envCollapseState = const Nothing
+        , envFocus = Nothing
         , envSecondaryHighlight = Nothing
         , envProject = const empty
         }
@@ -744,7 +849,7 @@ propListNodeInsertBeforeFirstCommitsString =
   where
     pending =
       execState
-        (handleInsert (listItemHandler (Just (Focus [listLabel] defaultFocusState))))
+        (handleKey commaKey (listItemHandler (Just (Focus [listLabel] defaultFocusState))))
         (testEditor listItemDocument (Just (Focus [listLabel] defaultFocusState)))
     typed =
       execState
@@ -789,7 +894,7 @@ propListNodeItemInsertCommitsString =
   where
     pending =
       execState
-        (handleInsert (listItemHandler (Just (Focus thirdItemPath defaultFocusState))))
+        (handleKey commaKey (listItemHandler (Just (Focus thirdItemPath defaultFocusState))))
         (testEditor listItemDocument (Just (Focus thirdItemPath defaultFocusState)))
     typed =
       execState
@@ -803,6 +908,15 @@ propListNodeItemInsertCommitsString =
       documentContext (editorDocument inserted) []
     omegaSelection =
       lineEditSelectionAtEnd "omega"
+
+propListNodeItemEnterStartsEdgeCompose :: Property
+propListNodeItemEnterStartsEdgeCompose =
+  editorFocus pending === Just (Focus thirdItemPath (testPendingLabelState "" emptyLineEditSelection))
+  where
+    pending =
+      execState
+        (handleInsert (listItemHandler (Just (Focus thirdItemPath defaultFocusState))))
+        (testEditor listItemDocument (Just (Focus thirdItemPath defaultFocusState)))
 
 propRootNodeFocusesOnClick :: Property
 propRootNodeFocusesOnClick =
@@ -851,9 +965,103 @@ propCommandClickNodeReplacesPendingRawEdgeWithRef =
         (handlePointer (PointerDown 10 10 commandModifiers) (rawInsertHandler focus))
         (testEditor rawInsertDocument focus)
     focus =
-      Just (Focus [rawInsertedLabel] (testPendingState "" emptyLineEditSelection))
+      Just (Focus [rawInsertedLabel] (testPendingValueState "" emptyLineEditSelection))
     clickedContext =
       documentContext (editorDocument clicked) []
+
+graphPanelNoCompose :: Document -> GraphPanelActions (State a)
+graphPanelNoCompose document =
+  GraphPanelActions
+    { graphPanelDrag = Nothing
+    , graphPanelPan = Nothing
+    , graphPanelEdgePress = Nothing
+    , graphPanelViewport = emptyGraphViewport
+    , graphPanelPointerOrigin = Nothing
+    , graphPanelPointerMoved = False
+    , graphPanelDocument = document
+    , graphPanelComposeMode = Nothing
+    , graphPanelComposePickLabel = const (pure ())
+    , graphPanelComposePickValue = const (pure ())
+    , graphPanelDragStart = const (pure ())
+    , graphPanelDragMove = const (pure ())
+    , graphPanelDragEnd = pure ()
+    , graphPanelPanStart = const (pure ())
+    , graphPanelPanMove = const (pure ())
+    , graphPanelPanEnd = pure ()
+    , graphPanelEdgePressStart = const (pure ())
+    , graphPanelEdgePressEnd = pure ()
+    , graphPanelSetViewport = const (pure ())
+    , graphPanelInteractionStart = const (pure ())
+    , graphPanelInteractionMove = const (pure ())
+    , graphPanelSetSelection = const (pure ())
+    }
+
+propCommandClickNodeChoosesEdgeComposeLabel :: Property
+propCommandClickNodeChoosesEdgeComposeLabel =
+  property $
+    case find picksLabel clickGrid of
+      Just point ->
+        editorFocus (clickLabel point)
+          === Just (Focus [rawInsertNode] (testPendingValueState "" emptyLineEditSelection))
+      Nothing ->
+        counterexample "no coordinate cmd+clicked a node identicon" False
+  where
+    pending =
+      testEditor rawInsertDocument (Just (Focus [] (testPendingLabelState "" emptyLineEditSelection)))
+    clickLabel (x, y) =
+      execState
+        (handlePointer (PointerDown x y commandModifiers) (rawInsertHandler (editorFocus pending)))
+        pending
+    picksLabel point =
+      editorFocus (clickLabel point)
+        == Just (Focus [rawInsertNode] (testPendingValueState "" emptyLineEditSelection))
+    clickGrid =
+      [(x, y) | x <- [0, 2 .. 240], y <- [0, 2 .. 240]]
+
+propGraphComposePickSelectsNodeRef :: Property
+propGraphComposePickSelectsNodeRef =
+  conjoin
+    [ resolvePath pickedContext [rawInsertedLabel] === Just (VRef rootId)
+    , editorFocus picked === Just (Focus [rawInsertedLabel] defaultFocusState)
+    ]
+  where
+    focus =
+      Just (Focus [rawInsertedLabel] (testPendingValueState "" emptyLineEditSelection))
+    picked =
+      execState
+        (handlePointer (PointerDown 160 120 commandModifiers) (graphComposeHandler focus))
+        (testEditor rawInsertDocument focus)
+    pickedContext =
+      documentContext (editorDocument picked) []
+
+propChooseExistingEdgeLabelFocusesSpot :: Property
+propChooseExistingEdgeLabelFocusesSpot =
+  editorFocus focused === Just (Focus [rawChildLabel] defaultFocusState)
+  where
+    focused =
+      chooseEdgeComposeLabel [] rawChildLabel
+        (testEditor rawInsertDocument (Just (Focus [] (testPendingLabelState "" emptyLineEditSelection))))
+
+propCommandClickLabelChoosesEdgeComposeLabel :: Property
+propCommandClickLabelChoosesEdgeComposeLabel =
+  property $
+    case find picksLabel clickGrid of
+      Just point ->
+        editorFocus (clickLabel point)
+          === Just (Focus [rawChildLabel] defaultFocusState)
+      Nothing ->
+        counterexample "no coordinate cmd+clicked an edge label" False
+  where
+    pending =
+      testEditor rawInsertDocument (Just (Focus [] (testPendingLabelState "" emptyLineEditSelection)))
+    clickLabel (x, y) =
+      execState
+        (handlePointer (PointerDown x y commandModifiers) (rawInsertHandler (editorFocus pending)))
+        pending
+    picksLabel point =
+      editorFocus (clickLabel point) == Just (Focus [rawChildLabel] defaultFocusState)
+    clickGrid =
+      [(x, y) | x <- [0, 2 .. 240], y <- [0, 2 .. 240]]
 
 propRawCycleProjectsCollapsedAndExpanded :: Property
 propRawCycleProjectsCollapsedAndExpanded =
@@ -865,8 +1073,9 @@ propRawCycleProjectsCollapsedAndExpanded =
 propRawNodeInsertCommitsNestedString :: Property
 propRawNodeInsertCommitsNestedString =
   conjoin
-    [ editorFocus pending === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingState "" emptyLineEditSelection))
-    , editorFocus typed === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingState "delta" deltaSelection))
+    [ editorFocus pending === Just (Focus [rawChildLabel] (testPendingLabelState "" emptyLineEditSelection))
+    , editorFocus labeled === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingValueState "" emptyLineEditSelection))
+    , editorFocus typed === Just (Focus [rawChildLabel, rawInsertedLabel] (testPendingValueState "delta" deltaSelection))
     , resolvePath insertedContext [rawChildLabel, rawInsertedLabel] === Just (VString "delta")
     , editorFocus inserted === Just (Focus [rawChildLabel, rawInsertedLabel] (testFocusState deltaSelection))
     ]
@@ -875,10 +1084,12 @@ propRawNodeInsertCommitsNestedString =
       execState
         (handleInsert (rawInsertHandler (Just (Focus [rawChildLabel] defaultFocusState))))
         (testEditor rawInsertDocument (Just (Focus [rawChildLabel] defaultFocusState)))
+    labeled =
+      chooseEdgeComposeLabel [rawChildLabel] rawInsertedLabel pending
     typed =
       execState
-        (handleKey (TextInput "delta") (rawInsertHandler (editorFocus pending)))
-        pending
+        (handleKey (TextInput "delta") (rawInsertHandler (editorFocus labeled)))
+        labeled
     inserted =
       execState
         (handleKey enterKey (rawInsertHandler (editorFocus typed)))
@@ -1081,8 +1292,9 @@ propScrollClampUsesClipNotLayoutRect =
 propRawEdgeInsertCommitsSiblingString :: Property
 propRawEdgeInsertCommitsSiblingString =
   conjoin
-    [ editorFocus pending === Just (Focus [rawInsertedLabel] (testPendingState "" emptyLineEditSelection))
-    , editorFocus typed === Just (Focus [rawInsertedLabel] (testPendingState "epsilon" epsilonSelection))
+    [ editorFocus pending === Just (Focus [] (testPendingLabelState "" emptyLineEditSelection))
+    , editorFocus labeled === Just (Focus [rawInsertedLabel] (testPendingValueState "" emptyLineEditSelection))
+    , editorFocus typed === Just (Focus [rawInsertedLabel] (testPendingValueState "epsilon" epsilonSelection))
     , resolvePath insertedContext [rawInsertedLabel] === Just (VString "epsilon")
     , editorFocus inserted === Just (Focus [rawInsertedLabel] (testFocusState epsilonSelection))
     ]
@@ -1091,10 +1303,12 @@ propRawEdgeInsertCommitsSiblingString =
       execState
         (handleInsert (rawInsertHandler (Just (Focus [rawStringLabel] defaultFocusState))))
         (testEditor rawInsertDocument (Just (Focus [rawStringLabel] defaultFocusState)))
+    labeled =
+      chooseEdgeComposeLabel [] rawInsertedLabel pending
     typed =
       execState
-        (handleKey (TextInput "epsilon") (rawInsertHandler (editorFocus pending)))
-        pending
+        (handleKey (TextInput "epsilon") (rawInsertHandler (editorFocus labeled)))
+        labeled
     inserted =
       execState
         (handleKey enterKey (rawInsertHandler (editorFocus typed)))
@@ -1210,25 +1424,36 @@ graphDragHandler drag =
           (graphSnapshot (newEditor rawInsertDocument) Nothing)
           emptyGraphViewport
           emptyGraphLayout
-          GraphPanelActions
+          (graphPanelNoCompose rawInsertDocument)
             { graphPanelDrag = drag
-            , graphPanelPan = Nothing
-            , graphPanelEdgePress = Nothing
-            , graphPanelViewport = emptyGraphViewport
-            , graphPanelPointerOrigin = Nothing
-            , graphPanelPointerMoved = False
             , graphPanelDragStart = \newDrag -> modify (\state -> state {graphDragTestDrag = Just newDrag})
             , graphPanelDragMove = \position -> modify (\state -> state {graphDragTestMoved = Just position})
             , graphPanelDragEnd = modify (\state -> state {graphDragTestEnded = True})
-            , graphPanelPanStart = \_ -> pure ()
-            , graphPanelPanMove = \_ -> pure ()
-            , graphPanelPanEnd = pure ()
-            , graphPanelEdgePressStart = \_ -> pure ()
-            , graphPanelEdgePressEnd = pure ()
-            , graphPanelSetViewport = \_ -> pure ()
-            , graphPanelInteractionStart = \_ -> pure ()
-            , graphPanelInteractionMove = \_ -> pure ()
-            , graphPanelSetSelection = \selection -> modify (\state -> state {graphDragTestSelection = selection})
+            }
+    placeMeasured measured (rootPlacement (Rect 0 0 320 240))
+
+graphComposeHandler :: Maybe Focus -> Handler (State Editor)
+graphComposeHandler focus =
+  runTestRender $ do
+    measured <-
+      measureHalay $
+        graphPanel
+          (graphSnapshot (testEditor rawInsertDocument focus) Nothing)
+          emptyGraphViewport
+          emptyGraphLayout
+          (graphPanelNoCompose rawInsertDocument)
+            { graphPanelComposeMode = focus >>= focusUnderSelection . focusState
+            , graphPanelComposePickLabel =
+                \label ->
+                  case composeParentPath focus of
+                    Just parentPath -> modify (chooseEdgeComposeLabel parentPath label)
+                    Nothing -> pure ()
+            , graphPanelComposePickValue =
+                \value ->
+                  case focus >>= focusUnderSelection . focusState of
+                    Just UnderValue ->
+                      modify (replaceFocusedSpot rawInsertedLabel value)
+                    _ -> pure ()
             }
     placeMeasured measured (rootPlacement (Rect 0 0 320 240))
 
@@ -1241,7 +1466,7 @@ graphInteractionHandler state =
           (graphSnapshot (newEditor rawInsertDocument) Nothing)
           (graphInteractionTestViewport state)
           emptyGraphLayout
-          GraphPanelActions
+          (graphPanelNoCompose rawInsertDocument)
             { graphPanelDrag = graphInteractionTestDrag state
             , graphPanelPan = graphInteractionTestPan state
             , graphPanelEdgePress = graphInteractionTestEdgePress state
@@ -1341,9 +1566,27 @@ testPendingState :: String -> LineEditSelection -> FocusState
 testPendingState string selection =
   defaultFocusState {focusPendingEdit = Just (PendingEdit string selection)}
 
+testPendingLabelState :: String -> LineEditSelection -> FocusState
+testPendingLabelState string selection =
+  defaultFocusState
+    { focusPendingEdit = Just (PendingEdit string selection)
+    , focusUnderSelection = Just UnderLabel
+    }
+
+testPendingValueState :: String -> LineEditSelection -> FocusState
+testPendingValueState string selection =
+  defaultFocusState
+    { focusPendingEdit = Just (PendingEdit string selection)
+    , focusUnderSelection = Just UnderValue
+    }
+
 enterKey :: KeyEvent
 enterKey =
   KeyCode noModifiers KeyCode.enter
+
+commaKey :: KeyEvent
+commaKey =
+  KeyCode noModifiers KeyCode.comma
 
 noModifiers :: KeyModifiers
 noModifiers =

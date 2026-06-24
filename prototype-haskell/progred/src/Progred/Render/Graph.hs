@@ -10,6 +10,7 @@ module Progred.Render.Graph
   , GraphSelection (..)
   , GraphSelectionStrength (..)
   , GraphSnapshot (..)
+  , deleteGraphSelection
   , treeSecondaryHighlight
   , GraphSelectedEdge (..)
   , GraphSelectedNode (..)
@@ -32,7 +33,7 @@ module Progred.Render.Graph
 
 import Control.Applicative ((<|>))
 import Control.Monad (guard, msum)
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Data.Bits ((.&.), shiftR, xor)
 import Data.Char (ord)
 import Data.Functor ((<&>))
@@ -48,6 +49,7 @@ import Progred.Document
 import Progred.Editor
 import Progred.Graph
 import Progred.GraphContext
+import Progred.MapGraph (MapGraph)
 import Progred.Projection (SecondaryHighlight (..))
 import Progred.Widgets.Identicon
 import qualified Puri.Canvas as Canvas
@@ -149,6 +151,10 @@ data GraphPanelActions actionM = GraphPanelActions
   , graphPanelViewport :: GraphViewport
   , graphPanelPointerOrigin :: Maybe Point
   , graphPanelPointerMoved :: Bool
+  , graphPanelDocument :: Document
+  , graphPanelComposeMode :: Maybe UnderSelection
+  , graphPanelComposePickLabel :: UUID -> actionM ()
+  , graphPanelComposePickValue :: Value -> actionM ()
   , graphPanelDragStart :: GraphDrag -> actionM ()
   , graphPanelDragMove :: Point -> actionM ()
   , graphPanelDragEnd :: actionM ()
@@ -192,6 +198,75 @@ moveGraphNode key position layout =
     { graphLayoutPositions = Map.insert key position (graphLayoutPositions layout)
     , graphLayoutVelocities = Map.insert key (Point 0 0) (graphLayoutVelocities layout)
     }
+
+deleteGraphSelection :: GraphSelection -> Editor -> Editor
+deleteGraphSelection selection editor =
+  case selection of
+    GraphSelectEdge source label ->
+      case graphSelectEdgeDeletes source label (documentGraph (editorDocument editor)) of
+        [] -> editor
+        edges -> applyEdgeDeletes edges editor
+    GraphSelectNode key ->
+      deleteGraphNode key editor
+
+deleteGraphNode :: GraphNodeKey -> Editor -> Editor
+deleteGraphNode key editor =
+  let document = editorDocument editor
+      graph = documentGraph document
+      cleared =
+        if isDocumentRootKey document key
+          then clearRoot editor
+          else editor
+   in applyEdgeDeletes (nodeEdgeDeletes key graph) cleared
+
+isDocumentRootKey :: Document -> GraphNodeKey -> Bool
+isDocumentRootKey document key =
+  case (documentRoot document, key) of
+    (Nothing, GraphRoot) -> True
+    (Just value, key') -> key' == valueGraphNodeKey value
+    _ -> False
+
+graphSelectEdgeDeletes :: GraphNodeKey -> UUID -> MapGraph -> [Edge]
+graphSelectEdgeDeletes (GraphUUID source) label graph =
+  case Map.lookup source graph >>= Map.lookup label of
+    Just _ -> [Edge source label]
+    Nothing -> []
+graphSelectEdgeDeletes _ _ _ = []
+
+nodeEdgeDeletes :: GraphNodeKey -> MapGraph -> [Edge]
+nodeEdgeDeletes key graph =
+  case key of
+    GraphRoot -> []
+    GraphUUID node ->
+      outgoingEdges node graph <> incomingRefEdges node graph
+    GraphScalar sk ->
+      incomingScalarEdges sk graph
+
+outgoingEdges :: UUID -> MapGraph -> [Edge]
+outgoingEdges source graph =
+  case Map.lookup source graph of
+    Nothing -> []
+    Just edges -> [Edge source label | label <- Map.keys edges]
+
+incomingRefEdges :: UUID -> MapGraph -> [Edge]
+incomingRefEdges target graph =
+  [ Edge source label
+  | (source, edges) <- Map.toList graph
+  , (label, VRef ref) <- Map.toList edges
+  , ref == target
+  ]
+
+incomingScalarEdges :: ScalarKey -> MapGraph -> [Edge]
+incomingScalarEdges sk graph =
+  [ Edge source label
+  | (source, edges) <- Map.toList graph
+  , (label, value) <- Map.toList edges
+  , valueHasScalarKey value sk
+  ]
+
+applyEdgeDeletes :: [Edge] -> Editor -> Editor
+applyEdgeDeletes edges editor =
+  foldl (flip deleteEdge) editor edges
 
 graphSnapshot :: Editor -> Maybe GraphSelection -> GraphSnapshot
 graphSnapshot editor graphSelection =
@@ -352,14 +427,17 @@ focusedEdge context focus = do
   pathEdge context focusPath
 
 treeSecondaryHighlight :: Editor -> Maybe GraphSelection -> Maybe SecondaryHighlight
-treeSecondaryHighlight editor graphSelection =
-  let document = editorDocument editor
-      context = documentContext document []
-   in case graphSelection of
-        Just (GraphSelectNode key) -> secondaryForNode context key
-        Just (GraphSelectEdge source label) ->
-          SecondarySpot . (++ [label]) <$> pathToNodeKey context source
-        Nothing -> focusedHighlight document context editor
+treeSecondaryHighlight editor graphSelection
+  | isJust (editorFocus editor >>= focusUnderSelection . focusState) =
+      Nothing
+  | otherwise =
+      let document = editorDocument editor
+          context = documentContext document []
+       in case graphSelection of
+            Just (GraphSelectNode key) -> secondaryForNode context key
+            Just (GraphSelectEdge source label) ->
+              SecondarySpot . (++ [label]) <$> pathToNodeKey context source
+            Nothing -> focusedHighlight document context editor
 
 secondaryForNode :: GraphContext -> GraphNodeKey -> Maybe SecondaryHighlight
 secondaryForNode _ key =
@@ -511,6 +589,71 @@ finishGraphInteraction actions selection
   | graphPanelPointerMoved actions = pure ()
   | otherwise = graphPanelSetSelection actions selection
 
+graphNodeKeyValue :: Document -> GraphNodeKey -> Maybe Value
+graphNodeKeyValue document key =
+  case key of
+    GraphRoot -> documentRoot document
+    GraphUUID uuid -> Just (VRef uuid)
+    GraphScalar sk -> Just (scalarKeyValue sk)
+
+scalarKeyValue :: ScalarKey -> Value
+scalarKeyValue key =
+  case key of
+    StringKey string -> VString string
+    IntKey integer -> VInt integer
+    FloatKey double -> VFloat double
+
+graphComposePointerDown
+  :: GraphPanelActions actionM
+  -> Document
+  -> KeyModifiers
+  -> [GraphEdgeLabelHit]
+  -> GraphSnapshot
+  -> Map GraphNodeKey Size
+  -> Map GraphNodeKey Point
+  -> Map GraphNodeKey Point
+  -> Point
+  -> Point
+  -> Maybe (actionM ())
+graphComposePointerDown actions document modifiers edgeHits snapshot sizesByKey graphPositions screenPositions pointer graphPointer
+  | not (keyMeta modifiers) = Nothing
+  | otherwise =
+      case graphPanelComposeMode actions of
+    Nothing -> Nothing
+    Just UnderLabel ->
+      case hitGraphEdge edgeHits pointer of
+        Just edge ->
+          Just (graphPanelComposePickLabel actions (graphEdgeLabel edge))
+        Nothing ->
+          case hitGraphNodeKey snapshot sizesByKey graphPositions screenPositions pointer graphPointer of
+            Nothing -> Nothing
+            Just drag -> graphNodePickLabel drag
+    Just UnderValue ->
+      case hitGraphEdge edgeHits pointer of
+        Just edge ->
+          graphNodeKeyValue document (graphEdgeTarget edge) <&> graphPanelComposePickValue actions
+        Nothing ->
+          case hitGraphNodeKey snapshot sizesByKey graphPositions screenPositions pointer graphPointer of
+            Nothing -> Nothing
+            Just drag ->
+              graphNodeKeyValue document (graphDragNode drag) <&> graphPanelComposePickValue actions
+  where
+    graphNodePickLabel drag =
+      case graphDragNode drag of
+        GraphUUID uuid -> Just (graphPanelComposePickLabel actions uuid)
+        _ -> Nothing
+
+hitGraphNodeKey
+  :: GraphSnapshot
+  -> Map GraphNodeKey Size
+  -> Map GraphNodeKey Point
+  -> Map GraphNodeKey Point
+  -> Point
+  -> Point
+  -> Maybe GraphDrag
+hitGraphNodeKey snapshot sizesByKey graphPositions screenPositions pointer graphPointer =
+  hitGraphNode snapshot sizesByKey graphPositions screenPositions pointer graphPointer
+
 graphClickMoveThreshold :: Double
 graphClickMoveThreshold = 2
 
@@ -546,25 +689,41 @@ graphPanelHandler snapshot viewport layout actions rect = do
   pure $
     onPointerCapture $ \event ->
       case event of
-        PointerDown {pointerX, pointerY}
+        PointerDown {pointerX, pointerY, pointerModifiers}
           | rectContains rect pointerX pointerY ->
               let pointer = Point pointerX pointerY
-               in Just $ do
-                    graphPanelInteractionStart actions pointer
-                    case hitGraphEdge edgeHits pointer of
-                      Just edge -> graphPanelEdgePressStart actions edge
-                      Nothing ->
-                        case
-                          hitGraphNode
-                            snapshot
-                            screenSizesByKey
-                            graphPositions
-                            screenPositions
-                            pointer
-                            (pointerGraphPoint viewport rect pointerX pointerY)
-                          of
-                            Just drag -> graphPanelDragStart actions drag
-                            Nothing -> graphPanelPanStart actions pointer
+                  graphPointer = pointerGraphPoint viewport rect pointerX pointerY
+               in case
+                    graphComposePointerDown
+                      actions
+                      (graphPanelDocument actions)
+                      pointerModifiers
+                      edgeHits
+                      snapshot
+                      sizesByKey
+                      graphPositions
+                      screenPositions
+                      pointer
+                      graphPointer
+                    of
+                    Just pick -> Just pick
+                    Nothing ->
+                      Just $ do
+                        graphPanelInteractionStart actions pointer
+                        case hitGraphEdge edgeHits pointer of
+                          Just edge -> graphPanelEdgePressStart actions edge
+                          Nothing ->
+                            case
+                              hitGraphNode
+                                snapshot
+                                screenSizesByKey
+                                graphPositions
+                                screenPositions
+                                pointer
+                                graphPointer
+                              of
+                                Just drag -> graphPanelDragStart actions drag
+                                Nothing -> graphPanelPanStart actions pointer
         PointerMove {pointerX, pointerY}
           | graphPanelDrag actions /= Nothing
               || graphPanelPan actions /= Nothing

@@ -4,9 +4,16 @@ module Progred.Editor
   , FocusState (..)
   , NumberEdit (..)
   , PendingEdit (..)
+  , UnderSelection (..)
+  , chooseEdgeComposeLabel
+  , composeParentPath
+  , labelPickActive
+  , refPickActive
+  , startEdgeCompose
   , blurValue
   , blurString
   , cancelPending
+  , clearRoot
   , defaultFocusState
   , deleteEdge
   , deleteFocusedSpot
@@ -32,6 +39,7 @@ module Progred.Editor
   , toggleCollapsed
   ) where
 
+import Data.Maybe (isJust)
 import qualified Data.Map.Strict as Map
 import Text.Read (readMaybe)
 import Progred.Builtins
@@ -40,7 +48,7 @@ import Progred.Graph
 import Progred.GraphContext
 import Progred.MapGraph
 import qualified Progred.PathTrie as PathTrie
-import Puri.Widgets (LineEditSelection (..))
+import Puri.Widgets (LineEditSelection (..), emptyLineEditSelection)
 
 -- Focus is the focused spot by path from the document root. Occurrences
 -- of a shared node are distinct because they are reached along different
@@ -51,10 +59,16 @@ data Focus = Focus
   }
   deriving (Eq, Show)
 
+data UnderSelection
+  = UnderLabel
+  | UnderValue
+  deriving (Eq, Show)
+
 data FocusState = FocusState
   { focusStringSelection :: LineEditSelection
   , focusNumberEdit :: Maybe NumberEdit
   , focusPendingEdit :: Maybe PendingEdit
+  , focusUnderSelection :: Maybe UnderSelection
   }
   deriving (Eq, Show)
 
@@ -76,6 +90,7 @@ defaultFocusState =
     { focusStringSelection = LineEditSelection 0 0 False
     , focusNumberEdit = Nothing
     , focusPendingEdit = Nothing
+    , focusUnderSelection = Nothing
     }
 
 data Editor = Editor
@@ -135,13 +150,18 @@ focusString path selection editor =
       (stateForPath path (editorFocus editor))
         { focusStringSelection = selection
         , focusPendingEdit = Nothing
+        , focusUnderSelection = Nothing
         }
 
 focusSpot :: [UUID] -> Editor -> Editor
 focusSpot path editor =
   setFocus (Just (Focus path state)) editor
   where
-    state = (stateForPath path (editorFocus editor)) {focusPendingEdit = Nothing}
+    state =
+      (stateForPath path (editorFocus editor))
+        { focusPendingEdit = Nothing
+        , focusUnderSelection = Nothing
+        }
 
 focusNumber :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
 focusNumber path string selection editor =
@@ -151,6 +171,7 @@ focusNumber path string selection editor =
       (stateForPath path (editorFocus editor))
         { focusNumberEdit = Just (NumberEdit string selection)
         , focusPendingEdit = Nothing
+        , focusUnderSelection = Nothing
         }
 
 focusPending :: [UUID] -> String -> LineEditSelection -> Editor -> Editor
@@ -161,6 +182,56 @@ focusPending path string selection editor =
       (stateForPath path (editorFocus editor))
         { focusPendingEdit = Just (PendingEdit string selection)
         }
+
+startEdgeCompose :: [UUID] -> Editor -> Editor
+startEdgeCompose parentPath =
+  setFocus (Just (Focus parentPath state))
+  where
+    state =
+      FocusState
+        { focusStringSelection = LineEditSelection 0 0 False
+        , focusNumberEdit = Nothing
+        , focusPendingEdit = Just (PendingEdit "" emptyLineEditSelection)
+        , focusUnderSelection = Just UnderLabel
+        }
+
+composeParentPath :: Maybe Focus -> Maybe [UUID]
+composeParentPath focus =
+  case focus of
+    Just Focus {focusPath = path, focusState = FocusState {focusUnderSelection = Just UnderLabel, focusPendingEdit = Just _}} ->
+      Just path
+    _ -> Nothing
+
+labelPickActive :: Maybe Focus -> Bool
+labelPickActive =
+  isJust . composeParentPath
+
+refPickActive :: Maybe Focus -> Bool
+refPickActive focus =
+  case focus of
+    Just Focus {focusState = FocusState {focusUnderSelection = Just UnderValue, focusPendingEdit = Just _}} -> True
+    _ -> False
+
+chooseEdgeComposeLabel :: [UUID] -> UUID -> Editor -> Editor
+chooseEdgeComposeLabel parentPath label editor =
+  let childPath = parentPath <> [label]
+   in setCollapsed parentPath False $
+        case resolvePath (editorContext editor) childPath of
+          Just _ -> focusSpot childPath editor
+          Nothing ->
+            setFocus
+              ( Just
+                  ( Focus
+                      childPath
+                      FocusState
+                        { focusStringSelection = LineEditSelection 0 0 False
+                        , focusNumberEdit = Nothing
+                        , focusPendingEdit = Just (PendingEdit "" emptyLineEditSelection)
+                        , focusUnderSelection = Just UnderValue
+                        }
+                  )
+              )
+              editor
 
 blurValue :: [UUID] -> Editor -> Editor
 blurValue path editor =

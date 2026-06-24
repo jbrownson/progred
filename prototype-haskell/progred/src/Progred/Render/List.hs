@@ -84,7 +84,7 @@ listActions :: Applicative renderM => Env actionM renderM -> Cursor -> Halay ren
 listActions env cursor child =
   case cursorFocus cursor of
     Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing ->
-      decorate (const (pure (onInsert (envEdit env (focusPending (listPendingPath (cursorPath cursor)) "" emptyLineEditSelection))))) child
+      decorate (const (pure (listInsertKeyHandler env (cursorPath cursor)))) child
     _ -> child
 
 listItemActions :: Applicative renderM => Env actionM renderM -> ListItem -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
@@ -95,10 +95,20 @@ listItemActions env item child =
         ( const $
             pure $
               onDelete (envEdit env (spliceListItem (cursorPath (listItemHead item))))
-                <> onInsert (envEdit env (focusPending (listPendingPath (cursorPath (listItemAfter item))) "" emptyLineEditSelection))
+                <> listInsertKeyHandler env (cursorPath (listItemAfter item))
         )
         child
     _ -> child
+
+listInsertKeyHandler :: Env actionM renderM -> [UUID] -> Handler actionM
+listInsertKeyHandler env path =
+  onKey $ \event ->
+    case event of
+      KeyCode modifiers code
+        | code == KeyCode.comma
+        , not (hasModifier modifiers) ->
+            Just (envEdit env (focusPending (listPendingPath path) "" emptyLineEditSelection))
+      _ -> Nothing
 
 emptyList :: (Canvas.Canvas renderM, Monad actionM) => Env actionM renderM -> Cursor -> [Halay renderM renderM (Handler actionM)]
 emptyList env cursor =

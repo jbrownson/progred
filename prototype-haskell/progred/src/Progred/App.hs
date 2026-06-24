@@ -4,6 +4,7 @@ module Progred.App
   , Model (..)
   , activeSelectionAfterEdit
   , clearActiveSelection
+  , deleteActiveSelection
   , initialModel
   , runAppM
   , stepGraphLayoutFrame
@@ -187,6 +188,10 @@ view viewport model = do
           , GraphView.graphPanelViewport = modelGraphViewport model
           , GraphView.graphPanelPointerOrigin = modelGraphPointerOrigin model
           , GraphView.graphPanelPointerMoved = modelGraphPointerMoved model
+          , GraphView.graphPanelDocument = editorDocument editor
+          , GraphView.graphPanelComposeMode = editorFocus editor >>= focusUnderSelection . focusState
+          , GraphView.graphPanelComposePickLabel = composePickLabel
+          , GraphView.graphPanelComposePickValue = composePickValue
           , GraphView.graphPanelDragStart = startGraphDrag
           , GraphView.graphPanelDragMove = moveGraphDrag
           , GraphView.graphPanelDragEnd = endGraphDrag
@@ -204,17 +209,17 @@ view viewport model = do
     freshCell = freshUUID
     setDocumentScroll offset =
       modify (\current -> current {modelDocumentScroll = offset})
-    editEditor change =
-      modify
-        ( \current ->
-            let after = change (modelEditor current)
-                selection =
-                  activeSelectionAfterEdit
-                    (modelEditor current)
-                    after
-                    (modelActiveSelection current)
-             in applyActiveSelection selection (current {modelEditor = after})
-        )
+    editEditor = modify . editEditorModel
+    composePickLabel label =
+      case composeParentPath (editorFocus editor) of
+        Just parentPath -> modify (editEditorModel (chooseEdgeComposeLabel parentPath label))
+        Nothing -> pure ()
+    composePickValue value =
+      case editorFocus editor >>= focusUnderSelection . focusState of
+        Just UnderValue -> do
+          cell <- freshCell
+          modify (editEditorModel (replaceFocusedSpot cell value))
+        _ -> pure ()
     startGraphDrag drag =
       modify $ \current ->
         current
@@ -315,7 +320,7 @@ view viewport model = do
                 PointerDown {} -> Just clearActiveSelection
                 _ -> Nothing
           )
-          <> onDelete (editEditor deleteFocusedSpot)
+          <> onDelete deleteActiveSelection
           <> onKey
             ( \event ->
                 case event of
@@ -324,9 +329,34 @@ view viewport model = do
                   _ -> Nothing
             )
 
+editEditorModel :: (Editor -> Editor) -> Model -> Model
+editEditorModel change current =
+  let after = change (modelEditor current)
+      selection =
+        activeSelectionAfterEdit
+          (modelEditor current)
+          after
+          (modelActiveSelection current)
+   in applyActiveSelection selection (current {modelEditor = after})
+
+deleteActiveSelection :: AppM ()
+deleteActiveSelection = do
+  selection <- gets modelActiveSelection
+  case selection of
+    ActiveGraph graphSelection ->
+      modify $ \current ->
+        applyActiveSelection ActiveNone $
+          current {modelEditor = GraphView.deleteGraphSelection graphSelection (modelEditor current)}
+    _ ->
+      modify (editEditorModel deleteFocusedSpot)
+
 clearActiveSelection :: AppM ()
 clearActiveSelection =
-  modify (applyActiveSelection ActiveNone)
+  modify $ \model ->
+    case editorFocus (modelEditor model) of
+      Just Focus {focusState = FocusState {focusUnderSelection = Just _}} ->
+        model {modelActiveSelection = ActiveNone}
+      _ -> applyActiveSelection ActiveNone model
 
 activeGraphSelection :: ActiveSelection -> Maybe GraphView.GraphSelection
 activeGraphSelection selection =

@@ -1,5 +1,6 @@
 module Puri.KeyCode
   ( backspace
+  , comma
   , delete
   , down
   , end
@@ -15,9 +16,10 @@ module Puri.KeyCode
 
 import Data.Word (Word32)
 
-backspace, tab, enter, escape, space, home, end, left, up, right, down, delete :: Word32
+backspace, tab, comma, enter, escape, space, home, end, left, up, right, down, delete :: Word32
 backspace = 8
 tab = 9
+comma = 188
 enter = 13
 escape = 27
 space = 32

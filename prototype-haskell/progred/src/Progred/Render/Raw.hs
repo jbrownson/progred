@@ -66,7 +66,10 @@ secondaryCursor env cursor child =
             Nothing -> False
     spotHasPrimaryFocus spot =
       case cursorFocus spot of
-        Just focus -> null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing
+        Just focus ->
+          null (focusPath focus)
+            && focusPendingEdit (focusState focus) == Nothing
+            && focusUnderSelection (focusState focus) == Nothing
         Nothing -> False
 
 drawSecondaryBackground :: Canvas.Canvas renderM => Placement -> renderM (Handler actionM)
@@ -127,7 +130,8 @@ rawNode env cursor target collapsedByDefault =
       edgeRow env cursor label
     pendingRows =
       case activeRawPending of
-        Just (label, pending) -> [pendingEdgeRow env cursor label pending]
+        Just (RawPendingLabel pending) -> [pendingLabelRow env cursor pending]
+        Just (RawPendingValue label pending) -> [pendingEdgeRow env cursor label pending]
         Nothing -> []
 
 rawNodeHeader :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> Edges -> Bool -> Halay renderM renderM (Handler actionM)
@@ -155,7 +159,14 @@ nodeReferenceActions env target child =
             onPointerCapture $ \event ->
               case event of
                 PointerDown {pointerX, pointerY, pointerModifiers}
-                  | keyMeta pointerModifiers && rectContains rect pointerX pointerY ->
+                  | keyMeta pointerModifiers
+                  , rectContains rect pointerX pointerY
+                  , Just parentPath <- composeParentPath (envFocus env) ->
+                      Just (envEdit env (chooseEdgeComposeLabel parentPath target))
+                PointerDown {pointerX, pointerY, pointerModifiers}
+                  | keyMeta pointerModifiers
+                  , refPickActive (envFocus env)
+                  , rectContains rect pointerX pointerY ->
                       Just $ do
                         cell <- envFreshUUID env
                         envEdit env (replaceFocusedSpot cell (VRef target))
@@ -166,15 +177,18 @@ rootActions env cursor child
   | null (cursorPath cursor) = focusableSpot env cursor child
   | otherwise = child
 
-rawNodeActions :: (Applicative renderM, Monad actionM) => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+rawNodeActions :: Applicative renderM => Env actionM renderM -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 rawNodeActions env cursor child =
   case cursorFocus cursor of
-    Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing ->
-      decorate (const (pure (onInsert (startPendingEdge env (cursorPath cursor))))) child
+    Just focus
+      | null (focusPath focus)
+      , focusPendingEdit (focusState focus) == Nothing
+      , focusUnderSelection (focusState focus) == Nothing ->
+          decorate (const (pure (onInsert (startPendingEdge env (cursorPath cursor))))) child
     _ -> child
 
 edgeRow
-  :: (Canvas.Canvas renderM, Monad actionM)
+  :: Canvas.Canvas renderM
   => Env actionM renderM
   -> Cursor
   -> UUID
@@ -182,29 +196,75 @@ edgeRow
 edgeRow env cursor label =
   rawEdgeActions env cursor childCursor $
     focusableEdge env childCursor $
-      rowWithGap valueGap [rawEdgeLabel label, rawChild (envProject env childCursor)]
+      rowWithGap valueGap [rawEdgeLabel env (cursorPath cursor) label, rawChild (envProject env childCursor)]
   where
     childCursor = descendCursor label cursor
 
-rawEdgeActions :: (Applicative renderM, Monad actionM) => Env actionM renderM -> Cursor -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
+rawEdgeActions :: Applicative renderM => Env actionM renderM -> Cursor -> Cursor -> Halay renderM renderM (Handler actionM) -> Halay renderM renderM (Handler actionM)
 rawEdgeActions env parentCursor childCursor child =
   case cursorFocus childCursor of
-    Just focus | null (focusPath focus) && focusPendingEdit (focusState focus) == Nothing ->
-      decorate (const (pure (onInsert (startPendingEdge env (cursorPath parentCursor))))) child
+    Just focus
+      | null (focusPath focus)
+      , focusPendingEdit (focusState focus) == Nothing
+      , focusUnderSelection (focusState focus) == Nothing ->
+          decorate (const (pure (onInsert (startPendingEdge env (cursorPath parentCursor))))) child
     _ -> child
 
-startPendingEdge :: Monad actionM => Env actionM renderM -> [UUID] -> actionM ()
-startPendingEdge env parentPath = do
-  label <- envFreshUUID env
-  envEdit env (focusPending (parentPath <> [label]) "" emptyLineEditSelection . setCollapsed parentPath False)
+startPendingEdge :: Env actionM renderM -> [UUID] -> actionM ()
+startPendingEdge env parentPath =
+  envEdit env (startEdgeCompose parentPath . setCollapsed parentPath False)
 
-rawEdgeLabel :: Canvas.Canvas renderM => UUID -> Halay renderM renderM (Handler actionM)
-rawEdgeLabel label =
-  inlineRowWithGap arrowGap [identiconPlay label, arrowPlay]
+rawEdgeLabel :: Canvas.Canvas renderM => Env actionM renderM -> [UUID] -> UUID -> Halay renderM renderM (Handler actionM)
+rawEdgeLabel env _parentPath label =
+  labelPickActions env label $
+    inlineRowWithGap arrowGap [identiconPlay label, arrowPlay]
+
+labelPickActions
+  :: Applicative renderM
+  => Env actionM renderM
+  -> UUID
+  -> Halay renderM renderM (Handler actionM)
+  -> Halay renderM renderM (Handler actionM)
+labelPickActions env label child =
+  decorate place child
+  where
+    place placement =
+      let rect = clipRect placement
+       in pure $
+            onPointerCapture $ \event ->
+              case event of
+                PointerDown {pointerX, pointerY, pointerModifiers}
+                  | keyMeta pointerModifiers
+                  , Just parentPath <- composeParentPath (envFocus env)
+                  , rectContains rect pointerX pointerY ->
+                      Just (envEdit env (chooseEdgeComposeLabel parentPath label))
+                _ -> Nothing
+
+pendingLabelRow :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> PendingEdit -> Halay renderM renderM (Handler actionM)
+pendingLabelRow env cursor pending =
+  rowWithGap
+    valueGap
+    [ rawPendingLabel env cursor pending
+    , textPlay arrowColor "→"
+    , rawChild (textPlay missingColor "")
+    ]
+
+rawPendingLabel :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> PendingEdit -> Halay renderM renderM (Handler actionM)
+rawPendingLabel env cursor pending =
+  rawPendingText True currentText interaction (envEdit env id)
+  where
+    parentPath = cursorPath cursor
+    currentText = pendingEditText pending
+    selection = pendingEditSelection pending
+    interaction =
+      LineEditFocused
+        selection
+        (\newText newSelection -> envEdit env (focusPending parentPath newText newSelection))
+        (envEdit env (cancelPending parentPath))
 
 pendingEdgeRow :: Canvas.Canvas renderM => Env actionM renderM -> Cursor -> UUID -> PendingEdit -> Halay renderM renderM (Handler actionM)
 pendingEdgeRow env cursor label pending =
-  rowWithGap valueGap [rawEdgeLabel label, rawChild (rawPendingInsert env cursor label pending)]
+  rowWithGap valueGap [rawEdgeLabel env (cursorPath cursor) label, rawChild (rawPendingInsert env cursor label pending)]
 
 rawChild :: Applicative measureM => Halay measureM placeM placed -> Halay measureM placeM placed
 rawChild =
@@ -327,12 +387,18 @@ rawPendingText focused currentText interaction commit =
                   Just commit
             _ -> Nothing
 
-activePending :: Cursor -> Maybe (UUID, PendingEdit)
+data RawPending
+  = RawPendingLabel PendingEdit
+  | RawPendingValue UUID PendingEdit
+  deriving (Eq, Show)
+
+activePending :: Cursor -> Maybe RawPending
 activePending cursor =
   case cursorFocus cursor of
     Just focus ->
-      case (focusPath focus, focusPendingEdit (focusState focus)) of
-        ([label], Just pending) -> Just (label, pending)
+      case (focusPath focus, focusUnderSelection (focusState focus), focusPendingEdit (focusState focus)) of
+        ([], Just UnderLabel, Just pending) -> Just (RawPendingLabel pending)
+        ([label], Just UnderValue, Just pending) -> Just (RawPendingValue label pending)
         _ -> Nothing
     _ -> Nothing
 

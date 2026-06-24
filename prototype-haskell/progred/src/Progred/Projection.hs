@@ -58,6 +58,7 @@ data Env actionM renderM = Env
   , envEdit :: (Editor -> Editor) -> actionM ()
   , envFreshUUID :: actionM UUID
   , envCollapseState :: [UUID] -> Maybe Bool
+  , envFocus :: Maybe Focus
   , envSecondaryHighlight :: Maybe SecondaryHighlight
   , envProject :: Cursor -> Halay renderM renderM (Handler actionM)
   }
@@ -124,6 +125,7 @@ projectContextWith total context edit fresh focus pathCollapseState secondary =
         , envEdit = edit
         , envFreshUUID = fresh
         , envCollapseState = pathCollapseState
+        , envFocus = focus
         , envSecondaryHighlight = secondary
         , envProject = apply
         }
@@ -167,8 +169,9 @@ focusableSpot env cursor child =
        in pure $
             onPointer $ \event ->
               case event of
-                PointerDown {pointerX, pointerY}
-                  | rectContains rect pointerX pointerY ->
+                PointerDown {pointerX, pointerY, pointerModifiers}
+                  | not (hasModifier pointerModifiers)
+                  , rectContains rect pointerX pointerY ->
                       Just (envEdit env (focusSpot path))
                 _ -> Nothing
 
