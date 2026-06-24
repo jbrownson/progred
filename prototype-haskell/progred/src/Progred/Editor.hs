@@ -12,6 +12,8 @@ module Progred.Editor
   , startEdgeCompose
   , blurValue
   , blurString
+  , cancelEdgeCompose
+  , edgeComposeParent
   , cancelPending
   , clearRoot
   , defaultFocusState
@@ -246,6 +248,23 @@ blurString =
 cancelPending :: [UUID] -> Editor -> Editor
 cancelPending =
   blurValue
+
+cancelEdgeCompose :: Editor -> Editor
+cancelEdgeCompose editor =
+  case edgeComposeParent (editorFocus editor) of
+    Just parentPath -> focusSpot parentPath editor
+    Nothing -> editor
+
+edgeComposeParent :: Maybe Focus -> Maybe [UUID]
+edgeComposeParent focus =
+  case focus of
+    Just Focus {focusPath = path, focusState = FocusState {focusUnderSelection = Just UnderLabel, focusPendingEdit = Just _}} ->
+      Just path
+    Just Focus {focusPath = path, focusState = FocusState {focusUnderSelection = Just UnderValue, focusPendingEdit = Just _}} ->
+      case unsnoc path of
+        Just (parentPath, _) -> Just parentPath
+        Nothing -> Nothing
+    _ -> Nothing
 
 -- Writing the edge drops focus that crossed it, so string edits pair the
 -- graph write and the replacement selection in one operation.

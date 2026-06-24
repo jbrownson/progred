@@ -72,6 +72,8 @@ main = do
   run "treeSecondarySharedString" propTreeSecondaryHighlightSharedString
   run "treeSecondaryUnderSelection" propTreeSecondaryHighlightSuppressesUnderSelection
   run "clearActiveSelection" propClearActiveSelectionClearsGraph
+  run "cancelEdgeCompose" propCancelEdgeCompose
+  run "cancelEscape" propCancelEscapeCancelsEdgeCompose
   run "treeFocusSelection" propTreeFocusReplacesGraphSelection
   run "pointerCapture" propPointerCapturePrecedesNormalPointer
   run "listProjectionRequiresIsa" propListProjectionRequiresIsa
@@ -735,6 +737,29 @@ propTreeSecondaryHighlightSuppressesUnderSelection =
       testEditor rawInsertDocument (Just (Focus [] (testPendingLabelState "" emptyLineEditSelection)))
     valueCompose =
       testEditor rawInsertDocument (Just (Focus [rawChildLabel] (testPendingValueState "" emptyLineEditSelection)))
+
+propCancelEdgeCompose :: Property
+propCancelEdgeCompose =
+  conjoin
+    [ editorFocus (cancelEdgeCompose labelCompose) === Just (Focus [rawChildLabel] defaultFocusState)
+    , editorFocus (cancelEdgeCompose valueCompose) === Just (Focus [rawChildLabel] defaultFocusState)
+    ]
+  where
+    labelCompose =
+      testEditor rawInsertDocument (Just (Focus [rawChildLabel] (testPendingLabelState "" emptyLineEditSelection)))
+    valueCompose =
+      chooseEdgeComposeLabel [rawChildLabel] rawInsertedLabel labelCompose
+
+propCancelEscapeCancelsEdgeCompose :: Property
+propCancelEscapeCancelsEdgeCompose =
+  ioProperty $ do
+    let composing =
+          initialModel
+            { modelEditor =
+                testEditor rawInsertDocument (Just (Focus [] (testPendingLabelState "" emptyLineEditSelection)))
+            }
+    (_, escaped) <- runAppM cancelEscape composing
+    pure (editorFocus (modelEditor escaped) === Just (Focus [] defaultFocusState))
 
 propClearActiveSelectionClearsGraph :: Property
 propClearActiveSelectionClearsGraph =
@@ -1587,6 +1612,10 @@ enterKey =
 commaKey :: KeyEvent
 commaKey =
   KeyCode noModifiers KeyCode.comma
+
+escapeKey :: KeyEvent
+escapeKey =
+  KeyCode noModifiers KeyCode.escape
 
 noModifiers :: KeyModifiers
 noModifiers =
