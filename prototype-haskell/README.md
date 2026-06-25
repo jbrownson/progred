@@ -2,7 +2,11 @@
 
 Haskell/Wasm prototype for Progred.
 
-Status: this is a Haskell/Wasm/Tauri spike for testing whether Haskell
+Status: paused as of 2026-06-25. The next prototype direction is native
+Rust, carrying forward the Puri/layout ideas without continuing the
+Haskell/Wasm spike. See `RUST_PIVOT.md`.
+
+Historical status: this is a Haskell/Wasm/Tauri spike for testing whether Haskell
 can own UI state and event interpretation while a thin JavaScript host
 only forwards browser events and provides drawing primitives. The current
 demo renders directly to a `<canvas>` through JSFFI. Haskell owns the

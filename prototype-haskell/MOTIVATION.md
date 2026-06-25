@@ -2,8 +2,9 @@
 
 This is the Haskell/Wasm exploration for Progred.
 
-Status: active again. The current direction is to build Progred on the
-Haskell/Wasm/Puri foundation and extend the UI runtime only as needed.
+Status: paused as of 2026-06-25. The Haskell/Wasm/Puri spike produced
+useful evidence, but the next prototype direction is native Rust. See
+`RUST_PIVOT.md` for the handoff and rationale.
 
 The original Haskell spike had three render targets: GTK, ImGui, and
 Wasm/DOM. The native probes proved basic GUI viability but did not solve
