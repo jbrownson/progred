@@ -1,8 +1,13 @@
 # Why this prototype exists
 
-Historical successor to the original `prototype-ts/`. The current mainline
-prototype is back in `prototype-ts/`; this Rust version is kept as a record of
-raw graph, graph-view, and egui lessons.
+Active again as of 2026-06-25. We are returning here from the
+Haskell/Wasm spike to pursue a native Rust direction. See
+`docs/return-from-haskell.md`.
+
+Historical successor to the original `prototype-ts/`. This Rust version
+was kept as a record of raw graph, graph-view, and egui lessons while the
+mainline moved through Swift/AppKit, TypeScript/Electron, and
+Haskell/Wasm.
 
 Goals:
 

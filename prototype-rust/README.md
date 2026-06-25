@@ -1,8 +1,13 @@
 # Progred
 
-Status: historical Rust/egui prototype. It is kept for architecture notes and
-lessons around raw graph editing, graph view, identicons, and egui focus
-limitations. The current main editor prototype is `prototype-ts/`.
+Status: active again as of 2026-06-25. We are returning here from the
+Haskell/Wasm spike to pursue a native Rust prototype, while preserving the
+historical Rust/egui lessons. See `docs/return-from-haskell.md`.
+
+Historical status: this was a Rust/egui prototype. It is kept for
+architecture notes and lessons around raw graph editing, graph view,
+identicons, and egui focus limitations. The later active prototypes were
+`prototype-ts/` and then `prototype-haskell/`.
 
 A structural editor that preserves what makes text great—simplicity, flexibility, universality—while lifting the abstraction level to represent actual structures.
 

@@ -2,6 +2,15 @@
 
 Read `README.md` for project philosophy, architecture, and current status.
 
+## Current Direction
+
+As of 2026-06-25, this prototype is active again as the native Rust path
+after the Haskell/Wasm spike paused. Keep the historical egui notes below;
+they are still relevant failure data. The new direction is not to revive
+egui as the main UI shell, but to reuse the Rust graph/core work and build
+a native renderer path, likely Vello behind a swappable renderer boundary.
+See `docs/return-from-haskell.md`.
+
 ## Cargo Build Cache
 
 Cursor's sandbox sets `CARGO_HOME` and `RUSTUP_HOME` to temporary directories. This causes cache invalidation when alternating between terminal and Cursor builds.
