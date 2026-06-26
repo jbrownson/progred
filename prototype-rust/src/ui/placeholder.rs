@@ -292,6 +292,10 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
         egui::Popup::from_response(&text_response)
             .id(ui.id().with("placeholder_popup"))
             .open(true)
+            // The popup Area defaults to Sense::click(), making its background a focusable
+            // Tab stop registered right after the search box. Keep it hover-only so Tab
+            // skips the whole popup and advances to the next field instead of defocusing.
+            .sense(egui::Sense::hover())
             .width(popup_width)
             .show(|ui| {
                 ui.set_width(popup_width);
@@ -302,7 +306,10 @@ pub fn render(ui: &mut Ui, editor: &Editor, ps: &PlaceholderState, expected_type
                     .min_scrolled_height(0.0)
                     .show(ui, |ui| {
                     for (i, entry) in entries.iter().enumerate() {
-                        if ui.add(egui::Button::selectable(i == selected_index, entry_job(ui, entry)).truncate()).clicked() {
+                        // Popup entries are navigated with arrows + Enter; keep them clickable
+                        // but out of the Tab focus ring so Tab advances to the next field
+                        // instead of landing on a button (which would defocus everything).
+                        if ui.add(egui::Button::selectable(i == selected_index, entry_job(ui, entry)).truncate().sense(egui::Sense::CLICK)).clicked() {
                             clicked = Some(i);
                         }
                     }
