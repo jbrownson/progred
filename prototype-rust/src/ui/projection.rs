@@ -529,7 +529,7 @@ fn render_string_editor(
             egui::TextEdit::singleline(&mut text)
                 .id(stable_id)
                 .desired_width(desired_width)
-                .frame(false)
+                .frame(egui::Frame::NONE)
         )
     }, selection_style(primary, secondary));
 
@@ -571,7 +571,7 @@ fn render_number_editor(
             egui::TextEdit::singleline(&mut text)
                 .id(stable_id)
                 .desired_width(desired_width)
-                .frame(false)
+                .frame(egui::Frame::NONE)
         )
     }, selection_style(primary, secondary));
 

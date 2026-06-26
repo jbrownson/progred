@@ -16,7 +16,6 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
             .with_title("Progred"),
-        vsync: false,
         ..Default::default()
     };
 
@@ -200,8 +199,8 @@ impl ProgredApp {
         });
     }
 
-    fn render_menu_bar(&mut self, ctx: &egui::Context, nav: &[DescendNode]) {
-        egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+    fn render_menu_bar(&mut self, ui: &mut egui::Ui, nav: &[DescendNode]) {
+        egui::Panel::top("menu_bar").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.add(egui::Button::new("New").shortcut_text(shortcuts::format(&shortcuts::NEW))).clicked() {
@@ -245,15 +244,16 @@ impl ProgredApp {
 }
 
 impl eframe::App for ProgredApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.window_title()));
 
         let d_tree = self.editor.render_d_tree();
         let nav = navigate::collect_descends(&d_tree);
         let orphan_ids = self.editor.doc.orphan_roots();
-        self.handle_keys(ctx, &nav);
+        self.handle_keys(&ctx, &nav);
 
-        self.render_menu_bar(ctx, &nav);
+        self.render_menu_bar(ui, &nav);
 
         if self.show_graph {
             progred_core::graph_view_state::step_physics(&mut self.graph_layout, &self.editor.doc, self.graph_camera.dragging());
@@ -263,14 +263,15 @@ impl eframe::App for ProgredApp {
         let mode = ui::compute_interaction_mode(modifiers, &self.editor);
         let mut events = Vec::new();
         let mut focus_map = HashMap::<egui::Id, Path>::new();
+        let panel_fill = ui.visuals().panel_fill;
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::NONE.fill(ctx.style().visuals.panel_fill))
-            .show(ctx, |ui| {
+            .frame(egui::Frame::NONE.fill(panel_fill))
+            .show(ui, |ui| {
                 if self.show_graph {
-                    ui::split_view::horizontal_split(ui, ctx, &mut self.graph_split, |left, right| {
+                    ui::split_view::horizontal_split(ui, &ctx, &mut self.graph_split, |left, right| {
                         ui::tree_view::render(left, &self.editor, &d_tree, &orphan_ids, &mode, &mut events, &mut focus_map);
-                        ui::graph_view::render(right, ctx, &self.editor, &mut self.graph_layout, &mut self.graph_camera, &mut events);
+                        ui::graph_view::render(right, &ctx, &self.editor, &mut self.graph_layout, &mut self.graph_camera, &mut events);
                     });
                 } else {
                     ui::tree_view::render(ui, &self.editor, &d_tree, &orphan_ids, &mode, &mut events, &mut focus_map);

@@ -8,7 +8,7 @@ edition = "2024"
 
 [dependencies]
 progred_core = { path = "progred_core" }
-eframe = "0.33"
-egui = "0.33"
+eframe = "0.35"
+egui = "0.35"
 serde_json = "1.0"
 rfd = "0.17"
