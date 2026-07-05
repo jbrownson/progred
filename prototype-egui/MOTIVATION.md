@@ -1,8 +1,12 @@
 # Why this prototype exists
 
-Active again as of 2026-06-25. We are returning here from the
-Haskell/Wasm spike to pursue a native Rust direction. See
-`docs/return-from-haskell.md`.
+Renamed from `prototype-rust/` to `prototype-egui/` on 2026-07-03.
+Historical again: the brief reactivation after the Haskell pause
+(2026-06-25, see `docs/return-from-haskell.md`) concluded that the
+graph/core work is worth keeping but egui is not the UI direction. The
+native Rust path continues in `prototype-linebender/`; this directory
+remains as the egui-era record and the salvage source for the
+graph/core crates.
 
 Historical successor to the original `prototype-ts/`. This Rust version
 was kept as a record of raw graph, graph-view, and egui lessons while the

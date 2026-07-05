@@ -1,8 +1,9 @@
 # Progred
 
-Status: active again as of 2026-06-25. We are returning here from the
-Haskell/Wasm spike to pursue a native Rust prototype, while preserving the
-historical Rust/egui lessons. See `docs/return-from-haskell.md`.
+Status: historical. Renamed from `prototype-rust/` to `prototype-egui/`
+on 2026-07-03; the native Rust direction continues in
+`prototype-linebender/`. The brief reactivation after the Haskell pause
+is recorded in `docs/return-from-haskell.md`.
 
 Historical status: this was a Rust/egui prototype. It is kept for
 architecture notes and lessons around raw graph editing, graph view,

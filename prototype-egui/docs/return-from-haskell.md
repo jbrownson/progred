@@ -4,7 +4,14 @@ Date: 2026-06-25
 
 ## Status
 
-This prototype is active again as the native Rust direction for Progred.
+Update 2026-07-03: superseded. The native Rust direction moved to a
+fresh `prototype-linebender/` (this directory was renamed to
+`prototype-egui/`), after deciding to build Puri over the Linebender
+stack rather than continue in the egui shell. Kept as the record of the
+decision to leave Haskell. See `../../prototype-linebender/docs/puri.md`.
+
+As written 2026-06-25: this prototype is active again as the native Rust
+direction for Progred.
 
 The previous Rust/egui UI shell is still historical. We are not returning
 to egui as the main GUI approach. We are returning to this Rust prototype

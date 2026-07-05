@@ -102,25 +102,31 @@ Full type matching remains contextual and intentionally tolerant of malformed gr
 
 ### Current Prototype
 
-The active path is `prototype-haskell/`: a Haskell/Wasm prototype using a
-small canvas UI runtime named Puri. The browser/webview host forwards
-events and provides drawing primitives; Haskell owns model state, focus,
-hit testing, event interpretation, and draw generation.
+The active path is `prototype-linebender/`: Progred built on Puri, a
+pure widget library where widgets are pure functions from (persistent
+widget state, props) to (draw calls, handlers), over the Linebender
+stack (winit, Vello, Parley, kurbo, peniko). Puri holds no state between
+frames, mints no identity, and ships no general layout engine — document
+layout is a small baseline-aware box algebra; state management is
+deliberately out of scope. See `prototype-linebender/docs/puri.md` for
+the UI runtime decision and plan, and `prototype-linebender/docs/model.md`
+for the data and editor model decisions.
 
-The previous `prototype-ts/` TypeScript/Electron prototype is usable, but
-React/DOM focus and local component state repeatedly caused subtle
-synchronization bugs around selection, secondary selection,
-collapse/layout state, and pending editors. Further React-side polishing
-is on hold while we explore a stateless UI runtime where focus and edit
-state are explicit model data rather than hidden browser/component state.
+The Haskell/Wasm prototype (`prototype-haskell/`) is paused; it produced
+the Puri and Halay designs the Rust direction carries forward (see
+`prototype-haskell/RUST_PIVOT.md`). The previous `prototype-ts/`
+TypeScript/Electron prototype is usable and remains the most complete
+editor and the behavior reference for editing semantics, but React/DOM
+focus and local component state repeatedly caused subtle synchronization
+bugs around selection, secondary selection, collapse/layout state, and
+pending editors.
 
 Useful commands:
 
 ```sh
-cd prototype-haskell
-make run
-make dist
-cabal build lib:puri lib:progred exe:prototype-haskell
+cd prototype-linebender
+unset CARGO_HOME RUSTUP_HOME && cargo build
+unset CARGO_HOME RUSTUP_HOME && cargo test
 
 cd prototype-ts
 npm install
@@ -140,6 +146,7 @@ npm run graph -- render src/graph/libraries/type.progred
 
 ### Other Prototypes
 
-- `prototype-ts/` — TypeScript/Electron prototype using React DOM, currently paused while the Haskell/Puri direction is explored
+- `prototype-egui/` — Rust/egui shell and reusable graph/core crates (formerly `prototype-rust/`), historical; egui focus post-mortem in `prototype-egui/AGENTS.md`
+- `prototype-haskell/` — Haskell/Wasm prototype using the Puri canvas runtime and the Halay layout engine, paused; see `prototype-haskell/RUST_PIVOT.md`
+- `prototype-ts/` — TypeScript/Electron prototype using React DOM, paused; the most complete editing behavior and test suite
 - `prototype-swift/` — Swift/AppKit native exploration
-- `prototype-rust/` — Rust/egui prototype, paused due to focus and tab-navigation constraints. See `prototype-rust/AGENTS.md` for details.

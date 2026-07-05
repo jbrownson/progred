@@ -2,14 +2,15 @@
 
 Read `README.md` for project philosophy, architecture, and current status.
 
-## Current Direction
+## Status
 
-As of 2026-06-25, this prototype is active again as the native Rust path
-after the Haskell/Wasm spike paused. Keep the historical egui notes below;
-they are still relevant failure data. The new direction is not to revive
-egui as the main UI shell, but to reuse the Rust graph/core work and build
-a native renderer path, likely Vello behind a swappable renderer boundary.
-See `docs/return-from-haskell.md`.
+Renamed from `prototype-rust` to `prototype-egui` on 2026-07-03. The
+native Rust direction moved to `prototype-linebender/`, which carries
+the Puri plan forward; see `../prototype-linebender/docs/puri.md`. This
+directory is historical: the egui shell and the raw graph, graph view,
+and egui focus lessons stay as reference, and the graph/core crates are
+the salvage source for the new prototype. Keep the egui notes below;
+they are still relevant failure data.
 
 ## Cargo Build Cache
 

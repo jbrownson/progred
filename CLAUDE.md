@@ -12,10 +12,35 @@ Read `README.md` first for project philosophy, active prototypes, and current st
 - Only commit when explicitly asked.
 - When a design pattern or lesson emerges during work, propose adding it to the relevant doc so future sessions start with that knowledge.
 
-## Active Haskell Prototype
+## Active Prototype
 
-The active prototype is `prototype-haskell/`, a Haskell/Wasm canvas UI
-spike using the Puri internal library.
+The active prototype is `prototype-linebender/`, which builds Progred on
+Puri, a pure widget library over the Linebender stack (winit, Vello,
+Parley, kurbo, peniko). See `prototype-linebender/AGENTS.md` for
+workflow and style, `prototype-linebender/docs/puri.md` for the UI
+runtime decision and plan, and `prototype-linebender/docs/model.md` for
+the data and editor model decisions.
+
+```bash
+cd prototype-linebender
+unset CARGO_HOME RUSTUP_HOME && cargo build
+unset CARGO_HOME RUSTUP_HOME && cargo test
+```
+
+Puri is intentionally small: render one frame from explicit state,
+return draw calls and transient handlers, reduce events to explicit
+state transitions, then render the next frame. Puri holds no state
+between frames, mints no identity, and does no layout. Extend Puri only
+as Progred needs it.
+
+`prototype-egui/` (formerly `prototype-rust/`) is historical again: the
+egui shell and graph/core crates remain as reference and salvage source.
+
+## Paused Haskell Prototype
+
+`prototype-haskell/` is the Haskell/Wasm canvas UI spike that produced
+the Puri and Halay designs. Paused as of 2026-06-25; see
+`prototype-haskell/RUST_PIVOT.md`.
 
 ```bash
 cd prototype-haskell
@@ -24,14 +49,8 @@ make dist
 cabal build lib:puri lib:progred exe:prototype-haskell
 ```
 
-`make run` builds the Wasm app and serves it from `dist/`. `make dist`
-builds the Haskell/Wasm executable, generates the JSFFI bridge, and
-copies the browser assets. Use the Cabal command for native
-typechecking/build feedback.
-
-Puri is intentionally small: render one frame, return a transient
-`Handler`, dispatch browser events through that handler into explicit app
-state, then render the next frame. Extend Puri only as Progred needs it.
+`make run` builds the Wasm app and serves it from `dist/`. Use the
+Cabal command for native typechecking/build feedback.
 
 ## Paused TypeScript Prototype
 
@@ -89,6 +108,6 @@ Use `find` for named nodes/fields/ctors, `inspect` for structural edges and list
 
 Prototype-specific historical guidance lives with those prototypes:
 
-- `prototype-rust/AGENTS.md` documents egui focus/layout constraints.
+- `prototype-egui/AGENTS.md` (formerly `prototype-rust/`) documents egui focus/layout constraints and pitfalls from the egui shell.
 - `prototype-swift/MOTIVATION.md` documents the AppKit focus motivation.
-- `prototype-haskell/README.md` documents the active Haskell/Wasm/Puri spike.
+- `prototype-haskell/README.md` documents the paused Haskell/Wasm/Puri spike, including Halay layout notes.

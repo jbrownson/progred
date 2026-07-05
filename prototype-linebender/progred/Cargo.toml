@@ -1,0 +1,14 @@
+[package]
+name = "progred"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+puri = { path = "../puri" }
+puri-vello = { path = "../puri-vello" }
+vello = "0.9.0"
+parley = "0.9.0"
+winit = "0.30.13"
+pollster = "0.4.0"
+ui-events = "0.3"
+ui-events-winit = "0.3"
