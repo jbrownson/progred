@@ -1,15 +1,14 @@
 use crate::gid::Gid;
-use crate::id::Id;
+use crate::id::{Id, NodeId};
 use im::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use uuid::Uuid;
 
-/// Stored edges exist only for identities in the UUID space; edges on
+/// Stored edges exist only for identities in the node space; edges on
 /// eternal values are library-provided, not stored. See
 /// `docs/model.md`.
 #[derive(Debug, Clone)]
 pub struct MutGid {
-    data: HashMap<Uuid, HashMap<Id, Id>>,
+    data: HashMap<NodeId, HashMap<Id, Id>>,
 }
 
 impl MutGid {
@@ -19,7 +18,7 @@ impl MutGid {
         }
     }
 
-    pub fn entities(&self) -> impl Iterator<Item = &Uuid> {
+    pub fn entities(&self) -> impl Iterator<Item = &NodeId> {
         self.data.keys()
     }
 
@@ -30,12 +29,12 @@ impl MutGid {
 
 impl Gid for MutGid {
     fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>> {
-        self.data.get(&entity.as_uuid()?)
+        self.data.get(&entity.as_node_id()?)
     }
 }
 
 impl MutGid {
-    pub fn set(&mut self, entity: Uuid, label: Id, value: Id) {
+    pub fn set(&mut self, entity: NodeId, label: Id, value: Id) {
         let edges = match self.data.get(&entity) {
             Some(e) => e.update(label, value),
             None => HashMap::unit(label, value),
@@ -43,7 +42,7 @@ impl MutGid {
         self.data.insert(entity, edges);
     }
 
-    pub fn merge(&mut self, other: HashMap<Uuid, HashMap<Id, Id>>) {
+    pub fn merge(&mut self, other: HashMap<NodeId, HashMap<Id, Id>>) {
         for (entity, new_edges) in other {
             let merged = match self.data.get(&entity) {
                 Some(existing) => existing.clone().union(new_edges),
@@ -53,7 +52,7 @@ impl MutGid {
         }
     }
 
-    pub fn delete(&mut self, entity: &Uuid, label: &Id) {
+    pub fn delete(&mut self, entity: &NodeId, label: &Id) {
         if let Some(edges) = self.data.get(entity) {
             let new_edges = edges.without(label);
             self.data = if new_edges.is_empty() {
@@ -74,7 +73,7 @@ impl MutGid {
     }
 
     pub fn purge(&mut self, id: &Id) {
-        if let Some(uuid) = id.as_uuid() {
+        if let Some(uuid) = id.as_node_id() {
             self.data = self.data.without(&uuid);
         }
         self.data = self
@@ -101,7 +100,7 @@ impl Default for MutGid {
 
 impl Serialize for MutGid {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let proxy: std::collections::BTreeMap<Uuid, Vec<(Id, Id)>> = self
+        let proxy: std::collections::BTreeMap<NodeId, Vec<(Id, Id)>> = self
             .data
             .iter()
             .map(|(uuid, edges)| {
@@ -116,7 +115,7 @@ impl Serialize for MutGid {
 
 impl<'de> Deserialize<'de> for MutGid {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let proxy: std::collections::HashMap<Uuid, Vec<(Id, Id)>> =
+        let proxy: std::collections::HashMap<NodeId, Vec<(Id, Id)>> =
             std::collections::HashMap::deserialize(deserializer)?;
         let data = proxy
             .into_iter()

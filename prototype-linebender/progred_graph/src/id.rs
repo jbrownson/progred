@@ -1,5 +1,5 @@
 //! An identity is a space plus a payload: `(space: Uuid, payload:
-//! bytes)`. UUIDs are the payload discipline of one well-known space;
+//! bytes)`. node ids are the payload discipline of one well-known space;
 //! strings and numbers are two more; further spaces are
 //! library-definable, including ones with non-minted payload
 //! disciplines (content hashes, external identifier systems). See
@@ -15,7 +15,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use uuid::Uuid;
 
-pub const UUID_SPACE: Uuid = Uuid::from_u128(0xf02b_45d2_23e1_43b5_ba14_77ef_534b_c9a9);
+/// A node identity: 16 CSPRNG bytes. Not an RFC 4122 UUID — the node
+/// space's payload discipline is its own — though the type and its
+/// hyphenated spelling are borrowed as tooling.
+pub type NodeId = Uuid;
+
+pub const NODE_SPACE: Uuid = Uuid::from_u128(0xf02b_45d2_23e1_43b5_ba14_77ef_534b_c9a9);
 pub const STRING_SPACE: Uuid = Uuid::from_u128(0x11d2_4563_f7fc_48da_873f_d97d_0838_1b97);
 pub const NUMBER_SPACE: Uuid = Uuid::from_u128(0xae81_64cc_f488_4089_b5ba_a041_086c_98ff);
 
@@ -25,9 +30,20 @@ pub struct Id {
     payload: Vec<u8>,
 }
 
+/// Mint a fresh node identity: 16 CSPRNG bytes, full
+/// 128-bit entropy. The space's payload discipline is ours, so RFC
+/// 4122's version/variant structure is deliberately not used — it
+/// exists to let different generation schemes share a namespace, a
+/// context this space doesn't have.
+pub fn new_node_id() -> Uuid {
+    let mut bytes = [0_u8; 16];
+    getrandom::fill(&mut bytes).expect("no entropy source");
+    Uuid::from_bytes(bytes)
+}
+
 impl Id {
-    pub fn new_uuid() -> Self {
-        Uuid::new_v4().into()
+    pub fn new_node_id() -> Self {
+        new_node_id().into()
     }
 
     /// Escape hatch for library-defined spaces; the caller owns the
@@ -44,8 +60,8 @@ impl Id {
         &self.payload
     }
 
-    pub fn as_uuid(&self) -> Option<Uuid> {
-        (self.space == UUID_SPACE)
+    pub fn as_node_id(&self) -> Option<Uuid> {
+        (self.space == NODE_SPACE)
             .then(|| Uuid::from_slice(&self.payload).ok())
             .flatten()
     }
@@ -73,7 +89,7 @@ impl Id {
 impl From<Uuid> for Id {
     fn from(uuid: Uuid) -> Self {
         Self {
-            space: UUID_SPACE,
+            space: NODE_SPACE,
             payload: uuid.as_bytes().to_vec(),
         }
     }
@@ -115,7 +131,7 @@ impl From<f64> for Id {
 
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(uuid) = self.as_uuid() {
+        if let Some(uuid) = self.as_node_id() {
             write!(f, "{uuid}")
         } else if let Some(s) = self.as_str() {
             write!(f, "\"{s}\"")
@@ -147,7 +163,7 @@ fn from_hex(s: &str) -> Option<Vec<u8>> {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum IdRepr {
-    Uuid(Uuid),
+    Node(Uuid),
     String(String),
     Number(f64),
     Value(Uuid, String),
@@ -155,8 +171,8 @@ enum IdRepr {
 
 impl Serialize for Id {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let repr = if let Some(uuid) = self.as_uuid() {
-            IdRepr::Uuid(uuid)
+        let repr = if let Some(uuid) = self.as_node_id() {
+            IdRepr::Node(uuid)
         } else if let Some(s) = self.as_str() {
             IdRepr::String(s.to_owned())
         } else if let Some(n) = self.as_number() {
@@ -171,7 +187,7 @@ impl Serialize for Id {
 impl<'de> Deserialize<'de> for Id {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         match IdRepr::deserialize(deserializer)? {
-            IdRepr::Uuid(uuid) => Ok(uuid.into()),
+            IdRepr::Node(uuid) => Ok(uuid.into()),
             IdRepr::String(s) => Ok(s.into()),
             IdRepr::Number(n) => Ok(n.into()),
             IdRepr::Value(space, hex) => from_hex(&hex)
@@ -212,7 +228,7 @@ mod tests {
         let uuid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let id = Id::from(uuid);
         let json = serde_json::to_string(&id).unwrap();
-        assert_eq!(json, r#"{"uuid":"550e8400-e29b-41d4-a716-446655440000"}"#);
+        assert_eq!(json, r#"{"node":"550e8400-e29b-41d4-a716-446655440000"}"#);
 
         let parsed: Id = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, id);
@@ -254,9 +270,9 @@ mod tests {
 
     #[test]
     fn test_equality() {
-        let uuid = Uuid::new_v4();
+        let uuid = new_node_id();
         assert_eq!(Id::from(uuid), Id::from(uuid));
-        assert_ne!(Id::from(Uuid::new_v4()), Id::from(Uuid::new_v4()));
+        assert_ne!(Id::from(new_node_id()), Id::from(new_node_id()));
         assert_ne!(Id::from("abc"), Id::from(123.0));
         assert_eq!(Id::from(f64::NAN), Id::from(f64::NAN));
     }
@@ -273,10 +289,10 @@ mod tests {
 
     #[test]
     fn uuid_payload_is_the_uuid_bytes() {
-        let uuid = Uuid::new_v4();
+        let uuid = new_node_id();
         let id = Id::from(uuid);
         assert_eq!(id.payload(), uuid.as_bytes());
-        assert_eq!(id.as_uuid(), Some(uuid));
+        assert_eq!(id.as_node_id(), Some(uuid));
         assert_eq!(id.as_str(), None);
     }
 
@@ -284,7 +300,7 @@ mod tests {
     fn test_hash_consistency() {
         use std::collections::HashSet;
 
-        let uuid = Uuid::new_v4();
+        let uuid = new_node_id();
         let mut set = HashSet::new();
         set.insert(Id::from(uuid));
         set.insert(Id::from("abc"));
