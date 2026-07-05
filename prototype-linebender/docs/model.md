@@ -14,6 +14,132 @@ Date: 2026-07-03
   labels specially (name, isa, cons) the way a text editor treats
   syntax specially while ASCII stays dumb.
 
+## Atomic Values
+
+The atom set (SID, NID) is principled, not arbitrary. An atom earns
+native substrate status when: its canonical form is free (value =
+identity, reflexive equality, no encoding decisions); nothing points a
+graph edge inside it (edited as a value, referenced as a whole — graph
+selection stops at the leaf, the text cursor owns the inside); it works
+in label position, which requires compound-free value-identity; and it
+is universal across target domains. Strings and numbers pass; the set
+is JSON's atoms minus the ones a graph makes redundant (bool =
+well-known nodes, null = absent edge).
+
+Considered and settled 2026-07-05:
+
+- Going lower (char/bit atoms, strings as cons lists) adds nothing:
+  one-character SIDs and 0/1 NIDs already express them, so that
+  encoding remains available as a convention experiment with zero
+  substrate change — while native-only-chars would destroy the string
+  labels the naming gradient depends on.
+- Blob-with-isa-driven-decode is rejected: identity would depend on
+  interpretation (which encoding of 42?), shattering value-identity and
+  reintroducing the canonical-encoding problem that killed CIDs. Native
+  SID/NID are canonical encodings chosen once, where enforceable.
+- A raw-bytes BLOB atom (identity = content hash, meaning via isa above
+  the substrate) is the anticipated future addition for CAD assets —
+  bytes are the one domain whose canonical form is free. Parked until a
+  real asset needs it.
+- No integer/float split: `1` and `1.0` as distinct identities is a
+  user trap, and Fidget speaks f64. Integerness is a type-layer
+  constraint on NID, like all width/format concerns.
+- NID equality is total via canonical payload bytes (NaN collapsed to
+  one bit pattern, -0.0 to 0.0, at construction). SID identity is the
+  exact UTF-8 sequence; normalizing input to NFC is an editor
+  convention, not a substrate rule. Atom equality semantics are the one
+  hard-to-change part — they bake into every stored document — which is
+  why they are pinned here.
+- Atom types as libraries was considered (2026-07-05) and resolved by
+  layer. Untagged payloads with context-decided interpretation are
+  rejected — that is codepages, and the bootstrap needs values readable
+  with zero conventions. But UUID-tagged payloads survive the argument:
+  `Value(type_uuid, bytes)` with identity as the pair is
+  self-describing (MIME, not codepages), the tag being a UUID needs no
+  registry (minted once, like name/isa/cons), and unknown tags degrade
+  gracefully (tag identicon plus opaque bytes). Today's SID/NID enum is
+  declared to BE this design with a closed fast-path tag set: `sid:...`
+  and bare-number serializations are canonical spellings of the two
+  well-known tags. The first atom beyond string/number arrives as
+  `Value(tag, bytes)` generalizing all three — not as a third variant —
+  which the spelling rule makes non-breaking. The cost to manage at
+  that point: with byte-identity, every encoding quirk is an identity
+  quirk, so each tag must pin exactly one canonical encoding per value;
+  the substrate enforces this for its two tags, libraries must uphold
+  it for theirs. The general statement (2026-07-05): a space's values
+  are the quotient of its byte strings by an equivalence, and the space
+  must split that quotient computably — normalize to a canonical
+  representative at construction — because substrate equality is
+  syntactic and must stay decidable by strangers with no shared
+  conventions; equivalence-as-relation is interpretation-dependent
+  identity again. Strict reads are the section's image: parsable means
+  canonical. Corollary: domains with no computable normal form
+  (programs up to equivalence, graphs up to isomorphism) can never be
+  value spaces — sameness there is a tool's judgment over graph
+  structure, not an identity. Presentation and editing of atoms are
+  already libraries (projections decide how a NID displays); dates,
+  colors, units, vectors remain libraries over the existing atoms
+  rather than new tags unless binary payload genuinely pays.
+- Executable equality (spaces shipping an eq function, e.g. as WASM)
+  was considered and rejected (2026-07-05): the equivalence laws and
+  hash-congruence become unverifiable promises, fuel-metered
+  termination makes map lookup partial, and the eq blobs themselves
+  are values whose sameness is function equivalence — the corollary
+  above biting its own tail. What survives is the factored form: ship
+  the section, not the relation. A normalizer
+  (`n : bytes -> Option<bytes>`, run once at construction, metered,
+  failure = unparsable) induces an equality that inherits every law
+  from syntactic equality for free, so a future library-defined space
+  may carry a normalizer blob through the same executable-convention
+  slot as user-defined projections. The built-in spaces already work
+  this way; `From<f64>` is the compiled-in normalizer. Identity here
+  is deliberately intensional; extensional sameness is a tool's
+  judgment, never an identity.
+- The fixed point (2026-07-05): an identity is `(space, payload)` where
+  the space slot is raw 16 bytes with mint-unique convention — raw, not
+  an Id, which is what terminates the regress — and UUIDs themselves
+  are just the payload discipline of one well-known space. Strings and
+  numbers are two more. This is the spec AND the representation: the
+  new prototype's `progred_graph` stores `Id { space: Uuid, payload:
+  Vec<u8> }` directly (fields private so constructors own canonical
+  payloads), with the well-known spaces keeping their privileged
+  serialized spellings and a general `value` form for the rest.
+  Consequences pinned now: minting discipline is a space convention
+  (content-addressed or externally-issued identifier spaces become
+  library-definable — the substrate takes no position on how identities
+  are minted), and edge-bearing is a property of the space, held for
+  now by exactly the UUID space; granting it to an eternal space would
+  mean documents assert edges about universal values, a deliberate
+  future decision, not a default.
+- An id whose payload does not parse in its space is a well-formed
+  identity without a value reading: identity (equality, hashing, edges,
+  serialization) is total over the bytes; interpretation is partial.
+  Reads are strict — parsable means canonical — so every value has
+  exactly one spelled identity, and near-miss bytes (a non-canonical
+  NaN) render as the strange bytes they are instead of impersonating
+  the value. Projections fall through to the opaque space:hex
+  rendering; documents never fail to load over it; and when a space's
+  convention grows, old readers see unparsable-but-valid identities
+  rather than errors. This is the atom-level instance of the
+  malformed-graph rule.
+- All identities in all spaces exist platonically; the substrate stores
+  only edges. "Creating a node" is discovering an unused member of a
+  mintable space and attaching its first edge; deletion is detachment
+  (which is what the orphan pool was always about). The governing rule
+  is: a space says HOW, not WHERE — identity answers which, the space
+  answers how to read the bytes, documents answer where edges are
+  stored, and none may leak into another. Hence two rejections
+  (2026-07-05): documents are not identity spaces (location burned into
+  identity is the naming conflation again; counter payloads
+  reintroduce a minting authority and break coordination-free minting;
+  compact ids are an encoding concern — file formats may alias ids
+  through a local table, packfile-style, without touching identity),
+  and nodes are not singleton spaces with empty payloads (a space is
+  the identity of a shared convention; singleton spaces carry none, and
+  the flip of the slot's meaning per case is the tell — the old model
+  is already exactly embedded as (UUID_SPACE, uuid) with its spelling
+  preserved).
+
 ## Rejected: JSON-Shaped Value Model
 
 Considered and rejected 2026-07-03: records-with-GUIDs plus immutable
