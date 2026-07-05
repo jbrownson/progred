@@ -1,6 +1,6 @@
 # Why this prototype exists
 
-Successor to `prototype-rust/`. Moved off egui because its focus model is
+Successor to `prototype-egui/` (then named `prototype-rust/`). Moved off egui because its focus model is
 fundamentally incompatible with a structured editor:
 
 - `Sense::click()` always sets the focusable bit — every clickable widget
@@ -17,7 +17,7 @@ handling. NSButton doesn't steal focus on click by default. The responder
 chain provides hierarchical focus with innermost-wins semantics. Focus and
 click are orthogonal — exactly what a structured editor needs.
 
-See `prototype-rust/AGENTS.md` for the full egui post-mortem.
+See `prototype-egui/AGENTS.md` for the full egui post-mortem.
 
 Status: historical. The Swift/AppKit prototype clarified focus and type-system
 ideas, but the current main editor prototype is `prototype-ts/`.

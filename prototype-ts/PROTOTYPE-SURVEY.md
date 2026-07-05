@@ -1,6 +1,6 @@
 # Prototype Survey Follow-ups
 
-This records ideas from `prototype-rust`, `prototype-swift`, and `prototype-haskell` that affected the TypeScript/Electron prototype. It is a status note, not a complete roadmap.
+This records ideas from `prototype-egui` (then named `prototype-rust`), `prototype-swift`, and `prototype-haskell` that affected the TypeScript/Electron prototype. It is a status note, not a complete roadmap.
 
 ## Landed In TypeScript
 
