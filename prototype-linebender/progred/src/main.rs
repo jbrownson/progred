@@ -1,19 +1,22 @@
 //! Window shell: winit + Vello plumbing around pure frame drawing.
-//! `draw_frame` writes to any puri `Canvas`; here it streams into vello.
+//! `run_frame` writes to any puri `Canvas`; here it streams into vello.
+
+mod conventions;
+mod identicon;
+mod raw;
 
 use std::sync::Arc;
 
-use parley::{FontContext, GenericFamily, LayoutContext, StyleProperty};
+use parley::{FontContext, LayoutContext};
+use progred_graph::MutGid;
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::{Handler, HasHandler, ImeEvent};
-use puri::layout::{Extent, HAlign, Node, col, decorate, leaf, pad, place_top_left, row};
-use puri::text::{TextCtx, TextStyle, paragraph, text};
+use puri::layout::{HAlign, col, place_top_left, row};
+use puri::text::{TextCtx, TextStyle, text};
 use puri_vello::VelloCanvas;
-use ui_events::keyboard::{Key, NamedKey};
-use ui_events::pointer::{PointerButtonEvent, PointerEvent};
+use ui_events::pointer::PointerEvent;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke, Vec2};
+use vello::kurbo::{Affine, Point, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
@@ -125,12 +128,8 @@ impl ApplicationHandler for App {
             };
             let translation = self.reducer.reduce(scale, &event);
             if ime.is_some() || translation.is_some() {
-                self.model
-                    .field
-                    .refresh(&mut self.font_cx, &mut self.layout_cx, scale as f32);
                 let mut frame = Frame {
                     scene: None,
-                    ime_caret: None,
                     handler: Handler::new(),
                 };
                 run_frame(
@@ -197,13 +196,9 @@ impl ApplicationHandler for App {
                     return;
                 }
 
-                self.model
-                    .field
-                    .refresh(&mut self.font_cx, &mut self.layout_cx, scale as f32);
                 self.scene.reset();
                 let mut frame = Frame {
                     scene: Some(&mut self.scene),
-                    ime_caret: None,
                     handler: Handler::new(),
                 };
                 run_frame(
@@ -215,16 +210,7 @@ impl ApplicationHandler for App {
                     height as f64,
                     scale,
                 );
-                let ime_caret = frame.ime_caret;
                 drop(frame);
-
-                window.set_ime_allowed(self.model.editing);
-                if let Some(caret) = ime_caret {
-                    window.set_ime_cursor_area(
-                        winit::dpi::PhysicalPosition::new(caret.x0, caret.y0),
-                        winit::dpi::PhysicalSize::new(caret.width(), caret.height()),
-                    );
-                }
 
                 let RenderState::Active { surface, .. } = &mut self.state else {
                     return;
@@ -290,13 +276,6 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
-    let mut field = LineEditState::new("click to edit me", 15.0);
-    field
-        .editor
-        .edit_styles()
-        .insert(StyleProperty::Brush(Color::WHITE.into()));
-    field.editor.edit_styles().insert(GenericFamily::SystemUi.into());
-
     let mut app = App {
         context: RenderContext::new(),
         renderers: vec![],
@@ -305,9 +284,10 @@ fn main() {
         font_cx: FontContext::new(),
         layout_cx: LayoutContext::new(),
         model: Model {
-            selected: None,
-            field,
-            editing: false,
+            doc: raw::sample_document(),
+            identicon_sheet: std::env::args()
+                .any(|arg| arg == "--identicons")
+                .then(identicon_sheet),
         },
         reducer: WindowEventReducer::default(),
     };
@@ -319,24 +299,34 @@ fn main() {
 }
 
 struct Model {
-    selected: Option<usize>,
-    field: LineEditState,
-    editing: bool,
+    doc: MutGid,
+    /// `--identicons`: an eyeball sheet of random identicons plus
+    /// deliberately close pairs, for judging visual differentiability.
+    identicon_sheet: Option<Vec<progred_graph::NodeId>>,
 }
 
-const SWATCHES: usize = 8;
+fn identicon_sheet() -> Vec<progred_graph::NodeId> {
+    use progred_graph::{NodeId, new_node_id};
+    let mut ids: Vec<NodeId> = (0..32).map(|_| new_node_id()).collect();
 
-fn move_selection(model: &mut Model, delta: isize) {
-    model.selected = Some(match model.selected {
-        None => {
-            if delta >= 0 {
-                0
-            } else {
-                SWATCHES - 1
-            }
-        }
-        Some(i) => (i as isize + delta).rem_euclid(SWATCHES as isize) as usize,
-    });
+    // Differ only in leaf-tile offsets: needs close inspection.
+    let base = new_node_id();
+    ids.push(base);
+    ids.push(NodeId::from_u128(base.as_u128() ^ (0xffff << 100)));
+
+    // Differ only in family: should be obvious at a glance.
+    ids.push(NodeId::from_u128(base.as_u128() ^ 0x7));
+
+    // Same character (family, hues, level-1 structure), everything
+    // else different: the stress case — differentiation must come from
+    // level-2 lightness and leaf texture.
+    let a = new_node_id();
+    let b = new_node_id();
+    let character = (1_u128 << 30) - 1;
+    ids.push(a);
+    ids.push(NodeId::from_u128((a.as_u128() & character) | (b.as_u128() & !character)));
+
+    ids
 }
 
 /// One pass over the UI: read-only in the model, producing draw calls
@@ -347,7 +337,6 @@ fn move_selection(model: &mut Model, delta: isize) {
 /// measurement caches parley's driver needs.
 struct Frame<'a> {
     scene: Option<&'a mut Scene>,
-    ime_caret: Option<Rect>,
     handler: Handler<App>,
 }
 
@@ -355,18 +344,6 @@ impl HasHandler<App> for Frame<'_> {
     fn handler(&mut self) -> &mut Handler<App> {
         &mut self.handler
     }
-}
-
-fn edit_access(app: &mut App) -> EditCtx<'_> {
-    EditCtx {
-        state: &mut app.model.field,
-        fonts: &mut app.font_cx,
-        layouts: &mut app.layout_cx,
-    }
-}
-
-fn pointer_position(event: &PointerButtonEvent) -> Point {
-    Point::new(event.state.position.x, event.state.position.y)
 }
 
 impl Canvas for Frame<'_> {
@@ -426,185 +403,57 @@ fn run_frame(
         Color::new([0.32, 0.35, 0.42, 1.0]),
         Affine::IDENTITY,
     );
-    let panel_rect = panel.rect();
-    frame.handler.on_pointer_down(move |app: &mut App, event| {
-        panel_rect.contains(pointer_position(event)) && {
-            app.model.selected = None;
-            app.model.editing = false;
-            true
-        }
-    });
-
-    for i in 0..SWATCHES {
-        let t = i as f32 / (SWATCHES - 1) as f32;
-        let x = m + padding + i as f64 * 34.0 * scale;
-        let y = height - m - padding - 24.0 * scale;
-        let swatch = Rect::new(x, y, x + 24.0 * scale, y + 24.0 * scale);
-        frame.fill(
-            swatch,
-            Color::new([0.25 + 0.65 * t, 0.42, 0.9 - 0.55 * t, 1.0]),
-            Affine::IDENTITY,
-        );
-        if model.selected == Some(i) {
-            frame.stroke(
-                swatch.inflate(3.0 * scale, 3.0 * scale),
-                Stroke::new(2.0 * scale),
-                Color::WHITE,
-                Affine::IDENTITY,
-            );
-        }
-        frame.handler.on_pointer_down(move |app: &mut App, event| {
-            swatch.contains(pointer_position(event)) && {
-                app.model.selected = Some(i);
-                true
-            }
-        });
-    }
-
-    frame.handler.on_key(|app: &mut App, event| {
-        event.state.is_down()
-            && match &event.key {
-                Key::Named(NamedKey::ArrowLeft) => {
-                    move_selection(&mut app.model, -1);
-                    true
-                }
-                Key::Named(NamedKey::ArrowRight) => {
-                    move_selection(&mut app.model, 1);
-                    true
-                }
-                Key::Named(NamedKey::Escape) => {
-                    if app.model.editing {
-                        app.model.editing = false;
-                    } else {
-                        app.model.selected = None;
-                    }
-                    true
-                }
-                _ => false,
-            }
-    });
-
     let mut tcx = TextCtx {
         fonts: font_cx,
         layouts: layout_cx,
         scale: scale as f32,
     };
     let title_style = TextStyle {
-        size: 28.0,
+        size: 22.0,
         brush: Color::WHITE.into(),
         weight: Some(650.0),
     };
-    let body_style = TextStyle {
-        size: 15.0,
-        brush: Color::WHITE.into(),
-        weight: None,
+    let styles = raw::RawStyles::new(scale);
+
+    let title = text(&mut tcx, "Progred", &title_style);
+    let body = match &model.identicon_sheet {
+        Some(ids) => sheet_view(ids, scale),
+        None => raw::project(&model.doc, &mut tcx, &styles),
     };
-
-    let title = text(&mut tcx, "Progred on Puri", &title_style);
-    let body = paragraph(
-        &mut tcx,
-        "The loop is closed: the same pure pass runs for every event and every \
-         redraw — an input pass carries the event and whoever takes it first owns \
-         it. Click a swatch to select it, arrow keys to move the selection, Escape \
-         or the panel background to clear it.",
-        &body_style,
-        1.4,
-        (width - 2.0 * m - 2.0 * padding) as f32,
-    );
-
-    let num = text(&mut tcx, "a + b", &body_style);
-    let den = text(&mut tcx, "2", &body_style);
-    let bar_width = num.extent.width.max(den.extent.width) + 8.0 * scale;
-    let fraction = col(
-        HAlign::Center,
-        1,
-        3.0 * scale,
-        vec![
-            num,
-            rule(bar_width, 1.5 * scale, Color::new([0.85, 0.85, 0.9, 1.0]).into()),
-            den,
-        ],
-    );
-    let equation = row(
-        4.0 * scale,
-        vec![
-            text(&mut tcx, "area =", &body_style),
-            fraction,
-            text(&mut tcx, "mm²", &body_style),
-        ],
-    );
-
-    // A traditional text box, composed from the bare editable text:
-    // pad for insets, decorate for chrome and pointer wiring.
-    let edit_style = EditStyle {
-        selection: Color::new([0.25, 0.45, 0.85, 0.45]).into(),
-        cursor: Color::WHITE.into(),
-    };
-    let inset = 8.0 * scale;
-    let editing = model.editing;
-    let caret_local = editing.then(|| model.field.cursor_rect()).flatten();
-    let field = text_edit(&model.field, editing, &edit_style, edit_access);
-    let field_box = decorate(
-        pad(Insets::uniform(inset), field),
-        move |p: &mut Frame, rect| {
-            let box_shape = RoundedRect::from_rect(rect, 6.0 * scale);
-            p.fill(box_shape, Color::new([0.16, 0.17, 0.20, 1.0]), Affine::IDENTITY);
-            if editing {
-                p.stroke(
-                    box_shape,
-                    Stroke::new(1.5 * scale),
-                    Color::new([0.45, 0.6, 0.95, 1.0]),
-                    Affine::IDENTITY,
-                );
-            }
-            let origin = Vec2::new(rect.x0 + inset, rect.y0 + inset);
-            if let Some(caret) = caret_local {
-                p.ime_caret = Some(caret + origin);
-            }
-            p.handler.on_pointer_down(move |app: &mut App, event| {
-                let position = pointer_position(event);
-                rect.contains(position) && {
-                    app.model.editing = true;
-                    let EditCtx {
-                        state,
-                        fonts,
-                        layouts,
-                    } = edit_access(app);
-                    state.pointer_down(
-                        fonts,
-                        layouts,
-                        position - origin,
-                        event.state.modifiers.shift(),
-                        event.state.count,
-                    );
-                    true
-                }
-            });
-        },
-    );
-
-    let content = col(
-        HAlign::Start,
-        0,
-        14.0 * scale,
-        vec![title, body, equation, field_box],
-    );
+    let content = col(HAlign::Start, 0, 18.0 * scale, vec![title, body]);
     place_top_left(content, frame, Point::new(m + padding, m + padding));
 }
 
-fn rule<P: Canvas>(width: f64, thickness: f64, brush: Brush) -> Node<P> {
-    leaf(
-        Extent {
-            width,
-            ascent: thickness,
-            descent: 0.0,
-        },
-        move |canvas: &mut P, at| {
-            canvas.fill(
-                Rect::new(at.x, at.y - thickness, at.x + width, at.y),
-                brush,
-                Affine::IDENTITY,
-            );
-        },
-    )
+/// Rows of large identicons (the last two rows are the close pairs),
+/// then the first eight repeated at label size.
+fn sheet_view<P: Canvas>(ids: &[progred_graph::NodeId], scale: f64) -> puri::layout::Node<P> {
+    use crate::identicon::node_identicon;
+    let big = 44.0 * scale;
+    let gap = 10.0 * scale;
+    let mut rows: Vec<_> = ids
+        .chunks(8)
+        .map(|chunk| {
+            row(
+                gap,
+                chunk.iter().map(|id| node_identicon(*id, big)).collect(),
+            )
+        })
+        .collect();
+    rows.push(row(
+        gap,
+        ids.iter()
+            .take(8)
+            .map(|id| node_identicon(*id, 16.0 * scale))
+            .collect(),
+    ));
+    // The experiment pairs again at the standard small size — the size
+    // that actually matters.
+    rows.push(row(
+        gap,
+        ids.iter()
+            .skip(32)
+            .map(|id| node_identicon(*id, 16.0 * scale))
+            .collect(),
+    ));
+    col(HAlign::Start, 0, gap, rows)
 }

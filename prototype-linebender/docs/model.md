@@ -4,11 +4,12 @@ Date: 2026-07-03
 
 ## Data Layer: gid v1, Unchanged
 
-- IDs are GUID | SID | NID. GUIDs are minted identity for mutable
+- IDs are GUID | SID | NID (TypeScript-era spelling; the Rust surface
+  says node id, string, number). GUIDs are minted identity for mutable
   nodes; SIDs and NIDs are identity the value itself carries. Edges are
   single-valued per label; labels are IDs.
 - Lists are graph structure by convention (cons/empty cells with
-  well-known UUIDs), not a data-layer primitive and not values.
+  well-known node ids), not a data-layer primitive and not values.
 - There are no compound values.
 - No special fields in the data layer. The editor layer treats some
   labels specially (name, isa, cons) the way a text editor treats
@@ -97,7 +98,7 @@ Considered and settled 2026-07-05:
   judgment, never an identity.
 - The fixed point (2026-07-05): an identity is `(space, payload)` where
   the space slot is raw 16 bytes with mint-unique convention — raw, not
-  an Id, which is what terminates the regress — and UUIDs themselves
+  an Id, which is what terminates the regress — and node ids themselves
   are just the payload discipline of one well-known space. Strings and
   numbers are two more. This is the spec AND the representation: the
   new prototype's `progred_graph` stores `Id { space: Uuid, payload:
@@ -108,7 +109,7 @@ Considered and settled 2026-07-05:
   (content-addressed or externally-issued identifier spaces become
   library-definable — the substrate takes no position on how identities
   are minted), and edge-bearing is a property of the space, held for
-  now by exactly the UUID space; granting it to an eternal space would
+  now by exactly the node space; granting it to an eternal space would
   mean documents assert edges about universal values, a deliberate
   future decision, not a default.
 - An id whose payload does not parse in its space is a well-formed
@@ -137,8 +138,8 @@ Considered and settled 2026-07-05:
   and nodes are not singleton spaces with empty payloads (a space is
   the identity of a shared convention; singleton spaces carry none, and
   the flip of the slot's meaning per case is the tell — the old model
-  is already exactly embedded as (UUID_SPACE, uuid) with its spelling
-  preserved).
+  is already exactly embedded as (NODE_SPACE, node id) with its
+  spelling preserved).
 
 ## Rejected: JSON-Shaped Value Model
 
@@ -191,6 +192,54 @@ identity for its own sake.
   namespace machinery at the data layer is the failure mode to avoid.
 - Name stays a plain string edge for now; icons and multiple languages
   arrive later as more name-shaped data, never as data-layer features.
+- The editor never displays raw UUIDs; identicons are their visual
+  form, and the encoding is bijective — all 128 bits recoverable from a
+  rendering at the small standard size, which rules out sub-perceptual
+  geometry (a v5 flaw: sub-pixel jitters rasterize away). The v6
+  encoding (2026-07-05) is a nested mosaic with salience decaying
+  exponentially from low bits to high — the git-short-hash principle
+  made literal. Low bits pick a family (an outline plus its natural
+  subdivision vocabulary: grids for square shapes, radial for round
+  ones), base hue, saturation, and the level-1 division pattern; each
+  of the four level-1 regions carries a hue transform and a split
+  variant; sixteen level-2 regions carry lightness levels; sixty-four
+  leaf tiles carry one-bit lightness offsets, tiling the icon with no
+  blank space. Finer levels derive their colors from their parents, so
+  the hierarchy reads top-down and decodes bottom-up; grout between
+  level-1 regions and the frame show the raw base color, which anchors
+  the decode. Every bit lands in a region of cell scale or larger.
+  Refined to v7 the same day: colors moved to OKLCH so the lightness
+  channel reads uniformly across hues (also the aesthetic fix — HSL's
+  perceived-lightness swings were the garishness), hue transforms
+  became analogous-leaning with one complement accent and a neutral,
+  families were made geometrically coherent (grids live only inside
+  grid-friendly outlines — sharp square, rounded square, and the
+  diamond, whose grid rotates to fit exactly; round and pointy
+  outlines subdivide radially), and frames stroke the family's actual
+  outline instead of a generic rounded rect. Families that share an
+  outline or a vocabulary carry constant structural signatures (a mat,
+  a center hole) so no two families can render alike under any bit
+  values; radius splits are equal-area so inner leaves stay readable
+  at the standard size; out-of-gamut chroma is walked in rather than
+  RGB-clamped so the lightness channel never distorts. The radial
+  engine works in boundary-normalized polar coordinates — radius is a
+  fraction of the distance to the outline in each direction — so
+  wedges reach into a shape's corners (the shield's shoulders and
+  point, the hexagon's tips) instead of stopping at an inscribed
+  circle and leaving those margins blank.
+  Separately: node-space minting dropped RFC 4122's version/variant
+  structure (2026-07-05) — payloads are 16 raw CSPRNG bytes with full
+  128-bit entropy, since the RFC structure exists to let different
+  generation schemes share a namespace, a context the space doesn't
+  have. That made "UUID" a misnomer, so the concept is named NodeId
+  (the node space, `new_node_id`, a `"node"` serialized tag); the uuid
+  type and its hyphenated spelling remain as tooling. The old NID
+  abbreviation for numbers was a JavaScript-era artifact (the type was
+  `number`); the Rust surface says node id, string, number plainly.
+  Identicons are not spoof-resistant (salient features can be ground
+  for); visual authentication would be a different tool. An explicit
+  reveal command may show the text form later; it is never the
+  default.
 
 ## Selection: Splice
 
