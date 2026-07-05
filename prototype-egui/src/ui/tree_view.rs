@@ -17,7 +17,9 @@ pub fn render<'a>(ui: &mut Ui, editor: &Editor, d_tree: &'a D, orphan_ids: &Hash
         let bg_response = ui.interact(
             ui.clip_rect(),
             ui.id().with("background"),
-            Sense::click(),
+            // Raw CLICK (not Sense::click) so this deselect-on-empty-space target
+            // senses mouse clicks without joining the Tab focus ring.
+            Sense::CLICK,
         );
 
         let path = Path::root();
