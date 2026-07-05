@@ -135,7 +135,8 @@ pub fn pad<P>(insets: Insets, child: Node<P>) -> Node<P> {
 }
 
 /// Runs `draw` with the subtree's settled rect before the subtree
-/// places — backgrounds now, hit-region emission later.
+/// places: backgrounds draw behind, and `interact::clickable` reuses
+/// the rect to register a hit region.
 pub fn decorate<P>(child: Node<P>, draw: impl FnOnce(&mut P, Rect) + 'static) -> Node<P> {
     Node {
         extent: child.extent,

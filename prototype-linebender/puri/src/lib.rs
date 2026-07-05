@@ -6,11 +6,13 @@
 pub mod draw;
 pub mod edit;
 pub mod handler;
+pub mod interact;
 pub mod layout;
 pub mod text;
 
 pub use draw::{Canvas, DrawCmd, DrawList, Glyph, GlyphRun, Shape, replay};
 pub use edit::{EditCtx, EditStyle, LineEditState, text_edit};
 pub use handler::{Handler, HasHandler, ImeEvent, capture};
+pub use interact::clickable;
 pub use layout::{Extent, HAlign, Node, col, decorate, leaf, pad, place, place_top_left, row};
 pub use text::{TextCtx, TextStyle, paragraph, text};
