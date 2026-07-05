@@ -8,10 +8,10 @@ mod raw;
 use std::sync::Arc;
 
 use parley::{FontContext, LayoutContext};
-use progred_graph::MutGid;
+use progred_graph::Id;
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Handler, HasHandler, ImeEvent};
-use puri::layout::{HAlign, col, place_top_left, row};
+use puri::layout::{HAlign, col, place_top_left};
 use puri::text::{TextCtx, TextStyle, text};
 use puri_vello::VelloCanvas;
 use ui_events::pointer::PointerEvent;
@@ -285,9 +285,8 @@ fn main() {
         layout_cx: LayoutContext::new(),
         model: Model {
             doc: raw::sample_document(),
-            identicon_sheet: std::env::args()
-                .any(|arg| arg == "--identicons")
-                .then(identicon_sheet),
+            selection: None,
+            collapse: raw::Collapse::default(),
         },
         reducer: WindowEventReducer::default(),
     };
@@ -299,34 +298,9 @@ fn main() {
 }
 
 struct Model {
-    doc: MutGid,
-    /// `--identicons`: an eyeball sheet of random identicons plus
-    /// deliberately close pairs, for judging visual differentiability.
-    identicon_sheet: Option<Vec<progred_graph::NodeId>>,
-}
-
-fn identicon_sheet() -> Vec<progred_graph::NodeId> {
-    use progred_graph::{NodeId, new_node_id};
-    let mut ids: Vec<NodeId> = (0..32).map(|_| new_node_id()).collect();
-
-    // Differ only in leaf-tile offsets: needs close inspection.
-    let base = new_node_id();
-    ids.push(base);
-    ids.push(NodeId::from_u128(base.as_u128() ^ (0xffff << 100)));
-
-    // Differ only in family: should be obvious at a glance.
-    ids.push(NodeId::from_u128(base.as_u128() ^ 0x7));
-
-    // Same character (family, hues, level-1 structure), everything
-    // else different: the stress case — differentiation must come from
-    // level-2 lightness and leaf texture.
-    let a = new_node_id();
-    let b = new_node_id();
-    let character = (1_u128 << 30) - 1;
-    ids.push(a);
-    ids.push(NodeId::from_u128((a.as_u128() & character) | (b.as_u128() & !character)));
-
-    ids
+    doc: raw::Document,
+    selection: Option<Id>,
+    collapse: raw::Collapse,
 }
 
 /// One pass over the UI: read-only in the model, producing draw calls
@@ -416,44 +390,14 @@ fn run_frame(
     let styles = raw::RawStyles::new(scale);
 
     let title = text(&mut tcx, "Progred", &title_style);
-    let body = match &model.identicon_sheet {
-        Some(ids) => sheet_view(ids, scale),
-        None => raw::project(&model.doc, &mut tcx, &styles),
-    };
+    let body = raw::project(
+        &model.doc,
+        model.selection.as_ref(),
+        &model.collapse,
+        &mut tcx,
+        &styles,
+        |app: &mut App, id| app.model.selection = Some(id),
+    );
     let content = col(HAlign::Start, 0, 18.0 * scale, vec![title, body]);
     place_top_left(content, frame, Point::new(m + padding, m + padding));
-}
-
-/// Rows of large identicons (the last two rows are the close pairs),
-/// then the first eight repeated at label size.
-fn sheet_view<P: Canvas>(ids: &[progred_graph::NodeId], scale: f64) -> puri::layout::Node<P> {
-    use crate::identicon::node_identicon;
-    let big = 44.0 * scale;
-    let gap = 10.0 * scale;
-    let mut rows: Vec<_> = ids
-        .chunks(8)
-        .map(|chunk| {
-            row(
-                gap,
-                chunk.iter().map(|id| node_identicon(*id, big)).collect(),
-            )
-        })
-        .collect();
-    rows.push(row(
-        gap,
-        ids.iter()
-            .take(8)
-            .map(|id| node_identicon(*id, 16.0 * scale))
-            .collect(),
-    ));
-    // The experiment pairs again at the standard small size — the size
-    // that actually matters.
-    rows.push(row(
-        gap,
-        ids.iter()
-            .skip(32)
-            .map(|id| node_identicon(*id, 16.0 * scale))
-            .collect(),
-    ));
-    col(HAlign::Start, 0, gap, rows)
 }

@@ -8,9 +8,12 @@ use crate::conventions::{EMPTY, HEAD, NAME, TAIL};
 use crate::identicon::{label_identicon, node_identicon};
 use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id};
 use puri::draw::Canvas;
-use puri::layout::{HAlign, Node, col, pad, row};
+use std::collections::HashSet;
+use puri::handler::HasHandler;
+use puri::interact::clickable;
+use puri::layout::{HAlign, Node, col, decorate, pad, row};
 use puri::text::{TextCtx, TextStyle, text};
-use vello::kurbo::Insets;
+use vello::kurbo::{Affine, Insets, RoundedRect};
 use vello::peniko::{Brush, Color};
 
 pub struct RawStyles {
@@ -40,10 +43,28 @@ impl RawStyles {
     }
 }
 
+/// A rooted graph: the document is its `root` id plus the `gid` that
+/// stores its edges. Every projection path starts at `root`; several
+/// top-level items are just a root that is an in-graph list.
+pub struct Document {
+    pub root: Id,
+    pub gid: MutGid,
+}
+
+/// Builds a cons list from `items`, returning its head (or `EMPTY`).
+fn cons_list(gid: &mut MutGid, items: Vec<Id>) -> Id {
+    items.into_iter().rev().fold(Id::from(EMPTY), |tail, item| {
+        let cell = new_node_id();
+        gid.set(cell, Id::from(HEAD), item);
+        gid.set(cell, Id::from(TAIL), tail);
+        Id::from(cell)
+    })
+}
+
 /// A small document exercising the model's range: named nodes, SID and
-/// GUID labels, a cons list, an unnamed scratch node, and a value from
-/// an unknown space.
-pub fn sample_document() -> MutGid {
+/// GUID labels, cons lists, an unnamed scratch node, and a value from
+/// an unknown space. Its root is a list of the top-level entities.
+pub fn sample_document() -> Document {
     let mut gid = MutGid::new();
     let name = Id::from(NAME);
 
@@ -71,6 +92,8 @@ pub fn sample_document() -> MutGid {
     gid.set(polygon, name.clone(), Id::from("polygon"));
     gid.set(polygon, Id::from("points"), Id::from(cell1));
     gid.set(polygon, Id::from(stroke_width), Id::from(1.5));
+    let dash = cons_list(&mut gid, vec![Id::from(2.0), Id::from(3.0)]);
+    gid.set(polygon, Id::from("dash"), dash);
 
     let scratch = new_node_id();
     gid.set(scratch, Id::from("color"), Id::from("rebeccapurple"));
@@ -79,122 +102,202 @@ pub fn sample_document() -> MutGid {
         Id::from("mystery"),
         Id::in_space(new_node_id(), vec![0xde, 0xad, 0xbe, 0xef]),
     );
+    // A self-reference: exercises cycle-collapse, which renders the
+    // back-edge as a collapsed header rather than recursing forever.
+    gid.set(scratch, Id::from("self"), Id::from(scratch));
 
-    gid
+    let root = cons_list(
+        &mut gid,
+        vec![
+            Id::from(polygon),
+            Id::from(origin),
+            Id::from(corner),
+            Id::from(stroke_width),
+            Id::from(scratch),
+        ],
+    );
+    Document { root, gid }
 }
 
-pub fn project<P: Canvas>(
-    gid: &MutGid,
+/// Per-path collapse overrides. An absent entry means "use the
+/// default", which is collapsed inside a cycle and expanded otherwise;
+/// a present entry forces it the other way. Sparse: only overrides are
+/// stored.
+#[derive(Default)]
+pub struct Collapse {
+    overrides: std::collections::HashMap<Vec<Id>, bool>,
+}
+
+impl Collapse {
+    fn collapsed(&self, path: &[Id], in_cycle: bool) -> bool {
+        self.overrides.get(path).copied().unwrap_or(in_cycle)
+    }
+}
+
+/// Read-only projection context threaded through every view.
+struct Cx<'a> {
+    gid: &'a MutGid,
+    collapse: &'a Collapse,
+    styles: &'a RawStyles,
+}
+
+pub fn project<C: 'static, P: Canvas + HasHandler<C>>(
+    doc: &Document,
+    selection: Option<&Id>,
+    collapse: &Collapse,
     tcx: &mut TextCtx,
     styles: &RawStyles,
+    on_select: impl Fn(&mut C, Id) + Clone + 'static,
 ) -> Node<P> {
-    let mut entities: Vec<NodeId> = gid
-        .entities()
-        .copied()
-        .filter(|entity| {
-            // Cons cells render inline as list syntax, not as blocks.
-            gid.get(&Id::from(*entity), &Id::from(HEAD)).is_none()
-        })
-        .collect();
-    entities.sort();
-    let blocks = entities
+    let cx = Cx {
+        gid: &doc.gid,
+        collapse,
+        styles,
+    };
+    // The root is projected directly; a list root lays its items out as
+    // blocks (the top-level view), anything else as a single block. The
+    // root list carries no brackets — that framing is for nested lists.
+    let items = list_items(cx.gid, &doc.root).unwrap_or_else(|| vec![doc.root.clone()]);
+    let blocks = items
         .iter()
-        .map(|entity| entity_block(gid, *entity, tcx, styles))
+        .enumerate()
+        .map(|(i, item)| {
+            let path = list_item_path(&[], i);
+            let block = value_view::<P>(&cx, tcx, &path, &HashSet::new(), item);
+            let selected = selection == Some(item);
+            let block = highlight(block, selected, styles);
+            let id = item.clone();
+            let select = on_select.clone();
+            clickable(block, move |ctx| select(ctx, id.clone()))
+        })
         .collect();
     col(HAlign::Start, 0, 14.0 * styles.scale, blocks)
 }
 
-fn entity_block<P: Canvas>(
-    gid: &MutGid,
-    entity: NodeId,
-    tcx: &mut TextCtx,
-    styles: &RawStyles,
-) -> Node<P> {
-    let id = Id::from(entity);
-    let gap = 6.0 * styles.scale;
+/// The graph path to the `i`th item of a cons list rooted at `base`:
+/// `i` tail steps then a head step. Distinct per item (they differ in
+/// tail depth), so it is a stable key for selection and collapse.
+fn list_item_path(base: &[Id], i: usize) -> Vec<Id> {
+    let mut path = base.to_vec();
+    path.extend(std::iter::repeat(Id::from(TAIL)).take(i));
+    path.push(Id::from(HEAD));
+    path
+}
 
-    let mut header = vec![node_identicon(entity, 18.0 * styles.scale)];
-    if let Some(name) = entity_name(gid, &id) {
-        header.push(text(tcx, &name, &styles.name));
+/// Draws a rounded fill behind a selected block. Runs before the block
+/// places (decorate's order), so it sits behind the content.
+fn highlight<P: Canvas>(node: Node<P>, selected: bool, styles: &RawStyles) -> Node<P> {
+    if !selected {
+        return node;
     }
-    let header = row(gap, header);
+    let scale = styles.scale;
+    decorate(node, move |p, rect| {
+        let pad = 5.0 * scale;
+        let bg = RoundedRect::from_rect(rect.inset(pad), 6.0 * scale);
+        p.fill(bg, Color::new([0.17, 0.24, 0.38, 1.0]), Affine::IDENTITY);
+    })
+}
 
-    let mut edges: Vec<(Id, Id)> = gid
-        .edges(&id)
-        .map(|edges| edges.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-        .unwrap_or_default();
-    edges.sort();
+/// A node rendered as a block: its identicon/name header over its
+/// edges, indented and recursively projected. Collapsed — by default a
+/// cycle, or forced by the collapse trie — it shows only the header,
+/// marked with an ellipsis when it hides edges.
+fn node_view<P: Canvas>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Id],
+    ancestors: &HashSet<Id>,
+    node: NodeId,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let id = Id::from(node);
+    let edges = non_name_edges(cx.gid, &id);
+    let header = header_row(cx, tcx, node);
+
+    if edges.is_empty() {
+        return header;
+    }
+    if cx.collapse.collapsed(path, ancestors.contains(&id)) {
+        return row(6.0 * scale, vec![header, text(tcx, "…", &cx.styles.dim)]);
+    }
+
+    let mut inner = ancestors.clone();
+    inner.insert(id);
     let rows = edges
         .into_iter()
-        .filter(|(label, _)| label.as_node_id() != Some(NAME))
         .map(|(label, value)| {
-            row(
-                gap,
-                vec![
-                    label_view(gid, &label, tcx, styles),
-                    value_view(gid, &value, tcx, styles, 0),
-                ],
-            )
+            let mut child = path.to_vec();
+            child.push(label.clone());
+            let label = label_view(cx, tcx, &label);
+            let value = value_view(cx, tcx, &child, &inner, &value);
+            row(6.0 * scale, vec![label, value])
         })
         .collect();
-
     col(
         HAlign::Start,
         0,
-        4.0 * styles.scale,
+        4.0 * scale,
         vec![
             header,
             pad(
-                Insets::new(26.0 * styles.scale, 0.0, 0.0, 0.0),
-                col(HAlign::Start, 0, 4.0 * styles.scale, rows),
+                Insets::new(26.0 * scale, 0.0, 0.0, 0.0),
+                col(HAlign::Start, 0, 4.0 * scale, rows),
             ),
         ],
     )
 }
 
-fn label_view<P: Canvas>(
-    gid: &MutGid,
-    label: &Id,
-    tcx: &mut TextCtx,
-    styles: &RawStyles,
-) -> Node<P> {
+fn header_row<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, node: NodeId) -> Node<P> {
+    let mut parts = vec![node_identicon(node, 18.0 * cx.styles.scale)];
+    if let Some(name) = entity_name(cx.gid, &Id::from(node)) {
+        parts.push(text(tcx, &name, &cx.styles.name));
+    }
+    row(6.0 * cx.styles.scale, parts)
+}
+
+/// A node's edges minus its name, sorted for stable order.
+fn non_name_edges(gid: &MutGid, id: &Id) -> Vec<(Id, Id)> {
+    let mut edges: Vec<(Id, Id)> = gid
+        .edges(id)
+        .map(|edges| edges.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default();
+    edges.retain(|(label, _)| label.as_node_id() != Some(NAME));
+    edges.sort();
+    edges
+}
+
+fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
     if let Some(s) = label.as_str() {
-        text(tcx, s, &styles.label)
+        text(tcx, s, &cx.styles.label)
     } else if let Some(uuid) = label.as_node_id() {
-        let mut parts = vec![label_identicon(uuid, 14.0 * styles.scale)];
-        if let Some(name) = entity_name(gid, label) {
-            parts.push(text(tcx, &name, &styles.label));
+        let mut parts = vec![label_identicon(uuid, 14.0 * cx.styles.scale)];
+        if let Some(name) = entity_name(cx.gid, label) {
+            parts.push(text(tcx, &name, &cx.styles.label));
         }
-        row(4.0 * styles.scale, parts)
+        row(4.0 * cx.styles.scale, parts)
     } else {
-        unknown_view(label, tcx, styles)
+        unknown_view(label, tcx, cx.styles)
     }
 }
 
 fn value_view<P: Canvas>(
-    gid: &MutGid,
-    value: &Id,
+    cx: &Cx,
     tcx: &mut TextCtx,
-    styles: &RawStyles,
-    depth: usize,
+    path: &[Id],
+    ancestors: &HashSet<Id>,
+    value: &Id,
 ) -> Node<P> {
     if let Some(s) = value.as_str() {
-        text(tcx, &format!("\"{s}\""), &styles.string)
+        text(tcx, &format!("\"{s}\""), &cx.styles.string)
     } else if let Some(n) = value.as_number() {
-        text(tcx, &n.to_string(), &styles.number)
-    } else if let Some(uuid) = value.as_node_id() {
-        match list_items(gid, value) {
-            Some(items) if depth < 4 => list_view(gid, &items, tcx, styles, depth),
-            _ => {
-                let mut parts = vec![node_identicon(uuid, 14.0 * styles.scale)];
-                if let Some(name) = entity_name(gid, value) {
-                    parts.push(text(tcx, &name, &styles.name));
-                }
-                row(4.0 * styles.scale, parts)
-            }
+        text(tcx, &n.to_string(), &cx.styles.number)
+    } else if let Some(node) = value.as_node_id() {
+        match list_items(cx.gid, value) {
+            Some(items) => list_view(cx, tcx, path, ancestors, &items),
+            None => node_view(cx, tcx, path, ancestors, node),
         }
     } else {
-        unknown_view(value, tcx, styles)
+        unknown_view(value, tcx, cx.styles)
     }
 }
 
@@ -212,42 +315,45 @@ fn unknown_view<P: Canvas>(id: &Id, tcx: &mut TextCtx, styles: &RawStyles) -> No
     )
 }
 
+/// A cons list, rendered inline as `[a, b, c]`. Items may themselves be
+/// multi-line blocks — the box algebra nests them freely, so nothing
+/// forces the list to break vertically.
 fn list_view<P: Canvas>(
-    gid: &MutGid,
-    items: &[Id],
+    cx: &Cx,
     tcx: &mut TextCtx,
-    styles: &RawStyles,
-    depth: usize,
+    path: &[Id],
+    ancestors: &HashSet<Id>,
+    items: &[Id],
 ) -> Node<P> {
-    let mut parts = vec![text(tcx, "[", &styles.label)];
+    let mut parts = vec![text(tcx, "[", &cx.styles.label)];
     for (i, item) in items.iter().enumerate() {
         if i > 0 {
-            parts.push(text(tcx, ", ", &styles.label));
+            parts.push(text(tcx, ", ", &cx.styles.label));
         }
-        parts.push(value_view(gid, item, tcx, styles, depth + 1));
+        parts.push(value_view(cx, tcx, &list_item_path(path, i), ancestors, item));
     }
-    parts.push(text(tcx, "]", &styles.label));
+    parts.push(text(tcx, "]", &cx.styles.label));
     row(0.0, parts)
 }
 
 /// Walks a cons chain; `Some` if the value is list-shaped (the empty
-/// list or a chain of head/tail cells), cycle-guarded.
+/// list or a chain of head/tail cells), returning the items. A cons
+/// cycle — a cell reached twice — is not a valid list, so it is `None`.
 pub fn list_items(gid: &impl Gid, value: &Id) -> Option<Vec<Id>> {
-    let head = Id::from(HEAD);
-    let tail = Id::from(TAIL);
-    let empty = Id::from(EMPTY);
-
+    let (head, tail, empty) = (Id::from(HEAD), Id::from(TAIL), Id::from(EMPTY));
     let mut items = Vec::new();
+    let mut seen = HashSet::new();
     let mut cursor = value.clone();
-    while items.len() < 64 {
+    loop {
         if cursor == empty {
             return Some(items);
         }
-        let item = gid.get(&cursor, &head)?;
-        items.push(item.clone());
+        if !seen.insert(cursor.clone()) {
+            return None;
+        }
+        items.push(gid.get(&cursor, &head)?.clone());
         cursor = gid.get(&cursor, &tail)?.clone();
     }
-    None
 }
 
 fn entity_name(gid: &impl Gid, id: &Id) -> Option<String> {
@@ -278,5 +384,19 @@ mod tests {
         // A cycle terminates as not-a-list instead of hanging.
         gid.set(c2, Id::from(TAIL), Id::from(c1));
         assert_eq!(list_items(&gid, &Id::from(c1)), None);
+    }
+
+    #[test]
+    fn collapse_default_follows_cycle_and_overrides_win() {
+        let mut collapse = Collapse::default();
+        let path = vec![Id::from("a"), Id::from("b")];
+        // Absent from the trie: expanded outside a cycle, collapsed in.
+        assert!(!collapse.collapsed(&path, false));
+        assert!(collapse.collapsed(&path, true));
+        // An override forces the state against the default either way.
+        collapse.overrides.insert(path.clone(), true);
+        assert!(collapse.collapsed(&path, false));
+        collapse.overrides.insert(path.clone(), false);
+        assert!(!collapse.collapsed(&path, true));
     }
 }
