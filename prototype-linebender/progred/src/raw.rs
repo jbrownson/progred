@@ -1,9 +1,10 @@
 //! The raw projection: any gid document rendered as entity blocks of
 //! edge rows, with no schema and no interpretation of semantic
 //! conventions — every node is just its identicon, every edge a row,
-//! including `name`. Only the structural cons-list shape is sugared
-//! (`[a, b, c]`); SID labels render plain, GUID labels and values get
-//! identicons, unparsable ids render as what they are.
+//! including `name`, and cons cells render as the plain nodes they
+//! are (list sugar belongs to a convention-aware projection). String
+//! and number labels render as their values, node labels and values
+//! get identicons, unparsable ids render as what they are.
 
 use crate::conventions::{EMPTY, HEAD, NAME, TAIL};
 use crate::identicon::{label_identicon, node_identicon};
@@ -152,8 +153,11 @@ impl Cx<'_> {
 
 /// A location in the projected spanning tree: the sequence of edge
 /// labels from the root. The same node or edge can be projected at
-/// several paths, so the path — not the id — is the stable identity a
-/// selection names.
+/// several paths, so the path — not the id — is the identity a
+/// selection names. Through a cons list a path is a chain of tail
+/// labels — positional, not the cell-anchored stability
+/// `docs/model.md` asks of splices — so path elements grow cell
+/// anchors when edits land.
 pub type Path = Vec<Id>;
 
 /// What is selected. An edge (the value at a path) for now; splice
@@ -244,7 +248,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 
 /// A node rendered as a block: its identicon/name header over its
 /// edges, indented and recursively projected. Collapsed — by default a
-/// cycle, or forced by the collapse trie — it shows only the header,
+/// cycle, or forced by an override — it shows only the header,
 /// marked with an ellipsis when it hides edges.
 fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     cx: &Cx,
@@ -306,6 +310,8 @@ fn sorted_edges(gid: &MutGid, id: &Id) -> Vec<(Id, Id)> {
 fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
     if let Some(s) = label.as_str() {
         text(tcx, s, &cx.styles.label)
+    } else if let Some(n) = label.as_number() {
+        text(tcx, &n.to_string(), &cx.styles.number)
     } else if let Some(uuid) = label.as_node_id() {
         label_identicon(uuid, 14.0 * cx.styles.scale)
     } else {
@@ -387,7 +393,7 @@ mod tests {
     fn collapse_default_follows_cycle_and_overrides_win() {
         let mut collapse = Collapse::default();
         let path = vec![Id::from("a"), Id::from("b")];
-        // Absent from the trie: expanded outside a cycle, collapsed in.
+        // Absent from the overrides: expanded outside a cycle, collapsed in.
         assert!(!collapse.collapsed(&path, false));
         assert!(collapse.collapsed(&path, true));
         // An override forces the state against the default either way.

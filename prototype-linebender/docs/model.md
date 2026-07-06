@@ -262,6 +262,15 @@ that node and its parent.
   which is much of why text editing feels fluid and node-only
   structural selection feels clunky. Splice imports the between-ness
   honestly.
+- The implemented selection (2026-07-05) is not yet this:
+  `Selection::Edge` names a path of edge labels from the root, and
+  through a cons list that is a tail-label chain — positional
+  addressing, exactly what cell anchoring exists to avoid. Fine while
+  selection is the only interaction; when edits land, path elements
+  need cell anchors (e.g. (label, value id) pairs) so selections
+  survive sibling edits. The label sequence alone remains the
+  projection-identity half — the same node projected at several paths
+  is distinguished by path, never by id.
 
 ## Types And Autocomplete
 
