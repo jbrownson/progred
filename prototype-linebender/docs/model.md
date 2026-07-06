@@ -351,7 +351,12 @@ that node and its parent.
   single line declines them); IME plumbing beyond what the puri widget
   already carries (window enabling, candidate positioning) is
   deliberately deferred, as is double-click word selection (the shell
-  does not yet count clicks).
+  does not yet count clicks). Numbers edit the same way with
+  parse-gated write-through (2026-07-06): the editor may show a
+  half-typed `3.` while the graph keeps the last parsed value, since
+  an unparsable number has no identity to write; the edited kind
+  follows the graph value, so digits typed into a string stay a
+  string.
 
 ## Types And Autocomplete
 

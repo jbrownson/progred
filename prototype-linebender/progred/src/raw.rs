@@ -23,9 +23,9 @@ use ui_events::pointer::PointerButton;
 use vello::kurbo::{Affine, BezPath, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
 
-/// Shared with the mounted string editor so edited text keeps the
-/// string color.
+/// Shared with the mounted editors so edited atoms keep their colors.
 const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
+const NUMBER_COLOR: [f32; 4] = [0.16, 0.40, 0.62, 1.0];
 
 pub struct RawStyles {
     pub label: TextStyle,
@@ -48,7 +48,7 @@ impl RawStyles {
         Self {
             label: style(14.0, [0.46, 0.49, 0.55, 1.0], None),
             string: style(14.0, STRING_COLOR, None),
-            number: style(14.0, [0.16, 0.40, 0.62, 1.0], None),
+            number: style(14.0, NUMBER_COLOR, None),
             dim: style(13.0, [0.55, 0.58, 0.64, 1.0], None),
             edit: EditStyle {
                 selection: Brush::from(Color::new([0.0, 0.48, 1.0, 0.30])),
@@ -202,14 +202,22 @@ pub enum Selection {
 }
 
 impl Selection {
-    /// Select the edge at `path`; a string value at an edge brings a
-    /// focused editor.
+    /// Select the edge at `path`; a string or number value at an edge
+    /// brings a focused editor.
     pub fn edge(doc: &Document, path: Path) -> Self {
         let edit = path
             .split_last()
             .and_then(|_| resolve(doc, &path))
-            .and_then(Id::as_str)
-            .map(line_edit);
+            .and_then(|value| {
+                value
+                    .as_str()
+                    .map(|s| line_edit(s, STRING_COLOR))
+                    .or_else(|| {
+                        value
+                            .as_number()
+                            .map(|n| line_edit(&n.to_string(), NUMBER_COLOR))
+                    })
+            });
         Selection::Edge { path, edit }
     }
 
@@ -232,11 +240,11 @@ impl Selection {
     }
 }
 
-fn line_edit(text: &str) -> LineEditState {
+fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
     let mut line = LineEditState::new(text, 14.0);
     line.editor
         .edit_styles()
-        .insert(StyleProperty::Brush(Brush::from(Color::new(STRING_COLOR))));
+        .insert(StyleProperty::Brush(Brush::from(Color::new(color))));
     line.editor
         .edit_styles()
         .insert(FontFamily::from("system-ui").into());
@@ -273,16 +281,29 @@ pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> 
 }
 
 /// Write the selection's editor text through to its edge: the graph
-/// is the source of truth, updated after every handled event. A
-/// parent that no longer resolves to a node drops the write silently
-/// — the malformed-graph rule at the mutation boundary.
+/// is the source of truth, updated after every handled event. The
+/// edited kind follows the graph value — strings write every
+/// keystroke; numbers write only when the text parses, since a
+/// half-typed state like `3.` has no identity to write. A parent that
+/// no longer resolves to a node drops the write silently — the
+/// malformed-graph rule at the mutation boundary.
 pub fn sync_edit(doc: &mut Document, selection: &Selection) {
     let Selection::Edge { path, edit } = selection;
     if let (Some(edit), Some((label, parent_path))) = (edit, path.split_last()) {
         if let Some(parent) = resolve(doc, parent_path).and_then(Id::as_node_id) {
-            let value = Id::from(edit.editor.text().to_string());
-            if resolve(doc, path) != Some(&value) {
-                doc.gid.set(parent, label.clone(), value);
+            let text = edit.editor.text().to_string();
+            let current = resolve(doc, path);
+            let next = match current {
+                Some(current) if current.as_str().is_some() => Some(Id::from(text)),
+                Some(current) if current.as_number().is_some() => {
+                    text.trim().parse::<f64>().ok().map(Id::from)
+                }
+                _ => None,
+            };
+            if let Some(next) = next {
+                if current != Some(&next) {
+                    doc.gid.set(parent, label.clone(), next);
+                }
             }
         }
     }
@@ -593,31 +614,48 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     value: &Id,
     hooks: &Hooks<C>,
 ) -> Node<P> {
+    let editing = cx
+        .selection
+        .filter(|selection| selection.path() == path)
+        .and_then(Selection::edit);
     let inner = if let Some(s) = value.as_str() {
-        let editing = cx
-            .selection
-            .filter(|selection| selection.path() == path)
-            .and_then(Selection::edit);
-        let content = match editing {
-            Some(line) => {
-                let edit_ctx = hooks.edit.clone();
-                text_edit(line, true, &cx.styles.edit, move |c| edit_ctx(c))
-            }
-            None => text(tcx, s, &cx.styles.string),
-        };
+        let content = atom_content(editing, text(tcx, s, &cx.styles.string), cx.styles, hooks);
         row(0.0, vec![
             text(tcx, "\"", &cx.styles.string),
             cursor_target(path.to_vec(), hooks, content),
             text(tcx, "\"", &cx.styles.string),
         ])
     } else if let Some(n) = value.as_number() {
-        text(tcx, &n.to_string(), &cx.styles.number)
+        let content = atom_content(
+            editing,
+            text(tcx, &n.to_string(), &cx.styles.number),
+            cx.styles,
+            hooks,
+        );
+        cursor_target(path.to_vec(), hooks, content)
     } else if let Some(node) = value.as_node_id() {
         node_view(cx, tcx, path, ancestors, node, hooks)
     } else {
         unknown_view(value, tcx, cx.styles)
     };
     descend(cx, path.to_vec(), hooks, inner)
+}
+
+/// An editable atom's content: the selection's focused editor when
+/// this atom is being edited, its static text otherwise.
+fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+    editing: Option<&LineEditState>,
+    fallback: Node<P>,
+    styles: &RawStyles,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    match editing {
+        Some(line) => {
+            let edit_ctx = hooks.edit.clone();
+            text_edit(line, true, &styles.edit, move |c| edit_ctx(c))
+        }
+        None => fallback,
+    }
 }
 
 /// A click on a string's text reports what happened — this path, this
@@ -740,7 +778,7 @@ mod tests {
     }
 
     #[test]
-    fn selecting_a_string_edge_brings_an_editor() {
+    fn selecting_an_atom_edge_brings_an_editor() {
         let mut gid = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("name"), Id::from("old"));
@@ -753,10 +791,38 @@ mod tests {
             Selection::edge(&doc, labels.iter().map(|s| Id::from(*s)).collect())
         };
         assert!(at(&["name"]).edit().is_some());
-        // Numbers, missing edges, and the root carry no editor.
-        assert!(at(&["x"]).edit().is_none());
+        assert!(at(&["x"]).edit().is_some());
+        // Missing edges and the root carry no editor.
         assert!(at(&["missing"]).edit().is_none());
         assert!(at(&[]).edit().is_none());
+    }
+
+    #[test]
+    fn number_edits_write_only_when_they_parse() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("x"), Id::from(1.5));
+        let mut doc = Document {
+            root: Id::from(node),
+            gid,
+        };
+        let path = vec![Id::from("x")];
+        let mut selection = Selection::edge(&doc, path.clone());
+
+        selection.edit_mut().unwrap().editor.set_text("2.5");
+        sync_edit(&mut doc, &selection);
+        assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
+
+        // Half-typed states leave the last parsed value in place.
+        for unparsable in ["2.5e", "", "-", "abc"] {
+            selection.edit_mut().unwrap().editor.set_text(unparsable);
+            sync_edit(&mut doc, &selection);
+            assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
+        }
+
+        selection.edit_mut().unwrap().editor.set_text("-3");
+        sync_edit(&mut doc, &selection);
+        assert_eq!(resolve(&doc, &path), Some(&Id::from(-3.0)));
     }
 
     #[test]
