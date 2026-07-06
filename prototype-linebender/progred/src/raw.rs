@@ -8,22 +8,31 @@
 
 use crate::conventions::{EMPTY, HEAD, NAME, TAIL};
 use crate::identicon::{label_identicon, node_identicon};
+use parley::StyleProperty;
+use parley::style::FontFamily;
 use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id};
 use puri::draw::Canvas;
+use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
 use puri::layout::{Extent, HAlign, Node, col, decorate, leaf, pad, row};
 use puri::text::{TextCtx, TextStyle, text};
 use std::collections::HashSet;
 use std::rc::Rc;
+use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButton;
 use vello::kurbo::{Affine, BezPath, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
+
+/// Shared with the mounted string editor so edited text keeps the
+/// string color.
+const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
 
 pub struct RawStyles {
     pub label: TextStyle,
     pub string: TextStyle,
     pub number: TextStyle,
     pub dim: TextStyle,
+    pub edit: EditStyle,
     pub scale: f64,
 }
 
@@ -38,9 +47,13 @@ impl RawStyles {
         // gray secondary labels, restrained literal accents.
         Self {
             label: style(14.0, [0.46, 0.49, 0.55, 1.0], None),
-            string: style(14.0, [0.55, 0.33, 0.28, 1.0], None),
+            string: style(14.0, STRING_COLOR, None),
             number: style(14.0, [0.16, 0.40, 0.62, 1.0], None),
             dim: style(13.0, [0.55, 0.58, 0.64, 1.0], None),
+            edit: EditStyle {
+                selection: Brush::from(Color::new([0.0, 0.48, 1.0, 0.30])),
+                cursor: Brush::from(Color::new([0.13, 0.14, 0.16, 1.0])),
+            },
             scale,
         }
     }
@@ -145,6 +158,14 @@ struct Cx<'a> {
     selection: Option<&'a Selection>,
 }
 
+/// Dispatch-time callbacks the shell injects: what selecting a path
+/// does, and how a dispatch reaches the selection's editor state and
+/// measurement caches.
+struct Hooks<C> {
+    select: Rc<dyn Fn(&mut C, Path)>,
+    edit: Rc<dyn for<'a> Fn(&'a mut C) -> EditCtx<'a>>,
+}
+
 impl Cx<'_> {
     fn selected(&self, path: &[Id]) -> bool {
         self.selection.map(Selection::path) == Some(path)
@@ -162,29 +183,145 @@ pub type Path = Vec<Id>;
 
 /// What is selected. An edge (the value at a path) for now; splice
 /// selections (the gaps between items) arrive with insertion points.
-#[derive(PartialEq)]
+/// A selected string edge carries its live editor state — every
+/// string is a text editor, focused by selection, and the graph is
+/// written through as it edits.
 pub enum Selection {
-    Edge(Path),
+    Edge { path: Path, edit: Option<LineEditState> },
 }
 
 impl Selection {
+    /// Select the edge at `path`; a string value at an edge brings a
+    /// focused editor.
+    pub fn edge(doc: &Document, path: Path) -> Self {
+        let edit = path
+            .split_last()
+            .and_then(|_| resolve(doc, &path))
+            .and_then(Id::as_str)
+            .map(line_edit);
+        Selection::Edge { path, edit }
+    }
+
     pub fn path(&self) -> &[Id] {
         match self {
-            Selection::Edge(path) => path,
+            Selection::Edge { path, .. } => path,
+        }
+    }
+
+    pub fn edit(&self) -> Option<&LineEditState> {
+        match self {
+            Selection::Edge { edit, .. } => edit.as_ref(),
+        }
+    }
+
+    pub fn edit_mut(&mut self) -> Option<&mut LineEditState> {
+        match self {
+            Selection::Edge { edit, .. } => edit.as_mut(),
+        }
+    }
+}
+
+fn line_edit(text: &str) -> LineEditState {
+    let mut line = LineEditState::new(text, 14.0);
+    line.editor
+        .edit_styles()
+        .insert(StyleProperty::Brush(Brush::from(Color::new(STRING_COLOR))));
+    line.editor
+        .edit_styles()
+        .insert(FontFamily::from("system-ui").into());
+    line
+}
+
+/// The value at `path`, following each label from the root.
+pub fn resolve<'a>(doc: &'a Document, path: &[Id]) -> Option<&'a Id> {
+    path.iter()
+        .try_fold(&doc.root, |node, label| doc.gid.get(node, label))
+}
+
+/// Write the selection's editor text through to its edge: the graph
+/// is the source of truth, updated after every handled event. A
+/// parent that no longer resolves to a node drops the write silently
+/// — the malformed-graph rule at the mutation boundary.
+pub fn sync_edit(doc: &mut Document, selection: &Selection) {
+    let Selection::Edge { path, edit } = selection;
+    if let (Some(edit), Some((label, parent_path))) = (edit, path.split_last()) {
+        if let Some(parent) = resolve(doc, parent_path).and_then(Id::as_node_id) {
+            let value = Id::from(edit.editor.text().to_string());
+            if resolve(doc, path) != Some(&value) {
+                doc.gid.set(parent, label.clone(), value);
+            }
         }
     }
 }
 
 /// A projected value's settled position: the path it stands for and the
-/// rect it occupied, collected fresh every frame. Keyboard navigation
-/// will read this to step selection by geometry and hierarchy relative
-/// to the current one; clicks go through each descend's own handler,
-/// not this list.
-#[allow(dead_code)] // read once keyboard navigation lands (next step)
+/// rect it occupied, collected fresh every frame in placement order.
+/// [`step_selection`] reads it to move the selection by keyboard;
+/// clicks go through each descend's own handler, not this list.
 pub struct Descend {
     pub path: Path,
+    /// Kept for geometric stepping and scroll-to-selection.
+    #[allow(dead_code)]
     pub rect: Rect,
 }
+
+/// Keyboard navigation over the frame's descends: a plain arrow steps
+/// the selection through the projected tree — left to the parent,
+/// right into the first placed child, up and down between siblings in
+/// placement order — and any arrow selects the root when nothing is
+/// selected. Returns the path to select, or `None` for keys
+/// navigation doesn't own.
+pub fn step_selection(
+    descends: &[Descend],
+    selection: Option<&Selection>,
+    event: &KeyboardEvent,
+) -> Option<Path> {
+    let modified = event.modifiers.ctrl()
+        || event.modifiers.meta()
+        || event.modifiers.alt()
+        || event.modifiers.shift();
+    let arrow = match &event.key {
+        Key::Named(
+            named @ (NamedKey::ArrowLeft
+            | NamedKey::ArrowRight
+            | NamedKey::ArrowUp
+            | NamedKey::ArrowDown),
+        ) => Some(*named),
+        _ => None,
+    }
+    .filter(|_| event.state.is_down() && !modified)?;
+    match (arrow, selection) {
+        (_, None) => Some(Vec::new()),
+        (NamedKey::ArrowLeft, Some(selection)) => selection
+            .path()
+            .split_last()
+            .map(|(_, parent)| parent.to_vec()),
+        (NamedKey::ArrowRight, Some(selection)) => {
+            let path = selection.path();
+            descends
+                .iter()
+                .map(|descend| &descend.path)
+                .find(|p| p.len() == path.len() + 1 && p.starts_with(path))
+                .cloned()
+        }
+        (NamedKey::ArrowUp, Some(selection)) => sibling(descends, selection.path(), false),
+        (NamedKey::ArrowDown, Some(selection)) => sibling(descends, selection.path(), true),
+        _ => None,
+    }
+}
+
+fn sibling(descends: &[Descend], path: &[Id], next: bool) -> Option<Path> {
+    let (_, parent) = path.split_last()?;
+    let siblings: Vec<&Path> = descends
+        .iter()
+        .map(|descend| &descend.path)
+        .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
+        .collect();
+    let index = siblings.iter().position(|p| p.as_slice() == path)?;
+    let index = if next { index + 1 } else { index.checked_sub(1)? };
+    siblings.get(index).map(|p| (*p).clone())
+}
+
 
 /// Placement contexts that accumulate descends as the projection
 /// places, so the shell can step selection by keyboard.
@@ -195,16 +332,16 @@ pub trait HasDescends {
 /// Marks `child` as the projection of the edge at `path`. On placement
 /// it draws the highlight when this is the selected edge, registers a
 /// click that selects the edge (innermost wins by handler precedence),
-/// and records its rect so keyboard navigation can find it by geometry.
+/// and records itself for keyboard navigation.
 fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     cx: &Cx,
     path: Path,
-    select: &Rc<dyn Fn(&mut C, Selection)>,
+    hooks: &Hooks<C>,
     child: Node<P>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let selected = cx.selected(&path);
-    let select = select.clone();
+    let select = hooks.select.clone();
     decorate(child, move |p, rect| {
         if selected {
             let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
@@ -217,7 +354,7 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
-                    select(ctx, Selection::Edge(target.clone()));
+                    select(ctx, target.clone());
                     true
                 }
         });
@@ -231,9 +368,13 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     collapse: &Collapse,
     tcx: &mut TextCtx,
     styles: &RawStyles,
-    on_select: impl Fn(&mut C, Selection) + 'static,
+    on_select: impl Fn(&mut C, Path) + 'static,
+    edit_ctx: impl for<'a> Fn(&'a mut C) -> EditCtx<'a> + 'static,
 ) -> Node<P> {
-    let select: Rc<dyn Fn(&mut C, Selection)> = Rc::new(on_select);
+    let hooks = Hooks {
+        select: Rc::new(on_select),
+        edit: Rc::new(edit_ctx),
+    };
     let cx = Cx {
         gid: &doc.gid,
         collapse,
@@ -243,7 +384,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     // Raw shows the pure graph with no assumptions: the root is
     // projected directly, so a cons-list root renders as its cells, not
     // as a list. List sugar belongs to a convention-aware projection.
-    value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), &doc.root, &select)
+    value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), &doc.root, &hooks)
 }
 
 /// A node rendered as a block: its identicon/name header over its
@@ -256,7 +397,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     path: &[Id],
     ancestors: &HashSet<Id>,
     node: NodeId,
-    select: &Rc<dyn Fn(&mut C, Selection)>,
+    hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let id = Id::from(node);
@@ -278,7 +419,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
             let mut child = path.to_vec();
             child.push(label.clone());
             let label = label_view(cx, tcx, &label);
-            let value = value_view(cx, tcx, &child, &inner, &value, select);
+            let value = value_view(cx, tcx, &child, &inner, &value, hooks);
             row(6.0 * scale, vec![label, arrow(cx.styles), value])
         })
         .collect();
@@ -357,18 +498,75 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     path: &[Id],
     ancestors: &HashSet<Id>,
     value: &Id,
-    select: &Rc<dyn Fn(&mut C, Selection)>,
+    hooks: &Hooks<C>,
 ) -> Node<P> {
     let inner = if let Some(s) = value.as_str() {
-        text(tcx, &format!("\"{s}\""), &cx.styles.string)
+        let editing = cx
+            .selection
+            .filter(|selection| selection.path() == path)
+            .and_then(Selection::edit);
+        let content = match editing {
+            Some(line) => {
+                let edit_ctx = hooks.edit.clone();
+                text_edit(line, true, &cx.styles.edit, move |c| edit_ctx(c))
+            }
+            None => text(tcx, s, &cx.styles.string),
+        };
+        row(0.0, vec![
+            text(tcx, "\"", &cx.styles.string),
+            cursor_target(cx, path.to_vec(), hooks, content),
+            text(tcx, "\"", &cx.styles.string),
+        ])
     } else if let Some(n) = value.as_number() {
         text(tcx, &n.to_string(), &cx.styles.number)
     } else if let Some(node) = value.as_node_id() {
-        node_view(cx, tcx, path, ancestors, node, select)
+        node_view(cx, tcx, path, ancestors, node, hooks)
     } else {
         unknown_view(value, tcx, cx.styles)
     };
-    descend(cx, path.to_vec(), select, inner)
+    descend(cx, path.to_vec(), hooks, inner)
+}
+
+/// Clicking a string lands the cursor where the click did: select the
+/// edge (a re-select keeps the editor), refresh the editor's lazy
+/// layout, and forward the position in text-local coordinates. The
+/// same handler serves the first click and every one after, so
+/// selecting and placing the cursor are one gesture.
+fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+    cx: &Cx,
+    path: Path,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let scale = cx.styles.scale as f32;
+    let select = hooks.select.clone();
+    let edit = hooks.edit.clone();
+    decorate(content, move |p, rect| {
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && {
+                    select(ctx, path.clone());
+                    let EditCtx {
+                        state,
+                        fonts,
+                        layouts,
+                    } = edit(ctx);
+                    state.refresh(fonts, layouts, scale);
+                    state.pointer_down(
+                        fonts,
+                        layouts,
+                        Point::new(
+                            event.state.position.x - rect.x0,
+                            event.state.position.y - rect.y0,
+                        ),
+                        event.state.modifiers.shift(),
+                        1,
+                    );
+                    true
+                }
+        });
+    })
 }
 
 /// A value from a space the editor doesn't know: the space's identicon
@@ -388,6 +586,117 @@ fn unknown_view<P: Canvas>(id: &Id, tcx: &mut TextCtx, styles: &RawStyles) -> No
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ui_events::keyboard::{KeyState, Modifiers};
+
+    fn descends(paths: &[Vec<&str>]) -> Vec<Descend> {
+        paths
+            .iter()
+            .map(|path| Descend {
+                path: path.iter().map(|s| Id::from(*s)).collect(),
+                rect: Rect::ZERO,
+            })
+            .collect()
+    }
+
+    fn arrow(key: NamedKey) -> KeyboardEvent {
+        KeyboardEvent {
+            key: Key::Named(key),
+            state: KeyState::Down,
+            modifiers: Modifiers::empty(),
+            ..Default::default()
+        }
+    }
+
+    fn stepped(ds: &[Descend], from: Option<&[&str]>, key: NamedKey) -> Option<Path> {
+        let selection = from.map(|p| Selection::Edge {
+            path: p.iter().map(|s| Id::from(*s)).collect(),
+            edit: None,
+        });
+        step_selection(ds, selection.as_ref(), &arrow(key))
+    }
+
+    #[test]
+    fn arrows_step_selection_through_the_tree() {
+        // Placement order: pre-order, parents before children.
+        let ds = descends(&[vec![], vec!["a"], vec!["a", "x"], vec!["a", "y"], vec!["b"]]);
+        let path = |p: &[&str]| p.iter().map(|s| Id::from(*s)).collect::<Vec<_>>();
+        // Nothing selected: any arrow lands on the root.
+        assert_eq!(stepped(&ds, None, NamedKey::ArrowDown), Some(vec![]));
+        // Right descends to the first placed child, left back to the parent.
+        assert_eq!(stepped(&ds, Some(&[]), NamedKey::ArrowRight), Some(path(&["a"])));
+        assert_eq!(
+            stepped(&ds, Some(&["a", "x"]), NamedKey::ArrowLeft),
+            Some(path(&["a"]))
+        );
+        // Up and down move between siblings in placement order.
+        assert_eq!(stepped(&ds, Some(&["a"]), NamedKey::ArrowDown), Some(path(&["b"])));
+        assert_eq!(stepped(&ds, Some(&["b"]), NamedKey::ArrowUp), Some(path(&["a"])));
+        assert_eq!(
+            stepped(&ds, Some(&["a", "x"]), NamedKey::ArrowDown),
+            Some(path(&["a", "y"]))
+        );
+        // Boundaries decline: no parent or sibling above the root, no
+        // children below a leaf, no sibling past the last.
+        assert_eq!(stepped(&ds, Some(&[]), NamedKey::ArrowLeft), None);
+        assert_eq!(stepped(&ds, Some(&[]), NamedKey::ArrowUp), None);
+        assert_eq!(stepped(&ds, Some(&["a", "x"]), NamedKey::ArrowRight), None);
+        assert_eq!(stepped(&ds, Some(&["b"]), NamedKey::ArrowDown), None);
+    }
+
+    #[test]
+    fn navigation_declines_modified_keys_releases_and_other_keys() {
+        let ds = descends(&[vec![], vec!["a"]]);
+        let shifted = KeyboardEvent {
+            modifiers: Modifiers::SHIFT,
+            ..arrow(NamedKey::ArrowDown)
+        };
+        assert!(step_selection(&ds, None, &shifted).is_none());
+        let released = KeyboardEvent {
+            state: KeyState::Up,
+            ..arrow(NamedKey::ArrowDown)
+        };
+        assert!(step_selection(&ds, None, &released).is_none());
+        assert!(step_selection(&ds, None, &arrow(NamedKey::Escape)).is_none());
+    }
+
+    #[test]
+    fn selecting_a_string_edge_brings_an_editor() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("name"), Id::from("old"));
+        gid.set(node, Id::from("x"), Id::from(1.5));
+        let doc = Document {
+            root: Id::from(node),
+            gid,
+        };
+        let at = |labels: &[&str]| {
+            Selection::edge(&doc, labels.iter().map(|s| Id::from(*s)).collect())
+        };
+        assert!(at(&["name"]).edit().is_some());
+        // Numbers, missing edges, and the root carry no editor.
+        assert!(at(&["x"]).edit().is_none());
+        assert!(at(&["missing"]).edit().is_none());
+        assert!(at(&[]).edit().is_none());
+    }
+
+    #[test]
+    fn edits_write_through_to_the_edge() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("name"), Id::from("old"));
+        let mut doc = Document {
+            root: Id::from(node),
+            gid,
+        };
+        let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
+        selection.edit_mut().unwrap().editor.set_text("new");
+        sync_edit(&mut doc, &selection);
+        assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
+        // A selection without an editor writes nothing.
+        let plain = Selection::edge(&doc, vec![Id::from("missing")]);
+        sync_edit(&mut doc, &plain);
+        assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
+    }
 
     #[test]
     fn collapse_default_follows_cycle_and_overrides_win() {

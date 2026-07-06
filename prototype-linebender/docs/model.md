@@ -324,6 +324,30 @@ that node and its parent.
   projection-identity half — the same node projected at several paths
   is distinguished by path, never by id.
 
+## Editing
+
+- Modeless (2026-07-05): every string value is a text editor.
+  Selecting a string edge focuses it — the editor state (cursor, text
+  selection, drag) lives inside the app's `Selection` value, created
+  when the selection lands on a string and dropped when it moves away,
+  so there is no begin/commit mode and no parallel pending-editor
+  state to sync (the TypeScript prototype's pending editors were a
+  standing bug source). The graph stays the source of truth: edits
+  write through after every handled event, retargeting the edge to the
+  new string id — strings are values, so retargeting leaves no
+  garbage. Unselected strings render as plain glyphs, which is exactly
+  what an unfocused default-state editor draws. Clicking a string
+  selects it and lands the cursor where the click did — one handler
+  serves the first click and every one after (select keeps an existing
+  editor; the position forwards to the editor in its settled rect's
+  coordinates), and pressing starts the editor's drag state, so
+  drag-selection works from the selecting click. Arrow keys inside a
+  focused string go to the cursor (up/down still navigate, since a
+  single line declines them); IME plumbing beyond what the puri widget
+  already carries (window enabling, candidate positioning) is
+  deliberately deferred, as is double-click word selection (the shell
+  does not yet count clicks).
+
 ## Types And Autocomplete
 
 Deferred behind projections.

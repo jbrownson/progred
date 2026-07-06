@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
+use puri::edit::EditCtx;
 use puri::handler::{Handler, HasHandler, ImeEvent};
 use puri::layout::place_top_left;
 use puri::text::TextCtx;
@@ -124,6 +125,7 @@ impl ApplicationHandler for App {
             };
             let translation = self.reducer.reduce(scale, &event);
             if ime.is_some() || translation.is_some() {
+                self.refresh_edit(scale as f32);
                 let mut frame = Frame {
                     scene: None,
                     handler: Handler::new(),
@@ -136,11 +138,28 @@ impl ApplicationHandler for App {
                     &mut self.layout_cx,
                     scale,
                 );
-                let handler = frame.handler;
+                let Frame {
+                    handler, descends, ..
+                } = frame;
                 let handled = match (ime, translation) {
                     (Some(ime), _) => handler.dispatch_ime(self, &ime),
+                    // Keys nothing claims fall through to selection
+                    // stepping, so the selected string's editor always
+                    // wins over navigation.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
+                            || match raw::step_selection(
+                                &descends,
+                                self.model.selection.as_ref(),
+                                &key_event,
+                            ) {
+                                Some(path) => {
+                                    self.model.selection =
+                                        Some(raw::Selection::edge(&self.model.doc, path));
+                                    true
+                                }
+                                None => false,
+                            }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
                         handler.dispatch_pointer_down(self, &button)
@@ -154,6 +173,10 @@ impl ApplicationHandler for App {
                     _ => false,
                 };
                 if handled {
+                    let model = &mut self.model;
+                    if let Some(selection) = &model.selection {
+                        raw::sync_edit(&mut model.doc, selection);
+                    }
                     window.request_redraw();
                 }
             }
@@ -282,6 +305,14 @@ impl Canvas for Frame<'_> {
 }
 
 impl App {
+    /// The selection's line-editor layout is lazy and refreshing needs
+    /// `&mut`; run it before each pure pass.
+    fn refresh_edit(&mut self, scale: f32) {
+        if let Some(line) = self.model.selection.as_mut().and_then(raw::Selection::edit_mut) {
+            line.refresh(&mut self.font_cx, &mut self.layout_cx, scale);
+        }
+    }
+
     /// Renders the current model to the surface, from `RedrawRequested`.
     fn redraw(&mut self) {
         let RenderState::Active {
@@ -297,6 +328,7 @@ impl App {
         let width = surface.config.width;
         let height = surface.config.height;
 
+        self.refresh_edit(scale as f32);
         self.scene.reset();
         let mut frame = Frame {
             scene: Some(&mut self.scene),
@@ -398,7 +430,30 @@ fn run_frame(
         &model.collapse,
         &mut tcx,
         &styles,
-        |app: &mut App, selection| app.model.selection = Some(selection),
+        // Re-clicking the selected path keeps its editor state.
+        |app: &mut App, path| {
+            if !app.model.selection.as_ref().is_some_and(|s| s.path() == path) {
+                app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
+            }
+        },
+        edit_ctx,
     );
     place_top_left(body, frame, Point::new(28.0 * scale, 28.0 * scale));
+}
+
+/// Dispatch-time access to the selection's editor. Only handlers the
+/// mounted editor registered call this, and the pass mounts it only
+/// when the selection carries one, so it exists at dispatch.
+fn edit_ctx(app: &mut App) -> EditCtx<'_> {
+    let state = app
+        .model
+        .selection
+        .as_mut()
+        .and_then(raw::Selection::edit_mut)
+        .expect("edit dispatch without a string selection");
+    EditCtx {
+        state,
+        fonts: &mut app.font_cx,
+        layouts: &mut app.layout_cx,
+    }
 }
