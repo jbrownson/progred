@@ -112,6 +112,20 @@ records). Clay or Taffy could implement the same interface later as
 adapters if some subtree earns declarative flex; neither is a
 dependency now.
 
+Scrolling (2026-07-05): the Haskell spike's document scroll threaded a
+Placement of layout rect plus clip rect through every widget so hit
+testing could respect clipping — the same retained-region wrongness
+the handler redesign removed. Here nothing threads: scrolled content
+places at an offset origin, and because every event rebuilds the
+frame, dispatch geometry follows automatically; content shifted
+outside the window cannot be hit because clicks cannot happen there. A
+future sub-window scroll panel gates its children by composing their
+captured handler behind a viewport-rect check and a coordinate shift —
+`capture` exists so containers do this as local policy, not threaded
+protocol. The shell owns the offset as ordinary app state; a scroll
+channel on the Handler lets widgets claim wheel events before the
+shell interprets the leftovers as document scroll.
+
 ## Stack
 
 - winit for windowing, input, and IME events; ui-events as the portable

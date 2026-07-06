@@ -17,7 +17,7 @@
 //! before/after behavior, transform events for, or drop.
 
 use ui_events::keyboard::KeyboardEvent;
-use ui_events::pointer::{PointerButtonEvent, PointerUpdate};
+use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent, PointerUpdate};
 
 /// Text composition events, mirroring winit's `Ime` (which bypasses
 /// ui-events); the shell converts.
@@ -32,6 +32,7 @@ pub struct Handler<C> {
     pub pointer_down: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
     pub pointer_move: Box<dyn Fn(&mut C, &PointerUpdate) -> bool>,
     pub pointer_up: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
+    pub scroll: Box<dyn Fn(&mut C, &PointerScrollEvent) -> bool>,
     pub key: Box<dyn Fn(&mut C, &KeyboardEvent) -> bool>,
     pub ime: Box<dyn Fn(&mut C, &ImeEvent) -> bool>,
 }
@@ -42,6 +43,7 @@ impl<C> Default for Handler<C> {
             pointer_down: Box::new(|_, _| false),
             pointer_move: Box::new(|_, _| false),
             pointer_up: Box::new(|_, _| false),
+            scroll: Box::new(|_, _| false),
             key: Box::new(|_, _| false),
             ime: Box::new(|_, _| false),
         }
@@ -92,6 +94,14 @@ impl<C> Handler<C> {
         self.pointer_up = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
     }
 
+    pub fn on_scroll(&mut self, dispatch: impl Fn(&mut C, &PointerScrollEvent) -> bool + 'static)
+    where
+        C: 'static,
+    {
+        let rest = std::mem::replace(&mut self.scroll, Box::new(|_, _| false));
+        self.scroll = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+    }
+
     pub fn on_ime(&mut self, dispatch: impl Fn(&mut C, &ImeEvent) -> bool + 'static)
     where
         C: 'static,
@@ -110,6 +120,10 @@ impl<C> Handler<C> {
 
     pub fn dispatch_pointer_up(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool {
         (self.pointer_up)(ctx, event)
+    }
+
+    pub fn dispatch_scroll(&self, ctx: &mut C, event: &PointerScrollEvent) -> bool {
+        (self.scroll)(ctx, event)
     }
 
     pub fn dispatch_key(&self, ctx: &mut C, event: &KeyboardEvent) -> bool {
