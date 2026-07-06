@@ -13,6 +13,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use muda::accelerator::{Accelerator, Code, Modifiers};
+use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::EditCtx;
@@ -54,24 +56,89 @@ struct App {
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
     doc_path: Option<PathBuf>,
+    /// Attached to the app once launched; commands arrive as user
+    /// events.
+    menu: Menu,
+    menu_ids: MenuIds,
     reducer: WindowEventReducer,
 }
 
-/// The platform's primary command modifier.
-fn action_mod(event: &KeyboardEvent) -> bool {
-    if cfg!(target_os = "macos") {
-        event.modifiers.meta()
+struct MenuIds {
+    open: MenuId,
+    save: MenuId,
+    save_as: MenuId,
+}
+
+/// The menu bar: file commands own their key equivalents, so the
+/// platform routes Cmd+S and friends here rather than through key
+/// dispatch. Attachment is macOS-only until another platform is run.
+fn build_menu() -> (Menu, MenuIds) {
+    let accel = if cfg!(target_os = "macos") {
+        Modifiers::META
     } else {
-        event.modifiers.ctrl()
-    }
+        Modifiers::CONTROL
+    };
+    let open = MenuItem::new("Open…", true, Some(Accelerator::new(Some(accel), Code::KeyO)));
+    let save = MenuItem::new("Save", true, Some(Accelerator::new(Some(accel), Code::KeyS)));
+    let save_as = MenuItem::new(
+        "Save As…",
+        true,
+        Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyS)),
+    );
+    let menu = Menu::new();
+    let ids = MenuIds {
+        open: open.id().clone(),
+        save: save.id().clone(),
+        save_as: save_as.id().clone(),
+    };
+    menu.append_items(&[
+        &Submenu::with_items(
+            "Progred",
+            true,
+            &[
+                &PredefinedMenuItem::about(None, None),
+                &PredefinedMenuItem::separator(),
+                &PredefinedMenuItem::quit(None),
+            ],
+        )
+        .expect("app menu"),
+        &Submenu::with_items(
+            "File",
+            true,
+            &[
+                &open,
+                &PredefinedMenuItem::separator(),
+                &save,
+                &save_as,
+            ],
+        )
+        .expect("file menu"),
+    ])
+    .expect("menu bar");
+    (menu, ids)
 }
 
 fn dialog() -> rfd::FileDialog {
     rfd::FileDialog::new().add_filter("progred", &["progred"])
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<MenuEvent> for App {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: MenuEvent) {
+        if *event.id() == self.menu_ids.open {
+            self.menu_open();
+        } else if *event.id() == self.menu_ids.save {
+            self.menu_save(false);
+        } else if *event.id() == self.menu_ids.save_as {
+            self.menu_save(true);
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        // After launch, so winit cannot replace it (its own default
+        // menu is disabled at loop construction).
+        #[cfg(target_os = "macos")]
+        self.menu.init_for_nsapp();
+
         let RenderState::Suspended(cached_window) = &mut self.state else {
             return;
         };
@@ -167,7 +234,6 @@ impl ApplicationHandler for App {
                     max_scroll,
                     ..
                 } = frame;
-                let path_before = self.doc_path.clone();
                 let handled = match (ime, translation) {
                     (Some(ime), _) => handler.dispatch_ime(self, &ime),
                     // Keys nothing claims fall through to the collapse
@@ -175,8 +241,6 @@ impl ApplicationHandler for App {
                     // selected string's editor always wins over both.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
-                            || self.save_key(&key_event)
-                            || self.open_key(&key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &descends,
@@ -207,9 +271,6 @@ impl ApplicationHandler for App {
                     }
                     _ => false,
                 };
-                if self.doc_path != path_before {
-                    window.set_title(&self.title());
-                }
                 if handled {
                     let model = &mut self.model;
                     if let Some(selection) = &model.selection {
@@ -269,6 +330,21 @@ fn main() {
         _ => raw::sample_document(),
     };
 
+    let mut builder = EventLoop::<MenuEvent>::with_user_event();
+    #[cfg(target_os = "macos")]
+    {
+        use winit::platform::macos::EventLoopBuilderExtMacOS;
+        builder.with_default_menu(false);
+    }
+    let event_loop = builder.build().expect("Couldn't create event loop");
+    // The menu attaches to the app instance the event loop created;
+    // its events arrive as user events through the proxy.
+    let (menu, menu_ids) = build_menu();
+    let proxy = event_loop.create_proxy();
+    MenuEvent::set_event_handler(Some(move |event| {
+        let _ = proxy.send_event(event);
+    }));
+
     let mut app = App {
         context: RenderContext::new(),
         renderers: vec![],
@@ -283,10 +359,11 @@ fn main() {
             scroll: 0.0,
         },
         doc_path,
+        menu,
+        menu_ids,
         reducer: WindowEventReducer::default(),
     };
 
-    let event_loop = EventLoop::new().expect("Couldn't create event loop");
     event_loop
         .run_app(&mut app)
         .expect("Couldn't run event loop");
@@ -413,58 +490,51 @@ impl App {
         }
     }
 
-    /// Cmd+S saves in place, or asks for a path when untitled;
-    /// Cmd+Shift+S always asks (save as). Write-through editing means
-    /// the graph is always current, so there is nothing to flush
-    /// first. A cancelled dialog saves nothing.
-    fn save_key(&mut self, event: &KeyboardEvent) -> bool {
-        event.state.is_down()
-            && action_mod(event)
-            && matches!(&event.key, Key::Character(c) if c.to_lowercase() == "s")
-            && {
-                let in_place = (!event.modifiers.shift())
-                    .then(|| self.doc_path.clone())
-                    .flatten();
-                let target = in_place
-                    .or_else(|| dialog().set_file_name("untitled.progred").save_file());
-                if let Some(path) = target {
-                    match store::save(&path, &self.model.doc) {
-                        Ok(()) => self.doc_path = Some(path),
-                        Err(error) => {
-                            eprintln!("failed to save {}: {error}", path.display());
-                        }
-                    }
+    /// Save saves in place, or asks for a path when untitled; save-as
+    /// always asks. Write-through editing means the graph is always
+    /// current, so there is nothing to flush first. A cancelled dialog
+    /// saves nothing.
+    fn menu_save(&mut self, save_as: bool) {
+        let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
+        let target = in_place.or_else(|| dialog().set_file_name("untitled.progred").save_file());
+        if let Some(path) = target {
+            match store::save(&path, &self.model.doc) {
+                Ok(()) => self.adopt_doc_path(path),
+                Err(error) => {
+                    eprintln!("failed to save {}: {error}", path.display());
                 }
-                true
             }
+        }
     }
 
-    /// Cmd+O opens a document, replacing the model. Selection,
-    /// collapse overrides, and scroll are path-bound to the old
-    /// document, so they reset with it.
-    fn open_key(&mut self, event: &KeyboardEvent) -> bool {
-        event.state.is_down()
-            && action_mod(event)
-            && matches!(&event.key, Key::Character(c) if c.to_lowercase() == "o")
-            && {
-                if let Some(path) = dialog().pick_file() {
-                    match store::load(&path) {
-                        Ok(doc) => {
-                            self.model = Model {
-                                doc,
-                                selection: None,
-                                collapse: raw::Collapse::default(),
-                                scroll: 0.0,
-                            };
-                            self.doc_path = Some(path);
-                        }
-                        Err(error) => {
-                            eprintln!("failed to open {}: {error}", path.display());
-                        }
-                    }
+    /// Open replaces the model. Selection, collapse overrides, and
+    /// scroll are path-bound to the old document, so they reset with
+    /// it.
+    fn menu_open(&mut self) {
+        if let Some(path) = dialog().pick_file() {
+            match store::load(&path) {
+                Ok(doc) => {
+                    self.model = Model {
+                        doc,
+                        selection: None,
+                        collapse: raw::Collapse::default(),
+                        scroll: 0.0,
+                    };
+                    self.adopt_doc_path(path);
                 }
-                true
+                Err(error) => {
+                    eprintln!("failed to open {}: {error}", path.display());
+                }
             }
+        }
+    }
+
+    fn adopt_doc_path(&mut self, path: PathBuf) {
+        self.doc_path = Some(path);
+        if let RenderState::Active { window, .. } = &self.state {
+            window.set_title(&self.title());
+            window.request_redraw();
+        }
     }
 
     /// Space toggles the selected node's collapse override; a focused
