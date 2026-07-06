@@ -356,7 +356,18 @@ that node and its parent.
   half-typed `3.` while the graph keeps the last parsed value, since
   an unparsable number has no identity to write; the edited kind
   follows the graph value, so digits typed into a string stay a
-  string.
+  string. The editor's PlainEditor buffer duplicates the edited text
+  while selected — parley's engine owns its working string — but it is
+  a plain caller-owned value with no identity leaned on: rebuilding it
+  each frame from the graph text plus bare cursor state (the
+  bufferless Haskell shape) stays available if the duplication ever
+  bites; Rust's methods-on-values packaging is the only real
+  difference (2026-07-06). Custody is one working copy, one direction
+  — the write-through runs once after each handled event — and
+  nothing else writes the graph today. Standing invariant for when
+  something does (undo arrives first): any non-editor write to the
+  currently edited edge must re-mint or drop the editor, or the stale
+  buffer clobbers it.
 
 ## Types And Autocomplete
 

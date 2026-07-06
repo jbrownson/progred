@@ -7,7 +7,10 @@ mod raw;
 // Unwired: give it a view toggle when identicons next need tuning.
 #[allow(dead_code)]
 mod sheet;
+mod store;
 
+use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use parley::{FontContext, LayoutContext};
@@ -48,6 +51,7 @@ struct App {
     font_cx: FontContext,
     layout_cx: LayoutContext<Brush>,
     model: Model,
+    doc_path: PathBuf,
     reducer: WindowEventReducer,
 }
 
@@ -60,7 +64,7 @@ impl ApplicationHandler for App {
         let window = cached_window.take().unwrap_or_else(|| {
             let attr = Window::default_attributes()
                 .with_inner_size(LogicalSize::new(900, 640))
-                .with_title("Progred");
+                .with_title(format!("Progred — {}", self.doc_path.display()));
             Arc::new(event_loop.create_window(attr).unwrap())
         });
 
@@ -155,6 +159,7 @@ impl ApplicationHandler for App {
                     // selected string's editor always wins over both.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
+                            || self.save_key(&key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &descends,
@@ -188,7 +193,7 @@ impl ApplicationHandler for App {
                 if handled {
                     let model = &mut self.model;
                     if let Some(selection) = &model.selection {
-                        raw::sync_edit(&mut model.doc, selection);
+                        raw::write_through(&mut model.doc, selection);
                     }
                     window.request_redraw();
                 }
@@ -231,6 +236,22 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
+    let doc_path = std::env::args()
+        .nth(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("untitled.progred"));
+    // A missing file starts the sample document (saving creates it); a
+    // file that exists but does not parse is refused rather than
+    // silently replaced, so a save cannot clobber it with the sample.
+    let doc = if doc_path.exists() {
+        store::load(&doc_path).unwrap_or_else(|error| {
+            eprintln!("failed to load {}: {error}", doc_path.display());
+            std::process::exit(1);
+        })
+    } else {
+        raw::sample_document()
+    };
+
     let mut app = App {
         context: RenderContext::new(),
         renderers: vec![],
@@ -239,11 +260,12 @@ fn main() {
         font_cx: FontContext::new(),
         layout_cx: LayoutContext::new(),
         model: Model {
-            doc: raw::sample_document(),
+            doc,
             selection: None,
             collapse: raw::Collapse::default(),
             scroll: 0.0,
         },
+        doc_path,
         reducer: WindowEventReducer::default(),
     };
 
@@ -365,6 +387,29 @@ impl App {
             self.model.scroll = next;
             true
         }
+    }
+
+    /// Cmd+S (Ctrl elsewhere) saves the document to its path.
+    /// Write-through editing means the graph is always current, so
+    /// there is nothing to flush first.
+    fn save_key(&mut self, event: &KeyboardEvent) -> bool {
+        let action = if cfg!(target_os = "macos") {
+            event.modifiers.meta()
+        } else {
+            event.modifiers.ctrl()
+        };
+        event.state.is_down()
+            && action
+            && matches!(&event.key, Key::Character(c) if c.to_lowercase() == "s")
+            && {
+                match store::save(&self.doc_path, &self.model.doc) {
+                    Ok(()) => eprintln!("saved {}", self.doc_path.display()),
+                    Err(error) => {
+                        eprintln!("failed to save {}: {error}", self.doc_path.display());
+                    }
+                }
+                true
+            }
     }
 
     /// Space toggles the selected node's collapse override; a focused
@@ -502,16 +547,18 @@ fn run_frame(
         &model.collapse,
         &mut tcx,
         &styles,
-        // The selection transition: re-selecting the same path keeps
-        // its editor state, and a reported text click seeds or
-        // advances the editor's caret — focus and cursor placement
-        // are one event.
-        move |app: &mut App, path, click| {
-            if !app.model.selection.as_ref().is_some_and(|s| s.path() == path) {
-                app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
-            }
-            if let Some(click) = click {
-                if let Some(line) = app.model.selection.as_mut().and_then(raw::Selection::edit_mut)
+        raw::Hooks {
+            // The selection transition: re-selecting the same path
+            // keeps its editor state, and a reported text click seeds
+            // or advances the editor's caret — focus and cursor
+            // placement are one event.
+            select: Rc::new(move |app: &mut App, path, click| {
+                if app.model.selection.as_ref().is_none_or(|s| s.path() != path) {
+                    app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
+                }
+                if let Some(click) = click
+                    && let Some(line) =
+                        app.model.selection.as_mut().and_then(raw::Selection::edit_mut)
                 {
                     line.refresh(&mut app.font_cx, &mut app.layout_cx, scale as f32);
                     line.pointer_down(
@@ -522,12 +569,12 @@ fn run_frame(
                         1,
                     );
                 }
-            }
+            }),
+            toggle: Rc::new(|app: &mut App, path| {
+                raw::toggle_collapse(&app.model.doc, &mut app.model.collapse, &path);
+            }),
+            edit: Rc::new(edit_ctx),
         },
-        |app: &mut App, path| {
-            raw::toggle_collapse(&app.model.doc, &mut app.model.collapse, &path);
-        },
-        edit_ctx,
     );
     let margin = 28.0 * scale;
     frame.max_scroll = ((body.extent.height() + 2.0 * margin - viewport_height) / scale).max(0.0);

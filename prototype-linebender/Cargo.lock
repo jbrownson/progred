@@ -1934,6 +1934,8 @@ dependencies = [
  "progred_graph",
  "puri",
  "puri-vello",
+ "serde",
+ "serde_json",
  "ui-events",
  "ui-events-winit",
  "vello",

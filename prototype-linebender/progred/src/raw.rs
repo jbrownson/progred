@@ -62,6 +62,7 @@ impl RawStyles {
 /// A rooted graph: the document is its `root` id plus the `gid` that
 /// stores its edges. Every projection path starts at `root`; several
 /// top-level items are just a root that is an in-graph list.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Document {
     pub root: Id,
     pub gid: MutGid,
@@ -171,10 +172,10 @@ pub struct TextClick {
 /// (optionally with a text click) does, what toggling a node's
 /// collapse does, and how a dispatch reaches the selection's editor
 /// state and measurement caches.
-struct Hooks<C> {
-    select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
-    toggle: Rc<dyn Fn(&mut C, Path)>,
-    edit: Rc<dyn for<'a> Fn(&'a mut C) -> EditCtx<'a>>,
+pub struct Hooks<C> {
+    pub select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
+    pub toggle: Rc<dyn Fn(&mut C, Path)>,
+    pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> EditCtx<'a>>,
 }
 
 impl Cx<'_> {
@@ -287,24 +288,24 @@ pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> 
 /// half-typed state like `3.` has no identity to write. A parent that
 /// no longer resolves to a node drops the write silently — the
 /// malformed-graph rule at the mutation boundary.
-pub fn sync_edit(doc: &mut Document, selection: &Selection) {
+pub fn write_through(doc: &mut Document, selection: &Selection) {
     let Selection::Edge { path, edit } = selection;
-    if let (Some(edit), Some((label, parent_path))) = (edit, path.split_last()) {
-        if let Some(parent) = resolve(doc, parent_path).and_then(Id::as_node_id) {
-            let text = edit.editor.text().to_string();
-            let current = resolve(doc, path);
-            let next = match current {
-                Some(current) if current.as_str().is_some() => Some(Id::from(text)),
-                Some(current) if current.as_number().is_some() => {
-                    text.trim().parse::<f64>().ok().map(Id::from)
-                }
-                _ => None,
-            };
-            if let Some(next) = next {
-                if current != Some(&next) {
-                    doc.gid.set(parent, label.clone(), next);
-                }
+    if let (Some(edit), Some((label, parent_path))) = (edit, path.split_last())
+        && let Some(parent) = resolve(doc, parent_path).and_then(Id::as_node_id)
+    {
+        let text = edit.editor.text().to_string();
+        let current = resolve(doc, path);
+        let next = match current {
+            Some(current) if current.as_str().is_some() => Some(Id::from(text)),
+            Some(current) if current.as_number().is_some() => {
+                text.trim().parse::<f64>().ok().map(Id::from)
             }
+            _ => None,
+        };
+        if let Some(next) = next
+            && current != Some(&next)
+        {
+            doc.gid.set(parent, label.clone(), next);
         }
     }
 }
@@ -423,15 +424,8 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     collapse: &Collapse,
     tcx: &mut TextCtx,
     styles: &RawStyles,
-    on_select: impl Fn(&mut C, Path, Option<TextClick>) + 'static,
-    on_toggle: impl Fn(&mut C, Path) + 'static,
-    edit_ctx: impl for<'a> Fn(&'a mut C) -> EditCtx<'a> + 'static,
+    hooks: Hooks<C>,
 ) -> Node<P> {
-    let hooks = Hooks {
-        select: Rc::new(on_select),
-        toggle: Rc::new(on_toggle),
-        edit: Rc::new(edit_ctx),
-    };
     let cx = Cx {
         gid: &doc.gid,
         collapse,
@@ -810,18 +804,18 @@ mod tests {
         let mut selection = Selection::edge(&doc, path.clone());
 
         selection.edit_mut().unwrap().editor.set_text("2.5");
-        sync_edit(&mut doc, &selection);
+        write_through(&mut doc, &selection);
         assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
 
         // Half-typed states leave the last parsed value in place.
         for unparsable in ["2.5e", "", "-", "abc"] {
             selection.edit_mut().unwrap().editor.set_text(unparsable);
-            sync_edit(&mut doc, &selection);
+            write_through(&mut doc, &selection);
             assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
         }
 
         selection.edit_mut().unwrap().editor.set_text("-3");
-        sync_edit(&mut doc, &selection);
+        write_through(&mut doc, &selection);
         assert_eq!(resolve(&doc, &path), Some(&Id::from(-3.0)));
     }
 
@@ -836,11 +830,11 @@ mod tests {
         };
         let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
         selection.edit_mut().unwrap().editor.set_text("new");
-        sync_edit(&mut doc, &selection);
+        write_through(&mut doc, &selection);
         assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
         // A selection without an editor writes nothing.
         let plain = Selection::edge(&doc, vec![Id::from("missing")]);
-        sync_edit(&mut doc, &plain);
+        write_through(&mut doc, &plain);
         assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
     }
 
