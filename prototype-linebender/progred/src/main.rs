@@ -515,14 +515,20 @@ fn run_frame(
                 }
             }
         },
+        |app: &mut App, path| {
+            raw::toggle_collapse(&app.model.doc, &mut app.model.collapse, &path);
+        },
         edit_ctx,
     );
     let margin = 28.0 * scale;
-    frame.max_scroll = (body.extent.height() + 2.0 * margin - viewport_height).max(0.0);
+    frame.max_scroll = ((body.extent.height() + 2.0 * margin - viewport_height) / scale).max(0.0);
     place_top_left(
         body,
         frame,
-        Point::new(margin, margin - model.scroll.clamp(0.0, frame.max_scroll)),
+        Point::new(
+            margin,
+            margin - model.scroll.clamp(0.0, frame.max_scroll) * scale,
+        ),
     );
 }
 

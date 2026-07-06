@@ -168,10 +168,12 @@ pub struct TextClick {
 }
 
 /// Dispatch-time callbacks the shell injects: what selecting a path
-/// (optionally with a text click) does, and how a dispatch reaches
-/// the selection's editor state and measurement caches.
+/// (optionally with a text click) does, what toggling a node's
+/// collapse does, and how a dispatch reaches the selection's editor
+/// state and measurement caches.
 struct Hooks<C> {
     select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
+    toggle: Rc<dyn Fn(&mut C, Path)>,
     edit: Rc<dyn for<'a> Fn(&'a mut C) -> EditCtx<'a>>,
 }
 
@@ -401,10 +403,12 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     tcx: &mut TextCtx,
     styles: &RawStyles,
     on_select: impl Fn(&mut C, Path, Option<TextClick>) + 'static,
+    on_toggle: impl Fn(&mut C, Path) + 'static,
     edit_ctx: impl for<'a> Fn(&'a mut C) -> EditCtx<'a> + 'static,
 ) -> Node<P> {
     let hooks = Hooks {
         select: Rc::new(on_select),
+        toggle: Rc::new(on_toggle),
         edit: Rc::new(edit_ctx),
     };
     let cx = Cx {
@@ -419,10 +423,11 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), &doc.root, &hooks)
 }
 
-/// A node rendered as a block: its identicon/name header over its
-/// edges, indented and recursively projected. Collapsed — by default a
-/// cycle, or forced by an override — it shows only the header,
-/// marked with an ellipsis when it hides edges.
+/// A node rendered as a block: its identicon header over its edges,
+/// indented and recursively projected. A node with edges carries a
+/// disclosure delta to the right of the header — outside the indent —
+/// that toggles collapse; collapsed (by default a cycle, or forced by
+/// an override) it shows only the header.
 fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -434,13 +439,18 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     let scale = cx.styles.scale;
     let id = Id::from(node);
     let edges = sorted_edges(cx.gid, &id);
-    let header = node_identicon(node, 18.0 * scale);
+    let icon = node_identicon(node, 18.0 * scale);
 
     if edges.is_empty() {
-        return header;
+        return icon;
     }
-    if cx.collapse.collapsed(path, ancestors.contains(&id)) {
-        return row(6.0 * scale, vec![header, text(tcx, "…", &cx.styles.dim)]);
+    let collapsed = cx.collapse.collapsed(path, ancestors.contains(&id));
+    let header = row(
+        4.0 * scale,
+        vec![icon, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
+    );
+    if collapsed {
+        return header;
     }
 
     let mut inner = ancestors.clone();
@@ -490,6 +500,57 @@ fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
     } else {
         unknown_view(label, tcx, cx.styles)
     }
+}
+
+/// The disclosure delta to the right of a node header: down when
+/// expanded, right when collapsed. Clicking it reports a toggle for
+/// this path without selecting; the extent spans the header height so
+/// the target is comfortable, and living outside the child indent it
+/// costs no horizontal space.
+fn disclosure<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+    path: Path,
+    collapsed: bool,
+    hooks: &Hooks<C>,
+    styles: &RawStyles,
+) -> Node<P> {
+    let scale = styles.scale;
+    let toggle = hooks.toggle.clone();
+    let brush = styles.dim.brush.clone();
+    let (width, ascent, descent) = (12.0 * scale, 14.4 * scale, 3.6 * scale);
+    leaf(
+        Extent {
+            width,
+            ascent,
+            descent,
+        },
+        move |p: &mut P, at| {
+            let rect = Rect::new(at.x, at.y - ascent, at.x + width, at.y + descent);
+            let (x, y) = (at.x + width / 2.0 - 1.0 * scale, at.y - 5.4 * scale);
+            let h = 3.8 * scale;
+            let mut tri = BezPath::new();
+            if collapsed {
+                tri.move_to((x - h * 0.5, y - h * 0.9));
+                tri.line_to((x - h * 0.5, y + h * 0.9));
+                tri.line_to((x + h * 0.9, y));
+            } else {
+                tri.move_to((x - h * 0.9, y - h * 0.5));
+                tri.line_to((x + h * 0.9, y - h * 0.5));
+                tri.line_to((x, y + h * 0.9));
+            }
+            tri.close_path();
+            p.fill(tri, brush.clone(), Affine::IDENTITY);
+            let toggle = toggle.clone();
+            let target = path.clone();
+            p.handler().on_pointer_down(move |ctx, event| {
+                event.button == Some(PointerButton::Primary)
+                    && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                    && {
+                        toggle(ctx, target.clone());
+                        true
+                    }
+            });
+        },
+    )
 }
 
 /// A small drawn arrow between a label and its value. Reading
