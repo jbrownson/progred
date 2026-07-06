@@ -198,27 +198,29 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
 
-            // KNOWN ISSUE: a live drag-resize glitches on macOS (the
-            // compositor stretches a frame mid-drag). Not ours — vello's
-            // own examples show it, and this is the canonical handling
-            // (resize + request_redraw). The real fix is below wgpu
-            // (CAMetalLayer `presentsWithTransaction` / a synchronized
-            // drawable commit); accepted for now, revisit in a lower layer.
+            // KNOWN ISSUE: a live drag-resize can still glitch on macOS
+            // (the compositor stretches a stale frame mid-drag). Not
+            // ours — vello's own examples show it. Rendering the new
+            // size synchronously inside the resize event narrows the
+            // stale window; the real fix is below wgpu (CAMetalLayer
+            // `presentsWithTransaction` / a synchronized drawable
+            // commit). Revisit in a lower layer.
             WindowEvent::Resized(size) => {
+                let valid = size.width != 0 && size.height != 0;
                 if let RenderState::Active {
                     surface,
                     valid_surface,
                     ..
                 } = &mut self.state
                 {
-                    if size.width != 0 && size.height != 0 {
+                    if valid {
                         self.context
                             .resize_surface(surface, size.width, size.height);
-                        *valid_surface = true;
-                        window.request_redraw();
-                    } else {
-                        *valid_surface = false;
                     }
+                    *valid_surface = valid;
+                }
+                if valid {
+                    self.redraw();
                 }
             }
 
@@ -255,7 +257,11 @@ struct Model {
     doc: raw::Document,
     selection: Option<raw::Selection>,
     collapse: raw::Collapse,
-    /// Vertical document scroll offset in physical pixels.
+    /// Vertical document scroll offset in logical pixels, so the
+    /// position survives moving between monitor scales. May exceed
+    /// the current maximum after a resize: placement clamps
+    /// effectively, so a transient shrink-and-grow restores the
+    /// position; scrolling collapses it to the clamped reality.
     scroll: f64,
 }
 
@@ -350,8 +356,11 @@ impl App {
         );
         // ScrollDelta documents positive Y as viewport-down, but
         // ui-events-winit passes winit deltas through raw, where
-        // positive Y is scroll-up; subtract to match reality.
-        let next = (self.model.scroll - delta.y).clamp(0.0, max_scroll);
+        // positive Y is scroll-up; subtract to match reality. Stepping
+        // from the clamped position keeps the first tick responsive
+        // when a resize left the stored offset out of bounds.
+        let next =
+            (self.model.scroll.clamp(0.0, max_scroll) - delta.y / scale).clamp(0.0, max_scroll);
         (next != self.model.scroll) && {
             self.model.scroll = next;
             true
