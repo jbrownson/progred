@@ -87,26 +87,25 @@ impl LineEditState {
             #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
             Key::Character(c) if action_mod && matches!(c.to_lowercase().as_str(), "c" | "x" | "v") => {
                 use clipboard_rs::{Clipboard, ClipboardContext};
-                match c.to_lowercase().as_str() {
-                    "c" => {
-                        if let Some(text) = drv.editor.selected_text() {
-                            let cb = ClipboardContext::new().unwrap();
-                            cb.set_text(text.to_owned()).ok();
+                if let Ok(cb) = ClipboardContext::new() {
+                    match c.to_lowercase().as_str() {
+                        "c" => {
+                            if let Some(text) = drv.editor.selected_text() {
+                                cb.set_text(text.to_owned()).ok();
+                            }
                         }
-                    }
-                    "x" => {
-                        if let Some(text) = drv.editor.selected_text() {
-                            let cb = ClipboardContext::new().unwrap();
-                            cb.set_text(text.to_owned()).ok();
-                            drv.delete_selection();
+                        "x" => {
+                            if let Some(text) = drv.editor.selected_text() {
+                                cb.set_text(text.to_owned()).ok();
+                                drv.delete_selection();
+                            }
                         }
+                        "v" => {
+                            let text = cb.get_text().unwrap_or_default();
+                            drv.insert_or_replace_selection(&text);
+                        }
+                        _ => {}
                     }
-                    "v" => {
-                        let cb = ClipboardContext::new().unwrap();
-                        let text = cb.get_text().unwrap_or_default();
-                        drv.insert_or_replace_selection(&text);
-                    }
-                    _ => {}
                 }
                 true
             }
