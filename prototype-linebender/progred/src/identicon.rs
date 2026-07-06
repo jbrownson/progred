@@ -60,12 +60,12 @@ fn icon_rect(at: Point, size: f64) -> Rect {
 }
 
 const HUE_STEP: f32 = 45.0;
-const CHROMAS: [f32; 4] = [0.055, 0.085, 0.115, 0.145];
+const CHROMAS: [f32; 4] = [0.07, 0.10, 0.13, 0.16];
 const NEUTRAL_CHROMA: f32 = 0.015;
 /// Analogous-leaning: small rotations, one complement accent, a
 /// near-complement, and a neutral. All distinct mod 360.
 const HUE_TRANSFORMS: [f32; 7] = [0.0, 30.0, -30.0, 60.0, -60.0, 150.0, 180.0];
-const LEVEL2_L: [f32; 4] = [0.80, 0.70, 0.60, 0.50];
+const LEVEL2_L: [f32; 4] = [0.85, 0.74, 0.63, 0.52];
 // None may equal half the distance between two level-2 values, or
 // leaf lightnesses would collide; the tests enforce it.
 const LEVEL3_DELTA: [f32; 4] = [0.018, 0.030, 0.044, 0.062];
@@ -128,8 +128,8 @@ const FAMILIES: [(u8, bool, f64, bool); 8] = [
     (1, false, 0.82, false),  // rounded square, matted grid
     (3, false, 0.707, false), // diamond, grid rotated 45° (exact fit)
     (4, true, 0.90, false),   // hexagon, radial
-    (0, true, 0.96, false),   // circle, radial
-    (0, true, 0.96, true),    // annulus, radial around a center hole
+    (0, true, 0.92, false),   // circle, radial
+    (0, true, 0.92, true),    // annulus, radial around a center hole
     (2, true, 0.90, false),   // squircle, radial
     (5, true, 0.88, false),   // shield, radial
 ];
@@ -182,10 +182,24 @@ fn draw<P: Canvas>(p: &mut P, rect: Rect, id: NodeId) {
         frame(p, rect, outline, f.frame, oklch(0.86, f.chroma * 0.5, f.base_hue));
     };
 
+    // Clip the mosaic to the silhouette, then stroke that silhouette in
+    // a dark hairline so the icon reads as a defined shape on any
+    // background; the frame bits stay a secondary inner decoration.
+    let edge = oklch(0.24, 0.015, f.base_hue);
+    let edge_stroke = Stroke::new(0.045 * w);
     match outline_shape(rect, outline) {
-        Outline::Circle(c) => p.clip(c, Affine::IDENTITY, body),
-        Outline::Rounded(r) => p.clip(r, Affine::IDENTITY, body),
-        Outline::Path(path) => p.clip(path, Affine::IDENTITY, body),
+        Outline::Circle(c) => {
+            p.clip(c, Affine::IDENTITY, body);
+            p.stroke(c, edge_stroke, edge, Affine::IDENTITY);
+        }
+        Outline::Rounded(r) => {
+            p.clip(r, Affine::IDENTITY, body);
+            p.stroke(r, edge_stroke, edge, Affine::IDENTITY);
+        }
+        Outline::Path(path) => {
+            p.clip(path.clone(), Affine::IDENTITY, body);
+            p.stroke(path, edge_stroke, edge, Affine::IDENTITY);
+        }
     }
 }
 
