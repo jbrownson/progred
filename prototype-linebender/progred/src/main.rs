@@ -8,15 +8,14 @@ mod raw;
 use std::sync::Arc;
 
 use parley::{FontContext, LayoutContext};
-use progred_graph::Id;
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Handler, HasHandler, ImeEvent};
-use puri::layout::{HAlign, col, place_top_left};
-use puri::text::{TextCtx, TextStyle, text};
+use puri::layout::place_top_left;
+use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
-use ui_events::pointer::PointerEvent;
+use ui_events::pointer::{PointerButton, PointerEvent};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::kurbo::{Affine, Point, RoundedRect, Stroke};
+use vello::kurbo::{Affine, Point, Stroke};
 use vello::peniko::{Brush, Color};
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
@@ -98,14 +97,8 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let (window, width, height) = match &self.state {
-            RenderState::Active {
-                surface, window, ..
-            } if window.id() == window_id => (
-                window.clone(),
-                surface.config.width,
-                surface.config.height,
-            ),
+        let window = match &self.state {
+            RenderState::Active { window, .. } if window.id() == window_id => window.clone(),
             _ => return,
         };
         let scale = window.scale_factor();
@@ -131,14 +124,13 @@ impl ApplicationHandler for App {
                 let mut frame = Frame {
                     scene: None,
                     handler: Handler::new(),
+                    descends: Vec::new(),
                 };
                 run_frame(
                     &mut frame,
                     &self.model,
                     &mut self.font_cx,
                     &mut self.layout_cx,
-                    width as f64,
-                    height as f64,
                     scale,
                 );
                 let handler = frame.handler;
@@ -167,109 +159,31 @@ impl ApplicationHandler for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
 
+            // KNOWN ISSUE: a live drag-resize glitches on macOS (the
+            // compositor stretches a frame mid-drag). Not ours — vello's
+            // own examples show it, and this is the canonical handling
+            // (resize + request_redraw). The real fix is below wgpu
+            // (CAMetalLayer `presentsWithTransaction` / a synchronized
+            // drawable commit); accepted for now, revisit in a lower layer.
             WindowEvent::Resized(size) => {
-                let RenderState::Active {
+                if let RenderState::Active {
                     surface,
                     valid_surface,
                     ..
                 } = &mut self.state
-                else {
-                    return;
-                };
-                if size.width != 0 && size.height != 0 {
-                    self.context
-                        .resize_surface(surface, size.width, size.height);
-                    *valid_surface = true;
-                } else {
-                    *valid_surface = false;
+                {
+                    if size.width != 0 && size.height != 0 {
+                        self.context
+                            .resize_surface(surface, size.width, size.height);
+                        *valid_surface = true;
+                        window.request_redraw();
+                    } else {
+                        *valid_surface = false;
+                    }
                 }
             }
 
-            WindowEvent::RedrawRequested => {
-                if matches!(
-                    &self.state,
-                    RenderState::Active {
-                        valid_surface: false,
-                        ..
-                    }
-                ) {
-                    return;
-                }
-
-                self.scene.reset();
-                let mut frame = Frame {
-                    scene: Some(&mut self.scene),
-                    handler: Handler::new(),
-                };
-                run_frame(
-                    &mut frame,
-                    &self.model,
-                    &mut self.font_cx,
-                    &mut self.layout_cx,
-                    width as f64,
-                    height as f64,
-                    scale,
-                );
-                drop(frame);
-
-                let RenderState::Active { surface, .. } = &mut self.state else {
-                    return;
-                };
-                let device_handle = &self.context.devices[surface.dev_id];
-
-                self.renderers[surface.dev_id]
-                    .as_mut()
-                    .unwrap()
-                    .render_to_texture(
-                        &device_handle.device,
-                        &device_handle.queue,
-                        &self.scene,
-                        &surface.target_view,
-                        &vello::RenderParams {
-                            base_color: Color::new([0.06, 0.065, 0.08, 1.0]),
-                            width,
-                            height,
-                            antialiasing_method: AaConfig::Msaa16,
-                        },
-                    )
-                    .expect("failed to render to texture");
-
-                let surface_texture = match surface.surface.get_current_texture() {
-                    CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
-                    CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Suboptimal(_) => {
-                        self.context.configure_surface(surface);
-                        window.request_redraw();
-                        return;
-                    }
-                    CurrentSurfaceTexture::Occluded | CurrentSurfaceTexture::Timeout => {
-                        window.request_redraw();
-                        return;
-                    }
-                    CurrentSurfaceTexture::Lost => panic!("Surface was lost"),
-                    CurrentSurfaceTexture::Validation => {
-                        panic!("Validation error getting surface")
-                    }
-                };
-
-                let mut encoder =
-                    device_handle
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Surface Blit"),
-                        });
-                surface.blitter.copy(
-                    &device_handle.device,
-                    &mut encoder,
-                    &surface.target_view,
-                    &surface_texture
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default()),
-                );
-                device_handle.queue.submit([encoder.finish()]);
-                surface_texture.present();
-
-                device_handle.device.poll(wgpu::PollType::Poll).unwrap();
-            }
+            WindowEvent::RedrawRequested => self.redraw(),
             _ => {}
         }
     }
@@ -299,24 +213,31 @@ fn main() {
 
 struct Model {
     doc: raw::Document,
-    selection: Option<Id>,
+    selection: Option<raw::Selection>,
     collapse: raw::Collapse,
 }
 
 /// One pass over the UI: read-only in the model, producing draw calls
-/// (when a scene is attached) and a transient `Handler`. Every event
-/// runs the pass fresh, dispatches through the returned handler — all
-/// mutation happens there, after placement — and discards it. The
-/// dispatch context is `App`, so dispatches reach the model and the
-/// measurement caches parley's driver needs.
+/// (when a scene is attached), a transient `Handler`, and the list of
+/// `Descend`s placed this frame. Every event runs the pass fresh; the
+/// handler and descends drive dispatch and selection, then are
+/// discarded. The dispatch context is `App`, so dispatches reach the
+/// model and the measurement caches parley's driver needs.
 struct Frame<'a> {
     scene: Option<&'a mut Scene>,
     handler: Handler<App>,
+    descends: Vec<raw::Descend>,
 }
 
 impl HasHandler<App> for Frame<'_> {
     fn handler(&mut self) -> &mut Handler<App> {
         &mut self.handler
+    }
+}
+
+impl raw::HasDescends for Frame<'_> {
+    fn descends(&mut self) -> &mut Vec<raw::Descend> {
+        &mut self.descends
     }
 }
 
@@ -357,47 +278,126 @@ impl Canvas for Frame<'_> {
     }
 }
 
+impl App {
+    /// Renders the current model to the surface. Called from
+    /// `RedrawRequested` and synchronously from `Resized` — rendering
+    /// the new size in-handler is what stops the drag-resize ghosting.
+    fn redraw(&mut self) {
+        let RenderState::Active {
+            surface,
+            valid_surface: true,
+            window,
+        } = &self.state
+        else {
+            return;
+        };
+        let window = window.clone();
+        let scale = window.scale_factor();
+        let width = surface.config.width;
+        let height = surface.config.height;
+
+        self.scene.reset();
+        let mut frame = Frame {
+            scene: Some(&mut self.scene),
+            handler: Handler::new(),
+            descends: Vec::new(),
+        };
+        run_frame(
+            &mut frame,
+            &self.model,
+            &mut self.font_cx,
+            &mut self.layout_cx,
+            scale,
+        );
+        drop(frame);
+
+        let RenderState::Active { surface, .. } = &mut self.state else {
+            return;
+        };
+        let device_handle = &self.context.devices[surface.dev_id];
+
+        self.renderers[surface.dev_id]
+            .as_mut()
+            .unwrap()
+            .render_to_texture(
+                &device_handle.device,
+                &device_handle.queue,
+                &self.scene,
+                &surface.target_view,
+                &vello::RenderParams {
+                    base_color: Color::new([0.965, 0.965, 0.972, 1.0]),
+                    width,
+                    height,
+                    antialiasing_method: AaConfig::Msaa16,
+                },
+            )
+            .expect("failed to render to texture");
+
+        let surface_texture = match surface.surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(surface_texture) => surface_texture,
+            CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Suboptimal(_) => {
+                self.context.configure_surface(surface);
+                window.request_redraw();
+                return;
+            }
+            CurrentSurfaceTexture::Occluded | CurrentSurfaceTexture::Timeout => {
+                window.request_redraw();
+                return;
+            }
+            CurrentSurfaceTexture::Lost => panic!("Surface was lost"),
+            CurrentSurfaceTexture::Validation => {
+                panic!("Validation error getting surface")
+            }
+        };
+
+        let mut encoder =
+            device_handle
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Surface Blit"),
+                });
+        surface.blitter.copy(
+            &device_handle.device,
+            &mut encoder,
+            &surface.target_view,
+            &surface_texture
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default()),
+        );
+        device_handle.queue.submit([encoder.finish()]);
+        surface_texture.present();
+
+        device_handle.device.poll(wgpu::PollType::Poll).unwrap();
+    }
+}
+
 fn run_frame(
     frame: &mut Frame<'_>,
     model: &Model,
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<Brush>,
-    width: f64,
-    height: f64,
     scale: f64,
 ) {
-    let m = 24.0 * scale;
-    let padding = 20.0 * scale;
+    // Empty space deselects. Registered before the content places, so
+    // the descend handlers (registered as they place) take precedence,
+    // and only a press that claims no edge falls through to here.
+    frame.handler().on_pointer_down(|app: &mut App, event| {
+        event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
+    });
 
-    let panel = RoundedRect::new(m, m, width - m, height - m, 12.0 * scale);
-    frame.fill(panel, Color::new([0.11, 0.12, 0.145, 1.0]), Affine::IDENTITY);
-    frame.stroke(
-        panel,
-        Stroke::new(1.5 * scale),
-        Color::new([0.32, 0.35, 0.42, 1.0]),
-        Affine::IDENTITY,
-    );
     let mut tcx = TextCtx {
         fonts: font_cx,
         layouts: layout_cx,
         scale: scale as f32,
     };
-    let title_style = TextStyle {
-        size: 22.0,
-        brush: Color::WHITE.into(),
-        weight: Some(650.0),
-    };
     let styles = raw::RawStyles::new(scale);
-
-    let title = text(&mut tcx, "Progred", &title_style);
     let body = raw::project(
         &model.doc,
         model.selection.as_ref(),
         &model.collapse,
         &mut tcx,
         &styles,
-        |app: &mut App, id| app.model.selection = Some(id),
+        |app: &mut App, selection| app.model.selection = Some(selection),
     );
-    let content = col(HAlign::Start, 0, 18.0 * scale, vec![title, body]);
-    place_top_left(content, frame, Point::new(m + padding, m + padding));
+    place_top_left(body, frame, Point::new(28.0 * scale, 28.0 * scale));
 }
