@@ -227,6 +227,56 @@ identity for its own sake.
   wedges reach into a shape's corners (the shield's shoulders and
   point, the hexagon's tips) instead of stopping at an inscribed
   circle and leaving those margins blank.
+  Tuned same day against rendered sample sheets: base hues moved from
+  uniform 45° steps to eight color-name anchors, since glance identity
+  is verbal ("the red one") and arithmetic steps land between names;
+  the transform vocabulary tightened to ±45° plus a single complement
+  accent after the sheets showed quadrant transforms out-shouting the
+  base hue (an icon must read as its base category, with the accent as
+  a feature, not a takeover); grout and outline chroma rose so small
+  renderings still carry the hue; the offset magnitude moved below the
+  leaf signs in bit order, being global texture contrast and thus more
+  salient than the per-leaf noise floor above it; and the offset
+  lattice was respaced so the sum of any two magnitudes stays clear of
+  the level-2 spacing — no leaf value under one magnitude reads as a
+  value under another.
+  A second same-day pass traded the leaf-tile quilt for solid level-2
+  panels carrying four small offset dots each: all-over tiling read as
+  uniform texture — all ground, no figure — while panels give the
+  family and quadrant structure legible area and turn the leaf bits
+  into ornament. The shell gained a fixed-seed identicon sample sheet
+  (`i` toggles it) so palette and salience changes are judged in the
+  app against the same identities.
+  Rebuilt same day as v8, a badge grammar, once the panels pass made
+  the deeper flaw visible: the encoding was one fixed record, so every
+  icon was the same subdivision with a different outline, and no bit's
+  meaning ever depended on an earlier bit — the missed half of the
+  hierarchy idea. Now the low bits choose a silhouette family, a
+  family variant (sharp/rounded square, disc/annulus, diamond/shield,
+  flat/pointy hexagon), hue, chroma, and a layout whose vocabulary is
+  family-specific (grids, bands, and nested rings for squares; wedges,
+  rings, and ring-crosses for the radial shapes). Four region records
+  each carry a hue transform, a panel lightness, and an inner figure —
+  disc, ring, diamond, square, bars, plus, saltire — with tone, size,
+  aspect, and offset nuances: shapes inside shapes, with no "none" in
+  any vocabulary so every field stays visible under every branch (the
+  bijection rule for grammars; a hidden-when-absent attribute would be
+  undecodable). Concentric-ring regions anchor their figures on the
+  ring at twelve o'clock rather than stacking them at the center for
+  the same reason. The high 64 bits became a beaded rim — 32 beads at
+  four lightness steps on a dark band that follows the silhouette via
+  the boundary-normalized radius — ornament rather than noise. Bit
+  positions are static; only vocabulary is branch-dependent, so decode
+  reads the branch bits first and the fixed-shape records after.
+  A fix pass after review at size: figures are sized by their region's
+  inscribed circle and always centered — a wedge tapers, so sizing by
+  its mid-arc span had figures crossing their containers near the
+  point; containment is now property-tested across every family,
+  variant, and layout. The figure aspect and offset nuance bits were
+  dropped as sub-perceptual at the standard size: the bijection rule
+  cuts both ways, a field too small to read being as broken as one
+  hidden. The freed bits became four figure sizes and fewer, larger
+  beads (34 x 2 bits).
   Separately: node-space minting dropped RFC 4122's version/variant
   structure (2026-07-05) — payloads are 16 raw CSPRNG bytes with full
   128-bit entropy, since the RFC structure exists to let different

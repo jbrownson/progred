@@ -4,6 +4,7 @@
 mod conventions;
 mod identicon;
 mod raw;
+mod sheet;
 
 use std::sync::Arc;
 
@@ -13,6 +14,7 @@ use puri::handler::{Handler, HasHandler, ImeEvent};
 use puri::layout::place_top_left;
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
+use ui_events::keyboard::Key;
 use ui_events::pointer::{PointerButton, PointerEvent};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::kurbo::{Affine, Point, Stroke};
@@ -201,6 +203,7 @@ fn main() {
             doc: raw::sample_document(),
             selection: None,
             collapse: raw::Collapse::default(),
+            view: View::Document,
         },
         reducer: WindowEventReducer::default(),
     };
@@ -215,6 +218,12 @@ struct Model {
     doc: raw::Document,
     selection: Option<raw::Selection>,
     collapse: raw::Collapse,
+    view: View,
+}
+
+enum View {
+    Document,
+    IdenticonSheet,
 }
 
 /// One pass over the UI: read-only in the model, producing draw calls
@@ -279,9 +288,7 @@ impl Canvas for Frame<'_> {
 }
 
 impl App {
-    /// Renders the current model to the surface. Called from
-    /// `RedrawRequested` and synchronously from `Resized` — rendering
-    /// the new size in-handler is what stops the drag-resize ghosting.
+    /// Renders the current model to the surface, from `RedrawRequested`.
     fn redraw(&mut self) {
         let RenderState::Active {
             surface,
@@ -384,6 +391,19 @@ fn run_frame(
     frame.handler().on_pointer_down(|app: &mut App, event| {
         event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
     });
+    // `i` toggles the identicon sample sheet; registered before the
+    // content places so a future focused editor's key dispatch wins.
+    frame.handler().on_key(|app: &mut App, event| {
+        event.state.is_down()
+            && matches!(&event.key, Key::Character(c) if c.as_str() == "i")
+            && {
+                app.model.view = match app.model.view {
+                    View::Document => View::IdenticonSheet,
+                    View::IdenticonSheet => View::Document,
+                };
+                true
+            }
+    });
 
     let mut tcx = TextCtx {
         fonts: font_cx,
@@ -391,13 +411,16 @@ fn run_frame(
         scale: scale as f32,
     };
     let styles = raw::RawStyles::new(scale);
-    let body = raw::project(
-        &model.doc,
-        model.selection.as_ref(),
-        &model.collapse,
-        &mut tcx,
-        &styles,
-        |app: &mut App, selection| app.model.selection = Some(selection),
-    );
+    let body = match model.view {
+        View::Document => raw::project(
+            &model.doc,
+            model.selection.as_ref(),
+            &model.collapse,
+            &mut tcx,
+            &styles,
+            |app: &mut App, selection| app.model.selection = Some(selection),
+        ),
+        View::IdenticonSheet => sheet::sample_sheet(&mut tcx, &styles),
+    };
     place_top_left(body, frame, Point::new(28.0 * scale, 28.0 * scale));
 }
