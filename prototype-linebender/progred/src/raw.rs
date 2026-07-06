@@ -247,6 +247,29 @@ pub fn resolve<'a>(doc: &'a Document, path: &[Id]) -> Option<&'a Id> {
         .try_fold(&doc.root, |node, label| doc.gid.get(node, label))
 }
 
+/// Toggle the collapse override for the node at `path`, staying
+/// sparse: an override matching the default (collapsed inside a
+/// cycle, expanded otherwise) is removed rather than stored. Declines
+/// unless the value is a node with edges — anything else has nothing
+/// to collapse.
+pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> bool {
+    resolve(doc, path)
+        .filter(|value| value.as_node_id().is_some())
+        .filter(|value| doc.gid.edges(value).is_some_and(|edges| !edges.is_empty()))
+        .map(|value| {
+            let in_cycle = (0..path.len())
+                .filter_map(|end| resolve(doc, &path[..end]))
+                .any(|ancestor| ancestor == value);
+            let next = !collapse.collapsed(path, in_cycle);
+            if next == in_cycle {
+                collapse.overrides.remove(path);
+            } else {
+                collapse.overrides.insert(path.to_vec(), next);
+            }
+        })
+        .is_some()
+}
+
 /// Write the selection's editor text through to its edge: the graph
 /// is the source of truth, updated after every handled event. A
 /// parent that no longer resolves to a node drops the write silently
@@ -692,6 +715,43 @@ mod tests {
         let plain = Selection::edge(&doc, vec![Id::from("missing")]);
         sync_edit(&mut doc, &plain);
         assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
+    }
+
+    #[test]
+    fn toggle_collapse_stays_sparse_and_respects_cycle_defaults() {
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        let child = new_node_id();
+        gid.set(root, Id::from("child"), Id::from(child));
+        gid.set(child, Id::from("back"), Id::from(root));
+        gid.set(child, Id::from("name"), Id::from("c"));
+        let doc = Document {
+            root: Id::from(root),
+            gid,
+        };
+        let mut collapse = Collapse::default();
+        let child_path = vec![Id::from("child")];
+        let back_path = vec![Id::from("child"), Id::from("back")];
+
+        // Expanded by default: toggling stores a collapse override,
+        // toggling again removes it.
+        assert!(toggle_collapse(&doc, &mut collapse, &child_path));
+        assert!(collapse.collapsed(&child_path, false));
+        assert!(toggle_collapse(&doc, &mut collapse, &child_path));
+        assert!(collapse.overrides.is_empty());
+
+        // The back-edge to the root is in a cycle, so its default is
+        // collapsed; toggling expands it.
+        assert!(toggle_collapse(&doc, &mut collapse, &back_path));
+        assert!(!collapse.collapsed(&back_path, true));
+
+        // Strings and missing paths have nothing to collapse.
+        assert!(!toggle_collapse(
+            &doc,
+            &mut collapse,
+            &[Id::from("child"), Id::from("name")]
+        ));
+        assert!(!toggle_collapse(&doc, &mut collapse, &[Id::from("nope")]));
     }
 
     #[test]

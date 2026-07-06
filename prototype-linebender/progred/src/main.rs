@@ -17,6 +17,7 @@ use puri::handler::{Handler, HasHandler, ImeEvent};
 use puri::layout::place_top_left;
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
+use ui_events::keyboard::{Key, KeyboardEvent};
 use ui_events::pointer::{PointerButton, PointerEvent};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::kurbo::{Affine, Point, Stroke};
@@ -25,7 +26,7 @@ use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
 use vello::{AaConfig, Renderer, RendererOptions, Scene};
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
@@ -126,10 +127,12 @@ impl ApplicationHandler for App {
             let translation = self.reducer.reduce(scale, &event);
             if ime.is_some() || translation.is_some() {
                 self.refresh_edit(scale as f32);
+                let viewport = window.inner_size().height as f64;
                 let mut frame = Frame {
                     scene: None,
                     handler: Handler::new(),
                     descends: Vec::new(),
+                    max_scroll: 0.0,
                 };
                 run_frame(
                     &mut frame,
@@ -137,17 +140,22 @@ impl ApplicationHandler for App {
                     &mut self.font_cx,
                     &mut self.layout_cx,
                     scale,
+                    viewport,
                 );
                 let Frame {
-                    handler, descends, ..
+                    handler,
+                    descends,
+                    max_scroll,
+                    ..
                 } = frame;
                 let handled = match (ime, translation) {
                     (Some(ime), _) => handler.dispatch_ime(self, &ime),
-                    // Keys nothing claims fall through to selection
-                    // stepping, so the selected string's editor always
-                    // wins over navigation.
+                    // Keys nothing claims fall through to the collapse
+                    // toggle and then selection stepping, so the
+                    // selected string's editor always wins over both.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
+                            || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &descends,
                                 self.model.selection.as_ref(),
@@ -169,6 +177,11 @@ impl ApplicationHandler for App {
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
                         handler.dispatch_pointer_up(self, &button)
+                    }
+                    // Scrolls nothing claims move the document.
+                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update)))) => {
+                        handler.dispatch_scroll(self, &update)
+                            || self.scroll_document(&update, scale, viewport, max_scroll)
                     }
                     _ => false,
                 };
@@ -227,6 +240,7 @@ fn main() {
             doc: raw::sample_document(),
             selection: None,
             collapse: raw::Collapse::default(),
+            scroll: 0.0,
         },
         reducer: WindowEventReducer::default(),
     };
@@ -241,6 +255,8 @@ struct Model {
     doc: raw::Document,
     selection: Option<raw::Selection>,
     collapse: raw::Collapse,
+    /// Vertical document scroll offset in physical pixels.
+    scroll: f64,
 }
 
 /// One pass over the UI: read-only in the model, producing draw calls
@@ -253,6 +269,9 @@ struct Frame<'a> {
     scene: Option<&'a mut Scene>,
     handler: Handler<App>,
     descends: Vec<raw::Descend>,
+    /// How far the document can scroll given this frame's content and
+    /// viewport; dispatch clamps against it.
+    max_scroll: f64,
 }
 
 impl HasHandler<App> for Frame<'_> {
@@ -313,6 +332,47 @@ impl App {
         }
     }
 
+    /// Scrolls the document, clamped to the frame's content.
+    fn scroll_document(
+        &mut self,
+        update: &ui_events::pointer::PointerScrollEvent,
+        scale: f64,
+        viewport: f64,
+        max_scroll: f64,
+    ) -> bool {
+        let line = 40.0 * scale;
+        let delta = update.delta.to_pixel_delta(
+            PhysicalPosition { x: line, y: line },
+            PhysicalPosition {
+                x: viewport,
+                y: viewport,
+            },
+        );
+        // ScrollDelta documents positive Y as viewport-down, but
+        // ui-events-winit passes winit deltas through raw, where
+        // positive Y is scroll-up; subtract to match reality.
+        let next = (self.model.scroll - delta.y).clamp(0.0, max_scroll);
+        (next != self.model.scroll) && {
+            self.model.scroll = next;
+            true
+        }
+    }
+
+    /// Space toggles the selected node's collapse override; a focused
+    /// string editor claims the key first and types a space instead.
+    fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
+        event.state.is_down()
+            && matches!(&event.key, Key::Character(c) if c.as_str() == " ")
+            && match &self.model.selection {
+                Some(selection) => raw::toggle_collapse(
+                    &self.model.doc,
+                    &mut self.model.collapse,
+                    selection.path(),
+                ),
+                None => false,
+            }
+    }
+
     /// Renders the current model to the surface, from `RedrawRequested`.
     fn redraw(&mut self) {
         let RenderState::Active {
@@ -334,6 +394,7 @@ impl App {
             scene: Some(&mut self.scene),
             handler: Handler::new(),
             descends: Vec::new(),
+            max_scroll: 0.0,
         };
         run_frame(
             &mut frame,
@@ -341,6 +402,7 @@ impl App {
             &mut self.font_cx,
             &mut self.layout_cx,
             scale,
+            height as f64,
         );
         drop(frame);
 
@@ -410,6 +472,7 @@ fn run_frame(
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<Brush>,
     scale: f64,
+    viewport_height: f64,
 ) {
     // Empty space deselects. Registered before the content places, so
     // the descend handlers (registered as they place) take precedence,
@@ -454,7 +517,13 @@ fn run_frame(
         },
         edit_ctx,
     );
-    place_top_left(body, frame, Point::new(28.0 * scale, 28.0 * scale));
+    let margin = 28.0 * scale;
+    frame.max_scroll = (body.extent.height() + 2.0 * margin - viewport_height).max(0.0);
+    place_top_left(
+        body,
+        frame,
+        Point::new(margin, margin - model.scroll.clamp(0.0, frame.max_scroll)),
+    );
 }
 
 /// Dispatch-time access to the selection's editor. Only handlers the
