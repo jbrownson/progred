@@ -51,8 +51,23 @@ struct App {
     font_cx: FontContext,
     layout_cx: LayoutContext<Brush>,
     model: Model,
-    doc_path: PathBuf,
+    /// Where the document lives; `None` is untitled until the first
+    /// save asks for a path.
+    doc_path: Option<PathBuf>,
     reducer: WindowEventReducer,
+}
+
+/// The platform's primary command modifier.
+fn action_mod(event: &KeyboardEvent) -> bool {
+    if cfg!(target_os = "macos") {
+        event.modifiers.meta()
+    } else {
+        event.modifiers.ctrl()
+    }
+}
+
+fn dialog() -> rfd::FileDialog {
+    rfd::FileDialog::new().add_filter("progred", &["progred"])
 }
 
 impl ApplicationHandler for App {
@@ -64,7 +79,7 @@ impl ApplicationHandler for App {
         let window = cached_window.take().unwrap_or_else(|| {
             let attr = Window::default_attributes()
                 .with_inner_size(LogicalSize::new(900, 640))
-                .with_title(format!("Progred — {}", self.doc_path.display()));
+                .with_title(self.title());
             Arc::new(event_loop.create_window(attr).unwrap())
         });
 
@@ -152,6 +167,7 @@ impl ApplicationHandler for App {
                     max_scroll,
                     ..
                 } = frame;
+                let path_before = self.doc_path.clone();
                 let handled = match (ime, translation) {
                     (Some(ime), _) => handler.dispatch_ime(self, &ime),
                     // Keys nothing claims fall through to the collapse
@@ -160,6 +176,7 @@ impl ApplicationHandler for App {
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
                             || self.save_key(&key_event)
+                            || self.open_key(&key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &descends,
@@ -190,6 +207,9 @@ impl ApplicationHandler for App {
                     }
                     _ => false,
                 };
+                if self.doc_path != path_before {
+                    window.set_title(&self.title());
+                }
                 if handled {
                     let model = &mut self.model;
                     if let Some(selection) = &model.selection {
@@ -236,20 +256,17 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
-    let doc_path = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("untitled.progred"));
-    // A missing file starts the sample document (saving creates it); a
-    // file that exists but does not parse is refused rather than
-    // silently replaced, so a save cannot clobber it with the sample.
-    let doc = if doc_path.exists() {
-        store::load(&doc_path).unwrap_or_else(|error| {
-            eprintln!("failed to load {}: {error}", doc_path.display());
+    let doc_path = std::env::args().nth(1).map(PathBuf::from);
+    // A given-but-missing path is a new document there; no path is
+    // untitled until the first save asks. A file that exists but does
+    // not parse is refused rather than silently replaced, so a save
+    // cannot clobber it with the sample.
+    let doc = match &doc_path {
+        Some(path) if path.exists() => store::load(path).unwrap_or_else(|error| {
+            eprintln!("failed to load {}: {error}", path.display());
             std::process::exit(1);
-        })
-    } else {
-        raw::sample_document()
+        }),
+        _ => raw::sample_document(),
     };
 
     let mut app = App {
@@ -389,23 +406,61 @@ impl App {
         }
     }
 
-    /// Cmd+S (Ctrl elsewhere) saves the document to its path.
-    /// Write-through editing means the graph is always current, so
-    /// there is nothing to flush first.
+    fn title(&self) -> String {
+        match &self.doc_path {
+            Some(path) => format!("Progred — {}", path.display()),
+            None => "Progred — untitled".into(),
+        }
+    }
+
+    /// Cmd+S saves in place, or asks for a path when untitled;
+    /// Cmd+Shift+S always asks (save as). Write-through editing means
+    /// the graph is always current, so there is nothing to flush
+    /// first. A cancelled dialog saves nothing.
     fn save_key(&mut self, event: &KeyboardEvent) -> bool {
-        let action = if cfg!(target_os = "macos") {
-            event.modifiers.meta()
-        } else {
-            event.modifiers.ctrl()
-        };
         event.state.is_down()
-            && action
+            && action_mod(event)
             && matches!(&event.key, Key::Character(c) if c.to_lowercase() == "s")
             && {
-                match store::save(&self.doc_path, &self.model.doc) {
-                    Ok(()) => eprintln!("saved {}", self.doc_path.display()),
-                    Err(error) => {
-                        eprintln!("failed to save {}: {error}", self.doc_path.display());
+                let in_place = (!event.modifiers.shift())
+                    .then(|| self.doc_path.clone())
+                    .flatten();
+                let target = in_place
+                    .or_else(|| dialog().set_file_name("untitled.progred").save_file());
+                if let Some(path) = target {
+                    match store::save(&path, &self.model.doc) {
+                        Ok(()) => self.doc_path = Some(path),
+                        Err(error) => {
+                            eprintln!("failed to save {}: {error}", path.display());
+                        }
+                    }
+                }
+                true
+            }
+    }
+
+    /// Cmd+O opens a document, replacing the model. Selection,
+    /// collapse overrides, and scroll are path-bound to the old
+    /// document, so they reset with it.
+    fn open_key(&mut self, event: &KeyboardEvent) -> bool {
+        event.state.is_down()
+            && action_mod(event)
+            && matches!(&event.key, Key::Character(c) if c.to_lowercase() == "o")
+            && {
+                if let Some(path) = dialog().pick_file() {
+                    match store::load(&path) {
+                        Ok(doc) => {
+                            self.model = Model {
+                                doc,
+                                selection: None,
+                                collapse: raw::Collapse::default(),
+                                scroll: 0.0,
+                            };
+                            self.doc_path = Some(path);
+                        }
+                        Err(error) => {
+                            eprintln!("failed to open {}: {error}", path.display());
+                        }
                     }
                 }
                 true
