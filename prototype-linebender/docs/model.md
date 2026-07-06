@@ -337,11 +337,16 @@ that node and its parent.
   new string id — strings are values, so retargeting leaves no
   garbage. Unselected strings render as plain glyphs, which is exactly
   what an unfocused default-state editor draws. Clicking a string
-  selects it and lands the cursor where the click did — one handler
-  serves the first click and every one after (select keeps an existing
-  editor; the position forwards to the editor in its settled rect's
-  coordinates), and pressing starts the editor's drag state, so
-  drag-selection works from the selecting click. Arrow keys inside a
+  selects it and lands the cursor where the click did: the projection
+  only reports what happened (this path, this text-local position),
+  and the shell's single selection transition consumes it — creating
+  or keeping the editor and advancing its caret — the same
+  one-event-one-transition shape as the Haskell LineEdit's
+  focus-with-initial-selection callback, moved into the shell because
+  parley's editor hit-tests behind its measurement caches rather than
+  exposing caret geometry as data. Pressing starts the editor's drag
+  state, so drag-selection works from the selecting click. Arrow keys
+  inside a
   focused string go to the cursor (up/down still navigate, since a
   single line declines them); IME plumbing beyond what the puri widget
   already carries (window enabling, candidate positioning) is

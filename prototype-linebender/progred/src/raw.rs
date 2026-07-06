@@ -158,11 +158,20 @@ struct Cx<'a> {
     selection: Option<&'a Selection>,
 }
 
+/// A reported click on a string's text, in text-local coordinates.
+/// The shell's selection transition consumes it to seed or advance
+/// the editor state — focus and caret placement are one event, as in
+/// the Haskell LineEdit's focus-with-initial-selection callback.
+pub struct TextClick {
+    pub point: Point,
+    pub shift: bool,
+}
+
 /// Dispatch-time callbacks the shell injects: what selecting a path
-/// does, and how a dispatch reaches the selection's editor state and
-/// measurement caches.
+/// (optionally with a text click) does, and how a dispatch reaches
+/// the selection's editor state and measurement caches.
 struct Hooks<C> {
-    select: Rc<dyn Fn(&mut C, Path)>,
+    select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
     edit: Rc<dyn for<'a> Fn(&'a mut C) -> EditCtx<'a>>,
 }
 
@@ -354,7 +363,7 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
-                    select(ctx, target.clone());
+                    select(ctx, target.clone(), None);
                     true
                 }
         });
@@ -368,7 +377,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     collapse: &Collapse,
     tcx: &mut TextCtx,
     styles: &RawStyles,
-    on_select: impl Fn(&mut C, Path) + 'static,
+    on_select: impl Fn(&mut C, Path, Option<TextClick>) + 'static,
     edit_ctx: impl for<'a> Fn(&'a mut C) -> EditCtx<'a> + 'static,
 ) -> Node<P> {
     let hooks = Hooks {
@@ -514,7 +523,7 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
         };
         row(0.0, vec![
             text(tcx, "\"", &cx.styles.string),
-            cursor_target(cx, path.to_vec(), hooks, content),
+            cursor_target(path.to_vec(), hooks, content),
             text(tcx, "\"", &cx.styles.string),
         ])
     } else if let Some(n) = value.as_number() {
@@ -527,42 +536,29 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     descend(cx, path.to_vec(), hooks, inner)
 }
 
-/// Clicking a string lands the cursor where the click did: select the
-/// edge (a re-select keeps the editor), refresh the editor's lazy
-/// layout, and forward the position in text-local coordinates. The
-/// same handler serves the first click and every one after, so
-/// selecting and placing the cursor are one gesture.
+/// A click on a string's text reports what happened — this path, this
+/// text-local position — and nothing more; the shell's selection
+/// transition decides what it means. One report serves the first
+/// click and every one after.
 fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
-    cx: &Cx,
     path: Path,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
-    let scale = cx.styles.scale as f32;
     let select = hooks.select.clone();
-    let edit = hooks.edit.clone();
     decorate(content, move |p, rect| {
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
-                    select(ctx, path.clone());
-                    let EditCtx {
-                        state,
-                        fonts,
-                        layouts,
-                    } = edit(ctx);
-                    state.refresh(fonts, layouts, scale);
-                    state.pointer_down(
-                        fonts,
-                        layouts,
-                        Point::new(
+                    let click = TextClick {
+                        point: Point::new(
                             event.state.position.x - rect.x0,
                             event.state.position.y - rect.y0,
                         ),
-                        event.state.modifiers.shift(),
-                        1,
-                    );
+                        shift: event.state.modifiers.shift(),
+                    };
+                    select(ctx, path.clone(), Some(click));
                     true
                 }
         });

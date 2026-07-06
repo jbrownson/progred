@@ -430,10 +430,26 @@ fn run_frame(
         &model.collapse,
         &mut tcx,
         &styles,
-        // Re-clicking the selected path keeps its editor state.
-        |app: &mut App, path| {
+        // The selection transition: re-selecting the same path keeps
+        // its editor state, and a reported text click seeds or
+        // advances the editor's caret — focus and cursor placement
+        // are one event.
+        move |app: &mut App, path, click| {
             if !app.model.selection.as_ref().is_some_and(|s| s.path() == path) {
                 app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
+            }
+            if let Some(click) = click {
+                if let Some(line) = app.model.selection.as_mut().and_then(raw::Selection::edit_mut)
+                {
+                    line.refresh(&mut app.font_cx, &mut app.layout_cx, scale as f32);
+                    line.pointer_down(
+                        &mut app.font_cx,
+                        &mut app.layout_cx,
+                        click.point,
+                        click.shift,
+                        1,
+                    );
+                }
             }
         },
         edit_ctx,
