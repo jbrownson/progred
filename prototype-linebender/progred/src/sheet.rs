@@ -1,8 +1,8 @@
-//! A deterministic identicon sample sheet, toggled in the shell with
-//! `i`. Fixed seeds sweep hue x silhouette, hue x chroma, and the
-//! chassis finish, then a random gallery down to standard sizes, so
-//! palette and salience changes are judged against the same
-//! identities every run.
+//! A deterministic identicon sample sheet. Fixed seeds sweep hue x
+//! silhouette, hue x chroma, and the chassis finish, then a random
+//! gallery down to standard sizes, so palette and salience changes
+//! are judged against the same identities every run. Unwired; give it
+//! a view toggle in the shell when tuning.
 
 use crate::identicon::node_identicon;
 use crate::raw::RawStyles;

@@ -245,8 +245,10 @@ identity for its own sake.
   uniform texture — all ground, no figure — while panels give the
   family and quadrant structure legible area and turn the leaf bits
   into ornament. The shell gained a fixed-seed identicon sample sheet
-  (`i` toggles it) so palette and salience changes are judged in the
-  app against the same identities.
+  so palette and salience changes are judged in the app against the
+  same identities; its temporary `i` toggle was removed once the
+  tuning pass settled — raw-key commands don't belong in the shell —
+  leaving the sheet module unwired until the next pass.
   Rebuilt same day as v8, a badge grammar, once the panels pass made
   the deeper flaw visible: the encoding was one fixed record, so every
   icon was the same subdivision with a different outline, and no bit's
