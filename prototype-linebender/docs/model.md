@@ -367,7 +367,10 @@ that node and its parent.
   nothing else writes the graph today. Standing invariant for when
   something does (undo arrives first): any non-editor write to the
   currently edited edge must re-mint or drop the editor, or the stale
-  buffer clobbers it.
+  buffer clobbers it. Sequencing (2026-07-06): dirty tracking waits
+  for undo — modified-since-save falls out of history position — and
+  undo waits for structural editing to exist; neither is built
+  standalone.
 
 ## Types And Autocomplete
 
