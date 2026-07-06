@@ -159,7 +159,9 @@ fn from_hex(s: &str) -> Option<Vec<u8>> {
 }
 
 /// Serialized forms: the well-known spaces keep their privileged
-/// spellings; any other space uses the general `value` form.
+/// spellings; any other space uses the general `value` form, as do
+/// non-finite numbers, which JSON cannot spell (serde_json writes
+/// null).
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum IdRepr {
@@ -175,7 +177,7 @@ impl Serialize for Id {
             IdRepr::Node(uuid)
         } else if let Some(s) = self.as_str() {
             IdRepr::String(s.to_owned())
-        } else if let Some(n) = self.as_number() {
+        } else if let Some(n) = self.as_number().filter(|n| n.is_finite()) {
             IdRepr::Number(n)
         } else {
             IdRepr::Value(self.space, to_hex(&self.payload))
@@ -252,6 +254,16 @@ mod tests {
 
         let parsed: Id = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, id);
+    }
+
+    #[test]
+    fn non_finite_numbers_take_the_general_serialized_form() {
+        for n in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let id = Id::from(n);
+            let json = serde_json::to_string(&id).unwrap();
+            assert!(json.starts_with(r#"{"value":"#), "{json}");
+            assert_eq!(serde_json::from_str::<Id>(&json).unwrap(), id);
+        }
     }
 
     #[test]
