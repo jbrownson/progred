@@ -994,15 +994,16 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             child.push(label.clone());
             // A real edge's label and arrow select the edge, like its
             // value — grouped so one target spans both and the gap
-            // between. A pending row's fall through so the click can't
-            // select the not-yet-edge it belongs to.
+            // between. A pending row's plain click falls through (the
+            // not-yet-edge can't be selected), but command still
+            // picks its label's identity.
             let head = row(
                 6.0 * scale,
                 vec![label_view(cx, tcx, &label), arrow(cx.styles)],
             );
             let head = match &value {
                 Some(_) => select_target(child.clone(), label.clone(), hooks, head),
-                None => head,
+                None => pick_target(label.clone(), hooks, head),
             };
             let content = match value {
                 Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
@@ -1365,6 +1366,27 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
         }
         None => fallback,
     }
+}
+
+/// A command-click pick target with no plain-click behavior — for
+/// parts like a pending row's label, whose plain click deliberately
+/// falls through.
+fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
+    id: Id,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let pick = hooks.pick.clone();
+    decorate(content, move |p, rect| {
+        let pick = pick.clone();
+        let id = id.clone();
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && command(&event.state.modifiers)
+                && pick(ctx, id.clone())
+        });
+    })
 }
 
 /// A plain click-to-select target for `path` — for edge parts like

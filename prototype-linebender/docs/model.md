@@ -564,9 +564,11 @@ that node and its parent.
   sorted among its would-be siblings, a label stage unsorted at the
   bottom of its node until it has a label to sort by; Enter resolves
   the query to an identity (quotes force a string, parsing text is a
-  number) and commits in one write; Escape, empty-Backspace, or
-  navigating away discards the stage — pending is selection state, so
-  deselection is disposal. The ranked completion popup rides both
+  number) and commits in one write. Discard is disposal of selection
+  state: Escape clears the selection outright — from pendings and
+  plain selections alike (2026-07-07) — empty-Backspace cancels a
+  pending back to its anchor edge, keeping the keyboard flow, and
+  navigating or selecting away simply replaces it. The ranked completion popup rides both
   stages' queries (2026-07-06): the universal layer as entries — the
   inferred atom, node references (fuzzy-ranked, short ids as
   detail), and a fresh node named after the query

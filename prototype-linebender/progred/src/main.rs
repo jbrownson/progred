@@ -801,8 +801,10 @@ impl App {
     /// back to its parent when the selection is an atom; the platform
     /// command modifier targets the parent explicitly. Labels author
     /// first, then values; on an empty document Enter begins the root
-    /// value. Escape — or Backspace on an empty query — discards the
-    /// stage with the graph untouched.
+    /// value. Escape clears the selection from anywhere, discarding
+    /// any pending with the graph untouched; Backspace on an empty
+    /// query cancels a pending back to its anchor instead, keeping
+    /// the keyboard flow.
     fn insert_key(
         &mut self,
         descends: &[raw::Descend],
@@ -874,12 +876,16 @@ impl App {
                         began
                     }
                 },
-                Key::Named(NamedKey::Escape | NamedKey::Backspace) => {
+                Key::Named(NamedKey::Escape) => {
+                    self.model.selection.take().is_some()
+                }
+                Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
                         Some(raw::Selection::Pending { path, .. }) => {
                             let back = raw::selection_after_delete(descends, path);
-                            // Escaping the empty document's root pending
-                            // deselects — reselecting it would pend again.
+                            // Cancelling the empty document's root
+                            // pending deselects — reselecting it
+                            // would pend again.
                             self.model.selection = (!(back.is_empty()
                                 && self.model.doc.root.is_none()))
                             .then(|| raw::Selection::edge(&self.model.doc, back));
