@@ -541,8 +541,13 @@ that node and its parent.
   secondary-selection sync bugs dissolve into a derivation).
 - Insertion (2026-07-06): raw's insertion is edge insertion,
   uniformly. A node is a bag of labeled edges, so Enter begins a new
-  edge on the parent of the selection — on the selected node itself
-  with Cmd, or when there is no parent — authored in two stages
+  edge on the selected node — falling back to its parent when the
+  selection is an atom — and Cmd+Enter targets the parent explicitly
+  (swapped from parent-first 2026-07-07: targeting the parent sent
+  the pending row to the bottom of large blocks, visually far from
+  the selection; into-the-selection keeps authoring where you look,
+  and ordered after-current insertion remains the future list
+  projection's Enter). Edges author in two stages
   through the same completion: label first (string labels for the
   casual gradient, references for schema-shaped GUID labels, a fresh
   node minted on the spot), then value; resolving a label that

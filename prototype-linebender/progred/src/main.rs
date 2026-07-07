@@ -797,11 +797,12 @@ impl App {
     }
 
     /// Enter advances a pending stage or begins one: a new edge on
-    /// the parent of the selection — on the selected node itself with
-    /// the platform command modifier, or when there is no parent —
-    /// authored label first, then value; on an empty document it
-    /// begins the root value. Escape — or Backspace on an empty
-    /// query — discards the stage with the graph untouched.
+    /// the selected node — authoring stays where you look — falling
+    /// back to its parent when the selection is an atom; the platform
+    /// command modifier targets the parent explicitly. Labels author
+    /// first, then values; on an empty document Enter begins the root
+    /// value. Escape — or Backspace on an empty query — discards the
+    /// stage with the graph untouched.
     fn insert_key(
         &mut self,
         descends: &[raw::Descend],
@@ -851,15 +852,20 @@ impl App {
                         let command = raw::command(&event.modifiers);
                         let started = match &selection {
                             Some(current) if command => {
-                                raw::pending_edge(&self.model.doc, current.path().to_vec())
-                            }
-                            Some(current) => {
                                 let path = current.path();
                                 path.split_last()
                                     .and_then(|(_, parent)| {
                                         raw::pending_edge(&self.model.doc, parent.to_vec())
                                     })
                                     .or_else(|| raw::pending_edge(&self.model.doc, path.to_vec()))
+                            }
+                            Some(current) => {
+                                let path = current.path();
+                                raw::pending_edge(&self.model.doc, path.to_vec()).or_else(|| {
+                                    path.split_last().and_then(|(_, parent)| {
+                                        raw::pending_edge(&self.model.doc, parent.to_vec())
+                                    })
+                                })
                             }
                             None => raw::pending_root(&self.model.doc),
                         };

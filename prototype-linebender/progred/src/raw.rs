@@ -215,8 +215,18 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
 }
 
 impl Cx<'_> {
+    /// Whether `path` carries the primary highlight. A label-stage
+    /// pending deliberately does not mark its parent — nothing is
+    /// selected there, something is being authored inside; the
+    /// pending row carries the highlight itself.
     fn selected(&self, path: &[Id]) -> bool {
-        self.selection.map(Selection::path) == Some(path)
+        match self.selection {
+            Some(Selection::Edge { path: selected, .. })
+            | Some(Selection::Pending {
+                path: selected, ..
+            }) => selected.as_slice() == path,
+            _ => false,
+        }
     }
 
     /// The pending child label under `path`, when the selection is
@@ -826,6 +836,20 @@ pub trait HasDescends {
     fn descends(&mut self) -> &mut Vec<Descend>;
 }
 
+/// The pane-local primary: translucent system blue, like the Swift
+/// version's selection, ringed at full strength — the strongest mark
+/// in the shared vocabulary.
+fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
+    let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
+    p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.22]), Affine::IDENTITY);
+    p.stroke(
+        bg,
+        Stroke::new(2.5 * scale),
+        Color::new([0.0, 0.48, 1.0, 1.0]),
+        Affine::IDENTITY,
+    );
+}
+
 /// Marks `child` as the projection of the edge at `path`. On placement
 /// it draws the highlight when this is the selected edge, registers a
 /// click that selects the edge (innermost wins by handler precedence)
@@ -844,17 +868,7 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     let pick = hooks.pick.clone();
     decorate(child, move |p, rect| {
         if selected {
-            let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
-            // Translucent system blue, like the Swift version's selection,
-            // ringed at full strength — the pane-local primary is the
-            // strongest mark in the shared vocabulary.
-            p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.22]), Affine::IDENTITY);
-            p.stroke(
-                bg,
-                Stroke::new(2.5 * scale),
-                Color::new([0.0, 0.48, 1.0, 1.0]),
-                Affine::IDENTITY,
-            );
+            primary_highlight(scale, p, rect);
         }
         let select = select.clone();
         let pick = pick.clone();
@@ -1000,14 +1014,19 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // A new edge being authored: the label query, unsorted until it
     // has a label to sort by.
     if let Some((query, choice)) = cx.pending_edge_under(path) {
-        rows.push(row(
+        let pending_row = row(
             6.0 * scale,
             vec![
                 query_content(cx, tcx, query, choice, hooks),
                 arrow(cx.styles),
                 text(tcx, "…", &cx.styles.dim),
             ],
-        ));
+        );
+        // The authoring locus carries the primary itself; its parent
+        // is deliberately unmarked.
+        rows.push(decorate(pending_row, move |p: &mut P, rect| {
+            primary_highlight(scale, p, rect);
+        }));
     }
     col(
         HAlign::Start,
