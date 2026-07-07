@@ -858,12 +858,23 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         .map(|(label, value)| {
             let mut child = path.to_vec();
             child.push(label.clone());
-            let label = label_view(cx, tcx, &label);
+            // A real edge's label and arrow select the edge, like its
+            // value — grouped so one target spans both and the gap
+            // between. A pending row's fall through so the click can't
+            // select the not-yet-edge it belongs to.
+            let head = row(
+                6.0 * scale,
+                vec![label_view(cx, tcx, &label), arrow(cx.styles)],
+            );
+            let head = match &value {
+                Some(_) => select_target(child.clone(), hooks, head),
+                None => head,
+            };
             let content = match value {
                 Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
                 None => pending_view(cx, tcx, child, hooks),
             };
-            row(6.0 * scale, vec![label, arrow(cx.styles), content])
+            row(6.0 * scale, vec![head, content])
         })
         .collect();
     // A new edge being authored: the label query, unsorted until it
@@ -1188,6 +1199,28 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
         }
         None => fallback,
     }
+}
+
+/// A plain click-to-select target for `path` — for edge parts like
+/// labels that select without carrying an editor click.
+fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
+    path: Path,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let select = hooks.select.clone();
+    decorate(content, move |p, rect| {
+        let select = select.clone();
+        let target = path.clone();
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && {
+                    select(ctx, target.clone(), None);
+                    true
+                }
+        });
+    })
 }
 
 /// A click on a string's text reports what happened — this path, this
