@@ -77,6 +77,11 @@ struct App {
     menu_items: MenuItems,
     /// Last pointer position, for anchoring pinch zoom.
     cursor: Point,
+    /// The selection identity last scrolled into view — path AND
+    /// variant, since Enter keeps the path while opening a pending —
+    /// so reveal fires once per change and never fights manual
+    /// scrolling.
+    revealed: Option<(raw::Path, std::mem::Discriminant<raw::Selection>)>,
     dispatch: Option<Dispatch>,
     reducer: WindowEventReducer,
 }
@@ -398,6 +403,7 @@ impl ApplicationHandler<MenuEvent> for App {
                     // same gesture — never sees the spent one. The
                     // redraw derives the pixels from the same state.
                     self.retain_dispatch(scale, Size::new(size.width as f64, viewport));
+                    self.reveal_selection(scale, viewport);
                     window.request_redraw();
                 } else {
                     self.dispatch = Some(dispatch);
@@ -493,6 +499,7 @@ fn main() {
         menu_ids,
         menu_items,
         cursor: Point::ZERO,
+        revealed: None,
         dispatch: None,
         reducer: WindowEventReducer::default(),
     };
@@ -664,6 +671,14 @@ impl App {
                 restore.map(|path| raw::Selection::edge(&self.model.doc, path));
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
+                let window = window.clone();
+                let size = window.inner_size();
+                let scale = window.scale_factor();
+                self.retain_dispatch(
+                    scale,
+                    Size::new(size.width as f64, size.height as f64),
+                );
+                self.reveal_selection(scale, size.height as f64);
                 window.request_redraw();
             }
         }
@@ -759,6 +774,54 @@ impl App {
         if let RenderState::Active { window, .. } = &self.state {
             window.set_title(&self.title());
             window.request_redraw();
+        }
+    }
+
+    /// Scroll-to-reveal, computed from the freshly retained dispatch
+    /// pass BEFORE anything draws, so the reveal lands in the next
+    /// presented frame with no corrective flash. Fires once per
+    /// selection-identity change (path AND variant — Enter keeps the
+    /// path while opening a pending), so it never fights manual
+    /// scrolling. The target is the popup anchor while pending — it
+    /// marks the authoring row — else the selection's rect.
+    fn reveal_selection(&mut self, scale: f64, viewport: f64) {
+        let reveal = self
+            .model
+            .selection
+            .as_ref()
+            .map(|s| (s.path().to_vec(), std::mem::discriminant(s)));
+        if reveal == self.revealed {
+            return;
+        }
+        self.revealed = reveal.clone();
+        let Some(dispatch) = &self.dispatch else {
+            return;
+        };
+        let target = dispatch.popup.as_ref().map(|popup| popup.anchor).or_else(|| {
+            reveal.as_ref().and_then(|(path, _)| {
+                dispatch
+                    .descends
+                    .iter()
+                    .find(|descend| &descend.path == path)
+                    .map(|descend| descend.rect)
+            })
+        });
+        if let Some(rect) = target {
+            let pad = 12.0 * scale;
+            let mut scroll = self.model.scroll;
+            // The pad is the landing margin, not the trigger: fully
+            // visible rects are left alone, so a click near an edge
+            // doesn't nudge.
+            if rect.y1 > viewport {
+                scroll += (rect.y1 + pad - viewport) / scale;
+            }
+            // Checked against the adjusted position, so when the rect
+            // is taller than the viewport the top wins.
+            let top = rect.y0 - (scroll - self.model.scroll) * scale;
+            if top < 0.0 {
+                scroll += (top - pad) / scale;
+            }
+            self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
         }
     }
 
@@ -1319,11 +1382,17 @@ fn run_frame(
                 selection => app.model.selection = selection,
             }
         });
-        place_top_left(
-            card,
-            frame,
-            Point::new(popup.anchor.x0, popup.anchor.y1 + 4.0 * scale),
-        );
+        // Below the anchor, unless it would run off the bottom and
+        // fits above — then flip on top, as the TypeScript prototype
+        // did. The card's extent is known before placement.
+        let below = popup.anchor.y1 + 4.0 * scale;
+        let above = popup.anchor.y0 - 4.0 * scale - card.extent.height();
+        let y = if below + card.extent.height() > viewport_height && above >= 0.0 {
+            above
+        } else {
+            below
+        };
+        place_top_left(card, frame, Point::new(popup.anchor.x0, y));
         frame.popup = Some(popup);
     }
 }

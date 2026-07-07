@@ -531,6 +531,8 @@ pub fn resolve_query(text: &str) -> Id {
 pub struct Entry {
     pub display: String,
     pub detail: Option<String>,
+    /// Byte spans of `display` the query matched, for highlighting.
+    pub matches: Vec<filter::Match>,
     pub action: EntryAction,
 }
 
@@ -579,6 +581,7 @@ fn completion_entries(gid: &MutGid, root: Option<&Id>, query: &str) -> Vec<Entry
     let atom_entry = Entry {
         display,
         detail: None,
+        matches: Vec::new(),
         action: EntryAction::Value(atom),
     };
     // Every node the document contains is referenceable: named ones
@@ -604,6 +607,7 @@ fn completion_entries(gid: &MutGid, root: Option<&Id>, query: &str) -> Vec<Entry
         .take(8)
         .map(|ranked| {
             let fuzzy = ranked.fuzzy();
+            let matches = ranked.matches;
             let (display, id) = ranked.item;
             let detail = id
                 .as_node_id()
@@ -612,6 +616,7 @@ fn completion_entries(gid: &MutGid, root: Option<&Id>, query: &str) -> Vec<Entry
             let entry = Entry {
                 display,
                 detail,
+                matches,
                 action: EntryAction::Value(id),
             };
             (entry, fuzzy)
@@ -640,6 +645,7 @@ fn completion_entries(gid: &MutGid, root: Option<&Id>, query: &str) -> Vec<Entry
             None => "new node".to_string(),
         },
         detail: None,
+        matches: Vec::new(),
         action: EntryAction::NewNode { name },
     });
     entries
@@ -1321,27 +1327,56 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
 ) -> Node<P> {
     let scale = styles.scale;
     let choice = popup.choice.min(popup.entries.len().saturating_sub(1));
-    let rows: Vec<Node<P>> = popup
+    // Cells first, so rows can pad out to the widest and the chosen
+    // highlight spans the card, not just its own content.
+    let cells: Vec<(Node<P>, Option<Node<P>>)> = popup
         .entries
         .iter()
-        .enumerate()
-        .map(|(index, entry)| {
+        .map(|entry| {
             let style = match &entry.action {
                 EntryAction::Value(id) if id.as_str().is_some() => &styles.string,
                 EntryAction::Value(id) if id.as_number().is_some() => &styles.number,
                 EntryAction::Value(_) => &styles.label,
                 EntryAction::NewNode { .. } => &styles.dim,
             };
-            let mut cells: Vec<Node<P>> = vec![text(tcx, &entry.display, style)];
-            if let Some(detail) = &entry.detail {
-                cells.push(text(tcx, detail, &styles.id));
+            let display = highlighted(tcx, &entry.display, &entry.matches, style);
+            let detail = entry
+                .detail
+                .as_ref()
+                .map(|detail| text(tcx, detail, &styles.id));
+            (display, detail)
+        })
+        .collect();
+    let widths: Vec<f64> = cells
+        .iter()
+        .map(|(display, detail)| {
+            display.extent.width
+                + detail
+                    .as_ref()
+                    .map_or(0.0, |detail| 8.0 * scale + detail.extent.width)
+        })
+        .collect();
+    let max_width = widths.iter().copied().fold(0.0, f64::max);
+    let rows: Vec<Node<P>> = cells
+        .into_iter()
+        .zip(widths)
+        .enumerate()
+        .map(|(index, ((display, detail), width))| {
+            let mut cells: Vec<Node<P>> = vec![display];
+            if let Some(detail) = detail {
+                cells.push(detail);
             }
             let content = pad(
-                Insets::new(8.0 * scale, 2.0 * scale, 8.0 * scale, 2.0 * scale),
+                Insets::new(
+                    8.0 * scale,
+                    2.0 * scale,
+                    8.0 * scale + (max_width - width),
+                    2.0 * scale,
+                ),
                 row(8.0 * scale, cells),
             );
             let chosen = index == choice;
-            let action = entry.action.clone();
+            let action = popup.entries[index].action.clone();
             let commit = commit.clone();
             decorate(content, move |p: &mut P, rect| {
                 if chosen {
@@ -1382,6 +1417,36 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
             rect.contains(Point::new(event.state.position.x, event.state.position.y))
         });
     })
+}
+
+/// Entry text with the query's matched spans in bold — the fuzzy
+/// filter's byte offsets drawn, not recomputed.
+fn highlighted<P: Canvas>(
+    tcx: &mut TextCtx,
+    s: &str,
+    matches: &[filter::Match],
+    style: &TextStyle,
+) -> Node<P> {
+    if matches.is_empty() {
+        return text(tcx, s, style);
+    }
+    let bold = TextStyle {
+        weight: Some(700.0),
+        ..style.clone()
+    };
+    let mut segments: Vec<Node<P>> = Vec::new();
+    let mut at = 0;
+    for span in matches {
+        if span.start > at {
+            segments.push(text(tcx, &s[at..span.start], style));
+        }
+        segments.push(text(tcx, &s[span.start..span.start + span.len], &bold));
+        at = span.start + span.len;
+    }
+    if at < s.len() {
+        segments.push(text(tcx, &s[at..], style));
+    }
+    row(0.0, segments)
 }
 
 /// An editable atom's content: the selection's focused editor when

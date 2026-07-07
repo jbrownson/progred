@@ -613,7 +613,17 @@ that node and its parent.
   forces the string. Entries are drawn by the shell
   after the body from the frame's popup output, driven by Up/Down and
   committed by Enter or by clicking a row — the card swallows other
-  clicks so nothing lands on content underneath. Vertical arrows
+  clicks so nothing lands on content underneath. Polish (2026-07-07):
+  the card flips above the anchor when it would run off the bottom
+  and fits above (the TS behavior); rows pad out to the widest so
+  the chosen highlight spans the card; the filter's match spans draw
+  in bold — byte offsets rendered, never recomputed. The shell also
+  scrolls to reveal on selection change — the popup anchor while
+  pending, the selection's rect otherwise — once per change, so it
+  never fights manual scrolling; computed from the post-event
+  dispatch pass before anything draws, so the reveal lands in the
+  presented frame (a first cut revealed after presenting, a visible
+  corrective flash), with the pad as landing margin, not trigger. Vertical arrows
   belong to the popup while pending, so discard is Escape,
   empty-Backspace, or selecting elsewhere. Command-click picks by
   pointing (2026-07-07, the TS/Haskell choose-id gesture): with a
