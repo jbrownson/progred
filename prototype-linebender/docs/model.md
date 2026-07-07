@@ -635,6 +635,50 @@ that node and its parent.
   select, only something to begin — with Escape deselecting rather
   than re-pending.
 
+## List Projection (Design Brief, 2026-07-07)
+
+Written at the end of the session that built the editing middle-game,
+so the next session starts warm. The list projection is the first
+convention-aware layer over raw and the first test of projection
+layering; it restores the ordered-element ergonomics raw deliberately
+lacks (the 2026-07-06 correction parked `pending_after`/`before`/
+`into` in raw.rs, tested, behind `#[allow(dead_code)]`, for exactly
+this).
+
+- Recognition: lean toward PARTITION, not all-or-nothing — split a
+  node's edges into position-labeled (the ordered elements) and the
+  rest (fields, rendered as raw rows above). A list carrying a `name`
+  or other metadata then degrades gracefully instead of cliffing back
+  to raw. All-positions-only is the simpler v1 fallback if partition
+  rendering fights the layout.
+- Layering mechanics (the real architecture question): v1 is a
+  hardcoded chain in `value_view` — list-shaped → list view, else the
+  raw block — decided per node. A projection registry waits for
+  user-defined projections. Paths are untouched: position labels are
+  real labels, so selection, undo, secondary marks, the graph view,
+  and persistence all work unchanged underneath.
+- The projection must be queryable at dispatch, not just at render:
+  `insert_key` needs "is this path list-shaped" to pick gestures, and
+  that is a pure doc question (inspect labels), needing no frame
+  state.
+- Rendering: elements as rows WITHOUT their position pills — the
+  position is identity, not information; order carries it. Fields (if
+  partitioned) render as ordinary raw rows. Inline `[a, b, c]` for
+  short atom-only lists is desirable but Wadler-style grouping can
+  wait; v1 is block rows. Collapsed form shows an element count.
+- Gestures: Enter on an element = pending sibling AFTER it
+  (`pending_after`); Shift+Enter before; Enter on the list node
+  itself = append (`pending_into`); Cmd+Enter stays raw's
+  edge-on-selection as the escape hatch (adding a field to a list
+  node). Elements are ordinary value pendings — one stage, no label
+  query, since the projection mints the position.
+- Completion: elements use the universal layer as-is; the projection
+  contributes no extra offers in v1 (the projection-parameterized
+  layer stays future).
+- Possibly riding along: name-awareness (a named node showing its
+  name as header) is the same kind of convention-awareness — decide
+  in-session whether it is part of this layer or its own.
+
 ## Graph View
 
 For demos on small graphs (2026-07-07), carried from the
