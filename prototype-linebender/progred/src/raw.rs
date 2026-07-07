@@ -64,10 +64,12 @@ impl RawStyles {
 
 /// A rooted graph: the document is its `root` id plus the `gid` that
 /// stores its edges. Every projection path starts at `root`; several
-/// top-level items are just a root that is an in-graph list.
+/// top-level items are just a root that is an in-graph list. The root
+/// is a location like any other — the empty path — so edits there
+/// commit to this field, and deleting it empties the document.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Document {
-    pub root: Id,
+    pub root: Option<Id>,
     pub gid: MutGid,
 }
 
@@ -134,7 +136,10 @@ pub fn sample_document() -> Document {
             Id::from(scratch),
         ],
     );
-    Document { root, gid }
+    Document {
+        root: Some(root),
+        gid,
+    }
 }
 
 /// Per-path collapse overrides. An absent entry means "use the
@@ -188,10 +193,9 @@ impl Cx<'_> {
 /// A location in the projected spanning tree: the sequence of edge
 /// labels from the root. The same node or edge can be projected at
 /// several paths, so the path — not the id — is the identity a
-/// selection names. Through a cons list a path is positional (a tail
-/// chain); when list editing demands stability, structural edits will
-/// adjust all path-keyed state through one general rewrite — see
-/// `docs/model.md`.
+/// selection names. List elements sit at position labels sibling
+/// edits never move; wraps and unwraps will adjust path-keyed state
+/// through one general rewrite — see `docs/model.md`.
 pub type Path = Vec<Id>;
 
 /// What is selected. An edge (the value at a path) for now; splice
@@ -204,12 +208,11 @@ pub enum Selection {
 }
 
 impl Selection {
-    /// Select the edge at `path`; a string or number value at an edge
-    /// brings a focused editor.
+    /// Select the edge at `path`; a string or number value brings a
+    /// focused editor (the root included — its commits target the
+    /// document's root field).
     pub fn edge(doc: &Document, path: Path) -> Self {
-        let edit = path
-            .split_last()
-            .and_then(|_| resolve(doc, &path))
+        let edit = resolve(doc, &path)
             .and_then(|value| {
                 value
                     .as_str()
@@ -256,7 +259,39 @@ fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
 /// The value at `path`, following each label from the root.
 pub fn resolve<'a>(doc: &'a Document, path: &[Id]) -> Option<&'a Id> {
     path.iter()
-        .try_fold(&doc.root, |node, label| doc.gid.get(node, label))
+        .try_fold(doc.root.as_ref()?, |node, label| doc.gid.get(node, label))
+}
+
+/// Deletes the value at `path`. Deletion is detachment: the value and
+/// anything under it stay in the graph for the orphan pool. The empty
+/// path empties the document's root; paths that no longer resolve
+/// decline.
+pub fn delete_edge(doc: &mut Document, path: &[Id]) -> bool {
+    match path.split_last() {
+        Some((label, parent_path)) if resolve(doc, path).is_some() => {
+            match resolve(doc, parent_path).and_then(Id::as_node_id) {
+                Some(parent) => {
+                    doc.gid.delete(&parent, label);
+                    true
+                }
+                None => false,
+            }
+        }
+        Some(_) => false,
+        None => doc.root.take().is_some(),
+    }
+}
+
+/// Where the selection lands after deleting `path`: the next sibling,
+/// else the previous, else the parent.
+pub fn selection_after_delete(descends: &[Descend], path: &[Id]) -> Path {
+    sibling(descends, path, true)
+        .or_else(|| sibling(descends, path, false))
+        .unwrap_or_else(|| {
+            path.split_last()
+                .map(|(_, parent)| parent.to_vec())
+                .unwrap_or_default()
+        })
 }
 
 /// Toggle the collapse override for the node at `path`, staying
@@ -282,18 +317,23 @@ pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> 
         .is_some()
 }
 
-/// Write the selection's editor text through to its edge: the graph
-/// is the source of truth, updated after every handled event. The
-/// edited kind follows the graph value — strings write every
+/// Write the selection's editor text through to its location: the
+/// graph is the source of truth, updated after every handled event.
+/// The edited kind follows the current value — strings write every
 /// keystroke; numbers write only when the text parses, since a
-/// half-typed state like `3.` has no identity to write. A parent that
-/// no longer resolves to a node drops the write silently — the
+/// half-typed state like `3.` has no identity to write. The empty
+/// path commits to the document's root field; an edge whose parent no
+/// longer resolves to a node drops the write silently — the
 /// malformed-graph rule at the mutation boundary.
 pub fn write_through(doc: &mut Document, selection: &Selection) {
     let Selection::Edge { path, edit } = selection;
-    if let (Some(edit), Some((label, parent_path))) = (edit, path.split_last())
-        && let Some(parent) = resolve(doc, parent_path).and_then(Id::as_node_id)
-    {
+    let target = match path.split_last() {
+        Some((label, parent_path)) => resolve(doc, parent_path)
+            .and_then(Id::as_node_id)
+            .map(|parent| Some((label, parent))),
+        None => Some(None),
+    };
+    if let (Some(edit), Some(target)) = (edit, target) {
         let text = edit.editor.text().to_string();
         let current = resolve(doc, path);
         let next = match current {
@@ -306,7 +346,10 @@ pub fn write_through(doc: &mut Document, selection: &Selection) {
         if let Some(next) = next
             && current != Some(&next)
         {
-            doc.gid.set(parent, label.clone(), next);
+            match target {
+                Some((label, parent)) => doc.gid.set(parent, label.clone(), next),
+                None => doc.root = Some(next),
+            }
         }
     }
 }
@@ -436,8 +479,17 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     // Raw shows the pure graph with no assumptions: the root is
     // projected directly, so a list root renders as its
     // position-labeled edges, not as `[a, b, c]`. List sugar belongs
-    // to a convention-aware projection.
-    value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), &doc.root, &hooks)
+    // to a convention-aware projection. An empty document is a
+    // selectable placeholder at the root path.
+    match &doc.root {
+        Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, &hooks),
+        None => descend(
+            &cx,
+            Vec::new(),
+            &hooks,
+            text(tcx, "empty document", &cx.styles.dim),
+        ),
+    }
 }
 
 /// A node rendered as a block: its identicon header over its edges,
@@ -798,7 +850,7 @@ mod tests {
         gid.set(node, Id::from("name"), Id::from("old"));
         gid.set(node, Id::from("x"), Id::from(1.5));
         let doc = Document {
-            root: Id::from(node),
+            root: Some(Id::from(node)),
             gid,
         };
         let at = |labels: &[&str]| {
@@ -806,7 +858,8 @@ mod tests {
         };
         assert!(at(&["name"]).edit().is_some());
         assert!(at(&["x"]).edit().is_some());
-        // Missing edges and the root carry no editor.
+        // Missing edges and node values carry no editor (this root is
+        // a node; an atom root would).
         assert!(at(&["missing"]).edit().is_none());
         assert!(at(&[]).edit().is_none());
     }
@@ -817,7 +870,7 @@ mod tests {
         let node = new_node_id();
         gid.set(node, Id::from("x"), Id::from(1.5));
         let mut doc = Document {
-            root: Id::from(node),
+            root: Some(Id::from(node)),
             gid,
         };
         let path = vec![Id::from("x")];
@@ -845,7 +898,7 @@ mod tests {
         let node = new_node_id();
         gid.set(node, Id::from("name"), Id::from("old"));
         let mut doc = Document {
-            root: Id::from(node),
+            root: Some(Id::from(node)),
             gid,
         };
         let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
@@ -859,6 +912,57 @@ mod tests {
     }
 
     #[test]
+    fn delete_edge_detaches_and_the_root_empties_the_document() {
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        let child = new_node_id();
+        gid.set(root, Id::from("child"), Id::from(child));
+        gid.set(child, Id::from("name"), Id::from("c"));
+        let mut doc = Document {
+            root: Some(Id::from(root)),
+            gid,
+        };
+
+        assert!(!delete_edge(&mut doc, &[Id::from("missing")]));
+
+        assert!(delete_edge(&mut doc, &[Id::from("child")]));
+        assert_eq!(resolve(&doc, &[Id::from("child")]), None);
+        // Detachment, not destruction: the orphan keeps its edges.
+        assert!(doc.gid.edges(&Id::from(child)).is_some());
+        // Already gone: declines.
+        assert!(!delete_edge(&mut doc, &[Id::from("child")]));
+
+        assert!(delete_edge(&mut doc, &[]));
+        assert_eq!(doc.root, None);
+        assert_eq!(resolve(&doc, &[]), None);
+        assert!(!delete_edge(&mut doc, &[]));
+    }
+
+    #[test]
+    fn root_edits_commit_to_the_document_root() {
+        let mut doc = Document {
+            root: Some(Id::from("old")),
+            gid: MutGid::new(),
+        };
+        let mut selection = Selection::edge(&doc, vec![]);
+        selection.edit_mut().unwrap().editor.set_text("new");
+        write_through(&mut doc, &selection);
+        assert_eq!(doc.root, Some(Id::from("new")));
+    }
+
+    #[test]
+    fn selection_after_delete_prefers_next_then_previous_then_parent() {
+        let ds = descends(&[vec![], vec!["a"], vec!["a", "x"], vec!["a", "y"], vec!["b"]]);
+        let path = |p: &[&str]| p.iter().map(|s| Id::from(*s)).collect::<Vec<_>>();
+        assert_eq!(selection_after_delete(&ds, &path(&["a"])), path(&["b"]));
+        assert_eq!(selection_after_delete(&ds, &path(&["b"])), path(&["a"]));
+        assert_eq!(selection_after_delete(&ds, &path(&["a", "x"])), path(&["a", "y"]));
+        // An only child falls back to its parent.
+        let only = descends(&[vec![], vec!["a"], vec!["a", "x"]]);
+        assert_eq!(selection_after_delete(&only, &path(&["a", "x"])), path(&["a"]));
+    }
+
+    #[test]
     fn toggle_collapse_stays_sparse_and_respects_cycle_defaults() {
         let mut gid = MutGid::new();
         let root = new_node_id();
@@ -867,7 +971,7 @@ mod tests {
         gid.set(child, Id::from("back"), Id::from(root));
         gid.set(child, Id::from("name"), Id::from("c"));
         let doc = Document {
-            root: Id::from(root),
+            root: Some(Id::from(root)),
             gid,
         };
         let mut collapse = Collapse::default();

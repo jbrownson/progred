@@ -26,7 +26,7 @@ use puri::handler::{Handler, HasHandler, ImeEvent};
 use puri::layout::place_top_left;
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
-use ui_events::keyboard::{Key, KeyboardEvent};
+use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::{PointerButton, PointerEvent};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::kurbo::{Affine, Point, Stroke};
@@ -245,6 +245,7 @@ impl ApplicationHandler<MenuEvent> for App {
                     // selected string's editor always wins over both.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
+                            || self.delete_key(&descends, &key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &descends,
@@ -539,6 +540,36 @@ impl App {
             window.set_title(&self.title());
             window.request_redraw();
         }
+    }
+
+    /// Backspace or Delete removes the selected edge — a focused atom
+    /// editor claims the keys while it has text and declines on an
+    /// empty buffer, so emptying a string then backspacing again
+    /// deletes the element. Selection lands on the next sibling, else
+    /// the previous, else the parent.
+    fn delete_key(&mut self, descends: &[raw::Descend], event: &KeyboardEvent) -> bool {
+        let plain = !(event.modifiers.ctrl()
+            || event.modifiers.meta()
+            || event.modifiers.alt()
+            || event.modifiers.shift());
+        event.state.is_down()
+            && plain
+            && matches!(
+                &event.key,
+                Key::Named(NamedKey::Backspace | NamedKey::Delete)
+            )
+            && match &self.model.selection {
+                Some(selection) => {
+                    let path = selection.path().to_vec();
+                    raw::delete_edge(&mut self.model.doc, &path) && {
+                        let next = raw::selection_after_delete(descends, &path);
+                        self.model.selection =
+                            Some(raw::Selection::edge(&self.model.doc, next));
+                        true
+                    }
+                }
+                None => false,
+            }
     }
 
     /// Space toggles the selected node's collapse override; a focused

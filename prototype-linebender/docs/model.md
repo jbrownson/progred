@@ -412,6 +412,15 @@ that node and its parent.
   unwraps as the rewrite's remaining customers. The label sequence
   remains projection identity — the same node projected at several
   paths is distinguished by path, never by id.
+- Demoted 2026-07-06 by ordered-identity lists: gap selection is no
+  longer required machinery. An insertion is a command relative to
+  the selected item — the gap's graph side is `between(prev, next)`
+  plus one edge set — and the displayed gap finally equals the graph
+  gap, retiring the TypeScript prototype's custom insertion-point
+  translation. The between-ness argument (a text cursor is a splice)
+  survives as a UX option if item-relative insertion ever feels
+  clunky; adding it back would be a pure selection mode with no model
+  implications.
 
 ## Editing
 
@@ -460,6 +469,20 @@ that node and its parent.
   for undo — modified-since-save falls out of history position — and
   undo waits for structural editing to exist; neither is built
   standalone.
+- Deletion (2026-07-06): Backspace or Delete removes the selected
+  edge — detachment, the value staying for the orphan pool. A focused
+  atom editor claims the keys while it has text and declines on an
+  empty buffer (a no-op edit is not a handled edit), so emptying a
+  string then backspacing again deletes the element — the text
+  editor's join idiom, modeless like everything else. Selection lands
+  on the next sibling, else the previous, else the parent. The root
+  is a location like any other — the empty path commits to the
+  document's root field — so deleting it empties the document
+  (`root: Option`, rendered as a selectable placeholder) and an atom
+  root is editable like any atom. The TypeScript prototype threaded
+  per-descend commit closures for the root and for list gaps;
+  ordered-identity lists removed the list motive, leaving the root as
+  the one special-cased commit.
 
 ## Types And Autocomplete
 
