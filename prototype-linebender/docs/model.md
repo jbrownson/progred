@@ -576,7 +576,12 @@ that node and its parent.
   committed by Enter or by clicking a row — the card swallows other
   clicks so nothing lands on content underneath. Vertical arrows
   belong to the popup while pending, so discard is Escape,
-  empty-Backspace, or selecting elsewhere. Selecting the empty
+  empty-Backspace, or selecting elsewhere. Command-click picks by
+  pointing (2026-07-07, the TS/Haskell choose-id gesture): with a
+  pending open, command-clicking any projection of an identity — a
+  tree value or label, a graph node or pill — commits it into the
+  open stage, value or label alike; with nothing pending the
+  modifier is inert and the click behaves normally. Selecting the empty
   document's root pends immediately — there is nothing there to
   select, only something to begin — with Escape deselecting rather
   than re-pending.

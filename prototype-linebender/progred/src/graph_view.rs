@@ -9,8 +9,8 @@
 //! and hit-testing are one pure pass: build geometry from state, draw
 //! it, register handlers over it.
 
-use crate::raw::{Document, Selection, hex, resolve, short_id};
-use parley::style::FontFamily;
+use crate::raw::{Document, Selection, command, hex, resolve, short_id};
+use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};
 use progred_graph::{Gid, Id, NodeId, position};
 use puri::draw::Canvas;
@@ -394,6 +394,9 @@ pub struct Hooks<C> {
     /// (world point, window point, panel pixels per world unit).
     pub drag_to: Rc<dyn Fn(&mut C, Point, Point, f64) -> bool>,
     pub release: Rc<dyn Fn(&mut C) -> bool>,
+    /// Command-click: commit the pointed-at identity into the open
+    /// pending; false when nothing is pending.
+    pub pick: Rc<dyn Fn(&mut C, Id) -> bool>,
 }
 
 const FONT_SIZE: f32 = 10.0;
@@ -450,10 +453,16 @@ struct EdgeView {
     pill_strength: Strength,
 }
 
-fn layout_text(tcx: &mut TextCtx, s: &str, size: f32, color: [f32; 4]) -> Layout<Brush> {
+fn layout_text(
+    tcx: &mut TextCtx,
+    s: &str,
+    size: f32,
+    color: [f32; 4],
+    family: GenericFamily,
+) -> Layout<Brush> {
     let mut builder = tcx.layouts.ranged_builder(tcx.fonts, s, tcx.scale, true);
     builder.push_default(StyleProperty::Brush(Brush::from(Color::new(color))));
-    builder.push_default(FontFamily::from("system-ui"));
+    builder.push_default(family);
     builder.push_default(StyleProperty::FontSize(size));
     let mut layout: Layout<Brush> = builder.build(s);
     layout.break_all_lines(None);
@@ -465,23 +474,25 @@ fn layout_text(tcx: &mut TextCtx, s: &str, size: f32, color: [f32; 4]) -> Layout
 /// identity language as the tree view.
 fn content(doc: &Document, id: &Id, tcx: &mut TextCtx, zoom: f64) -> Layout<Brush> {
     let size = FONT_SIZE * zoom as f32;
+    let ui = GenericFamily::SystemUi;
+    let mono = GenericFamily::Monospace;
     if let Some(s) = id.as_str() {
-        layout_text(tcx, &format!("\"{s}\""), size, STRING_TEXT)
+        layout_text(tcx, &format!("\"{s}\""), size, STRING_TEXT, ui)
     } else if let Some(n) = id.as_number() {
-        layout_text(tcx, &n.to_string(), size, NUMBER_TEXT)
+        layout_text(tcx, &n.to_string(), size, NUMBER_TEXT, ui)
     } else if let Some(node) = id.as_node_id() {
         match doc
             .gid
             .get(id, &Id::from(crate::conventions::NAME))
             .and_then(Id::as_str)
         {
-            Some(name) => layout_text(tcx, name, size, TEXT),
-            None => layout_text(tcx, &short_id(node), size, DIM_TEXT),
+            Some(name) => layout_text(tcx, name, size, TEXT, ui),
+            None => layout_text(tcx, &short_id(node), size, DIM_TEXT, mono),
         }
     } else if let Some(bytes) = position::as_position(id) {
-        layout_text(tcx, &hex(bytes), size, DIM_TEXT)
+        layout_text(tcx, &hex(bytes), size, DIM_TEXT, mono)
     } else {
-        layout_text(tcx, &hex(id.payload()), size, DIM_TEXT)
+        layout_text(tcx, &hex(id.payload()), size, DIM_TEXT, mono)
     }
 }
 
@@ -713,6 +724,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     let press_background = hooks.press_background.clone();
     let drag_to = hooks.drag_to.clone();
     let release = hooks.release.clone();
+    let pick = hooks.pick.clone();
     let extent = Extent {
         width: panel.width(),
         ascent: 0.0,
@@ -803,19 +815,25 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         let press_node = press_node.clone();
         let press_edge = press_edge.clone();
         let press_background = press_background.clone();
+        let pick = pick.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             let point = Point::new(event.state.position.x, event.state.position.y);
             event.button == Some(PointerButton::Primary) && panel.contains(point) && {
+                let picking = command(&event.state.modifiers);
                 if let Some((_, source, label)) =
                     pill_hits.iter().find(|(rect, _, _)| rect.contains(point))
                 {
-                    press_edge(ctx, source.clone(), label.clone());
+                    if !(picking && pick(ctx, label.clone())) {
+                        press_edge(ctx, source.clone(), label.clone());
+                    }
                 } else if let Some((rect, id)) =
                     node_hits.iter().find(|(rect, _)| rect.contains(point))
                 {
-                    let world = from_panel(point);
-                    let node_world = from_panel(rect.center());
-                    press_node(ctx, id.clone(), world - node_world, point);
+                    if !(picking && pick(ctx, id.clone())) {
+                        let world = from_panel(point);
+                        let node_world = from_panel(rect.center());
+                        press_node(ctx, id.clone(), world - node_world, point);
+                    }
                 } else {
                     press_background(ctx, point);
                 }

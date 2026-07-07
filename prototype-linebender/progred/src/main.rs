@@ -14,6 +14,7 @@ use std::sync::Arc;
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
+use progred_graph::Id;
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditState};
 use puri::handler::{Handler, HasHandler, ImeEvent};
@@ -761,6 +762,28 @@ impl App {
             })
     }
 
+    /// Commits a pointed-at identity into the open pending — the
+    /// command-click gesture. A value-stage pending commits and
+    /// selects the edge; a label stage advances to its value stage.
+    /// False when nothing is pending, so the click falls through.
+    fn pick_identity(&mut self, id: Id) -> bool {
+        match self.model.selection.take() {
+            Some(raw::Selection::Pending { path, .. }) => {
+                raw::commit_pending(&mut self.model.doc, &path, &raw::EntryAction::Value(id));
+                self.model.selection = Some(raw::Selection::edge(&self.model.doc, path));
+                true
+            }
+            Some(raw::Selection::PendingEdge { parent, .. }) => {
+                self.commit_label(parent, &raw::EntryAction::Value(id));
+                true
+            }
+            selection => {
+                self.model.selection = selection;
+                false
+            }
+        }
+    }
+
     /// A resolved label advances the pending edge to its value stage —
     /// or selects the existing edge when the label is taken.
     fn commit_label(&mut self, parent: raw::Path, action: &raw::EntryAction) {
@@ -825,11 +848,7 @@ impl App {
                         true
                     }
                     selection => {
-                        let command = if cfg!(target_os = "macos") {
-                            event.modifiers.meta()
-                        } else {
-                            event.modifiers.ctrl()
-                        };
+                        let command = raw::command(&event.modifiers);
                         let started = match &selection {
                             Some(current) if command => {
                                 raw::pending_edge(&self.model.doc, current.path().to_vec())
@@ -1070,6 +1089,7 @@ fn run_frame(
                 raw::toggle_collapse(&app.model.doc, &mut app.model.collapse, &path);
             }),
             edit: Rc::new(edit_ctx),
+            pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
         },
     );
     let margin = 12.0 * scale;
@@ -1109,6 +1129,7 @@ fn run_frame(
                     app.model.graph.drag_to(world, panel, px)
                 }),
                 release: Rc::new(|app: &mut App| app.model.graph.release()),
+                pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             },
         );
         place_top_left(pane, frame, Point::new(panel.x0, panel.y0));

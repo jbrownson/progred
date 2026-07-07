@@ -35,6 +35,9 @@ pub struct RawStyles {
     pub string: TextStyle,
     pub number: TextStyle,
     pub dim: TextStyle,
+    /// Byte-identity renderings — short ids and hex — in monospace,
+    /// so ids read as ids and align when compared.
+    pub id: TextStyle,
     pub edit: EditStyle,
     pub scale: f64,
 }
@@ -45,6 +48,7 @@ impl RawStyles {
             size,
             brush: Brush::from(Color::new(color)),
             weight,
+            family: parley::style::GenericFamily::SystemUi,
         };
         // A light, native-feeling palette: near-black primary labels,
         // gray secondary labels, restrained literal accents.
@@ -53,6 +57,10 @@ impl RawStyles {
             string: style(14.0, STRING_COLOR, None),
             number: style(14.0, NUMBER_COLOR, None),
             dim: style(13.0, [0.55, 0.58, 0.64, 1.0], None),
+            id: TextStyle {
+                family: parley::style::GenericFamily::Monospace,
+                ..style(13.0, [0.55, 0.58, 0.64, 1.0], None)
+            },
             edit: EditStyle {
                 selection: Brush::from(Color::new([0.0, 0.48, 1.0, 0.30])),
                 cursor: Brush::from(Color::new([0.13, 0.14, 0.16, 1.0])),
@@ -191,6 +199,19 @@ pub struct Hooks<C> {
     /// None when the editor is already gone — retained-frame dispatch
     /// may fire a frame late, and absent state declines.
     pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
+    /// Commit a pointed-at identity into the open pending (value or
+    /// label stage); false when nothing is pending, so the click
+    /// falls through to selection.
+    pub pick: Rc<dyn Fn(&mut C, Id) -> bool>,
+}
+
+/// The platform command modifier, for pointer gestures.
+pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
+    if cfg!(target_os = "macos") {
+        modifiers.meta()
+    } else {
+        modifiers.ctrl()
+    }
 }
 
 impl Cx<'_> {
@@ -807,17 +828,20 @@ pub trait HasDescends {
 
 /// Marks `child` as the projection of the edge at `path`. On placement
 /// it draws the highlight when this is the selected edge, registers a
-/// click that selects the edge (innermost wins by handler precedence),
-/// and records itself for keyboard navigation.
+/// click that selects the edge (innermost wins by handler precedence)
+/// — or, with the command modifier and a pending open, picks `value`
+/// into it — and records itself for keyboard navigation.
 fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     cx: &Cx,
     path: Path,
+    value: Option<Id>,
     hooks: &Hooks<C>,
     child: Node<P>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let selected = cx.selected(&path);
     let select = hooks.select.clone();
+    let pick = hooks.pick.clone();
     decorate(child, move |p, rect| {
         if selected {
             let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
@@ -833,12 +857,20 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
             );
         }
         let select = select.clone();
+        let pick = pick.clone();
         let target = path.clone();
+        let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
-                    select(ctx, target.clone(), None);
+                    let picked = command(&event.state.modifiers)
+                        && value
+                            .as_ref()
+                            .is_some_and(|id| pick(ctx, id.clone()));
+                    if !picked {
+                        select(ctx, target.clone(), None);
+                    }
                     true
                 }
         });
@@ -890,6 +922,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             _ => descend(
                 &cx,
                 Vec::new(),
+                None,
                 &hooks,
                 text(tcx, "empty document", &cx.styles.dim),
             ),
@@ -920,7 +953,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         entries.push((label, None));
         entries.sort_by(|a, b| a.0.cmp(&b.0));
     }
-    let id_text = text(tcx, &short_id(node), &cx.styles.dim);
+    let id_text = text(tcx, &short_id(node), &cx.styles.id);
 
     let pending_edge = cx.pending_edge_under(path).is_some();
     if entries.is_empty() && !pending_edge {
@@ -954,7 +987,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 vec![label_view(cx, tcx, &label), arrow(cx.styles)],
             );
             let head = match &value {
-                Some(_) => select_target(child.clone(), hooks, head),
+                Some(_) => select_target(child.clone(), label.clone(), hooks, head),
                 None => head,
             };
             let content = match value {
@@ -1017,9 +1050,9 @@ fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
     } else if let Some(n) = label.as_number() {
         text(tcx, &n.to_string(), &cx.styles.number)
     } else if let Some(uuid) = label.as_node_id() {
-        text(tcx, &short_id(uuid), &cx.styles.dim)
+        text(tcx, &short_id(uuid), &cx.styles.id)
     } else if let Some(bytes) = position::as_position(label) {
-        text(tcx, &hex(bytes), &cx.styles.dim)
+        text(tcx, &hex(bytes), &cx.styles.id)
     } else {
         unknown_view(label, tcx, cx.styles)
     };
@@ -1151,17 +1184,17 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
         row(0.0, vec![
             text(tcx, "\"", &cx.styles.string),
-            cursor_target(path.to_vec(), hooks, content),
+            cursor_target(path.to_vec(), value.clone(), hooks, content),
             text(tcx, "\"", &cx.styles.string),
         ])
     } else if let Some(n) = value.as_number() {
         let fallback = text(tcx, &n.to_string(), &cx.styles.number);
         let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
-        cursor_target(path.to_vec(), hooks, content)
+        cursor_target(path.to_vec(), value.clone(), hooks, content)
     } else if let Some(node) = value.as_node_id() {
         node_view(cx, tcx, path, ancestors, node, hooks)
     } else if let Some(bytes) = position::as_position(value) {
-        text(tcx, &hex(bytes), &cx.styles.dim)
+        text(tcx, &hex(bytes), &cx.styles.id)
     } else {
         unknown_view(value, tcx, cx.styles)
     };
@@ -1172,7 +1205,7 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     } else {
         secondary_mark(cx, value, inner)
     };
-    descend(cx, path.to_vec(), hooks, inner)
+    descend(cx, path.to_vec(), Some(value.clone()), hooks, inner)
 }
 
 /// A nonexistent edge the selection is authoring: the completion
@@ -1196,7 +1229,7 @@ fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         }
         _ => text(tcx, "…", &cx.styles.dim),
     };
-    descend(cx, path, hooks, content)
+    descend(cx, path, None, hooks, content)
 }
 
 /// A focused completion query: the editor plus its popup, emitted at
@@ -1247,7 +1280,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
             };
             let mut cells: Vec<Node<P>> = vec![text(tcx, &entry.display, style)];
             if let Some(detail) = &entry.detail {
-                cells.push(text(tcx, detail, &styles.dim));
+                cells.push(text(tcx, detail, &styles.id));
             }
             let content = pad(
                 Insets::new(8.0 * scale, 2.0 * scale, 8.0 * scale, 2.0 * scale),
@@ -1316,21 +1349,31 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 }
 
 /// A plain click-to-select target for `path` — for edge parts like
-/// labels that select without carrying an editor click.
+/// labels that select without carrying an editor click. With the
+/// command modifier and a pending open, picks `label` — the identity
+/// the label displays — into it instead.
 fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
     path: Path,
+    label: Id,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
     let select = hooks.select.clone();
+    let pick = hooks.pick.clone();
     decorate(content, move |p, rect| {
         let select = select.clone();
+        let pick = pick.clone();
         let target = path.clone();
+        let label = label.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
-                    select(ctx, target.clone(), None);
+                    let picked =
+                        command(&event.state.modifiers) && pick(ctx, label.clone());
+                    if !picked {
+                        select(ctx, target.clone(), None);
+                    }
                     true
                 }
         });
@@ -1340,18 +1383,26 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
 /// A click on a string's text reports what happened — this path, this
 /// text-local position — and nothing more; the shell's selection
 /// transition decides what it means. One report serves the first
-/// click and every one after.
+/// click and every one after. With the command modifier and a pending
+/// open, picks the atom's identity into it instead.
 fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     path: Path,
+    value: Id,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
     let select = hooks.select.clone();
+    let pick = hooks.pick.clone();
     decorate(content, move |p, rect| {
+        let pick = pick.clone();
+        let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
+                    if command(&event.state.modifiers) && pick(ctx, value.clone()) {
+                        return true;
+                    }
                     let click = TextClick {
                         point: Point::new(
                             event.state.position.x - rect.x0,
@@ -1374,8 +1425,8 @@ fn unknown_view<P: Canvas>(id: &Id, tcx: &mut TextCtx, styles: &RawStyles) -> No
     row(
         4.0 * styles.scale,
         vec![
-            text(tcx, &short_id(id.space()), &styles.dim),
-            text(tcx, &hex(id.payload()), &styles.dim),
+            text(tcx, &short_id(id.space()), &styles.id),
+            text(tcx, &hex(id.payload()), &styles.id),
         ],
     )
 }

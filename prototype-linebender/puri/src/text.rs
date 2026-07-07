@@ -5,7 +5,7 @@ use crate::draw::{Canvas, Glyph, GlyphRun};
 use crate::layout::{Extent, Node, leaf};
 use kurbo::{Affine, Line, Point, Stroke};
 use parley::layout::{Alignment, Layout, PositionedLayoutItem};
-use parley::style::{FontFamily, FontWeight};
+use parley::style::{FontWeight, GenericFamily};
 use parley::{AlignmentOptions, FontContext, LayoutContext, LineHeight, StyleProperty};
 use peniko::Brush;
 
@@ -20,6 +20,7 @@ pub struct TextStyle {
     pub size: f32,
     pub brush: Brush,
     pub weight: Option<f32>,
+    pub family: GenericFamily,
 }
 
 /// Single line, no wrapping; width includes trailing whitespace so
@@ -51,7 +52,7 @@ fn build_layout(
 ) -> Layout<Brush> {
     let mut builder = ctx.layouts.ranged_builder(ctx.fonts, s, ctx.scale, true);
     builder.push_default(StyleProperty::Brush(style.brush.clone()));
-    builder.push_default(FontFamily::from("system-ui"));
+    builder.push_default(style.family);
     builder.push_default(StyleProperty::FontSize(style.size));
     if let Some(weight) = style.weight {
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(weight)));
@@ -162,11 +163,13 @@ mod tests {
             size: 28.0,
             brush: Color::WHITE.into(),
             weight: None,
+            family: GenericFamily::SystemUi,
         };
         let small = TextStyle {
             size: 12.0,
             brush: Color::WHITE.into(),
             weight: None,
+            family: GenericFamily::SystemUi,
         };
         let r = row(4.0, vec![text(&mut ctx, "big", &big), text(&mut ctx, "small", &small)]);
 
