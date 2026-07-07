@@ -1072,7 +1072,7 @@ fn run_frame(
             edit: Rc::new(edit_ctx),
         },
     );
-    let margin = 28.0 * scale;
+    let margin = 12.0 * scale;
     frame.max_scroll = ((body.extent.height() + 2.0 * margin - viewport_height) / scale).max(0.0);
     place_top_left(
         body,
