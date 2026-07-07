@@ -352,6 +352,13 @@ identity for its own sake.
   cuts both ways, a field too small to read being as broken as one
   hidden. The freed bits became four figure sizes and fewer, larger
   beads (34 x 2 bits).
+  Benched 2026-07-06: the raw view trials git-style id suffixes (an
+  ellipsis and the last five hex digits, fixed length) instead —
+  identicons added visual noise and required explanation, and
+  truncated ids are precise, quiet, verbally communicable, and
+  familiar from git. The code stays, the sample sheet still draws
+  them, and the graph view is their likely home; "never displays raw
+  UUIDs" is suspended for the trial, decided by dogfooding.
   Separately: node-space minting dropped RFC 4122's version/variant
   structure (2026-07-05) — payloads are 16 raw CSPRNG bytes with full
   128-bit entropy, since the RFC structure exists to let different

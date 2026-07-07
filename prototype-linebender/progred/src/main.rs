@@ -2,6 +2,10 @@
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
 mod conventions;
+// Benched while the raw view trials git-style id suffixes; the sample
+// sheet still draws identicons and a future graph view is their
+// likely home.
+#[allow(dead_code)]
 mod identicon;
 mod raw;
 // Unwired: give it a view toggle when identicons next need tuning.

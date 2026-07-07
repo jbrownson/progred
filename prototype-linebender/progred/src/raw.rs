@@ -3,12 +3,14 @@
 //! conventions — every node is just its identicon, every edge a row,
 //! including `name`, and lists render as the plain position-labeled
 //! nodes they are (list sugar belongs to a convention-aware
-//! projection). String
-//! and number labels render as their values, node labels and values
-//! get identicons, unparsable ids render as what they are.
+//! projection). Known
+//! identity spaces render friendly — strings and numbers as their
+//! values, node ids as git-style suffixes, positions as their payload
+//! hex — and unparsable or unknown ids render as the space-and-bytes
+//! they are (an even rawer all-space-and-bytes inspection view could
+//! exist; raw itself owns friendly renderings for what it knows).
 
 use crate::conventions::NAME;
-use crate::identicon::{label_identicon, node_identicon};
 use parley::StyleProperty;
 use parley::style::FontFamily;
 use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id, position};
@@ -454,15 +456,15 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     let scale = cx.styles.scale;
     let id = Id::from(node);
     let edges = sorted_edges(cx.gid, &id);
-    let icon = node_identicon(node, 18.0 * scale);
+    let id_text = text(tcx, &short_id(node), &cx.styles.dim);
 
     if edges.is_empty() {
-        return icon;
+        return id_text;
     }
     let collapsed = cx.collapse.collapsed(path, ancestors.contains(&id));
     let header = row(
         4.0 * scale,
-        vec![icon, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
+        vec![id_text, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
     );
     if collapsed {
         return header;
@@ -494,6 +496,17 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     )
 }
 
+/// Git-style short form of a node id: an ellipsis and the last five
+/// hex digits, fixed length even where fewer would disambiguate.
+/// Trialing this over identicons (which remain in the sample sheet
+/// and are the likely graph-view rendering); a collision within a
+/// document is unlikely (about 0.5% somewhere in a hundred-node
+/// document) and the display can grow if it ever matters.
+fn short_id(id: NodeId) -> String {
+    let hex = id.simple().to_string();
+    format!("…{}", &hex[hex.len() - 5..])
+}
+
 /// A node's edges, sorted for stable order. All of them — `name` is not
 /// special here.
 fn sorted_edges(gid: &MutGid, id: &Id) -> Vec<(Id, Id)> {
@@ -511,10 +524,16 @@ fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
     } else if let Some(n) = label.as_number() {
         text(tcx, &n.to_string(), &cx.styles.number)
     } else if let Some(uuid) = label.as_node_id() {
-        label_identicon(uuid, 14.0 * cx.styles.scale)
+        text(tcx, &short_id(uuid), &cx.styles.dim)
+    } else if let Some(bytes) = position::as_position(label) {
+        text(tcx, &hex(bytes), &cx.styles.dim)
     } else {
         unknown_view(label, tcx, cx.styles)
     }
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// The disclosure delta to the right of a node header: down when
@@ -629,6 +648,8 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
         cursor_target(path.to_vec(), hooks, content)
     } else if let Some(node) = value.as_node_id() {
         node_view(cx, tcx, path, ancestors, node, hooks)
+    } else if let Some(bytes) = position::as_position(value) {
+        text(tcx, &hex(bytes), &cx.styles.dim)
     } else {
         unknown_view(value, tcx, cx.styles)
     };
@@ -681,16 +702,15 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     })
 }
 
-/// A value from a space the editor doesn't know: the space's identicon
-/// plus the payload as hex. Raw UUIDs are never shown; identicons are
-/// their visual form.
+/// A value from a space the editor doesn't know — or a known space's
+/// non-canonical spelling: the space's short id plus the payload as
+/// hex.
 fn unknown_view<P: Canvas>(id: &Id, tcx: &mut TextCtx, styles: &RawStyles) -> Node<P> {
-    let hex: String = id.payload().iter().map(|b| format!("{b:02x}")).collect();
     row(
         4.0 * styles.scale,
         vec![
-            label_identicon(id.space(), 14.0 * styles.scale),
-            text(tcx, &hex, &styles.dim),
+            text(tcx, &short_id(id.space()), &styles.dim),
+            text(tcx, &hex(id.payload()), &styles.dim),
         ],
     )
 }
