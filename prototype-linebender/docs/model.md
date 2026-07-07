@@ -483,6 +483,17 @@ that node and its parent.
   per-descend commit closures for the root and for list gaps;
   ordered-identity lists removed the list motive, leaving the root as
   the one special-cased commit.
+- Secondary selection (2026-07-06): the identity at the end of the
+  selected edge marks each of its other projections with a subtle
+  wash over the whole projection — expanded block, collapsed header,
+  atom text, or label — while the selected one carries only the
+  primary highlight. Uniform across spaces: strings and numbers are
+  identities like any GUID node (a first cut marked GUIDs only, but
+  every `"origin"` is one SID and every `2` one NID — the marks
+  surface exactly that sameness, labels included). Derived in the
+  pass from the primary selection each frame, so there is no second
+  selection state to synchronize (the TypeScript prototype's
+  secondary-selection sync bugs dissolve into a derivation).
 - Insertion (2026-07-06): raw's insertion is edge insertion,
   uniformly. A node is a bag of labeled edges, so Enter begins a new
   edge on the parent of the selection — on the selected node itself

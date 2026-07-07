@@ -165,6 +165,8 @@ struct Cx<'a> {
     collapse: &'a Collapse,
     styles: &'a RawStyles,
     selection: Option<&'a Selection>,
+    /// The node whose other projections carry the secondary mark.
+    secondary: Option<Id>,
 }
 
 /// A reported click on a string's text, in text-local coordinates.
@@ -775,6 +777,17 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     })
 }
 
+/// The identity marked as the secondary selection: the one at the end
+/// of the selected edge. An identity can project in many places —
+/// GUID nodes, but equally SID strings, NID numbers, and labels — and
+/// the marks make that sameness visible, uniformly across spaces.
+fn secondary_of(doc: &Document, selection: Option<&Selection>) -> Option<Id> {
+    match selection? {
+        Selection::Edge { path, .. } => resolve(doc, path).cloned(),
+        _ => None,
+    }
+}
+
 pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     doc: &Document,
     selection: Option<&Selection>,
@@ -788,6 +801,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         collapse,
         styles,
         selection,
+        secondary: secondary_of(doc, selection),
     };
     // Raw shows the pure graph with no assumptions: the root is
     // projected directly, so a list root renders as its
@@ -926,7 +940,7 @@ fn sorted_edges(gid: &MutGid, id: &Id) -> Vec<(Id, Id)> {
 }
 
 fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
-    if let Some(s) = label.as_str() {
+    let inner = if let Some(s) = label.as_str() {
         text(tcx, s, &cx.styles.label)
     } else if let Some(n) = label.as_number() {
         text(tcx, &n.to_string(), &cx.styles.number)
@@ -936,7 +950,23 @@ fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
         text(tcx, &hex(bytes), &cx.styles.dim)
     } else {
         unknown_view(label, tcx, cx.styles)
+    };
+    secondary_mark(cx, label, inner)
+}
+
+/// The secondary selection's mark: a subtle wash over another whole
+/// projection of the selected edge's node — an expanded block, a
+/// collapsed header, or a GUID label. The primary selection's
+/// geometry at lower strength, so the two read as one family.
+fn secondary_mark<P: Canvas>(cx: &Cx, id: &Id, content: Node<P>) -> Node<P> {
+    if cx.secondary.as_ref() != Some(id) {
+        return content;
     }
+    let scale = cx.styles.scale;
+    decorate(content, move |p: &mut P, rect| {
+        let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
+        p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.10]), Affine::IDENTITY);
+    })
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -1059,6 +1089,13 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         text(tcx, &hex(bytes), &cx.styles.dim)
     } else {
         unknown_view(value, tcx, cx.styles)
+    };
+    // Other projections of the selected edge's node carry the
+    // secondary mark; the selected one has the primary highlight.
+    let inner = if cx.selected(path) {
+        inner
+    } else {
+        secondary_mark(cx, value, inner)
     };
     descend(cx, path.to_vec(), hooks, inner)
 }
@@ -1522,6 +1559,37 @@ mod tests {
             Selection::edge(&empty, Vec::new()),
             Selection::Pending { .. }
         ));
+    }
+
+    #[test]
+    fn secondary_is_the_selected_edges_value_in_any_space() {
+        let mut gid = MutGid::new();
+        let shared = new_node_id();
+        gid.set(shared, Id::from("x"), Id::from(1.0));
+        let root = new_node_id();
+        gid.set(root, Id::from("a"), Id::from(shared));
+        gid.set(root, Id::from("b"), Id::from(shared));
+        let doc = Document {
+            root: Some(Id::from(root)),
+            gid,
+        };
+        let edge = |path: Vec<Id>| Selection::Edge { path, edit: None };
+
+        assert_eq!(
+            secondary_of(&doc, Some(&edge(vec![Id::from("a")]))),
+            Some(Id::from(shared))
+        );
+        // Atoms are identities too — SIDs and NIDs mark like GUIDs.
+        assert_eq!(
+            secondary_of(&doc, Some(&edge(vec![Id::from("a"), Id::from("x")]))),
+            Some(Id::from(1.0))
+        );
+        // Pendings and no selection don't mark.
+        assert_eq!(
+            secondary_of(&doc, Some(&pending_value(vec![Id::from("c")]))),
+            None
+        );
+        assert_eq!(secondary_of(&doc, None), None);
     }
 
     #[test]
