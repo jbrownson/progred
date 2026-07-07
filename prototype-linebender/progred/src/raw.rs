@@ -464,16 +464,14 @@ pub fn pending_root(doc: &Document) -> Option<Selection> {
     doc.root.is_none().then(|| pending_value(Vec::new()))
 }
 
-/// The identity a pending query resolves to: quotes force a string,
-/// text that parses is a number, anything else is the string as
-/// typed.
+/// The identity a pending query resolves to: a leading quote forces a
+/// string (the closing quote optional, so string mode holds while
+/// typing), text that parses is a number, anything else is the string
+/// as typed.
 pub fn resolve_query(text: &str) -> Id {
     let trimmed = text.trim();
-    let quoted = (trimmed.len() >= 2)
-        .then(|| trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
-        .flatten();
-    match quoted {
-        Some(inner) => Id::from(inner),
+    match trimmed.strip_prefix('"') {
+        Some(inner) => Id::from(inner.strip_suffix('"').unwrap_or(inner)),
         None => trimmed
             .parse::<f64>()
             .map(Id::from)
@@ -526,34 +524,70 @@ fn completion_entries(gid: &MutGid, query: &str) -> Vec<Entry> {
             .map(|n| n.to_string())
             .unwrap_or_default(),
     };
-    let mut entries = vec![Entry {
+    // Quotes and numbers state atom intent, so the atom leads;
+    // otherwise a confident (non-fuzzy) reference match is likelier
+    // the intent than a new literal — typing a visible name or short
+    // id should default to the reference, and quoting always forces
+    // the string.
+    let atom_leads = query.trim_start().starts_with('"') || atom.as_number().is_some();
+    let atom_entry = Entry {
         display,
         detail: None,
         action: EntryAction::Value(atom),
-    }];
-    let named: Vec<(String, Id)> = gid
-        .entities()
-        .filter_map(|node| {
-            let id = Id::from(*node);
-            let name = gid.get(&id, &Id::from(NAME))?.as_str()?.to_string();
-            Some((name, id))
+    };
+    // Every node the document contains is referenceable: named ones
+    // by name, unnamed ones by the short id they render as — what
+    // you see is what you can type. Unnamed keys start with the
+    // ellipsis, which sorts after names, so they trail on an empty
+    // query.
+    let mut nodes: Vec<(String, Id)> = document_nodes(gid)
+        .into_iter()
+        .map(|node| {
+            let id = Id::from(node);
+            let key = gid
+                .get(&id, &Id::from(NAME))
+                .and_then(Id::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| short_id(node));
+            (key, id)
         })
         .collect();
-    entries.extend(
-        filter::rank(named, |(name, _)| name, query)
-            .into_iter()
-            .take(8)
-            .map(|ranked| {
-                let (name, id) = ranked.item;
-                let detail = id.as_node_id().map(short_id);
-                Entry {
-                    display: name,
-                    detail,
-                    action: EntryAction::Value(id),
-                }
-            }),
-    );
-    let name = (!query.trim().is_empty()).then(|| query.trim().to_string());
+    nodes.sort();
+    let references: Vec<(Entry, bool)> = filter::rank(nodes, |(key, _)| key, query)
+        .into_iter()
+        .take(8)
+        .map(|ranked| {
+            let fuzzy = ranked.fuzzy();
+            let (display, id) = ranked.item;
+            let detail = id
+                .as_node_id()
+                .map(short_id)
+                .filter(|detail| *detail != display);
+            let entry = Entry {
+                display,
+                detail,
+                action: EntryAction::Value(id),
+            };
+            (entry, fuzzy)
+        })
+        .collect();
+    let mut entries = Vec::new();
+    if atom_leads {
+        entries.push(atom_entry);
+        entries.extend(references.into_iter().map(|(entry, _)| entry));
+    } else {
+        let (weak, strong): (Vec<_>, Vec<_>) =
+            references.into_iter().partition(|(_, fuzzy)| *fuzzy);
+        entries.extend(strong.into_iter().map(|(entry, _)| entry));
+        entries.push(atom_entry);
+        entries.extend(weak.into_iter().map(|(entry, _)| entry));
+    }
+    let trimmed = query.trim();
+    let name_text = trimmed
+        .strip_prefix('"')
+        .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
+        .unwrap_or(trimmed);
+    let name = (!name_text.is_empty()).then(|| name_text.to_string());
     entries.push(Entry {
         display: match &name {
             Some(name) => format!("new node \"{name}\""),
@@ -563,6 +597,28 @@ fn completion_entries(gid: &MutGid, query: &str) -> Vec<Entry> {
         action: EntryAction::NewNode { name },
     });
     entries
+}
+
+/// Every GUID node the document contains — entity sources plus nodes
+/// appearing only as labels or values (an edgeless node referenced
+/// somewhere is still referenceable). Sorted for a deterministic
+/// offer order.
+fn document_nodes(gid: &MutGid) -> Vec<NodeId> {
+    let mut nodes: Vec<NodeId> = gid
+        .entities()
+        .flat_map(|entity| {
+            let edge_nodes = gid
+                .edges(&Id::from(*entity))
+                .into_iter()
+                .flatten()
+                .flat_map(|(label, value)| [label.as_node_id(), value.as_node_id()])
+                .flatten();
+            std::iter::once(*entity).chain(edge_nodes)
+        })
+        .collect();
+    nodes.sort();
+    nodes.dedup();
+    nodes
 }
 
 /// Resolves a chosen entry to the identity it denotes, minting and
@@ -1622,30 +1678,65 @@ mod tests {
             gid.set(node, Id::from(NAME), Id::from(name));
         }
 
-        let entries = completion_entries(&gid, "orig");
-        assert_eq!(entries[0].display, "\"orig\"");
-        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str().is_some()));
+        // A confident reference match outranks the typed string;
         // "corner" has no i, so only "origin" matches the query.
-        assert_eq!(entries[1].display, "origin");
-        assert!(entries[1].detail.is_some());
+        let entries = completion_entries(&gid, "orig");
+        assert_eq!(entries[0].display, "origin");
+        assert!(entries[0].detail.is_some());
+        assert_eq!(entries[1].display, "\"orig\"");
+        assert!(matches!(&entries[1].action, EntryAction::Value(id) if id.as_str().is_some()));
         assert_eq!(entries.len(), 3);
         assert!(matches!(
             &entries.last().unwrap().action,
             EntryAction::NewNode { name: Some(name) } if name == "orig"
         ));
 
-        // An empty query offers everything named, unnamed creation,
-        // and the empty string.
+        // A leading quote forces the string back on top, closed or
+        // not, and the new node's name drops the quotes.
+        let entries = completion_entries(&gid, "\"orig");
+        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str() == Some("orig")));
+        assert!(matches!(
+            &entries.last().unwrap().action,
+            EntryAction::NewNode { name: Some(name) } if name == "orig"
+        ));
+
+        // An empty query offers every node — the NAME label is
+        // itself an unnamed node here — plus unnamed creation and
+        // the empty string.
         let entries = completion_entries(&gid, "");
-        assert_eq!(entries.len(), 4);
+        assert_eq!(entries.len(), 5);
         assert!(matches!(
             &entries.last().unwrap().action,
             EntryAction::NewNode { name: None }
         ));
 
-        // Numbers infer as the atom entry.
+        // Numbers infer as the atom entry and lead.
         let entries = completion_entries(&gid, "2.5");
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_number() == Some(2.5)));
+
+        // Unnamed nodes are offered too, searchable by the short id
+        // they render as — including edgeless ones only referenced
+        // as values — and an exact suffix ranks first. A hex suffix
+        // can happen to parse as a number ("12345", "12e45") and
+        // legitimately cede the lead to the atom, so pick one that
+        // doesn't.
+        let orphan = std::iter::repeat_with(new_node_id)
+            .find(|node| {
+                short_id(*node)
+                    .trim_start_matches('…')
+                    .parse::<f64>()
+                    .is_err()
+            })
+            .unwrap();
+        let scratch = new_node_id();
+        gid.set(scratch, Id::from("ref"), Id::from(orphan));
+        let suffix = short_id(orphan);
+        let entries = completion_entries(&gid, suffix.trim_start_matches('…'));
+        assert_eq!(entries[0].display, suffix);
+        assert!(entries[0].detail.is_none());
+        assert!(
+            matches!(&entries[0].action, EntryAction::Value(id) if id.as_node_id() == Some(orphan))
+        );
     }
 
     #[test]
@@ -1680,7 +1771,9 @@ mod tests {
         assert_eq!(resolve_query("abc"), Id::from("abc"));
         assert_eq!(resolve_query("\"3.5\""), Id::from("3.5"));
         assert_eq!(resolve_query(""), Id::from(""));
-        assert_eq!(resolve_query("\""), Id::from("\""));
+        // A leading quote is string mode even before it closes.
+        assert_eq!(resolve_query("\"3.5"), Id::from("3.5"));
+        assert_eq!(resolve_query("\""), Id::from(""));
     }
 
     #[test]

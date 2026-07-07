@@ -518,9 +518,15 @@ that node and its parent.
   navigating away discards the stage — pending is selection state, so
   deselection is disposal. The ranked completion popup rides both
   stages' queries (2026-07-06): the universal layer as entries — the
-  inferred atom first, references to everything named (document and
-  orphans alike, fuzzy-ranked, short ids as detail), and a fresh node
-  named after the query (create-on-reference) — drawn by the shell
+  inferred atom, node references (fuzzy-ranked, short ids as
+  detail), and a fresh node named after the query
+  (create-on-reference). The atom leads only when the query states
+  atom intent — a leading quote (string mode holds while typing,
+  before the close) or a numeric parse; otherwise confident
+  reference matches (prefix/substring tiers) outrank the typed
+  string, which sits above only fuzzy matches — typing a visible
+  name or short id defaults to the reference, and quoting always
+  forces the string. Entries are drawn by the shell
   after the body from the frame's popup output, driven by Up/Down and
   committed by Enter or by clicking a row — the card swallows other
   clicks so nothing lands on content underneath. Vertical arrows
@@ -541,7 +547,10 @@ Deferred behind projections.
   that parses is a number; quotes force a string), a fresh node, and
   name search across the document and orphan pool (isa shown beside
   matches for disambiguation), whose misses become
-  create-on-reference. Raw offers only the universal layer, so the
+  create-on-reference. Every node is referenceable (2026-07-06):
+  unnamed nodes join the search keyed by the short id they render as
+  — what you see is what you can type — trailing named matches on an
+  empty query, so anonymous nodes (lists included) can be aliased. Raw offers only the universal layer, so the
   root is not special: name-and-isa search works there like anywhere.
   Domain projections own their root offers (a fresh document of their
   kind — templates) later; shape-recognized projections bootstrap

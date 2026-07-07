@@ -18,6 +18,16 @@ pub struct Match {
 pub struct Ranked<A> {
     pub item: A,
     pub matches: Vec<Match>,
+    tier: usize,
+}
+
+impl<A> Ranked<A> {
+    /// Whether the item was accepted by a fuzzy-subsequence tier
+    /// rather than a prefix/substring one — a weak signal callers may
+    /// rank differently.
+    pub fn fuzzy(&self) -> bool {
+        self.tier >= 4
+    }
 }
 
 type CharEq = fn(char, char) -> bool;
@@ -83,6 +93,7 @@ pub fn rank<A>(items: Vec<A>, key: impl Fn(&A) -> &str, needle: &str) -> Vec<Ran
                 Ranked {
                     item,
                     matches: vec![Match { start: 0, len }],
+                    tier: 0,
                 }
             })
             .collect();
@@ -97,13 +108,17 @@ pub fn rank<A>(items: Vec<A>, key: impl Fn(&A) -> &str, needle: &str) -> Vec<Ran
     ];
     let mut remaining = items;
     let mut ranked = Vec::new();
-    for (matcher, eq) in tiers {
+    for (tier, (matcher, eq)) in tiers.into_iter().enumerate() {
         let mut accepted = Vec::new();
         remaining = remaining
             .into_iter()
             .filter_map(|item| match matcher(needle, key(&item), eq) {
                 Some(matches) => {
-                    accepted.push(Ranked { item, matches });
+                    accepted.push(Ranked {
+                        item,
+                        matches,
+                        tier,
+                    });
                     None
                 }
                 None => Some(item),
