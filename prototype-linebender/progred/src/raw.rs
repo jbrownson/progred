@@ -11,6 +11,7 @@
 //! exist; raw itself owns friendly renderings for what it knows).
 
 use crate::conventions::NAME;
+use crate::filter;
 use parley::StyleProperty;
 use parley::style::FontFamily;
 use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id, position};
@@ -202,6 +203,18 @@ impl Cx<'_> {
             _ => None,
         }
     }
+
+    /// The label query of a new edge being authored on `path`.
+    fn pending_edge_under(&self, path: &[Id]) -> Option<(&LineEditState, usize)> {
+        match self.selection {
+            Some(Selection::PendingEdge {
+                parent,
+                query,
+                choice,
+            }) if parent.as_slice() == path => Some((query, *choice)),
+            _ => None,
+        }
+    }
 }
 
 /// A location in the projected spanning tree: the sequence of edge
@@ -221,14 +234,34 @@ pub type Path = Vec<Id>;
 /// discards the pending edge entirely.
 pub enum Selection {
     Edge { path: Path, edit: Option<LineEditState> },
-    Pending { path: Path, query: LineEditState },
+    /// A nonexistent edge's value being authored (the root included).
+    Pending {
+        path: Path,
+        query: LineEditState,
+        /// Which completion entry commits; clamped against the
+        /// frame's recomputed entries at use.
+        choice: usize,
+    },
+    /// A new edge on `parent` whose label is being authored; resolving
+    /// the label advances to the value stage (or selects the existing
+    /// edge if the label is taken).
+    PendingEdge {
+        parent: Path,
+        query: LineEditState,
+        choice: usize,
+    },
 }
 
 impl Selection {
     /// Select the edge at `path`; a string or number value brings a
     /// focused editor (the root included — its commits target the
-    /// document's root field).
+    /// document's root field). Selecting the empty document's root is
+    /// already authoring it: there is nothing there to select, only
+    /// something to begin, so it pends immediately.
     pub fn edge(doc: &Document, path: Path) -> Self {
+        if path.is_empty() && doc.root.is_none() {
+            return pending_value(path);
+        }
         let edit = resolve(doc, &path)
             .and_then(|value| {
                 value
@@ -246,20 +279,25 @@ impl Selection {
     pub fn path(&self) -> &[Id] {
         match self {
             Selection::Edge { path, .. } | Selection::Pending { path, .. } => path,
+            Selection::PendingEdge { parent, .. } => parent,
         }
     }
 
     pub fn edit(&self) -> Option<&LineEditState> {
         match self {
             Selection::Edge { edit, .. } => edit.as_ref(),
-            Selection::Pending { query, .. } => Some(query),
+            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => {
+                Some(query)
+            }
         }
     }
 
     pub fn edit_mut(&mut self) -> Option<&mut LineEditState> {
         match self {
             Selection::Edge { edit, .. } => edit.as_mut(),
-            Selection::Pending { query, .. } => Some(query),
+            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => {
+                Some(query)
+            }
         }
     }
 }
@@ -330,15 +368,33 @@ fn positions_of(gid: &MutGid, node: &Id) -> Vec<Id> {
     positions
 }
 
-fn pending(path: Path) -> Selection {
+/// A value-stage pending: the edge named by `path` does not exist,
+/// and its value is being authored.
+pub fn pending_value(path: Path) -> Selection {
     Selection::Pending {
         path,
         query: line_edit("", QUERY_COLOR),
+        choice: 0,
     }
 }
 
+/// A new edge on the node at `parent`, its label to be authored.
+/// Raw's one insertion: a node is a bag of labeled edges, and adding
+/// to it means adding an edge — no list semantics here (the future
+/// list projection owns element gestures).
+pub fn pending_edge(doc: &Document, parent: Path) -> Option<Selection> {
+    resolve(doc, &parent)?.as_node_id()?;
+    Some(Selection::PendingEdge {
+        parent,
+        query: line_edit("", QUERY_COLOR),
+        choice: 0,
+    })
+}
+
 /// A pending sibling next to the element at `path` (which must sit at
-/// a position label), minted between it and its neighbor.
+/// a position label), minted between it and its neighbor. Parked for
+/// the list projection: raw's gestures no longer mint positions.
+#[allow(dead_code)]
 fn pending_beside(doc: &Document, path: &[Id], after: bool) -> Option<Selection> {
     let (label, parent_path) = path.split_last()?;
     position::as_position(label)?;
@@ -352,38 +408,58 @@ fn pending_beside(doc: &Document, path: &[Id], after: bool) -> Option<Selection>
     };
     let mut fresh_path = parent_path.to_vec();
     fresh_path.push(fresh);
-    Some(pending(fresh_path))
+    Some(pending_value(fresh_path))
 }
 
+#[allow(dead_code)]
 pub fn pending_after(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_beside(doc, path, true)
 }
 
+#[allow(dead_code)]
 pub fn pending_before(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_beside(doc, path, false)
 }
 
-/// A pending first element inside the node at `path`. Element
-/// insertion applies where elements plausibly live — nodes with
-/// position edges, or empty nodes, which is how lists begin; a node
-/// with only record fields declines (field insertion, with its
-/// pending label, is a separate gesture).
-pub fn pending_into(doc: &Document, path: &[Id]) -> Option<Selection> {
+/// A pending element inside the node at `path`, appended at the end
+/// or prepended at the front. Element insertion applies where
+/// elements plausibly live — nodes with position edges, or empty
+/// nodes, which is how lists begin; a node with only record fields
+/// declines (field insertion, with its pending label, is a separate
+/// gesture).
+#[allow(dead_code)]
+fn pending_into_at(doc: &Document, path: &[Id], end: bool) -> Option<Selection> {
     let value = resolve(doc, path)?;
     value.as_node_id()?;
     let positions = positions_of(&doc.gid, value);
     let record_only = positions.is_empty()
         && doc.gid.edges(value).is_some_and(|edges| !edges.is_empty());
     (!record_only).then_some(())?;
-    let fresh = position::between(None, positions.first())?;
+    let fresh = if end {
+        position::between(positions.last(), None)?
+    } else {
+        position::between(None, positions.first())?
+    };
     let mut fresh_path = path.to_vec();
     fresh_path.push(fresh);
-    Some(pending(fresh_path))
+    Some(pending_value(fresh_path))
+}
+
+/// Appends: "add to this list" goes at the end. Parked with its
+/// siblings for the list projection.
+#[allow(dead_code)]
+pub fn pending_into(doc: &Document, path: &[Id]) -> Option<Selection> {
+    pending_into_at(doc, path, true)
+}
+
+#[allow(dead_code)]
+pub fn pending_into_first(doc: &Document, path: &[Id]) -> Option<Selection> {
+    pending_into_at(doc, path, false)
 }
 
 /// A pending root for an empty document.
 pub fn pending_root(doc: &Document) -> Option<Selection> {
-    doc.root.is_none().then(|| pending(Vec::new()))
+    doc.root.is_none().then(|| pending_value(Vec::new()))
 }
 
 /// The identity a pending query resolves to: quotes force a string,
@@ -401,6 +477,112 @@ pub fn resolve_query(text: &str) -> Id {
             .map(Id::from)
             .unwrap_or_else(|_| Id::from(text)),
     }
+}
+
+/// A completion offer on a pending edge. The display styles itself by
+/// the action's kind at draw time.
+#[derive(Clone)]
+pub struct Entry {
+    pub display: String,
+    pub detail: Option<String>,
+    pub action: EntryAction,
+}
+
+#[derive(Clone)]
+pub enum EntryAction {
+    /// Commit this identity: an inferred atom or a reference.
+    Value(Id),
+    /// Mint a node, optionally named, and commit it.
+    NewNode { name: Option<String> },
+}
+
+/// The completion popup a pending row emits during placement; the
+/// shell draws it after the body and commits from it. Recomputed
+/// every frame like everything else.
+pub struct Popup {
+    pub anchor: Rect,
+    pub entries: Vec<Entry>,
+    pub choice: usize,
+}
+
+/// Placement contexts that carry the frame's popup.
+pub trait HasPopup {
+    fn popup(&mut self) -> &mut Option<Popup>;
+}
+
+/// The universal completion layer for `query`: the inferred atom,
+/// references to everything named (document and orphans alike, ranked
+/// by the fuzzy tiers), and a fresh node — named after the query when
+/// there is one, the create-on-reference of the floating-definitions
+/// design.
+fn completion_entries(gid: &MutGid, query: &str) -> Vec<Entry> {
+    let atom = resolve_query(query);
+    let display = match atom.as_str() {
+        Some(s) => format!("\"{s}\""),
+        None => atom
+            .as_number()
+            .map(|n| n.to_string())
+            .unwrap_or_default(),
+    };
+    let mut entries = vec![Entry {
+        display,
+        detail: None,
+        action: EntryAction::Value(atom),
+    }];
+    let named: Vec<(String, Id)> = gid
+        .entities()
+        .filter_map(|node| {
+            let id = Id::from(*node);
+            let name = gid.get(&id, &Id::from(NAME))?.as_str()?.to_string();
+            Some((name, id))
+        })
+        .collect();
+    entries.extend(
+        filter::rank(named, |(name, _)| name, query)
+            .into_iter()
+            .take(8)
+            .map(|ranked| {
+                let (name, id) = ranked.item;
+                let detail = id.as_node_id().map(short_id);
+                Entry {
+                    display: name,
+                    detail,
+                    action: EntryAction::Value(id),
+                }
+            }),
+    );
+    let name = (!query.trim().is_empty()).then(|| query.trim().to_string());
+    entries.push(Entry {
+        display: match &name {
+            Some(name) => format!("new node \"{name}\""),
+            None => "new node".to_string(),
+        },
+        detail: None,
+        action: EntryAction::NewNode { name },
+    });
+    entries
+}
+
+/// Resolves a chosen entry to the identity it denotes, minting and
+/// naming for a new node. Labels and values resolve alike.
+pub fn resolve_entry(doc: &mut Document, action: &EntryAction) -> Id {
+    match action {
+        EntryAction::Value(id) => id.clone(),
+        EntryAction::NewNode { name } => {
+            let node = new_node_id();
+            if let Some(name) = name {
+                doc.gid.set(node, Id::from(NAME), Id::from(name.as_str()));
+            }
+            Id::from(node)
+        }
+    }
+}
+
+/// Commits a pending edge from a chosen entry: resolves the action to
+/// an identity and writes it.
+pub fn commit_pending(doc: &mut Document, path: &[Id], action: &EntryAction) -> bool {
+    let value = resolve_entry(doc, action);
+    set_value(doc, path, value)
 }
 
 /// Writes `value` at `path` — the empty path writes the document
@@ -593,7 +775,7 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     })
 }
 
-pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     doc: &Document,
     selection: Option<&Selection>,
     collapse: &Collapse,
@@ -633,7 +815,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 /// disclosure delta to the right of the header — outside the indent —
 /// that toggles collapse; collapsed (by default a cycle, or forced by
 /// an override) it shows only the header.
-fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Id],
@@ -653,11 +835,13 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     }
     let id_text = text(tcx, &short_id(node), &cx.styles.dim);
 
-    if entries.is_empty() {
+    let pending_edge = cx.pending_edge_under(path).is_some();
+    if entries.is_empty() && !pending_edge {
         return id_text;
     }
-    // A pending child forces the node open so it can be seen.
-    let collapsed = entries.iter().all(|(_, value)| value.is_some())
+    // A pending child or edge forces the node open so it can be seen.
+    let collapsed = !pending_edge
+        && entries.iter().all(|(_, value)| value.is_some())
         && cx.collapse.collapsed(path, ancestors.contains(&id));
     let header = row(
         4.0 * scale,
@@ -669,7 +853,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 
     let mut inner = ancestors.clone();
     inner.insert(id);
-    let rows = entries
+    let mut rows: Vec<Node<P>> = entries
         .into_iter()
         .map(|(label, value)| {
             let mut child = path.to_vec();
@@ -682,6 +866,18 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
             row(6.0 * scale, vec![label, arrow(cx.styles), content])
         })
         .collect();
+    // A new edge being authored: the label query, unsorted until it
+    // has a label to sort by.
+    if let Some((query, choice)) = cx.pending_edge_under(path) {
+        rows.push(row(
+            6.0 * scale,
+            vec![
+                query_content(cx, tcx, query, choice, hooks),
+                arrow(cx.styles),
+                text(tcx, "…", &cx.styles.dim),
+            ],
+        ));
+    }
     col(
         HAlign::Start,
         0,
@@ -819,7 +1015,7 @@ fn arrow<P: Canvas>(styles: &RawStyles) -> Node<P> {
     })
 }
 
-fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Id],
@@ -858,19 +1054,123 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 
 /// A nonexistent edge the selection is authoring: the completion
 /// query's focused editor, wrapped as an ordinary descend so it
-/// highlights, clicks, and navigates like the edge it may become.
-fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+/// highlights, clicks, and navigates like the edge it may become. Its
+/// placement emits the completion popup for the shell to draw over
+/// the body.
+fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let editing = cx
-        .selection
-        .filter(|selection| selection.path() == path.as_slice())
-        .and_then(Selection::edit);
-    let content = atom_content(editing, text(tcx, "…", &cx.styles.dim), cx.styles, hooks);
+    let content = match cx.selection {
+        Some(Selection::Pending {
+            path: pending,
+            query,
+            choice,
+        }) if pending.as_slice() == path.as_slice() => {
+            query_content(cx, tcx, query, *choice, hooks)
+        }
+        _ => text(tcx, "…", &cx.styles.dim),
+    };
     descend(cx, path, hooks, content)
+}
+
+/// A focused completion query: the editor plus its popup, emitted at
+/// placement for the shell to draw over the body. Serves both pending
+/// stages — a value and a new edge's label.
+fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    query: &LineEditState,
+    choice: usize,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let entries = completion_entries(cx.gid, &query.editor.text().to_string());
+    let content = atom_content(Some(query), text(tcx, "…", &cx.styles.dim), cx.styles, hooks);
+    decorate(content, move |p: &mut P, rect| {
+        *p.popup() = Some(Popup {
+            anchor: rect,
+            entries,
+            choice,
+        });
+    })
+}
+
+/// The drawn completion card: entry rows under the pending anchor,
+/// the chosen one highlighted, styled by what each entry commits.
+/// The shell places it after the body, so it overlays and its
+/// handlers win: clicking a row commits it, and the card swallows
+/// every other click so nothing lands on content underneath.
+pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
+    tcx: &mut TextCtx,
+    styles: &RawStyles,
+    popup: &Popup,
+    commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
+) -> Node<P> {
+    let scale = styles.scale;
+    let choice = popup.choice.min(popup.entries.len().saturating_sub(1));
+    let rows: Vec<Node<P>> = popup
+        .entries
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            let style = match &entry.action {
+                EntryAction::Value(id) if id.as_str().is_some() => &styles.string,
+                EntryAction::Value(id) if id.as_number().is_some() => &styles.number,
+                EntryAction::Value(_) => &styles.label,
+                EntryAction::NewNode { .. } => &styles.dim,
+            };
+            let mut cells: Vec<Node<P>> = vec![text(tcx, &entry.display, style)];
+            if let Some(detail) = &entry.detail {
+                cells.push(text(tcx, detail, &styles.dim));
+            }
+            let content = pad(
+                Insets::new(8.0 * scale, 2.0 * scale, 8.0 * scale, 2.0 * scale),
+                row(8.0 * scale, cells),
+            );
+            let chosen = index == choice;
+            let action = entry.action.clone();
+            let commit = commit.clone();
+            decorate(content, move |p: &mut P, rect| {
+                if chosen {
+                    p.fill(
+                        RoundedRect::from_rect(rect, 4.0 * scale),
+                        Color::new([0.0, 0.48, 1.0, 0.14]),
+                        Affine::IDENTITY,
+                    );
+                }
+                p.handler().on_pointer_down(move |ctx, event| {
+                    event.button == Some(PointerButton::Primary)
+                        && rect.contains(Point::new(
+                            event.state.position.x,
+                            event.state.position.y,
+                        ))
+                        && {
+                            commit(ctx, &action);
+                            true
+                        }
+                });
+            })
+        })
+        .collect();
+    let card = pad(
+        Insets::uniform(4.0 * scale),
+        col(HAlign::Start, 0, 2.0 * scale, rows),
+    );
+    decorate(card, move |p: &mut P, rect| {
+        let shape = RoundedRect::from_rect(rect, 6.0 * scale);
+        p.fill(shape, Color::new([1.0, 1.0, 1.0, 1.0]), Affine::IDENTITY);
+        p.stroke(
+            shape,
+            Stroke::new(1.0 * scale),
+            Color::new([0.75, 0.77, 0.81, 1.0]),
+            Affine::IDENTITY,
+        );
+        p.handler().on_pointer_down(move |_, event| {
+            rect.contains(Point::new(event.state.position.x, event.state.position.y))
+        });
+    })
 }
 
 /// An editable atom's content: the selection's focused editor when
@@ -1148,9 +1448,14 @@ mod tests {
         };
         assert!(path[0] < positions[0]);
 
-        // Into the root list: a first element before everything.
+        // Into the root list appends at the end; the first variant
+        // prepends.
         let Some(Selection::Pending { path, .. }) = pending_into(&doc, &[]) else {
             panic!("pending into");
+        };
+        assert!(positions[1] < path[0]);
+        let Some(Selection::Pending { path, .. }) = pending_into_first(&doc, &[]) else {
+            panic!("pending into first");
         };
         assert!(path[0] < positions[0]);
 
@@ -1168,6 +1473,7 @@ mod tests {
         // positional element.
         assert!(pending_into(&doc, &[Id::from("name")]).is_none());
         assert!(pending_into(&doc, &[]).is_none());
+        assert!(pending_into_first(&doc, &[]).is_none());
         // An empty document offers the root; a rooted one does not.
         assert!(pending_root(&doc).is_none());
         let empty = Document {
@@ -1178,6 +1484,92 @@ mod tests {
             pending_root(&empty),
             Some(Selection::Pending { path, .. }) if path.is_empty()
         ));
+        // Selecting the empty root pends immediately.
+        assert!(matches!(
+            Selection::edge(&empty, Vec::new()),
+            Selection::Pending { .. }
+        ));
+    }
+
+    #[test]
+    fn pending_edge_targets_nodes_only() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("name"), Id::from("x"));
+        let doc = Document {
+            root: Some(Id::from(node)),
+            gid,
+        };
+        assert!(matches!(
+            pending_edge(&doc, Vec::new()),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
+        // An atom takes no edges; an empty document has no node.
+        assert!(pending_edge(&doc, vec![Id::from("name")]).is_none());
+        let empty = Document {
+            root: None,
+            gid: MutGid::new(),
+        };
+        assert!(pending_edge(&empty, Vec::new()).is_none());
+    }
+
+    #[test]
+    fn completion_offers_atom_references_and_new_node() {
+        let mut gid = MutGid::new();
+        for name in ["origin", "corner"] {
+            let node = new_node_id();
+            gid.set(node, Id::from(NAME), Id::from(name));
+        }
+
+        let entries = completion_entries(&gid, "orig");
+        assert_eq!(entries[0].display, "\"orig\"");
+        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str().is_some()));
+        // "corner" has no i, so only "origin" matches the query.
+        assert_eq!(entries[1].display, "origin");
+        assert!(entries[1].detail.is_some());
+        assert_eq!(entries.len(), 3);
+        assert!(matches!(
+            &entries.last().unwrap().action,
+            EntryAction::NewNode { name: Some(name) } if name == "orig"
+        ));
+
+        // An empty query offers everything named, unnamed creation,
+        // and the empty string.
+        let entries = completion_entries(&gid, "");
+        assert_eq!(entries.len(), 4);
+        assert!(matches!(
+            &entries.last().unwrap().action,
+            EntryAction::NewNode { name: None }
+        ));
+
+        // Numbers infer as the atom entry.
+        let entries = completion_entries(&gid, "2.5");
+        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_number() == Some(2.5)));
+    }
+
+    #[test]
+    fn commit_pending_mints_named_nodes() {
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        gid.set(root, Id::from("x"), Id::from(1.0));
+        let mut doc = Document {
+            root: Some(Id::from(root)),
+            gid,
+        };
+        let path = vec![Id::from("fresh")];
+        assert!(commit_pending(
+            &mut doc,
+            &path,
+            &EntryAction::NewNode {
+                name: Some("thing".into())
+            }
+        ));
+        let value = resolve(&doc, &path).unwrap().clone();
+        assert!(value.as_node_id().is_some());
+        assert_eq!(
+            doc.gid.get(&value, &Id::from(NAME)),
+            Some(&Id::from("thing"))
+        );
     }
 
     #[test]

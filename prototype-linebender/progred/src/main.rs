@@ -2,8 +2,6 @@
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
 mod conventions;
-// Consumed by the completion popup, the next increment.
-#[allow(dead_code)]
 mod filter;
 // Benched while the raw view trials git-style id suffixes; the sample
 // sheet still draws identicons and a future graph view is their
@@ -24,7 +22,7 @@ use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::edit::EditCtx;
+use puri::edit::{EditCtx, LineEditState};
 use puri::handler::{Handler, HasHandler, ImeEvent};
 use puri::layout::place_top_left;
 use puri::text::TextCtx;
@@ -226,6 +224,7 @@ impl ApplicationHandler<MenuEvent> for App {
                     handler: Handler::new(),
                     descends: Vec::new(),
                     max_scroll: 0.0,
+                    popup: None,
                 };
                 run_frame(
                     &mut frame,
@@ -239,6 +238,7 @@ impl ApplicationHandler<MenuEvent> for App {
                     handler,
                     descends,
                     max_scroll,
+                    popup,
                     ..
                 } = frame;
                 let handled = match (ime, translation) {
@@ -249,7 +249,7 @@ impl ApplicationHandler<MenuEvent> for App {
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
                             || self.delete_key(&descends, &key_event)
-                            || self.insert_key(&descends, &key_event)
+                            || self.insert_key(&descends, &popup, &key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &descends,
@@ -403,6 +403,15 @@ struct Frame<'a> {
     /// How far the document can scroll given this frame's content and
     /// viewport; dispatch clamps against it.
     max_scroll: f64,
+    /// The pending row's completion popup, emitted during placement;
+    /// drawn after the body and committed from at dispatch.
+    popup: Option<raw::Popup>,
+}
+
+impl raw::HasPopup for Frame<'_> {
+    fn popup(&mut self) -> &mut Option<raw::Popup> {
+        &mut self.popup
+    }
 }
 
 impl HasHandler<App> for Frame<'_> {
@@ -563,8 +572,10 @@ impl App {
                 Key::Named(NamedKey::Backspace | NamedKey::Delete)
             )
             && match &self.model.selection {
-                Some(selection) => {
-                    let path = selection.path().to_vec();
+                // Only a real edge deletes; a pending's Backspace is
+                // its cancel, handled by insert_key.
+                Some(raw::Selection::Edge { path, .. }) => {
+                    let path = path.clone();
                     raw::delete_edge(&mut self.model.doc, &path) && {
                         let next = raw::selection_after_delete(descends, &path);
                         self.model.selection =
@@ -572,25 +583,87 @@ impl App {
                         true
                     }
                 }
-                None => false,
+                _ => false,
             }
     }
 
-    /// Enter commits a pending edge or begins one — a sibling after
-    /// the selection, before it with Shift, the first element into a
-    /// selected node with the platform command modifier (also the
-    /// fallback when the selection has no position to sit beside),
-    /// and the root of an empty document. The query resolves to the
-    /// identity that commits; Escape — or Backspace on an empty
-    /// query — discards it with the graph untouched.
-    fn insert_key(&mut self, descends: &[raw::Descend], event: &KeyboardEvent) -> bool {
+    /// The chosen entry's action — from the frame's popup, else the
+    /// query's inferred atom.
+    fn chosen_action(
+        popup: &Option<raw::Popup>,
+        query: &LineEditState,
+        choice: usize,
+    ) -> raw::EntryAction {
+        popup
+            .as_ref()
+            .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
+            .map(|entry| entry.action.clone())
+            .unwrap_or_else(|| {
+                raw::EntryAction::Value(raw::resolve_query(&query.editor.text().to_string()))
+            })
+    }
+
+    /// A resolved label advances the pending edge to its value stage —
+    /// or selects the existing edge when the label is taken.
+    fn commit_label(&mut self, parent: raw::Path, action: &raw::EntryAction) {
+        let label = raw::resolve_entry(&mut self.model.doc, action);
+        let mut path = parent;
+        path.push(label);
+        self.model.selection = Some(match raw::resolve(&self.model.doc, &path) {
+            Some(_) => raw::Selection::edge(&self.model.doc, path),
+            None => raw::pending_value(path),
+        });
+    }
+
+    /// Enter advances a pending stage or begins one: a new edge on
+    /// the parent of the selection — on the selected node itself with
+    /// the platform command modifier, or when there is no parent —
+    /// authored label first, then value; on an empty document it
+    /// begins the root value. Escape — or Backspace on an empty
+    /// query — discards the stage with the graph untouched.
+    fn insert_key(
+        &mut self,
+        descends: &[raw::Descend],
+        popup: &Option<raw::Popup>,
+        event: &KeyboardEvent,
+    ) -> bool {
         event.state.is_down()
             && match &event.key {
+                // While pending, vertical arrows drive the popup choice.
+                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown)) => {
+                    match &mut self.model.selection {
+                        Some(
+                            raw::Selection::Pending { choice, .. }
+                            | raw::Selection::PendingEdge { choice, .. },
+                        ) => {
+                            let len = popup.as_ref().map(|p| p.entries.len()).unwrap_or(0);
+                            *choice = match direction {
+                                NamedKey::ArrowUp => choice.saturating_sub(1),
+                                _ => (*choice + 1).min(len.saturating_sub(1)),
+                            };
+                            true
+                        }
+                        _ => false,
+                    }
+                }
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(raw::Selection::Pending { path, query }) => {
-                        let value = raw::resolve_query(&query.editor.text().to_string());
-                        raw::set_value(&mut self.model.doc, &path, value);
+                    Some(raw::Selection::Pending {
+                        path,
+                        query,
+                        choice,
+                    }) => {
+                        let action = Self::chosen_action(popup, &query, choice);
+                        raw::commit_pending(&mut self.model.doc, &path, &action);
                         self.model.selection = Some(raw::Selection::edge(&self.model.doc, path));
+                        true
+                    }
+                    Some(raw::Selection::PendingEdge {
+                        parent,
+                        query,
+                        choice,
+                    }) => {
+                        let action = Self::chosen_action(popup, &query, choice);
+                        self.commit_label(parent, &action);
                         true
                     }
                     selection => {
@@ -601,13 +674,16 @@ impl App {
                         };
                         let started = match &selection {
                             Some(current) if command => {
-                                raw::pending_into(&self.model.doc, current.path())
+                                raw::pending_edge(&self.model.doc, current.path().to_vec())
                             }
-                            Some(current) if event.modifiers.shift() => {
-                                raw::pending_before(&self.model.doc, current.path())
+                            Some(current) => {
+                                let path = current.path();
+                                path.split_last()
+                                    .and_then(|(_, parent)| {
+                                        raw::pending_edge(&self.model.doc, parent.to_vec())
+                                    })
+                                    .or_else(|| raw::pending_edge(&self.model.doc, path.to_vec()))
                             }
-                            Some(current) => raw::pending_after(&self.model.doc, current.path())
-                                .or_else(|| raw::pending_into(&self.model.doc, current.path())),
                             None => raw::pending_root(&self.model.doc),
                         };
                         let began = started.is_some();
@@ -619,8 +695,16 @@ impl App {
                     match &self.model.selection {
                         Some(raw::Selection::Pending { path, .. }) => {
                             let back = raw::selection_after_delete(descends, path);
+                            // Escaping the empty document's root pending
+                            // deselects — reselecting it would pend again.
+                            self.model.selection = (!(back.is_empty()
+                                && self.model.doc.root.is_none()))
+                            .then(|| raw::Selection::edge(&self.model.doc, back));
+                            true
+                        }
+                        Some(raw::Selection::PendingEdge { parent, .. }) => {
                             self.model.selection =
-                                Some(raw::Selection::edge(&self.model.doc, back));
+                                Some(raw::Selection::edge(&self.model.doc, parent.clone()));
                             true
                         }
                         _ => false,
@@ -667,6 +751,7 @@ impl App {
             handler: Handler::new(),
             descends: Vec::new(),
             max_scroll: 0.0,
+            popup: None,
         };
         run_frame(
             &mut frame,
@@ -804,6 +889,28 @@ fn run_frame(
             margin - model.scroll.clamp(0.0, frame.max_scroll) * scale,
         ),
     );
+    // The pending row's popup draws after the body, so it overlays
+    // and its click targets win.
+    if let Some(popup) = frame.popup.take() {
+        let card = raw::popup_view(&mut tcx, &styles, &popup, |app: &mut App, action| {
+            match app.model.selection.take() {
+                Some(raw::Selection::Pending { path, .. }) => {
+                    raw::commit_pending(&mut app.model.doc, &path, action);
+                    app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
+                }
+                Some(raw::Selection::PendingEdge { parent, .. }) => {
+                    app.commit_label(parent, action);
+                }
+                selection => app.model.selection = selection,
+            }
+        });
+        place_top_left(
+            card,
+            frame,
+            Point::new(popup.anchor.x0, popup.anchor.y1 + 4.0 * scale),
+        );
+        frame.popup = Some(popup);
+    }
 }
 
 /// Dispatch-time access to the selection's editor. Only handlers the

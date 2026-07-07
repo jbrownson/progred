@@ -483,18 +483,41 @@ that node and its parent.
   per-descend commit closures for the root and for list gaps;
   ordered-identity lists removed the list motive, leaving the root as
   the one special-cased commit.
-- Insertion (2026-07-06, first pass): Enter begins a pending sibling
-  after the selection — Shift+Enter before, Cmd+Enter the first
-  element into a selected node (also the fallback when the selection
-  has no position to sit beside), and Enter on an empty document's
-  placeholder begins the root. The pending edge renders in place,
-  sorted among its would-be siblings, with the query editor focused;
-  Enter resolves the query to an identity (quotes force a string,
-  parsing text is a number) and commits it in one write; Escape,
-  empty-Backspace, or navigating away discards it — the pending edge
-  is selection state, so deselection is disposal. The ranked
-  completion popup (references, node creation) layers onto the same
-  pending row next.
+- Insertion (2026-07-06): raw's insertion is edge insertion,
+  uniformly. A node is a bag of labeled edges, so Enter begins a new
+  edge on the parent of the selection — on the selected node itself
+  with Cmd, or when there is no parent — authored in two stages
+  through the same completion: label first (string labels for the
+  casual gradient, references for schema-shaped GUID labels, a fresh
+  node minted on the spot), then value; resolving a label that
+  already exists selects the existing edge instead. The new edge
+  appears wherever its label sorts — raw makes no ordering promises.
+  A first pass minted position labels from the gesture (sibling
+  after/before, append into, Shift and Cmd variants), which was list
+  semantics leaked into the semantics-free layer; those gestures are
+  parked for the list projection, which owns element insertion —
+  ordering is a list concept, so Shift+Enter retires from raw with
+  them. On an empty document Enter begins the root value with no
+  label stage — the root is a value slot, not an edge. The pending
+  renders in place with the query editor focused — a value stage
+  sorted among its would-be siblings, a label stage unsorted at the
+  bottom of its node until it has a label to sort by; Enter resolves
+  the query to an identity (quotes force a string, parsing text is a
+  number) and commits in one write; Escape, empty-Backspace, or
+  navigating away discards the stage — pending is selection state, so
+  deselection is disposal. The ranked completion popup rides both
+  stages' queries (2026-07-06): the universal layer as entries — the
+  inferred atom first, references to everything named (document and
+  orphans alike, fuzzy-ranked, short ids as detail), and a fresh node
+  named after the query (create-on-reference) — drawn by the shell
+  after the body from the frame's popup output, driven by Up/Down and
+  committed by Enter or by clicking a row — the card swallows other
+  clicks so nothing lands on content underneath. Vertical arrows
+  belong to the popup while pending, so discard is Escape,
+  empty-Backspace, or selecting elsewhere. Selecting the empty
+  document's root pends immediately — there is nothing there to
+  select, only something to begin — with Escape deselecting rather
+  than re-pending.
 
 ## Types And Autocomplete
 
@@ -512,7 +535,10 @@ Deferred behind projections.
   Domain projections own their root offers (a fresh document of their
   kind — templates) later; shape-recognized projections bootstrap
   through the universal layer, since an empty root has no shape to
-  recognize.
+  recognize. Labels resolve through the same layer (2026-07-06): a
+  new edge is authored label-then-value, both stages one completion —
+  the contextual label gradient (SID strings casually, GUID
+  references where schema-shaped) needs no separate machinery.
 - Pending resolves identity (2026-07-06): no committing a string and
   reinterpreting it. The selection can name a nonexistent edge; the
   projection includes selected nonexistent edges as pending rows; the
