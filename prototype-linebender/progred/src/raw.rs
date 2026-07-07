@@ -1,16 +1,17 @@
 //! The raw projection: any gid document rendered as entity blocks of
 //! edge rows, with no schema and no interpretation of semantic
 //! conventions — every node is just its identicon, every edge a row,
-//! including `name`, and cons cells render as the plain nodes they
-//! are (list sugar belongs to a convention-aware projection). String
+//! including `name`, and lists render as the plain position-labeled
+//! nodes they are (list sugar belongs to a convention-aware
+//! projection). String
 //! and number labels render as their values, node labels and values
 //! get identicons, unparsable ids render as what they are.
 
-use crate::conventions::{EMPTY, HEAD, NAME, TAIL};
+use crate::conventions::NAME;
 use crate::identicon::{label_identicon, node_identicon};
 use parley::StyleProperty;
 use parley::style::FontFamily;
-use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id};
+use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id, position};
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
@@ -68,19 +69,23 @@ pub struct Document {
     pub gid: MutGid,
 }
 
-/// Builds a cons list from `items`, returning its head (or `EMPTY`).
-fn cons_list(gid: &mut MutGid, items: Vec<Id>) -> Id {
-    items.into_iter().rev().fold(Id::from(EMPTY), |tail, item| {
-        let cell = new_node_id();
-        gid.set(cell, Id::from(HEAD), item);
-        gid.set(cell, Id::from(TAIL), tail);
-        Id::from(cell)
-    })
+/// Builds a list: a fresh node whose element edges are ordered
+/// position labels.
+fn list(gid: &mut MutGid, items: Vec<Id>) -> Id {
+    let node = new_node_id();
+    let mut last: Option<Id> = None;
+    for item in items {
+        let pos = position::between(last.as_ref(), None).expect("appending after a valid position");
+        gid.set(node, pos.clone(), item);
+        last = Some(pos);
+    }
+    Id::from(node)
 }
 
 /// A small document exercising the model's range: named nodes, SID and
-/// GUID labels, cons lists, an unnamed scratch node, and a value from
-/// an unknown space. Its root is a list of the top-level entities.
+/// GUID labels, position-labeled lists, an unnamed scratch node, and a
+/// value from an unknown space. Its root is a list of the top-level
+/// entities.
 pub fn sample_document() -> Document {
     let mut gid = MutGid::new();
     let name = Id::from(NAME);
@@ -95,21 +100,15 @@ pub fn sample_document() -> Document {
     gid.set(corner, Id::from("x"), Id::from(4.0));
     gid.set(corner, Id::from("y"), Id::from(2.5));
 
-    let cell2 = new_node_id();
-    gid.set(cell2, Id::from(HEAD), Id::from(corner));
-    gid.set(cell2, Id::from(TAIL), Id::from(EMPTY));
-    let cell1 = new_node_id();
-    gid.set(cell1, Id::from(HEAD), Id::from(origin));
-    gid.set(cell1, Id::from(TAIL), Id::from(cell2));
-
     let stroke_width = new_node_id();
     gid.set(stroke_width, name.clone(), Id::from("stroke-width"));
 
     let polygon = new_node_id();
     gid.set(polygon, name.clone(), Id::from("polygon"));
-    gid.set(polygon, Id::from("points"), Id::from(cell1));
+    let points = list(&mut gid, vec![Id::from(origin), Id::from(corner)]);
+    gid.set(polygon, Id::from("points"), points);
     gid.set(polygon, Id::from(stroke_width), Id::from(1.5));
-    let dash = cons_list(&mut gid, vec![Id::from(2.0), Id::from(3.0)]);
+    let dash = list(&mut gid, vec![Id::from(2.0), Id::from(3.0)]);
     gid.set(polygon, Id::from("dash"), dash);
 
     let scratch = new_node_id();
@@ -123,7 +122,7 @@ pub fn sample_document() -> Document {
     // back-edge as a collapsed header rather than recursing forever.
     gid.set(scratch, Id::from("self"), Id::from(scratch));
 
-    let root = cons_list(
+    let root = list(
         &mut gid,
         vec![
             Id::from(polygon),
@@ -187,10 +186,10 @@ impl Cx<'_> {
 /// A location in the projected spanning tree: the sequence of edge
 /// labels from the root. The same node or edge can be projected at
 /// several paths, so the path — not the id — is the identity a
-/// selection names. Through a cons list a path is a chain of tail
-/// labels — positional, not the cell-anchored stability
-/// `docs/model.md` asks of splices — so path elements grow cell
-/// anchors when edits land.
+/// selection names. Through a cons list a path is positional (a tail
+/// chain); when list editing demands stability, structural edits will
+/// adjust all path-keyed state through one general rewrite — see
+/// `docs/model.md`.
 pub type Path = Vec<Id>;
 
 /// What is selected. An edge (the value at a path) for now; splice
@@ -433,8 +432,9 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
         selection,
     };
     // Raw shows the pure graph with no assumptions: the root is
-    // projected directly, so a cons-list root renders as its cells, not
-    // as a list. List sugar belongs to a convention-aware projection.
+    // projected directly, so a list root renders as its
+    // position-labeled edges, not as `[a, b, c]`. List sugar belongs
+    // to a convention-aware projection.
     value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), &doc.root, &hooks)
 }
 

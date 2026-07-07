@@ -8,8 +8,9 @@ Date: 2026-07-03
   says node id, string, number). GUIDs are minted identity for mutable
   nodes; SIDs and NIDs are identity the value itself carries. Edges are
   single-valued per label; labels are IDs.
-- Lists are graph structure by convention (cons/empty cells with
-  well-known node ids), not a data-layer primitive and not values.
+- Lists are graph structure by convention — position-space labels
+  whose identity order is the sequence (2026-07-06; previously cons
+  cells) — not a data-layer primitive and not values.
 - There are no compound values.
 - No special fields in the data layer. The editor layer treats some
   labels specially (name, isa, cons) the way a text editor treats
@@ -141,6 +142,49 @@ Considered and settled 2026-07-05:
   is already exactly embedded as (NODE_SPACE, node id) with its
   spelling preserved).
 
+## Lists
+
+- Encoded as ordered-identity labels (2026-07-06): a list is a node
+  whose element edges are labeled by position-space values, and the
+  labels' identity order is the sequence. Insertion mints
+  `between(prev, next)` and sets one edge; removal deletes one edge;
+  no other element's address moves, so the silent re-addressing class
+  (delete the first item and a collapse override on the
+  second-to-last now collapses the last) does not exist for lists.
+  Single-valued-per-label gives one element per position, and `[2, 2]`
+  is two edges under distinct position labels — the position identity
+  cons cells existed to manufacture, carried directly by the label.
+- The position space: payloads are byte strings read as the binary
+  fraction `0.b₁b₂…`, so trailing zero bits are value-neutral and the
+  canonical form is nonempty with a nonzero final byte — one spelling
+  per position, strict reads for free, no headers or length fields.
+  Plain lexicographic payload comparison is the dense order, so the
+  derived id ordering already sorts lists and the raw projection
+  displays them in order unmodified. `between(a, b)` always exists
+  and generates bit-aware, so identifiers grow about a bit per
+  adversarial same-gap insert — the immutable-label side of the
+  order-maintenance trade (Dietz–Sleator; Treedoc, Logoot, and LSEQ
+  are the CRDT ancestors). Compaction, if a pathological editing
+  pattern ever wants it, is an explicit structural edit through the
+  path rewrite, never a silent tax on insertion.
+- Supersedes the cons encoding, an FP-background default: tail chains
+  address by route, so every sibling edit re-addressed the suffix and
+  every edit was cell surgery. Old cons documents remain loadable —
+  the raw projection renders any graph — but the convention and its
+  well-known ids (head, tail, empty) are retired.
+- Ordered edge-sets in the data layer were the third option,
+  rejected: ambient order would force meaning onto every record (is
+  `name`-first significant?), a freedom nothing wants. Order stays
+  opt-in, carried by the labels a convention chooses — each element
+  in a stable bucket, the buckets ordered.
+- Costs, accepted: no structural tail-sharing (reference the node to
+  share), range operations relabel O(n), an empty list needs a
+  convention marker (nothing else distinguishes it from an empty
+  record), and traversal is a sort the projection already does.
+  Position-identifier schemes interleave oddly under concurrent
+  merging; irrelevant single-user, remember it if collaboration
+  arrives.
+
 ## Rejected: JSON-Shaped Value Model
 
 Considered and rejected 2026-07-03: records-with-GUIDs plus immutable
@@ -155,18 +199,27 @@ reasoning is kept because the idea will recur.
   per-element identities for the same reason, presenting JSON lists
   while keeping identity-bearing positions underneath.
 - Positions need identity precisely because leaves may not have it: in
-  `[2, 2]` both elements are the same NID; only the cell distinguishes
-  them. Cons cells manufacture position identity — that is their
-  justification, not Lisp nostalgia.
+  `[2, 2]` both elements are the same NID; only the position
+  distinguishes them. Cons cells manufactured that identity — their
+  justification, not Lisp nostalgia — and position labels now carry
+  it directly (2026-07-06).
 - Coupling identity semantics to shape (records mutable with identity,
   lists immutable values) is an arbitrary asymmetry. One law instead:
-  GUIDs are minted identity, scalars carry their own, order is
-  structure.
+  GUIDs are minted identity, scalars carry their own, and sequence
+  never lives in mutable side-data (an earlier wording, "order is
+  structure", overclaimed: ordered identity satisfies the law too).
 - Content-addressed compound IDs (Unison-style hashing) were also
   considered and rejected: hashing a graph requires declaring which
   edges are content and which are incidental, and arbitrary graphs have
   no natural content boundary. To share a structure, reference its
   node — that is what the model is for.
+- Revisited 2026-07-06 with lists-as-values sketched in earnest: the
+  path-addressing argument turned out not to discriminate — label
+  paths through cons tails are exactly as positional as integer keys —
+  but the rejection stands on the grounds that remain: splice
+  selection solves the list projection problem without growing the
+  data model, the bootstrapping relief is minor, and the smaller
+  substrate wins by default.
 
 What survives is projection-level: the default projection renders list
 structure as `[a, b, c]`, and the pitch to programmers stays "like
@@ -299,11 +352,14 @@ Selection is (location, mode): the node at a path, or the gap between
 that node and its parent.
 
 - Gaps subsume list insertion points: between items, before the first,
-  after the last (the gap before the terminator), and the sole point in
-  an empty list. Whole-list versus before-first-item stops being
-  ambiguous.
-- Splices anchor on cons-cell GUIDs, so they stay valid across sibling
-  edits — the stability that index-based positions cannot offer.
+  after the last, and the sole point in an empty list. Whole-list
+  versus before-first-item stops being ambiguous. With
+  ordered-identity lists a gap is directly representable by its
+  neighboring positions, and committing an insertion is
+  `between(prev, next)` plus one edge set.
+- A splice names the gap at a path like any selection; stability
+  across sibling edits is the general path-adjustment problem below,
+  not a special splice property.
 - Edge gaps generalize beyond lists: a splice on any edge is the
   wrap/insert-around position.
 - This replaces list-specific selection variants from earlier
@@ -314,15 +370,21 @@ that node and its parent.
   which is much of why text editing feels fluid and node-only
   structural selection feels clunky. Splice imports the between-ness
   honestly.
-- The implemented selection (2026-07-05) is not yet this:
-  `Selection::Edge` names a path of edge labels from the root, and
-  through a cons list that is a tail-label chain — positional
-  addressing, exactly what cell anchoring exists to avoid. Fine while
-  selection is the only interaction; when edits land, path elements
-  need cell anchors (e.g. (label, value id) pairs) so selections
-  survive sibling edits. The label sequence alone remains the
-  projection-identity half — the same node projected at several paths
-  is distinguished by path, never by id.
+- Paths stay plain label sequences. Decorating path elements with the
+  value ids seen (cell anchors) was considered and rejected
+  (2026-07-06): an id detects drift but does not correct it, and the
+  same staleness lives in every path-keyed state — delete the first
+  list item and a collapse override on the second-to-last now
+  collapses the last — which selection-side anchors cannot touch. The
+  honest mechanism, when list editing demands it, is general and
+  structured: a structural edit adjusts all path-keyed state
+  (selection, collapse overrides, whatever joins them) through one
+  rewrite, the way text editors adjust marks. Ordered-identity lists
+  (2026-07-06) then dissolved the list instance of the staleness —
+  sibling edits no longer move any address — leaving wraps and
+  unwraps as the rewrite's remaining customers. The label sequence
+  remains projection identity — the same node projected at several
+  paths is distinguished by path, never by id.
 
 ## Editing
 
