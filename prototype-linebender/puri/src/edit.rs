@@ -151,7 +151,10 @@ impl LineEditState {
                 }
                 true
             }
-            Key::Named(NamedKey::Delete) => {
+            // Delete keys decline on an empty buffer — a no-op edit is
+            // not a handled edit — so the caller can interpret them
+            // (delete the element, join, whatever).
+            Key::Named(NamedKey::Delete) if drv.editor.text() != "" => {
                 if action_mod {
                     drv.delete_word();
                 } else {
@@ -159,7 +162,7 @@ impl LineEditState {
                 }
                 true
             }
-            Key::Named(NamedKey::Backspace) => {
+            Key::Named(NamedKey::Backspace) if drv.editor.text() != "" => {
                 if action_mod {
                     drv.backdelete_word();
                 } else {
@@ -431,6 +434,37 @@ mod tests {
             Key::Named(NamedKey::Escape),
             Modifiers::empty(),
         ));
+    }
+
+    #[test]
+    fn delete_keys_decline_on_an_empty_buffer() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut state = LineEditState::new("x", 16.0);
+
+        press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::End),
+            Modifiers::empty(),
+        );
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Backspace),
+            Modifiers::empty(),
+        ));
+        assert!(state.editor.text() == "");
+        for key in [NamedKey::Backspace, NamedKey::Delete] {
+            assert!(!press(
+                &mut state,
+                &mut fonts,
+                &mut layouts,
+                Key::Named(key),
+                Modifiers::empty(),
+            ));
+        }
     }
 
     #[test]
