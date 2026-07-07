@@ -27,6 +27,12 @@ use peniko::Brush;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButton;
 
+/// A selection as comparable byte offsets, for did-anything-move
+/// checks around driver operations.
+fn cursor_of(selection: &parley::Selection) -> (usize, usize) {
+    (selection.anchor().index(), selection.focus().index())
+}
+
 /// An in-progress IME composition: the preedit text and the caret (or
 /// highlight) the IME wants within it. Kept out of `text`, which stays
 /// the base the composition will land in.
@@ -221,23 +227,28 @@ impl LineEditState {
                     }
                     true
                 }
+                // Arrows handle only when the caret actually moves:
+                // at the text's boundary they decline, so the caller
+                // can interpret them (selection navigation).
                 Key::Named(NamedKey::ArrowLeft) => {
+                    let before = cursor_of(drv.editor.raw_selection());
                     match (action_mod, shift) {
                         (true, true) => drv.select_word_left(),
                         (true, false) => drv.move_word_left(),
                         (false, true) => drv.select_left(),
                         (false, false) => drv.move_left(),
                     }
-                    true
+                    cursor_of(drv.editor.raw_selection()) != before
                 }
                 Key::Named(NamedKey::ArrowRight) => {
+                    let before = cursor_of(drv.editor.raw_selection());
                     match (action_mod, shift) {
                         (true, true) => drv.select_word_right(),
                         (true, false) => drv.move_word_right(),
                         (false, true) => drv.select_right(),
                         (false, false) => drv.move_right(),
                     }
-                    true
+                    cursor_of(drv.editor.raw_selection()) != before
                 }
                 Key::Named(NamedKey::Home) => {
                     if shift {
@@ -631,6 +642,49 @@ mod tests {
             Modifiers::empty(),
         );
         assert!(state.text() == "abz");
+    }
+
+    #[test]
+    fn boundary_arrows_decline_so_navigation_can_take_them() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut state = state("ab");
+        // Caret at 0: Left declines, Right moves.
+        assert!(!press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowLeft),
+            Modifiers::empty(),
+        ));
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowRight),
+            Modifiers::empty(),
+        ));
+        let mut state = state.with_cursor_at_end();
+        assert!(!press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowRight),
+            Modifiers::empty(),
+        ));
+        assert!(!press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowRight),
+            Modifiers::SHIFT,
+        ));
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowLeft),
+            Modifiers::empty(),
+        ));
     }
 
     #[test]
