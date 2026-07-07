@@ -4,6 +4,7 @@
 mod conventions;
 mod filter;
 mod graph_view;
+mod history;
 mod raw;
 mod store;
 
@@ -84,6 +85,8 @@ struct MenuIds {
     open: MenuId,
     save: MenuId,
     save_as: MenuId,
+    undo: MenuId,
+    redo: MenuId,
     graph: MenuId,
 }
 
@@ -104,6 +107,12 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
         true,
         Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyS)),
     );
+    let undo = MenuItem::new("Undo", true, Some(Accelerator::new(Some(accel), Code::KeyZ)));
+    let redo = MenuItem::new(
+        "Redo",
+        true,
+        Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyZ)),
+    );
     let graph = CheckMenuItem::new(
         "Graph",
         true,
@@ -116,6 +125,8 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
         open: open.id().clone(),
         save: save.id().clone(),
         save_as: save_as.id().clone(),
+        undo: undo.id().clone(),
+        redo: redo.id().clone(),
         graph: graph.id().clone(),
     };
     menu.append_items(&[
@@ -141,6 +152,7 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
             ],
         )
         .expect("file menu"),
+        &Submenu::with_items("Edit", true, &[&undo, &redo]).expect("edit menu"),
         &Submenu::with_items("View", true, &[&graph]).expect("view menu"),
     ])
     .expect("menu bar");
@@ -160,6 +172,15 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
     }
 }
 
+/// The selection as a restorable edge path — pendings restore as
+/// nothing, being disposable.
+fn edge_path(selection: &Option<raw::Selection>) -> Option<raw::Path> {
+    match selection {
+        Some(raw::Selection::Edge { path, .. }) => Some(path.clone()),
+        _ => None,
+    }
+}
+
 fn dialog() -> rfd::FileDialog {
     rfd::FileDialog::new().add_filter("progred", &["progred"])
 }
@@ -174,6 +195,10 @@ impl ApplicationHandler<MenuEvent> for App {
             self.menu_save(false);
         } else if *event.id() == self.menu_ids.save_as {
             self.menu_save(true);
+        } else if *event.id() == self.menu_ids.undo {
+            self.step_history(true);
+        } else if *event.id() == self.menu_ids.redo {
+            self.step_history(false);
         } else if *event.id() == self.menu_ids.graph
             && let RenderState::Active { window, .. } = &self.state
         {
@@ -337,8 +362,15 @@ impl ApplicationHandler<MenuEvent> for App {
                 };
                 if handled {
                     let model = &mut self.model;
-                    if let Some(selection) = &model.selection {
-                        raw::write_through(&mut model.doc, selection);
+                    if let Some(selection) = &mut model.selection {
+                        let before = model.doc.clone();
+                        // True on the first write of the editor's
+                        // life: the run's one step opens here.
+                        if raw::write_through(&mut model.doc, selection) {
+                            let path = selection.path().to_vec();
+                            model.history.record(before, Some(path));
+                            self.refresh_title();
+                        }
                     }
                     // Mint the successor handler from the mutated
                     // state now, so the next event — even within the
@@ -428,6 +460,7 @@ fn main() {
             selection: None,
             collapse: raw::Collapse::default(),
             graph: graph_view::GraphView::default(),
+            history: history::History::default(),
             scroll: 0.0,
         },
         doc_path,
@@ -449,6 +482,7 @@ struct Model {
     selection: Option<raw::Selection>,
     collapse: raw::Collapse,
     graph: graph_view::GraphView,
+    history: history::History,
     /// Vertical document scroll offset in logical pixels, so the
     /// position survives moving between monitor scales. May exceed
     /// the current maximum after a resize: placement clamps
@@ -561,10 +595,49 @@ impl App {
     }
 
     fn title(&self) -> String {
+        let dirty = if self.model.history.dirty() { " •" } else { "" };
         match &self.doc_path {
-            Some(path) => format!("Progred — {}", path.display()),
-            None => "Progred — untitled".into(),
+            Some(path) => format!("Progred — {}{dirty}", path.display()),
+            None => format!("Progred — untitled{dirty}"),
         }
+    }
+
+    fn refresh_title(&self) {
+        if let RenderState::Active { window, .. } = &self.state {
+            window.set_title(&self.title());
+        }
+    }
+
+    /// Undo or redo one step, restoring the snapshot's document and
+    /// selection; the displaced state crosses to the other stack.
+    fn step_history(&mut self, back: bool) {
+        let current = self.model.doc.clone();
+        let selection = edge_path(&self.model.selection);
+        let restored = if back {
+            self.model.history.undo(current, selection)
+        } else {
+            self.model.history.redo(current, selection)
+        };
+        if let Some((doc, restore)) = restored {
+            self.model.doc = doc;
+            self.model.selection =
+                restore.map(|path| raw::Selection::edge(&self.model.doc, path));
+            self.refresh_title();
+            if let RenderState::Active { window, .. } = &self.state {
+                window.request_redraw();
+            }
+        }
+    }
+
+    /// Unsaved changes gate for the document-replacing commands.
+    fn confirm_discard(&self) -> bool {
+        !self.model.history.dirty()
+            || rfd::MessageDialog::new()
+                .set_title("Unsaved Changes")
+                .set_description("Discard unsaved changes?")
+                .set_buttons(rfd::MessageButtons::OkCancel)
+                .show()
+                == rfd::MessageDialogResult::Ok
     }
 
     /// Save saves in place, or asks for a path when untitled; save-as
@@ -576,7 +649,13 @@ impl App {
         let target = in_place.or_else(|| dialog().set_file_name("untitled.progred").save_file());
         if let Some(path) = target {
             match store::save(&path, &self.model.doc) {
-                Ok(()) => self.adopt_doc_path(path),
+                Ok(()) => {
+                    self.model.history.mark_saved();
+                    // A run must not straddle the save mark, or edits
+                    // after it would coalesce into a pre-save step.
+                    raw::break_edit_run(&mut self.model.selection);
+                    self.adopt_doc_path(path);
+                }
                 Err(error) => {
                     eprintln!("failed to save {}: {error}", path.display());
                 }
@@ -585,10 +664,12 @@ impl App {
     }
 
     /// Open replaces the model. Selection, collapse overrides, and
-    /// A fresh untitled document. View state is document-bound and
-    /// resets with it; no dirty prompt yet — like Open, New discards
-    /// (dirty tracking waits on undo).
+    /// A fresh untitled document, gated on unsaved changes. View
+    /// state is document-bound and resets with it, history included.
     fn menu_new(&mut self) {
+        if !self.confirm_discard() {
+            return;
+        }
         self.model = Model {
             doc: raw::Document {
                 root: None,
@@ -597,6 +678,7 @@ impl App {
             selection: None,
             collapse: raw::Collapse::default(),
             graph: graph_view::GraphView::default(),
+            history: history::History::default(),
             scroll: 0.0,
         };
         self.doc_path = None;
@@ -609,6 +691,9 @@ impl App {
     /// scroll are path-bound to the old document, so they reset with
     /// it.
     fn menu_open(&mut self) {
+        if !self.confirm_discard() {
+            return;
+        }
         if let Some(path) = dialog().pick_file() {
             match store::load(&path) {
                 Ok(doc) => {
@@ -617,6 +702,7 @@ impl App {
                         selection: None,
                         collapse: raw::Collapse::default(),
                         graph: graph_view::GraphView::default(),
+                        history: history::History::default(),
                         scroll: 0.0,
                     };
                     self.adopt_doc_path(path);
@@ -702,7 +788,11 @@ impl App {
             && match (&event.key, &self.model.graph.selection) {
                 (Key::Named(NamedKey::Backspace | NamedKey::Delete), Some(selection)) => {
                     let selection = selection.clone();
-                    graph_view::delete_selection(&mut self.model.doc, &selection);
+                    let before = self.model.doc.clone();
+                    if graph_view::delete_selection(&mut self.model.doc, &selection) {
+                        self.model.history.record(before, None);
+                        self.refresh_title();
+                    }
                     self.model.graph.selection = None;
                     true
                 }
@@ -733,9 +823,19 @@ impl App {
             && match &self.model.selection {
                 // Only a real edge deletes; a pending's Backspace is
                 // its cancel, handled by insert_key.
-                Some(raw::Selection::Edge { path, .. }) => {
+                Some(raw::Selection::Edge { path, recorded, .. }) => {
                     let path = path.clone();
+                    // Backspacing through the value and once more to
+                    // delete the edge is one gesture: when this edge
+                    // has the open run, its frame (pre-run document,
+                    // edge intact) already covers the deletion.
+                    let covered = *recorded;
+                    let before = self.model.doc.clone();
                     raw::delete_edge(&mut self.model.doc, &path) && {
+                        if !covered {
+                            self.model.history.record(before, Some(path.clone()));
+                            self.refresh_title();
+                        }
                         let next = raw::selection_after_delete(descends, &path);
                         self.model.selection =
                             Some(raw::Selection::edge(&self.model.doc, next));
@@ -769,8 +869,7 @@ impl App {
     fn pick_identity(&mut self, id: Id) -> bool {
         match self.model.selection.take() {
             Some(raw::Selection::Pending { path, .. }) => {
-                raw::commit_pending(&mut self.model.doc, &path, &raw::EntryAction::Value(id));
-                self.model.selection = Some(raw::Selection::edge(&self.model.doc, path));
+                self.commit_value(path, &raw::EntryAction::Value(id));
                 true
             }
             Some(raw::Selection::PendingEdge { parent, .. }) => {
@@ -784,10 +883,29 @@ impl App {
         }
     }
 
+    /// Commits the pending value stage — one undo step — and selects
+    /// the edge it wrote.
+    fn commit_value(&mut self, path: raw::Path, action: &raw::EntryAction) {
+        let before = self.model.doc.clone();
+        if raw::commit_pending(&mut self.model.doc, &path, action) {
+            self.model.history.record(before, None);
+            self.refresh_title();
+        }
+        self.model.selection = Some(raw::Selection::edge(&self.model.doc, path));
+    }
+
     /// A resolved label advances the pending edge to its value stage —
-    /// or selects the existing edge when the label is taken.
+    /// or selects the existing edge when the label is taken. Minting a
+    /// new-node label writes its name: an undo step.
     fn commit_label(&mut self, parent: raw::Path, action: &raw::EntryAction) {
+        let before = self.model.doc.clone();
         let label = raw::resolve_entry(&mut self.model.doc, action);
+        // Only a NAMED mint writes an edge; an unnamed one is just a
+        // fresh id, no mutation to record.
+        if matches!(action, raw::EntryAction::NewNode { name: Some(_) }) {
+            self.model.history.record(before, None);
+            self.refresh_title();
+        }
         let mut path = parent;
         path.push(label);
         self.model.selection = Some(match raw::resolve(&self.model.doc, &path) {
@@ -837,8 +955,7 @@ impl App {
                         choice,
                     }) => {
                         let action = Self::chosen_action(popup, &query, choice);
-                        raw::commit_pending(&mut self.model.doc, &path, &action);
-                        self.model.selection = Some(raw::Selection::edge(&self.model.doc, path));
+                        self.commit_value(path, &action);
                         true
                     }
                     Some(raw::Selection::PendingEdge {
@@ -1153,8 +1270,7 @@ fn run_frame(
         let card = raw::popup_view(&mut tcx, &styles, &popup, |app: &mut App, action| {
             match app.model.selection.take() {
                 Some(raw::Selection::Pending { path, .. }) => {
-                    raw::commit_pending(&mut app.model.doc, &path, action);
-                    app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
+                    app.commit_value(path, action);
                 }
                 Some(raw::Selection::PendingEdge { parent, .. }) => {
                     app.commit_label(parent, action);

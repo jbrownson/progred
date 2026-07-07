@@ -514,6 +514,38 @@ that node and its parent.
   it. Sequencing (2026-07-06): dirty tracking waits for undo —
   modified-since-save falls out of history position — and undo waits
   for structural editing to exist; neither is built standalone.
+- Undo landed (2026-07-07): a snapshot stack over the persistent
+  gid — Document clones are O(1) structural sharing, and History is
+  a dumb stack: record/undo/redo plus a saved position, no policy.
+  Recording is explicit at each mutation site — deletes, value
+  commits, picks, and graph detachments each record one step; a
+  label commit records only when it mints (and names) a new node.
+  Text-run coalescing is editing custody, not history's: the run IS
+  the mounted editor's lifetime (`Selection::Edge` carries a
+  `recorded` flag; `write_through` returns true only for the run's
+  first real write, so the step opens at the run's start and later
+  keystrokes stay silent), and saving breaks the run at the
+  selection so it never straddles the mark. A corollary better than
+  the interim design: revisiting an edge after selecting elsewhere
+  re-mints the editor and is a new step by construction. The design
+  arrived by successive user correction the same day: first
+  ptr_eq-diffing across dispatch with selection-shape run inference
+  (working backwards from the event stream), then declared step
+  kinds with coalescing inside History; both replaced — handlers
+  mark their own undo frames, and run identity lives with the
+  editing session that owns it. Push-before vs push-after is a
+  recorded non-question: "save what I'm displacing" and "checkpoint
+  what I just made" are duals (same state sequence, cursor off by
+  one), neither provably better; before-push won here purely on
+  plumbing — mutation sites are natural narrators, while session-end
+  (the after-push moment for text runs) has no single line of code
+  in this shell.
+  Dirty IS history position versus the save mark, so undoing back to
+  the mark is clean again; the title carries a dot, and New/Open
+  confirm before discarding. Undo restores the snapshot's document
+  and re-mints the selection from it — the standing invariant's
+  first client. Cmd+Z / Shift+Cmd+Z through the Edit menu. Quit
+  remains unguarded (window-close interception deferred).
 - Deletion (2026-07-06): Backspace or Delete removes the selected
   edge — detachment, the value staying for the orphan pool. A focused
   atom editor claims the keys while it has text and declines on an

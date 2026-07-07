@@ -75,7 +75,9 @@ impl RawStyles {
 /// top-level items are just a root that is an in-graph list. The root
 /// is a location like any other — the empty path — so edits there
 /// commit to this field, and deleting it empties the document.
-#[derive(serde::Serialize, serde::Deserialize)]
+/// Clones are O(1): the gid shares structure, which is what makes
+/// snapshot undo free.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Document {
     pub root: Option<Id>,
     pub gid: MutGid,
@@ -271,7 +273,14 @@ pub type Path = Vec<Id>;
 /// commits, and until then the graph is untouched — deselecting
 /// discards the pending edge entirely.
 pub enum Selection {
-    Edge { path: Path, edit: Option<LineEditState> },
+    Edge {
+        path: Path,
+        edit: Option<LineEditState>,
+        /// Whether this editor's write-through run has recorded its
+        /// undo step: the run is the editor's lifetime, so the first
+        /// write records and the rest coalesce by staying silent.
+        recorded: bool,
+    },
     /// A nonexistent edge's value being authored (the root included).
     Pending {
         path: Path,
@@ -311,7 +320,11 @@ impl Selection {
                             .map(|n| line_edit(&n.to_string(), NUMBER_COLOR))
                     })
             });
-        Selection::Edge { path, edit }
+        Selection::Edge {
+            path,
+            edit,
+            recorded: false,
+        }
     }
 
     pub fn path(&self) -> &[Id] {
@@ -730,9 +743,18 @@ pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> 
 /// path commits to the document's root field; an edge whose parent no
 /// longer resolves to a node drops the write silently — the
 /// malformed-graph rule at the mutation boundary.
-pub fn write_through(doc: &mut Document, selection: &Selection) {
-    let Selection::Edge { path, edit } = selection else {
-        return;
+/// Writes the focused editor's text through to the graph. Returns
+/// whether this write OPENED an undo step: true exactly on the first
+/// write of the mounted editor's life, so a typing run is one step
+/// and history stays a dumb stack.
+pub fn write_through(doc: &mut Document, selection: &mut Selection) -> bool {
+    let Selection::Edge {
+        path,
+        edit,
+        recorded,
+    } = selection
+    else {
+        return false;
     };
     let target = match path.split_last() {
         Some((label, parent_path)) => resolve(doc, parent_path)
@@ -757,7 +779,19 @@ pub fn write_through(doc: &mut Document, selection: &Selection) {
                 Some((label, parent)) => doc.gid.set(parent, label.clone(), next),
                 None => doc.root = Some(next),
             }
+            let first = !*recorded;
+            *recorded = true;
+            return first;
         }
+    }
+    false
+}
+
+/// Breaks the open edit run: the next write records a fresh undo
+/// step. Called after a save, so a run never straddles the mark.
+pub fn break_edit_run(selection: &mut Option<Selection>) {
+    if let Some(Selection::Edge { recorded, .. }) = selection {
+        *recorded = false;
     }
 }
 
@@ -1500,6 +1534,7 @@ mod tests {
         let selection = from.map(|p| Selection::Edge {
             path: p.iter().map(|s| Id::from(*s)).collect(),
             edit: None,
+            recorded: false,
         });
         step_selection(ds, selection.as_ref(), &arrow(key))
     }
@@ -1582,18 +1617,18 @@ mod tests {
         let mut selection = Selection::edge(&doc, path.clone());
 
         selection.edit_mut().unwrap().set_text("2.5");
-        write_through(&mut doc, &selection);
+        write_through(&mut doc, &mut selection);
         assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
 
         // Half-typed states leave the last parsed value in place.
         for unparsable in ["2.5e", "", "-", "abc"] {
             selection.edit_mut().unwrap().set_text(unparsable);
-            write_through(&mut doc, &selection);
+            write_through(&mut doc, &mut selection);
             assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
         }
 
         selection.edit_mut().unwrap().set_text("-3");
-        write_through(&mut doc, &selection);
+        write_through(&mut doc, &mut selection);
         assert_eq!(resolve(&doc, &path), Some(&Id::from(-3.0)));
     }
 
@@ -1608,12 +1643,44 @@ mod tests {
         };
         let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
         selection.edit_mut().unwrap().set_text("new");
-        write_through(&mut doc, &selection);
+        write_through(&mut doc, &mut selection);
         assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
         // A selection without an editor writes nothing.
-        let plain = Selection::edge(&doc, vec![Id::from("missing")]);
-        write_through(&mut doc, &plain);
+        let mut plain = Selection::edge(&doc, vec![Id::from("missing")]);
+        assert!(!write_through(&mut doc, &mut plain));
         assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
+    }
+
+    #[test]
+    fn write_through_opens_one_step_per_editor_life() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("name"), Id::from("a"));
+        let mut doc = Document {
+            root: Some(Id::from(node)),
+            gid,
+        };
+        let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
+
+        // First write opens the step; the rest of the run is silent,
+        // as are no-op rewrites.
+        selection.edit_mut().unwrap().set_text("ab");
+        assert!(write_through(&mut doc, &mut selection));
+        selection.edit_mut().unwrap().set_text("abc");
+        assert!(!write_through(&mut doc, &mut selection));
+        assert!(!write_through(&mut doc, &mut selection));
+
+        // Breaking the run (a save) makes the next write a new step.
+        let mut holder = Some(selection);
+        break_edit_run(&mut holder);
+        let mut selection = holder.unwrap();
+        selection.edit_mut().unwrap().set_text("abcd");
+        assert!(write_through(&mut doc, &mut selection));
+
+        // A re-minted editor is a new run by construction.
+        let mut fresh = Selection::edge(&doc, vec![Id::from("name")]);
+        fresh.edit_mut().unwrap().set_text("x");
+        assert!(write_through(&mut doc, &mut fresh));
     }
 
     #[test]
@@ -1651,7 +1718,7 @@ mod tests {
         };
         let mut selection = Selection::edge(&doc, vec![]);
         selection.edit_mut().unwrap().set_text("new");
-        write_through(&mut doc, &selection);
+        write_through(&mut doc, &mut selection);
         assert_eq!(doc.root, Some(Id::from("new")));
     }
 
@@ -1743,7 +1810,11 @@ mod tests {
             root: Some(Id::from(root)),
             gid,
         };
-        let edge = |path: Vec<Id>| Selection::Edge { path, edit: None };
+        let edge = |path: Vec<Id>| Selection::Edge {
+            path,
+            edit: None,
+            recorded: false,
+        };
 
         assert_eq!(
             secondary_of(&doc, Some(&edge(vec![Id::from("a")]))),

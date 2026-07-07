@@ -342,7 +342,9 @@ impl GraphView {
 /// node is fully detached — the root cleared if it is the root, every
 /// outgoing edge removed, and every edge anywhere targeting it
 /// removed. Unreferenced values simply stop appearing.
-pub fn delete_selection(doc: &mut Document, selection: &GraphSelection) {
+pub fn delete_selection(doc: &mut Document, selection: &GraphSelection) -> bool {
+    let before = doc.gid.clone();
+    let before_root = doc.root.clone();
     match selection {
         GraphSelection::Edge { source, label } => {
             if let Some(entity) = source.as_node_id() {
@@ -382,6 +384,7 @@ pub fn delete_selection(doc: &mut Document, selection: &GraphSelection) {
             }
         }
     }
+    !(doc.gid.ptr_eq(&before) && doc.root == before_root)
 }
 
 /// Dispatch-time callbacks the shell injects, mirroring `raw::Hooks`:
