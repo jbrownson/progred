@@ -1,6 +1,7 @@
 mod gid;
 mod id;
 mod mutgid;
+pub mod position;
 
 pub use gid::{Gid, StackedGid};
 pub use id::{Id, NODE_SPACE, NUMBER_SPACE, NodeId, STRING_SPACE, new_node_id};
