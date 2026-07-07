@@ -489,6 +489,30 @@ that node and its parent.
 Deferred behind projections.
 
 - Bootstrap: projection-owned completion, no schema required.
+- Layered like rendering (2026-07-06): a projection contributes
+  parameterized offers where it knows something, over a universal
+  substrate layer available at every site — atoms by inference (text
+  that parses is a number; quotes force a string), a fresh node, and
+  name search across the document and orphan pool (isa shown beside
+  matches for disambiguation), whose misses become
+  create-on-reference. Raw offers only the universal layer, so the
+  root is not special: name-and-isa search works there like anywhere.
+  Domain projections own their root offers (a fresh document of their
+  kind — templates) later; shape-recognized projections bootstrap
+  through the universal layer, since an empty root has no shape to
+  recognize.
+- Pending resolves identity (2026-07-06): no committing a string and
+  reinterpreting it. The selection can name a nonexistent edge; the
+  projection includes selected nonexistent edges as pending rows; the
+  completion query lives in the selection the way the line editor
+  does; resolution commits the chosen identity in one write, and
+  deselection discards the pending row with the graph never touched.
+- Fuzzy matching carries from the TypeScript prototype's
+  compositional filters (`filters.ts`): tiers chained over rejects —
+  exact prefix, exact substring, case-insensitive forms, then fuzzy
+  subsequence — each tier sorted by fraction matched, match spans
+  driving highlights. Ported as `progred/src/filter.rs`, with spans
+  byte-correct under case folding.
 - Later: a minimal schema in the shape the TypeScript prototype already
   proved sufficient (ctors/records, fields, sums, an expected
   element type for lists). Everything is tagged, so TypeScript-style

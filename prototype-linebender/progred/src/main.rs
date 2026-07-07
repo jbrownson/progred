@@ -2,6 +2,9 @@
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
 mod conventions;
+// Consumed by the completion popup, the next increment.
+#[allow(dead_code)]
+mod filter;
 // Benched while the raw view trials git-style id suffixes; the sample
 // sheet still draws identicons and a future graph view is their
 // likely home.
