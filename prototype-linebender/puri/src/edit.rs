@@ -401,12 +401,15 @@ impl LineEditState {
 /// editor built off the true state. Registers keyboard and IME
 /// dispatch (through `with`) only while focused; pointer wiring is the
 /// caller's, via the state's pointer methods and its own settled rect.
+/// Dispatch targets the last rendered frame, which can outlive the
+/// editor (deselect, then a move in the same gesture), so `with`
+/// returns None when the editor is gone and the handlers decline.
 pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
     state: &LineEditState,
     focused: bool,
     style: &EditStyle,
     tcx: &mut TextCtx,
-    with: impl for<'a> Fn(&'a mut C) -> EditCtx<'a> + Clone + 'static,
+    with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
 ) -> Node<P> {
     let scale = tcx.scale;
     let editor = state.editor(tcx.fonts, tcx.layouts, scale);
@@ -460,35 +463,41 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
             let text_origin = Point::new(at.x, at.y - layout_baseline);
             let with_key = with.clone();
             p.handler().on_key(move |ctx, event| {
-                let EditCtx {
-                    state,
-                    fonts,
-                    layouts,
-                } = with_key(ctx);
-                state.handle_key(fonts, layouts, event)
+                with_key(ctx).is_some_and(
+                    |EditCtx {
+                         state,
+                         fonts,
+                         layouts,
+                     }| state.handle_key(fonts, layouts, event),
+                )
             });
             let with_move = with.clone();
             p.handler().on_pointer_move(move |ctx, update| {
-                update.current.buttons.contains(PointerButton::Primary) && {
-                    let EditCtx {
-                        state,
-                        fonts,
-                        layouts,
-                    } = with_move(ctx);
-                    state.pointer_move(
-                        fonts,
-                        layouts,
-                        scale,
-                        Point::new(
-                            update.current.position.x - text_origin.x,
-                            update.current.position.y - text_origin.y,
-                        ),
+                update.current.buttons.contains(PointerButton::Primary)
+                    && with_move(ctx).is_some_and(
+                        |EditCtx {
+                             state,
+                             fonts,
+                             layouts,
+                         }| {
+                            state.pointer_move(
+                                fonts,
+                                layouts,
+                                scale,
+                                Point::new(
+                                    update.current.position.x - text_origin.x,
+                                    update.current.position.y - text_origin.y,
+                                ),
+                            )
+                        },
                     )
-                }
             });
             let with_up = with.clone();
-            p.handler().on_pointer_up(move |ctx, _| with_up(ctx).state.pointer_up());
-            p.handler().on_ime(move |ctx, event| with(ctx).state.handle_ime(event));
+            p.handler().on_pointer_up(move |ctx, _| {
+                with_up(ctx).is_some_and(|edit| edit.state.pointer_up())
+            });
+            p.handler()
+                .on_ime(move |ctx, event| with(ctx).is_some_and(|edit| edit.state.handle_ime(event)));
         }
     })
 }

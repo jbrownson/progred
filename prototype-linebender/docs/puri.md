@@ -31,21 +31,27 @@ A pure widget library: rendering and behavior, nothing else.
 - State a widget must keep across frames — cursor/selection, scroll
   offset, drag state, focus — is defined by Puri as types and passed in
   by the caller. Puri holds nothing between frames.
-- Each rendered frame yields two outputs: the draw calls and a
-  `Handler`. The shell presents the draws and retains the handler
-  until the next redraw replaces it; every input event dispatches into
-  the retained handler (corrected 2026-07-07 — the shell originally
-  re-ran the pass per event to mint a fresh handler, on the theory
-  that purity makes the re-run match the displayed frame; that is
-  false whenever state advanced since the present, e.g. a stepping
-  simulation, so quick clicks hit-tested against geometry newer than
-  the pixels — and it cost a full pass per pointer move besides. The
-  user reacts to what was presented, so the presented frame's handler
-  is the honest dispatch target). The pass itself stays read-only in
-  the model; all mutation happens in dispatch, preserving
-  one-event-one-transition and avoiding read-after-write order
-  dependence within a pass. Handlers are still transient — one frame
-  of custody in the shell, never puri's.
+- Each pass yields two outputs: the draw calls and a `Handler`. The
+  handler is a pure function of the state the pass read, so it is
+  SINGLE-SHOT with respect to mutation: the shell retains it, events
+  dispatch into it, and the first handled (mutating) event spends it —
+  the shell mints the successor from the mutated state immediately, in
+  the event path, so no later event (even in the same gesture) ever
+  dispatches into a spent handler; unhandled events leave it standing,
+  and the redraw derives the pixels from the same state. Settled
+  2026-07-07 after visiting both wrong corners the same day: fresh
+  pass per event dispatched against state NEWER than the pixels
+  (a stepping simulation made quick clicks miss what they aimed at)
+  and cost a pass per hover move; retain-until-vsync let same-gesture
+  events dispatch into a handler whose state was gone (a deselect
+  followed by a drag-move panicked the editor hook). Residual windows
+  where mutation happens outside dispatch (menu commands, pinch)
+  remint only at the next redraw, so handlers must still decline on
+  absent state rather than assume it — the editor hook returns Option
+  for exactly this. The pass itself stays read-only in the model; all
+  mutation happens in dispatch, preserving one-event-one-transition
+  and avoiding read-after-write order dependence within a pass.
+  Handlers remain shell custody, never puri's.
 - A `Handler` holds one composed function per event kind (typed
   channels: pointer down, key — extended as widgets need). The monoid
   is function composition, mirroring how rendering works: `on_*` wraps

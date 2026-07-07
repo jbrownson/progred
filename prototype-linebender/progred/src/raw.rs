@@ -185,7 +185,9 @@ pub struct TextClick {
 pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
-    pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> EditCtx<'a>>,
+    /// None when the editor is already gone — retained-frame dispatch
+    /// may fire a frame late, and absent state declines.
+    pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
 }
 
 impl Cx<'_> {

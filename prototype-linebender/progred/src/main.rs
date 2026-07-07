@@ -79,6 +79,7 @@ struct App {
 }
 
 struct MenuIds {
+    new: MenuId,
     open: MenuId,
     save: MenuId,
     save_as: MenuId,
@@ -94,6 +95,7 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
     } else {
         Modifiers::CONTROL
     };
+    let new = MenuItem::new("New", true, Some(Accelerator::new(Some(accel), Code::KeyN)));
     let open = MenuItem::new("Open…", true, Some(Accelerator::new(Some(accel), Code::KeyO)));
     let save = MenuItem::new("Save", true, Some(Accelerator::new(Some(accel), Code::KeyS)));
     let save_as = MenuItem::new(
@@ -109,6 +111,7 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
     );
     let menu = Menu::new();
     let ids = MenuIds {
+        new: new.id().clone(),
         open: open.id().clone(),
         save: save.id().clone(),
         save_as: save_as.id().clone(),
@@ -129,6 +132,7 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
             "File",
             true,
             &[
+                &new,
                 &open,
                 &PredefinedMenuItem::separator(),
                 &save,
@@ -161,7 +165,9 @@ fn dialog() -> rfd::FileDialog {
 
 impl ApplicationHandler<MenuEvent> for App {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: MenuEvent) {
-        if *event.id() == self.menu_ids.open {
+        if *event.id() == self.menu_ids.new {
+            self.menu_new();
+        } else if *event.id() == self.menu_ids.open {
             self.menu_open();
         } else if *event.id() == self.menu_ids.save {
             self.menu_save(false);
@@ -274,10 +280,12 @@ impl ApplicationHandler<MenuEvent> for App {
             {
                 self.cursor = position;
             }
-            // Events dispatch into the last rendered frame's handler
-            // — the user reacts to what was presented, so its
-            // geometry is what clicks mean. Until the first redraw
-            // there is nothing to dispatch into.
+            // Events dispatch into the retained frame's handler — a
+            // pure function of the state it was built from, so it is
+            // single-shot: a handled (mutating) event spends it and
+            // the successor is minted immediately below; unhandled
+            // events leave it standing. Until the first redraw there
+            // is nothing to dispatch into.
             if (ime.is_some() || translation.is_some())
                 && let Some(dispatch) = self.dispatch.take()
             {
@@ -326,13 +334,19 @@ impl ApplicationHandler<MenuEvent> for App {
                     }
                     _ => false,
                 };
-                self.dispatch = Some(dispatch);
                 if handled {
                     let model = &mut self.model;
                     if let Some(selection) = &model.selection {
                         raw::write_through(&mut model.doc, selection);
                     }
+                    // Mint the successor handler from the mutated
+                    // state now, so the next event — even within the
+                    // same gesture — never sees the spent one. The
+                    // redraw derives the pixels from the same state.
+                    self.retain_dispatch(scale, Size::new(size.width as f64, viewport));
                     window.request_redraw();
+                } else {
+                    self.dispatch = Some(dispatch);
                 }
             }
         }
@@ -570,6 +584,27 @@ impl App {
     }
 
     /// Open replaces the model. Selection, collapse overrides, and
+    /// A fresh untitled document. View state is document-bound and
+    /// resets with it; no dirty prompt yet — like Open, New discards
+    /// (dirty tracking waits on undo).
+    fn menu_new(&mut self) {
+        self.model = Model {
+            doc: raw::Document {
+                root: None,
+                gid: progred_graph::MutGid::new(),
+            },
+            selection: None,
+            collapse: raw::Collapse::default(),
+            graph: graph_view::GraphView::default(),
+            scroll: 0.0,
+        };
+        self.doc_path = None;
+        if let RenderState::Active { window, .. } = &self.state {
+            window.set_title(&self.title());
+            window.request_redraw();
+        }
+    }
+
     /// scroll are path-bound to the old document, so they reset with
     /// it.
     fn menu_open(&mut self) {
@@ -598,6 +633,40 @@ impl App {
             window.set_title(&self.title());
             window.request_redraw();
         }
+    }
+
+    /// Runs the pure pass for the current state and retains its
+    /// dispatch outputs; no scene — pixels are the redraw's job.
+    fn retain_dispatch(&mut self, scale: f64, viewport: Size) {
+        let mut frame = Frame {
+            scene: None,
+            handler: Handler::new(),
+            descends: Vec::new(),
+            max_scroll: 0.0,
+            popup: None,
+        };
+        run_frame(
+            &mut frame,
+            &self.model,
+            self.graph_item.is_checked(),
+            &mut self.font_cx,
+            &mut self.layout_cx,
+            scale,
+            viewport,
+        );
+        let Frame {
+            handler,
+            descends,
+            max_scroll,
+            popup,
+            ..
+        } = frame;
+        self.dispatch = Some(Dispatch {
+            handler,
+            descends,
+            max_scroll,
+            popup,
+        });
     }
 
     /// Scrolls over the graph panel drive its viewport — trackpad
@@ -1069,19 +1138,18 @@ fn run_frame(
     }
 }
 
-/// Dispatch-time access to the selection's editor. Only handlers the
-/// mounted editor registered call this, and the pass mounts it only
-/// when the selection carries one, so it exists at dispatch.
-fn edit_ctx(app: &mut App) -> EditCtx<'_> {
+/// Dispatch-time access to the selection's editor. Retained-frame
+/// dispatch can outlive the editor by a frame — deselect, then a move
+/// in the same gesture — so absence declines rather than panics.
+fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
     let state = app
         .model
         .selection
         .as_mut()
-        .and_then(raw::Selection::edit_mut)
-        .expect("edit dispatch without an editor");
-    EditCtx {
+        .and_then(raw::Selection::edit_mut)?;
+    Some(EditCtx {
         state,
         fonts: &mut app.font_cx,
         layouts: &mut app.layout_cx,
-    }
+    })
 }
