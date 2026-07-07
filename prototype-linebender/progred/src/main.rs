@@ -217,7 +217,6 @@ impl ApplicationHandler<MenuEvent> for App {
             };
             let translation = self.reducer.reduce(scale, &event);
             if ime.is_some() || translation.is_some() {
-                self.refresh_edit(scale as f32);
                 let viewport = window.inner_size().height as f64;
                 let mut frame = Frame {
                     scene: None,
@@ -464,14 +463,6 @@ impl Canvas for Frame<'_> {
 }
 
 impl App {
-    /// The selection's line-editor layout is lazy and refreshing needs
-    /// `&mut`; run it before each pure pass.
-    fn refresh_edit(&mut self, scale: f32) {
-        if let Some(line) = self.model.selection.as_mut().and_then(raw::Selection::edit_mut) {
-            line.refresh(&mut self.font_cx, &mut self.layout_cx, scale);
-        }
-    }
-
     /// Scrolls the document, clamped to the frame's content.
     fn scroll_document(
         &mut self,
@@ -599,7 +590,7 @@ impl App {
             .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
             .map(|entry| entry.action.clone())
             .unwrap_or_else(|| {
-                raw::EntryAction::Value(raw::resolve_query(&query.editor.text().to_string()))
+                raw::EntryAction::Value(raw::resolve_query(query.text()))
             })
     }
 
@@ -744,7 +735,6 @@ impl App {
         let width = surface.config.width;
         let height = surface.config.height;
 
-        self.refresh_edit(scale as f32);
         self.scene.reset();
         let mut frame = Frame {
             scene: Some(&mut self.scene),
@@ -858,18 +848,25 @@ fn run_frame(
             select: Rc::new(move |app: &mut App, path, click| {
                 if app.model.selection.as_ref().is_none_or(|s| s.path() != path) {
                     app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
+                } else if click.is_none()
+                    && let Some(line) =
+                        app.model.selection.as_mut().and_then(raw::Selection::edit_mut)
+                {
+                    // Re-selecting without a text click lands the
+                    // caret at the end, same as a fresh mount.
+                    line.cursor_to_end();
                 }
                 if let Some(click) = click
                     && let Some(line) =
                         app.model.selection.as_mut().and_then(raw::Selection::edit_mut)
                 {
-                    line.refresh(&mut app.font_cx, &mut app.layout_cx, scale as f32);
                     line.pointer_down(
                         &mut app.font_cx,
                         &mut app.layout_cx,
+                        scale as f32,
                         click.point,
                         click.shift,
-                        1,
+                        click.count,
                     );
                 }
             }),

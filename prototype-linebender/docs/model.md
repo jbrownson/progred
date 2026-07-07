@@ -443,32 +443,73 @@ that node and its parent.
   focus-with-initial-selection callback, moved into the shell because
   parley's editor hit-tests behind its measurement caches rather than
   exposing caret geometry as data. Pressing starts the editor's drag
-  state, so drag-selection works from the selecting click. Arrow keys
+  state, so drag-selection works from the selecting click. An editor
+  mounted without a text click — a label click, a keyboard landing —
+  starts with the caret at the end, so typing appends (2026-07-07; a
+  select-all trial was rejected the same day: visually heavy and one
+  keystroke from wiping the value). The rule is uniform over the
+  already-selected edge too: re-selecting without a text click — its
+  label, its chrome — lands the caret back at the end. With true-state
+  custody this is a plain field write at construction; a briefly-lived
+  deferred-seed mechanism (needed while the retained PlainEditor gated
+  caret writes behind its driver) dissolved the same day it was built
+  when the editor went transient. Arrow keys
   inside a
   focused string go to the cursor (up/down still navigate, since a
   single line declines them); IME plumbing beyond what the puri widget
   already carries (window enabling, candidate positioning) is
-  deliberately deferred, as is double-click word selection (the shell
-  does not yet count clicks). Numbers edit the same way with
+  deliberately deferred. Double-click selects the word and triple the
+  line (2026-07-07): ui-events-winit's TapCounter supplies click
+  counts through the existing reducer — no shell counting — and drag
+  anchoring is gesture data (origin point + count) replayed each
+  move, since only byte offsets round-trip the transient editors.
+  Known accessibility gap, deferred to the accessibility pass:
+  TapCounter hardcodes the 500ms interval and slop radii, ignoring
+  the OS double-click-speed setting. Verified against winit 0.30:
+  winit exposes no click counts, no double-click events (Windows
+  CS_DBLCLKS unset), no interval setting — it discards the
+  OS-computed NSEvent.clickCount already present in the mouse events
+  it handles, which is why ui-events-winit recounts above it with
+  hardcoded thresholds. Upstream state (checked 2026-07-07): winit
+  #642 (2018, punted to applications) and #3899 (2024) — the latter
+  proposes counts on pointer events with winit-maintainer and
+  Linebender convergence (Option<NonZero>, macOS from
+  NSEvent.clickCount, Windows from GetDoubleClickTime +
+  GetSystemMetricsForDpi, hardcoded defaults elsewhere — Linux has
+  no native setting), unimplemented; ui-events intends to adopt
+  winit counts once they exist, so TapCounter is itself a stopgap.
+  Fix routes when taken up: implement #3899 (whole-ecosystem, the
+  consensus already exists); interim TapCounter config upstream; or
+  ~40 lines of shell counting against NSEvent.doubleClickInterval
+  (objc2-app-kit is already in our tree via winit) fixing only us.
+  Numbers edit the same way with
   parse-gated write-through (2026-07-06): the editor may show a
   half-typed `3.` while the graph keeps the last parsed value, since
   an unparsable number has no identity to write; the edited kind
   follows the graph value, so digits typed into a string stay a
-  string. The editor's PlainEditor buffer duplicates the edited text
-  while selected — parley's engine owns its working string — but it is
-  a plain caller-owned value with no identity leaned on: rebuilding it
-  each frame from the graph text plus bare cursor state (the
-  bufferless Haskell shape) stays available if the duplication ever
-  bites; Rust's methods-on-values packaging is the only real
-  difference (2026-07-06). Custody is one working copy, one direction
+  string. The bufferless Haskell shape landed (2026-07-07): the
+  selection stores only true state — base text, anchor/focus byte
+  offsets, any active IME preedit — and a transient `PlainEditor` is
+  constructed from it and discarded, per pass for drawing and per
+  dispatch for editing semantics. Parley's retained-mode machinery
+  (internal layout cache, dirty flag, driver-gated writes) lives and
+  dies inside those moments; its debugged editing behavior is
+  borrowed whole rather than re-owned; IME preedit stays out of the
+  base text, applied as a pure state transition (keys and pointers
+  already decline while composing), so the graph never sees
+  composition. Deliberately not round-tripped, as
+  single-line-irrelevant: cursor affinity, word/line drag anchors,
+  the vertical goal column. This also retired the shell's
+  refresh-before-pass step — layout freshness is now internal to the
+  transient construction. Custody is one working copy, one direction
   — the write-through runs once after each handled event — and
   nothing else writes the graph today. Standing invariant for when
   something does (undo arrives first): any non-editor write to the
-  currently edited edge must re-mint or drop the editor, or the stale
-  buffer clobbers it. Sequencing (2026-07-06): dirty tracking waits
-  for undo — modified-since-save falls out of history position — and
-  undo waits for structural editing to exist; neither is built
-  standalone.
+  currently edited edge must re-mint the editor state (`set_text`
+  clamps the selection to the new text), or the stale text clobbers
+  it. Sequencing (2026-07-06): dirty tracking waits for undo —
+  modified-since-save falls out of history position — and undo waits
+  for structural editing to exist; neither is built standalone.
 - Deletion (2026-07-06): Backspace or Delete removes the selected
   edge — detachment, the value staying for the orphan pool. A focused
   atom editor claims the keys while it has text and declines on an

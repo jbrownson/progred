@@ -12,8 +12,6 @@
 
 use crate::conventions::NAME;
 use crate::filter;
-use parley::StyleProperty;
-use parley::style::FontFamily;
 use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id, position};
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
@@ -172,10 +170,12 @@ struct Cx<'a> {
 /// A reported click on a string's text, in text-local coordinates.
 /// The shell's selection transition consumes it to seed or advance
 /// the editor state — focus and caret placement are one event, as in
-/// the Haskell LineEdit's focus-with-initial-selection callback.
+/// the Haskell LineEdit's focus-with-initial-selection callback. The
+/// count carries double/triple clicks (word and line selection).
 pub struct TextClick {
     pub point: Point,
     pub shift: bool,
+    pub count: u8,
 }
 
 /// Dispatch-time callbacks the shell injects: what selecting a path
@@ -304,15 +304,12 @@ impl Selection {
     }
 }
 
+// Seeded with the caret at the end: an editor mounted without a text
+// click — label click, keyboard landing — starts appending (a
+// select-all trial read as dangerous), and a click's caret placement
+// overrides it.
 fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
-    let mut line = LineEditState::new(text, 14.0);
-    line.editor
-        .edit_styles()
-        .insert(StyleProperty::Brush(Brush::from(Color::new(color))));
-    line.editor
-        .edit_styles()
-        .insert(FontFamily::from("system-ui").into());
-    line
+    LineEditState::new(text, 14.0, Brush::from(Color::new(color))).with_cursor_at_end()
 }
 
 /// The value at `path`, following each label from the root.
@@ -705,7 +702,7 @@ pub fn write_through(doc: &mut Document, selection: &Selection) {
         None => Some(None),
     };
     if let (Some(edit), Some(target)) = (edit, target) {
-        let text = edit.editor.text().to_string();
+        let text = edit.text().to_string();
         let current = resolve(doc, path);
         let next = match current {
             Some(current) if current.as_str().is_some() => Some(Id::from(text)),
@@ -1125,19 +1122,16 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         .filter(|selection| selection.path() == path)
         .and_then(Selection::edit);
     let inner = if let Some(s) = value.as_str() {
-        let content = atom_content(editing, text(tcx, s, &cx.styles.string), cx.styles, hooks);
+        let fallback = text(tcx, s, &cx.styles.string);
+        let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
         row(0.0, vec![
             text(tcx, "\"", &cx.styles.string),
             cursor_target(path.to_vec(), hooks, content),
             text(tcx, "\"", &cx.styles.string),
         ])
     } else if let Some(n) = value.as_number() {
-        let content = atom_content(
-            editing,
-            text(tcx, &n.to_string(), &cx.styles.number),
-            cx.styles,
-            hooks,
-        );
+        let fallback = text(tcx, &n.to_string(), &cx.styles.number);
+        let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
         cursor_target(path.to_vec(), hooks, content)
     } else if let Some(node) = value.as_node_id() {
         node_view(cx, tcx, path, ancestors, node, hooks)
@@ -1190,8 +1184,9 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
     choice: usize,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let entries = completion_entries(cx.gid, &query.editor.text().to_string());
-    let content = atom_content(Some(query), text(tcx, "…", &cx.styles.dim), cx.styles, hooks);
+    let entries = completion_entries(cx.gid, query.text());
+    let fallback = text(tcx, "…", &cx.styles.dim);
+    let content = atom_content(Some(query), fallback, tcx, cx.styles, hooks);
     decorate(content, move |p: &mut P, rect| {
         *p.popup() = Some(Popup {
             anchor: rect,
@@ -1282,13 +1277,14 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
 fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     editing: Option<&LineEditState>,
     fallback: Node<P>,
+    tcx: &mut TextCtx,
     styles: &RawStyles,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     match editing {
         Some(line) => {
             let edit_ctx = hooks.edit.clone();
-            text_edit(line, true, &styles.edit, move |c| edit_ctx(c))
+            text_edit(line, true, &styles.edit, tcx, move |c| edit_ctx(c))
         }
         None => fallback,
     }
@@ -1337,6 +1333,7 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
                             event.state.position.y - rect.y0,
                         ),
                         shift: event.state.modifiers.shift(),
+                        count: event.state.count.max(1),
                     };
                     select(ctx, path.clone(), Some(click));
                     true
@@ -1467,18 +1464,18 @@ mod tests {
         let path = vec![Id::from("x")];
         let mut selection = Selection::edge(&doc, path.clone());
 
-        selection.edit_mut().unwrap().editor.set_text("2.5");
+        selection.edit_mut().unwrap().set_text("2.5");
         write_through(&mut doc, &selection);
         assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
 
         // Half-typed states leave the last parsed value in place.
         for unparsable in ["2.5e", "", "-", "abc"] {
-            selection.edit_mut().unwrap().editor.set_text(unparsable);
+            selection.edit_mut().unwrap().set_text(unparsable);
             write_through(&mut doc, &selection);
             assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
         }
 
-        selection.edit_mut().unwrap().editor.set_text("-3");
+        selection.edit_mut().unwrap().set_text("-3");
         write_through(&mut doc, &selection);
         assert_eq!(resolve(&doc, &path), Some(&Id::from(-3.0)));
     }
@@ -1493,7 +1490,7 @@ mod tests {
             gid,
         };
         let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
-        selection.edit_mut().unwrap().editor.set_text("new");
+        selection.edit_mut().unwrap().set_text("new");
         write_through(&mut doc, &selection);
         assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
         // A selection without an editor writes nothing.
@@ -1536,7 +1533,7 @@ mod tests {
             gid: MutGid::new(),
         };
         let mut selection = Selection::edge(&doc, vec![]);
-        selection.edit_mut().unwrap().editor.set_text("new");
+        selection.edit_mut().unwrap().set_text("new");
         write_through(&mut doc, &selection);
         assert_eq!(doc.root, Some(Id::from("new")));
     }
