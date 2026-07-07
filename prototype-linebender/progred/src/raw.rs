@@ -1,6 +1,6 @@
 //! The raw projection: any gid document rendered as entity blocks of
 //! edge rows, with no schema and no interpretation of semantic
-//! conventions — every node is just its identicon, every edge a row,
+//! conventions — every node is just its short id, every edge a row,
 //! including `name`, and lists render as the plain position-labeled
 //! nodes they are (list sugar belongs to a convention-aware
 //! projection). Known
@@ -880,7 +880,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     }
 }
 
-/// A node rendered as a block: its identicon header over its edges,
+/// A node rendered as a block: its short-id header over its edges,
 /// indented and recursively projected. A node with edges carries a
 /// disclosure delta to the right of the header — outside the indent —
 /// that toggles collapse; collapsed (by default a cycle, or forced by
@@ -975,11 +975,10 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 
 /// Git-style short form of a node id: an ellipsis and the last five
 /// hex digits, fixed length even where fewer would disambiguate.
-/// Trialing this over identicons (which remain in the sample sheet
-/// and are the likely graph-view rendering); a collision within a
-/// document is unlikely (about 0.5% somewhere in a hundred-node
-/// document) and the display can grow if it ever matters.
-fn short_id(id: NodeId) -> String {
+/// A collision within a document is unlikely (about 0.5% somewhere in
+/// a hundred-node document) and the display can grow if it ever
+/// matters.
+pub fn short_id(id: NodeId) -> String {
     let hex = id.simple().to_string();
     format!("…{}", &hex[hex.len() - 5..])
 }
@@ -1081,9 +1080,9 @@ fn disclosure<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 }
 
 /// A small drawn arrow between a label and its value. Reading
-/// "label → value", and being a stroke rather than an identicon, it
+/// "label → value", and being a stroke rather than an id, it
 /// separates an edge's key from its target — labels and values are
-/// otherwise both identicons.
+/// otherwise both ids.
 fn arrow<P: Canvas>(styles: &RawStyles) -> Node<P> {
     let scale = styles.scale;
     let width = 16.0 * scale;

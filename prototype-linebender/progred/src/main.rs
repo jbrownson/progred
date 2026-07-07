@@ -4,14 +4,7 @@
 mod conventions;
 mod filter;
 mod graph_view;
-// Benched in the raw view while it trials git-style id suffixes; the
-// graph view draws them for unnamed nodes, their anticipated home.
-#[allow(dead_code)]
-mod identicon;
 mod raw;
-// Unwired: give it a view toggle when identicons next need tuning.
-#[allow(dead_code)]
-mod sheet;
 mod store;
 
 use std::path::PathBuf;

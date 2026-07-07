@@ -9,14 +9,13 @@
 //! and hit-testing are one pure pass: build geometry from state, draw
 //! it, register handlers over it.
 
-use crate::identicon::node_identicon;
-use crate::raw::{Document, Selection, hex, resolve};
+use crate::raw::{Document, Selection, hex, resolve, short_id};
 use parley::style::FontFamily;
 use parley::{Layout, StyleProperty};
 use progred_graph::{Gid, Id, NodeId, position};
 use puri::draw::Canvas;
 use puri::handler::HasHandler;
-use puri::layout::{Extent, Node, leaf, place_top_left};
+use puri::layout::{Extent, Node, leaf};
 use puri::text::{TextCtx, draw_layout};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -400,8 +399,6 @@ pub struct Hooks<C> {
 const FONT_SIZE: f32 = 10.0;
 const NODE_PADDING: f64 = 7.0;
 const NODE_MIN_HEIGHT: f64 = 24.0;
-const ICON_SIZE: f64 = 24.0;
-const LABEL_ICON_SIZE: f64 = 16.0;
 const PILL_PADDING: f64 = 4.0;
 const ARROW_LENGTH: f64 = 7.0;
 const ARROW_WIDTH: f64 = 3.5;
@@ -420,15 +417,10 @@ const STRING_TEXT: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
 const NUMBER_TEXT: [f32; 4] = [0.16, 0.40, 0.62, 1.0];
 const DIM_TEXT: [f32; 4] = [0.55, 0.58, 0.64, 1.0];
 
-enum Content {
-    Text(Box<Layout<Brush>>),
-    Icon(NodeId),
-}
-
 struct NodeView {
     id: Id,
     rect: Rect,
-    content: Content,
+    content: Layout<Brush>,
     root: bool,
     strength: Strength,
 }
@@ -446,7 +438,7 @@ struct EdgeView {
     path: BezPath,
     arrow: BezPath,
     pill: Rect,
-    pill_content: Content,
+    pill_content: Layout<Brush>,
     strength: Strength,
 }
 
@@ -461,53 +453,36 @@ fn layout_text(tcx: &mut TextCtx, s: &str, size: f32, color: [f32; 4]) -> Layout
 }
 
 /// What an identity looks like in the graph: named nodes show their
-/// name, unnamed ones their identicon, atoms their value.
-fn content(doc: &Document, id: &Id, tcx: &mut TextCtx, zoom: f64) -> Content {
+/// name, unnamed ones their short id, atoms their value — the same
+/// identity language as the tree view.
+fn content(doc: &Document, id: &Id, tcx: &mut TextCtx, zoom: f64) -> Layout<Brush> {
     let size = FONT_SIZE * zoom as f32;
     if let Some(s) = id.as_str() {
-        Content::Text(Box::new(layout_text(tcx, &format!("\"{s}\""), size, STRING_TEXT)))
+        layout_text(tcx, &format!("\"{s}\""), size, STRING_TEXT)
     } else if let Some(n) = id.as_number() {
-        Content::Text(Box::new(layout_text(tcx, &n.to_string(), size, NUMBER_TEXT)))
+        layout_text(tcx, &n.to_string(), size, NUMBER_TEXT)
     } else if let Some(node) = id.as_node_id() {
         match doc
             .gid
             .get(id, &Id::from(crate::conventions::NAME))
             .and_then(Id::as_str)
         {
-            Some(name) => Content::Text(Box::new(layout_text(tcx, name, size, TEXT))),
-            None => Content::Icon(node),
+            Some(name) => layout_text(tcx, name, size, TEXT),
+            None => layout_text(tcx, &short_id(node), size, DIM_TEXT),
         }
     } else if let Some(bytes) = position::as_position(id) {
-        Content::Text(Box::new(layout_text(tcx, &hex(bytes), size, DIM_TEXT)))
+        layout_text(tcx, &hex(bytes), size, DIM_TEXT)
     } else {
-        Content::Text(Box::new(layout_text(tcx, &hex(id.payload()), size, DIM_TEXT)))
+        layout_text(tcx, &hex(id.payload()), size, DIM_TEXT)
     }
 }
 
-fn content_size(content: &Content, scale: f64) -> (f64, f64) {
-    match content {
-        Content::Text(layout) => (f64::from(layout.width()), f64::from(layout.height())),
-        Content::Icon(_) => (ICON_SIZE * scale, ICON_SIZE * scale),
-    }
-}
-
-fn draw_content<P: Canvas>(p: &mut P, content: &Content, rect: Rect, icon_size: f64) {
-    match content {
-        Content::Text(layout) => {
-            let at = Point::new(
-                rect.center().x - f64::from(layout.width()) / 2.0,
-                rect.center().y - f64::from(layout.height()) / 2.0,
-            );
-            draw_layout(p, layout, Affine::translate(at.to_vec2()));
-        }
-        Content::Icon(node) => {
-            let at = Point::new(
-                rect.center().x - icon_size / 2.0,
-                rect.center().y - icon_size / 2.0,
-            );
-            place_top_left(node_identicon::<P>(*node, icon_size), p, at);
-        }
-    }
+fn draw_content<P: Canvas>(p: &mut P, layout: &Layout<Brush>, rect: Rect) {
+    let at = Point::new(
+        rect.center().x - f64::from(layout.width()) / 2.0,
+        rect.center().y - f64::from(layout.height()) / 2.0,
+    );
+    draw_layout(p, layout, Affine::translate(at.to_vec2()));
 }
 
 /// Where the segment from `from` toward `to` crosses the boundary of
@@ -588,7 +563,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         .filter_map(|id| {
             let world = *view.positions.get(id)?;
             let content = content(doc, id, tcx, zoom);
-            let (w, h) = content_size(&content, px);
+            let (w, h) = (f64::from(content.width()), f64::from(content.height()));
             let width = w + 2.0 * NODE_PADDING * px;
             let height = (h + 2.0 * NODE_PADDING * px).max(NODE_MIN_HEIGHT * px);
             let at = to_panel(world);
@@ -694,12 +669,10 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 (path, mid, end, end - control)
             };
             let pill_content = content(doc, label, tcx, zoom);
-            let (w, h) = match &pill_content {
-                Content::Text(layout) => {
-                    (f64::from(layout.width()), f64::from(layout.height()))
-                }
-                Content::Icon(_) => (LABEL_ICON_SIZE * px, LABEL_ICON_SIZE * px),
-            };
+            let (w, h) = (
+                f64::from(pill_content.width()),
+                f64::from(pill_content.height()),
+            );
             let pill = Rect::from_center_size(
                 mid,
                 (
@@ -760,7 +733,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                     Color::new(color),
                     Affine::IDENTITY,
                 );
-                draw_content(p, &edge.pill_content, edge.pill, LABEL_ICON_SIZE * px);
+                draw_content(p, &edge.pill_content, edge.pill);
             }
             for node in &node_views {
                 let shape = RoundedRect::from_rect(node.rect, 5.0 * px);
@@ -777,7 +750,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                     Color::new(color),
                     Affine::IDENTITY,
                 );
-                draw_content(p, &node.content, node.rect, ICON_SIZE * px);
+                draw_content(p, &node.content, node.rect);
             }
         });
         p.stroke(

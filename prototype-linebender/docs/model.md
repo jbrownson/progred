@@ -59,7 +59,7 @@ Considered and settled 2026-07-05:
   `Value(type_uuid, bytes)` with identity as the pair is
   self-describing (MIME, not codepages), the tag being a UUID needs no
   registry (minted once, like name/isa/cons), and unknown tags degrade
-  gracefully (tag identicon plus opaque bytes). Today's SID/NID enum is
+  gracefully (tag short id plus opaque bytes). Today's SID/NID enum is
   declared to BE this design with a closed fast-path tag set: `sid:...`
   and bare-number serializations are canonical spellings of the two
   well-known tags. The first atom beyond string/number arrives as
@@ -253,7 +253,7 @@ identity for its own sake.
 
 - SID edge labels are permitted. A SID label fuses name and identity
   for that edge — acceptable for casual data, wrong for schema
-  citizens, and the difference should be visible (identicon-labeled
+  citizens, and the difference should be visible (id- or name-labeled
   GUID keys versus plain-text SID keys).
 - No per-key "strengthen" gesture; it would never be obvious when to
   use it. The gradient is contextual instead: records with an `isa` get
@@ -265,8 +265,9 @@ identity for its own sake.
   namespace machinery at the data layer is the failure mode to avoid.
 - Name stays a plain string edge for now; icons and multiple languages
   arrive later as more name-shaped data, never as data-layer features.
-- The editor never displays raw UUIDs; identicons are their visual
-  form, and the encoding is bijective — all 128 bits recoverable from a
+- The editor never displays raw UUIDs; identicons were their visual
+  form (superseded — see the identicon paragraph's deletion note),
+  with a bijective encoding — all 128 bits recoverable from a
   rendering at the small standard size, which rules out sub-perceptual
   geometry (a v5 flaw: sub-pixel jitters rasterize away). The v6
   encoding (2026-07-05) is a nested mosaic with salience decaying
@@ -356,9 +357,12 @@ identity for its own sake.
   ellipsis and the last five hex digits, fixed length) instead —
   identicons added visual noise and required explanation, and
   truncated ids are precise, quiet, verbally communicable, and
-  familiar from git. The code stays, the sample sheet still draws
-  them, and the graph view is their likely home; "never displays raw
-  UUIDs" is suspended for the trial, decided by dogfooding.
+  familiar from git. Deleted 2026-07-07: the graph view (their
+  anticipated home) trialed them for unnamed nodes and the verdict
+  was they are not missed anywhere — both views speak one identity
+  language, short ids. The identicon and sample-sheet modules are
+  gone (git history keeps the v6 encoding); "never displays raw
+  UUIDs" is repealed, truncated ids being the display form.
   Separately: node-space minting dropped RFC 4122's version/variant
   structure (2026-07-05) — payloads are 16 raw CSPRNG bytes with full
   128-bit entropy, since the RFC structure exists to let different
@@ -584,7 +588,8 @@ TypeScript/egui/Haskell prototypes as one design — same force
 constants (repulsion 8000, spring 0.02 toward rest 120, damping 0.85,
 gravity 0.005, max force 10), same FNV-seeded deterministic initial
 positions, same rendering (rounded-rect nodes: names for named,
-identicons for unnamed — their anticipated home — atom values as
+short ids for unnamed (identicons were trialed here and deleted —
+one identity language with the tree) — atom values as
 their own nodes, so a shared `2` is visibly one node; quadratic edges
 with arrowheads and label pills, cubic self-loops, parallel-edge
 fanning; root tinted). Puri shape: positions, velocities, selection,
