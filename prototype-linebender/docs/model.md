@@ -184,6 +184,26 @@ Considered and settled 2026-07-05:
   Position-identifier schemes interleave oddly under concurrent
   merging; irrelevant single-user, remember it if collaboration
   arrives.
+- The empty-list marker is an `isa → List` tag on an ordinary node
+  (2026-07-06) — the anticipated isa convention's first customer. A
+  reserved swap-in empty-list identity was rejected: lists are nodes
+  and nodes are shared, so swapping the value at one referencing edge
+  silently diverges every other reference. Projections may still
+  infer list-ness from position-labeled edges when untagged; the tag
+  decides the empty and ambiguous cases.
+- Moving an element mints a fresh position, so bucket identity does
+  not travel with it structurally the way a rewired cons cell could
+  have. The answer is the path-rewrite mechanism, not structure: a
+  move is an editor gesture, the gesture knows old and new labels,
+  and it emits the rewrite that carries collapse, selection, and
+  friends across (2026-07-06). A uuid-bucket-plus-ordering-list
+  hybrid was rejected as parallel state with an invariant to maintain
+  on every edit. Anything a rewrite misses fails loud — state lost,
+  never reassigned. Also rejected: a compound label (uuid for path
+  identity, fraction for order) — identity by equivalence class is
+  exactly the non-syntactic equality the atom rules forbid, storage
+  keyed by full ids would relabel on move anyway, and explicit moves
+  are already the rewrite's job.
 
 ## Rejected: JSON-Shaped Value Model
 
