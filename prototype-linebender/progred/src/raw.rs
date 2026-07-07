@@ -29,6 +29,7 @@ use vello::peniko::{Brush, Color};
 /// Shared with the mounted editors so edited atoms keep their colors.
 const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
 const NUMBER_COLOR: [f32; 4] = [0.16, 0.40, 0.62, 1.0];
+const QUERY_COLOR: [f32; 4] = [0.46, 0.49, 0.55, 1.0];
 
 pub struct RawStyles {
     pub label: TextStyle,
@@ -188,6 +189,19 @@ impl Cx<'_> {
     fn selected(&self, path: &[Id]) -> bool {
         self.selection.map(Selection::path) == Some(path)
     }
+
+    /// The pending child label under `path`, when the selection is
+    /// authoring one there.
+    fn pending_child_of(&self, path: &[Id]) -> Option<Id> {
+        match self.selection {
+            Some(Selection::Pending { path: pending, .. })
+                if pending.split_last().is_some_and(|(_, parent)| parent == path) =>
+            {
+                pending.last().cloned()
+            }
+            _ => None,
+        }
+    }
 }
 
 /// A location in the projected spanning tree: the sequence of edge
@@ -198,13 +212,16 @@ impl Cx<'_> {
 /// through one general rewrite — see `docs/model.md`.
 pub type Path = Vec<Id>;
 
-/// What is selected. An edge (the value at a path) for now; splice
-/// selections (the gaps between items) arrive with insertion points.
-/// A selected string edge carries its live editor state — every
-/// string is a text editor, focused by selection, and the graph is
-/// written through as it edits.
+/// What is selected: the value at a path, or a nonexistent edge being
+/// authored. A selected atom carries its live editor state — every
+/// atom is a text editor, focused by selection, and the graph is
+/// written through as it edits. A pending selection carries the
+/// completion query instead; the query resolves to the identity that
+/// commits, and until then the graph is untouched — deselecting
+/// discards the pending edge entirely.
 pub enum Selection {
     Edge { path: Path, edit: Option<LineEditState> },
+    Pending { path: Path, query: LineEditState },
 }
 
 impl Selection {
@@ -228,19 +245,21 @@ impl Selection {
 
     pub fn path(&self) -> &[Id] {
         match self {
-            Selection::Edge { path, .. } => path,
+            Selection::Edge { path, .. } | Selection::Pending { path, .. } => path,
         }
     }
 
     pub fn edit(&self) -> Option<&LineEditState> {
         match self {
             Selection::Edge { edit, .. } => edit.as_ref(),
+            Selection::Pending { query, .. } => Some(query),
         }
     }
 
     pub fn edit_mut(&mut self) -> Option<&mut LineEditState> {
         match self {
             Selection::Edge { edit, .. } => edit.as_mut(),
+            Selection::Pending { query, .. } => Some(query),
         }
     }
 }
@@ -283,7 +302,8 @@ pub fn delete_edge(doc: &mut Document, path: &[Id]) -> bool {
 }
 
 /// Where the selection lands after deleting `path`: the next sibling,
-/// else the previous, else the parent.
+/// else the previous, else the parent. Also where a discarded pending
+/// edge returns to.
 pub fn selection_after_delete(descends: &[Descend], path: &[Id]) -> Path {
     sibling(descends, path, true)
         .or_else(|| sibling(descends, path, false))
@@ -292,6 +312,115 @@ pub fn selection_after_delete(descends: &[Descend], path: &[Id]) -> Path {
                 .map(|(_, parent)| parent.to_vec())
                 .unwrap_or_default()
         })
+}
+
+/// The sorted position labels of a node's element edges.
+fn positions_of(gid: &MutGid, node: &Id) -> Vec<Id> {
+    let mut positions: Vec<Id> = gid
+        .edges(node)
+        .map(|edges| {
+            edges
+                .keys()
+                .filter(|label| position::as_position(label).is_some())
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    positions.sort();
+    positions
+}
+
+fn pending(path: Path) -> Selection {
+    Selection::Pending {
+        path,
+        query: line_edit("", QUERY_COLOR),
+    }
+}
+
+/// A pending sibling next to the element at `path` (which must sit at
+/// a position label), minted between it and its neighbor.
+fn pending_beside(doc: &Document, path: &[Id], after: bool) -> Option<Selection> {
+    let (label, parent_path) = path.split_last()?;
+    position::as_position(label)?;
+    let parent = resolve(doc, parent_path)?;
+    let positions = positions_of(&doc.gid, parent);
+    let index = positions.iter().position(|p| p == label)?;
+    let fresh = if after {
+        position::between(Some(label), positions.get(index + 1))?
+    } else {
+        position::between(index.checked_sub(1).map(|i| &positions[i]), Some(label))?
+    };
+    let mut fresh_path = parent_path.to_vec();
+    fresh_path.push(fresh);
+    Some(pending(fresh_path))
+}
+
+pub fn pending_after(doc: &Document, path: &[Id]) -> Option<Selection> {
+    pending_beside(doc, path, true)
+}
+
+pub fn pending_before(doc: &Document, path: &[Id]) -> Option<Selection> {
+    pending_beside(doc, path, false)
+}
+
+/// A pending first element inside the node at `path`. Element
+/// insertion applies where elements plausibly live — nodes with
+/// position edges, or empty nodes, which is how lists begin; a node
+/// with only record fields declines (field insertion, with its
+/// pending label, is a separate gesture).
+pub fn pending_into(doc: &Document, path: &[Id]) -> Option<Selection> {
+    let value = resolve(doc, path)?;
+    value.as_node_id()?;
+    let positions = positions_of(&doc.gid, value);
+    let record_only = positions.is_empty()
+        && doc.gid.edges(value).is_some_and(|edges| !edges.is_empty());
+    (!record_only).then_some(())?;
+    let fresh = position::between(None, positions.first())?;
+    let mut fresh_path = path.to_vec();
+    fresh_path.push(fresh);
+    Some(pending(fresh_path))
+}
+
+/// A pending root for an empty document.
+pub fn pending_root(doc: &Document) -> Option<Selection> {
+    doc.root.is_none().then(|| pending(Vec::new()))
+}
+
+/// The identity a pending query resolves to: quotes force a string,
+/// text that parses is a number, anything else is the string as
+/// typed.
+pub fn resolve_query(text: &str) -> Id {
+    let trimmed = text.trim();
+    let quoted = (trimmed.len() >= 2)
+        .then(|| trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')))
+        .flatten();
+    match quoted {
+        Some(inner) => Id::from(inner),
+        None => trimmed
+            .parse::<f64>()
+            .map(Id::from)
+            .unwrap_or_else(|_| Id::from(text)),
+    }
+}
+
+/// Writes `value` at `path` — the empty path writes the document
+/// root. The single-location write every edit reduces to.
+pub fn set_value(doc: &mut Document, path: &[Id], value: Id) -> bool {
+    match path.split_last() {
+        Some((label, parent_path)) => {
+            match resolve(doc, parent_path).and_then(Id::as_node_id) {
+                Some(parent) => {
+                    doc.gid.set(parent, label.clone(), value);
+                    true
+                }
+                None => false,
+            }
+        }
+        None => {
+            doc.root = Some(value);
+            true
+        }
+    }
 }
 
 /// Toggle the collapse override for the node at `path`, staying
@@ -326,7 +455,9 @@ pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> 
 /// longer resolves to a node drops the write silently — the
 /// malformed-graph rule at the mutation boundary.
 pub fn write_through(doc: &mut Document, selection: &Selection) {
-    let Selection::Edge { path, edit } = selection;
+    let Selection::Edge { path, edit } = selection else {
+        return;
+    };
     let target = match path.split_last() {
         Some((label, parent_path)) => resolve(doc, parent_path)
             .and_then(Id::as_node_id)
@@ -483,12 +614,17 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     // selectable placeholder at the root path.
     match &doc.root {
         Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, &hooks),
-        None => descend(
-            &cx,
-            Vec::new(),
-            &hooks,
-            text(tcx, "empty document", &cx.styles.dim),
-        ),
+        None => match cx.selection {
+            Some(Selection::Pending { path, .. }) if path.is_empty() => {
+                pending_view(&cx, tcx, Vec::new(), &hooks)
+            }
+            _ => descend(
+                &cx,
+                Vec::new(),
+                &hooks,
+                text(tcx, "empty document", &cx.styles.dim),
+            ),
+        },
     }
 }
 
@@ -507,13 +643,22 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let id = Id::from(node);
-    let edges = sorted_edges(cx.gid, &id);
+    let mut entries: Vec<(Id, Option<Id>)> = sorted_edges(cx.gid, &id)
+        .into_iter()
+        .map(|(label, value)| (label, Some(value)))
+        .collect();
+    if let Some(label) = cx.pending_child_of(path) {
+        entries.push((label, None));
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+    }
     let id_text = text(tcx, &short_id(node), &cx.styles.dim);
 
-    if edges.is_empty() {
+    if entries.is_empty() {
         return id_text;
     }
-    let collapsed = cx.collapse.collapsed(path, ancestors.contains(&id));
+    // A pending child forces the node open so it can be seen.
+    let collapsed = entries.iter().all(|(_, value)| value.is_some())
+        && cx.collapse.collapsed(path, ancestors.contains(&id));
     let header = row(
         4.0 * scale,
         vec![id_text, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
@@ -524,14 +669,17 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 
     let mut inner = ancestors.clone();
     inner.insert(id);
-    let rows = edges
+    let rows = entries
         .into_iter()
         .map(|(label, value)| {
             let mut child = path.to_vec();
             child.push(label.clone());
             let label = label_view(cx, tcx, &label);
-            let value = value_view(cx, tcx, &child, &inner, &value, hooks);
-            row(6.0 * scale, vec![label, arrow(cx.styles), value])
+            let content = match value {
+                Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
+                None => pending_view(cx, tcx, child, hooks),
+            };
+            row(6.0 * scale, vec![label, arrow(cx.styles), content])
         })
         .collect();
     col(
@@ -706,6 +854,23 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
         unknown_view(value, tcx, cx.styles)
     };
     descend(cx, path.to_vec(), hooks, inner)
+}
+
+/// A nonexistent edge the selection is authoring: the completion
+/// query's focused editor, wrapped as an ordinary descend so it
+/// highlights, clicks, and navigates like the edge it may become.
+fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: Path,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let editing = cx
+        .selection
+        .filter(|selection| selection.path() == path.as_slice())
+        .and_then(Selection::edit);
+    let content = atom_content(editing, text(tcx, "…", &cx.styles.dim), cx.styles, hooks);
+    descend(cx, path, hooks, content)
 }
 
 /// An editable atom's content: the selection's focused editor when
@@ -960,6 +1125,90 @@ mod tests {
         // An only child falls back to its parent.
         let only = descends(&[vec![], vec!["a"], vec!["a", "x"]]);
         assert_eq!(selection_after_delete(&only, &path(&["a", "x"])), path(&["a"]));
+    }
+
+    #[test]
+    fn pending_insertions_mint_between_neighbors() {
+        let mut gid = MutGid::new();
+        let items = list(&mut gid, vec![Id::from("a"), Id::from("b")]);
+        let doc = Document {
+            root: Some(items.clone()),
+            gid,
+        };
+        let positions = positions_of(&doc.gid, &items);
+        let first = vec![positions[0].clone()];
+
+        let Some(Selection::Pending { path, .. }) = pending_after(&doc, &first) else {
+            panic!("pending after");
+        };
+        assert!(positions[0] < path[0] && path[0] < positions[1]);
+
+        let Some(Selection::Pending { path, .. }) = pending_before(&doc, &first) else {
+            panic!("pending before");
+        };
+        assert!(path[0] < positions[0]);
+
+        // Into the root list: a first element before everything.
+        let Some(Selection::Pending { path, .. }) = pending_into(&doc, &[]) else {
+            panic!("pending into");
+        };
+        assert!(path[0] < positions[0]);
+
+        // A record field has no position to sit beside.
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("name"), Id::from("x"));
+        let doc = Document {
+            root: Some(Id::from(node)),
+            gid,
+        };
+        assert!(pending_after(&doc, &[Id::from("name")]).is_none());
+        // Its value being an atom declines "into", and so does the
+        // record itself — a node with only field edges takes no
+        // positional element.
+        assert!(pending_into(&doc, &[Id::from("name")]).is_none());
+        assert!(pending_into(&doc, &[]).is_none());
+        // An empty document offers the root; a rooted one does not.
+        assert!(pending_root(&doc).is_none());
+        let empty = Document {
+            root: None,
+            gid: MutGid::new(),
+        };
+        assert!(matches!(
+            pending_root(&empty),
+            Some(Selection::Pending { path, .. }) if path.is_empty()
+        ));
+    }
+
+    #[test]
+    fn resolve_query_infers_the_identity() {
+        assert_eq!(resolve_query("3.5"), Id::from(3.5));
+        assert_eq!(resolve_query(" -2 "), Id::from(-2.0));
+        assert_eq!(resolve_query("abc"), Id::from("abc"));
+        assert_eq!(resolve_query("\"3.5\""), Id::from("3.5"));
+        assert_eq!(resolve_query(""), Id::from(""));
+        assert_eq!(resolve_query("\""), Id::from("\""));
+    }
+
+    #[test]
+    fn set_value_writes_edges_and_the_root() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("x"), Id::from(1.0));
+        let mut doc = Document {
+            root: Some(Id::from(node)),
+            gid,
+        };
+        assert!(set_value(&mut doc, &[Id::from("x")], Id::from(2.0)));
+        assert_eq!(resolve(&doc, &[Id::from("x")]), Some(&Id::from(2.0)));
+        assert!(set_value(&mut doc, &[], Id::from("root")));
+        assert_eq!(doc.root, Some(Id::from("root")));
+        // A parent that is not a node declines.
+        assert!(!set_value(
+            &mut doc,
+            &[Id::from("x"), Id::from("y")],
+            Id::from(0.0)
+        ));
     }
 
     #[test]

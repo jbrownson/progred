@@ -483,6 +483,18 @@ that node and its parent.
   per-descend commit closures for the root and for list gaps;
   ordered-identity lists removed the list motive, leaving the root as
   the one special-cased commit.
+- Insertion (2026-07-06, first pass): Enter begins a pending sibling
+  after the selection — Shift+Enter before, Cmd+Enter the first
+  element into a selected node (also the fallback when the selection
+  has no position to sit beside), and Enter on an empty document's
+  placeholder begins the root. The pending edge renders in place,
+  sorted among its would-be siblings, with the query editor focused;
+  Enter resolves the query to an identity (quotes force a string,
+  parsing text is a number) and commits it in one write; Escape,
+  empty-Backspace, or navigating away discards it — the pending edge
+  is selection state, so deselection is disposal. The ranked
+  completion popup (references, node creation) layers onto the same
+  pending row next.
 
 ## Types And Autocomplete
 

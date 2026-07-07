@@ -249,6 +249,7 @@ impl ApplicationHandler<MenuEvent> for App {
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         handler.dispatch_key(self, &key_event)
                             || self.delete_key(&descends, &key_event)
+                            || self.insert_key(&descends, &key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &descends,
@@ -575,6 +576,60 @@ impl App {
             }
     }
 
+    /// Enter commits a pending edge or begins one — a sibling after
+    /// the selection, before it with Shift, the first element into a
+    /// selected node with the platform command modifier (also the
+    /// fallback when the selection has no position to sit beside),
+    /// and the root of an empty document. The query resolves to the
+    /// identity that commits; Escape — or Backspace on an empty
+    /// query — discards it with the graph untouched.
+    fn insert_key(&mut self, descends: &[raw::Descend], event: &KeyboardEvent) -> bool {
+        event.state.is_down()
+            && match &event.key {
+                Key::Named(NamedKey::Enter) => match self.model.selection.take() {
+                    Some(raw::Selection::Pending { path, query }) => {
+                        let value = raw::resolve_query(&query.editor.text().to_string());
+                        raw::set_value(&mut self.model.doc, &path, value);
+                        self.model.selection = Some(raw::Selection::edge(&self.model.doc, path));
+                        true
+                    }
+                    selection => {
+                        let command = if cfg!(target_os = "macos") {
+                            event.modifiers.meta()
+                        } else {
+                            event.modifiers.ctrl()
+                        };
+                        let started = match &selection {
+                            Some(current) if command => {
+                                raw::pending_into(&self.model.doc, current.path())
+                            }
+                            Some(current) if event.modifiers.shift() => {
+                                raw::pending_before(&self.model.doc, current.path())
+                            }
+                            Some(current) => raw::pending_after(&self.model.doc, current.path())
+                                .or_else(|| raw::pending_into(&self.model.doc, current.path())),
+                            None => raw::pending_root(&self.model.doc),
+                        };
+                        let began = started.is_some();
+                        self.model.selection = started.or(selection);
+                        began
+                    }
+                },
+                Key::Named(NamedKey::Escape | NamedKey::Backspace) => {
+                    match &self.model.selection {
+                        Some(raw::Selection::Pending { path, .. }) => {
+                            let back = raw::selection_after_delete(descends, path);
+                            self.model.selection =
+                                Some(raw::Selection::edge(&self.model.doc, back));
+                            true
+                        }
+                        _ => false,
+                    }
+                }
+                _ => false,
+            }
+    }
+
     /// Space toggles the selected node's collapse override; a focused
     /// string editor claims the key first and types a space instead.
     fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
@@ -760,7 +815,7 @@ fn edit_ctx(app: &mut App) -> EditCtx<'_> {
         .selection
         .as_mut()
         .and_then(raw::Selection::edit_mut)
-        .expect("edit dispatch without a string selection");
+        .expect("edit dispatch without an editor");
     EditCtx {
         state,
         fonts: &mut app.font_cx,
