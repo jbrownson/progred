@@ -844,6 +844,7 @@ fn secondary_of(doc: &Document, selection: Option<&Selection>) -> Option<Id> {
 pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     doc: &Document,
     selection: Option<&Selection>,
+    graph_node: Option<&Id>,
     collapse: &Collapse,
     tcx: &mut TextCtx,
     styles: &RawStyles,
@@ -854,7 +855,9 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         collapse,
         styles,
         selection,
-        secondary: secondary_of(doc, selection),
+        // The graph view's selected node is a secondary here too:
+        // its projections are the same identity.
+        secondary: secondary_of(doc, selection).or_else(|| graph_node.cloned()),
     };
     // Raw shows the pure graph with no assumptions: the root is
     // projected directly, so a list root renders as its
@@ -1022,7 +1025,7 @@ fn secondary_mark<P: Canvas>(cx: &Cx, id: &Id, content: Node<P>) -> Node<P> {
     })
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 

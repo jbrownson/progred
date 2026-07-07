@@ -31,14 +31,21 @@ A pure widget library: rendering and behavior, nothing else.
 - State a widget must keep across frames — cursor/selection, scroll
   offset, drag state, focus — is defined by Puri as types and passed in
   by the caller. Puri holds nothing between frames.
-- Every input event runs the pure pass fresh (no scene attached),
-  collecting a transient `Handler` that is dispatched once for that
-  event and discarded. Nothing is retained across events, so dispatch
-  geometry always matches the displayed frame — purity guarantees the
-  re-run reproduces it. The pass itself stays read-only in the model;
-  all mutation happens in dispatch, after placement completes,
-  preserving one-event-one-transition and avoiding read-after-write
-  order dependence within a pass.
+- Each rendered frame yields two outputs: the draw calls and a
+  `Handler`. The shell presents the draws and retains the handler
+  until the next redraw replaces it; every input event dispatches into
+  the retained handler (corrected 2026-07-07 — the shell originally
+  re-ran the pass per event to mint a fresh handler, on the theory
+  that purity makes the re-run match the displayed frame; that is
+  false whenever state advanced since the present, e.g. a stepping
+  simulation, so quick clicks hit-tested against geometry newer than
+  the pixels — and it cost a full pass per pointer move besides. The
+  user reacts to what was presented, so the presented frame's handler
+  is the honest dispatch target). The pass itself stays read-only in
+  the model; all mutation happens in dispatch, preserving
+  one-event-one-transition and avoiding read-after-write order
+  dependence within a pass. Handlers are still transient — one frame
+  of custody in the shell, never puri's.
 - A `Handler` holds one composed function per event kind (typed
   channels: pointer down, key — extended as widgets need). The monoid
   is function composition, mirroring how rendering works: `on_*` wraps
@@ -48,9 +55,7 @@ A pure widget library: rendering and behavior, nothing else.
   region registry; widgets gate by their own settled rects inline, so
   non-rectangular picking is first-class. `capture` scopes a subtree's
   registrations into a value its parent composes — call, wrap with
-  before/after, transform events, or drop. If per-event passes ever
-  cost too much (text shaping per mouse move), the answer is the
-  planned caller-side memoization, not retained dispatch. No action
+  before/after, transform events, or drop. No action
   type or reducer is baked in; per-widget action vocabularies (the line
   edit's) exist for testability without any global action enum.
 - Puri mints no identity and retains no hierarchy. The widget tree is a
@@ -280,9 +285,12 @@ Handler entirely and fused event consumption into placement — wrong by
 the architecture's own oldest rule (the render pass is read-only; all
 mutation happens after), since mid-pass mutation reintroduces
 order-dependent behavior within a frame. The settled design: a
-transient Handler of composed dispatch functions, rebuilt by a fresh
-pure pass for every event, dispatched once, discarded. Freshness like
-egui's run-per-event model; phase separation unlike egui's fused one.
+transient Handler of composed dispatch functions, one per rendered
+frame, dispatched against until the next frame replaces it (2026-07-07;
+the interim rebuilt-per-event shape hit-tested against state the user
+had not seen and paid a pass per pointer move). Phase separation
+unlike egui's fused model, and dispatch against the presented frame
+unlike egui's run-per-event freshness.
 Refined same day at the user's direction: the per-kind Vec channels
 became one composed function per kind (a unified Event enum was tried
 for a moment and rolled back — typed channels, composed accumulation),

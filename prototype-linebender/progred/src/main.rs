@@ -3,9 +3,9 @@
 
 mod conventions;
 mod filter;
-// Benched while the raw view trials git-style id suffixes; the sample
-// sheet still draws identicons and a future graph view is their
-// likely home.
+mod graph_view;
+// Benched in the raw view while it trials git-style id suffixes; the
+// graph view draws them for unnamed nodes, their anticipated home.
 #[allow(dead_code)]
 mod identicon;
 mod raw;
@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use muda::accelerator::{Accelerator, Code, Modifiers};
-use muda::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
+use muda::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditState};
@@ -30,7 +30,7 @@ use puri_vello::VelloCanvas;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::{PointerButton, PointerEvent};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::kurbo::{Affine, Point, Stroke};
+use vello::kurbo::{Affine, Point, Size, Stroke, Vec2};
 use vello::peniko::{Brush, Color};
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
@@ -50,6 +50,18 @@ enum RenderState {
     Suspended(Option<Arc<Window>>),
 }
 
+/// The last rendered frame's dispatch outputs, retained until the
+/// next redraw replaces them: the handler events feed, plus what the
+/// shell's key fallbacks interpret. The user reacts to what was
+/// presented, so its geometry is the honest hit-test target — and the
+/// event path runs no pass at all.
+struct Dispatch {
+    handler: Handler<App>,
+    descends: Vec<raw::Descend>,
+    max_scroll: f64,
+    popup: Option<raw::Popup>,
+}
+
 struct App {
     context: RenderContext,
     renderers: Vec<Option<Renderer>>,
@@ -65,6 +77,11 @@ struct App {
     /// events.
     menu: Menu,
     menu_ids: MenuIds,
+    /// The View > Graph checkbox; muda owns the check state.
+    graph_item: CheckMenuItem,
+    /// Last pointer position, for anchoring pinch zoom.
+    cursor: Point,
+    dispatch: Option<Dispatch>,
     reducer: WindowEventReducer,
 }
 
@@ -72,12 +89,13 @@ struct MenuIds {
     open: MenuId,
     save: MenuId,
     save_as: MenuId,
+    graph: MenuId,
 }
 
 /// The menu bar: file commands own their key equivalents, so the
 /// platform routes Cmd+S and friends here rather than through key
 /// dispatch. Attachment is macOS-only until another platform is run.
-fn build_menu() -> (Menu, MenuIds) {
+fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
     let accel = if cfg!(target_os = "macos") {
         Modifiers::META
     } else {
@@ -90,11 +108,18 @@ fn build_menu() -> (Menu, MenuIds) {
         true,
         Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyS)),
     );
+    let graph = CheckMenuItem::new(
+        "Graph",
+        true,
+        false,
+        Some(Accelerator::new(Some(accel), Code::KeyG)),
+    );
     let menu = Menu::new();
     let ids = MenuIds {
         open: open.id().clone(),
         save: save.id().clone(),
         save_as: save_as.id().clone(),
+        graph: graph.id().clone(),
     };
     menu.append_items(&[
         &Submenu::with_items(
@@ -118,9 +143,23 @@ fn build_menu() -> (Menu, MenuIds) {
             ],
         )
         .expect("file menu"),
+        &Submenu::with_items("View", true, &[&graph]).expect("view menu"),
     ])
     .expect("menu bar");
-    (menu, ids)
+    (menu, ids, graph)
+}
+
+/// The position carried by any pointer translation, for cursor
+/// tracking.
+fn pointer_position(event: &PointerEvent) -> Option<Point> {
+    match event {
+        PointerEvent::Down(e) | PointerEvent::Up(e) => {
+            Some(Point::new(e.state.position.x, e.state.position.y))
+        }
+        PointerEvent::Move(u) => Some(Point::new(u.current.position.x, u.current.position.y)),
+        PointerEvent::Scroll(e) => Some(Point::new(e.state.position.x, e.state.position.y)),
+        _ => None,
+    }
 }
 
 fn dialog() -> rfd::FileDialog {
@@ -135,6 +174,10 @@ impl ApplicationHandler<MenuEvent> for App {
             self.menu_save(false);
         } else if *event.id() == self.menu_ids.save_as {
             self.menu_save(true);
+        } else if *event.id() == self.menu_ids.graph
+            && let RenderState::Active { window, .. } = &self.state
+        {
+            window.request_redraw();
         }
     }
 
@@ -199,6 +242,23 @@ impl ApplicationHandler<MenuEvent> for App {
         };
         let scale = window.scale_factor();
 
+        // Pinch zooms the graph toward the cursor; winit delivers it
+        // outside the pointer stream the reducer covers.
+        if let WindowEvent::PinchGesture { delta, .. } = &event
+            && self.graph_item.is_checked()
+        {
+            let size = window.inner_size();
+            let panel = graph_view::panel(size.width as f64, size.height as f64);
+            let anchor = if panel.contains(self.cursor) {
+                self.cursor - panel.center()
+            } else {
+                Vec2::ZERO
+            };
+            self.model.graph.zoom_at(1.0 + delta, anchor, scale);
+            window.request_redraw();
+            return;
+        }
+
         if !matches!(
             event,
             WindowEvent::KeyboardInput {
@@ -216,46 +276,38 @@ impl ApplicationHandler<MenuEvent> for App {
                 _ => None,
             };
             let translation = self.reducer.reduce(scale, &event);
-            if ime.is_some() || translation.is_some() {
-                let viewport = window.inner_size().height as f64;
-                let mut frame = Frame {
-                    scene: None,
-                    handler: Handler::new(),
-                    descends: Vec::new(),
-                    max_scroll: 0.0,
-                    popup: None,
-                };
-                run_frame(
-                    &mut frame,
-                    &self.model,
-                    &mut self.font_cx,
-                    &mut self.layout_cx,
-                    scale,
-                    viewport,
-                );
-                let Frame {
-                    handler,
-                    descends,
-                    max_scroll,
-                    popup,
-                    ..
-                } = frame;
+            if let Some(WindowEventTranslation::Pointer(pointer)) = &translation
+                && let Some(position) = pointer_position(pointer)
+            {
+                self.cursor = position;
+            }
+            // Events dispatch into the last rendered frame's handler
+            // — the user reacts to what was presented, so its
+            // geometry is what clicks mean. Until the first redraw
+            // there is nothing to dispatch into.
+            if (ime.is_some() || translation.is_some())
+                && let Some(dispatch) = self.dispatch.take()
+            {
+                let size = window.inner_size();
+                let viewport = size.height as f64;
                 let handled = match (ime, translation) {
-                    (Some(ime), _) => handler.dispatch_ime(self, &ime),
+                    (Some(ime), _) => dispatch.handler.dispatch_ime(self, &ime),
                     // Keys nothing claims fall through to the collapse
                     // toggle and then selection stepping, so the
                     // selected string's editor always wins over both.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
-                        handler.dispatch_key(self, &key_event)
-                            || self.delete_key(&descends, &key_event)
-                            || self.insert_key(&descends, &popup, &key_event)
+                        dispatch.handler.dispatch_key(self, &key_event)
+                            || self.graph_key(&key_event)
+                            || self.delete_key(&dispatch.descends, &key_event)
+                            || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
-                                &descends,
+                                &dispatch.descends,
                                 self.model.selection.as_ref(),
                                 &key_event,
                             ) {
                                 Some(path) => {
+                                    self.model.graph.selection = None;
                                     self.model.selection =
                                         Some(raw::Selection::edge(&self.model.doc, path));
                                     true
@@ -264,21 +316,24 @@ impl ApplicationHandler<MenuEvent> for App {
                             }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
-                        handler.dispatch_pointer_down(self, &button)
+                        dispatch.handler.dispatch_pointer_down(self, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
-                        handler.dispatch_pointer_move(self, &update)
+                        dispatch.handler.dispatch_pointer_move(self, &update)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
-                        handler.dispatch_pointer_up(self, &button)
+                        dispatch.handler.dispatch_pointer_up(self, &button)
                     }
-                    // Scrolls nothing claims move the document.
+                    // Scrolls nothing claims pan or zoom the graph
+                    // under the cursor, else move the document.
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update)))) => {
-                        handler.dispatch_scroll(self, &update)
-                            || self.scroll_document(&update, scale, viewport, max_scroll)
+                        dispatch.handler.dispatch_scroll(self, &update)
+                            || self.graph_scroll(&update, scale, size.width as f64, viewport)
+                            || self.scroll_document(&update, scale, viewport, dispatch.max_scroll)
                     }
                     _ => false,
                 };
+                self.dispatch = Some(dispatch);
                 if handled {
                     let model = &mut self.model;
                     if let Some(selection) = &model.selection {
@@ -347,7 +402,7 @@ fn main() {
     let event_loop = builder.build().expect("Couldn't create event loop");
     // The menu attaches to the app instance the event loop created;
     // its events arrive as user events through the proxy.
-    let (menu, menu_ids) = build_menu();
+    let (menu, menu_ids, graph_item) = build_menu();
     let proxy = event_loop.create_proxy();
     MenuEvent::set_event_handler(Some(move |event| {
         let _ = proxy.send_event(event);
@@ -364,11 +419,15 @@ fn main() {
             doc,
             selection: None,
             collapse: raw::Collapse::default(),
+            graph: graph_view::GraphView::default(),
             scroll: 0.0,
         },
         doc_path,
         menu,
         menu_ids,
+        graph_item,
+        cursor: Point::ZERO,
+        dispatch: None,
         reducer: WindowEventReducer::default(),
     };
 
@@ -381,6 +440,7 @@ struct Model {
     doc: raw::Document,
     selection: Option<raw::Selection>,
     collapse: raw::Collapse,
+    graph: graph_view::GraphView,
     /// Vertical document scroll offset in logical pixels, so the
     /// position survives moving between monitor scales. May exceed
     /// the current maximum after a resize: placement clamps
@@ -527,6 +587,7 @@ impl App {
                         doc,
                         selection: None,
                         collapse: raw::Collapse::default(),
+                        graph: graph_view::GraphView::default(),
                         scroll: 0.0,
                     };
                     self.adopt_doc_path(path);
@@ -544,6 +605,50 @@ impl App {
             window.set_title(&self.title());
             window.request_redraw();
         }
+    }
+
+    /// Scrolls over the graph panel drive its viewport — trackpad
+    /// pixels pan, wheel lines zoom toward the cursor — instead of
+    /// the document.
+    fn graph_scroll(
+        &mut self,
+        update: &ui_events::pointer::PointerScrollEvent,
+        scale: f64,
+        width: f64,
+        height: f64,
+    ) -> bool {
+        if !self.graph_item.is_checked() {
+            return false;
+        }
+        let panel = graph_view::panel(width, height);
+        let position = Point::new(update.state.position.x, update.state.position.y);
+        panel.contains(position) && {
+            self.model
+                .graph
+                .scroll(&update.delta, position - panel.center(), scale);
+            true
+        }
+    }
+
+    /// Graph-view keys: Delete removes the graph selection — one
+    /// detachment for an edge, full detachment everywhere for a node
+    /// — and Escape clears it. The graph and document selections are
+    /// exclusive, so this never races the document delete below.
+    fn graph_key(&mut self, event: &KeyboardEvent) -> bool {
+        event.state.is_down()
+            && match (&event.key, &self.model.graph.selection) {
+                (Key::Named(NamedKey::Backspace | NamedKey::Delete), Some(selection)) => {
+                    let selection = selection.clone();
+                    graph_view::delete_selection(&mut self.model.doc, &selection);
+                    self.model.graph.selection = None;
+                    true
+                }
+                (Key::Named(NamedKey::Escape), Some(_)) => {
+                    self.model.graph.selection = None;
+                    true
+                }
+                _ => false,
+            }
     }
 
     /// Backspace or Delete removes the selected edge — a focused atom
@@ -735,6 +840,12 @@ impl App {
         let width = surface.config.width;
         let height = surface.config.height;
 
+        // Advance the force simulation while the graph is open; the
+        // continuous redraw request below keeps it animating.
+        let show_graph = self.graph_item.is_checked();
+        if show_graph {
+            self.model.graph.step(&self.model.doc);
+        }
         self.scene.reset();
         let mut frame = Frame {
             scene: Some(&mut self.scene),
@@ -746,12 +857,25 @@ impl App {
         run_frame(
             &mut frame,
             &self.model,
+            show_graph,
             &mut self.font_cx,
             &mut self.layout_cx,
             scale,
-            height as f64,
+            Size::new(width as f64, height as f64),
         );
-        drop(frame);
+        let Frame {
+            handler,
+            descends,
+            max_scroll,
+            popup,
+            ..
+        } = frame;
+        self.dispatch = Some(Dispatch {
+            handler,
+            descends,
+            max_scroll,
+            popup,
+        });
 
         let RenderState::Active { surface, .. } = &mut self.state else {
             return;
@@ -810,22 +934,30 @@ impl App {
         surface_texture.present();
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
+
+        if show_graph && self.model.graph.hot() {
+            window.request_redraw();
+        }
     }
 }
 
 fn run_frame(
     frame: &mut Frame<'_>,
     model: &Model,
+    show_graph: bool,
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<Brush>,
     scale: f64,
-    viewport_height: f64,
+    viewport: Size,
 ) {
+    let (viewport_width, viewport_height) = (viewport.width, viewport.height);
     // Empty space deselects. Registered before the content places, so
     // the descend handlers (registered as they place) take precedence,
     // and only a press that claims no edge falls through to here.
     frame.handler().on_pointer_down(|app: &mut App, event| {
-        event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
+        event.button == Some(PointerButton::Primary)
+            && (app.model.selection.take().is_some()
+                | app.model.graph.selection.take().is_some())
     });
 
     let mut tcx = TextCtx {
@@ -837,6 +969,7 @@ fn run_frame(
     let body = raw::project(
         &model.doc,
         model.selection.as_ref(),
+        model.graph.selected_node(),
         &model.collapse,
         &mut tcx,
         &styles,
@@ -846,6 +979,7 @@ fn run_frame(
             // or advances the editor's caret — focus and cursor
             // placement are one event.
             select: Rc::new(move |app: &mut App, path, click| {
+                app.model.graph.selection = None;
                 if app.model.selection.as_ref().is_none_or(|s| s.path() != path) {
                     app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
                 } else if click.is_none()
@@ -886,6 +1020,38 @@ fn run_frame(
             margin - model.scroll.clamp(0.0, frame.max_scroll) * scale,
         ),
     );
+    // The graph pane draws over the document's right side; placed
+    // after the body so its handlers win inside the panel.
+    if show_graph {
+        let panel = graph_view::panel(viewport_width, viewport_height);
+        let pane = graph_view::pane(
+            &model.doc,
+            &model.graph,
+            model.selection.as_ref(),
+            &mut tcx,
+            panel,
+            &graph_view::Hooks {
+                press_node: Rc::new(|app: &mut App, id, grab, world| {
+                    app.model.selection = None;
+                    app.model.graph.press_node(id, grab, world);
+                }),
+                press_edge: Rc::new(|app: &mut App, source, label| {
+                    app.model.selection = None;
+                    app.model.graph.selection =
+                        Some(graph_view::GraphSelection::Edge { source, label });
+                }),
+                press_background: Rc::new(|app: &mut App, panel| {
+                    app.model.graph.press_background(panel);
+                }),
+                drag_to: Rc::new(|app: &mut App, world, panel, px| {
+                    app.model.graph.drag_to(world, panel, px)
+                }),
+                release: Rc::new(|app: &mut App| app.model.graph.release()),
+            },
+        );
+        place_top_left(pane, frame, Point::new(panel.x0, panel.y0));
+    }
+
     // The pending row's popup draws after the body, so it overlays
     // and its click targets win.
     if let Some(popup) = frame.popup.take() {

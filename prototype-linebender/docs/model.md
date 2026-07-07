@@ -577,6 +577,48 @@ that node and its parent.
   select, only something to begin — with Escape deselecting rather
   than re-pending.
 
+## Graph View
+
+For demos on small graphs (2026-07-07), carried from the
+TypeScript/egui/Haskell prototypes as one design — same force
+constants (repulsion 8000, spring 0.02 toward rest 120, damping 0.85,
+gravity 0.005, max force 10), same FNV-seeded deterministic initial
+positions, same rendering (rounded-rect nodes: names for named,
+identicons for unnamed — their anticipated home — atom values as
+their own nodes, so a shared `2` is visibly one node; quadratic edges
+with arrowheads and label pills, cubic self-loops, parallel-edge
+fanning; root tinted). Puri shape: positions, velocities, selection,
+and drag are explicit model state; the pane is one pure pass — build
+geometry from state, draw it, register handlers over it — and the
+simulation steps once per redraw, with the continuous redraw request
+gated on the simulation being visibly in motion or dragged — unlike
+the prior prototypes' run-forever loops, it sleeps when settled and
+any event that changes the graph reheats it (View > Graph, Cmd+G).
+Click-vs-drag slop is measured in panel pixels for nodes and pans
+alike; a first cut measured node slop in world units, a
+zoom-dependent dead zone that read as drag latency. The graph's
+animation is also what exposed the shell's per-event pass rebuilding
+dispatch handlers from state newer than the pixels — quick grabs on
+a hot graph missed their node — settled by dispatching into the last
+rendered frame's handler (see puri.md), which also deleted the pass
+per pointer move. Selection is exclusive
+with the document's and mirrors across panes as secondary marks both
+ways (the graph-selected node marks its projections; the selected
+edge and its value mark in the graph). Deletion follows the
+TS/Haskell semantics — the egui port's was dead code — an edge is one
+detachment; a node is detached everywhere (root cleared if root,
+outgoing and incoming edges removed), with unreferenced values simply
+dropping out of view. Viewport (2026-07-07): the pane clips; pan and
+zoom are world-space model state — background drag pans, trackpad
+two-finger scroll pans (ScrollDelta pixels, matching the document
+scroll's sign convention), pinch zooms toward the cursor (winit
+PinchGesture, handled outside the reducer, which doesn't cover
+gestures), and wheel lines zoom toward the cursor; text re-lays-out
+at the zoomed size, so it stays crisp rather than scaling glyphs.
+Scroll over the panel routes to the graph ahead of the document.
+Still scoped out: position continuity across identity changes (the
+Haskell spot-transfer).
+
 ## Types And Autocomplete
 
 Deferred behind projections.
