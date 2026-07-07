@@ -160,6 +160,9 @@ impl Collapse {
 /// Read-only projection context threaded through every view.
 struct Cx<'a> {
     gid: &'a MutGid,
+    /// The document root — a Document field, not a gid edge, so the
+    /// completion sweep needs it passed alongside the gid.
+    root: Option<&'a Id>,
     collapse: &'a Collapse,
     styles: &'a RawStyles,
     selection: Option<&'a Selection>,
@@ -514,7 +517,7 @@ pub trait HasPopup {
 /// by the fuzzy tiers), and a fresh node — named after the query when
 /// there is one, the create-on-reference of the floating-definitions
 /// design.
-fn completion_entries(gid: &MutGid, query: &str) -> Vec<Entry> {
+fn completion_entries(gid: &MutGid, root: Option<&Id>, query: &str) -> Vec<Entry> {
     let atom = resolve_query(query);
     let display = match atom.as_str() {
         Some(s) => format!("\"{s}\""),
@@ -539,7 +542,7 @@ fn completion_entries(gid: &MutGid, query: &str) -> Vec<Entry> {
     // you see is what you can type. Unnamed keys start with the
     // ellipsis, which sorts after names, so they trail on an empty
     // query.
-    let mut nodes: Vec<(String, Id)> = document_nodes(gid)
+    let mut nodes: Vec<(String, Id)> = document_nodes(gid, root)
         .into_iter()
         .map(|node| {
             let id = Id::from(node);
@@ -598,11 +601,13 @@ fn completion_entries(gid: &MutGid, query: &str) -> Vec<Entry> {
     entries
 }
 
-/// Every GUID node the document contains — entity sources plus nodes
+/// Every GUID node the document contains — entity sources, nodes
 /// appearing only as labels or values (an edgeless node referenced
-/// somewhere is still referenceable). Sorted for a deterministic
+/// somewhere is still referenceable), and the root, whose reference
+/// is a Document field rather than a gid edge — a fresh edgeless
+/// node at root is still in the document. Sorted for a deterministic
 /// offer order.
-fn document_nodes(gid: &MutGid) -> Vec<NodeId> {
+fn document_nodes(gid: &MutGid, root: Option<&Id>) -> Vec<NodeId> {
     let mut nodes: Vec<NodeId> = gid
         .entities()
         .flat_map(|entity| {
@@ -614,6 +619,7 @@ fn document_nodes(gid: &MutGid) -> Vec<NodeId> {
                 .flatten();
             std::iter::once(*entity).chain(edge_nodes)
         })
+        .chain(root.and_then(Id::as_node_id))
         .collect();
     nodes.sort();
     nodes.dedup();
@@ -854,6 +860,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 ) -> Node<P> {
     let cx = Cx {
         gid: &doc.gid,
+        root: doc.root.as_ref(),
         collapse,
         styles,
         selection,
@@ -1188,7 +1195,7 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
     choice: usize,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let entries = completion_entries(cx.gid, query.text());
+    let entries = completion_entries(cx.gid, cx.root, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let content = atom_content(Some(query), fallback, tcx, cx.styles, hooks);
     decorate(content, move |p: &mut P, rect| {
@@ -1681,7 +1688,7 @@ mod tests {
 
         // A confident reference match outranks the typed string;
         // "corner" has no i, so only "origin" matches the query.
-        let entries = completion_entries(&gid, "orig");
+        let entries = completion_entries(&gid, None, "orig");
         assert_eq!(entries[0].display, "origin");
         assert!(entries[0].detail.is_some());
         assert_eq!(entries[1].display, "\"orig\"");
@@ -1694,7 +1701,7 @@ mod tests {
 
         // A leading quote forces the string back on top, closed or
         // not, and the new node's name drops the quotes.
-        let entries = completion_entries(&gid, "\"orig");
+        let entries = completion_entries(&gid, None, "\"orig");
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str() == Some("orig")));
         assert!(matches!(
             &entries.last().unwrap().action,
@@ -1704,7 +1711,7 @@ mod tests {
         // An empty query offers every node — the NAME label is
         // itself an unnamed node here — plus unnamed creation and
         // the empty string.
-        let entries = completion_entries(&gid, "");
+        let entries = completion_entries(&gid, None, "");
         assert_eq!(entries.len(), 5);
         assert!(matches!(
             &entries.last().unwrap().action,
@@ -1712,7 +1719,7 @@ mod tests {
         ));
 
         // Numbers infer as the atom entry and lead.
-        let entries = completion_entries(&gid, "2.5");
+        let entries = completion_entries(&gid, None, "2.5");
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_number() == Some(2.5)));
 
         // Unnamed nodes are offered too, searchable by the short id
@@ -1732,12 +1739,21 @@ mod tests {
         let scratch = new_node_id();
         gid.set(scratch, Id::from("ref"), Id::from(orphan));
         let suffix = short_id(orphan);
-        let entries = completion_entries(&gid, suffix.trim_start_matches('…'));
+        let entries = completion_entries(&gid, None, suffix.trim_start_matches('…'));
         assert_eq!(entries[0].display, suffix);
         assert!(entries[0].detail.is_none());
         assert!(
             matches!(&entries[0].action, EntryAction::Value(id) if id.as_node_id() == Some(orphan))
         );
+
+        // The root's reference is a Document field, not a gid edge -
+        // a fresh edgeless node at root is still offered.
+        let root = new_node_id();
+        let root_id = Id::from(root);
+        let entries = completion_entries(&gid, Some(&root_id), "");
+        assert!(entries.iter().any(
+            |entry| matches!(&entry.action, EntryAction::Value(id) if id.as_node_id() == Some(root))
+        ));
     }
 
     #[test]
