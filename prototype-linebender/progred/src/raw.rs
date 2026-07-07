@@ -821,8 +821,16 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     decorate(child, move |p, rect| {
         if selected {
             let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
-            // Translucent system blue, like the Swift version's selection.
+            // Translucent system blue, like the Swift version's selection,
+            // ringed at full strength — the pane-local primary is the
+            // strongest mark in the shared vocabulary.
             p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.22]), Affine::IDENTITY);
+            p.stroke(
+                bg,
+                Stroke::new(2.5 * scale),
+                Color::new([0.0, 0.48, 1.0, 1.0]),
+                Affine::IDENTITY,
+            );
         }
         let select = select.clone();
         let target = path.clone();
@@ -1030,6 +1038,12 @@ fn secondary_mark<P: Canvas>(cx: &Cx, id: &Id, content: Node<P>) -> Node<P> {
     decorate(content, move |p: &mut P, rect| {
         let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
         p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.10]), Affine::IDENTITY);
+        p.stroke(
+            bg,
+            Stroke::new(1.5 * scale),
+            Color::new([0.0, 0.48, 1.0, 0.55]),
+            Affine::IDENTITY,
+        );
     })
 }
 

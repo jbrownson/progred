@@ -609,7 +609,16 @@ rendered frame's handler (see puri.md), which also deleted the pass
 per pointer move. Selection is exclusive
 with the document's and mirrors across panes as secondary marks both
 ways (the graph-selected node marks its projections; the selected
-edge and its value mark in the graph). Deletion follows the
+edge and its value mark in the graph, pills included when a label is
+the secondary identity). Selection vocabulary unified 2026-07-07:
+the pane-local primary is strong (the tree's translucent blue fill;
+the graph's full-strength blue stroke), and the secondary mark is one
+shared treatment in both panes — a translucent blue wash plus a thin
+translucent blue outline — for identity occurrences and the mirrored
+tree edge (washed pill, neutral curve). The two panes speak one
+language, primary can't be mistaken for secondary, and the
+prototypes' near-black/gray selection strokes are retired (a
+wash-only tree secondary proved too subtle next to the graph's). Deletion follows the
 TS/Haskell semantics — the egui port's was dead code — an edge is one
 detachment; a node is detached everywhere (root cleared if root,
 outgoing and incoming edges removed), with unreferenced values simply

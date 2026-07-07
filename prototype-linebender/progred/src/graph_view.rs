@@ -409,8 +409,13 @@ const NODE_FILL: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const ROOT_FILL: [f32; 4] = [0.922, 0.941, 0.980, 1.0];
 const BORDER: [f32; 4] = [0.467, 0.467, 0.467, 1.0];
 const EDGE: [f32; 4] = [0.561, 0.588, 0.631, 1.0];
-const PRIMARY: [f32; 4] = [0.067, 0.067, 0.067, 1.0];
-const SECONDARY: [f32; 4] = [0.467, 0.467, 0.467, 1.0];
+/// Pane-local primary: a full-strength stroke in the selection blue.
+const PRIMARY: [f32; 4] = [0.0, 0.48, 1.0, 1.0];
+/// The secondary mark, shared with the tree: a translucent blue wash
+/// plus a thin translucent outline — clearly related to the primary,
+/// clearly not it.
+const WASH: [f32; 4] = [0.0, 0.48, 1.0, 0.10];
+const SECONDARY_OUTLINE: [f32; 4] = [0.0, 0.48, 1.0, 0.55];
 const PILL_BG: [f32; 4] = [0.984, 0.984, 0.980, 1.0];
 const TEXT: [f32; 4] = [0.13, 0.14, 0.16, 1.0];
 const STRING_TEXT: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
@@ -440,6 +445,9 @@ struct EdgeView {
     pill: Rect,
     pill_content: Layout<Brush>,
     strength: Strength,
+    /// The pill can outrank the curve: a label that is the secondary
+    /// identity marks the pill alone, as the tree marks label text.
+    pill_strength: Strength,
 }
 
 fn layout_text(tcx: &mut TextCtx, s: &str, size: f32, color: [f32; 4]) -> Layout<Brush> {
@@ -556,6 +564,13 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         Selection::Edge { path, .. } => resolve(doc, path).cloned(),
         _ => None,
     });
+    // The secondary identity, as in the tree: the selected edge's
+    // value, or the graph's own selected node — every projection of
+    // it marks, label pills included.
+    let secondary = doc_value.or_else(|| match &view.selection {
+        Some(GraphSelection::Node(id)) => Some(id.clone()),
+        _ => None,
+    });
 
     let node_views: Vec<NodeView> = snapshot
         .nodes
@@ -569,7 +584,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             let at = to_panel(world);
             let strength = if view.selection == Some(GraphSelection::Node(id.clone())) {
                 Strength::Primary
-            } else if doc_value.as_ref() == Some(id) {
+            } else if secondary.as_ref() == Some(id) {
                 Strength::Secondary
             } else {
                 Strength::None
@@ -627,11 +642,6 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                     label: label.clone(),
                 }) {
                 Strength::Primary
-            } else if doc_edge
-                .as_ref()
-                .is_some_and(|(s, l)| s.as_ref() == Some(source) && l == label)
-            {
-                Strength::Secondary
             } else {
                 Strength::None
             };
@@ -680,6 +690,20 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                     h + 2.0 * PILL_PADDING * px,
                 ),
             );
+            // The pill carries the secondaries: the tree-selected
+            // edge mirrored here, and labels that are the secondary
+            // identity — washes, never strokes.
+            let pill_strength = if strength == Strength::Primary {
+                Strength::Primary
+            } else if doc_edge
+                .as_ref()
+                .is_some_and(|(s, l)| s.as_ref() == Some(source) && l == label)
+                || secondary.as_ref() == Some(label)
+            {
+                Strength::Secondary
+            } else {
+                Strength::None
+            };
             Some(EdgeView {
                 source: source.clone(),
                 label: label.clone(),
@@ -688,6 +712,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 pill,
                 pill_content,
                 strength,
+                pill_strength,
             })
         })
         .collect();
@@ -710,8 +735,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             for edge in &edge_views {
                 let (color, width) = match edge.strength {
                     Strength::Primary => (PRIMARY, 2.5),
-                    Strength::Secondary => (SECONDARY, 2.5),
-                    Strength::None => (EDGE, 1.2),
+                    _ => (EDGE, 1.2),
                 };
                 p.stroke(
                     edge.path.clone(),
@@ -726,11 +750,19 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                     Affine::IDENTITY,
                 );
                 let pill = RoundedRect::from_rect(edge.pill, 4.0 * px);
+                let (pill_color, pill_width) = match edge.pill_strength {
+                    Strength::Primary => (PRIMARY, 2.5),
+                    Strength::Secondary => (SECONDARY_OUTLINE, 1.5),
+                    Strength::None => (color, 1.0),
+                };
                 p.fill(pill, Color::new(PILL_BG), Affine::IDENTITY);
+                if edge.pill_strength == Strength::Secondary {
+                    p.fill(pill, Color::new(WASH), Affine::IDENTITY);
+                }
                 p.stroke(
                     pill,
-                    Stroke::new(1.0 * px),
-                    Color::new(color),
+                    Stroke::new(pill_width * px),
+                    Color::new(pill_color),
                     Affine::IDENTITY,
                 );
                 draw_content(p, &edge.pill_content, edge.pill);
@@ -739,9 +771,12 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 let shape = RoundedRect::from_rect(node.rect, 5.0 * px);
                 let fill = if node.root { ROOT_FILL } else { NODE_FILL };
                 p.fill(shape, Color::new(fill), Affine::IDENTITY);
+                if node.strength == Strength::Secondary {
+                    p.fill(shape, Color::new(WASH), Affine::IDENTITY);
+                }
                 let (color, width) = match node.strength {
                     Strength::Primary => (PRIMARY, 2.5),
-                    Strength::Secondary => (SECONDARY, 2.5),
+                    Strength::Secondary => (SECONDARY_OUTLINE, 1.5),
                     Strength::None => (BORDER, 1.2),
                 };
                 p.stroke(
