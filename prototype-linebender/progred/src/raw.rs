@@ -857,16 +857,31 @@ pub fn step_selection(
     }
 }
 
+/// The neighboring sibling, continuing through ancestors at the
+/// ends: past the last child, Down flows to the enclosing next
+/// sibling (and Up mirrors), instead of dead-ending.
 fn sibling(descends: &[Descend], path: &[Id], next: bool) -> Option<Path> {
-    let (_, parent) = path.split_last()?;
-    let siblings: Vec<&Path> = descends
-        .iter()
-        .map(|descend| &descend.path)
-        .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
-        .collect();
-    let index = siblings.iter().position(|p| p.as_slice() == path)?;
-    let index = if next { index + 1 } else { index.checked_sub(1)? };
-    siblings.get(index).map(|p| (*p).clone())
+    let mut path = path.to_vec();
+    loop {
+        let (_, parent) = path.split_last()?;
+        let siblings: Vec<&Path> = descends
+            .iter()
+            .map(|descend| &descend.path)
+            .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
+            .collect();
+        let index = siblings.iter().position(|p| **p == path)?;
+        let neighbor = if next {
+            siblings.get(index + 1)
+        } else {
+            index.checked_sub(1).and_then(|index| siblings.get(index))
+        };
+        match neighbor {
+            Some(found) => return Some((*found).clone()),
+            None => {
+                path.pop();
+            }
+        }
+    }
 }
 
 
@@ -1861,6 +1876,28 @@ mod tests {
             Selection::edge(&empty, Vec::new()),
             Selection::Pending { .. }
         ));
+    }
+
+    #[test]
+    fn sibling_stepping_continues_through_ancestors() {
+        let all = descends(&[
+            vec![],
+            vec!["a"],
+            vec!["a", "x"],
+            vec!["a", "y"],
+            vec!["b"],
+        ]);
+        let at = |labels: &[&str]| -> Path { labels.iter().map(|s| Id::from(*s)).collect() };
+
+        // Within a parent: plain sibling steps.
+        assert_eq!(sibling(&all, &at(&["a", "x"]), true), Some(at(&["a", "y"])));
+        // Past the last child, Down flows to the enclosing next
+        // sibling; Up mirrors from the first child.
+        assert_eq!(sibling(&all, &at(&["a", "y"]), true), Some(at(&["b"])));
+        assert_eq!(sibling(&all, &at(&["b"]), false), Some(at(&["a"])));
+        assert_eq!(sibling(&all, &at(&["a", "x"]), false), None);
+        // The document's ends still end.
+        assert_eq!(sibling(&all, &at(&["b"]), true), None);
     }
 
     #[test]
