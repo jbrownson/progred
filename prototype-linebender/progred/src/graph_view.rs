@@ -551,15 +551,10 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     let to_panel = |world: Point| ((world.to_vec2() + pan) * px).to_point() + center;
     let snapshot = snapshot(doc);
 
-    // The document selection projects into the graph as secondary
-    // marks: the selected edge, and its value node — the same
-    // identity-sameness rule as the projection's own marks.
-    let doc_edge = doc_selection.and_then(|selection| match selection {
-        Selection::Edge { path, .. } => path.split_last().map(|(label, parent)| {
-            (resolve(doc, parent).cloned(), label.clone())
-        }),
-        _ => None,
-    });
+    // The document selection projects into the graph through its
+    // VALUE only — the node it points at washes; mirroring the edge
+    // itself as a pill wash read too much like a graph-side edge
+    // selection.
     let doc_value = doc_selection.and_then(|selection| match selection {
         Selection::Edge { path, .. } => resolve(doc, path).cloned(),
         _ => None,
@@ -690,16 +685,12 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                     h + 2.0 * PILL_PADDING * px,
                 ),
             );
-            // The pill carries the secondaries: the tree-selected
-            // edge mirrored here, and labels that are the secondary
-            // identity — washes, never strokes.
+            // Pills wash only as identity occurrences — a label
+            // that IS the secondary identity (including the selected
+            // edge's own value used as a label elsewhere).
             let pill_strength = if strength == Strength::Primary {
                 Strength::Primary
-            } else if doc_edge
-                .as_ref()
-                .is_some_and(|(s, l)| s.as_ref() == Some(source) && l == label)
-                || secondary.as_ref() == Some(label)
-            {
+            } else if secondary.as_ref() == Some(label) {
                 Strength::Secondary
             } else {
                 Strength::None
