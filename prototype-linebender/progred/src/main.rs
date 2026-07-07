@@ -72,8 +72,9 @@ struct App {
     /// events.
     menu: Menu,
     menu_ids: MenuIds,
-    /// The View > Graph checkbox; muda owns the check state.
-    graph_item: CheckMenuItem,
+    /// Menu items whose state the shell keeps current: enablement
+    /// for save/undo/redo, muda-owned check state for the graph.
+    menu_items: MenuItems,
     /// Last pointer position, for anchoring pinch zoom.
     cursor: Point,
     dispatch: Option<Dispatch>,
@@ -85,15 +86,23 @@ struct MenuIds {
     open: MenuId,
     save: MenuId,
     save_as: MenuId,
+    quit: MenuId,
     undo: MenuId,
     redo: MenuId,
     graph: MenuId,
 }
 
+struct MenuItems {
+    save: MenuItem,
+    undo: MenuItem,
+    redo: MenuItem,
+    graph: CheckMenuItem,
+}
+
 /// The menu bar: file commands own their key equivalents, so the
 /// platform routes Cmd+S and friends here rather than through key
 /// dispatch. Attachment is macOS-only until another platform is run.
-fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
+fn build_menu() -> (Menu, MenuIds, MenuItems) {
     let accel = if cfg!(target_os = "macos") {
         Modifiers::META
     } else {
@@ -107,6 +116,7 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
         true,
         Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyS)),
     );
+    let quit = MenuItem::new("Quit Progred", true, Some(Accelerator::new(Some(accel), Code::KeyQ)));
     let undo = MenuItem::new("Undo", true, Some(Accelerator::new(Some(accel), Code::KeyZ)));
     let redo = MenuItem::new(
         "Redo",
@@ -125,6 +135,7 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
         open: open.id().clone(),
         save: save.id().clone(),
         save_as: save_as.id().clone(),
+        quit: quit.id().clone(),
         undo: undo.id().clone(),
         redo: redo.id().clone(),
         graph: graph.id().clone(),
@@ -136,7 +147,7 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
             &[
                 &PredefinedMenuItem::about(None, None),
                 &PredefinedMenuItem::separator(),
-                &PredefinedMenuItem::quit(None),
+                &quit,
             ],
         )
         .expect("app menu"),
@@ -156,7 +167,13 @@ fn build_menu() -> (Menu, MenuIds, CheckMenuItem) {
         &Submenu::with_items("View", true, &[&graph]).expect("view menu"),
     ])
     .expect("menu bar");
-    (menu, ids, graph)
+    let items = MenuItems {
+        save,
+        undo,
+        redo,
+        graph,
+    };
+    (menu, ids, items)
 }
 
 /// The position carried by any pointer translation, for cursor
@@ -195,6 +212,10 @@ impl ApplicationHandler<MenuEvent> for App {
             self.menu_save(false);
         } else if *event.id() == self.menu_ids.save_as {
             self.menu_save(true);
+        } else if *event.id() == self.menu_ids.quit {
+            if self.confirm_discard() {
+                _event_loop.exit();
+            }
         } else if *event.id() == self.menu_ids.undo {
             self.step_history(true);
         } else if *event.id() == self.menu_ids.redo {
@@ -270,7 +291,7 @@ impl ApplicationHandler<MenuEvent> for App {
         // Pinch zooms the graph toward the cursor; winit delivers it
         // outside the pointer stream the reducer covers.
         if let WindowEvent::PinchGesture { delta, .. } = &event
-            && self.graph_item.is_checked()
+            && self.menu_items.graph.is_checked()
         {
             let size = window.inner_size();
             let panel = graph_view::panel(size.width as f64, size.height as f64);
@@ -385,7 +406,11 @@ impl ApplicationHandler<MenuEvent> for App {
         }
 
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                if self.confirm_discard() {
+                    event_loop.exit();
+                }
+            }
 
             // KNOWN ISSUE: a live drag-resize can still glitch on macOS
             // (the compositor stretches a stale frame mid-drag). Not
@@ -442,7 +467,7 @@ fn main() {
     let event_loop = builder.build().expect("Couldn't create event loop");
     // The menu attaches to the app instance the event loop created;
     // its events arrive as user events through the proxy.
-    let (menu, menu_ids, graph_item) = build_menu();
+    let (menu, menu_ids, menu_items) = build_menu();
     let proxy = event_loop.create_proxy();
     MenuEvent::set_event_handler(Some(move |event| {
         let _ = proxy.send_event(event);
@@ -466,7 +491,7 @@ fn main() {
         doc_path,
         menu,
         menu_ids,
-        graph_item,
+        menu_items,
         cursor: Point::ZERO,
         dispatch: None,
         reducer: WindowEventReducer::default(),
@@ -608,6 +633,21 @@ impl App {
         }
     }
 
+    /// Menu enablement follows the model: gray what can't act. Save
+    /// stays live for untitled documents — it defers to the save
+    /// panel, per platform convention.
+    fn sync_menus(&self) {
+        self.menu_items
+            .save
+            .set_enabled(self.model.history.dirty() || self.doc_path.is_none());
+        self.menu_items
+            .undo
+            .set_enabled(self.model.history.can_undo());
+        self.menu_items
+            .redo
+            .set_enabled(self.model.history.can_redo());
+    }
+
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
     fn step_history(&mut self, back: bool) {
@@ -735,7 +775,7 @@ impl App {
         run_frame(
             &mut frame,
             &self.model,
-            self.graph_item.is_checked(),
+            self.menu_items.graph.is_checked(),
             &mut self.font_cx,
             &mut self.layout_cx,
             scale,
@@ -766,7 +806,7 @@ impl App {
         width: f64,
         height: f64,
     ) -> bool {
-        if !self.graph_item.is_checked() {
+        if !self.menu_items.graph.is_checked() {
             return false;
         }
         let panel = graph_view::panel(width, height);
@@ -1052,7 +1092,8 @@ impl App {
 
         // Advance the force simulation while the graph is open; the
         // continuous redraw request below keeps it animating.
-        let show_graph = self.graph_item.is_checked();
+        self.sync_menus();
+        let show_graph = self.menu_items.graph.is_checked();
         if show_graph {
             self.model.graph.step(&self.model.doc);
         }
