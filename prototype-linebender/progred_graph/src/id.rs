@@ -80,7 +80,7 @@ impl Id {
                 // Strict read: only the canonical spelling parses, so
                 // near-miss bytes render as bytes instead of
                 // impersonating the value.
-                (Id::from(n).payload == self.payload).then_some(n)
+                (canonical(n).to_le_bytes() == bytes).then_some(n)
             })
             .flatten()
     }
@@ -113,18 +113,23 @@ impl From<String> for Id {
     }
 }
 
+/// The one spelling per value: NaN collapses to a single bit pattern,
+/// -0.0 to 0.0.
+fn canonical(n: f64) -> f64 {
+    if n.is_nan() {
+        f64::from_bits(0x7ff8_0000_0000_0000)
+    } else if n == 0.0 {
+        0.0
+    } else {
+        n
+    }
+}
+
 impl From<f64> for Id {
     fn from(n: f64) -> Self {
-        let canonical = if n.is_nan() {
-            f64::from_bits(0x7ff8_0000_0000_0000)
-        } else if n == 0.0 {
-            0.0
-        } else {
-            n
-        };
         Self {
             space: NUMBER_SPACE,
-            payload: canonical.to_le_bytes().to_vec(),
+            payload: canonical(n).to_le_bytes().to_vec(),
         }
     }
 }
@@ -148,7 +153,8 @@ fn to_hex(bytes: &[u8]) -> String {
 }
 
 fn from_hex(s: &str) -> Option<Vec<u8>> {
-    (s.len() % 2 == 0)
+    // ASCII-only keeps the two-byte slices below on char boundaries.
+    (s.is_ascii() && s.len().is_multiple_of(2))
         .then(|| {
             (0..s.len())
                 .step_by(2)
@@ -263,6 +269,17 @@ mod tests {
             let json = serde_json::to_string(&id).unwrap();
             assert!(json.starts_with(r#"{"value":"#), "{json}");
             assert_eq!(serde_json::from_str::<Id>(&json).unwrap(), id);
+        }
+    }
+
+    #[test]
+    fn malformed_hex_payloads_error_instead_of_panicking() {
+        // Multi-byte chars once panicked the byte slicing; odd length
+        // and non-hex are plain rejections.
+        for hex in ["aαb", "abc", "zz"] {
+            let json =
+                format!(r#"{{"value":["0e7b9a2f-5f3d-4c1e-9a4b-0f2f4bfa7c11","{hex}"]}}"#);
+            assert!(serde_json::from_str::<Id>(&json).is_err(), "{hex}");
         }
     }
 

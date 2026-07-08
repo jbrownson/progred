@@ -52,8 +52,12 @@ impl MutGid {
         }
     }
 
+    /// Absent labels leave the map untouched, so `ptr_eq` stays an
+    /// honest did-anything-change signal.
     pub fn delete(&mut self, entity: &NodeId, label: &Id) {
-        if let Some(edges) = self.data.get(entity) {
+        if let Some(edges) = self.data.get(entity)
+            && edges.contains_key(label)
+        {
             let new_edges = edges.without(label);
             self.data = if new_edges.is_empty() {
                 self.data.without(entity)
