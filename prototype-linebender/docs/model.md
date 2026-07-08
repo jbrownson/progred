@@ -610,7 +610,10 @@ that node and its parent.
   reference matches (prefix/substring tiers) outrank the typed
   string, which sits above only fuzzy matches — typing a visible
   name or short id defaults to the reference, and quoting always
-  forces the string. Entries are drawn by the shell
+  forces the string. The typed text is always insertable as itself
+  (2026-07-08, user: typing "5" offered no way to insert the string):
+  a numeric query offers its string form directly below the number;
+  a quoted query stays string-only, the quote being stated intent. Entries are drawn by the shell
   after the body from the frame's popup output, driven by Up/Down and
   committed by Enter or by clicking a row — the card swallows other
   clicks so nothing lands on content underneath. Polish (2026-07-07):

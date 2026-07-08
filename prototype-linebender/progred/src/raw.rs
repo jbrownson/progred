@@ -639,6 +639,15 @@ fn completion_entries(sources: &Sources, names: &Names, query: &str) -> Vec<Entr
     // id should default to the reference, and quoting always forces
     // the string.
     let atom_leads = query.trim_start().starts_with('"') || atom.as_number().is_some();
+    // The typed text is always insertable as itself: a numeric query
+    // offers its string form right below the number (a quote already
+    // states string intent, so quoted queries stay string-only).
+    let string_entry = atom.as_number().is_some().then(|| Entry {
+        display: format!("\"{query}\""),
+        detail: None,
+        matches: Vec::new(),
+        action: EntryAction::Value(Id::from(query)),
+    });
     let atom_entry = Entry {
         display,
         detail: None,
@@ -685,6 +694,7 @@ fn completion_entries(sources: &Sources, names: &Names, query: &str) -> Vec<Entr
     let mut entries = Vec::new();
     if atom_leads {
         entries.push(atom_entry);
+        entries.extend(string_entry);
         entries.extend(references.into_iter().map(|(entry, _)| entry));
     } else {
         let (weak, strong): (Vec<_>, Vec<_>) =
@@ -2389,9 +2399,19 @@ mod tests {
             EntryAction::NewNode { name: None }
         ));
 
-        // Numbers infer as the atom entry and lead.
+        // Numbers infer as the atom entry and lead — with the typed
+        // text always insertable as a string right below.
         let entries = complete(&gid, None, "2.5", &names);
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_number() == Some(2.5)));
+        assert!(matches!(&entries[1].action, EntryAction::Value(id) if id.as_str() == Some("2.5")));
+        // A quote is stated string intent: no number offer rides along.
+        let entries = complete(&gid, None, "\"2.5", &names);
+        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str() == Some("2.5")));
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| matches!(&entry.action, EntryAction::Value(id) if id.as_number().is_some()))
+        );
 
         // Unnamed nodes are offered too, searchable by the short id
         // they render as — including edgeless ones only referenced
