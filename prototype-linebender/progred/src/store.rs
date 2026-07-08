@@ -12,7 +12,11 @@ pub fn load(path: &Path) -> Result<Document, String> {
 
 pub fn save(path: &Path, doc: &Document) -> Result<(), String> {
     let json = serde_json::to_string_pretty(doc).map_err(|error| error.to_string())?;
-    std::fs::write(path, json).map_err(|error| error.to_string())
+    // Write-then-rename, so a crash mid-write cannot truncate the
+    // previous save.
+    let tmp = path.with_extension("progred.tmp");
+    std::fs::write(&tmp, json).map_err(|error| error.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

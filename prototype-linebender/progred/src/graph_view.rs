@@ -46,7 +46,7 @@ pub enum GraphSelection {
 /// An in-progress drag: a node being moved (with where the pointer
 /// grabbed it, as a world offset from the node position), or the
 /// background panning the viewport. Either way, an unmoved release is
-/// a click — selecting the node, or clearing the selection.
+/// a click, reported through [`Release`].
 enum Drag {
     Node {
         node: Id,
@@ -62,12 +62,11 @@ enum Drag {
 }
 
 /// The graph view's explicit state: per-node world positions and
-/// velocities, the viewport (world-space pan, zoom), the graph's own
-/// selection, and any drag in progress.
+/// velocities, the viewport (world-space pan, zoom), and any drag in
+/// progress. Selection lives in the shell's one slot, not here.
 pub struct GraphView {
     positions: HashMap<Id, Point>,
     velocities: HashMap<Id, Vec2>,
-    pub selection: Option<GraphSelection>,
     drag: Option<Drag>,
     pan: Vec2,
     zoom: f64,
@@ -78,12 +77,20 @@ impl Default for GraphView {
         Self {
             positions: HashMap::new(),
             velocities: HashMap::new(),
-            selection: None,
             drag: None,
             pan: Vec2::ZERO,
             zoom: 1.0,
         }
     }
+}
+
+/// What a released press turned out to be: a drag that ends, or an
+/// unmoved click — on a node or the background — for the shell to
+/// turn into a selection change.
+pub enum Release {
+    Drag,
+    ClickNode(Id),
+    ClickBackground,
 }
 
 struct Snapshot {
@@ -176,10 +183,9 @@ impl GraphView {
                 self.velocities.insert(id.clone(), Vec2::ZERO);
             }
         }
-        self.positions
-            .retain(|id, _| snapshot.nodes.contains(id));
-        self.velocities
-            .retain(|id, _| snapshot.nodes.contains(id));
+        let keep: std::collections::HashSet<&Id> = snapshot.nodes.iter().collect();
+        self.positions.retain(|id, _| keep.contains(id));
+        self.velocities.retain(|id, _| keep.contains(id));
     }
 
     fn forces(&self, snapshot: &Snapshot) -> HashMap<Id, Vec2> {
@@ -274,24 +280,25 @@ impl GraphView {
         }
     }
 
-    /// Ends a press; an unmoved one is a click — selecting the node,
-    /// or clearing the selection for the background.
-    pub fn release(&mut self) -> bool {
-        match self.drag.take() {
-            Some(Drag::Node { node, moved, .. }) => {
-                if !moved {
-                    self.selection = Some(GraphSelection::Node(node));
+    /// Ends a press, reporting what it was; `None` when no press was
+    /// in progress.
+    pub fn release(&mut self) -> Option<Release> {
+        Some(match self.drag.take()? {
+            Drag::Node { node, moved, .. } => {
+                if moved {
+                    Release::Drag
+                } else {
+                    Release::ClickNode(node)
                 }
-                true
             }
-            Some(Drag::Pan { moved, .. }) => {
-                if !moved {
-                    self.selection = None;
+            Drag::Pan { moved, .. } => {
+                if moved {
+                    Release::Drag
+                } else {
+                    Release::ClickBackground
                 }
-                true
             }
-            None => false,
-        }
+        })
     }
 
     /// Whether the simulation is visibly moving (or held by a drag);
@@ -329,13 +336,6 @@ impl GraphView {
         }
     }
 
-    /// The graph-selected node, for the projection's secondary marks.
-    pub fn selected_node(&self) -> Option<&Id> {
-        match &self.selection {
-            Some(GraphSelection::Node(id)) => Some(id),
-            _ => None,
-        }
-    }
 }
 
 /// Deletes the selection from the graph: an edge is one detachment; a
@@ -550,6 +550,7 @@ fn arrowhead(tip: Point, direction: Vec2, scale: f64) -> BezPath {
 pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     doc: &Document,
     view: &GraphView,
+    selection: Option<&GraphSelection>,
     doc_selection: Option<&Selection>,
     tcx: &mut TextCtx,
     panel: Rect,
@@ -576,7 +577,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     // The secondary identity, as in the tree: the selected edge's
     // value, or the graph's own selected node — every projection of
     // it marks, label pills included.
-    let secondary = doc_value.or_else(|| match &view.selection {
+    let secondary = doc_value.or_else(|| match selection {
         Some(GraphSelection::Node(id)) => Some(id.clone()),
         _ => None,
     });
@@ -591,7 +592,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             let width = w + 2.0 * NODE_PADDING * px;
             let height = (h + 2.0 * NODE_PADDING * px).max(NODE_MIN_HEIGHT * px);
             let at = to_panel(world);
-            let strength = if view.selection == Some(GraphSelection::Node(id.clone())) {
+            let strength = if matches!(selection, Some(GraphSelection::Node(n)) if n == id) {
                 Strength::Primary
             } else if secondary.as_ref() == Some(id) {
                 Strength::Secondary
@@ -607,12 +608,11 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             })
         })
         .collect();
-    let rect_of = |id: &Id| {
-        node_views
-            .iter()
-            .find(|node| node.id == *id)
-            .map(|node| node.rect)
-    };
+    let rects: HashMap<&Id, Rect> = node_views
+        .iter()
+        .map(|node| (&node.id, node.rect))
+        .collect();
+    let rect_of = |id: &Id| rects.get(id).copied();
 
     // Parallel edges between the same unordered pair fan out; an
     // exact bidirectional pair splits evenly.
@@ -645,11 +645,10 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             };
             let offset =
                 (index as f64 - (total as f64 - 1.0) / 2.0) * PARALLEL_SPACING * px;
-            let strength = if view.selection
-                == Some(GraphSelection::Edge {
-                    source: source.clone(),
-                    label: label.clone(),
-                }) {
+            let strength = if matches!(
+                selection,
+                Some(GraphSelection::Edge { source: s, label: l }) if s == source && l == label
+            ) {
                 Strength::Primary
             } else {
                 Strength::None
@@ -917,21 +916,48 @@ mod tests {
         // Deleting the root also empties the root slot.
         delete_selection(&mut doc, &GraphSelection::Node(Id::from(a)));
         assert!(doc.root.is_none());
+    }
 
-        // Edge deletion removes exactly one edge.
-        let (mut doc, a, _) = doc2();
-        delete_selection(
+    #[test]
+    fn deleting_an_edge_removes_exactly_one() {
+        let (mut doc, a, _) = doc();
+        assert!(delete_selection(
             &mut doc,
             &GraphSelection::Edge {
                 source: Id::from(a),
                 label: Id::from("x"),
             },
-        );
+        ));
         assert!(doc.gid.get(&Id::from(a), &Id::from("x")).is_none());
         assert!(doc.gid.get(&Id::from(a), &Id::from("to")).is_some());
+
+        // A stale selection — the edge already gone — is a no-op, not
+        // a recorded change.
+        assert!(!delete_selection(
+            &mut doc,
+            &GraphSelection::Edge {
+                source: Id::from(a),
+                label: Id::from("x"),
+            },
+        ));
     }
 
-    fn doc2() -> (Document, NodeId, NodeId) {
-        doc()
+    #[test]
+    fn release_reports_clicks_and_drags() {
+        let mut view = GraphView::default();
+        assert!(view.release().is_none());
+
+        view.press_node(Id::from(1.0), Vec2::ZERO, Point::ZERO);
+        assert!(matches!(
+            view.release(),
+            Some(Release::ClickNode(id)) if id == Id::from(1.0)
+        ));
+
+        view.press_node(Id::from(1.0), Vec2::ZERO, Point::ZERO);
+        view.drag_to(Point::new(50.0, 0.0), Point::new(50.0, 0.0), 1.0);
+        assert!(matches!(view.release(), Some(Release::Drag)));
+
+        view.press_background(Point::ZERO);
+        assert!(matches!(view.release(), Some(Release::ClickBackground)));
     }
 }

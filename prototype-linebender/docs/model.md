@@ -690,8 +690,8 @@ short ids for unnamed (identicons were trialed here and deleted —
 one identity language with the tree) — atom values as
 their own nodes, so a shared `2` is visibly one node; quadratic edges
 with arrowheads and label pills, cubic self-loops, parallel-edge
-fanning; root tinted). Puri shape: positions, velocities, selection,
-and drag are explicit model state; the pane is one pure pass — build
+fanning; root tinted). Puri shape: positions, velocities, and drag
+are explicit model state; the pane is one pure pass — build
 geometry from state, draw it, register handlers over it — and the
 simulation steps once per redraw, with the continuous redraw request
 gated on the simulation being visibly in motion or dragged — unlike
@@ -704,8 +704,16 @@ animation is also what exposed the shell's per-event pass rebuilding
 dispatch handlers from state newer than the pixels — quick grabs on
 a hot graph missed their node — settled by dispatching into the last
 rendered frame's handler (see puri.md), which also deleted the pass
-per pointer move. Selection is exclusive
-with the document's and mirrors across panes as secondary marks both
+per pointer move. Selection storage (second pass, 2026-07-07): ONE
+Model-level slot — `Selected::Tree | Selected::Graph` — replaced the
+two per-pane fields after a review caught undo/redo restoring a tree
+selection without clearing the graph's, breaking the exclusivity both
+key handlers assumed. With one slot there is nothing to synchronize:
+selecting in either pane inherently clears the other, and the graph
+pane no longer owns a selection — it reports what a release was
+(`Release::Drag`, `ClickNode`, `ClickBackground`) and the shell makes
+the transition. The one selection mirrors across panes as secondary
+marks both
 ways, always through identity: the graph-selected node marks its
 projections in the tree; the tree-selected edge marks its VALUE's
 node in the graph, and pills wash only when their label is the

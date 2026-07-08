@@ -741,18 +741,16 @@ pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> 
         .is_some()
 }
 
-/// Write the selection's editor text through to its location: the
-/// graph is the source of truth, updated after every handled event.
-/// The edited kind follows the current value — strings write every
-/// keystroke; numbers write only when the text parses, since a
-/// half-typed state like `3.` has no identity to write. The empty
-/// path commits to the document's root field; an edge whose parent no
-/// longer resolves to a node drops the write silently — the
-/// malformed-graph rule at the mutation boundary.
-/// Writes the focused editor's text through to the graph. Returns
-/// whether this write OPENED an undo step: true exactly on the first
-/// write of the mounted editor's life, so a typing run is one step
-/// and history stays a dumb stack.
+/// Writes the selection's editor text through to its location after
+/// every handled event — the graph is the source of truth. The edited
+/// kind follows the current value: strings write every keystroke;
+/// numbers only when the text parses, since a half-typed state like
+/// `3.` has no identity to write. The empty path commits to the
+/// document's root field; an edge whose parent no longer resolves to
+/// a node drops the write silently — the malformed-graph rule at the
+/// mutation boundary. Returns whether this write OPENED an undo step:
+/// true exactly on the first write of the mounted editor's life, so a
+/// typing run is one step and history stays a dumb stack.
 pub fn write_through(doc: &mut Document, selection: &mut Selection) -> bool {
     let Selection::Edge {
         path,
@@ -795,7 +793,7 @@ pub fn write_through(doc: &mut Document, selection: &mut Selection) -> bool {
 
 /// Breaks the open edit run: the next write records a fresh undo
 /// step. Called after a save, so a run never straddles the mark.
-pub fn break_edit_run(selection: &mut Option<Selection>) {
+pub fn break_edit_run(selection: Option<&mut Selection>) {
     if let Some(Selection::Edge { recorded, .. }) = selection {
         *recorded = false;
     }
@@ -807,8 +805,7 @@ pub fn break_edit_run(selection: &mut Option<Selection>) {
 /// clicks go through each descend's own handler, not this list.
 pub struct Descend {
     pub path: Path,
-    /// Kept for geometric stepping and scroll-to-selection.
-    #[allow(dead_code)]
+    /// The settled rect, for scroll-to-selection.
     pub rect: Rect,
 }
 
@@ -1751,9 +1748,7 @@ mod tests {
         assert!(!write_through(&mut doc, &mut selection));
 
         // Breaking the run (a save) makes the next write a new step.
-        let mut holder = Some(selection);
-        break_edit_run(&mut holder);
-        let mut selection = holder.unwrap();
+        break_edit_run(Some(&mut selection));
         selection.edit_mut().unwrap().set_text("abcd");
         assert!(write_through(&mut doc, &mut selection));
 

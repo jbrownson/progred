@@ -194,13 +194,21 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
     }
 }
 
-/// The selection as a restorable edge path — pendings restore as
-/// nothing, being disposable.
-fn edge_path(selection: &Option<raw::Selection>) -> Option<raw::Path> {
+/// The selection as a restorable edge path — pendings and graph
+/// selections restore as nothing, being disposable.
+fn edge_path(selection: &Option<Selected>) -> Option<raw::Path> {
     match selection {
-        Some(raw::Selection::Edge { path, .. }) => Some(path.clone()),
+        Some(Selected::Tree(raw::Selection::Edge { path, .. })) => Some(path.clone()),
         _ => None,
     }
+}
+
+/// No modifiers at all — the gate for the bare editing keys.
+fn plain(event: &KeyboardEvent) -> bool {
+    !(event.modifiers.ctrl()
+        || event.modifiers.meta()
+        || event.modifiers.alt()
+        || event.modifiers.shift())
 }
 
 fn dialog() -> rfd::FileDialog {
@@ -356,13 +364,13 @@ impl ApplicationHandler<MenuEvent> for App {
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &dispatch.descends,
-                                self.model.selection.as_ref(),
+                                self.model.tree_selection(),
                                 &key_event,
                             ) {
                                 Some(path) => {
-                                    self.model.graph.selection = None;
-                                    self.model.selection =
-                                        Some(raw::Selection::edge(&self.model.doc, path));
+                                    self.model.selection = Some(Selected::Tree(
+                                        raw::Selection::edge(&self.model.doc, path),
+                                    ));
                                     true
                                 }
                                 None => false,
@@ -388,7 +396,7 @@ impl ApplicationHandler<MenuEvent> for App {
                 };
                 if handled {
                     let model = &mut self.model;
-                    if let Some(selection) = &mut model.selection {
+                    if let Some(Selected::Tree(selection)) = &mut model.selection {
                         let before = model.doc.clone();
                         // True on the first write of the editor's
                         // life: the run's one step opens here.
@@ -509,9 +517,19 @@ fn main() {
         .expect("Couldn't run event loop");
 }
 
+/// The app's one selection: the tree's edge or pending, or the
+/// graph's node or edge. A single slot, so selecting in either pane
+/// inherently clears the other — there is nothing to synchronize.
+// One instance lives in the model; the variants' size gap is moot.
+#[allow(clippy::large_enum_variant)]
+enum Selected {
+    Tree(raw::Selection),
+    Graph(graph_view::GraphSelection),
+}
+
 struct Model {
     doc: raw::Document,
-    selection: Option<raw::Selection>,
+    selection: Option<Selected>,
     collapse: raw::Collapse,
     graph: graph_view::GraphView,
     history: history::History,
@@ -521,6 +539,37 @@ struct Model {
     /// effectively, so a transient shrink-and-grow restores the
     /// position; scrolling collapses it to the clamped reality.
     scroll: f64,
+}
+
+impl Model {
+    fn tree_selection(&self) -> Option<&raw::Selection> {
+        match &self.selection {
+            Some(Selected::Tree(selection)) => Some(selection),
+            _ => None,
+        }
+    }
+
+    fn tree_selection_mut(&mut self) -> Option<&mut raw::Selection> {
+        match &mut self.selection {
+            Some(Selected::Tree(selection)) => Some(selection),
+            _ => None,
+        }
+    }
+
+    fn graph_selection(&self) -> Option<&graph_view::GraphSelection> {
+        match &self.selection {
+            Some(Selected::Graph(selection)) => Some(selection),
+            _ => None,
+        }
+    }
+
+    /// The graph-selected node, for the tree's secondary marks.
+    fn graph_node(&self) -> Option<&Id> {
+        match self.graph_selection() {
+            Some(graph_view::GraphSelection::Node(id)) => Some(id),
+            _ => None,
+        }
+    }
 }
 
 /// One pass over the UI: read-only in the model, producing draw calls
@@ -667,8 +716,11 @@ impl App {
         };
         if let Some((doc, restore)) = restored {
             self.model.doc = doc;
-            self.model.selection =
-                restore.map(|path| raw::Selection::edge(&self.model.doc, path));
+            // One slot: restoring (or clearing) the tree selection
+            // also drops any graph selection, which may reference
+            // content the restored document no longer has.
+            self.model.selection = restore
+                .map(|path| Selected::Tree(raw::Selection::edge(&self.model.doc, path)));
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
                 let window = window.clone();
@@ -708,7 +760,7 @@ impl App {
                     self.model.history.mark_saved();
                     // A run must not straddle the save mark, or edits
                     // after it would coalesce into a pre-save step.
-                    raw::break_edit_run(&mut self.model.selection);
+                    raw::break_edit_run(self.model.tree_selection_mut());
                     self.adopt_doc_path(path);
                 }
                 Err(error) => {
@@ -718,50 +770,55 @@ impl App {
         }
     }
 
-    /// Open replaces the model. Selection, collapse overrides, and
-    /// A fresh untitled document, gated on unsaved changes. View
-    /// state is document-bound and resets with it, history included.
-    fn menu_new(&mut self) {
-        if !self.confirm_discard() {
-            return;
-        }
+    /// Replaces the model wholesale for New and Open. Selection,
+    /// collapse overrides, scroll, and history are bound to the old
+    /// document and reset with it. Mints the successor dispatch
+    /// immediately, as every mutation site does: the retained handler
+    /// was built from the old document, and its dispatches must not
+    /// run against the new model.
+    fn adopt_model(&mut self, doc: raw::Document, path: Option<PathBuf>) {
         self.model = Model {
-            doc: raw::Document {
-                root: None,
-                gid: progred_graph::MutGid::new(),
-            },
+            doc,
             selection: None,
             collapse: raw::Collapse::default(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
         };
-        self.doc_path = None;
+        self.doc_path = path;
+        self.revealed = None;
         if let RenderState::Active { window, .. } = &self.state {
+            let window = window.clone();
             window.set_title(&self.title());
+            let size = window.inner_size();
+            self.retain_dispatch(
+                window.scale_factor(),
+                Size::new(size.width as f64, size.height as f64),
+            );
             window.request_redraw();
         }
     }
 
-    /// scroll are path-bound to the old document, so they reset with
-    /// it.
+    /// A fresh untitled document, gated on unsaved changes.
+    fn menu_new(&mut self) {
+        if self.confirm_discard() {
+            self.adopt_model(
+                raw::Document {
+                    root: None,
+                    gid: progred_graph::MutGid::new(),
+                },
+                None,
+            );
+        }
+    }
+
     fn menu_open(&mut self) {
         if !self.confirm_discard() {
             return;
         }
         if let Some(path) = dialog().pick_file() {
             match store::load(&path) {
-                Ok(doc) => {
-                    self.model = Model {
-                        doc,
-                        selection: None,
-                        collapse: raw::Collapse::default(),
-                        graph: graph_view::GraphView::default(),
-                        history: history::History::default(),
-                        scroll: 0.0,
-                    };
-                    self.adopt_doc_path(path);
-                }
+                Ok(doc) => self.adopt_model(doc, Some(path)),
                 Err(error) => {
                     eprintln!("failed to open {}: {error}", path.display());
                 }
@@ -787,8 +844,7 @@ impl App {
     fn reveal_selection(&mut self, scale: f64, viewport: f64) {
         let reveal = self
             .model
-            .selection
-            .as_ref()
+            .tree_selection()
             .map(|s| (s.path().to_vec(), std::mem::discriminant(s)));
         if reveal == self.revealed {
             return;
@@ -883,27 +939,29 @@ impl App {
     }
 
     /// Graph-view keys: Delete removes the graph selection — one
-    /// detachment for an edge, full detachment everywhere for a node
-    /// — and Escape clears it. The graph and document selections are
-    /// exclusive, so this never races the document delete below.
+    /// detachment for an edge, full detachment everywhere for a node.
+    /// The one selection slot means this and the document delete
+    /// below can never both match; Escape falls through to the
+    /// universal clear in `insert_key`.
     fn graph_key(&mut self, event: &KeyboardEvent) -> bool {
         event.state.is_down()
-            && match (&event.key, &self.model.graph.selection) {
-                (Key::Named(NamedKey::Backspace | NamedKey::Delete), Some(selection)) => {
+            && plain(event)
+            && matches!(
+                &event.key,
+                Key::Named(NamedKey::Backspace | NamedKey::Delete)
+            )
+            && match self.model.graph_selection() {
+                Some(selection) => {
                     let selection = selection.clone();
                     let before = self.model.doc.clone();
                     if graph_view::delete_selection(&mut self.model.doc, &selection) {
                         self.model.history.record(before, None);
                         self.refresh_title();
                     }
-                    self.model.graph.selection = None;
+                    self.model.selection = None;
                     true
                 }
-                (Key::Named(NamedKey::Escape), Some(_)) => {
-                    self.model.graph.selection = None;
-                    true
-                }
-                _ => false,
+                None => false,
             }
     }
 
@@ -913,12 +971,8 @@ impl App {
     /// deletes the element. Selection lands on the next sibling, else
     /// the previous, else the parent.
     fn delete_key(&mut self, descends: &[raw::Descend], event: &KeyboardEvent) -> bool {
-        let plain = !(event.modifiers.ctrl()
-            || event.modifiers.meta()
-            || event.modifiers.alt()
-            || event.modifiers.shift());
         event.state.is_down()
-            && plain
+            && plain(event)
             && matches!(
                 &event.key,
                 Key::Named(NamedKey::Backspace | NamedKey::Delete)
@@ -926,7 +980,7 @@ impl App {
             && match &self.model.selection {
                 // Only a real edge deletes; a pending's Backspace is
                 // its cancel, handled by insert_key.
-                Some(raw::Selection::Edge { path, recorded, .. }) => {
+                Some(Selected::Tree(raw::Selection::Edge { path, recorded, .. })) => {
                     let path = path.clone();
                     // Backspacing through the value and once more to
                     // delete the edge is one gesture: when this edge
@@ -941,7 +995,7 @@ impl App {
                         }
                         let next = raw::selection_after_delete(descends, &path);
                         self.model.selection =
-                            Some(raw::Selection::edge(&self.model.doc, next));
+                            Some(Selected::Tree(raw::Selection::edge(&self.model.doc, next)));
                         true
                     }
                 }
@@ -971,11 +1025,11 @@ impl App {
     /// False when nothing is pending, so the click falls through.
     fn pick_identity(&mut self, id: Id) -> bool {
         match self.model.selection.take() {
-            Some(raw::Selection::Pending { path, .. }) => {
+            Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
                 self.commit_value(path, &raw::EntryAction::Value(id));
                 true
             }
-            Some(raw::Selection::PendingEdge { parent, .. }) => {
+            Some(Selected::Tree(raw::Selection::PendingEdge { parent, .. })) => {
                 self.commit_label(parent, &raw::EntryAction::Value(id));
                 true
             }
@@ -994,7 +1048,7 @@ impl App {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(raw::Selection::edge(&self.model.doc, path));
+        self.model.selection = Some(Selected::Tree(raw::Selection::edge(&self.model.doc, path)));
     }
 
     /// A resolved label advances the pending edge to its value stage —
@@ -1011,10 +1065,10 @@ impl App {
         }
         let mut path = parent;
         path.push(label);
-        self.model.selection = Some(match raw::resolve(&self.model.doc, &path) {
+        self.model.selection = Some(Selected::Tree(match raw::resolve(&self.model.doc, &path) {
             Some(_) => raw::Selection::edge(&self.model.doc, path),
             None => raw::pending_value(path),
-        });
+        }));
     }
 
     /// Enter advances a pending stage or begins one: a new edge on
@@ -1037,10 +1091,10 @@ impl App {
                 // While pending, vertical arrows drive the popup choice.
                 Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown)) => {
                     match &mut self.model.selection {
-                        Some(
+                        Some(Selected::Tree(
                             raw::Selection::Pending { choice, .. }
                             | raw::Selection::PendingEdge { choice, .. },
-                        ) => {
+                        )) => {
                             let len = popup.as_ref().map(|p| p.entries.len()).unwrap_or(0);
                             *choice = match direction {
                                 NamedKey::ArrowUp => choice.saturating_sub(1),
@@ -1052,27 +1106,33 @@ impl App {
                     }
                 }
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(raw::Selection::Pending {
+                    Some(Selected::Tree(raw::Selection::Pending {
                         path,
                         query,
                         choice,
-                    }) => {
+                    })) => {
                         let action = Self::chosen_action(popup, &query, choice);
                         self.commit_value(path, &action);
                         true
                     }
-                    Some(raw::Selection::PendingEdge {
+                    Some(Selected::Tree(raw::Selection::PendingEdge {
                         parent,
                         query,
                         choice,
-                    }) => {
+                    })) => {
                         let action = Self::chosen_action(popup, &query, choice);
                         self.commit_label(parent, &action);
                         true
                     }
                     selection => {
                         let command = raw::command(&event.modifiers);
-                        let started = match &selection {
+                        // Only a tree selection anchors a new edge; a
+                        // graph selection has no path to author at.
+                        let tree = match &selection {
+                            Some(Selected::Tree(current)) => Some(current),
+                            _ => None,
+                        };
+                        let started = match tree {
                             Some(current) if command => {
                                 let path = current.path();
                                 path.split_last()
@@ -1092,7 +1152,7 @@ impl App {
                             None => raw::pending_root(&self.model.doc),
                         };
                         let began = started.is_some();
-                        self.model.selection = started.or(selection);
+                        self.model.selection = started.map(Selected::Tree).or(selection);
                         began
                     }
                 },
@@ -1101,19 +1161,23 @@ impl App {
                 }
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
-                        Some(raw::Selection::Pending { path, .. }) => {
+                        Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
                             let back = raw::selection_after_delete(descends, path);
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
                             // would pend again.
                             self.model.selection = (!(back.is_empty()
                                 && self.model.doc.root.is_none()))
-                            .then(|| raw::Selection::edge(&self.model.doc, back));
+                            .then(|| {
+                                Selected::Tree(raw::Selection::edge(&self.model.doc, back))
+                            });
                             true
                         }
-                        Some(raw::Selection::PendingEdge { parent, .. }) => {
-                            self.model.selection =
-                                Some(raw::Selection::edge(&self.model.doc, parent.clone()));
+                        Some(Selected::Tree(raw::Selection::PendingEdge { parent, .. })) => {
+                            self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                                &self.model.doc,
+                                parent.clone(),
+                            )));
                             true
                         }
                         _ => false,
@@ -1128,12 +1192,11 @@ impl App {
     fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
         event.state.is_down()
             && matches!(&event.key, Key::Character(c) if c.as_str() == " ")
-            && match &self.model.selection {
-                Some(selection) => raw::toggle_collapse(
-                    &self.model.doc,
-                    &mut self.model.collapse,
-                    selection.path(),
-                ),
+            && match self.model.tree_selection() {
+                Some(selection) => {
+                    let path = selection.path().to_vec();
+                    raw::toggle_collapse(&self.model.doc, &mut self.model.collapse, &path)
+                }
                 None => false,
             }
     }
@@ -1265,13 +1328,12 @@ fn run_frame(
     viewport: Size,
 ) {
     let (viewport_width, viewport_height) = (viewport.width, viewport.height);
-    // Empty space deselects. Registered before the content places, so
-    // the descend handlers (registered as they place) take precedence,
-    // and only a press that claims no edge falls through to here.
+    // Empty space deselects — the one slot, whichever pane filled it.
+    // Registered before the content places, so the descend handlers
+    // (registered as they place) take precedence, and only a press
+    // that claims no edge falls through to here.
     frame.handler().on_pointer_down(|app: &mut App, event| {
-        event.button == Some(PointerButton::Primary)
-            && (app.model.selection.take().is_some()
-                | app.model.graph.selection.take().is_some())
+        event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
     });
 
     let mut tcx = TextCtx {
@@ -1282,8 +1344,8 @@ fn run_frame(
     let styles = raw::RawStyles::new(scale);
     let body = raw::project(
         &model.doc,
-        model.selection.as_ref(),
-        model.graph.selected_node(),
+        model.tree_selection(),
+        model.graph_node(),
         &model.collapse,
         &mut tcx,
         &styles,
@@ -1293,12 +1355,12 @@ fn run_frame(
             // or advances the editor's caret — focus and cursor
             // placement are one event.
             select: Rc::new(move |app: &mut App, path, click| {
-                app.model.graph.selection = None;
-                if app.model.selection.as_ref().is_none_or(|s| s.path() != path) {
-                    app.model.selection = Some(raw::Selection::edge(&app.model.doc, path));
+                if app.model.tree_selection().is_none_or(|s| s.path() != path) {
+                    app.model.selection =
+                        Some(Selected::Tree(raw::Selection::edge(&app.model.doc, path)));
                 } else if click.is_none()
                     && let Some(line) =
-                        app.model.selection.as_mut().and_then(raw::Selection::edit_mut)
+                        app.model.tree_selection_mut().and_then(raw::Selection::edit_mut)
                 {
                     // Re-selecting without a text click lands the
                     // caret at the end, same as a fresh mount.
@@ -1306,7 +1368,7 @@ fn run_frame(
                 }
                 if let Some(click) = click
                     && let Some(line) =
-                        app.model.selection.as_mut().and_then(raw::Selection::edit_mut)
+                        app.model.tree_selection_mut().and_then(raw::Selection::edit_mut)
                 {
                     line.pointer_down(
                         &mut app.font_cx,
@@ -1342,18 +1404,25 @@ fn run_frame(
         let pane = graph_view::pane(
             &model.doc,
             &model.graph,
-            model.selection.as_ref(),
+            model.graph_selection(),
+            model.tree_selection(),
             &mut tcx,
             panel,
             &graph_view::Hooks {
                 press_node: Rc::new(|app: &mut App, id, grab, world| {
-                    app.model.selection = None;
+                    // Grabbing a node drops a tree selection (its
+                    // editor must not stay focused behind the drag);
+                    // a graph selection stands until the release
+                    // decides click or drag.
+                    if matches!(app.model.selection, Some(Selected::Tree(_))) {
+                        app.model.selection = None;
+                    }
                     app.model.graph.press_node(id, grab, world);
                 }),
                 press_edge: Rc::new(|app: &mut App, source, label| {
-                    app.model.selection = None;
-                    app.model.graph.selection =
-                        Some(graph_view::GraphSelection::Edge { source, label });
+                    app.model.selection = Some(Selected::Graph(
+                        graph_view::GraphSelection::Edge { source, label },
+                    ));
                 }),
                 press_background: Rc::new(|app: &mut App, panel| {
                     app.model.graph.press_background(panel);
@@ -1361,7 +1430,19 @@ fn run_frame(
                 drag_to: Rc::new(|app: &mut App, world, panel, px| {
                     app.model.graph.drag_to(world, panel, px)
                 }),
-                release: Rc::new(|app: &mut App| app.model.graph.release()),
+                release: Rc::new(|app: &mut App| match app.model.graph.release() {
+                    Some(graph_view::Release::ClickNode(id)) => {
+                        app.model.selection =
+                            Some(Selected::Graph(graph_view::GraphSelection::Node(id)));
+                        true
+                    }
+                    Some(graph_view::Release::ClickBackground) => {
+                        app.model.selection = None;
+                        true
+                    }
+                    Some(graph_view::Release::Drag) => true,
+                    None => false,
+                }),
                 pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             },
         );
@@ -1373,10 +1454,10 @@ fn run_frame(
     if let Some(popup) = frame.popup.take() {
         let card = raw::popup_view(&mut tcx, &styles, &popup, |app: &mut App, action| {
             match app.model.selection.take() {
-                Some(raw::Selection::Pending { path, .. }) => {
+                Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
                     app.commit_value(path, action);
                 }
-                Some(raw::Selection::PendingEdge { parent, .. }) => {
+                Some(Selected::Tree(raw::Selection::PendingEdge { parent, .. })) => {
                     app.commit_label(parent, action);
                 }
                 selection => app.model.selection = selection,
@@ -1403,8 +1484,7 @@ fn run_frame(
 fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
     let state = app
         .model
-        .selection
-        .as_mut()
+        .tree_selection_mut()
         .and_then(raw::Selection::edit_mut)?;
     Some(EditCtx {
         state,
