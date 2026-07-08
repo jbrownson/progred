@@ -679,6 +679,163 @@ this).
   name as header) is the same kind of convention-awareness — decide
   in-session whether it is part of this layer or its own.
 
+Shipped 2026-07-07, same day. What landed matches the brief:
+partition recognition (`list_shaped` = any position-labeled edge, or
+a pending one, so a named list renders its fields as raw rows above
+the elements — the sample's `points` list is named to show this); the
+hardcoded chain in `value_view`; elements as bare value rows with
+positions suppressed; collapsed form shows the element count; Enter
+on an element pends after (Shift+Enter before), Enter on the list
+node appends (Shift+Enter prepends — added for symmetry), Cmd+Enter
+is the field escape hatch. The gesture chains live in raw
+(`pending_enter`, `pending_enter_before`, `pending_field`), not the
+shell, and the dispatch-queryable-shape requirement dissolved: the
+parked pendings gate themselves, so the chain just tries them in
+order. Deviations and decisions to watch: (1) Enter on an EMPTY node
+takes its first element — this is how lists begin, and it deliberately
+outranks the sibling gesture so an empty node nested as an element is
+fillable at all (a keyboard path to `[[1,2],[3]]`); fields on fresh
+nodes take Cmd+Enter. (2) Cmd+Enter became SELECTION-first (it
+targeted the parent first before; the parent fallback remains for
+atoms) — its old parent-targeting was a stopgap for lists, which the
+real gestures replace. (3) Enter on a node-valued element pends a
+sibling, not a field on it — fields on elements take Cmd+Enter.
+Name-awareness was deliberately left out: it is its own convention
+layer, not part of this one.
+
+The convention knows its own node (2026-07-08, user-reported: File >
+New, make a named node, and the graph view showed `…fed8` pills —
+the "name names itself" edge had been sample-document DATA, not
+editor behavior). `Names::convention()` now answers for the NAME node
+itself — text "name", `label: None`, nothing consumed, nothing
+pretending to be an editable edge — with a stored name still winning.
+The sample's explicit self-name edge is gone as redundant (its
+floating name → "name" pair leaves the sample graph). Knock-on win:
+completion now offers "name" as a key wherever the NAME node appears,
+so naming an existing node by keyboard is Enter, type "name", pick,
+type the name — no hex required. The eventual home for facts like
+this is a LIBRARY gid layered under the document (StackedGid has
+waited for exactly this since the egui era); the fallback is the
+editor-convention stopgap, deliberately not that architecture step.
+
+Label pendings own their clicks (2026-07-08, user-reported: Enter on
+the root list, then clicking the header kept the pending instead of
+selecting the node). There is no quasi-selected state — PendingEdge
+deliberately leaves its parent unmarked and the row carries the
+primary — but PendingEdge has no path of its own (`path()` names its
+PARENT), and the selection transition's "same path keeps the mounted
+editor" guard conflated the two. That conflation was also accidentally
+load-bearing: it was the only thing keeping a click on the pending row
+from discarding it. Fix is two-sided: the pending-edge row swallows
+its own pointer-downs (nothing on it means "select the parent"), and
+the transition treats PendingEdge as never path-equal, so a reported
+click is always a real selection change. Riding along: query editors
+(both pending stages) gained click-to-caret, wired straight through
+the edit hook — the selection transition is never involved, so
+clicking what you're typing can't discard it.
+
+Gestures REASSIGNED 2026-07-08 after real use (user: Enter on a node
+element should add an edge to IT — and "cmd+enter doing the list
+thing" was their original instinct, which the brief had flipped).
+Enter now authors ON the selection: a new field edge on any node —
+records, lists, empties, node elements alike; atoms keep the one
+carve-out they force (no edges to author): an atom element pends a
+sibling (Shift+Enter before), any other atom defers to its parent's
+field, so the fast `2, Enter, 2.5` flow survives unchorded. Cmd+Enter
+is the positional gesture, in list terms: a sibling beside any
+element (Cmd+Shift before), append/prepend into a list, and a first
+element into an empty node — still outranking the sibling so nested
+empty lists stay fillable. Consequences: the field escape hatch
+dissolved into the main gesture (a list node takes fields with plain
+Enter), inserting beside a NODE element is now chorded, and "how
+lists begin" moved to the chord — mint a node, Cmd+Enter, type. The
+chains are `pending_enter`/`pending_insert` in raw, shift folded in
+as a flag; `pending_enter_before` and the standalone escape-hatch
+role of `pending_field` retired.
+
+First-launch feedback ("basically the same as before but w/o the
+labels?... I was expecting [x, y, z]") pulled two things forward the
+same day. (1) A fieldless atom-only list projects INLINE as
+`[1, "two", 3]` — dim brackets and commas, every element still an
+ordinary descend (click, edit, secondary-mark), a pending element's
+query editor sitting inline between the commas. The inline form drops
+the short-id header (that is the sugar); fields or node elements keep
+the block form, whose element rows now carry a dim leading `-` — the
+YAML vernacular — so they read apart from labeled field rows.
+Width-aware inline-vs-block choice is still the Wadler layer; until
+then a long atom list runs wide. (2) A slice of name-awareness
+arrived early, for LABELS only: a named GUID label renders its name
+in label style (graph pills and completion already did), and the NAME
+convention node names itself "name" in the sample, so `name` rows
+finally read `name → "polygon"` instead of a hex id. A named GUID
+label and a SID label are now visually identical — the identity
+difference shows only through secondary marks; distinguishing them is
+an open styling question. Value-side name-awareness (a block headed
+by its name) stays its own layer.
+
+Names became POLICY immediately after (user direction: "names are a
+bit special and have deep but still configurable editor support").
+`conventions::Names` is one editor-state function
+`(&MutGid, &Id) -> Option<Name>` — `convention()` reads the `name`
+edge, `none()` disables names for a strict raw view — owned by the
+Model (an editor setting, so it survives document swaps), threaded
+through the tree's `Cx` and the graph pane, and every display-name
+check asks it: tree labels, completion keys, graph node/pill content.
+Expanding what a name is (computed names, per-library conventions) or
+turning names off is now a swap of that one value; a View-menu toggle
+for `none()` is the natural next consumer. The WRITE side —
+completion's name-your-new-node offer and mint — deliberately stays
+hardwired to the `name` convention until it needs to vary.
+
+Refined immediately (user: a lookup alone is not enough — the
+projection must also know to SKIP the name field below): the policy's
+answer is `Name { text, label: Option<Id> }` — the text plus the edge
+it CONSUMED (`None` for future computed names, which consume
+nothing). Name-aware blocks project the consumed edge AS the header:
+named nodes and lists head with their name (near-black, replacing the
+short id — the graph view's language) and skip that edge in their
+ordinary listing. The header name is the name edge's projection, not
+a copy of it — it descends, selects, click-places the caret, edits
+with write-through, secondary-marks, and deletes exactly like the row
+it replaced; deleting it reverts the head to the short id. A named
+fieldless atom list stays inline, the name leading the brackets:
+`pair [1, 2]`. Header clicks are TWO-STAGE (user: "how do I select a
+node now that the header is a text box?"): the name text stands for
+the node until the node is selected — a cold click falls through to
+the block's target and selects the NODE; once the node (or the name
+edge) is selected, the name engages as a text target and the next
+click selects the name edge with caret placement. Click to select,
+click again to rename — the Finder pattern. Implemented as a
+pass-time conditional target (the pass reads the current selection);
+single-shot dispatch guarantees the second click meets the engaged
+successor, never a stale target. Cold, the name edge still descends
+(keyboard-reachable, secondary-markable) — it just registers no
+pointer handler. Tap counts never span targets (user correction —
+stage one is selecting the node, not half a double-click): the report
+stays honest (cursor_target passes the physical count), and the
+shell's selection TRANSITION clamps to a first click whenever the
+click is what mounted the editor; counts pass through only while the
+same editor stays mounted (double=word, triple=line). This also stops
+a quick click across neighboring atoms — inline list elements sit
+within double-click slop — from misreading as a double-click in the
+second one. Open questions recorded: the graph view still draws
+name edges even though its node content shows the name — hiding them
+there is a separate call — and value headers hide the id entirely, so
+two same-named nodes read alike outside secondary marks.
+
+View > Raw (Cmd+R) arrived as the policy's first consumer: a check
+item like Graph, muda-owned state read at frame time. Raw is a VIEW
+toggle, not a settings rewrite — the frame passes `Names::none()` and
+bypasses the projection chain (one `!cx.raw` gate in `value_view`;
+names go quiet through the policy with no extra plumbing) while
+`model.names` keeps the configured policy underneath. Raw shows the
+pure graph: short-id headers, name and position edges as ordinary
+rows, no brackets or dashes. Two knock-ons accepted as coherent:
+completion keys follow the policy, so raw completion offers nodes by
+short id only; and the list GESTURES stay live (Enter beside an
+element still mints a position) — gestures follow the document's
+shape, not the view.
+
 ## Graph View
 
 For demos on small graphs (2026-07-07), carried from the

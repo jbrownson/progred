@@ -95,6 +95,7 @@ struct MenuIds {
     undo: MenuId,
     redo: MenuId,
     graph: MenuId,
+    raw: MenuId,
 }
 
 struct MenuItems {
@@ -102,6 +103,17 @@ struct MenuItems {
     undo: MenuItem,
     redo: MenuItem,
     graph: CheckMenuItem,
+    raw: CheckMenuItem,
+}
+
+/// The View menu's frame inputs: which panes and layers this frame
+/// shows.
+#[derive(Clone, Copy)]
+struct ViewFlags {
+    graph: bool,
+    /// Convention layers off: names and the list projection stand
+    /// down, showing the document as the pure graph it is.
+    raw: bool,
 }
 
 /// The menu bar: file commands own their key equivalents, so the
@@ -134,6 +146,12 @@ fn build_menu() -> (Menu, MenuIds, MenuItems) {
         false,
         Some(Accelerator::new(Some(accel), Code::KeyG)),
     );
+    let raw = CheckMenuItem::new(
+        "Raw",
+        true,
+        false,
+        Some(Accelerator::new(Some(accel), Code::KeyR)),
+    );
     let menu = Menu::new();
     let ids = MenuIds {
         new: new.id().clone(),
@@ -144,6 +162,7 @@ fn build_menu() -> (Menu, MenuIds, MenuItems) {
         undo: undo.id().clone(),
         redo: redo.id().clone(),
         graph: graph.id().clone(),
+        raw: raw.id().clone(),
     };
     menu.append_items(&[
         &Submenu::with_items(
@@ -169,7 +188,7 @@ fn build_menu() -> (Menu, MenuIds, MenuItems) {
         )
         .expect("file menu"),
         &Submenu::with_items("Edit", true, &[&undo, &redo]).expect("edit menu"),
-        &Submenu::with_items("View", true, &[&graph]).expect("view menu"),
+        &Submenu::with_items("View", true, &[&raw, &graph]).expect("view menu"),
     ])
     .expect("menu bar");
     let items = MenuItems {
@@ -177,6 +196,7 @@ fn build_menu() -> (Menu, MenuIds, MenuItems) {
         undo,
         redo,
         graph,
+        raw,
     };
     (menu, ids, items)
 }
@@ -233,7 +253,7 @@ impl ApplicationHandler<MenuEvent> for App {
             self.step_history(true);
         } else if *event.id() == self.menu_ids.redo {
             self.step_history(false);
-        } else if *event.id() == self.menu_ids.graph
+        } else if (*event.id() == self.menu_ids.graph || *event.id() == self.menu_ids.raw)
             && let RenderState::Active { window, .. } = &self.state
         {
             window.request_redraw();
@@ -498,6 +518,7 @@ fn main() {
             doc,
             selection: None,
             collapse: raw::Collapse::default(),
+            names: conventions::Names::default(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
@@ -531,6 +552,9 @@ struct Model {
     doc: raw::Document,
     selection: Option<Selected>,
     collapse: raw::Collapse,
+    /// The name policy: an editor setting, not document state, so it
+    /// survives document swaps.
+    names: conventions::Names,
     graph: graph_view::GraphView,
     history: history::History,
     /// Vertical document scroll offset in logical pixels, so the
@@ -781,6 +805,7 @@ impl App {
             doc,
             selection: None,
             collapse: raw::Collapse::default(),
+            names: self.model.names.clone(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
@@ -881,6 +906,13 @@ impl App {
         }
     }
 
+    fn view_flags(&self) -> ViewFlags {
+        ViewFlags {
+            graph: self.menu_items.graph.is_checked(),
+            raw: self.menu_items.raw.is_checked(),
+        }
+    }
+
     /// Runs the pure pass for the current state and retains its
     /// dispatch outputs; no scene — pixels are the redraw's job.
     fn retain_dispatch(&mut self, scale: f64, viewport: Size) {
@@ -891,10 +923,11 @@ impl App {
             max_scroll: 0.0,
             popup: None,
         };
+        let view = self.view_flags();
         run_frame(
             &mut frame,
             &self.model,
-            self.menu_items.graph.is_checked(),
+            view,
             &mut self.font_cx,
             &mut self.layout_cx,
             scale,
@@ -1071,15 +1104,19 @@ impl App {
         }));
     }
 
-    /// Enter advances a pending stage or begins one: a new edge on
-    /// the selected node — authoring stays where you look — falling
-    /// back to its parent when the selection is an atom; the platform
-    /// command modifier targets the parent explicitly. Labels author
-    /// first, then values; on an empty document Enter begins the root
-    /// value. Escape clears the selection from anywhere, discarding
-    /// any pending with the graph untouched; Backspace on an empty
-    /// query cancels a pending back to its anchor instead, keeping
-    /// the keyboard flow.
+    /// Enter advances a pending stage or begins one, authoring ON the
+    /// selection (the chains live in raw): a new field edge on any
+    /// node; atoms take no edges, so an atom element pends a sibling
+    /// (Shift+Enter before) and any other atom defers to its parent.
+    /// The command chord is the positional list gesture: a sibling
+    /// beside an element, append into a list (Shift prepends), a
+    /// first element into an empty node — how lists begin. Labels
+    /// author first, then values; list elements are one-stage value
+    /// pendings, the projection minting the position. On an empty
+    /// document Enter begins the root value. Escape clears the
+    /// selection from anywhere, discarding any pending with the graph
+    /// untouched; Backspace on an empty query cancels a pending back
+    /// to its anchor instead, keeping the keyboard flow.
     fn insert_key(
         &mut self,
         descends: &[raw::Descend],
@@ -1125,31 +1162,20 @@ impl App {
                         true
                     }
                     selection => {
-                        let command = raw::command(&event.modifiers);
-                        // Only a tree selection anchors a new edge; a
+                        // Only a tree selection anchors authoring; a
                         // graph selection has no path to author at.
                         let tree = match &selection {
                             Some(Selected::Tree(current)) => Some(current),
                             _ => None,
                         };
+                        let doc = &self.model.doc;
+                        let before = event.modifiers.shift();
                         let started = match tree {
-                            Some(current) if command => {
-                                let path = current.path();
-                                path.split_last()
-                                    .and_then(|(_, parent)| {
-                                        raw::pending_edge(&self.model.doc, parent.to_vec())
-                                    })
-                                    .or_else(|| raw::pending_edge(&self.model.doc, path.to_vec()))
+                            Some(current) if raw::command(&event.modifiers) => {
+                                raw::pending_insert(doc, current.path(), before)
                             }
-                            Some(current) => {
-                                let path = current.path();
-                                raw::pending_edge(&self.model.doc, path.to_vec()).or_else(|| {
-                                    path.split_last().and_then(|(_, parent)| {
-                                        raw::pending_edge(&self.model.doc, parent.to_vec())
-                                    })
-                                })
-                            }
-                            None => raw::pending_root(&self.model.doc),
+                            Some(current) => raw::pending_enter(doc, current.path(), before),
+                            None => raw::pending_root(doc),
                         };
                         let began = started.is_some();
                         self.model.selection = started.map(Selected::Tree).or(selection);
@@ -1219,8 +1245,8 @@ impl App {
         // Advance the force simulation while the graph is open; the
         // continuous redraw request below keeps it animating.
         self.sync_menus();
-        let show_graph = self.menu_items.graph.is_checked();
-        if show_graph {
+        let view = self.view_flags();
+        if view.graph {
             self.model.graph.step(&self.model.doc);
         }
         self.scene.reset();
@@ -1234,7 +1260,7 @@ impl App {
         run_frame(
             &mut frame,
             &self.model,
-            show_graph,
+            view,
             &mut self.font_cx,
             &mut self.layout_cx,
             scale,
@@ -1312,7 +1338,7 @@ impl App {
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
 
-        if show_graph && self.model.graph.hot() {
+        if view.graph && self.model.graph.hot() {
             window.request_redraw();
         }
     }
@@ -1321,7 +1347,7 @@ impl App {
 fn run_frame(
     frame: &mut Frame<'_>,
     model: &Model,
-    show_graph: bool,
+    view: ViewFlags,
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<Brush>,
     scale: f64,
@@ -1342,11 +1368,18 @@ fn run_frame(
         scale: scale as f32,
     };
     let styles = raw::RawStyles::new(scale);
+    // The Raw view stands the convention layers down for this frame:
+    // names answer None and the list projection is bypassed. The
+    // model's configured policy is untouched underneath.
+    let none = conventions::Names::none();
+    let names = if view.raw { &none } else { &model.names };
     let body = raw::project(
         &model.doc,
         model.tree_selection(),
         model.graph_node(),
         &model.collapse,
+        names,
+        view.raw,
         &mut tcx,
         &styles,
         raw::Hooks {
@@ -1355,7 +1388,15 @@ fn run_frame(
             // or advances the editor's caret — focus and cursor
             // placement are one event.
             select: Rc::new(move |app: &mut App, path, click| {
-                if app.model.tree_selection().is_none_or(|s| s.path() != path) {
+                // A label pending has no path of its own — path()
+                // names its PARENT — so a reported click is always a
+                // real selection change (the pending row swallows its
+                // own clicks before they can reach here).
+                let fresh = match app.model.tree_selection() {
+                    Some(raw::Selection::PendingEdge { .. }) | None => true,
+                    Some(current) => current.path() != path,
+                };
+                if fresh {
                     app.model.selection =
                         Some(Selected::Tree(raw::Selection::edge(&app.model.doc, path)));
                 } else if click.is_none()
@@ -1370,13 +1411,20 @@ fn run_frame(
                     && let Some(line) =
                         app.model.tree_selection_mut().and_then(raw::Selection::edit_mut)
                 {
+                    // A tap sequence never spans targets: the click
+                    // that mounts an editor is its first, whatever
+                    // the physical count says — selecting the node
+                    // was stage one, not half a double-click, and a
+                    // quick click on a neighboring atom is not a
+                    // double-click in this one.
+                    let count = if fresh { 1 } else { click.count };
                     line.pointer_down(
                         &mut app.font_cx,
                         &mut app.layout_cx,
                         scale as f32,
                         click.point,
                         click.shift,
-                        click.count,
+                        count,
                     );
                 }
             }),
@@ -1399,13 +1447,14 @@ fn run_frame(
     );
     // The graph pane draws over the document's right side; placed
     // after the body so its handlers win inside the panel.
-    if show_graph {
+    if view.graph {
         let panel = graph_view::panel(viewport_width, viewport_height);
         let pane = graph_view::pane(
             &model.doc,
             &model.graph,
             model.graph_selection(),
             model.tree_selection(),
+            names,
             &mut tcx,
             panel,
             &graph_view::Hooks {

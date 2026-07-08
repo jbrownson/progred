@@ -1,16 +1,16 @@
 //! The raw projection: any gid document rendered as entity blocks of
-//! edge rows, with no schema and no interpretation of semantic
-//! conventions — every node is just its short id, every edge a row,
-//! including `name`, and lists render as the plain position-labeled
-//! nodes they are (list sugar belongs to a convention-aware
-//! projection). Known
+//! edge rows, with no schema — every node is just its short id, every
+//! edge a row, including `name` — plus the first convention-aware
+//! layer over it: the list projection, which claims position-labeled
+//! nodes in the hardcoded `value_view` chain and renders their
+//! elements as bare ordered rows. Known
 //! identity spaces render friendly — strings and numbers as their
 //! values, node ids as git-style suffixes, positions as their payload
 //! hex — and unparsable or unknown ids render as the space-and-bytes
 //! they are (an even rawer all-space-and-bytes inspection view could
 //! exist; raw itself owns friendly renderings for what it knows).
 
-use crate::conventions::NAME;
+use crate::conventions::{NAME, Name, Names};
 use crate::filter;
 use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id, position};
 use puri::draw::Canvas;
@@ -32,6 +32,9 @@ const QUERY_COLOR: [f32; 4] = [0.46, 0.49, 0.55, 1.0];
 
 pub struct RawStyles {
     pub label: TextStyle,
+    /// A node's own name, projected as its header: the strongest text
+    /// in a block.
+    pub name: TextStyle,
     pub string: TextStyle,
     pub number: TextStyle,
     pub dim: TextStyle,
@@ -54,6 +57,7 @@ impl RawStyles {
         // gray secondary labels, restrained literal accents.
         Self {
             label: style(14.0, [0.46, 0.49, 0.55, 1.0], None),
+            name: style(14.0, [0.13, 0.14, 0.16, 1.0], None),
             string: style(14.0, STRING_COLOR, None),
             number: style(14.0, NUMBER_COLOR, None),
             dim: style(13.0, [0.55, 0.58, 0.64, 1.0], None),
@@ -120,6 +124,12 @@ pub fn sample_document() -> Document {
     let polygon = new_node_id();
     gid.set(polygon, name.clone(), Id::from("polygon"));
     let points = list(&mut gid, vec![Id::from(origin), Id::from(corner)]);
+    // A named list: exercises the partition — fields above elements.
+    gid.set(
+        points.as_node_id().expect("lists are nodes"),
+        name.clone(),
+        Id::from("points"),
+    );
     gid.set(polygon, Id::from("points"), points);
     gid.set(polygon, Id::from(stroke_width), Id::from(1.5));
     let dash = list(&mut gid, vec![Id::from(2.0), Id::from(3.0)]);
@@ -173,6 +183,12 @@ struct Cx<'a> {
     /// The document root — a Document field, not a gid edge, so the
     /// completion sweep needs it passed alongside the gid.
     root: Option<&'a Id>,
+    /// The editor's name policy; every display-name check asks it.
+    names: &'a Names,
+    /// The Raw view: convention layers stand down — the projection
+    /// chain stops claiming nodes, showing the pure graph. (Names go
+    /// quiet through the policy, so only the chain reads this.)
+    raw: bool,
     collapse: &'a Collapse,
     styles: &'a RawStyles,
     selection: Option<&'a Selection>,
@@ -440,9 +456,8 @@ pub fn pending_edge(doc: &Document, parent: Path) -> Option<Selection> {
 }
 
 /// A pending sibling next to the element at `path` (which must sit at
-/// a position label), minted between it and its neighbor. Parked for
-/// the list projection: raw's gestures no longer mint positions.
-#[allow(dead_code)]
+/// a position label), minted between it and its neighbor. The list
+/// projection's gesture — raw's own gestures never mint positions.
 fn pending_beside(doc: &Document, path: &[Id], after: bool) -> Option<Selection> {
     let (label, parent_path) = path.split_last()?;
     position::as_position(label)?;
@@ -459,12 +474,10 @@ fn pending_beside(doc: &Document, path: &[Id], after: bool) -> Option<Selection>
     Some(pending_value(fresh_path))
 }
 
-#[allow(dead_code)]
 pub fn pending_after(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_beside(doc, path, true)
 }
 
-#[allow(dead_code)]
 pub fn pending_before(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_beside(doc, path, false)
 }
@@ -475,7 +488,6 @@ pub fn pending_before(doc: &Document, path: &[Id]) -> Option<Selection> {
 /// nodes, which is how lists begin; a node with only record fields
 /// declines (field insertion, with its pending label, is a separate
 /// gesture).
-#[allow(dead_code)]
 fn pending_into_at(doc: &Document, path: &[Id], end: bool) -> Option<Selection> {
     let value = resolve(doc, path)?;
     value.as_node_id()?;
@@ -493,16 +505,60 @@ fn pending_into_at(doc: &Document, path: &[Id], end: bool) -> Option<Selection> 
     Some(pending_value(fresh_path))
 }
 
-/// Appends: "add to this list" goes at the end. Parked with its
-/// siblings for the list projection.
-#[allow(dead_code)]
+/// Appends: "add to this list" goes at the end.
 pub fn pending_into(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_into_at(doc, path, true)
 }
 
-#[allow(dead_code)]
 pub fn pending_into_first(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_into_at(doc, path, false)
+}
+
+/// Plain Enter: author ON the selection — a new field edge on any
+/// node, lists and empties included. Atoms take no edges, so an atom
+/// element pends a sibling instead (before with shift) and any other
+/// atom defers to its parent's field. The positional list gestures
+/// live on the command chord: `pending_insert`.
+pub fn pending_enter(doc: &Document, path: &[Id], before: bool) -> Option<Selection> {
+    let node = resolve(doc, path).is_some_and(|value| value.as_node_id().is_some());
+    if node {
+        return pending_field(doc, path);
+    }
+    let beside = if before {
+        pending_before(doc, path)
+    } else {
+        pending_after(doc, path)
+    };
+    beside.or_else(|| pending_field(doc, path))
+}
+
+/// The command chord: positional insertion, in list terms. An empty
+/// node takes its first element — how lists begin, and it outranks
+/// the sibling gesture so a nested empty list stays fillable — an
+/// element pends a sibling (before with shift), and a list appends
+/// (prepends with shift). No positional sense declines.
+pub fn pending_insert(doc: &Document, path: &[Id], before: bool) -> Option<Selection> {
+    let empty = resolve(doc, path).is_some_and(|value| {
+        value.as_node_id().is_some()
+            && doc.gid.edges(value).is_none_or(|edges| edges.is_empty())
+    });
+    if empty {
+        return pending_into_at(doc, path, !before);
+    }
+    if before {
+        pending_before(doc, path).or_else(|| pending_into_first(doc, path))
+    } else {
+        pending_after(doc, path).or_else(|| pending_into(doc, path))
+    }
+}
+
+/// A new field edge on the selection — its parent's when the
+/// selection takes no edges.
+pub fn pending_field(doc: &Document, path: &[Id]) -> Option<Selection> {
+    pending_edge(doc, path.to_vec()).or_else(|| {
+        path.split_last()
+            .and_then(|(_, parent)| pending_edge(doc, parent.to_vec()))
+    })
 }
 
 /// A pending root for an empty document.
@@ -563,7 +619,7 @@ pub trait HasPopup {
 /// by the fuzzy tiers), and a fresh node — named after the query when
 /// there is one, the create-on-reference of the floating-definitions
 /// design.
-fn completion_entries(gid: &MutGid, root: Option<&Id>, query: &str) -> Vec<Entry> {
+fn completion_entries(gid: &MutGid, root: Option<&Id>, names: &Names, query: &str) -> Vec<Entry> {
     let atom = resolve_query(query);
     let display = match atom.as_str() {
         Some(s) => format!("\"{s}\""),
@@ -593,10 +649,9 @@ fn completion_entries(gid: &MutGid, root: Option<&Id>, query: &str) -> Vec<Entry
         .into_iter()
         .map(|node| {
             let id = Id::from(node);
-            let key = gid
-                .get(&id, &Id::from(NAME))
-                .and_then(Id::as_str)
-                .map(str::to_string)
+            let key = names
+                .of(gid, &id)
+                .map(|name| name.text)
                 .unwrap_or_else(|| short_id(node));
             (key, id)
         })
@@ -955,11 +1010,15 @@ fn secondary_of(doc: &Document, selection: Option<&Selection>) -> Option<Id> {
     }
 }
 
+// The explicit-state boundary: everything a pass reads arrives here.
+#[allow(clippy::too_many_arguments)]
 pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     doc: &Document,
     selection: Option<&Selection>,
     graph_node: Option<&Id>,
     collapse: &Collapse,
+    names: &Names,
+    raw: bool,
     tcx: &mut TextCtx,
     styles: &RawStyles,
     hooks: Hooks<C>,
@@ -967,6 +1026,8 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let cx = Cx {
         gid: &doc.gid,
         root: doc.root.as_ref(),
+        names,
+        raw,
         collapse,
         styles,
         selection,
@@ -1011,19 +1072,23 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let id = Id::from(node);
+    let name = cx.names.of(cx.gid, &id);
+    let name_label = name.as_ref().and_then(|name| name.label.clone());
+    // The name edge is consumed by the header, so the listing skips it.
     let mut entries: Vec<(Id, Option<Id>)> = sorted_edges(cx.gid, &id)
         .into_iter()
+        .filter(|(label, _)| name_label.as_ref() != Some(label))
         .map(|(label, value)| (label, Some(value)))
         .collect();
     if let Some(label) = cx.pending_child_of(path) {
         entries.push((label, None));
         entries.sort_by(|a, b| a.0.cmp(&b.0));
     }
-    let id_text = text(tcx, &short_id(node), &cx.styles.id);
+    let head = head_view(cx, tcx, path, node, &name, hooks);
 
     let pending_edge = cx.pending_edge_under(path).is_some();
     if entries.is_empty() && !pending_edge {
-        return id_text;
+        return head;
     }
     // A pending child or edge forces the node open so it can be seen.
     let collapsed = !pending_edge
@@ -1031,7 +1096,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         && cx.collapse.collapsed(path, ancestors.contains(&id));
     let header = row(
         4.0 * scale,
-        vec![id_text, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
+        vec![head, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
     );
     if collapsed {
         return header;
@@ -1041,46 +1106,73 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     inner.insert(id);
     let mut rows: Vec<Node<P>> = entries
         .into_iter()
-        .map(|(label, value)| {
-            let mut child = path.to_vec();
-            child.push(label.clone());
-            // A real edge's label and arrow select the edge, like its
-            // value — grouped so one target spans both and the gap
-            // between. A pending row's plain click falls through (the
-            // not-yet-edge can't be selected), but command still
-            // picks its label's identity.
-            let head = row(
-                6.0 * scale,
-                vec![label_view(cx, tcx, &label), arrow(cx.styles)],
-            );
-            let head = match &value {
-                Some(_) => select_target(child.clone(), label.clone(), hooks, head),
-                None => pick_target(label.clone(), hooks, head),
-            };
-            let content = match value {
-                Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
-                None => pending_view(cx, tcx, child, hooks),
-            };
-            row(6.0 * scale, vec![head, content])
-        })
+        .map(|(label, value)| edge_row(cx, tcx, path, &inner, label, value, hooks))
         .collect();
     // A new edge being authored: the label query, unsorted until it
     // has a label to sort by.
     if let Some((query, choice)) = cx.pending_edge_under(path) {
-        let pending_row = row(
-            6.0 * scale,
-            vec![
-                query_content(cx, tcx, query, choice, hooks),
-                arrow(cx.styles),
-                text(tcx, "…", &cx.styles.dim),
-            ],
-        );
-        // The authoring locus carries the primary itself; its parent
-        // is deliberately unmarked.
-        rows.push(decorate(pending_row, move |p: &mut P, rect| {
-            primary_highlight(scale, p, rect);
-        }));
+        rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
     }
+    block(header, rows, cx.styles)
+}
+
+/// A named node's head: the consumed name edge projected as the
+/// header — the text is the name, and it selects, edits, marks, and
+/// deletes as the edge it is, replacing that edge's ordinary row.
+/// An unnamed node heads with its short id; a name without an edge
+/// (computed) is plain text.
+///
+/// The name text stands for the NODE until the node is selected: a
+/// cold click falls through to the block's own target — click the
+/// thing to select it, click again to rename — and only then does
+/// the name engage as a text target. The pass decides from current
+/// state; single-shot dispatch means the second click always sees
+/// the engaged successor. Cold, the edge stays keyboard-reachable
+/// and markable, just not a pointer target.
+fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Id],
+    node: NodeId,
+    name: &Option<Name>,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let Some(name) = name else {
+        return text(tcx, &short_id(node), &cx.styles.id);
+    };
+    let fallback = text(tcx, &name.text, &cx.styles.name);
+    let Some(label) = &name.label else {
+        return fallback;
+    };
+    let Some(value) = cx.gid.get(&Id::from(node), label).cloned() else {
+        return fallback;
+    };
+    let mut edge = path.to_vec();
+    edge.push(label.clone());
+    let editing = cx
+        .selection
+        .filter(|selection| selection.path() == edge.as_slice())
+        .and_then(Selection::edit);
+    let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
+    if cx.selected(path) || cx.selected(&edge) {
+        let content = cursor_target(edge.clone(), value.clone(), hooks, content);
+        let content = if cx.selected(&edge) {
+            content
+        } else {
+            secondary_mark(cx, &value, content)
+        };
+        descend(cx, edge, Some(value), hooks, content)
+    } else {
+        let content = secondary_mark(cx, &value, content);
+        decorate(content, move |p: &mut P, rect| {
+            p.descends().push(Descend { path: edge, rect });
+        })
+    }
+}
+
+/// A node block: the header over its indented rows.
+fn block<P: Canvas>(header: Node<P>, rows: Vec<Node<P>>, styles: &RawStyles) -> Node<P> {
+    let scale = styles.scale;
     col(
         HAlign::Start,
         0,
@@ -1093,6 +1185,196 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             ),
         ],
     )
+}
+
+/// One labeled edge row: the label-and-arrow head, then the value (or
+/// its pending query). A real edge's label and arrow select the edge,
+/// like its value — grouped so one target spans both and the gap
+/// between. A pending row's plain click falls through (the
+/// not-yet-edge can't be selected), but command still picks its
+/// label's identity.
+fn edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Id],
+    ancestors: &HashSet<Id>,
+    label: Id,
+    value: Option<Id>,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let mut child = path.to_vec();
+    child.push(label.clone());
+    let head = row(
+        6.0 * scale,
+        vec![label_view(cx, tcx, &label), arrow(cx.styles)],
+    );
+    let head = match &value {
+        Some(_) => select_target(child.clone(), label.clone(), hooks, head),
+        None => pick_target(label.clone(), hooks, head),
+    };
+    let content = match value {
+        Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
+        None => pending_view(cx, tcx, child, hooks),
+    };
+    row(6.0 * scale, vec![head, content])
+}
+
+/// The label-query row of a new edge being authored on a node. The
+/// authoring locus carries the primary itself; its parent is
+/// deliberately unmarked.
+fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    query: &LineEditState,
+    choice: usize,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let pending_row = row(
+        6.0 * scale,
+        vec![
+            query_content(cx, tcx, query, choice, hooks),
+            arrow(cx.styles),
+            text(tcx, "…", &cx.styles.dim),
+        ],
+    );
+    decorate(pending_row, move |p: &mut P, rect| {
+        primary_highlight(scale, p, rect);
+        // The row owns its clicks: nothing here means "select the
+        // parent", so nothing may fall through to it. (The query's
+        // caret target, registered after, still wins inside itself.)
+        p.handler().on_pointer_down(move |_, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+        });
+    })
+}
+
+/// Whether the list projection claims a node: it has ordered elements
+/// — position-labeled edges — or is about to (`pending` being the
+/// pending child label under its path).
+fn list_shaped(gid: &MutGid, id: &Id, pending: Option<&Id>) -> bool {
+    gid.edges(id)
+        .into_iter()
+        .flatten()
+        .map(|(label, _)| label)
+        .chain(pending)
+        .any(|label| position::as_position(label).is_some())
+}
+
+/// A list-shaped node: its position-labeled edges are the ordered
+/// elements, rendered as bare value rows — the position is identity,
+/// not information; order carries it — below any other edges, which
+/// stay ordinary field rows. Collapsed shows the element count.
+/// Paths are untouched underneath: positions are real labels, so
+/// selection, undo, marks, and the graph view work unchanged.
+fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Id],
+    ancestors: &HashSet<Id>,
+    node: NodeId,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let id = Id::from(node);
+    let name = cx.names.of(cx.gid, &id);
+    let name_label = name.as_ref().and_then(|name| name.label.clone());
+    // The name edge is consumed by the header, so the listing skips it.
+    let (mut elements, mut fields): (Vec<(Id, Option<Id>)>, Vec<(Id, Option<Id>)>) =
+        sorted_edges(cx.gid, &id)
+            .into_iter()
+            .filter(|(label, _)| name_label.as_ref() != Some(label))
+            .map(|(label, value)| (label, Some(value)))
+            .partition(|(label, _)| position::as_position(label).is_some());
+    if let Some(label) = cx.pending_child_of(path) {
+        let section = if position::as_position(&label).is_some() {
+            &mut elements
+        } else {
+            &mut fields
+        };
+        section.push((label, None));
+        section.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+    let pending_edge = cx.pending_edge_under(path).is_some();
+    let mut inner = ancestors.clone();
+    inner.insert(id.clone());
+
+    // A fieldless atom list reads as a literal: `[1, "two", 3]` on
+    // one line, dim punctuation, each element still an ordinary
+    // descend (click, edit, mark) — a pending one included. Fields
+    // or node elements take the block form; width-aware grouping
+    // (Wadler) waits, so a long list will run wide for now.
+    let inline = fields.is_empty()
+        && !pending_edge
+        && elements.iter().all(|(_, value)| {
+            value
+                .as_ref()
+                .is_none_or(|v| v.as_str().is_some() || v.as_number().is_some())
+        });
+    if inline {
+        let mut cells: Vec<Node<P>> = Vec::new();
+        if name.is_some() {
+            cells.push(head_view(cx, tcx, path, node, &name, hooks));
+        }
+        cells.push(text(
+            tcx,
+            if name.is_some() { " [" } else { "[" },
+            &cx.styles.dim,
+        ));
+        for (index, (label, value)) in elements.into_iter().enumerate() {
+            if index > 0 {
+                cells.push(text(tcx, ", ", &cx.styles.dim));
+            }
+            let mut child = path.to_vec();
+            child.push(label);
+            cells.push(match value {
+                Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
+                None => pending_view(cx, tcx, child, hooks),
+            });
+        }
+        cells.push(text(tcx, "]", &cx.styles.dim));
+        return row(0.0, cells);
+    }
+
+    // A pending child or edge forces the node open so it can be seen.
+    let collapsed = !pending_edge
+        && elements.iter().chain(&fields).all(|(_, value)| value.is_some())
+        && cx.collapse.collapsed(path, ancestors.contains(&id));
+    let head = head_view(cx, tcx, path, node, &name, hooks);
+    let mut header = vec![
+        head,
+        disclosure(path.to_vec(), collapsed, hooks, cx.styles),
+    ];
+    if collapsed {
+        let count = format!(
+            "{} element{}",
+            elements.len(),
+            if elements.len() == 1 { "" } else { "s" }
+        );
+        header.push(text(tcx, &count, &cx.styles.dim));
+        return row(4.0 * scale, header);
+    }
+    let mut rows: Vec<Node<P>> = fields
+        .into_iter()
+        .map(|(label, value)| edge_row(cx, tcx, path, &inner, label, value, hooks))
+        .collect();
+    rows.extend(elements.into_iter().map(|(label, value)| {
+        let mut child = path.to_vec();
+        child.push(label);
+        let content = match value {
+            Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
+            None => pending_view(cx, tcx, child, hooks),
+        };
+        // The list vernacular: a dim leading dash marks an element
+        // row apart from the labeled field rows above.
+        row(6.0 * scale, vec![text(tcx, "-", &cx.styles.dim), content])
+    }));
+    if let Some((query, choice)) = cx.pending_edge_under(path) {
+        rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
+    }
+    block(row(4.0 * scale, header), rows, cx.styles)
 }
 
 /// Git-style short form of a node id: an ellipsis and the last five
@@ -1122,7 +1404,12 @@ fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
     } else if let Some(n) = label.as_number() {
         text(tcx, &n.to_string(), &cx.styles.number)
     } else if let Some(uuid) = label.as_node_id() {
-        text(tcx, &short_id(uuid), &cx.styles.id)
+        // A named node used as a label reads by its name, through
+        // the editor's one name policy.
+        match cx.names.of(cx.gid, label) {
+            Some(name) => text(tcx, &name.text, &cx.styles.label),
+            None => text(tcx, &short_id(uuid), &cx.styles.id),
+        }
     } else if let Some(bytes) = position::as_position(label) {
         text(tcx, &hex(bytes), &cx.styles.id)
     } else {
@@ -1264,7 +1551,15 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
         cursor_target(path.to_vec(), value.clone(), hooks, content)
     } else if let Some(node) = value.as_node_id() {
-        node_view(cx, tcx, path, ancestors, node, hooks)
+        // The hardcoded projection chain, decided per node: the list
+        // projection claims list-shaped nodes, everything else stays
+        // the raw block. A registry waits for user-defined
+        // projections; the Raw view empties the chain.
+        if !cx.raw && list_shaped(cx.gid, value, cx.pending_child_of(path).as_ref()) {
+            list_view(cx, tcx, path, ancestors, node, hooks)
+        } else {
+            node_view(cx, tcx, path, ancestors, node, hooks)
+        }
     } else if let Some(bytes) = position::as_position(value) {
         text(tcx, &hex(bytes), &cx.styles.id)
     } else {
@@ -1314,14 +1609,38 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
     choice: usize,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let entries = completion_entries(cx.gid, cx.root, query.text());
+    let entries = completion_entries(cx.gid, cx.root, cx.names, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let content = atom_content(Some(query), fallback, tcx, cx.styles, hooks);
+    let edit = hooks.edit.clone();
+    let scale = cx.styles.scale;
     decorate(content, move |p: &mut P, rect| {
         *p.popup() = Some(Popup {
             anchor: rect,
             entries,
             choice,
+        });
+        // Clicks in the query place the caret, straight through the
+        // edit hook — the selection transition is never involved, so
+        // clicking what you are typing can't discard it.
+        let edit = edit.clone();
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && edit(ctx).is_some_and(|edit| {
+                    edit.state.pointer_down(
+                        edit.fonts,
+                        edit.layouts,
+                        scale as f32,
+                        Point::new(
+                            event.state.position.x - rect.x0,
+                            event.state.position.y - rect.y0,
+                        ),
+                        event.state.modifiers.shift(),
+                        event.state.count.max(1),
+                    );
+                    true
+                })
         });
     })
 }
@@ -1959,10 +2278,11 @@ mod tests {
             let node = new_node_id();
             gid.set(node, Id::from(NAME), Id::from(name));
         }
+        let names = Names::convention();
 
         // A confident reference match outranks the typed string;
         // "corner" has no i, so only "origin" matches the query.
-        let entries = completion_entries(&gid, None, "orig");
+        let entries = completion_entries(&gid, None, &names, "orig");
         assert_eq!(entries[0].display, "origin");
         assert!(entries[0].detail.is_some());
         assert_eq!(entries[1].display, "\"orig\"");
@@ -1975,7 +2295,7 @@ mod tests {
 
         // A leading quote forces the string back on top, closed or
         // not, and the new node's name drops the quotes.
-        let entries = completion_entries(&gid, None, "\"orig");
+        let entries = completion_entries(&gid, None, &names, "\"orig");
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str() == Some("orig")));
         assert!(matches!(
             &entries.last().unwrap().action,
@@ -1985,7 +2305,7 @@ mod tests {
         // An empty query offers every node — the NAME label is
         // itself an unnamed node here — plus unnamed creation and
         // the empty string.
-        let entries = completion_entries(&gid, None, "");
+        let entries = completion_entries(&gid, None, &names, "");
         assert_eq!(entries.len(), 5);
         assert!(matches!(
             &entries.last().unwrap().action,
@@ -1993,7 +2313,7 @@ mod tests {
         ));
 
         // Numbers infer as the atom entry and lead.
-        let entries = completion_entries(&gid, None, "2.5");
+        let entries = completion_entries(&gid, None, &names, "2.5");
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_number() == Some(2.5)));
 
         // Unnamed nodes are offered too, searchable by the short id
@@ -2013,7 +2333,7 @@ mod tests {
         let scratch = new_node_id();
         gid.set(scratch, Id::from("ref"), Id::from(orphan));
         let suffix = short_id(orphan);
-        let entries = completion_entries(&gid, None, suffix.trim_start_matches('…'));
+        let entries = completion_entries(&gid, None, &names, suffix.trim_start_matches('…'));
         assert_eq!(entries[0].display, suffix);
         assert!(entries[0].detail.is_none());
         assert!(
@@ -2024,10 +2344,41 @@ mod tests {
         // a fresh edgeless node at root is still offered.
         let root = new_node_id();
         let root_id = Id::from(root);
-        let entries = completion_entries(&gid, Some(&root_id), "");
+        let entries = completion_entries(&gid, Some(&root_id), &names, "");
         assert!(entries.iter().any(
             |entry| matches!(&entry.action, EntryAction::Value(id) if id.as_node_id() == Some(root))
         ));
+    }
+
+    #[test]
+    fn the_name_policy_is_editor_state() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from(NAME), Id::from("origin"));
+
+        // The name carries its provenance: the consumed edge label.
+        let name = Names::convention().of(&gid, &Id::from(node)).unwrap();
+        assert_eq!(name.text, "origin");
+        assert_eq!(name.label, Some(Id::from(NAME)));
+        assert!(Names::none().of(&gid, &Id::from(node)).is_none());
+
+        // The convention knows its own node with no edge behind it —
+        // nothing consumed — and a stored name still wins.
+        let convention = Names::convention().of(&gid, &Id::from(NAME)).unwrap();
+        assert_eq!(convention.text, "name");
+        assert_eq!(convention.label, None);
+        gid.set(NAME, Id::from(NAME), Id::from("nombre"));
+        let stored = Names::convention().of(&gid, &Id::from(NAME)).unwrap();
+        assert_eq!(stored.text, "nombre");
+        assert_eq!(stored.label, Some(Id::from(NAME)));
+
+        // Completion keys through the policy: with names disabled,
+        // the node falls back to its short id and the name no longer
+        // matches.
+        let entries = completion_entries(&gid, None, &Names::none(), "orig");
+        assert!(!entries.iter().any(|entry| entry.display == "origin"));
+        let entries = completion_entries(&gid, None, &Names::convention(), "orig");
+        assert_eq!(entries[0].display, "origin");
     }
 
     #[test]
@@ -2137,5 +2488,436 @@ mod tests {
         assert!(collapse.collapsed(&path, false));
         collapse.overrides.insert(path.clone(), false);
         assert!(!collapse.collapsed(&path, true));
+    }
+
+    #[test]
+    fn list_shape_is_positions_or_a_pending_position() {
+        let mut gid = MutGid::new();
+        let items = list(&mut gid, vec![Id::from(1.0)]);
+        let record = new_node_id();
+        gid.set(record, Id::from(NAME), Id::from("r"));
+        // Positions make the list; a name doesn't unmake it —
+        // partition, not all-or-nothing.
+        assert!(list_shaped(&gid, &items, None));
+        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("l"));
+        assert!(list_shaped(&gid, &items, None));
+        assert!(!list_shaped(&gid, &Id::from(record), None));
+        // A pending element claims an empty node for the projection;
+        // a pending field does not.
+        let fresh = Id::from(new_node_id());
+        let pos = position::between(None, None).unwrap();
+        assert!(!list_shaped(&gid, &fresh, None));
+        assert!(list_shaped(&gid, &fresh, Some(&pos)));
+        assert!(!list_shaped(&gid, &fresh, Some(&Id::from("field"))));
+    }
+
+    #[test]
+    fn enter_authors_on_the_selection_and_the_chord_inserts() {
+        let mut gid = MutGid::new();
+        let nested = new_node_id();
+        let items = list(&mut gid, vec![Id::from("a"), Id::from(nested)]);
+        let record = new_node_id();
+        gid.set(record, Id::from("items"), items.clone());
+        gid.set(record, Id::from("x"), Id::from(1.0));
+        let doc = Document {
+            root: Some(Id::from(record)),
+            gid,
+        };
+        let positions = positions_of(&doc.gid, &items);
+        let items_path = vec![Id::from("items")];
+        let first = vec![Id::from("items"), positions[0].clone()];
+        let second = vec![Id::from("items"), positions[1].clone()];
+
+        // Enter authors ON the selection: a field edge on any node —
+        // the record, the list itself, a node nested as an element.
+        assert!(matches!(
+            pending_enter(&doc, &[], false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
+        assert!(matches!(
+            pending_enter(&doc, &items_path, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent == items_path
+        ));
+        assert!(matches!(
+            pending_enter(&doc, &second, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent == second
+        ));
+
+        // Atoms take no edges: an atom element pends a sibling
+        // (before with shift); an atom field defers to its parent.
+        let Some(Selection::Pending { path, .. }) = pending_enter(&doc, &first, false) else {
+            panic!("sibling after");
+        };
+        assert!(positions[0] < path[1] && path[1] < positions[1]);
+        let Some(Selection::Pending { path, .. }) = pending_enter(&doc, &first, true) else {
+            panic!("sibling before");
+        };
+        assert!(path[1] < positions[0]);
+        assert!(matches!(
+            pending_enter(&doc, &[Id::from("x")], false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
+
+        // The chord inserts positionally: a sibling beside any
+        // element, append and prepend on the list itself.
+        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &first, false) else {
+            panic!("chord sibling");
+        };
+        assert!(positions[0] < path[1] && path[1] < positions[1]);
+        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &items_path, false)
+        else {
+            panic!("append");
+        };
+        assert!(positions[1] < path[1]);
+        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &items_path, true)
+        else {
+            panic!("prepend");
+        };
+        assert!(path[1] < positions[0]);
+
+        // Under the chord an empty node takes its first element —
+        // outranking the sibling gesture, so a nested empty list is
+        // fillable — and the chord declines where nothing positional
+        // makes sense.
+        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &second, false) else {
+            panic!("into the empty element");
+        };
+        assert!(path.starts_with(&second) && path.len() == 3);
+        assert!(position::as_position(&path[2]).is_some());
+        assert!(pending_insert(&doc, &[], false).is_none());
+        assert!(pending_insert(&doc, &[Id::from("x")], false).is_none());
+    }
+
+    use puri::draw::{GlyphRun, Shape};
+    use puri::handler::Handler;
+    use puri::layout::place_top_left;
+
+    /// A placement context that keeps only what assertions need:
+    /// descends, the popup, and a dispatchable handler; drawing is
+    /// discarded.
+    #[derive(Default)]
+    struct Probe<C = ()> {
+        handler: Handler<C>,
+        descends: Vec<Descend>,
+        popup: Option<Popup>,
+    }
+
+    impl<C> Canvas for Probe<C> {
+        fn fill(&mut self, _: impl Into<Shape>, _: impl Into<Brush>, _: Affine) {}
+        fn stroke(&mut self, _: impl Into<Shape>, _: Stroke, _: impl Into<Brush>, _: Affine) {}
+        fn glyph_run(&mut self, _: GlyphRun) {}
+        fn clip(&mut self, _: impl Into<Shape>, _: Affine, content: impl FnOnce(&mut Self)) {
+            content(self);
+        }
+    }
+
+    impl<C> HasHandler<C> for Probe<C> {
+        fn handler(&mut self) -> &mut Handler<C> {
+            &mut self.handler
+        }
+    }
+
+    impl<C> HasDescends for Probe<C> {
+        fn descends(&mut self) -> &mut Vec<Descend> {
+            &mut self.descends
+        }
+    }
+
+    impl<C> HasPopup for Probe<C> {
+        fn popup(&mut self) -> &mut Option<Popup> {
+            &mut self.popup
+        }
+    }
+
+    fn probe_hooks() -> Hooks<()> {
+        Hooks {
+            select: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            edit: Rc::new(|_: &mut ()| None),
+            pick: Rc::new(|_, _| false),
+        }
+    }
+
+    /// Hooks whose context records every select's path.
+    fn logging_hooks() -> Hooks<Vec<Path>> {
+        Hooks {
+            select: Rc::new(|log: &mut Vec<Path>, path, _| log.push(path)),
+            toggle: Rc::new(|_, _| {}),
+            edit: Rc::new(|_: &mut Vec<Path>| None),
+            pick: Rc::new(|_, _| false),
+        }
+    }
+
+    fn down_at(point: Point) -> ui_events::pointer::PointerButtonEvent {
+        let mut state = ui_events::pointer::PointerState::default();
+        state.position.x = point.x;
+        state.position.y = point.y;
+        ui_events::pointer::PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: ui_events::pointer::PointerInfo {
+                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: ui_events::pointer::PointerType::Mouse,
+            },
+            state,
+        }
+    }
+
+    fn place_probe_with<C: 'static + Default>(
+        doc: &Document,
+        selection: Option<&Selection>,
+        names: &Names,
+        raw: bool,
+        hooks: Hooks<C>,
+    ) -> Probe<C> {
+        let mut fonts = parley::FontContext::new();
+        let mut layouts = parley::LayoutContext::new();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+        };
+        let styles = RawStyles::new(1.0);
+        let node = project::<C, Probe<C>>(
+            doc,
+            selection,
+            None,
+            &Collapse::default(),
+            names,
+            raw,
+            &mut tcx,
+            &styles,
+            hooks,
+        );
+        let mut probe = Probe::default();
+        place_top_left(node, &mut probe, Point::ZERO);
+        probe
+    }
+
+    fn place_probe_in(doc: &Document, names: &Names, raw: bool) -> Probe {
+        place_probe_with(doc, None, names, raw, probe_hooks())
+    }
+
+    fn place_probe(doc: &Document) -> Probe {
+        place_probe_in(doc, &Names::convention(), false)
+    }
+
+    #[test]
+    fn list_projection_places_fields_above_ordered_elements() {
+        let mut gid = MutGid::new();
+        let items = list(&mut gid, vec![Id::from(1.0), Id::from(2.0)]);
+        gid.set(items.as_node_id().unwrap(), Id::from("k"), Id::from(9.0));
+        let doc = Document {
+            root: Some(items.clone()),
+            gid,
+        };
+        let positions = positions_of(&doc.gid, &items);
+        let probe = place_probe(&doc);
+
+        // Placement order: the block, its field, then the elements in
+        // position order — fields above elements (the field keeps
+        // this list in block form).
+        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                Vec::new(),
+                vec![Id::from("k")],
+                vec![positions[0].clone()],
+                vec![positions[1].clone()],
+            ]
+        );
+        let tops: Vec<f64> = probe.descends.iter().skip(1).map(|d| d.rect.y0).collect();
+        assert!(tops.is_sorted_by(|a, b| a < b), "{tops:?}");
+    }
+
+    #[test]
+    fn named_nodes_project_the_name_as_their_header() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from(NAME), Id::from("thing"));
+        gid.set(node, Id::from("x"), Id::from(1.0));
+        let doc = Document {
+            root: Some(Id::from(node)),
+            gid,
+        };
+        let probe = place_probe(&doc);
+
+        // The name edge is consumed by the header: it still descends
+        // (selectable, editable), but as the un-indented head above
+        // the field rows, not as a row of its own.
+        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![Vec::new(), vec![Id::from(NAME)], vec![Id::from("x")]]
+        );
+        let name_rect = probe.descends[1].rect;
+        let x_rect = probe.descends[2].rect;
+        assert!(name_rect.y0 < x_rect.y0);
+        assert!(name_rect.x0 < x_rect.x0);
+
+        // A node whose only edge is its name is just its name.
+        let mut gid = MutGid::new();
+        let sole = new_node_id();
+        gid.set(sole, Id::from(NAME), Id::from("leaf"));
+        let doc = Document {
+            root: Some(Id::from(sole)),
+            gid,
+        };
+        let probe = place_probe(&doc);
+        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
+        assert_eq!(paths, vec![Vec::new(), vec![Id::from(NAME)]]);
+    }
+
+    #[test]
+    fn named_atom_lists_stay_inline_with_the_name_leading() {
+        let mut gid = MutGid::new();
+        let items = list(&mut gid, vec![Id::from(1.0), Id::from(2.0)]);
+        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("pair"));
+        let doc = Document {
+            root: Some(items.clone()),
+            gid,
+        };
+        let positions = positions_of(&doc.gid, &items);
+        let probe = place_probe(&doc);
+
+        // The consumed name is no field: the list stays inline, the
+        // name leading the brackets on the same line.
+        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                Vec::new(),
+                vec![Id::from(NAME)],
+                vec![positions[0].clone()],
+                vec![positions[1].clone()],
+            ]
+        );
+        let name_rect = probe.descends[1].rect;
+        let first = probe.descends[2].rect;
+        assert!((name_rect.y0 - first.y0).abs() < 0.5, "{name_rect:?} vs {first:?}");
+        assert!(name_rect.x1 <= first.x0);
+    }
+
+    #[test]
+    fn a_named_header_selects_its_node_first_then_engages_as_text() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from(NAME), Id::from("thing"));
+        gid.set(node, Id::from("x"), Id::from(1.0));
+        let doc = Document {
+            root: Some(Id::from(node)),
+            gid,
+        };
+
+        // Cold: a click on the name falls through to the block,
+        // selecting the NODE edge.
+        let probe = place_probe_with(&doc, None, &Names::convention(), false, logging_hooks());
+        let name_rect = probe.descends[1].rect;
+        let mut log: Vec<Path> = Vec::new();
+        assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(name_rect.center())));
+        assert_eq!(log, vec![Vec::<Id>::new()]);
+
+        // With the node selected, the successor pass engages the
+        // name as a text target: the same click now selects the name
+        // edge (and carries the caret placement).
+        let selection = Selection::edge(&doc, Vec::new());
+        let probe = place_probe_with(
+            &doc,
+            Some(&selection),
+            &Names::convention(),
+            false,
+            logging_hooks(),
+        );
+        let name_rect = probe.descends[1].rect;
+        let mut log: Vec<Path> = Vec::new();
+        assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(name_rect.center())));
+        assert_eq!(log, vec![vec![Id::from(NAME)]]);
+    }
+
+    #[test]
+    fn a_label_pending_owns_its_clicks_and_the_parent_stays_clickable() {
+        let mut gid = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Id::from("x"), Id::from(1.0));
+        let doc = Document {
+            root: Some(Id::from(node)),
+            gid,
+        };
+        let pending = pending_edge(&doc, Vec::new()).unwrap();
+        let probe = place_probe_with(
+            &doc,
+            Some(&pending),
+            &Names::convention(),
+            false,
+            logging_hooks(),
+        );
+
+        // A click on the pending row is swallowed — handled, but no
+        // selection reported — so the pending survives its own
+        // clicks. (The caret target declines here because the
+        // logging hooks expose no editor.)
+        let anchor = probe.popup.as_ref().unwrap().anchor;
+        let mut log: Vec<Path> = Vec::new();
+        assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(anchor.center())));
+        assert!(log.is_empty());
+
+        // A click on the parent's header reports the parent — a real
+        // selection change, not a nudge of the pending.
+        let header = probe.descends[0].rect;
+        assert!(probe.handler.dispatch_pointer_down(
+            &mut log,
+            &down_at(Point::new(header.x0 + 2.0, header.y0 + 2.0)),
+        ));
+        assert_eq!(log, vec![Vec::<Id>::new()]);
+    }
+
+    #[test]
+    fn the_raw_view_stands_the_convention_layers_down() {
+        let mut gid = MutGid::new();
+        let items = list(&mut gid, vec![Id::from(1.0), Id::from(2.0)]);
+        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("pair"));
+        let doc = Document {
+            root: Some(items.clone()),
+            gid,
+        };
+        let probe = place_probe_in(&doc, &Names::none(), true);
+
+        // No list projection: the name and the elements are plain
+        // rows again — stacked, not inline — and nothing is consumed
+        // into a header.
+        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
+        assert_eq!(paths.len(), 4);
+        assert!(paths.contains(&vec![Id::from(NAME)]));
+        let tops: Vec<f64> = probe.descends.iter().skip(1).map(|d| d.rect.y0).collect();
+        assert!(tops.is_sorted_by(|a, b| a < b), "{tops:?}");
+        // Rows are indented under the id header, the name's included.
+        assert!(probe.descends[1].rect.x0 > probe.descends[0].rect.x0);
+    }
+
+    #[test]
+    fn atom_only_lists_project_inline() {
+        let mut gid = MutGid::new();
+        let items = list(&mut gid, vec![Id::from(1.0), Id::from("two")]);
+        let doc = Document {
+            root: Some(items.clone()),
+            gid,
+        };
+        let positions = positions_of(&doc.gid, &items);
+        let probe = place_probe(&doc);
+
+        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                Vec::new(),
+                vec![positions[0].clone()],
+                vec![positions[1].clone()],
+            ]
+        );
+        // One line, reading left to right.
+        let (a, b) = (probe.descends[1].rect, probe.descends[2].rect);
+        assert!((a.y0 - b.y0).abs() < 0.5, "{a:?} vs {b:?}");
+        assert!(a.x1 <= b.x0);
     }
 }

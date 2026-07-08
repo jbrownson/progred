@@ -9,6 +9,7 @@
 //! and hit-testing are one pure pass: build geometry from state, draw
 //! it, register handlers over it.
 
+use crate::conventions::Names;
 use crate::raw::{Document, Selection, command, hex, resolve, short_id};
 use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};
@@ -473,9 +474,10 @@ fn layout_text(
 }
 
 /// What an identity looks like in the graph: named nodes show their
-/// name, unnamed ones their short id, atoms their value — the same
-/// identity language as the tree view.
-fn content(doc: &Document, id: &Id, tcx: &mut TextCtx, zoom: f64) -> Layout<Brush> {
+/// name (through the editor's one name policy), unnamed ones their
+/// short id, atoms their value — the same identity language as the
+/// tree view.
+fn content(doc: &Document, names: &Names, id: &Id, tcx: &mut TextCtx, zoom: f64) -> Layout<Brush> {
     let size = FONT_SIZE * zoom as f32;
     let ui = GenericFamily::SystemUi;
     let mono = GenericFamily::Monospace;
@@ -484,12 +486,8 @@ fn content(doc: &Document, id: &Id, tcx: &mut TextCtx, zoom: f64) -> Layout<Brus
     } else if let Some(n) = id.as_number() {
         layout_text(tcx, &n.to_string(), size, NUMBER_TEXT, ui)
     } else if let Some(node) = id.as_node_id() {
-        match doc
-            .gid
-            .get(id, &Id::from(crate::conventions::NAME))
-            .and_then(Id::as_str)
-        {
-            Some(name) => layout_text(tcx, name, size, TEXT, ui),
+        match names.of(&doc.gid, id) {
+            Some(name) => layout_text(tcx, &name.text, size, TEXT, ui),
             None => layout_text(tcx, &short_id(node), size, DIM_TEXT, mono),
         }
     } else if let Some(bytes) = position::as_position(id) {
@@ -547,11 +545,14 @@ fn arrowhead(tip: Point, direction: Vec2, scale: f64) -> BezPath {
 /// The graph pane: geometry built from explicit state, drawn and
 /// hit-tested in one pass. `panel` is the pane's window rectangle;
 /// world origin maps to its center.
+// The explicit-state boundary: everything a pass reads arrives here.
+#[allow(clippy::too_many_arguments)]
 pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     doc: &Document,
     view: &GraphView,
     selection: Option<&GraphSelection>,
     doc_selection: Option<&Selection>,
+    names: &Names,
     tcx: &mut TextCtx,
     panel: Rect,
     hooks: &Hooks<C>,
@@ -587,7 +588,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         .iter()
         .filter_map(|id| {
             let world = *view.positions.get(id)?;
-            let content = content(doc, id, tcx, zoom);
+            let content = content(doc, names, id, tcx, zoom);
             let (w, h) = (f64::from(content.width()), f64::from(content.height()));
             let width = w + 2.0 * NODE_PADDING * px;
             let height = (h + 2.0 * NODE_PADDING * px).max(NODE_MIN_HEIGHT * px);
@@ -686,7 +687,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 let mid = quadratic_point(start, control, end, 0.5);
                 (path, mid, end, end - control)
             };
-            let pill_content = content(doc, label, tcx, zoom);
+            let pill_content = content(doc, names, label, tcx, zoom);
             let (w, h) = (
                 f64::from(pill_content.width()),
                 f64::from(pill_content.height()),
