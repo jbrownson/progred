@@ -21,7 +21,7 @@ use crate::handler::{HasHandler, ImeEvent};
 use crate::layout::{Extent, Node, leaf};
 use crate::text::{TextCtx, draw_layout};
 use kurbo::{Affine, Point, Rect};
-use parley::style::FontFamily;
+use parley::style::GenericFamily;
 use parley::{FontContext, LayoutContext, PlainEditor, StyleProperty};
 use peniko::Brush;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -141,7 +141,7 @@ impl LineEditState {
         editor
             .edit_styles()
             .insert(StyleProperty::Brush(self.brush.clone()));
-        editor.edit_styles().insert(FontFamily::from("system-ui").into());
+        editor.edit_styles().insert(GenericFamily::SystemUi.into());
         let mut driver = editor.driver(fonts, layouts);
         driver.select_byte_range(self.anchor, self.focus);
         if let Some(preedit) = &self.preedit {
@@ -285,7 +285,9 @@ impl LineEditState {
                     }
                     true
                 }
-                Key::Character(c) if !action_mod => {
+                // Any ctrl or meta chord is a command somewhere —
+                // never text, whichever of them is the action mod.
+                Key::Character(c) if !(event.modifiers.ctrl() || event.modifiers.meta()) => {
                     drv.insert_or_replace_selection(c);
                     true
                 }
@@ -618,6 +620,22 @@ mod tests {
                 Modifiers::empty(),
             ));
         }
+    }
+
+    #[test]
+    fn command_chords_never_insert_text() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut state = state("x").with_cursor_at_end();
+        for modifiers in [Modifiers::CONTROL, Modifiers::META] {
+            assert!(!press(
+                &mut state,
+                &mut fonts,
+                &mut layouts,
+                Key::Character("q".into()),
+                modifiers,
+            ));
+        }
+        assert!(state.text() == "x");
     }
 
     #[test]

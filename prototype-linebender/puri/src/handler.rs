@@ -1,9 +1,13 @@
-//! The frame's second output: a transient `Handler` — one composed
-//! dispatch function per event kind — collected during placement and
-//! dispatched once for the event that prompted the pass, then
-//! discarded. Nothing is retained across events; every event runs the
-//! pure pass fresh, so dispatch geometry always matches the displayed
-//! frame.
+//! The frame's second output: a `Handler` — one composed dispatch
+//! function per event kind — collected during placement. The caller
+//! retains it and dispatches events into it; because it is a pure
+//! function of the state its pass read, it is single-shot: the first
+//! handled (mutating) event spends it, and the caller mints a
+//! successor from the mutated state before the next event dispatches.
+//! Unhandled events leave it standing. Dispatch geometry therefore
+//! always matches the presented frame, and dispatches must decline on
+//! absent state for any window where mutation happens outside
+//! dispatch.
 //!
 //! Dispatches receive the caller's context `C` by `&mut` (state is
 //! passed in, never closed over) and do their effects directly. The
@@ -50,6 +54,15 @@ impl<C> Default for Handler<C> {
     }
 }
 
+/// Wrap `slot` so `dispatch` tries first and declines fall through.
+fn compose<C: 'static, E: 'static>(
+    slot: &mut Box<dyn Fn(&mut C, &E) -> bool>,
+    dispatch: impl Fn(&mut C, &E) -> bool + 'static,
+) {
+    let rest = std::mem::replace(slot, Box::new(|_, _| false));
+    *slot = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+}
+
 impl<C> Handler<C> {
     pub fn new() -> Self {
         Self::default()
@@ -64,24 +77,21 @@ impl<C> Handler<C> {
     ) where
         C: 'static,
     {
-        let rest = std::mem::replace(&mut self.pointer_down, Box::new(|_, _| false));
-        self.pointer_down = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+        compose(&mut self.pointer_down, dispatch);
     }
 
     pub fn on_key(&mut self, dispatch: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static)
     where
         C: 'static,
     {
-        let rest = std::mem::replace(&mut self.key, Box::new(|_, _| false));
-        self.key = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+        compose(&mut self.key, dispatch);
     }
 
     pub fn on_pointer_move(&mut self, dispatch: impl Fn(&mut C, &PointerUpdate) -> bool + 'static)
     where
         C: 'static,
     {
-        let rest = std::mem::replace(&mut self.pointer_move, Box::new(|_, _| false));
-        self.pointer_move = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+        compose(&mut self.pointer_move, dispatch);
     }
 
     pub fn on_pointer_up(
@@ -90,24 +100,21 @@ impl<C> Handler<C> {
     ) where
         C: 'static,
     {
-        let rest = std::mem::replace(&mut self.pointer_up, Box::new(|_, _| false));
-        self.pointer_up = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+        compose(&mut self.pointer_up, dispatch);
     }
 
     pub fn on_scroll(&mut self, dispatch: impl Fn(&mut C, &PointerScrollEvent) -> bool + 'static)
     where
         C: 'static,
     {
-        let rest = std::mem::replace(&mut self.scroll, Box::new(|_, _| false));
-        self.scroll = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+        compose(&mut self.scroll, dispatch);
     }
 
     pub fn on_ime(&mut self, dispatch: impl Fn(&mut C, &ImeEvent) -> bool + 'static)
     where
         C: 'static,
     {
-        let rest = std::mem::replace(&mut self.ime, Box::new(|_, _| false));
-        self.ime = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+        compose(&mut self.ime, dispatch);
     }
 
     pub fn dispatch_pointer_down(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool {
