@@ -505,7 +505,10 @@ fn pending_into_at(doc: &Document, path: &[Id], end: bool) -> Option<Selection> 
     Some(pending_value(fresh_path))
 }
 
-/// Appends: "add to this list" goes at the end.
+/// Appends: "add to this list" goes at the end. Parked since the
+/// beside/within gesture split — append is Enter on the last element
+/// — ready if a list-node append gesture returns.
+#[allow(dead_code)]
 pub fn pending_into(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_into_at(doc, path, true)
 }
@@ -514,51 +517,34 @@ pub fn pending_into_first(doc: &Document, path: &[Id]) -> Option<Selection> {
     pending_into_at(doc, path, false)
 }
 
-/// Plain Enter: author ON the selection — a new field edge on any
-/// node, lists and empties included. Atoms take no edges, so an atom
-/// element pends a sibling instead (before with shift) and any other
-/// atom defers to its parent's field. The positional list gestures
-/// live on the command chord: `pending_insert`.
+/// Plain Enter: a new peer BESIDE the selection — continue the
+/// enumeration you are in. An element pends a sibling (before with
+/// shift); a field value pends a new field on its parent; the root
+/// has nothing beside it and falls within, a field edge on itself.
 pub fn pending_enter(doc: &Document, path: &[Id], before: bool) -> Option<Selection> {
-    let node = resolve(doc, path).is_some_and(|value| value.as_node_id().is_some());
-    if node {
-        return pending_field(doc, path);
-    }
     let beside = if before {
         pending_before(doc, path)
     } else {
         pending_after(doc, path)
     };
-    beside.or_else(|| pending_field(doc, path))
+    beside
+        .or_else(|| {
+            path.split_last()
+                .and_then(|(_, parent)| pending_edge(doc, parent.to_vec()))
+        })
+        .or_else(|| pending_edge(doc, path.to_vec()))
 }
 
-/// The command chord: positional insertion, in list terms. An empty
-/// node takes its first element — how lists begin, and it outranks
-/// the sibling gesture so a nested empty list stays fillable — an
-/// element pends a sibling (before with shift), and a list appends
-/// (prepends with shift). No positional sense declines.
-pub fn pending_insert(doc: &Document, path: &[Id], before: bool) -> Option<Selection> {
-    let empty = resolve(doc, path).is_some_and(|value| {
-        value.as_node_id().is_some()
-            && doc.gid.edges(value).is_none_or(|edges| edges.is_empty())
-    });
-    if empty {
-        return pending_into_at(doc, path, !before);
-    }
-    if before {
-        pending_before(doc, path).or_else(|| pending_into_first(doc, path))
+/// The command chord: author WITHIN the selection — a new field edge
+/// on the selected node. With shift, the positional variant instead:
+/// a first element at the front — how lists begin, empty nodes
+/// included, and prepend on a list. Atoms have no within and decline.
+pub fn pending_insert(doc: &Document, path: &[Id], front: bool) -> Option<Selection> {
+    if front {
+        pending_into_first(doc, path)
     } else {
-        pending_after(doc, path).or_else(|| pending_into(doc, path))
+        pending_edge(doc, path.to_vec())
     }
-}
-
-/// A new field edge on the selection — its parent's when the
-/// selection takes no edges.
-pub fn pending_field(doc: &Document, path: &[Id]) -> Option<Selection> {
-    pending_edge(doc, path.to_vec()).or_else(|| {
-        path.split_last()
-            .and_then(|(_, parent)| pending_edge(doc, parent.to_vec()))
-    })
 }
 
 /// A pending root for an empty document.
@@ -2512,7 +2498,7 @@ mod tests {
     }
 
     #[test]
-    fn enter_authors_on_the_selection_and_the_chord_inserts() {
+    fn enter_continues_beside_and_the_chord_authors_within() {
         let mut gid = MutGid::new();
         let nested = new_node_id();
         let items = list(&mut gid, vec![Id::from("a"), Id::from(nested)]);
@@ -2528,23 +2514,8 @@ mod tests {
         let first = vec![Id::from("items"), positions[0].clone()];
         let second = vec![Id::from("items"), positions[1].clone()];
 
-        // Enter authors ON the selection: a field edge on any node —
-        // the record, the list itself, a node nested as an element.
-        assert!(matches!(
-            pending_enter(&doc, &[], false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-        assert!(matches!(
-            pending_enter(&doc, &items_path, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent == items_path
-        ));
-        assert!(matches!(
-            pending_enter(&doc, &second, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent == second
-        ));
-
-        // Atoms take no edges: an atom element pends a sibling
-        // (before with shift); an atom field defers to its parent.
+        // Enter continues the enumeration: any element — atom or node
+        // — pends a sibling (before with shift).
         let Some(Selection::Pending { path, .. }) = pending_enter(&doc, &first, false) else {
             panic!("sibling after");
         };
@@ -2553,39 +2524,56 @@ mod tests {
             panic!("sibling before");
         };
         assert!(path[1] < positions[0]);
+        let Some(Selection::Pending { path, .. }) = pending_enter(&doc, &second, false) else {
+            panic!("node element sibling");
+        };
+        assert!(positions[1] < path[1]);
+
+        // A field value — atom or node — pends the parent's next
+        // field; the root has nothing beside it and takes the field
+        // on itself.
         assert!(matches!(
             pending_enter(&doc, &[Id::from("x")], false),
             Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
         ));
+        assert!(matches!(
+            pending_enter(&doc, &items_path, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
+        assert!(matches!(
+            pending_enter(&doc, &[], false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
 
-        // The chord inserts positionally: a sibling beside any
-        // element, append and prepend on the list itself.
-        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &first, false) else {
-            panic!("chord sibling");
-        };
-        assert!(positions[0] < path[1] && path[1] < positions[1]);
-        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &items_path, false)
-        else {
-            panic!("append");
-        };
-        assert!(positions[1] < path[1]);
+        // The chord authors within: a field edge on the selected node
+        // — the list included, empty nodes included — and atoms
+        // decline.
+        assert!(matches!(
+            pending_insert(&doc, &items_path, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent == items_path
+        ));
+        assert!(matches!(
+            pending_insert(&doc, &second, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent == second
+        ));
+        assert!(pending_insert(&doc, &first, false).is_none());
+
+        // Shift is the positional variant: a first element at the
+        // front — prepend on a list, how an empty node becomes a list
+        // (nested as an element included) — declining on records and
+        // atoms.
         let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &items_path, true)
         else {
             panic!("prepend");
         };
         assert!(path[1] < positions[0]);
-
-        // Under the chord an empty node takes its first element —
-        // outranking the sibling gesture, so a nested empty list is
-        // fillable — and the chord declines where nothing positional
-        // makes sense.
-        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &second, false) else {
+        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &second, true) else {
             panic!("into the empty element");
         };
         assert!(path.starts_with(&second) && path.len() == 3);
         assert!(position::as_position(&path[2]).is_some());
-        assert!(pending_insert(&doc, &[], false).is_none());
-        assert!(pending_insert(&doc, &[Id::from("x")], false).is_none());
+        assert!(pending_insert(&doc, &[], true).is_none());
+        assert!(pending_insert(&doc, &first, true).is_none());
     }
 
     use puri::draw::{GlyphRun, Shape};

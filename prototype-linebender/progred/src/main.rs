@@ -1104,19 +1104,20 @@ impl App {
         }));
     }
 
-    /// Enter advances a pending stage or begins one, authoring ON the
-    /// selection (the chains live in raw): a new field edge on any
-    /// node; atoms take no edges, so an atom element pends a sibling
-    /// (Shift+Enter before) and any other atom defers to its parent.
-    /// The command chord is the positional list gesture: a sibling
-    /// beside an element, append into a list (Shift prepends), a
-    /// first element into an empty node — how lists begin. Labels
-    /// author first, then values; list elements are one-stage value
-    /// pendings, the projection minting the position. On an empty
-    /// document Enter begins the root value. Escape clears the
-    /// selection from anywhere, discarding any pending with the graph
-    /// untouched; Backspace on an empty query cancels a pending back
-    /// to its anchor instead, keeping the keyboard flow.
+    /// Enter advances a pending stage or begins one (the chains live
+    /// in raw). Plain Enter is a new peer BESIDE the selection: a
+    /// sibling element in a list (Shift+Enter before), a new field on
+    /// the parent record otherwise; the root has nothing beside it
+    /// and takes the field on itself. The command chord authors
+    /// WITHIN the selection: a field edge on the selected node — or,
+    /// with Shift, a first element at the front, which is how lists
+    /// begin. Labels author first, then values; list elements are
+    /// one-stage value pendings, the projection minting the position.
+    /// On an empty document Enter begins the root value. Escape
+    /// clears the selection from anywhere, discarding any pending
+    /// with the graph untouched; Backspace on an empty query cancels
+    /// a pending back to its anchor instead, keeping the keyboard
+    /// flow.
     fn insert_key(
         &mut self,
         descends: &[raw::Descend],
@@ -1169,12 +1170,12 @@ impl App {
                             _ => None,
                         };
                         let doc = &self.model.doc;
-                        let before = event.modifiers.shift();
+                        let shift = event.modifiers.shift();
                         let started = match tree {
                             Some(current) if raw::command(&event.modifiers) => {
-                                raw::pending_insert(doc, current.path(), before)
+                                raw::pending_insert(doc, current.path(), shift)
                             }
-                            Some(current) => raw::pending_enter(doc, current.path(), before),
+                            Some(current) => raw::pending_enter(doc, current.path(), shift),
                             None => raw::pending_root(doc),
                         };
                         let began = started.is_some();

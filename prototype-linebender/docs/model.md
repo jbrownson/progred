@@ -734,6 +734,24 @@ click is always a real selection change. Riding along: query editors
 the edit hook — the selection transition is never involved, so
 clicking what you're typing can't discard it.
 
+Gestures settled on BESIDE/WITHIN 2026-07-08, superseding the same
+day's within-first assignment (below) after one more real-use bump —
+the two consistent polarities were laid out and the user picked
+beside-first to try. Plain Enter continues the enumeration you are in
+(the outliner convention): any element, atom or node, pends a sibling
+(Shift+Enter before); a field value pends the parent's next field;
+the root, with nothing beside it, takes the field on itself.
+Cmd+Enter authors within the selection: a field edge on the selected
+node — lists and empties included, so list metadata is reachable —
+and Cmd+Shift+Enter is the positional variant, a first element at the
+front: prepend on a list, and how an empty node becomes a list
+(nested-as-element included). Shift consistently means the
+front/before flavor. Atoms decline the chord (no within). The one
+loss, accepted: no append gesture on the list node itself — append is
+Enter on the last element; `pending_into` is parked for its return.
+No carve-outs remain: element-vs-field behavior follows position
+uniformly for atoms and nodes alike.
+
 Gestures REASSIGNED 2026-07-08 after real use (user: Enter on a node
 element should add an edge to IT — and "cmd+enter doing the list
 thing" was their original instinct, which the brief had flipped).
