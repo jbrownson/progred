@@ -15,19 +15,7 @@ impl<T: Gid + ?Sized> Gid for &T {
     }
 }
 
-pub struct StackedGid<Top: Gid, Bottom: Gid> {
-    top: Top,
-    bottom: Bottom,
-}
-
-impl<Top: Gid, Bottom: Gid> StackedGid<Top, Bottom> {
-    pub fn new(top: Top, bottom: Bottom) -> Self {
-        Self { top, bottom }
-    }
-}
-
-impl<Top: Gid, Bottom: Gid> Gid for StackedGid<Top, Bottom> {
-    fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>> {
-        self.top.edges(entity).or_else(|| self.bottom.edges(entity))
-    }
-}
+// StackedGid (a Gid-implementing document-over-library merge) lived
+// here through 2026-07-08; retired for the editor's explicit
+// `Sources` — a combined view that masquerades as one graph erases
+// the provenance the editor then has to bolt back on.

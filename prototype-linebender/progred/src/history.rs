@@ -97,8 +97,12 @@ mod tests {
         }
     }
 
-    fn x_of(doc: &Document) -> &Id {
-        crate::raw::resolve(doc, &[Id::from("x")]).unwrap()
+    fn x_of(doc: &Document) -> Id {
+        let lib = MutGid::new();
+        crate::sources::Sources { doc, library: &lib }
+            .resolve(&[Id::from("x")])
+            .unwrap()
+            .clone()
     }
 
     #[test]
@@ -108,11 +112,11 @@ mod tests {
         history.record(doc(1.0), Some(path.clone()));
 
         let (back, selection) = history.undo(doc(2.0), None).unwrap();
-        assert_eq!(x_of(&back), &Id::from(1.0));
+        assert_eq!(x_of(&back), Id::from(1.0));
         assert_eq!(selection, Some(path));
 
         let (forward, _) = history.redo(back, selection).unwrap();
-        assert_eq!(x_of(&forward), &Id::from(2.0));
+        assert_eq!(x_of(&forward), Id::from(2.0));
         assert!(history.redo(doc(9.9), None).is_none());
     }
 

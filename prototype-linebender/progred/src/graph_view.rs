@@ -10,7 +10,8 @@
 //! it, register handlers over it.
 
 use crate::conventions::Names;
-use crate::raw::{Document, Selection, command, hex, resolve, short_id};
+use crate::raw::{Document, Selection, command, hex, short_id};
+use crate::sources::Sources;
 use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};
 use progred_graph::{Gid, Id, NodeId, position};
@@ -413,6 +414,9 @@ const ARROW_WIDTH: f64 = 3.5;
 const PANEL_BG: [f32; 4] = [0.968, 0.972, 0.984, 1.0];
 const SEPARATOR: [f32; 4] = [0.851, 0.867, 0.890, 1.0];
 const NODE_FILL: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
+/// External (library-authority) identities sit on a subtly darker
+/// ground, as in the tree.
+const EXTERNAL_FILL: [f32; 4] = [0.929, 0.933, 0.945, 1.0];
 const ROOT_FILL: [f32; 4] = [0.922, 0.941, 0.980, 1.0];
 const BORDER: [f32; 4] = [0.467, 0.467, 0.467, 1.0];
 const EDGE: [f32; 4] = [0.561, 0.588, 0.631, 1.0];
@@ -434,6 +438,7 @@ struct NodeView {
     rect: Rect,
     content: Layout<Brush>,
     root: bool,
+    external: bool,
     strength: Strength,
 }
 
@@ -451,6 +456,8 @@ struct EdgeView {
     arrow: BezPath,
     pill: Rect,
     pill_content: Layout<Brush>,
+    /// The label is a library-authority identity: darker pill ground.
+    external: bool,
     strength: Strength,
     /// The pill can outrank the curve: a label that is the secondary
     /// identity marks the pill alone, as the tree marks label text.
@@ -477,7 +484,13 @@ fn layout_text(
 /// name (through the editor's one name policy), unnamed ones their
 /// short id, atoms their value — the same identity language as the
 /// tree view.
-fn content(doc: &Document, names: &Names, id: &Id, tcx: &mut TextCtx, zoom: f64) -> Layout<Brush> {
+fn content(
+    sources: &Sources,
+    names: &Names,
+    id: &Id,
+    tcx: &mut TextCtx,
+    zoom: f64,
+) -> Layout<Brush> {
     let size = FONT_SIZE * zoom as f32;
     let ui = GenericFamily::SystemUi;
     let mono = GenericFamily::Monospace;
@@ -486,7 +499,7 @@ fn content(doc: &Document, names: &Names, id: &Id, tcx: &mut TextCtx, zoom: f64)
     } else if let Some(n) = id.as_number() {
         layout_text(tcx, &n.to_string(), size, NUMBER_TEXT, ui)
     } else if let Some(node) = id.as_node_id() {
-        match names.of(&doc.gid, id) {
+        match names.of(sources, id) {
             Some(name) => layout_text(tcx, &name.text, size, TEXT, ui),
             None => layout_text(tcx, &short_id(node), size, DIM_TEXT, mono),
         }
@@ -548,7 +561,7 @@ fn arrowhead(tip: Point, direction: Vec2, scale: f64) -> BezPath {
 // The explicit-state boundary: everything a pass reads arrives here.
 #[allow(clippy::too_many_arguments)]
 pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
-    doc: &Document,
+    sources: &Sources,
     view: &GraphView,
     selection: Option<&GraphSelection>,
     doc_selection: Option<&Selection>,
@@ -557,6 +570,9 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     panel: Rect,
     hooks: &Hooks<C>,
 ) -> Node<P> {
+    // Library facts read through for display only; the snapshot —
+    // what the graph SHOWS — stays the document's own.
+    let doc = sources.doc;
     let scale = f64::from(tcx.scale);
     let zoom = view.zoom;
     // Panel pixels per world unit; world -> panel goes through the
@@ -572,7 +588,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     // itself as a pill wash read too much like a graph-side edge
     // selection.
     let doc_value = doc_selection.and_then(|selection| match selection {
-        Selection::Edge { path, .. } => resolve(doc, path).cloned(),
+        Selection::Edge { path, .. } => sources.resolve(path).cloned(),
         _ => None,
     });
     // The secondary identity, as in the tree: the selected edge's
@@ -588,7 +604,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         .iter()
         .filter_map(|id| {
             let world = *view.positions.get(id)?;
-            let content = content(doc, names, id, tcx, zoom);
+            let content = content(sources, names, id, tcx, zoom);
             let (w, h) = (f64::from(content.width()), f64::from(content.height()));
             let width = w + 2.0 * NODE_PADDING * px;
             let height = (h + 2.0 * NODE_PADDING * px).max(NODE_MIN_HEIGHT * px);
@@ -605,6 +621,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 rect: Rect::from_center_size(at, (width, height)),
                 content,
                 root: doc.root.as_ref() == Some(id),
+                external: sources.external(id),
                 strength,
             })
         })
@@ -687,7 +704,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 let mid = quadratic_point(start, control, end, 0.5);
                 (path, mid, end, end - control)
             };
-            let pill_content = content(doc, names, label, tcx, zoom);
+            let pill_content = content(sources, names, label, tcx, zoom);
             let (w, h) = (
                 f64::from(pill_content.width()),
                 f64::from(pill_content.height()),
@@ -716,6 +733,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 arrow: arrowhead(tip, tip_direction, px),
                 pill,
                 pill_content,
+                external: sources.external(label),
                 strength,
                 pill_strength,
             })
@@ -761,7 +779,8 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                     Strength::Secondary => (SECONDARY_OUTLINE, 1.5),
                     Strength::None => (color, 1.0),
                 };
-                p.fill(pill, Color::new(PILL_BG), Affine::IDENTITY);
+                let pill_bg = if edge.external { EXTERNAL_FILL } else { PILL_BG };
+                p.fill(pill, Color::new(pill_bg), Affine::IDENTITY);
                 if edge.pill_strength == Strength::Secondary {
                     p.fill(pill, Color::new(WASH), Affine::IDENTITY);
                 }
@@ -775,7 +794,13 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             }
             for node in &node_views {
                 let shape = RoundedRect::from_rect(node.rect, 5.0 * px);
-                let fill = if node.root { ROOT_FILL } else { NODE_FILL };
+                let fill = if node.root {
+                    ROOT_FILL
+                } else if node.external {
+                    EXTERNAL_FILL
+                } else {
+                    NODE_FILL
+                };
                 p.fill(shape, Color::new(fill), Affine::IDENTITY);
                 if node.strength == Strength::Secondary {
                     p.fill(shape, Color::new(WASH), Affine::IDENTITY);

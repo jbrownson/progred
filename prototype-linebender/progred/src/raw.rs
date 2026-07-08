@@ -12,7 +12,8 @@
 
 use crate::conventions::{NAME, Name, Names};
 use crate::filter;
-use progred_graph::{Gid, Id, MutGid, NodeId, new_node_id, position};
+use crate::sources::Sources;
+use progred_graph::{Id, MutGid, NodeId, new_node_id, position};
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
@@ -179,10 +180,8 @@ impl Collapse {
 
 /// Read-only projection context threaded through every view.
 struct Cx<'a> {
-    gid: &'a MutGid,
-    /// The document root — a Document field, not a gid edge, so the
-    /// completion sweep needs it passed alongside the gid.
-    root: Option<&'a Id>,
+    /// The reading context: the document read over its library.
+    sources: Sources<'a>,
     /// The editor's name policy; every display-name check asks it.
     names: &'a Names,
     /// The Raw view: convention layers stand down — the projection
@@ -321,21 +320,32 @@ impl Selection {
     /// document's root field). Selecting the empty document's root is
     /// already authoring it: there is nothing there to select, only
     /// something to begin, so it pends immediately.
-    pub fn edge(doc: &Document, path: Path) -> Self {
-        if path.is_empty() && doc.root.is_none() {
+    pub fn edge(sources: &Sources, path: Path) -> Self {
+        if path.is_empty() && sources.root().is_none() {
             return pending_value(path);
         }
-        let edit = resolve(doc, &path)
-            .and_then(|value| {
-                value
-                    .as_str()
-                    .map(|s| line_edit(s, STRING_COLOR))
-                    .or_else(|| {
-                        value
-                            .as_number()
-                            .map(|n| line_edit(&n.to_string(), NUMBER_COLOR))
-                    })
-            });
+        // An editor mounts only where write-through can land: the
+        // parent entity must not be external.
+        let parent_writable = match path.split_last() {
+            Some((_, parent_path)) => sources
+                .resolve(parent_path)
+                .is_some_and(|parent| sources.writable(parent)),
+            None => true,
+        };
+        let edit = parent_writable
+            .then(|| {
+                sources.resolve(&path).and_then(|value| {
+                    value
+                        .as_str()
+                        .map(|s| line_edit(s, STRING_COLOR))
+                        .or_else(|| {
+                            value
+                                .as_number()
+                                .map(|n| line_edit(&n.to_string(), NUMBER_COLOR))
+                        })
+                })
+            })
+            .flatten();
         Selection::Edge {
             path,
             edit,
@@ -377,20 +387,20 @@ fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
     LineEditState::new(text, 14.0, Brush::from(Color::new(color))).with_cursor_at_end()
 }
 
-/// The value at `path`, following each label from the root.
-pub fn resolve<'a>(doc: &'a Document, path: &[Id]) -> Option<&'a Id> {
-    path.iter()
-        .try_fold(doc.root.as_ref()?, |node, label| doc.gid.get(node, label))
-}
-
 /// Deletes the value at `path`. Deletion is detachment: the value and
 /// anything under it stay in the graph for the orphan pool. The empty
 /// path empties the document's root; paths that no longer resolve
 /// decline.
-pub fn delete_edge(doc: &mut Document, path: &[Id]) -> bool {
+pub fn delete_edge(doc: &mut Document, library: &MutGid, path: &[Id]) -> bool {
     match path.split_last() {
-        Some((label, parent_path)) if resolve(doc, path).is_some() => {
-            match resolve(doc, parent_path).and_then(Id::as_node_id) {
+        Some((label, parent_path)) => {
+            let sources = Sources { doc: &*doc, library };
+            let parent = sources
+                .resolve(path)
+                .and(sources.resolve(parent_path))
+                .and_then(Id::as_node_id)
+                .filter(|parent| sources.writable(&Id::from(*parent)));
+            match parent {
                 Some(parent) => {
                     doc.gid.delete(&parent, label);
                     true
@@ -398,7 +408,6 @@ pub fn delete_edge(doc: &mut Document, path: &[Id]) -> bool {
                 None => false,
             }
         }
-        Some(_) => false,
         None => doc.root.take().is_some(),
     }
 }
@@ -417,8 +426,8 @@ pub fn selection_after_delete(descends: &[Descend], path: &[Id]) -> Path {
 }
 
 /// The sorted position labels of a node's element edges.
-fn positions_of(gid: &MutGid, node: &Id) -> Vec<Id> {
-    let mut positions: Vec<Id> = gid
+fn positions_of(sources: &Sources, node: &Id) -> Vec<Id> {
+    let mut positions: Vec<Id> = sources
         .edges(node)
         .map(|edges| {
             edges
@@ -444,10 +453,15 @@ pub fn pending_value(path: Path) -> Selection {
 
 /// A new edge on the node at `parent`, its label to be authored.
 /// Raw's one insertion: a node is a bag of labeled edges, and adding
-/// to it means adding an edge — no list semantics here (the future
-/// list projection owns element gestures).
-pub fn pending_edge(doc: &Document, parent: Path) -> Option<Selection> {
-    resolve(doc, &parent)?.as_node_id()?;
+/// to it means adding an edge. EXTERNAL entities — the library the
+/// authority — decline: a lone document edge would shadow the
+/// library's facts wholesale (the per-entity fallback), silently
+/// de-naming the conventions. A document that owns the entity (a
+/// fork, copy/paste's job) authors freely.
+pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
+    let value = sources.resolve(&parent)?;
+    value.as_node_id()?;
+    sources.writable(value).then_some(())?;
     Some(Selection::PendingEdge {
         parent,
         query: line_edit("", QUERY_COLOR),
@@ -458,11 +472,15 @@ pub fn pending_edge(doc: &Document, parent: Path) -> Option<Selection> {
 /// A pending sibling next to the element at `path` (which must sit at
 /// a position label), minted between it and its neighbor. The list
 /// projection's gesture — raw's own gestures never mint positions.
-fn pending_beside(doc: &Document, path: &[Id], after: bool) -> Option<Selection> {
+fn pending_beside(sources: &Sources, path: &[Id], after: bool) -> Option<Selection> {
     let (label, parent_path) = path.split_last()?;
     position::as_position(label)?;
-    let parent = resolve(doc, parent_path)?;
-    let positions = positions_of(&doc.gid, parent);
+    let parent = sources.resolve(parent_path)?;
+    // Stated, not incidental: an external list takes no minted
+    // siblings (doc-only positions would decline anyway, but a
+    // pending that opens and cannot commit is an affordance lie).
+    sources.writable(parent).then_some(())?;
+    let positions = positions_of(sources, parent);
     let index = positions.iter().position(|p| p == label)?;
     let fresh = if after {
         position::between(Some(label), positions.get(index + 1))?
@@ -474,12 +492,12 @@ fn pending_beside(doc: &Document, path: &[Id], after: bool) -> Option<Selection>
     Some(pending_value(fresh_path))
 }
 
-pub fn pending_after(doc: &Document, path: &[Id]) -> Option<Selection> {
-    pending_beside(doc, path, true)
+pub fn pending_after(sources: &Sources, path: &[Id]) -> Option<Selection> {
+    pending_beside(sources, path, true)
 }
 
-pub fn pending_before(doc: &Document, path: &[Id]) -> Option<Selection> {
-    pending_beside(doc, path, false)
+pub fn pending_before(sources: &Sources, path: &[Id]) -> Option<Selection> {
+    pending_beside(sources, path, false)
 }
 
 /// A pending element inside the node at `path`, appended at the end
@@ -487,13 +505,14 @@ pub fn pending_before(doc: &Document, path: &[Id]) -> Option<Selection> {
 /// elements plausibly live — nodes with position edges, or empty
 /// nodes, which is how lists begin; a node with only record fields
 /// declines (field insertion, with its pending label, is a separate
-/// gesture).
-fn pending_into_at(doc: &Document, path: &[Id], end: bool) -> Option<Selection> {
-    let value = resolve(doc, path)?;
+/// gesture). External entities decline, as in [`pending_edge`].
+fn pending_into_at(sources: &Sources, path: &[Id], end: bool) -> Option<Selection> {
+    let value = sources.resolve(path)?;
     value.as_node_id()?;
-    let positions = positions_of(&doc.gid, value);
-    let record_only = positions.is_empty()
-        && doc.gid.edges(value).is_some_and(|edges| !edges.is_empty());
+    sources.writable(value).then_some(())?;
+    let positions = positions_of(sources, value);
+    let record_only =
+        positions.is_empty() && sources.edges(value).is_some_and(|edges| !edges.is_empty());
     (!record_only).then_some(())?;
     let fresh = if end {
         position::between(positions.last(), None)?
@@ -509,47 +528,47 @@ fn pending_into_at(doc: &Document, path: &[Id], end: bool) -> Option<Selection> 
 /// beside/within gesture split — append is Enter on the last element
 /// — ready if a list-node append gesture returns.
 #[allow(dead_code)]
-pub fn pending_into(doc: &Document, path: &[Id]) -> Option<Selection> {
-    pending_into_at(doc, path, true)
+pub fn pending_into(sources: &Sources, path: &[Id]) -> Option<Selection> {
+    pending_into_at(sources, path, true)
 }
 
-pub fn pending_into_first(doc: &Document, path: &[Id]) -> Option<Selection> {
-    pending_into_at(doc, path, false)
+pub fn pending_into_first(sources: &Sources, path: &[Id]) -> Option<Selection> {
+    pending_into_at(sources, path, false)
 }
 
 /// Plain Enter: a new peer BESIDE the selection — continue the
 /// enumeration you are in. An element pends a sibling (before with
 /// shift); a field value pends a new field on its parent; the root
 /// has nothing beside it and falls within, a field edge on itself.
-pub fn pending_enter(doc: &Document, path: &[Id], before: bool) -> Option<Selection> {
+pub fn pending_enter(sources: &Sources, path: &[Id], before: bool) -> Option<Selection> {
     let beside = if before {
-        pending_before(doc, path)
+        pending_before(sources, path)
     } else {
-        pending_after(doc, path)
+        pending_after(sources, path)
     };
     beside
         .or_else(|| {
             path.split_last()
-                .and_then(|(_, parent)| pending_edge(doc, parent.to_vec()))
+                .and_then(|(_, parent)| pending_edge(sources, parent.to_vec()))
         })
-        .or_else(|| pending_edge(doc, path.to_vec()))
+        .or_else(|| pending_edge(sources, path.to_vec()))
 }
 
 /// The command chord: author WITHIN the selection — a new field edge
 /// on the selected node. With shift, the positional variant instead:
 /// a first element at the front — how lists begin, empty nodes
 /// included, and prepend on a list. Atoms have no within and decline.
-pub fn pending_insert(doc: &Document, path: &[Id], front: bool) -> Option<Selection> {
+pub fn pending_insert(sources: &Sources, path: &[Id], front: bool) -> Option<Selection> {
     if front {
-        pending_into_first(doc, path)
+        pending_into_first(sources, path)
     } else {
-        pending_edge(doc, path.to_vec())
+        pending_edge(sources, path.to_vec())
     }
 }
 
 /// A pending root for an empty document.
-pub fn pending_root(doc: &Document) -> Option<Selection> {
-    doc.root.is_none().then(|| pending_value(Vec::new()))
+pub fn pending_root(sources: &Sources) -> Option<Selection> {
+    sources.root().is_none().then(|| pending_value(Vec::new()))
 }
 
 /// The identity a pending query resolves to: a leading quote forces a
@@ -605,7 +624,7 @@ pub trait HasPopup {
 /// by the fuzzy tiers), and a fresh node — named after the query when
 /// there is one, the create-on-reference of the floating-definitions
 /// design.
-fn completion_entries(gid: &MutGid, root: Option<&Id>, names: &Names, query: &str) -> Vec<Entry> {
+fn completion_entries(sources: &Sources, names: &Names, query: &str) -> Vec<Entry> {
     let atom = resolve_query(query);
     let display = match atom.as_str() {
         Some(s) => format!("\"{s}\""),
@@ -631,12 +650,12 @@ fn completion_entries(gid: &MutGid, root: Option<&Id>, names: &Names, query: &st
     // you see is what you can type. Unnamed keys start with the
     // ellipsis, which sorts after names, so they trail on an empty
     // query.
-    let mut nodes: Vec<(String, Id)> = document_nodes(gid, root)
+    let mut nodes: Vec<(String, Id)> = document_nodes(sources)
         .into_iter()
         .map(|node| {
             let id = Id::from(node);
             let key = names
-                .of(gid, &id)
+                .of(sources, &id)
                 .map(|name| name.text)
                 .unwrap_or_else(|| short_id(node));
             (key, id)
@@ -692,17 +711,18 @@ fn completion_entries(gid: &MutGid, root: Option<&Id>, names: &Names, query: &st
     entries
 }
 
-/// Every GUID node the document contains — entity sources, nodes
-/// appearing only as labels or values (an edgeless node referenced
-/// somewhere is still referenceable), and the root, whose reference
-/// is a Document field rather than a gid edge — a fresh edgeless
-/// node at root is still in the document. Sorted for a deterministic
-/// offer order.
-fn document_nodes(gid: &MutGid, root: Option<&Id>) -> Vec<NodeId> {
-    let mut nodes: Vec<NodeId> = gid
+/// Every GUID node the document or its library contains — entity
+/// sources, nodes appearing only as labels or values (an edgeless
+/// node referenced somewhere is still referenceable), and the root,
+/// whose reference is a Document field rather than a gid edge — a
+/// fresh edgeless node at root is still in the document. Library
+/// nodes are offered so the conventions are typeable from keystroke
+/// one. Sorted for a deterministic offer order.
+fn document_nodes(sources: &Sources) -> Vec<NodeId> {
+    let mut nodes: Vec<NodeId> = sources
         .entities()
         .flat_map(|entity| {
-            let edge_nodes = gid
+            let edge_nodes = sources
                 .edges(&Id::from(*entity))
                 .into_iter()
                 .flatten()
@@ -710,7 +730,7 @@ fn document_nodes(gid: &MutGid, root: Option<&Id>) -> Vec<NodeId> {
                 .flatten();
             std::iter::once(*entity).chain(edge_nodes)
         })
-        .chain(root.and_then(Id::as_node_id))
+        .chain(sources.root().and_then(Id::as_node_id))
         .collect();
     nodes.sort();
     nodes.dedup();
@@ -734,17 +754,27 @@ pub fn resolve_entry(doc: &mut Document, action: &EntryAction) -> Id {
 
 /// Commits a pending edge from a chosen entry: resolves the action to
 /// an identity and writes it.
-pub fn commit_pending(doc: &mut Document, path: &[Id], action: &EntryAction) -> bool {
+pub fn commit_pending(
+    doc: &mut Document,
+    library: &MutGid,
+    path: &[Id],
+    action: &EntryAction,
+) -> bool {
     let value = resolve_entry(doc, action);
-    set_value(doc, path, value)
+    set_value(doc, library, path, value)
 }
 
 /// Writes `value` at `path` — the empty path writes the document
 /// root. The single-location write every edit reduces to.
-pub fn set_value(doc: &mut Document, path: &[Id], value: Id) -> bool {
+pub fn set_value(doc: &mut Document, library: &MutGid, path: &[Id], value: Id) -> bool {
     match path.split_last() {
         Some((label, parent_path)) => {
-            match resolve(doc, parent_path).and_then(Id::as_node_id) {
+            let sources = Sources { doc: &*doc, library };
+            let parent = sources
+                .resolve(parent_path)
+                .and_then(Id::as_node_id)
+                .filter(|parent| sources.writable(&Id::from(*parent)));
+            match parent {
                 Some(parent) => {
                     doc.gid.set(parent, label.clone(), value);
                     true
@@ -764,13 +794,14 @@ pub fn set_value(doc: &mut Document, path: &[Id], value: Id) -> bool {
 /// cycle, expanded otherwise) is removed rather than stored. Declines
 /// unless the value is a node with edges — anything else has nothing
 /// to collapse.
-pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> bool {
-    resolve(doc, path)
+pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Id]) -> bool {
+    sources
+        .resolve(path)
         .filter(|value| value.as_node_id().is_some())
-        .filter(|value| doc.gid.edges(value).is_some_and(|edges| !edges.is_empty()))
+        .filter(|value| sources.edges(value).is_some_and(|edges| !edges.is_empty()))
         .map(|value| {
             let in_cycle = (0..path.len())
-                .filter_map(|end| resolve(doc, &path[..end]))
+                .filter_map(|end| sources.resolve(&path[..end]))
                 .any(|ancestor| ancestor == value);
             let next = !collapse.collapsed(path, in_cycle);
             if next == in_cycle {
@@ -792,7 +823,7 @@ pub fn toggle_collapse(doc: &Document, collapse: &mut Collapse, path: &[Id]) -> 
 /// mutation boundary. Returns whether this write OPENED an undo step:
 /// true exactly on the first write of the mounted editor's life, so a
 /// typing run is one step and history stays a dumb stack.
-pub fn write_through(doc: &mut Document, selection: &mut Selection) -> bool {
+pub fn write_through(doc: &mut Document, library: &MutGid, selection: &mut Selection) -> bool {
     let Selection::Edge {
         path,
         edit,
@@ -801,15 +832,18 @@ pub fn write_through(doc: &mut Document, selection: &mut Selection) -> bool {
     else {
         return false;
     };
+    let sources = Sources { doc: &*doc, library };
     let target = match path.split_last() {
-        Some((label, parent_path)) => resolve(doc, parent_path)
+        Some((label, parent_path)) => sources
+            .resolve(parent_path)
             .and_then(Id::as_node_id)
+            .filter(|parent| sources.writable(&Id::from(*parent)))
             .map(|parent| Some((label, parent))),
         None => Some(None),
     };
     if let (Some(edit), Some(target)) = (edit, target) {
         let text = edit.text().to_string();
-        let current = resolve(doc, path);
+        let current = sources.resolve(path);
         let next = match current {
             Some(current) if current.as_str().is_some() => Some(Id::from(text)),
             Some(current) if current.as_number().is_some() => {
@@ -989,9 +1023,9 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 /// of the selected edge. An identity can project in many places —
 /// GUID nodes, but equally SID strings, NID numbers, and labels — and
 /// the marks make that sameness visible, uniformly across spaces.
-fn secondary_of(doc: &Document, selection: Option<&Selection>) -> Option<Id> {
+fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Id> {
     match selection? {
-        Selection::Edge { path, .. } => resolve(doc, path).cloned(),
+        Selection::Edge { path, .. } => sources.resolve(path).cloned(),
         _ => None,
     }
 }
@@ -999,7 +1033,7 @@ fn secondary_of(doc: &Document, selection: Option<&Selection>) -> Option<Id> {
 // The explicit-state boundary: everything a pass reads arrives here.
 #[allow(clippy::too_many_arguments)]
 pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
-    doc: &Document,
+    sources: &Sources,
     selection: Option<&Selection>,
     graph_node: Option<&Id>,
     collapse: &Collapse,
@@ -1010,8 +1044,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     hooks: Hooks<C>,
 ) -> Node<P> {
     let cx = Cx {
-        gid: &doc.gid,
-        root: doc.root.as_ref(),
+        sources: *sources,
         names,
         raw,
         collapse,
@@ -1019,14 +1052,14 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         selection,
         // The graph view's selected node is a secondary here too:
         // its projections are the same identity.
-        secondary: secondary_of(doc, selection).or_else(|| graph_node.cloned()),
+        secondary: secondary_of(sources, selection).or_else(|| graph_node.cloned()),
     };
     // Raw shows the pure graph with no assumptions: the root is
     // projected directly, so a list root renders as its
     // position-labeled edges, not as `[a, b, c]`. List sugar belongs
     // to a convention-aware projection. An empty document is a
     // selectable placeholder at the root path.
-    match &doc.root {
+    match sources.root() {
         Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, &hooks),
         None => match cx.selection {
             Some(Selection::Pending { path, .. }) if path.is_empty() => {
@@ -1058,10 +1091,10 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let id = Id::from(node);
-    let name = cx.names.of(cx.gid, &id);
+    let name = cx.names.of(&cx.sources, &id);
     let name_label = name.as_ref().and_then(|name| name.label.clone());
     // The name edge is consumed by the header, so the listing skips it.
-    let mut entries: Vec<(Id, Option<Id>)> = sorted_edges(cx.gid, &id)
+    let mut entries: Vec<(Id, Option<Id>)> = sorted_edges(&cx.sources, &id)
         .into_iter()
         .filter(|(label, _)| name_label.as_ref() != Some(label))
         .map(|(label, value)| (label, Some(value)))
@@ -1130,7 +1163,7 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let Some(label) = &name.label else {
         return fallback;
     };
-    let Some(value) = cx.gid.get(&Id::from(node), label).cloned() else {
+    let Some(value) = cx.sources.get(&Id::from(node), label).cloned() else {
         return fallback;
     };
     let mut edge = path.to_vec();
@@ -1240,8 +1273,9 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
 /// Whether the list projection claims a node: it has ordered elements
 /// — position-labeled edges — or is about to (`pending` being the
 /// pending child label under its path).
-fn list_shaped(gid: &MutGid, id: &Id, pending: Option<&Id>) -> bool {
-    gid.edges(id)
+fn list_shaped(sources: &Sources, id: &Id, pending: Option<&Id>) -> bool {
+    sources
+        .edges(id)
         .into_iter()
         .flatten()
         .map(|(label, _)| label)
@@ -1265,11 +1299,11 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let id = Id::from(node);
-    let name = cx.names.of(cx.gid, &id);
+    let name = cx.names.of(&cx.sources, &id);
     let name_label = name.as_ref().and_then(|name| name.label.clone());
     // The name edge is consumed by the header, so the listing skips it.
     let (mut elements, mut fields): (Vec<(Id, Option<Id>)>, Vec<(Id, Option<Id>)>) =
-        sorted_edges(cx.gid, &id)
+        sorted_edges(&cx.sources, &id)
             .into_iter()
             .filter(|(label, _)| name_label.as_ref() != Some(label))
             .map(|(label, value)| (label, Some(value)))
@@ -1375,8 +1409,8 @@ pub fn short_id(id: NodeId) -> String {
 
 /// A node's edges, sorted for stable order. All of them — `name` is not
 /// special here.
-fn sorted_edges(gid: &MutGid, id: &Id) -> Vec<(Id, Id)> {
-    let mut edges: Vec<(Id, Id)> = gid
+fn sorted_edges(sources: &Sources, id: &Id) -> Vec<(Id, Id)> {
+    let mut edges: Vec<(Id, Id)> = sources
         .edges(id)
         .map(|edges| edges.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
         .unwrap_or_default();
@@ -1392,16 +1426,48 @@ fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
     } else if let Some(uuid) = label.as_node_id() {
         // A named node used as a label reads by its name, through
         // the editor's one name policy.
-        match cx.names.of(cx.gid, label) {
+        match cx.names.of(&cx.sources, label) {
             Some(name) => text(tcx, &name.text, &cx.styles.label),
             None => text(tcx, &short_id(uuid), &cx.styles.id),
         }
     } else if let Some(bytes) = position::as_position(label) {
         text(tcx, &hex(bytes), &cx.styles.id)
     } else {
-        unknown_view(label, tcx, cx.styles)
+        unknown_view(cx, tcx, label)
     };
     secondary_mark(cx, label, inner)
+}
+
+/// A node projection's ground, painted only at authority
+/// TRANSITIONS: an external entity under a document-authority parent
+/// takes the dark tint — no lock, just "from elsewhere" — and a
+/// document-authority entity under an external parent takes its
+/// light ground back (opaque, since an alpha wash can't be undone by
+/// another wash). Runs of the same authority draw nothing, so
+/// nesting never stacks tints. Wraps outside the descend so the
+/// node's own selection highlight draws over its ground.
+fn ground<P: Canvas>(cx: &Cx, path: &[Id], id: &Id, content: Node<P>) -> Node<P> {
+    if id.as_node_id().is_none() {
+        return content;
+    }
+    let external = cx.sources.external(id);
+    let parent_external = path
+        .split_last()
+        .and_then(|(_, parent)| cx.sources.resolve(parent))
+        .is_some_and(|parent| cx.sources.external(parent));
+    if external == parent_external {
+        return content;
+    }
+    let scale = cx.styles.scale;
+    let color = if external {
+        Color::new([0.13, 0.14, 0.16, 0.05])
+    } else {
+        Color::new([0.965, 0.965, 0.972, 1.0])
+    };
+    decorate(content, move |p: &mut P, rect| {
+        let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
+        p.fill(bg, color, Affine::IDENTITY);
+    })
 }
 
 /// The secondary selection's mark: a subtle wash over another whole
@@ -1541,7 +1607,7 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         // projection claims list-shaped nodes, everything else stays
         // the raw block. A registry waits for user-defined
         // projections; the Raw view empties the chain.
-        if !cx.raw && list_shaped(cx.gid, value, cx.pending_child_of(path).as_ref()) {
+        if !cx.raw && list_shaped(&cx.sources, value, cx.pending_child_of(path).as_ref()) {
             list_view(cx, tcx, path, ancestors, node, hooks)
         } else {
             node_view(cx, tcx, path, ancestors, node, hooks)
@@ -1549,7 +1615,7 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     } else if let Some(bytes) = position::as_position(value) {
         text(tcx, &hex(bytes), &cx.styles.id)
     } else {
-        unknown_view(value, tcx, cx.styles)
+        unknown_view(cx, tcx, value)
     };
     // Other projections of the selected edge's node carry the
     // secondary mark; the selected one has the primary highlight.
@@ -1558,7 +1624,8 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     } else {
         secondary_mark(cx, value, inner)
     };
-    descend(cx, path.to_vec(), Some(value.clone()), hooks, inner)
+    let placed = descend(cx, path.to_vec(), Some(value.clone()), hooks, inner);
+    ground(cx, path, value, placed)
 }
 
 /// A nonexistent edge the selection is authoring: the completion
@@ -1595,7 +1662,7 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
     choice: usize,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let entries = completion_entries(cx.gid, cx.root, cx.names, query.text());
+    let entries = completion_entries(&cx.sources, cx.names, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let content = atom_content(Some(query), fallback, tcx, cx.styles, hooks);
     let edit = hooks.edit.clone();
@@ -1876,22 +1943,28 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 }
 
 /// A value from a space the editor doesn't know — or a known space's
-/// non-canonical spelling: the space's short id plus the payload as
-/// hex.
-fn unknown_view<P: Canvas>(id: &Id, tcx: &mut TextCtx, styles: &RawStyles) -> Node<P> {
+/// non-canonical spelling: the space (named when the library names
+/// it, its short id otherwise) plus the payload as hex.
+fn unknown_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, id: &Id) -> Node<P> {
+    let space = match cx.names.of(&cx.sources, &Id::from(id.space())) {
+        Some(name) => text(tcx, &name.text, &cx.styles.label),
+        None => text(tcx, &short_id(id.space()), &cx.styles.id),
+    };
     row(
-        4.0 * styles.scale,
-        vec![
-            text(tcx, &short_id(id.space()), &styles.id),
-            text(tcx, &hex(id.payload()), &styles.id),
-        ],
+        4.0 * cx.styles.scale,
+        vec![space, text(tcx, &hex(id.payload()), &cx.styles.id)],
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_graph::Gid;
     use ui_events::keyboard::{KeyState, Modifiers};
+
+    fn src<'a>(doc: &'a Document, library: &'a MutGid) -> Sources<'a> {
+        Sources { doc, library }
+    }
 
     fn descends(paths: &[Vec<&str>]) -> Vec<Descend> {
         paths
@@ -1968,6 +2041,7 @@ mod tests {
     #[test]
     fn selecting_an_atom_edge_brings_an_editor() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("name"), Id::from("old"));
         gid.set(node, Id::from("x"), Id::from(1.5));
@@ -1976,7 +2050,7 @@ mod tests {
             gid,
         };
         let at = |labels: &[&str]| {
-            Selection::edge(&doc, labels.iter().map(|s| Id::from(*s)).collect())
+            Selection::edge(&src(&doc, &lib), labels.iter().map(|s| Id::from(*s)).collect())
         };
         assert!(at(&["name"]).edit().is_some());
         assert!(at(&["x"]).edit().is_some());
@@ -1989,6 +2063,7 @@ mod tests {
     #[test]
     fn number_edits_write_only_when_they_parse() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("x"), Id::from(1.5));
         let mut doc = Document {
@@ -1996,76 +2071,79 @@ mod tests {
             gid,
         };
         let path = vec![Id::from("x")];
-        let mut selection = Selection::edge(&doc, path.clone());
+        let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
 
         selection.edit_mut().unwrap().set_text("2.5");
-        write_through(&mut doc, &mut selection);
-        assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
+        write_through(&mut doc, &lib, &mut selection);
+        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Id::from(2.5)));
 
         // Half-typed states leave the last parsed value in place.
         for unparsable in ["2.5e", "", "-", "abc"] {
             selection.edit_mut().unwrap().set_text(unparsable);
-            write_through(&mut doc, &mut selection);
-            assert_eq!(resolve(&doc, &path), Some(&Id::from(2.5)));
+            write_through(&mut doc, &lib, &mut selection);
+            assert_eq!(src(&doc, &lib).resolve(&path), Some(&Id::from(2.5)));
         }
 
         selection.edit_mut().unwrap().set_text("-3");
-        write_through(&mut doc, &mut selection);
-        assert_eq!(resolve(&doc, &path), Some(&Id::from(-3.0)));
+        write_through(&mut doc, &lib, &mut selection);
+        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Id::from(-3.0)));
     }
 
     #[test]
     fn edits_write_through_to_the_edge() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("name"), Id::from("old"));
         let mut doc = Document {
             root: Some(Id::from(node)),
             gid,
         };
-        let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
+        let mut selection = Selection::edge(&src(&doc, &lib), vec![Id::from("name")]);
         selection.edit_mut().unwrap().set_text("new");
-        write_through(&mut doc, &mut selection);
-        assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
+        write_through(&mut doc, &lib, &mut selection);
+        assert_eq!(src(&doc, &lib).resolve(&[Id::from("name")]), Some(&Id::from("new")));
         // A selection without an editor writes nothing.
-        let mut plain = Selection::edge(&doc, vec![Id::from("missing")]);
-        assert!(!write_through(&mut doc, &mut plain));
-        assert_eq!(resolve(&doc, &[Id::from("name")]), Some(&Id::from("new")));
+        let mut plain = Selection::edge(&src(&doc, &lib), vec![Id::from("missing")]);
+        assert!(!write_through(&mut doc, &lib, &mut plain));
+        assert_eq!(src(&doc, &lib).resolve(&[Id::from("name")]), Some(&Id::from("new")));
     }
 
     #[test]
     fn write_through_opens_one_step_per_editor_life() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("name"), Id::from("a"));
         let mut doc = Document {
             root: Some(Id::from(node)),
             gid,
         };
-        let mut selection = Selection::edge(&doc, vec![Id::from("name")]);
+        let mut selection = Selection::edge(&src(&doc, &lib), vec![Id::from("name")]);
 
         // First write opens the step; the rest of the run is silent,
         // as are no-op rewrites.
         selection.edit_mut().unwrap().set_text("ab");
-        assert!(write_through(&mut doc, &mut selection));
+        assert!(write_through(&mut doc, &lib, &mut selection));
         selection.edit_mut().unwrap().set_text("abc");
-        assert!(!write_through(&mut doc, &mut selection));
-        assert!(!write_through(&mut doc, &mut selection));
+        assert!(!write_through(&mut doc, &lib, &mut selection));
+        assert!(!write_through(&mut doc, &lib, &mut selection));
 
         // Breaking the run (a save) makes the next write a new step.
         break_edit_run(Some(&mut selection));
         selection.edit_mut().unwrap().set_text("abcd");
-        assert!(write_through(&mut doc, &mut selection));
+        assert!(write_through(&mut doc, &lib, &mut selection));
 
         // A re-minted editor is a new run by construction.
-        let mut fresh = Selection::edge(&doc, vec![Id::from("name")]);
+        let mut fresh = Selection::edge(&src(&doc, &lib), vec![Id::from("name")]);
         fresh.edit_mut().unwrap().set_text("x");
-        assert!(write_through(&mut doc, &mut fresh));
+        assert!(write_through(&mut doc, &lib, &mut fresh));
     }
 
     #[test]
     fn delete_edge_detaches_and_the_root_empties_the_document() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let root = new_node_id();
         let child = new_node_id();
         gid.set(root, Id::from("child"), Id::from(child));
@@ -2075,30 +2153,31 @@ mod tests {
             gid,
         };
 
-        assert!(!delete_edge(&mut doc, &[Id::from("missing")]));
+        assert!(!delete_edge(&mut doc, &lib, &[Id::from("missing")]));
 
-        assert!(delete_edge(&mut doc, &[Id::from("child")]));
-        assert_eq!(resolve(&doc, &[Id::from("child")]), None);
+        assert!(delete_edge(&mut doc, &lib, &[Id::from("child")]));
+        assert_eq!(src(&doc, &lib).resolve(&[Id::from("child")]), None);
         // Detachment, not destruction: the orphan keeps its edges.
         assert!(doc.gid.edges(&Id::from(child)).is_some());
         // Already gone: declines.
-        assert!(!delete_edge(&mut doc, &[Id::from("child")]));
+        assert!(!delete_edge(&mut doc, &lib, &[Id::from("child")]));
 
-        assert!(delete_edge(&mut doc, &[]));
+        assert!(delete_edge(&mut doc, &lib, &[]));
         assert_eq!(doc.root, None);
-        assert_eq!(resolve(&doc, &[]), None);
-        assert!(!delete_edge(&mut doc, &[]));
+        assert_eq!(src(&doc, &lib).resolve(&[]), None);
+        assert!(!delete_edge(&mut doc, &lib, &[]));
     }
 
     #[test]
     fn root_edits_commit_to_the_document_root() {
+        let lib = MutGid::new();
         let mut doc = Document {
             root: Some(Id::from("old")),
             gid: MutGid::new(),
         };
-        let mut selection = Selection::edge(&doc, vec![]);
+        let mut selection = Selection::edge(&src(&doc, &lib), vec![]);
         selection.edit_mut().unwrap().set_text("new");
-        write_through(&mut doc, &mut selection);
+        write_through(&mut doc, &lib, &mut selection);
         assert_eq!(doc.root, Some(Id::from("new")));
     }
 
@@ -2117,31 +2196,32 @@ mod tests {
     #[test]
     fn pending_insertions_mint_between_neighbors() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let items = list(&mut gid, vec![Id::from("a"), Id::from("b")]);
         let doc = Document {
             root: Some(items.clone()),
             gid,
         };
-        let positions = positions_of(&doc.gid, &items);
+        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
         let first = vec![positions[0].clone()];
 
-        let Some(Selection::Pending { path, .. }) = pending_after(&doc, &first) else {
+        let Some(Selection::Pending { path, .. }) = pending_after(&src(&doc, &lib), &first) else {
             panic!("pending after");
         };
         assert!(positions[0] < path[0] && path[0] < positions[1]);
 
-        let Some(Selection::Pending { path, .. }) = pending_before(&doc, &first) else {
+        let Some(Selection::Pending { path, .. }) = pending_before(&src(&doc, &lib), &first) else {
             panic!("pending before");
         };
         assert!(path[0] < positions[0]);
 
         // Into the root list appends at the end; the first variant
         // prepends.
-        let Some(Selection::Pending { path, .. }) = pending_into(&doc, &[]) else {
+        let Some(Selection::Pending { path, .. }) = pending_into(&src(&doc, &lib), &[]) else {
             panic!("pending into");
         };
         assert!(positions[1] < path[0]);
-        let Some(Selection::Pending { path, .. }) = pending_into_first(&doc, &[]) else {
+        let Some(Selection::Pending { path, .. }) = pending_into_first(&src(&doc, &lib), &[]) else {
             panic!("pending into first");
         };
         assert!(path[0] < positions[0]);
@@ -2154,26 +2234,26 @@ mod tests {
             root: Some(Id::from(node)),
             gid,
         };
-        assert!(pending_after(&doc, &[Id::from("name")]).is_none());
+        assert!(pending_after(&src(&doc, &lib), &[Id::from("name")]).is_none());
         // Its value being an atom declines "into", and so does the
         // record itself — a node with only field edges takes no
         // positional element.
-        assert!(pending_into(&doc, &[Id::from("name")]).is_none());
-        assert!(pending_into(&doc, &[]).is_none());
-        assert!(pending_into_first(&doc, &[]).is_none());
+        assert!(pending_into(&src(&doc, &lib), &[Id::from("name")]).is_none());
+        assert!(pending_into(&src(&doc, &lib), &[]).is_none());
+        assert!(pending_into_first(&src(&doc, &lib), &[]).is_none());
         // An empty document offers the root; a rooted one does not.
-        assert!(pending_root(&doc).is_none());
+        assert!(pending_root(&src(&doc, &lib)).is_none());
         let empty = Document {
             root: None,
             gid: MutGid::new(),
         };
         assert!(matches!(
-            pending_root(&empty),
+            pending_root(&src(&empty, &lib)),
             Some(Selection::Pending { path, .. }) if path.is_empty()
         ));
         // Selecting the empty root pends immediately.
         assert!(matches!(
-            Selection::edge(&empty, Vec::new()),
+            Selection::edge(&src(&empty, &lib), Vec::new()),
             Selection::Pending { .. }
         ));
     }
@@ -2203,6 +2283,7 @@ mod tests {
     #[test]
     fn secondary_is_the_selected_edges_value_in_any_space() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let shared = new_node_id();
         gid.set(shared, Id::from("x"), Id::from(1.0));
         let root = new_node_id();
@@ -2219,25 +2300,26 @@ mod tests {
         };
 
         assert_eq!(
-            secondary_of(&doc, Some(&edge(vec![Id::from("a")]))),
+            secondary_of(&src(&doc, &lib), Some(&edge(vec![Id::from("a")]))),
             Some(Id::from(shared))
         );
         // Atoms are identities too — SIDs and NIDs mark like GUIDs.
         assert_eq!(
-            secondary_of(&doc, Some(&edge(vec![Id::from("a"), Id::from("x")]))),
+            secondary_of(&src(&doc, &lib), Some(&edge(vec![Id::from("a"), Id::from("x")]))),
             Some(Id::from(1.0))
         );
         // Pendings and no selection don't mark.
         assert_eq!(
-            secondary_of(&doc, Some(&pending_value(vec![Id::from("c")]))),
+            secondary_of(&src(&doc, &lib), Some(&pending_value(vec![Id::from("c")]))),
             None
         );
-        assert_eq!(secondary_of(&doc, None), None);
+        assert_eq!(secondary_of(&src(&doc, &lib), None), None);
     }
 
     #[test]
     fn pending_edge_targets_nodes_only() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("name"), Id::from("x"));
         let doc = Document {
@@ -2245,16 +2327,16 @@ mod tests {
             gid,
         };
         assert!(matches!(
-            pending_edge(&doc, Vec::new()),
+            pending_edge(&src(&doc, &lib), Vec::new()),
             Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
         ));
         // An atom takes no edges; an empty document has no node.
-        assert!(pending_edge(&doc, vec![Id::from("name")]).is_none());
+        assert!(pending_edge(&src(&doc, &lib), vec![Id::from("name")]).is_none());
         let empty = Document {
             root: None,
             gid: MutGid::new(),
         };
-        assert!(pending_edge(&empty, Vec::new()).is_none());
+        assert!(pending_edge(&src(&empty, &lib), Vec::new()).is_none());
     }
 
     #[test]
@@ -2265,10 +2347,19 @@ mod tests {
             gid.set(node, Id::from(NAME), Id::from(name));
         }
         let names = Names::convention();
+        // An empty library keeps the offer counts about the document.
+        let empty = MutGid::new();
+        let complete = |gid: &MutGid, root: Option<&Id>, query: &str, names: &Names| {
+            let doc = Document {
+                root: root.cloned(),
+                gid: gid.clone(),
+            };
+            completion_entries(&src(&doc, &empty), names, query)
+        };
 
         // A confident reference match outranks the typed string;
         // "corner" has no i, so only "origin" matches the query.
-        let entries = completion_entries(&gid, None, &names, "orig");
+        let entries = complete(&gid, None, "orig", &names);
         assert_eq!(entries[0].display, "origin");
         assert!(entries[0].detail.is_some());
         assert_eq!(entries[1].display, "\"orig\"");
@@ -2281,7 +2372,7 @@ mod tests {
 
         // A leading quote forces the string back on top, closed or
         // not, and the new node's name drops the quotes.
-        let entries = completion_entries(&gid, None, &names, "\"orig");
+        let entries = complete(&gid, None, "\"orig", &names);
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str() == Some("orig")));
         assert!(matches!(
             &entries.last().unwrap().action,
@@ -2291,7 +2382,7 @@ mod tests {
         // An empty query offers every node — the NAME label is
         // itself an unnamed node here — plus unnamed creation and
         // the empty string.
-        let entries = completion_entries(&gid, None, &names, "");
+        let entries = complete(&gid, None, "", &names);
         assert_eq!(entries.len(), 5);
         assert!(matches!(
             &entries.last().unwrap().action,
@@ -2299,7 +2390,7 @@ mod tests {
         ));
 
         // Numbers infer as the atom entry and lead.
-        let entries = completion_entries(&gid, None, &names, "2.5");
+        let entries = complete(&gid, None, "2.5", &names);
         assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_number() == Some(2.5)));
 
         // Unnamed nodes are offered too, searchable by the short id
@@ -2319,7 +2410,7 @@ mod tests {
         let scratch = new_node_id();
         gid.set(scratch, Id::from("ref"), Id::from(orphan));
         let suffix = short_id(orphan);
-        let entries = completion_entries(&gid, None, &names, suffix.trim_start_matches('…'));
+        let entries = complete(&gid, None, suffix.trim_start_matches('…'), &names);
         assert_eq!(entries[0].display, suffix);
         assert!(entries[0].detail.is_none());
         assert!(
@@ -2330,7 +2421,7 @@ mod tests {
         // a fresh edgeless node at root is still offered.
         let root = new_node_id();
         let root_id = Id::from(root);
-        let entries = completion_entries(&gid, Some(&root_id), &names, "");
+        let entries = complete(&gid, Some(&root_id), "", &names);
         assert!(entries.iter().any(
             |entry| matches!(&entry.action, EntryAction::Value(id) if id.as_node_id() == Some(root))
         ));
@@ -2338,38 +2429,106 @@ mod tests {
 
     #[test]
     fn the_name_policy_is_editor_state() {
+        let library = crate::conventions::library();
         let mut gid = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from(NAME), Id::from("origin"));
+        let doc = Document {
+            root: None,
+            gid: gid.clone(),
+        };
+        let sources = src(&doc, &library);
 
         // The name carries its provenance: the consumed edge label.
-        let name = Names::convention().of(&gid, &Id::from(node)).unwrap();
+        let name = Names::convention().of(&sources, &Id::from(node)).unwrap();
         assert_eq!(name.text, "origin");
         assert_eq!(name.label, Some(Id::from(NAME)));
-        assert!(Names::none().of(&gid, &Id::from(node)).is_none());
+        assert!(Names::none().of(&sources, &Id::from(node)).is_none());
 
-        // The convention knows its own node with no edge behind it —
-        // nothing consumed — and a stored name still wins.
-        let convention = Names::convention().of(&gid, &Id::from(NAME)).unwrap();
+        // The convention node's own name is library DATA, and a
+        // document's stored name shadows it.
+        let convention = Names::convention().of(&sources, &Id::from(NAME)).unwrap();
         assert_eq!(convention.text, "name");
-        assert_eq!(convention.label, None);
+        assert_eq!(convention.label, Some(Id::from(NAME)));
         gid.set(NAME, Id::from(NAME), Id::from("nombre"));
-        let stored = Names::convention().of(&gid, &Id::from(NAME)).unwrap();
+        let doc = Document {
+            root: None,
+            gid,
+        };
+        let sources = src(&doc, &library);
+        let stored = Names::convention().of(&sources, &Id::from(NAME)).unwrap();
         assert_eq!(stored.text, "nombre");
-        assert_eq!(stored.label, Some(Id::from(NAME)));
 
         // Completion keys through the policy: with names disabled,
         // the node falls back to its short id and the name no longer
         // matches.
-        let entries = completion_entries(&gid, None, &Names::none(), "orig");
+        let entries = completion_entries(&sources, &Names::none(), "orig");
         assert!(!entries.iter().any(|entry| entry.display == "origin"));
-        let entries = completion_entries(&gid, None, &Names::convention(), "orig");
+        let entries = completion_entries(&sources, &Names::convention(), "orig");
         assert_eq!(entries[0].display, "origin");
+    }
+
+    #[test]
+    fn the_library_reads_through_but_never_writes() {
+        let library = crate::conventions::library();
+        let mut doc = Document {
+            root: Some(Id::from(NAME)),
+            gid: MutGid::new(),
+        };
+        let sources = src(&doc, &library);
+
+        // Completion offers the conventions from keystroke one, as
+        // references: picking "name" yields the NAME node, not a
+        // lookalike string label.
+        let entries = completion_entries(&sources, &Names::convention(), "nam");
+        assert_eq!(entries[0].display, "name");
+        assert!(matches!(
+            &entries[0].action,
+            EntryAction::Value(id) if id.as_node_id() == Some(NAME)
+        ));
+
+        // Library facts render through the sources, and paths now
+        // RESOLVE through them...
+        assert_eq!(sorted_edges(&sources, &Id::from(NAME)).len(), 1);
+        assert_eq!(
+            src(&doc, &library).resolve(&[Id::from(NAME)]),
+            Some(&Id::from("name"))
+        );
+        // ...but writes gate on entity authority: the NAME entity is
+        // external, so editing and deleting decline with no read-only
+        // flag anywhere.
+        assert!(!delete_edge(&mut doc, &library, &[Id::from(NAME)]));
+        assert!(!set_value(&mut doc, &library, &[Id::from(NAME)], Id::from("x")));
+        assert!(
+            Selection::edge(&src(&doc, &library), vec![Id::from(NAME)])
+                .edit()
+                .is_none()
+        );
+
+        // Authoring gestures decline on a library-described entity
+        // too — one document edge would shadow its facts wholesale —
+        // while authoring BESIDE the reference stays a document edit.
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        gid.set(root, Id::from("k"), Id::from(NAME));
+        let doc = Document {
+            root: Some(Id::from(root)),
+            gid,
+        };
+        let path = vec![Id::from("k")];
+        assert!(pending_edge(&src(&doc, &library), path.clone()).is_none());
+        assert!(pending_insert(&src(&doc, &library), &path, false).is_none());
+        assert!(pending_insert(&src(&doc, &library), &path, true).is_none());
+        assert!(matches!(
+            pending_enter(&src(&doc, &library), &path, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
     }
 
     #[test]
     fn commit_pending_mints_named_nodes() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let root = new_node_id();
         gid.set(root, Id::from("x"), Id::from(1.0));
         let mut doc = Document {
@@ -2379,12 +2538,13 @@ mod tests {
         let path = vec![Id::from("fresh")];
         assert!(commit_pending(
             &mut doc,
+            &lib,
             &path,
             &EntryAction::NewNode {
                 name: Some("thing".into())
             }
         ));
-        let value = resolve(&doc, &path).unwrap().clone();
+        let value = src(&doc, &lib).resolve(&path).unwrap().clone();
         assert!(value.as_node_id().is_some());
         assert_eq!(
             doc.gid.get(&value, &Id::from(NAME)),
@@ -2407,19 +2567,21 @@ mod tests {
     #[test]
     fn set_value_writes_edges_and_the_root() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("x"), Id::from(1.0));
         let mut doc = Document {
             root: Some(Id::from(node)),
             gid,
         };
-        assert!(set_value(&mut doc, &[Id::from("x")], Id::from(2.0)));
-        assert_eq!(resolve(&doc, &[Id::from("x")]), Some(&Id::from(2.0)));
-        assert!(set_value(&mut doc, &[], Id::from("root")));
+        assert!(set_value(&mut doc, &lib, &[Id::from("x")], Id::from(2.0)));
+        assert_eq!(src(&doc, &lib).resolve(&[Id::from("x")]), Some(&Id::from(2.0)));
+        assert!(set_value(&mut doc, &lib, &[], Id::from("root")));
         assert_eq!(doc.root, Some(Id::from("root")));
         // A parent that is not a node declines.
         assert!(!set_value(
             &mut doc,
+            &lib,
             &[Id::from("x"), Id::from("y")],
             Id::from(0.0)
         ));
@@ -2428,6 +2590,7 @@ mod tests {
     #[test]
     fn toggle_collapse_stays_sparse_and_respects_cycle_defaults() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let root = new_node_id();
         let child = new_node_id();
         gid.set(root, Id::from("child"), Id::from(child));
@@ -2443,23 +2606,23 @@ mod tests {
 
         // Expanded by default: toggling stores a collapse override,
         // toggling again removes it.
-        assert!(toggle_collapse(&doc, &mut collapse, &child_path));
+        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &child_path));
         assert!(collapse.collapsed(&child_path, false));
-        assert!(toggle_collapse(&doc, &mut collapse, &child_path));
+        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &child_path));
         assert!(collapse.overrides.is_empty());
 
         // The back-edge to the root is in a cycle, so its default is
         // collapsed; toggling expands it.
-        assert!(toggle_collapse(&doc, &mut collapse, &back_path));
+        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &back_path));
         assert!(!collapse.collapsed(&back_path, true));
 
         // Strings and missing paths have nothing to collapse.
         assert!(!toggle_collapse(
-            &doc,
+            &src(&doc, &lib),
             &mut collapse,
             &[Id::from("child"), Id::from("name")]
         ));
-        assert!(!toggle_collapse(&doc, &mut collapse, &[Id::from("nope")]));
+        assert!(!toggle_collapse(&src(&doc, &lib), &mut collapse, &[Id::from("nope")]));
     }
 
     #[test]
@@ -2478,28 +2641,31 @@ mod tests {
 
     #[test]
     fn list_shape_is_positions_or_a_pending_position() {
+        let empty = MutGid::new();
         let mut gid = MutGid::new();
         let items = list(&mut gid, vec![Id::from(1.0)]);
         let record = new_node_id();
         gid.set(record, Id::from(NAME), Id::from("r"));
+        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("l"));
+        let doc = Document { root: None, gid };
+        let sources = src(&doc, &empty);
         // Positions make the list; a name doesn't unmake it —
         // partition, not all-or-nothing.
-        assert!(list_shaped(&gid, &items, None));
-        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("l"));
-        assert!(list_shaped(&gid, &items, None));
-        assert!(!list_shaped(&gid, &Id::from(record), None));
+        assert!(list_shaped(&sources, &items, None));
+        assert!(!list_shaped(&sources, &Id::from(record), None));
         // A pending element claims an empty node for the projection;
         // a pending field does not.
         let fresh = Id::from(new_node_id());
         let pos = position::between(None, None).unwrap();
-        assert!(!list_shaped(&gid, &fresh, None));
-        assert!(list_shaped(&gid, &fresh, Some(&pos)));
-        assert!(!list_shaped(&gid, &fresh, Some(&Id::from("field"))));
+        assert!(!list_shaped(&sources, &fresh, None));
+        assert!(list_shaped(&sources, &fresh, Some(&pos)));
+        assert!(!list_shaped(&sources, &fresh, Some(&Id::from("field"))));
     }
 
     #[test]
     fn enter_continues_beside_and_the_chord_authors_within() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let nested = new_node_id();
         let items = list(&mut gid, vec![Id::from("a"), Id::from(nested)]);
         let record = new_node_id();
@@ -2509,22 +2675,22 @@ mod tests {
             root: Some(Id::from(record)),
             gid,
         };
-        let positions = positions_of(&doc.gid, &items);
+        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
         let items_path = vec![Id::from("items")];
         let first = vec![Id::from("items"), positions[0].clone()];
         let second = vec![Id::from("items"), positions[1].clone()];
 
         // Enter continues the enumeration: any element — atom or node
         // — pends a sibling (before with shift).
-        let Some(Selection::Pending { path, .. }) = pending_enter(&doc, &first, false) else {
+        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, false) else {
             panic!("sibling after");
         };
         assert!(positions[0] < path[1] && path[1] < positions[1]);
-        let Some(Selection::Pending { path, .. }) = pending_enter(&doc, &first, true) else {
+        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, true) else {
             panic!("sibling before");
         };
         assert!(path[1] < positions[0]);
-        let Some(Selection::Pending { path, .. }) = pending_enter(&doc, &second, false) else {
+        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &second, false) else {
             panic!("node element sibling");
         };
         assert!(positions[1] < path[1]);
@@ -2533,15 +2699,15 @@ mod tests {
         // field; the root has nothing beside it and takes the field
         // on itself.
         assert!(matches!(
-            pending_enter(&doc, &[Id::from("x")], false),
+            pending_enter(&src(&doc, &lib), &[Id::from("x")], false),
             Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
         ));
         assert!(matches!(
-            pending_enter(&doc, &items_path, false),
+            pending_enter(&src(&doc, &lib), &items_path, false),
             Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
         ));
         assert!(matches!(
-            pending_enter(&doc, &[], false),
+            pending_enter(&src(&doc, &lib), &[], false),
             Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
         ));
 
@@ -2549,31 +2715,31 @@ mod tests {
         // — the list included, empty nodes included — and atoms
         // decline.
         assert!(matches!(
-            pending_insert(&doc, &items_path, false),
+            pending_insert(&src(&doc, &lib), &items_path, false),
             Some(Selection::PendingEdge { parent, .. }) if parent == items_path
         ));
         assert!(matches!(
-            pending_insert(&doc, &second, false),
+            pending_insert(&src(&doc, &lib), &second, false),
             Some(Selection::PendingEdge { parent, .. }) if parent == second
         ));
-        assert!(pending_insert(&doc, &first, false).is_none());
+        assert!(pending_insert(&src(&doc, &lib), &first, false).is_none());
 
         // Shift is the positional variant: a first element at the
         // front — prepend on a list, how an empty node becomes a list
         // (nested as an element included) — declining on records and
         // atoms.
-        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &items_path, true)
+        let Some(Selection::Pending { path, .. }) = pending_insert(&src(&doc, &lib), &items_path, true)
         else {
             panic!("prepend");
         };
         assert!(path[1] < positions[0]);
-        let Some(Selection::Pending { path, .. }) = pending_insert(&doc, &second, true) else {
+        let Some(Selection::Pending { path, .. }) = pending_insert(&src(&doc, &lib), &second, true) else {
             panic!("into the empty element");
         };
         assert!(path.starts_with(&second) && path.len() == 3);
         assert!(position::as_position(&path[2]).is_some());
-        assert!(pending_insert(&doc, &[], true).is_none());
-        assert!(pending_insert(&doc, &first, true).is_none());
+        assert!(pending_insert(&src(&doc, &lib), &[], true).is_none());
+        assert!(pending_insert(&src(&doc, &lib), &first, true).is_none());
     }
 
     use puri::draw::{GlyphRun, Shape};
@@ -2666,8 +2832,9 @@ mod tests {
             scale: 1.0,
         };
         let styles = RawStyles::new(1.0);
+        let library = crate::conventions::library();
         let node = project::<C, Probe<C>>(
-            doc,
+            &src(doc, &library),
             selection,
             None,
             &Collapse::default(),
@@ -2699,7 +2866,7 @@ mod tests {
             root: Some(items.clone()),
             gid,
         };
-        let positions = positions_of(&doc.gid, &items);
+        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
         let probe = place_probe(&doc);
 
         // Placement order: the block, its field, then the elements in
@@ -2766,7 +2933,7 @@ mod tests {
             root: Some(items.clone()),
             gid,
         };
-        let positions = positions_of(&doc.gid, &items);
+        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
         let probe = place_probe(&doc);
 
         // The consumed name is no field: the list stays inline, the
@@ -2790,6 +2957,7 @@ mod tests {
     #[test]
     fn a_named_header_selects_its_node_first_then_engages_as_text() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from(NAME), Id::from("thing"));
         gid.set(node, Id::from("x"), Id::from(1.0));
@@ -2809,7 +2977,7 @@ mod tests {
         // With the node selected, the successor pass engages the
         // name as a text target: the same click now selects the name
         // edge (and carries the caret placement).
-        let selection = Selection::edge(&doc, Vec::new());
+        let selection = Selection::edge(&src(&doc, &lib), Vec::new());
         let probe = place_probe_with(
             &doc,
             Some(&selection),
@@ -2826,13 +2994,14 @@ mod tests {
     #[test]
     fn a_label_pending_owns_its_clicks_and_the_parent_stays_clickable() {
         let mut gid = MutGid::new();
+        let lib = MutGid::new();
         let node = new_node_id();
         gid.set(node, Id::from("x"), Id::from(1.0));
         let doc = Document {
             root: Some(Id::from(node)),
             gid,
         };
-        let pending = pending_edge(&doc, Vec::new()).unwrap();
+        let pending = pending_edge(&src(&doc, &lib), Vec::new()).unwrap();
         let probe = place_probe_with(
             &doc,
             Some(&pending),
@@ -2858,6 +3027,79 @@ mod tests {
             &down_at(Point::new(header.x0 + 2.0, header.y0 + 2.0)),
         ));
         assert_eq!(log, vec![Vec::<Id>::new()]);
+    }
+
+    #[test]
+    fn forked_entities_edit_in_place_under_library_structure() {
+        // A library with real structure: S --x--> B, B --y--> 1.
+        let s_node = new_node_id();
+        let b = new_node_id();
+        let mut library = MutGid::new();
+        library.set(s_node, Id::from("x"), Id::from(b));
+        library.set(b, Id::from("y"), Id::from(1.0));
+        // The document references S.
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        gid.set(root, Id::from("k"), Id::from(s_node));
+        let mut doc = Document {
+            root: Some(Id::from(root)),
+            gid,
+        };
+        let b_path = vec![Id::from("k"), Id::from("x")];
+        let y_path = vec![Id::from("k"), Id::from("x"), Id::from("y")];
+
+        // Reading resolves through the library; writing declines
+        // while the library is the authority for B.
+        assert_eq!(src(&doc, &library).resolve(&b_path), Some(&Id::from(b)));
+        assert!(pending_edge(&src(&doc, &library), b_path.clone()).is_none());
+        assert!(
+            Selection::edge(&src(&doc, &library), y_path.clone())
+                .edit()
+                .is_none()
+        );
+        assert!(!set_value(&mut doc, &library, &y_path, Id::from(2.0)));
+        assert!(!delete_edge(&mut doc, &library, &y_path));
+
+        // The fork: the document takes B over (copy/paste's eventual
+        // job — same identity, copied wholesale). The structure now
+        // shows the document's B, editable IN PLACE under S.
+        doc.gid.set(b, Id::from("y"), Id::from(1.0));
+        assert!(pending_edge(&src(&doc, &library), b_path.clone()).is_some());
+        assert!(
+            Selection::edge(&src(&doc, &library), y_path.clone())
+                .edit()
+                .is_some()
+        );
+        assert!(set_value(&mut doc, &library, &y_path, Id::from(2.0)));
+        assert_eq!(src(&doc, &library).resolve(&y_path), Some(&Id::from(2.0)));
+        assert!(delete_edge(&mut doc, &library, &y_path));
+
+        // S itself stays external and inert: no fields on it, no
+        // retargeting its edges.
+        assert!(pending_edge(&src(&doc, &library), vec![Id::from("k")]).is_none());
+        assert!(!set_value(&mut doc, &library, &b_path, Id::from(9.0)));
+    }
+
+    #[test]
+    fn external_lists_take_no_minted_siblings() {
+        let mut library = MutGid::new();
+        let items = new_node_id();
+        let pos = position::between(None, None).unwrap();
+        library.set(items, pos.clone(), Id::from("a"));
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        gid.set(root, Id::from("m"), Id::from(items));
+        let doc = Document {
+            root: Some(Id::from(root)),
+            gid,
+        };
+        let element = vec![Id::from("m"), pos];
+
+        // The element reads through, but nothing mints beside it and
+        // nothing appends into the list while it is external.
+        assert_eq!(src(&doc, &library).resolve(&element), Some(&Id::from("a")));
+        assert!(pending_enter(&src(&doc, &library), &element, false).is_none());
+        assert!(pending_insert(&src(&doc, &library), &[Id::from("m")], true).is_none());
     }
 
     #[test]
@@ -2891,7 +3133,7 @@ mod tests {
             root: Some(items.clone()),
             gid,
         };
-        let positions = positions_of(&doc.gid, &items);
+        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
         let probe = place_probe(&doc);
 
         let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();

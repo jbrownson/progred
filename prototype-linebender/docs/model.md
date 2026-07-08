@@ -718,6 +718,96 @@ this is a LIBRARY gid layered under the document (StackedGid has
 waited for exactly this since the egui era); the fallback is the
 editor-convention stopgap, deliberately not that architecture step.
 
+The library step was then taken the same day (user direction, with
+three corrections from prior prototypes baked in). `Sources` is the
+reading context — `{ doc, library }`, two gids held EXPLICITLY,
+deliberately NOT implementing Gid: past hybrids merged the layers
+into one graph view and then had to bolt provenance metadata back on
+for read-only UI; when the combination never masquerades, provenance
+is simply which side answered. Presentation (Cx, graph content,
+labels, the name policy, completion) reads through both; MUTATION
+resolves against the document alone, so library facts are read-only
+with no flags anywhere — editors don't mount, deletes decline,
+write-through drops. Fallback is per ENTITY, never per edge (user:
+an edge-level merge tempts inheritance at the data layer; semantics
+like that belong above the substrate). `conventions::library()` names
+the well-known ids — name, and the node/string/number/position space
+nodes, so unknown-space values read `number a3f2…` — replacing the
+hardcoded NAME fallback with data. Completion sweeps both layers, so
+the conventions are typeable from keystroke one and picking "name"
+yields the NAME node rather than a lookalike string label (the fresh-
+document trap). The graph pane's SNAPSHOT stays document-only —
+library facts enrich display, they don't populate the picture.
+StackedGid retired from progred_graph. One hole surfaced by use the
+same day (user: can't edit the name node's name, but CAN add it an
+arbitrary edge — intentional?): resolution-gating protected library
+EDGES but not library ENTITIES — the entity's id resolves through any
+document reference, so pending gestures would open on it and the
+committed edge, landing in the document, would SHADOW the library's
+whole entity (per-entity fallback), silently de-naming the
+conventions — fork-on-write through the back door. Closed by the
+previous prototypes' rule: the whole library node is read-only —
+`pending_edge`/`pending_into_at` take the library and decline on
+entities it describes, while referencing them and authoring beside
+the reference stay ordinary document edits. The editability conflict then resolved in conversation (user: "we
+should be ABLE to make any kind of edit... the fractional ids also
+complicate that"): the substrate stays fully permissive — a document
+may state anything about any identity — and read-only is purely an
+editor affordance above it. Under per-entity fallback, the only
+COHERENT edit of an external entity is a whole-entity fork (a partial
+edge would shadow the rest away; a library list makes this vivid —
+one inserted position edge would leave a one-element list, so the
+fractional design and the per-entity design agree the entity is the
+unit). The fork needs NO command: it is copy/paste's job (user call —
+rare on purpose, possible by design), so the gates now check
+AUTHORITY, not description: `Sources::external(entity)` = the library
+describes it and the document does not; external entities render on a
+subtly darker ground (tree wash, graph node fill, label pills — no
+lock iconography, per user) and decline authoring, while a document
+that owns the entity — today by hand, eventually by paste — authors
+freely, its copy diverging from the library thereafter, which is the
+semantics of taking a node over. Authority is per-ENTITY everywhere — settled after two user probes
+(a library node pointing at a document node "should have a light bg
+again"; fork-something-inside-a-library-structure "we should be able
+to edit the thing we just forked"). A first cut had the tree gate by
+PATH (mutation resolved document-only, so everything past a library
+hop was inert), defended as honest-affordance — but entity-level
+shadowing already made the CONTENT under a library hop show the
+document's version of a forked entity, so path authority was the one
+layer disagreeing with the other two. Now: `resolve` reads through
+the Sources (navigation reaches what presentation shows), every WRITE
+gates on the parent entity's authority (`writable` = not external;
+editors only mount where write-through can land), and the ground
+follows the same rule — external entities on the dark tint, a
+document-authority entity nested under an external ancestor gets an
+opaque light patch back, editable right there because it is. The fork
+flow: copy the entity to anywhere in the document (identity-
+preserving paste — no dedicated command, rare on purpose), and the
+library structure immediately shows and edits your version in place;
+the structure node itself stays external and inert. Grounds paint
+only at authority TRANSITIONS (user simplification — the first cut
+painted by absolute state, which double-tinted nested externals and
+repainted light redundantly): a node draws a ground iff its authority
+differs from its parent's — dark entering external, opaque light
+leaving it — so runs of the same authority draw nothing and nesting
+never stacks. One parent check replaced the ancestor walk.
+
+The (doc, library) pair then got its name (user call): `Sources`
+grew to hold the `&Document` itself, and every reader — `resolve`,
+`root`, `external`/`writable`, edges — is a method on it. One value
+travels through the whole read side (Cx dropped its separate root
+field; completion dropped its root parameter; project and the graph
+pane take `&Sources`; the shell builds it via `Model::sources()`).
+The four WRITERS (write_through, delete_edge, set_value,
+commit_pending) keep explicit `(&mut Document, &MutGid)` — mutation
+needs the exclusive document, so the bundle cannot carry it — and
+construct a Sources internally for their read phase. Multiple
+libraries stay future-simple: being read-only, they compose UPSTREAM
+by merging into the one `Model.library` gid (`MutGid::merge` has
+waited for this); `Sources` remains two-sided permanently. Open:
+copy/paste itself; user-loadable libraries and the completion noise
+budget (five convention offers on an empty query) are future calls.
+
 Label pendings own their clicks (2026-07-08, user-reported: Enter on
 the root list, then clicking the header kept the pending instead of
 selecting the node). There is no quasi-selected state — PendingEdge

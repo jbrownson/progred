@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 progred_graph = { path = "../progred_graph" }
+im = "15"
 puri = { path = "../puri" }
 puri-vello = { path = "../puri-vello" }
 vello = "0.9.0"

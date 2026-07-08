@@ -4,10 +4,33 @@
 //! (CSPRNG) on 2026-07-05. The cons-list ids (head/tail/empty) were
 //! retired 2026-07-06 for ordered-identity position labels.
 
-use progred_graph::{Gid, Id, MutGid, NodeId};
+use crate::sources::Sources;
+use progred_graph::{
+    Id, MutGid, NODE_SPACE, NUMBER_SPACE, NodeId, STRING_SPACE, position::POSITION_SPACE,
+};
 use std::rc::Rc;
 
 pub const NAME: NodeId = NodeId::from_u128(0xf8ac_c21e_3635_4e5a_9702_1ee4_8d29_fed8);
+
+/// The built-in library: names for the editor's well-known ids, read
+/// under every document through [`Sources`] — never written, never
+/// saved. What the NAME hardcode used to fake is data here, so
+/// completion can offer it and the graph can label it like anything
+/// else.
+pub fn library() -> MutGid {
+    let mut gid = MutGid::new();
+    let name = Id::from(NAME);
+    gid.set(NAME, name.clone(), Id::from("name"));
+    for (space, text) in [
+        (NODE_SPACE, "node"),
+        (STRING_SPACE, "string"),
+        (NUMBER_SPACE, "number"),
+        (POSITION_SPACE, "position"),
+    ] {
+        gid.set(space, name.clone(), Id::from(text));
+    }
+    gid
+}
 
 /// A node's display name, and where it came from: a name is not just
 /// text — a name-aware projection must know which edge the name
@@ -28,27 +51,19 @@ pub struct Name {
 /// completion's name-your-new-node offer — stays on the `name`
 /// convention until it needs to vary.
 #[derive(Clone)]
-pub struct Names(Rc<dyn Fn(&MutGid, &Id) -> Option<Name>>);
+pub struct Names(Rc<dyn Fn(&Sources, &Id) -> Option<Name>>);
 
 impl Names {
-    /// The `name` convention: a `name` edge to a string value. The
-    /// convention also knows its own node — `NAME` reads as "name"
-    /// with no edge behind it, so a fresh document needs no
-    /// self-description (a stored name still wins). The eventual home
-    /// for this kind of fact is a library gid layered under the
-    /// document.
+    /// The `name` convention: a `name` edge to a string value, read
+    /// through the document and its library alike — the well-known
+    /// ids' own names are library data, not code.
     pub fn convention() -> Self {
-        Self(Rc::new(|gid, id| {
+        Self(Rc::new(|sources, id| {
             let label = Id::from(NAME);
-            if let Some(text) = gid.get(id, &label).and_then(Id::as_str) {
-                return Some(Name {
-                    text: text.to_string(),
-                    label: Some(label),
-                });
-            }
-            (id == &label).then(|| Name {
-                text: "name".to_string(),
-                label: None,
+            let text = sources.get(id, &label).and_then(Id::as_str)?;
+            Some(Name {
+                text: text.to_string(),
+                label: Some(label),
             })
         }))
     }
@@ -58,8 +73,8 @@ impl Names {
         Self(Rc::new(|_, _| None))
     }
 
-    pub fn of(&self, gid: &MutGid, id: &Id) -> Option<Name> {
-        (self.0)(gid, id)
+    pub fn of(&self, sources: &Sources, id: &Id) -> Option<Name> {
+        (self.0)(sources, id)
     }
 }
 

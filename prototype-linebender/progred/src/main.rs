@@ -3,6 +3,7 @@
 
 mod conventions;
 mod filter;
+mod sources;
 mod graph_view;
 mod history;
 mod raw;
@@ -389,7 +390,7 @@ impl ApplicationHandler<MenuEvent> for App {
                             ) {
                                 Some(path) => {
                                     self.model.selection = Some(Selected::Tree(
-                                        raw::Selection::edge(&self.model.doc, path),
+                                        raw::Selection::edge(&self.model.sources(), path),
                                     ));
                                     true
                                 }
@@ -420,7 +421,7 @@ impl ApplicationHandler<MenuEvent> for App {
                         let before = model.doc.clone();
                         // True on the first write of the editor's
                         // life: the run's one step opens here.
-                        if raw::write_through(&mut model.doc, selection) {
+                        if raw::write_through(&mut model.doc, &model.library, selection) {
                             let path = selection.path().to_vec();
                             model.history.record(before, Some(path));
                             self.refresh_title();
@@ -519,6 +520,7 @@ fn main() {
             selection: None,
             collapse: raw::Collapse::default(),
             names: conventions::Names::default(),
+            library: conventions::library(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
@@ -555,6 +557,9 @@ struct Model {
     /// The name policy: an editor setting, not document state, so it
     /// survives document swaps.
     names: conventions::Names,
+    /// The built-in library, read under every document; never
+    /// written, never saved.
+    library: progred_graph::MutGid,
     graph: graph_view::GraphView,
     history: history::History,
     /// Vertical document scroll offset in logical pixels, so the
@@ -566,6 +571,14 @@ struct Model {
 }
 
 impl Model {
+    /// The reading context: this document over the editor's library.
+    fn sources(&self) -> sources::Sources<'_> {
+        sources::Sources {
+            doc: &self.doc,
+            library: &self.library,
+        }
+    }
+
     fn tree_selection(&self) -> Option<&raw::Selection> {
         match &self.selection {
             Some(Selected::Tree(selection)) => Some(selection),
@@ -744,7 +757,7 @@ impl App {
             // also drops any graph selection, which may reference
             // content the restored document no longer has.
             self.model.selection = restore
-                .map(|path| Selected::Tree(raw::Selection::edge(&self.model.doc, path)));
+                .map(|path| Selected::Tree(raw::Selection::edge(&self.model.sources(), path)));
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
                 let window = window.clone();
@@ -806,6 +819,7 @@ impl App {
             selection: None,
             collapse: raw::Collapse::default(),
             names: self.model.names.clone(),
+            library: conventions::library(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
@@ -1021,14 +1035,14 @@ impl App {
                     // edge intact) already covers the deletion.
                     let covered = *recorded;
                     let before = self.model.doc.clone();
-                    raw::delete_edge(&mut self.model.doc, &path) && {
+                    raw::delete_edge(&mut self.model.doc, &self.model.library, &path) && {
                         if !covered {
                             self.model.history.record(before, Some(path.clone()));
                             self.refresh_title();
                         }
                         let next = raw::selection_after_delete(descends, &path);
                         self.model.selection =
-                            Some(Selected::Tree(raw::Selection::edge(&self.model.doc, next)));
+                            Some(Selected::Tree(raw::Selection::edge(&self.model.sources(), next)));
                         true
                     }
                 }
@@ -1077,11 +1091,11 @@ impl App {
     /// the edge it wrote.
     fn commit_value(&mut self, path: raw::Path, action: &raw::EntryAction) {
         let before = self.model.doc.clone();
-        if raw::commit_pending(&mut self.model.doc, &path, action) {
+        if raw::commit_pending(&mut self.model.doc, &self.model.library, &path, action) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(Selected::Tree(raw::Selection::edge(&self.model.doc, path)));
+        self.model.selection = Some(Selected::Tree(raw::Selection::edge(&self.model.sources(), path)));
     }
 
     /// A resolved label advances the pending edge to its value stage —
@@ -1098,10 +1112,12 @@ impl App {
         }
         let mut path = parent;
         path.push(label);
-        self.model.selection = Some(Selected::Tree(match raw::resolve(&self.model.doc, &path) {
-            Some(_) => raw::Selection::edge(&self.model.doc, path),
-            None => raw::pending_value(path),
-        }));
+        self.model.selection = Some(Selected::Tree(
+            match self.model.sources().resolve(&path) {
+                Some(_) => raw::Selection::edge(&self.model.sources(), path),
+                None => raw::pending_value(path),
+            },
+        ));
     }
 
     /// Enter advances a pending stage or begins one (the chains live
@@ -1169,14 +1185,16 @@ impl App {
                             Some(Selected::Tree(current)) => Some(current),
                             _ => None,
                         };
-                        let doc = &self.model.doc;
+                        let sources = self.model.sources();
                         let shift = event.modifiers.shift();
                         let started = match tree {
                             Some(current) if raw::command(&event.modifiers) => {
-                                raw::pending_insert(doc, current.path(), shift)
+                                raw::pending_insert(&sources, current.path(), shift)
                             }
-                            Some(current) => raw::pending_enter(doc, current.path(), shift),
-                            None => raw::pending_root(doc),
+                            Some(current) => {
+                                raw::pending_enter(&sources, current.path(), shift)
+                            }
+                            None => raw::pending_root(&sources),
                         };
                         let began = started.is_some();
                         self.model.selection = started.map(Selected::Tree).or(selection);
@@ -1196,13 +1214,13 @@ impl App {
                             self.model.selection = (!(back.is_empty()
                                 && self.model.doc.root.is_none()))
                             .then(|| {
-                                Selected::Tree(raw::Selection::edge(&self.model.doc, back))
+                                Selected::Tree(raw::Selection::edge(&self.model.sources(), back))
                             });
                             true
                         }
                         Some(Selected::Tree(raw::Selection::PendingEdge { parent, .. })) => {
                             self.model.selection = Some(Selected::Tree(raw::Selection::edge(
-                                &self.model.doc,
+                                &self.model.sources(),
                                 parent.clone(),
                             )));
                             true
@@ -1222,7 +1240,14 @@ impl App {
             && match self.model.tree_selection() {
                 Some(selection) => {
                     let path = selection.path().to_vec();
-                    raw::toggle_collapse(&self.model.doc, &mut self.model.collapse, &path)
+                    raw::toggle_collapse(
+                        &sources::Sources {
+                            doc: &self.model.doc,
+                            library: &self.model.library,
+                        },
+                        &mut self.model.collapse,
+                        &path,
+                    )
                 }
                 None => false,
             }
@@ -1374,8 +1399,9 @@ fn run_frame(
     // model's configured policy is untouched underneath.
     let none = conventions::Names::none();
     let names = if view.raw { &none } else { &model.names };
+    let sources = model.sources();
     let body = raw::project(
-        &model.doc,
+        &sources,
         model.tree_selection(),
         model.graph_node(),
         &model.collapse,
@@ -1399,7 +1425,7 @@ fn run_frame(
                 };
                 if fresh {
                     app.model.selection =
-                        Some(Selected::Tree(raw::Selection::edge(&app.model.doc, path)));
+                        Some(Selected::Tree(raw::Selection::edge(&app.model.sources(), path)));
                 } else if click.is_none()
                     && let Some(line) =
                         app.model.tree_selection_mut().and_then(raw::Selection::edit_mut)
@@ -1430,7 +1456,14 @@ fn run_frame(
                 }
             }),
             toggle: Rc::new(|app: &mut App, path| {
-                raw::toggle_collapse(&app.model.doc, &mut app.model.collapse, &path);
+                raw::toggle_collapse(
+                    &sources::Sources {
+                        doc: &app.model.doc,
+                        library: &app.model.library,
+                    },
+                    &mut app.model.collapse,
+                    &path,
+                );
             }),
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
@@ -1451,7 +1484,7 @@ fn run_frame(
     if view.graph {
         let panel = graph_view::panel(viewport_width, viewport_height);
         let pane = graph_view::pane(
-            &model.doc,
+            &sources,
             &model.graph,
             model.graph_selection(),
             model.tree_selection(),
