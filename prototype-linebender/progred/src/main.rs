@@ -774,14 +774,22 @@ impl App {
     }
 
     /// Unsaved changes gate for the document-replacing commands.
+    /// Parented to the window, the dialog is a real NSAlert sheet;
+    /// parentless, rfd falls back to a CFUserNotification panel that
+    /// arrives unfocused (a click to focus, then a click to answer)
+    /// and warns on the console.
     fn confirm_discard(&self) -> bool {
-        !self.model.history.dirty()
-            || rfd::MessageDialog::new()
-                .set_title("Unsaved Changes")
-                .set_description("Discard unsaved changes?")
-                .set_buttons(rfd::MessageButtons::OkCancel)
-                .show()
-                == rfd::MessageDialogResult::Ok
+        if !self.model.history.dirty() {
+            return true;
+        }
+        let mut dialog = rfd::MessageDialog::new()
+            .set_title("Unsaved Changes")
+            .set_description("Discard unsaved changes?")
+            .set_buttons(rfd::MessageButtons::OkCancel);
+        if let RenderState::Active { window, .. } = &self.state {
+            dialog = dialog.set_parent(window.as_ref());
+        }
+        dialog.show() == rfd::MessageDialogResult::Ok
     }
 
     /// Save saves in place, or asks for a path when untitled; save-as
