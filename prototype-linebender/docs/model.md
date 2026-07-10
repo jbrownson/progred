@@ -2,7 +2,160 @@
 
 Date: 2026-07-03
 
-## Data Layer: gid v1, Unchanged
+## Data Layer v2: The Typed Model (2026-07-09)
+
+The substrate, whole:
+
+```rust
+pub type NodeId = Uuid;            // 16 CSPRNG bytes; the only reference
+
+pub enum Atom {                    // the values that can MEAN — every map
+    Node(NodeId),                  // key is one; meaning is looked up
+    String(String),                // through it (nodes carry metadata;
+    Number(Number),                // strings/numbers are their own spelling)
+}
+pub struct Number(f64);            // canonical: one NaN bit pattern, -0.0 =
+                                   // 0.0; Eq/Hash by bits, Ord by total_cmp
+
+pub enum Value {                   // anything sayable
+    Atom(Atom),
+    List(im::OrdMap<Position, Value>),
+}
+pub struct Position(Vec<u8>);      // session-only element identity: a
+                                   // canonical binary fraction, minted at
+                                   // load/insert, stripped at save, IGNORED
+                                   // by Value's hand-written Eq/Hash/Ord;
+                                   // deliberately neither Value nor Atom,
+                                   // so positions cannot occur in data
+
+pub struct MutGid {                // the entity table: maps are the only
+    data: im::HashMap<NodeId,      // entities — identity-bearing, mutable
+        im::HashMap<Atom, Value>>, // in place, shareable, cycle-capable
+}
+
+pub enum Step { Key(Atom), Element(Position) }   // projection paths
+
+pub struct Document { root: Option<Value>, gid: MutGid }
+```
+
+File format (versioned; loaders refuse other versions rather than
+guess): `{"format": 1, "root": <value>, "gid": {"<uuid>": [[<atom>,
+<value>], …]}}` where `<atom>` is `{"node"|"string"|"number": …}`
+(non-finite numbers spell `"nan"`/`"inf"`/`"-inf"` — the general form
+that used to catch them is gone) and `<value>` adds `{"list":
+[<value>, …]}`, inline and recursive, positions never serialized.
+
+The decision arc (all 2026-07-09, one long session):
+
+- Lists were promoted to entity-kinds in the morning (see Lists) and
+  the kind machinery immediately bred special cases — sticky kinds,
+  panics, write gates, deserializer refusals, a no-names rule. The
+  user named the smell ("so many special cases forming") and the
+  ground-up question: do lists need identity at all?
+- They don't: identity earns its 16 bytes for mutate-while-shared,
+  cycles, and distinct-despite-equal. Maps need all three; sequences
+  are owned by their containers in practice, and the model already
+  declared list-element identity to be session fiction (positions
+  stripped at save). So lists became VALUES — inline, structural,
+  compared by content (positions ignored) — and every kind gate
+  became unrepresentable instead of policed. Fractional positions
+  survive unchanged as the session spelling of element identity; the
+  container is an ordered map so the every-keystroke value rewrite is
+  a structural share, not a rebuild.
+- Labels narrowed to atoms BY TYPE (user: a label MEANS — you look it
+  up for metadata; a list collects, it doesn't mean). `Step` gained
+  the honest second constructor; a dangling `Element` is the same
+  stale-path class the editor already tolerates.
+- Atoms closed to a fixed enum (user, going practical): the open
+  (space, payload) generality had zero users once the position space
+  died, and a closed enum lets types own the invariants — UTF-8 by
+  String, canonical floats by one newtype — deleting the payload
+  disciplines, strict-read machinery, and the general serialized
+  form. Strings-only (numbers parsed out) was rejected: it breaks
+  one-spelling-per-value or smuggles the number space back as
+  spelling discipline, and erases a distinction the editor already
+  surfaces (the dual atom offer). f64 stays; arbitrary-precision
+  would be a contained future swap of the Number variant's interior.
+  If extensibility returns it is one `Blob`-style variant tagged by a
+  minted NodeId (so a library can name and describe the tag), added
+  when a real payload needs it.
+- The beauty trade, named: the founding `Id → Id → Maybe Id` had the
+  beauty of the untyped lambda calculus — one sort, all guarantees
+  dynamic — and the week's chipping was each position's real sort
+  coming home into the types. The signature was quietly false (values
+  never had edges, labels never meaningfully took lists); the chips
+  removed falseness, not beauty. What remains is the same
+  partial-function heart, typed: `NodeId → Atom ⇀ Value`, with
+  `Value = Atom | [Value]` — two mutually recursive lines, every one
+  load-bearing. Both poles were coherent; the unstable place was the
+  middle (uniform signature plus kind machinery), which is exactly
+  where the special cases bred.
+
+Related work — why this isn't just triples (RDF, examined
+2026-07-09): RDF is the uniform-relation model field-tested for 25
+years, and its history is a sequence of retrofits that each re-add a
+distinction the uniformity erased. Its positions were never uniform
+(literals can't be subjects, predicates must be IRIs — the sorts were
+there from day one). Its lists are its most famous wound: cons cells
+(`rdf:first/rest/nil`, ill-formed lists representable, every consumer
+polices) and ordinal containers (`rdf:_1, rdf:_2` — the re-addressing
+problem), with the ecosystem's real answer being "don't put sequences
+in RDF." IRIs entangle identity with naming authority (httpRange-14);
+minted-uuid-plus-name-edges is the fix. Blank nodes made anonymity
+semantically special (existentials) and poisoned merge, diff, and
+canonicalization; minting real ids for everything (skolemization by
+construction) dodges the class. Literals are (datatype IRI, lexical
+form) = our old (space, payload); practice converged on the fixed
+core set, mirroring the fixed-atom decision, and RDF's term-vs-value
+equality split (`"1"` vs `"01"^^xsd:integer`) is the permanent bug
+source our one-canonical-spelling rule collapses. Named graphs are
+provenance retrofitted — `Sources` learned that lesson pre-pain.
+Parked decisions taken from the comparison: EDGE METADATA, when
+wanted, is an ordinary map describing the (entity, key) pair — no
+edge identity creeps into the substrate (RDF reification/RDF-star,
+Wikidata qualifiers are that pressure); PASTE has two axes — the
+projection's spanning tree is the copy boundary (inline = carried,
+reference = kept), and identity fate is per-gesture, paste-as-copy
+reminting with one substitution map over the deduplicated entity set
+(a diamond stays a diamond) vs paste-as-reference keeping ids (the
+library fork), never an edge meaning "these ids are equal"
+(owl:sameAs); TYPES, when they come, are closed-world shapes that
+CHECK documents (SHACL stance) feeding diagnostics and completion,
+never open-world axioms that ENTAIL facts (OWL stance) — shapes
+check, code computes, nothing infers; interop with triple-shaped
+systems, if ever, is an export projection (the Wikidata pattern),
+never the native model.
+
+Shipped 2026-07-09, same session. What landed matches the layout;
+notes from the build: `progred_graph` is four small modules (value,
+position, mutgid, gid) and the old `id.rs` is gone whole — spaces,
+payload disciplines, strict reads, the general form. The editor's
+write path became TWO functions: `set_value` (split at the last Key
+step, `respine` the element suffix — surviving positions kept, the
+final step insert-or-replaces — write the one authority-gated edge)
+and `delete_edge` (a Key step detaches; an Element step rebuilds the
+list without it via the same `set_value`). `write_through` funnels
+through `set_value`, so element edits rebuild their list at the
+owning edge — string-editing shape, as designed. Editor gates
+reduced to `spine_writable` (the entity at the path's last Key step;
+no Key step means the document's own root spine) — `pending_edge`
+needs only `as_node` (lists decline structurally), the
+empty-node-becomes-list gesture died with the ambiguity, and
+`Selection::edge` mounts editors on the same test. `list_shaped`
+does not exist; `value_view` matches the Value enum. Completion's
+"new list" commits `Value::list([])` — PURE, no entity minted, so
+the orphan-on-failed-commit wart died for lists — and the label
+stage simply lacks the offer. Graph view: nodes are Values (equal
+lists = one node, value semantics displayed honestly), list nodes
+draw square with their inline literal as content, position edges
+don't exist so the ordinal pills went away entirely, and node
+deletion detaches occurrences INSIDE list values too (a `without`
+walk), the root list included. The one intentional main.rs seam:
+`commit_label` narrows the resolved entry to an Atom and declines a
+list — unreachable by construction, stated in one match. Tests:
+87 across the workspace, clippy at the pre-rebuild baseline.
+
+## Data Layer v1 (superseded 2026-07-09, see v2 above)
 
 - IDs are GUID | SID | NID (TypeScript-era spelling; the Rust surface
   says node id, string, number). GUIDs are minted identity for mutable
@@ -17,6 +170,16 @@ Date: 2026-07-03
   syntax specially while ASCII stays dumb.
 
 ## Atomic Values
+
+(Largely superseded 2026-07-09 by the typed model: the open
+`(space, payload)` design gave way to the closed Atom enum, and the
+spaces, payload disciplines, strict reads, and general serialized
+form went with it. What SURVIVES, load-bearing as ever: one canonical
+spelling per value — NaN collapsed, -0.0 = 0.0, exact UTF-8 — now
+owned by constructors of the fixed variants; and the Blob-when-needed
+posture, returning someday as one enum variant tagged by a minted
+NodeId. The reasoning below is kept as the record of why the atom
+set is what it is.)
 
 The atom set (SID, NID) is principled, not arbitrary. An atom earns
 native substrate status when: its canonical form is free (value =
@@ -144,9 +307,64 @@ Considered and settled 2026-07-05:
 
 ## Lists
 
-- Encoded as ordered-identity labels (2026-07-06): a list is a node
-  whose element edges are labeled by position-space values, and the
-  labels' identity order is the sequence. Insertion mints
+- FINAL (2026-07-09, evening): lists are VALUES — see Data Layer v2.
+  The entity-kind promotion below lasted one day as the middle ground
+  between the uniform relation and the typed model; its storage
+  insight (files keep honest sequences, positions are session
+  spelling) and its gesture amendments survive; its kind machinery
+  (sticky kinds, panics, gates, refusals, no-names-by-rule) is
+  superseded by unrepresentability. Kept as the record of the arc.
+- Promoted to a data-model construct (2026-07-09): an entity is a map
+  OR a list, never both — kind per entity, declared at the mint
+  (completion's "new list") or by the first write's label space, and
+  sticky: an emptied list is still a list, an emptied map is nothing.
+  The old rejection of first-class lists had conflated them with the
+  cons encoding's re-addressing problems; once position labels solved
+  ordered identity, the remaining reasons dissolved — ordered and
+  unordered edges are never wanted on one entity, so the mixed case
+  the unified encoding paid to allow was exactly the case to forbid.
+  Storage is the honest sequence, `{"list": [v1, v2]}` beside
+  `{"map": [[label, value], …]}`: positions are stripped at save and
+  minted evenly at load (`position::spread`), because paths need
+  stability only WITHIN an editing session — the position space is
+  the session spelling of order, everything below this entry its
+  mechanics. The kind boundary is enforced, not tolerated: the data
+  layer panics on a kind-violating write (its writers gate first),
+  and the editor's one write (`set_value`) declines at the boundary,
+  so a malformed list is not a representable state. Old files are
+  refused like any unparsable file rather than migrated — prototype
+  scratch. A list holds elements only, so the intra-list name edge is
+  gone: a list is named by the edge that references it (or a wrapping
+  map), and `name` stays a convention — richer naming (multilingual,
+  long/short, non-textual) is library evolution, not substrate.
+- The lens that settled it (same discussion): the substrate's
+  constructs are finite functions — a map a finite partial function
+  `Id ⇀ Id`, a list a finite sequence — and they are structure
+  because they contain values; atoms have no interior identity and
+  compress to spellings (payload bytes in a space). The rule:
+  structure where the parts need identity of their own, spelling
+  where they don't. What that rule leaves open is honestly
+  arbitrary, and arbitrary-but-simpler is allowed to win — which is
+  what admitted lists.
+- Node operations on a list, the open seam (2026-07-09, user-named):
+  the operations that still make sense all work (delete, collapse,
+  beside/within, replace-by-rebuild, graph detach); the ones that
+  assumed the mixed entity — naming, arbitrary metadata — now have
+  nowhere to land, and their landing place is the WRAP idiom (a map
+  that holds the list plus its metadata), manual today, the reserved
+  path-rewrite wrap gesture eventually. Kind CONVERSION has no
+  identity-preserving path, and the stickiness is asymmetric: a map
+  emptied of its fields vanishes from the gid and is reborn
+  kind-free (delete the fields, then Cmd+Shift+Enter — map→list
+  works), while an emptied list is still a list, so list→map means
+  minting a fresh node and re-pointing references. Accepted for now:
+  conversion-in-place is a rewrite of what the entity IS, and if it
+  earns a gesture it should be an explicit one, not an accident of
+  emptying. Copy/paste, when it arrives as the fork mechanism, must
+  carry kind with the edges.
+- Encoded in memory as ordered-identity labels (2026-07-06): a list
+  is a node whose element edges are labeled by position-space values,
+  and the labels' identity order is the sequence. Insertion mints
   `between(prev, next)` and sets one edge; removal deletes one edge;
   no other element's address moves, so the silent re-addressing class
   (delete the first item and a collapse override on the
@@ -178,19 +396,22 @@ Considered and settled 2026-07-05:
   opt-in, carried by the labels a convention chooses — each element
   in a stable bucket, the buckets ordered.
 - Costs, accepted: no structural tail-sharing (reference the node to
-  share), range operations relabel O(n), an empty list needs a
-  convention marker (nothing else distinguishes it from an empty
-  record), and traversal is a sort the projection already does.
-  Position-identifier schemes interleave oddly under concurrent
-  merging; irrelevant single-user, remember it if collaboration
-  arrives.
-- The empty-list marker is an `isa → List` tag on an ordinary node
-  (2026-07-06) — the anticipated isa convention's first customer. A
-  reserved swap-in empty-list identity was rejected: lists are nodes
-  and nodes are shared, so swapping the value at one referencing edge
-  silently diverges every other reference. Projections may still
-  infer list-ness from position-labeled edges when untagged; the tag
-  decides the empty and ambiguous cases.
+  share), range operations relabel O(n), and traversal is a sort the
+  projection already does. Position-identifier schemes interleave
+  oddly under concurrent merging; irrelevant single-user, remember it
+  if collaboration arrives. (An earlier cost — an empty list needs a
+  convention marker — died with promotion: kind is data, so an empty
+  list simply exists, `{"list": []}`, the state no shape could say.)
+- Superseded (2026-07-09): the empty-list marker was an `isa → List`
+  tag on an ordinary node (2026-07-06, the anticipated isa
+  convention's first customer); its ids were minted 2026-07-08, wired
+  for one uncommitted day, and retired unadopted when lists joined
+  the data model. Shape inference went with it — `list_shaped` is a
+  kind lookup now, list-ness intentional rather than guessed. Still
+  standing from that round: a reserved swap-in empty-list IDENTITY
+  stays rejected, because lists are nodes and nodes are shared, so
+  swapping the value at one referencing edge silently diverges every
+  other reference.
 - Moving an element mints a fresh position, so bucket identity does
   not travel with it structurally the way a rewired cons cell could
   have. The answer is the path-rewrite mechanism, not structure: a
@@ -704,7 +925,10 @@ atoms) — its old parent-targeting was a stopgap for lists, which the
 real gestures replace. (3) Enter on a node-valued element pends a
 sibling, not a field on it — fields on elements take Cmd+Enter.
 Name-awareness was deliberately left out: it is its own convention
-layer, not part of this one.
+layer, not part of this one. (Recognition superseded 2026-07-09:
+lists joined the data model, so `list_shaped` is a kind lookup, the
+partition's fields side became unrepresentable and was deleted, and
+lists carry no name edge — see Lists.)
 
 The convention knows its own node (2026-07-08, user-reported: File >
 New, make a named node, and the graph view showed `…fed8` pills —
@@ -734,9 +958,13 @@ with no flags anywhere — editors don't mount, deletes decline,
 write-through drops. Fallback is per ENTITY, never per edge (user:
 an edge-level merge tempts inheritance at the data layer; semantics
 like that belong above the substrate). `conventions::library()` names
-the well-known ids — name, and the node/string/number/position space
-nodes, so unknown-space values read `number a3f2…` — replacing the
-hardcoded NAME fallback with data. Completion sweeps both layers, so
+the well-known ids, replacing the hardcoded NAME fallback with data.
+A first cut also named the four identity-space uuids; removed the
+same day (user: spaces are the id MECHANISM, external to the graph —
+not graph vocabulary). An `isa`/`List` pair minted in their place for
+the 2026-07-06 empty-list marker lived one uncommitted day before
+lists joined the data model (2026-07-09, see Lists) and shrank the
+library back to `name`. Completion sweeps both layers, so
 the conventions are typeable from keystroke one and picking "name"
 yields the NAME node rather than a lookalike string label (the fresh-
 document trap). The graph pane's SNAPSHOT stays document-only —
@@ -845,6 +1073,27 @@ Enter on the last element; `pending_into` is parked for its return.
 No carve-outs remain: element-vs-field behavior follows position
 uniformly for atoms and nodes alike.
 
+Amended when lists joined the data model (2026-07-09, see Lists): a
+list holds no fields, so "within" on a list means its elements —
+Cmd+Enter appends (the parked `pending_into` returned for exactly
+this), Cmd+Shift+Enter still prepends, and the field pending
+declines lists outright (`pending_edge` gates on kind, so committing
+can never hit the data layer's kind panic). Enter on a root list
+falls within the same way: append, where a map root takes a field on
+itself. List metadata via fields is gone with the mixed entity —
+metadata belongs on a wrapping map or the referencing edge. (The
+empty-node-becomes-list arm of the shift chord died the same evening
+with the typed model — lists begin as the "new list" completion
+offer; see Data Layer v2.) The
+name machinery came out of `list_view` the same day (user: lists
+won't have names; remove what assumes they will) — the list header
+is always the short id, and the inline literal never leads with a
+name. Completion's "new list" was re-cut from an always-trailing
+offer to a RANKED entry (user): it competes under its own display
+text like any reference — type toward it and it surfaces (a "new
+li" prefix match leads), type away and it leaves — so the popup
+carries no permanent extra row, easing the parked noise budget.
+
 Gestures REASSIGNED 2026-07-08 after real use (user: Enter on a node
 element should add an edge to IT — and "cmd+enter doing the list
 thing" was their original instinct, which the brief had flipped).
@@ -947,6 +1196,24 @@ short id only; and the list GESTURES stay live (Enter beside an
 element still mints a position) — gestures follow the document's
 shape, not the view.
 
+Redrawn when lists joined the data model (2026-07-09, user call):
+lists render as lists in Raw too, brackets and dashes intact,
+because kind is data, not convention; flattening a list to position
+rows would be showing session-minted artifacts the file doesn't even
+contain. Shape settled the same day (user): Raw is ONE BIT of view
+state, threaded as itself — `Cx.raw`, and the same bit into the
+graph pane and completion — with every name lookup DERIVING from it
+(`Cx::name` answers None when raw; the graph's `content` and
+completion's keys gate the same way). A first cut instead deleted
+the flag and swapped `Names::none()` in at the shell; the user
+called both halves: deleting was premature (domain projections will
+stand down through this bit when they arrive), and the swap made
+"which names function is active" a second piece of state — the
+names function should be a function of the bit. `Names::none()` is
+gone with the swap. An even-rawer all-space-and-bytes inspection
+view (positions visible) remains a separate hypothetical, as the
+module doc always framed it.
+
 ## Graph View
 
 For demos on small graphs (2026-07-07), carried from the
@@ -1007,8 +1274,15 @@ PinchGesture, handled outside the reducer, which doesn't cover
 gestures), and wheel lines zoom toward the cursor; text re-lays-out
 at the zoomed size, so it stays crisp rather than scaling glyphs.
 Scroll over the panel routes to the graph ahead of the document.
-Still scoped out: position continuity across identity changes (the
-Haskell spot-transfer).
+List edges (2026-07-09, with lists in the data model): the pill
+shows the element's 1-BASED ORDINAL, dim like the tree's dashes —
+the order is the data; the position bytes are its session spelling
+and stay out of view here as everywhere. Computed per source from
+the snapshot's sorted position labels; selection and deletion still
+key by the real label underneath. List NODES draw square-cornered
+where maps stay rounded (user suggestion, same day) — kind is data,
+worth a silhouette. Still scoped out: position
+continuity across identity changes (the Haskell spot-transfer).
 
 ## Types And Autocomplete
 

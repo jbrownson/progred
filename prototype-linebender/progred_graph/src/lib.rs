@@ -1,9 +1,10 @@
 mod gid;
-mod id;
 mod mutgid;
 pub mod position;
+mod value;
 
 pub use gid::Gid;
-pub use id::{Id, NODE_SPACE, NUMBER_SPACE, NodeId, STRING_SPACE, new_node_id};
 pub use mutgid::MutGid;
+pub use position::Position;
+pub use value::{Atom, NodeId, Number, Step, Value, new_node_id};
 pub use uuid::Uuid;

@@ -11,7 +11,7 @@
 
 use crate::raw::Document;
 use im::HashMap;
-use progred_graph::{Gid, Id, MutGid, NodeId};
+use progred_graph::{Atom, Gid, MutGid, NodeId, Step, Value};
 
 #[derive(Clone, Copy)]
 pub struct Sources<'a> {
@@ -20,27 +20,30 @@ pub struct Sources<'a> {
 }
 
 impl<'a> Sources<'a> {
-    pub fn edges(&self, entity: &Id) -> Option<&'a HashMap<Id, Id>> {
+    pub fn edges(&self, entity: NodeId) -> Option<&'a HashMap<Atom, Value>> {
         self.doc
             .gid
             .edges(entity)
             .or_else(|| self.library.edges(entity))
     }
 
-    pub fn get(&self, entity: &Id, label: &Id) -> Option<&'a Id> {
-        self.edges(entity)?.get(label)
+    pub fn get(&self, entity: NodeId, key: &Atom) -> Option<&'a Value> {
+        self.edges(entity)?.get(key)
     }
 
-    pub fn root(&self) -> Option<&'a Id> {
+    pub fn root(&self) -> Option<&'a Value> {
         self.doc.root.as_ref()
     }
 
-    /// The value at `path`, following each label from the root —
-    /// through both sides, so navigation reaches what presentation
-    /// shows. Writes gate separately, on entity authority.
-    pub fn resolve(&self, path: &[Id]) -> Option<&'a Id> {
-        path.iter()
-            .try_fold(self.root()?, |node, label| self.get(node, label))
+    /// The value at `path`, following each step from the root — key
+    /// steps through entities (both sides, so navigation reaches
+    /// what presentation shows), element steps into list values.
+    /// Writes gate separately, on entity authority.
+    pub fn resolve(&self, path: &[Step]) -> Option<&'a Value> {
+        path.iter().try_fold(self.root()?, |value, step| match step {
+            Step::Key(key) => self.get(value.as_node()?, key),
+            Step::Element(position) => value.as_list()?.get(position),
+        })
     }
 
     /// Every entity either side describes; shadowed duplicates are
@@ -54,13 +57,13 @@ impl<'a> Sources<'a> {
     /// on their own ground and decline authoring; a document that
     /// takes the entity over (a fork — copy/paste's job) is the
     /// authority again.
-    pub fn external(&self, entity: &Id) -> bool {
+    pub fn external(&self, entity: NodeId) -> bool {
         self.doc.gid.edges(entity).is_none() && self.library.edges(entity).is_some()
     }
 
     /// Whether writes may target the entity: the document is the
     /// authority, or nobody is (fresh nodes).
-    pub fn writable(&self, entity: &Id) -> bool {
+    pub fn writable(&self, entity: NodeId) -> bool {
         !self.external(entity)
     }
 }
@@ -78,33 +81,27 @@ mod tests {
     fn the_document_shadows_the_library_per_entity() {
         let entity = new_node_id();
         let mut library = MutGid::new();
-        library.set(entity, Id::from("a"), Id::from(1.0));
-        library.set(entity, Id::from("b"), Id::from(2.0));
+        library.set(entity, Atom::from("a"), Value::from(1.0));
+        library.set(entity, Atom::from("b"), Value::from(2.0));
 
         let doc = doc_of(MutGid::new());
         let sources = Sources {
             doc: &doc,
             library: &library,
         };
-        assert_eq!(
-            sources.get(&Id::from(entity), &Id::from("a")),
-            Some(&Id::from(1.0))
-        );
+        assert_eq!(sources.get(entity, &Atom::from("a")), Some(&Value::from(1.0)));
 
         // One document edge takes over the whole entity — no
         // edge-level merge, so the library's `b` is gone too.
         let mut gid = MutGid::new();
-        gid.set(entity, Id::from("a"), Id::from(9.0));
+        gid.set(entity, Atom::from("a"), Value::from(9.0));
         let doc = doc_of(gid);
         let sources = Sources {
             doc: &doc,
             library: &library,
         };
-        assert_eq!(
-            sources.get(&Id::from(entity), &Id::from("a")),
-            Some(&Id::from(9.0))
-        );
-        assert_eq!(sources.get(&Id::from(entity), &Id::from("b")), None);
+        assert_eq!(sources.get(entity, &Atom::from("a")), Some(&Value::from(9.0)));
+        assert_eq!(sources.get(entity, &Atom::from("b")), None);
     }
 
     #[test]
@@ -112,30 +109,63 @@ mod tests {
         let lib_entity = new_node_id();
         let doc_entity = new_node_id();
         let mut library = MutGid::new();
-        library.set(lib_entity, Id::from("a"), Id::from(1.0));
+        library.set(lib_entity, Atom::from("a"), Value::from(1.0));
         let mut gid = MutGid::new();
-        gid.set(doc_entity, Id::from("a"), Id::from(1.0));
+        gid.set(doc_entity, Atom::from("a"), Value::from(1.0));
 
         let doc = doc_of(gid.clone());
         let sources = Sources {
             doc: &doc,
             library: &library,
         };
-        assert!(sources.external(&Id::from(lib_entity)));
-        assert!(!sources.writable(&Id::from(lib_entity)));
-        assert!(!sources.external(&Id::from(doc_entity)));
-        // Atoms have no edges anywhere; never external.
-        assert!(!sources.external(&Id::from(1.0)));
+        assert!(sources.external(lib_entity));
+        assert!(!sources.writable(lib_entity));
+        assert!(!sources.external(doc_entity));
 
         // A fork — the document taking the entity over — ends the
         // library's authority.
-        gid.set(lib_entity, Id::from("mine"), Id::from(2.0));
+        gid.set(lib_entity, Atom::from("mine"), Value::from(2.0));
         let doc = doc_of(gid);
         let sources = Sources {
             doc: &doc,
             library: &library,
         };
-        assert!(!sources.external(&Id::from(lib_entity)));
-        assert!(sources.writable(&Id::from(lib_entity)));
+        assert!(!sources.external(lib_entity));
+        assert!(sources.writable(lib_entity));
+    }
+
+    #[test]
+    fn resolve_walks_keys_and_elements() {
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        gid.set(
+            root,
+            Atom::from("items"),
+            Value::list([Value::from(1.0), Value::from("two")]),
+        );
+        let doc = Document {
+            root: Some(Value::from(root)),
+            gid,
+        };
+        let library = MutGid::new();
+        let sources = Sources {
+            doc: &doc,
+            library: &library,
+        };
+
+        let items = sources.resolve(&[Step::Key(Atom::from("items"))]).unwrap();
+        let positions: Vec<_> = items.as_list().unwrap().keys().cloned().collect();
+        let path = vec![
+            Step::Key(Atom::from("items")),
+            Step::Element(positions[1].clone()),
+        ];
+        assert_eq!(sources.resolve(&path), Some(&Value::from("two")));
+        // A dangling element is the stale-path class: None, not a
+        // panic.
+        let gone = progred_graph::position::between(Some(&positions[1]), None).unwrap();
+        assert_eq!(
+            sources.resolve(&[Step::Key(Atom::from("items")), Step::Element(gone)]),
+            None
+        );
     }
 }

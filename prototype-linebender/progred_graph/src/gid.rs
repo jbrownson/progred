@@ -1,21 +1,19 @@
-use crate::id::Id;
+use crate::value::{Atom, NodeId, Value};
 use im::HashMap;
 
+/// The entity-reading interface: what a stored or computed entity
+/// answers. `MutGid` is the stored implementor; computed entities are
+/// the anticipated other.
 pub trait Gid {
-    fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>>;
+    fn edges(&self, entity: NodeId) -> Option<&HashMap<Atom, Value>>;
 
-    fn get(&self, entity: &Id, label: &Id) -> Option<&Id> {
-        self.edges(entity)?.get(label)
+    fn get(&self, entity: NodeId, key: &Atom) -> Option<&Value> {
+        self.edges(entity)?.get(key)
     }
 }
 
 impl<T: Gid + ?Sized> Gid for &T {
-    fn edges(&self, entity: &Id) -> Option<&HashMap<Id, Id>> {
+    fn edges(&self, entity: NodeId) -> Option<&HashMap<Atom, Value>> {
         (**self).edges(entity)
     }
 }
-
-// StackedGid (a Gid-implementing document-over-library merge) lived
-// here through 2026-07-08; retired for the editor's explicit
-// `Sources` — a combined view that masquerades as one graph erases
-// the provenance the editor then has to bolt back on.

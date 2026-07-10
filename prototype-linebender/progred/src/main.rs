@@ -16,7 +16,7 @@ use std::sync::Arc;
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
-use progred_graph::Id;
+use progred_graph::{Step, Value};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditState};
 use puri::handler::{Handler, HasHandler, ImeEvent};
@@ -112,8 +112,8 @@ struct MenuItems {
 #[derive(Clone, Copy)]
 struct ViewFlags {
     graph: bool,
-    /// Convention layers off: names and the list projection stand
-    /// down, showing the document as the pure graph it is.
+    /// The one Raw bit: convention layers derive from it — names
+    /// answer bare identities. Lists stay lists; kind is data.
     raw: bool,
 }
 
@@ -601,7 +601,7 @@ impl Model {
     }
 
     /// The graph-selected node, for the tree's secondary marks.
-    fn graph_node(&self) -> Option<&Id> {
+    fn graph_node(&self) -> Option<&Value> {
         match self.graph_selection() {
             Some(graph_view::GraphSelection::Node(id)) => Some(id),
             _ => None,
@@ -1074,11 +1074,20 @@ impl App {
             })
     }
 
-    /// Commits a pointed-at identity into the open pending — the
+    /// Commits a pointed-at value into the open pending — the
     /// command-click gesture. A value-stage pending commits and
     /// selects the edge; a label stage advances to its value stage.
-    /// False when nothing is pending, so the click falls through.
-    fn pick_identity(&mut self, id: Id) -> bool {
+    /// False when nothing is pending — or when a list is picked at
+    /// the label stage, which only atoms fit — so the click falls
+    /// through rather than spending the pending.
+    fn pick_identity(&mut self, id: Value) -> bool {
+        if matches!(
+            self.model.selection,
+            Some(Selected::Tree(raw::Selection::PendingEdge { .. }))
+        ) && id.as_atom().is_none()
+        {
+            return false;
+        }
         match self.model.selection.take() {
             Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
                 self.commit_value(path, &raw::EntryAction::Value(id));
@@ -1111,7 +1120,11 @@ impl App {
     /// new-node label writes its name: an undo step.
     fn commit_label(&mut self, parent: raw::Path, action: &raw::EntryAction) {
         let before = self.model.doc.clone();
-        let label = raw::resolve_entry(&mut self.model.doc, action);
+        let label = match raw::resolve_entry(&mut self.model.doc, action) {
+            Value::Atom(atom) => atom,
+            // The label stage offers atoms only; nothing else arrives.
+            Value::List(_) => return,
+        };
         // Only a NAMED mint writes an edge; an unnamed one is just a
         // fresh id, no mutation to record.
         if matches!(action, raw::EntryAction::NewNode { name: Some(_) }) {
@@ -1119,7 +1132,7 @@ impl App {
             self.refresh_title();
         }
         let mut path = parent;
-        path.push(label);
+        path.push(Step::Key(label));
         self.model.selection = Some(Selected::Tree(
             match self.model.sources().resolve(&path) {
                 Some(_) => raw::Selection::edge(&self.model.sources(), path),
@@ -1133,10 +1146,10 @@ impl App {
     /// sibling element in a list (Shift+Enter before), a new field on
     /// the parent record otherwise; the root has nothing beside it
     /// and takes the field on itself. The command chord authors
-    /// WITHIN the selection: a field edge on the selected node — or,
-    /// with Shift, a first element at the front, which is how lists
-    /// begin. Labels author first, then values; list elements are
-    /// one-stage value pendings, the projection minting the position.
+    /// WITHIN the selection: a field edge on the selected node, an
+    /// appended element on a list (with Shift, at the front). Labels
+    /// author first, then values; list elements are one-stage value
+    /// pendings, the projection minting the position.
     /// On an empty document Enter begins the root value. Escape
     /// clears the selection from anywhere, discarding any pending
     /// with the graph untouched; Backspace on an empty query cancels
@@ -1402,18 +1415,16 @@ fn run_frame(
         scale: scale as f32,
     };
     let styles = raw::RawStyles::new(scale);
-    // The Raw view stands the convention layers down for this frame:
-    // names answer None and the list projection is bypassed. The
-    // model's configured policy is untouched underneath.
-    let none = conventions::Names::none();
-    let names = if view.raw { &none } else { &model.names };
+    // The Raw view is ONE bit, threaded as itself: name lookups
+    // derive from it downstream, no policy swapped here, and the
+    // model's configured policy rides along untouched.
     let sources = model.sources();
     let body = raw::project(
         &sources,
         model.tree_selection(),
         model.graph_node(),
         &model.collapse,
-        names,
+        &model.names,
         view.raw,
         &mut tcx,
         &styles,
@@ -1496,7 +1507,8 @@ fn run_frame(
             &model.graph,
             model.graph_selection(),
             model.tree_selection(),
-            names,
+            &model.names,
+            view.raw,
             &mut tcx,
             panel,
             &graph_view::Hooks {

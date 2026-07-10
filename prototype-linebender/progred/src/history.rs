@@ -85,22 +85,26 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Id, MutGid, new_node_id};
+    use progred_graph::{Atom, MutGid, Step, Value, new_node_id};
+
+    fn x() -> Step {
+        Step::Key(Atom::from("x"))
+    }
 
     fn doc(value: f64) -> Document {
         let mut gid = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("x"), Id::from(value));
+        gid.set(node, Atom::from("x"), Value::from(value));
         Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         }
     }
 
-    fn x_of(doc: &Document) -> Id {
+    fn x_of(doc: &Document) -> Value {
         let lib = MutGid::new();
         crate::sources::Sources { doc, library: &lib }
-            .resolve(&[Id::from("x")])
+            .resolve(&[x()])
             .unwrap()
             .clone()
     }
@@ -108,22 +112,22 @@ mod tests {
     #[test]
     fn undo_and_redo_roundtrip_with_selection() {
         let mut history = History::default();
-        let path = vec![Id::from("x")];
+        let path = vec![x()];
         history.record(doc(1.0), Some(path.clone()));
 
         let (back, selection) = history.undo(doc(2.0), None).unwrap();
-        assert_eq!(x_of(&back), Id::from(1.0));
+        assert_eq!(x_of(&back), Value::from(1.0));
         assert_eq!(selection, Some(path));
 
         let (forward, _) = history.redo(back, selection).unwrap();
-        assert_eq!(x_of(&forward), Id::from(2.0));
+        assert_eq!(x_of(&forward), Value::from(2.0));
         assert!(history.redo(doc(9.9), None).is_none());
     }
 
     #[test]
     fn recording_clears_redo() {
         let mut history = History::default();
-        let x = vec![Id::from("x")];
+        let x = vec![x()];
         history.record(doc(1.0), Some(x.clone()));
         let (back, _) = history.undo(doc(1.5), Some(x.clone())).unwrap();
         history.record(back, Some(x));
@@ -134,7 +138,7 @@ mod tests {
     fn dirty_is_position_relative_to_the_save_mark() {
         let mut history = History::default();
         assert!(!history.dirty());
-        let x = vec![Id::from("x")];
+        let x = vec![x()];
         history.record(doc(1.0), Some(x.clone()));
         assert!(history.dirty());
 

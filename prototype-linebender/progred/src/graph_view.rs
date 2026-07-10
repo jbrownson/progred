@@ -1,20 +1,21 @@
 //! The graph view: the document as spatial nodes and edges, for
-//! demos on small graphs. Every identity that appears as an entity or
-//! a value is a node — atoms included, so a shared `2` is visibly one
-//! node — and every (entity, label, value) is a directed edge with a
-//! label pill. Layout is the force simulation carried from the
-//! TypeScript/egui/Haskell prototypes (same constants), stepped every
-//! frame while the view is open; positions and velocities are
-//! explicit model state, seeded deterministically per id. Rendering
-//! and hit-testing are one pure pass: build geometry from state, draw
-//! it, register handlers over it.
+//! demos on small graphs. Every value that appears as an entity or at
+//! the end of an edge is a node — atoms and lists included, keyed by
+//! value equality, so a shared `2` (or two equal `[2, 3]`s) is
+//! visibly one node — and every (entity, key, value) is a directed
+//! edge with a label pill. Layout is the force simulation carried
+//! from the TypeScript/egui/Haskell prototypes (same constants),
+//! stepped every frame while the view is open; positions and
+//! velocities are explicit model state, seeded deterministically per
+//! value. Rendering and hit-testing are one pure pass: build geometry
+//! from state, draw it, register handlers over it.
 
 use crate::conventions::Names;
-use crate::raw::{Document, Selection, command, hex, short_id};
+use crate::raw::{Document, Selection, command, short_id};
 use crate::sources::Sources;
 use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};
-use progred_graph::{Gid, Id, NodeId, position};
+use progred_graph::{Atom, Gid, NodeId, Value};
 use puri::draw::Canvas;
 use puri::handler::HasHandler;
 use puri::layout::{Extent, Node, leaf};
@@ -41,8 +42,8 @@ pub fn panel(width: f64, height: f64) -> Rect {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum GraphSelection {
-    Node(Id),
-    Edge { source: Id, label: Id },
+    Node(Value),
+    Edge { source: NodeId, label: Atom },
 }
 
 /// An in-progress drag: a node being moved (with where the pointer
@@ -51,7 +52,7 @@ pub enum GraphSelection {
 /// a click, reported through [`Release`].
 enum Drag {
     Node {
-        node: Id,
+        node: Value,
         grab: Vec2,
         pressed: Point,
         moved: bool,
@@ -67,8 +68,8 @@ enum Drag {
 /// velocities, the viewport (world-space pan, zoom), and any drag in
 /// progress. Selection lives in the shell's one slot, not here.
 pub struct GraphView {
-    positions: HashMap<Id, Point>,
-    velocities: HashMap<Id, Vec2>,
+    positions: HashMap<Value, Point>,
+    velocities: HashMap<Value, Vec2>,
     drag: Option<Drag>,
     pan: Vec2,
     zoom: f64,
@@ -91,40 +92,39 @@ impl Default for GraphView {
 /// turn into a selection change.
 pub enum Release {
     Drag,
-    ClickNode(Id),
+    ClickNode(Value),
     ClickBackground,
 }
 
 struct Snapshot {
-    nodes: Vec<Id>,
-    edges: Vec<(Id, Id, Id)>,
+    nodes: Vec<Value>,
+    edges: Vec<(NodeId, Atom, Value)>,
 }
 
-/// Every identity in the document: entities plus every edge value.
-/// Labels appear on edge pills, not as nodes.
+/// Every value in the document: entities plus every edge value.
+/// Keys appear on edge pills, not as nodes.
 fn snapshot(doc: &Document) -> Snapshot {
-    let mut nodes: Vec<Id> = Vec::new();
+    let mut nodes: Vec<Value> = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    let mut add = |nodes: &mut Vec<Id>, id: &Id| {
-        if seen.insert(id.clone()) {
-            nodes.push(id.clone());
+    let mut add = |nodes: &mut Vec<Value>, value: &Value| {
+        if seen.insert(value.clone()) {
+            nodes.push(value.clone());
         }
     };
     let mut edges = Vec::new();
     let mut entities: Vec<NodeId> = doc.gid.entities().copied().collect();
     entities.sort();
     for entity in entities {
-        let source = Id::from(entity);
-        add(&mut nodes, &source);
-        let mut outgoing: Vec<(Id, Id)> = doc
+        add(&mut nodes, &Value::from(entity));
+        let mut outgoing: Vec<(Atom, Value)> = doc
             .gid
-            .edges(&source)
+            .edges(entity)
             .map(|edges| edges.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
             .unwrap_or_default();
         outgoing.sort();
-        for (label, value) in outgoing {
+        for (key, value) in outgoing {
             add(&mut nodes, &value);
-            edges.push((source.clone(), label, value));
+            edges.push((entity, key, value));
         }
     }
     if let Some(root) = &doc.root {
@@ -133,16 +133,42 @@ fn snapshot(doc: &Document) -> Snapshot {
     Snapshot { nodes, edges }
 }
 
-/// FNV-1a over the id's stable bytes, for deterministic seeding.
-fn id_hash(id: &Id) -> u32 {
+/// FNV-1a over the value's structure, for deterministic seeding.
+/// Positions are ignored, like every other reading of a list.
+fn id_hash(value: &Value) -> u32 {
+    fn eat(hash: &mut u32, byte: u8) {
+        *hash = (*hash ^ u32::from(byte)).wrapping_mul(16_777_619);
+    }
+    fn walk(hash: &mut u32, value: &Value) {
+        match value {
+            Value::Atom(Atom::Node(node)) => {
+                eat(hash, 0);
+                for byte in node.as_bytes() {
+                    eat(hash, *byte);
+                }
+            }
+            Value::Atom(Atom::String(s)) => {
+                eat(hash, 1);
+                for byte in s.as_bytes() {
+                    eat(hash, *byte);
+                }
+            }
+            Value::Atom(Atom::Number(n)) => {
+                eat(hash, 2);
+                for byte in n.get().to_le_bytes() {
+                    eat(hash, byte);
+                }
+            }
+            Value::List(elements) => {
+                eat(hash, 3);
+                for element in elements.values() {
+                    walk(hash, element);
+                }
+            }
+        }
+    }
     let mut hash: u32 = 2_166_136_261;
-    let mut eat = |byte: u8| hash = (hash ^ u32::from(byte)).wrapping_mul(16_777_619);
-    for byte in id.space().as_bytes() {
-        eat(*byte);
-    }
-    for byte in id.payload() {
-        eat(*byte);
-    }
+    walk(&mut hash, value);
     hash
 }
 
@@ -185,13 +211,13 @@ impl GraphView {
                 self.velocities.insert(id.clone(), Vec2::ZERO);
             }
         }
-        let keep: std::collections::HashSet<&Id> = snapshot.nodes.iter().collect();
+        let keep: std::collections::HashSet<&Value> = snapshot.nodes.iter().collect();
         self.positions.retain(|id, _| keep.contains(id));
         self.velocities.retain(|id, _| keep.contains(id));
     }
 
-    fn forces(&self, snapshot: &Snapshot) -> HashMap<Id, Vec2> {
-        let mut forces: HashMap<Id, Vec2> =
+    fn forces(&self, snapshot: &Snapshot) -> HashMap<Value, Vec2> {
+        let mut forces: HashMap<Value, Vec2> =
             snapshot.nodes.iter().map(|id| (id.clone(), Vec2::ZERO)).collect();
         let unit = |delta: Vec2| {
             let length = delta.hypot();
@@ -212,12 +238,13 @@ impl GraphView {
             }
         }
         for (source, _, target) in &snapshot.edges {
-            let delta = self.positions[target] - self.positions[source];
+            let source = Value::from(*source);
+            let delta = self.positions[target] - self.positions[&source];
             let distance = delta.hypot().max(0.1);
             let magnitude =
                 (ATTRACTION_K * (distance - REST_LENGTH)).clamp(-MAX_FORCE, MAX_FORCE);
             let force = unit(delta) * magnitude;
-            *forces.get_mut(source).unwrap() += force;
+            *forces.get_mut(&source).unwrap() += force;
             *forces.get_mut(target).unwrap() -= force;
         }
         for id in &snapshot.nodes {
@@ -228,7 +255,7 @@ impl GraphView {
 
     /// `grab` is the world offset from the node position to the
     /// pointer; `pressed` is in panel pixels, for the click slop.
-    pub fn press_node(&mut self, node: Id, grab: Vec2, pressed: Point) {
+    pub fn press_node(&mut self, node: Value, grab: Vec2, pressed: Point) {
         self.drag = Some(Drag::Node {
             node,
             grab,
@@ -340,49 +367,68 @@ impl GraphView {
 
 }
 
+/// The value with every occurrence of `target` removed: a match
+/// removes the value itself (None), a list drops matching elements
+/// and purges the rest recursively — lists are values, so detaching
+/// reaches inside them.
+fn without(value: &Value, target: &Value) -> Option<Value> {
+    if value == target {
+        return None;
+    }
+    match value {
+        Value::Atom(_) => Some(value.clone()),
+        Value::List(elements) => Some(Value::List(
+            elements
+                .iter()
+                .filter_map(|(position, element)| {
+                    without(element, target).map(|element| (position.clone(), element))
+                })
+                .collect(),
+        )),
+    }
+}
+
 /// Deletes the selection from the graph: an edge is one detachment; a
 /// node is fully detached — the root cleared if it is the root, every
-/// outgoing edge removed, and every edge anywhere targeting it
-/// removed. Unreferenced values simply stop appearing.
+/// outgoing edge removed, and every occurrence anywhere as or inside
+/// an edge value removed. Unreferenced values simply stop appearing.
 pub fn delete_selection(doc: &mut Document, selection: &GraphSelection) -> bool {
     let before = doc.gid.clone();
     let before_root = doc.root.clone();
     match selection {
         GraphSelection::Edge { source, label } => {
-            if let Some(entity) = source.as_node_id() {
-                doc.gid.delete(&entity, label);
-            }
+            doc.gid.delete(*source, label);
         }
         GraphSelection::Node(id) => {
-            if doc.root.as_ref() == Some(id) {
-                doc.root = None;
-            }
-            if let Some(entity) = id.as_node_id() {
-                let outgoing: Vec<Id> = doc
+            doc.root = doc.root.take().and_then(|root| without(&root, id));
+            if let Some(entity) = id.as_node() {
+                let outgoing: Vec<Atom> = doc
                     .gid
-                    .edges(id)
+                    .edges(entity)
                     .map(|edges| edges.keys().cloned().collect())
                     .unwrap_or_default();
-                for label in outgoing {
-                    doc.gid.delete(&entity, &label);
+                for key in outgoing {
+                    doc.gid.delete(entity, &key);
                 }
             }
-            let incoming: Vec<(NodeId, Id)> = doc
-                .gid
-                .entities()
-                .flat_map(|entity| {
-                    let source = Id::from(*entity);
-                    doc.gid
-                        .edges(&source)
-                        .into_iter()
-                        .flatten()
-                        .filter(|(_, value)| *value == id)
-                        .map(|(label, _)| (*entity, label.clone()))
-                        .collect::<Vec<_>>()
-                })
-                .collect();
-            for (source, label) in incoming {
-                doc.gid.delete(&source, &label);
+            let entities: Vec<NodeId> = doc.gid.entities().copied().collect();
+            for entity in entities {
+                let touched: Vec<(Atom, Option<Value>)> = doc
+                    .gid
+                    .edges(entity)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|(key, value)| {
+                        let next = without(value, id);
+                        (next.as_ref() != Some(value)).then(|| (key.clone(), next))
+                    })
+                    .collect();
+                for (key, next) in touched {
+                    match next {
+                        Some(next) => doc.gid.set(entity, key, next),
+                        None => doc.gid.delete(entity, &key),
+                    }
+                }
             }
         }
     }
@@ -393,15 +439,15 @@ pub fn delete_selection(doc: &mut Document, selection: &GraphSelection) -> bool 
 /// the pane reports what happened in world coordinates; the shell
 /// owns the transitions.
 pub struct Hooks<C> {
-    pub press_node: Rc<dyn Fn(&mut C, Id, Vec2, Point)>,
-    pub press_edge: Rc<dyn Fn(&mut C, Id, Id)>,
+    pub press_node: Rc<dyn Fn(&mut C, Value, Vec2, Point)>,
+    pub press_edge: Rc<dyn Fn(&mut C, NodeId, Atom)>,
     pub press_background: Rc<dyn Fn(&mut C, Point)>,
     /// (world point, window point, panel pixels per world unit).
     pub drag_to: Rc<dyn Fn(&mut C, Point, Point, f64) -> bool>,
     pub release: Rc<dyn Fn(&mut C) -> bool>,
-    /// Command-click: commit the pointed-at identity into the open
+    /// Command-click: commit the pointed-at value into the open
     /// pending; false when nothing is pending.
-    pub pick: Rc<dyn Fn(&mut C, Id) -> bool>,
+    pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
 }
 
 const FONT_SIZE: f32 = 10.0;
@@ -434,11 +480,13 @@ const NUMBER_TEXT: [f32; 4] = [0.16, 0.40, 0.62, 1.0];
 const DIM_TEXT: [f32; 4] = [0.55, 0.58, 0.64, 1.0];
 
 struct NodeView {
-    id: Id,
+    id: Value,
     rect: Rect,
     content: Layout<Brush>,
     root: bool,
     external: bool,
+    /// Lists draw square-cornered; kind is data, worth a silhouette.
+    list: bool,
     strength: Strength,
 }
 
@@ -450,8 +498,8 @@ enum Strength {
 }
 
 struct EdgeView {
-    source: Id,
-    label: Id,
+    source: NodeId,
+    label: Atom,
     path: BezPath,
     arrow: BezPath,
     pill: Rect,
@@ -480,33 +528,35 @@ fn layout_text(
     layout
 }
 
-/// What an identity looks like in the graph: named nodes show their
-/// name (through the editor's one name policy), unnamed ones their
-/// short id, atoms their value — the same identity language as the
-/// tree view.
+/// What a value looks like in the graph: named nodes show their name
+/// (through the editor's one name policy, derived from the raw bit),
+/// unnamed ones their short id, atoms their value, lists their inline
+/// literal — the same identity language as the tree view.
 fn content(
     sources: &Sources,
     names: &Names,
-    id: &Id,
+    raw: bool,
+    value: &Value,
     tcx: &mut TextCtx,
     zoom: f64,
 ) -> Layout<Brush> {
     let size = FONT_SIZE * zoom as f32;
     let ui = GenericFamily::SystemUi;
     let mono = GenericFamily::Monospace;
-    if let Some(s) = id.as_str() {
-        layout_text(tcx, &format!("\"{s}\""), size, STRING_TEXT, ui)
-    } else if let Some(n) = id.as_number() {
-        layout_text(tcx, &n.to_string(), size, NUMBER_TEXT, ui)
-    } else if let Some(node) = id.as_node_id() {
-        match names.of(sources, id) {
-            Some(name) => layout_text(tcx, &name.text, size, TEXT, ui),
-            None => layout_text(tcx, &short_id(node), size, DIM_TEXT, mono),
+    match value {
+        Value::Atom(Atom::String(s)) => {
+            layout_text(tcx, &format!("\"{s}\""), size, STRING_TEXT, ui)
         }
-    } else if let Some(bytes) = position::as_position(id) {
-        layout_text(tcx, &hex(bytes), size, DIM_TEXT, mono)
-    } else {
-        layout_text(tcx, &hex(id.payload()), size, DIM_TEXT, mono)
+        Value::Atom(Atom::Number(n)) => {
+            layout_text(tcx, &n.get().to_string(), size, NUMBER_TEXT, ui)
+        }
+        Value::Atom(Atom::Node(node)) => {
+            match (!raw).then(|| names.of(sources, *node)).flatten() {
+                Some(name) => layout_text(tcx, &name.text, size, TEXT, ui),
+                None => layout_text(tcx, &short_id(*node), size, DIM_TEXT, mono),
+            }
+        }
+        Value::List(_) => layout_text(tcx, &value.to_string(), size, DIM_TEXT, ui),
     }
 }
 
@@ -523,42 +573,41 @@ fn draw_content<P: Canvas>(p: &mut P, layout: &Layout<Brush>, rect: Rect) {
 fn clip_to_rect(from: Point, to: Point, rect: Rect) -> Point {
     let delta = to - from;
     let mut t: f64 = 1.0;
-    if delta.x.abs() > 1e-9 {
+    if delta.x.abs() > 1e-6 {
         t = t.min((rect.width() / 2.0) / delta.x.abs());
     }
-    if delta.y.abs() > 1e-9 {
+    if delta.y.abs() > 1e-6 {
         t = t.min((rect.height() / 2.0) / delta.y.abs());
     }
-    from + delta * t.min(1.0)
+    from + delta * t
 }
 
-fn quadratic_point(p0: Point, c: Point, p1: Point, t: f64) -> Point {
+fn quadratic_point(a: Point, control: Point, b: Point, t: f64) -> Point {
     let u = 1.0 - t;
-    Point::new(
-        u * u * p0.x + 2.0 * u * t * c.x + t * t * p1.x,
-        u * u * p0.y + 2.0 * u * t * c.y + t * t * p1.y,
-    )
+    (a.to_vec2() * (u * u) + control.to_vec2() * (2.0 * u * t) + b.to_vec2() * (t * t))
+        .to_point()
 }
 
-fn arrowhead(tip: Point, direction: Vec2, scale: f64) -> BezPath {
-    let unit = if direction.hypot() < 1e-6 {
+fn arrowhead(tip: Point, direction: Vec2, px: f64) -> BezPath {
+    let length = direction.hypot();
+    let dir = if length < 1e-6 {
         Vec2::new(1.0, 0.0)
     } else {
-        direction / direction.hypot()
+        direction / length
     };
-    let normal = Vec2::new(-unit.y, unit.x);
-    let back = tip - unit * (ARROW_LENGTH * scale);
+    let normal = Vec2::new(-dir.y, dir.x);
+    let base = tip - dir * (ARROW_LENGTH * px);
     let mut path = BezPath::new();
-    path.move_to(back + normal * (ARROW_WIDTH * scale));
+    path.move_to(base + normal * (ARROW_WIDTH * px));
     path.line_to(tip);
-    path.line_to(back - normal * (ARROW_WIDTH * scale));
+    path.line_to(base - normal * (ARROW_WIDTH * px));
     path
 }
 
-/// The graph pane: geometry built from explicit state, drawn and
-/// hit-tested in one pass. `panel` is the pane's window rectangle;
-/// world origin maps to its center.
-// The explicit-state boundary: everything a pass reads arrives here.
+/// One pure pass: geometry from state, drawing, handlers. The pane
+/// reports presses/drags/releases through hooks; the shell owns every
+/// transition. `doc_selection` mirrors the document selection in as a
+/// secondary mark; `selection` is the graph's own.
 #[allow(clippy::too_many_arguments)]
 pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     sources: &Sources,
@@ -566,6 +615,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     selection: Option<&GraphSelection>,
     doc_selection: Option<&Selection>,
     names: &Names,
+    raw: bool,
     tcx: &mut TextCtx,
     panel: Rect,
     hooks: &Hooks<C>,
@@ -604,7 +654,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         .iter()
         .filter_map(|id| {
             let world = *view.positions.get(id)?;
-            let content = content(sources, names, id, tcx, zoom);
+            let content = content(sources, names, raw, id, tcx, zoom);
             let (w, h) = (f64::from(content.width()), f64::from(content.height()));
             let width = w + 2.0 * NODE_PADDING * px;
             let height = (h + 2.0 * NODE_PADDING * px).max(NODE_MIN_HEIGHT * px);
@@ -621,21 +671,22 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 rect: Rect::from_center_size(at, (width, height)),
                 content,
                 root: doc.root.as_ref() == Some(id),
-                external: sources.external(id),
+                external: id.as_node().is_some_and(|node| sources.external(node)),
+                list: matches!(id, Value::List(_)),
                 strength,
             })
         })
         .collect();
-    let rects: HashMap<&Id, Rect> = node_views
+    let rects: HashMap<&Value, Rect> = node_views
         .iter()
         .map(|node| (&node.id, node.rect))
         .collect();
-    let rect_of = |id: &Id| rects.get(id).copied();
+    let rect_of = |id: &Value| rects.get(id).copied();
 
-    // Parallel edges between the same unordered pair fan out; an
-    // exact bidirectional pair splits evenly.
-    let mut pair_counts: HashMap<(Id, Id), usize> = HashMap::new();
-    let pair = |a: &Id, b: &Id| {
+    // Parallel edges between one pair fan out by index; direction
+    // folded so a->b and b->a share the count.
+    let mut pair_counts: HashMap<(Value, Value), usize> = HashMap::new();
+    let pair = |a: &Value, b: &Value| {
         if a <= b {
             (a.clone(), b.clone())
         } else {
@@ -643,17 +694,18 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         }
     };
     for (source, _, target) in &snapshot.edges {
-        *pair_counts.entry(pair(source, target)).or_default() += 1;
+        *pair_counts.entry(pair(&Value::from(*source), target)).or_default() += 1;
     }
-    let mut pair_seen: HashMap<(Id, Id), usize> = HashMap::new();
+    let mut pair_seen: HashMap<(Value, Value), usize> = HashMap::new();
 
     let edge_views: Vec<EdgeView> = snapshot
         .edges
         .iter()
         .filter_map(|(source, label, target)| {
-            let source_rect = rect_of(source)?;
+            let source_value = Value::from(*source);
+            let source_rect = rect_of(&source_value)?;
             let target_rect = rect_of(target)?;
-            let key = pair(source, target);
+            let key = pair(&source_value, target);
             let total = pair_counts[&key];
             let index = {
                 let seen = pair_seen.entry(key).or_default();
@@ -671,7 +723,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             } else {
                 Strength::None
             };
-            let (path, mid, tip, tip_direction) = if source == target {
+            let (path, mid, tip, tip_direction) = if source_value == *target {
                 // Self-loop: a cubic arch above the node, growing
                 // with its index so stacked loops separate.
                 let top = Point::new(source_rect.center().x, source_rect.y0);
@@ -704,7 +756,8 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 let mid = quadratic_point(start, control, end, 0.5);
                 (path, mid, end, end - control)
             };
-            let pill_content = content(sources, names, label, tcx, zoom);
+            let pill_content =
+                content(sources, names, raw, &Value::Atom(label.clone()), tcx, zoom);
             let (w, h) = (
                 f64::from(pill_content.width()),
                 f64::from(pill_content.height()),
@@ -721,19 +774,21 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             // edge's own value used as a label elsewhere).
             let pill_strength = if strength == Strength::Primary {
                 Strength::Primary
-            } else if secondary.as_ref() == Some(label) {
+            } else if secondary.as_ref() == Some(&Value::Atom(label.clone())) {
                 Strength::Secondary
             } else {
                 Strength::None
             };
             Some(EdgeView {
-                source: source.clone(),
+                source: *source,
                 label: label.clone(),
                 path,
                 arrow: arrowhead(tip, tip_direction, px),
                 pill,
                 pill_content,
-                external: sources.external(label),
+                external: label
+                    .as_node()
+                    .is_some_and(|node| sources.external(node)),
                 strength,
                 pill_strength,
             })
@@ -793,7 +848,8 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 draw_content(p, &edge.pill_content, edge.pill);
             }
             for node in &node_views {
-                let shape = RoundedRect::from_rect(node.rect, 5.0 * px);
+                let radius = if node.list { 0.0 } else { 5.0 };
+                let shape = RoundedRect::from_rect(node.rect, radius * px);
                 let fill = if node.root {
                     ROOT_FILL
                 } else if node.external {
@@ -829,13 +885,13 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         // Hit-testing mirrors draw order back-to-front: pills over
         // nodes, nodes over background; the pane swallows everything
         // inside the panel so nothing lands on the document beneath.
-        let node_hits: Vec<(Rect, Id)> = node_views
+        let node_hits: Vec<(Rect, Value)> = node_views
             .iter()
             .map(|node| (node.rect, node.id.clone()))
             .collect();
-        let pill_hits: Vec<(Rect, Id, Id)> = edge_views
+        let pill_hits: Vec<(Rect, NodeId, Atom)> = edge_views
             .iter()
-            .map(|edge| (edge.pill, edge.source.clone(), edge.label.clone()))
+            .map(|edge| (edge.pill, edge.source, edge.label.clone()))
             .collect();
         let from_panel = move |window: Point| {
             (((window - panel.center()) / px) - pan).to_point()
@@ -851,8 +907,8 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 if let Some((_, source, label)) =
                     pill_hits.iter().find(|(rect, _, _)| rect.contains(point))
                 {
-                    if !(picking && pick(ctx, label.clone())) {
-                        press_edge(ctx, source.clone(), label.clone());
+                    if !(picking && pick(ctx, Value::Atom(label.clone()))) {
+                        press_edge(ctx, *source, label.clone());
                     }
                 } else if let Some((rect, id)) =
                     node_hits.iter().find(|(rect, _)| rect.contains(point))
@@ -888,12 +944,12 @@ mod tests {
         let mut gid = MutGid::new();
         let a = new_node_id();
         let b = new_node_id();
-        gid.set(a, Id::from("to"), Id::from(b));
-        gid.set(a, Id::from("x"), Id::from(2.0));
-        gid.set(b, Id::from("x"), Id::from(2.0));
+        gid.set(a, Atom::from("to"), Value::from(b));
+        gid.set(a, Atom::from("x"), Value::from(2.0));
+        gid.set(b, Atom::from("x"), Value::from(2.0));
         (
             Document {
-                root: Some(Id::from(a)),
+                root: Some(Value::from(a)),
                 gid,
             },
             a,
@@ -902,15 +958,29 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_shares_atom_nodes() {
-        let (doc, a, b) = doc();
-        let snapshot = snapshot(&doc);
+    fn snapshot_shares_value_nodes_lists_included() {
+        let (mut doc, a, b) = doc();
+        let snapshot = super::snapshot(&doc);
         // a, b, and ONE shared node for the number 2.
         assert_eq!(snapshot.nodes.len(), 3);
         assert_eq!(snapshot.edges.len(), 3);
-        assert!(snapshot.nodes.contains(&Id::from(a)));
-        assert!(snapshot.nodes.contains(&Id::from(b)));
-        assert!(snapshot.nodes.contains(&Id::from(2.0)));
+        assert!(snapshot.nodes.contains(&Value::from(a)));
+        assert!(snapshot.nodes.contains(&Value::from(b)));
+        assert!(snapshot.nodes.contains(&Value::from(2.0)));
+
+        // Equal list values are one node too — value semantics
+        // displayed honestly.
+        doc.gid.set(a, Atom::from("p"), Value::list([Value::from(1.0)]));
+        doc.gid.set(b, Atom::from("q"), Value::list([Value::from(1.0)]));
+        let snapshot = super::snapshot(&doc);
+        assert_eq!(
+            snapshot
+                .nodes
+                .iter()
+                .filter(|node| matches!(node, Value::List(_)))
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -921,7 +991,7 @@ mod tests {
             view.step(&doc);
         }
         let distance =
-            (view.positions[&Id::from(a)] - view.positions[&Id::from(b)]).hypot();
+            (view.positions[&Value::from(a)] - view.positions[&Value::from(b)]).hypot();
         assert!(
             distance > REST_LENGTH * 0.3 && distance < REST_LENGTH * 3.0,
             "settled at {distance}"
@@ -929,18 +999,30 @@ mod tests {
     }
 
     #[test]
-    fn deleting_a_node_detaches_it_everywhere() {
+    fn deleting_a_node_detaches_it_everywhere_lists_included() {
         let (mut doc, a, b) = doc();
-        delete_selection(&mut doc, &GraphSelection::Node(Id::from(b)));
-        // b's outgoing edge is gone and a no longer references it.
-        assert!(doc.gid.edges(&Id::from(b)).is_none_or(|edges| edges.is_empty()));
+        // b also referenced from inside a list value and the root list.
+        doc.gid
+            .set(a, Atom::from("refs"), Value::list([Value::from(b), Value::from(1.0)]));
+        doc.root = Some(Value::list([Value::from(a), Value::from(b)]));
+        delete_selection(&mut doc, &GraphSelection::Node(Value::from(b)));
+        // b's outgoing edges are gone, a no longer references it, and
+        // the list occurrences dropped out with order preserved.
+        assert!(doc.gid.edges(b).is_none_or(|edges| edges.is_empty()));
         assert!(
             doc.gid
-                .edges(&Id::from(a))
-                .is_some_and(|edges| !edges.values().any(|value| *value == Id::from(b)))
+                .edges(a)
+                .is_some_and(|edges| !edges.values().any(|value| *value == Value::from(b)))
         );
+        assert_eq!(
+            doc.gid.get(a, &Atom::from("refs")),
+            Some(&Value::list([Value::from(1.0)]))
+        );
+        assert_eq!(doc.root, Some(Value::list([Value::from(a)])));
+
         // Deleting the root also empties the root slot.
-        delete_selection(&mut doc, &GraphSelection::Node(Id::from(a)));
+        doc.root = Some(Value::from(a));
+        delete_selection(&mut doc, &GraphSelection::Node(Value::from(a)));
         assert!(doc.root.is_none());
     }
 
@@ -950,20 +1032,20 @@ mod tests {
         assert!(delete_selection(
             &mut doc,
             &GraphSelection::Edge {
-                source: Id::from(a),
-                label: Id::from("x"),
+                source: a,
+                label: Atom::from("x"),
             },
         ));
-        assert!(doc.gid.get(&Id::from(a), &Id::from("x")).is_none());
-        assert!(doc.gid.get(&Id::from(a), &Id::from("to")).is_some());
+        assert!(doc.gid.get(a, &Atom::from("x")).is_none());
+        assert!(doc.gid.get(a, &Atom::from("to")).is_some());
 
         // A stale selection — the edge already gone — is a no-op, not
         // a recorded change.
         assert!(!delete_selection(
             &mut doc,
             &GraphSelection::Edge {
-                source: Id::from(a),
-                label: Id::from("x"),
+                source: a,
+                label: Atom::from("x"),
             },
         ));
     }
@@ -973,13 +1055,13 @@ mod tests {
         let mut view = GraphView::default();
         assert!(view.release().is_none());
 
-        view.press_node(Id::from(1.0), Vec2::ZERO, Point::ZERO);
+        view.press_node(Value::from(1.0), Vec2::ZERO, Point::ZERO);
         assert!(matches!(
             view.release(),
-            Some(Release::ClickNode(id)) if id == Id::from(1.0)
+            Some(Release::ClickNode(id)) if id == Value::from(1.0)
         ));
 
-        view.press_node(Id::from(1.0), Vec2::ZERO, Point::ZERO);
+        view.press_node(Value::from(1.0), Vec2::ZERO, Point::ZERO);
         view.drag_to(Point::new(50.0, 0.0), Point::new(50.0, 0.0), 1.0);
         assert!(matches!(view.release(), Some(Release::Drag)));
 

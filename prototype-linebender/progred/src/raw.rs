@@ -1,19 +1,14 @@
-//! The raw projection: any gid document rendered as entity blocks of
+//! The raw projection: any document rendered as entity blocks of
 //! edge rows, with no schema — every node is just its short id, every
-//! edge a row, including `name` — plus the first convention-aware
-//! layer over it: the list projection, which claims position-labeled
-//! nodes in the hardcoded `value_view` chain and renders their
-//! elements as bare ordered rows. Known
-//! identity spaces render friendly — strings and numbers as their
-//! values, node ids as git-style suffixes, positions as their payload
-//! hex — and unparsable or unknown ids render as the space-and-bytes
-//! they are (an even rawer all-space-and-bytes inspection view could
-//! exist; raw itself owns friendly renderings for what it knows).
+//! edge a row, including `name` — plus the list projection, which
+//! renders list values as inline literals or dashed element rows.
+//! Atoms render as their values, node ids as git-style suffixes;
+//! positions are session bookkeeping and never render at all.
 
 use crate::conventions::{NAME, Name, Names};
 use crate::filter;
 use crate::sources::Sources;
-use progred_graph::{Id, MutGid, NodeId, new_node_id, position};
+use progred_graph::{Atom, MutGid, NodeId, Position, Step, Value, new_node_id, position};
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
@@ -39,8 +34,8 @@ pub struct RawStyles {
     pub string: TextStyle,
     pub number: TextStyle,
     pub dim: TextStyle,
-    /// Byte-identity renderings — short ids and hex — in monospace,
-    /// so ids read as ids and align when compared.
+    /// Byte-identity renderings — short ids — in monospace, so ids
+    /// read as ids and align when compared.
     pub id: TextStyle,
     pub edit: EditStyle,
     pub scale: f64,
@@ -75,88 +70,70 @@ impl RawStyles {
     }
 }
 
-/// A rooted graph: the document is its `root` id plus the `gid` that
-/// stores its edges. Every projection path starts at `root`; several
-/// top-level items are just a root that is an in-graph list. The root
-/// is a location like any other — the empty path — so edits there
-/// commit to this field, and deleting it empties the document.
-/// Clones are O(1): the gid shares structure, which is what makes
-/// snapshot undo free.
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+/// A rooted graph: the document is its `root` value plus the entity
+/// table that stores its maps. Every projection path starts at
+/// `root`; several top-level items are just a root that is a list.
+/// The root is a location like any other — the empty path — so edits
+/// there commit to this field, and deleting it empties the document.
+/// Clones are O(1): the gid and list values share structure, which is
+/// what makes snapshot undo free.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Document {
-    pub root: Option<Id>,
+    pub root: Option<Value>,
     pub gid: MutGid,
 }
 
-/// Builds a list: a fresh node whose element edges are ordered
-/// position labels.
-fn list(gid: &mut MutGid, items: Vec<Id>) -> Id {
-    let node = new_node_id();
-    let mut last: Option<Id> = None;
-    for item in items {
-        let pos = position::between(last.as_ref(), None).expect("appending after a valid position");
-        gid.set(node, pos.clone(), item);
-        last = Some(pos);
-    }
-    Id::from(node)
-}
-
-/// A small document exercising the model's range: named nodes, SID and
-/// GUID labels, position-labeled lists, an unnamed scratch node, and a
-/// value from an unknown space. Its root is a list of the top-level
-/// entities.
+/// A small document exercising the model's range: named nodes, string
+/// and node keys, inline lists (an empty one included), and an
+/// unnamed scratch node with a self-reference. Its root is a list of
+/// the top-level entities.
 pub fn sample_document() -> Document {
     let mut gid = MutGid::new();
-    let name = Id::from(NAME);
+    let name = Atom::Node(NAME);
 
     let origin = new_node_id();
-    gid.set(origin, name.clone(), Id::from("origin"));
-    gid.set(origin, Id::from("x"), Id::from(0.0));
-    gid.set(origin, Id::from("y"), Id::from(0.0));
+    gid.set(origin, name.clone(), Value::from("origin"));
+    gid.set(origin, Atom::from("x"), Value::from(0.0));
+    gid.set(origin, Atom::from("y"), Value::from(0.0));
 
     let corner = new_node_id();
-    gid.set(corner, name.clone(), Id::from("corner"));
-    gid.set(corner, Id::from("x"), Id::from(4.0));
-    gid.set(corner, Id::from("y"), Id::from(2.5));
+    gid.set(corner, name.clone(), Value::from("corner"));
+    gid.set(corner, Atom::from("x"), Value::from(4.0));
+    gid.set(corner, Atom::from("y"), Value::from(2.5));
 
     let stroke_width = new_node_id();
-    gid.set(stroke_width, name.clone(), Id::from("stroke-width"));
+    gid.set(stroke_width, name.clone(), Value::from("stroke-width"));
 
     let polygon = new_node_id();
-    gid.set(polygon, name.clone(), Id::from("polygon"));
-    let points = list(&mut gid, vec![Id::from(origin), Id::from(corner)]);
-    // A named list: exercises the partition — fields above elements.
+    gid.set(polygon, name.clone(), Value::from("polygon"));
+    // Lists are values, inline at their edges; the edge that holds
+    // one is its name in context.
     gid.set(
-        points.as_node_id().expect("lists are nodes"),
-        name.clone(),
-        Id::from("points"),
+        polygon,
+        Atom::from("points"),
+        Value::list([Value::from(origin), Value::from(corner)]),
     );
-    gid.set(polygon, Id::from("points"), points);
-    gid.set(polygon, Id::from(stroke_width), Id::from(1.5));
-    let dash = list(&mut gid, vec![Id::from(2.0), Id::from(3.0)]);
-    gid.set(polygon, Id::from("dash"), dash);
+    gid.set(polygon, Atom::Node(stroke_width), Value::from(1.5));
+    gid.set(
+        polygon,
+        Atom::from("dash"),
+        Value::list([Value::from(2.0), Value::from(3.0)]),
+    );
+    gid.set(polygon, Atom::from("holes"), Value::list([]));
 
     let scratch = new_node_id();
-    gid.set(scratch, Id::from("color"), Id::from("rebeccapurple"));
-    gid.set(
-        scratch,
-        Id::from("mystery"),
-        Id::in_space(new_node_id(), vec![0xde, 0xad, 0xbe, 0xef]),
-    );
+    gid.set(scratch, Atom::from("color"), Value::from("rebeccapurple"));
     // A self-reference: exercises cycle-collapse, which renders the
     // back-edge as a collapsed header rather than recursing forever.
-    gid.set(scratch, Id::from("self"), Id::from(scratch));
+    gid.set(scratch, Atom::from("self"), Value::from(scratch));
 
-    let root = list(
-        &mut gid,
-        vec![
-            Id::from(polygon),
-            Id::from(origin),
-            Id::from(corner),
-            Id::from(stroke_width),
-            Id::from(scratch),
-        ],
-    );
+    let root = Value::list([
+        Value::from(polygon),
+        Value::from(origin),
+        Value::from(corner),
+        Value::from(stroke_width),
+        Value::from(scratch),
+    ]);
     Document {
         root: Some(root),
         gid,
@@ -169,11 +146,11 @@ pub fn sample_document() -> Document {
 /// stored.
 #[derive(Default)]
 pub struct Collapse {
-    overrides: std::collections::HashMap<Vec<Id>, bool>,
+    overrides: std::collections::HashMap<Path, bool>,
 }
 
 impl Collapse {
-    fn collapsed(&self, path: &[Id], in_cycle: bool) -> bool {
+    fn collapsed(&self, path: &[Step], in_cycle: bool) -> bool {
         self.overrides.get(path).copied().unwrap_or(in_cycle)
     }
 }
@@ -182,17 +159,19 @@ impl Collapse {
 struct Cx<'a> {
     /// The reading context: the document read over its library.
     sources: Sources<'a>,
-    /// The editor's name policy; every display-name check asks it.
+    /// The editor's name policy; every display-name check asks it,
+    /// through [`Cx::name`], which derives from the raw bit.
     names: &'a Names,
-    /// The Raw view: convention layers stand down — the projection
-    /// chain stops claiming nodes, showing the pure graph. (Names go
-    /// quiet through the policy, so only the chain reads this.)
+    /// The Raw view, ONE bit of view state: convention layers derive
+    /// from it — names answer None through [`Cx::name`]; domain
+    /// projections, when they arrive, stand down through the same
+    /// bit. Nothing else is swapped anywhere.
     raw: bool,
     collapse: &'a Collapse,
     styles: &'a RawStyles,
     selection: Option<&'a Selection>,
-    /// The node whose other projections carry the secondary mark.
-    secondary: Option<Id>,
+    /// The value whose other projections carry the secondary mark.
+    secondary: Option<Value>,
 }
 
 /// A reported click on a string's text, in text-local coordinates.
@@ -216,10 +195,10 @@ pub struct Hooks<C> {
     /// None when the editor is already gone — retained-frame dispatch
     /// may fire a frame late, and absent state declines.
     pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
-    /// Commit a pointed-at identity into the open pending (value or
+    /// Commit a pointed-at value into the open pending (value or
     /// label stage); false when nothing is pending, so the click
     /// falls through to selection.
-    pub pick: Rc<dyn Fn(&mut C, Id) -> bool>,
+    pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
 }
 
 /// The platform command modifier, for pointer gestures.
@@ -232,11 +211,18 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
 }
 
 impl Cx<'_> {
+    /// The display name at this projection: the policy's answer,
+    /// derived through the raw bit — Raw shows bare identities with
+    /// no policy swapped anywhere.
+    fn name(&self, node: NodeId) -> Option<Name> {
+        (!self.raw).then(|| self.names.of(&self.sources, node))?
+    }
+
     /// Whether `path` carries the primary highlight. A label-stage
     /// pending deliberately does not mark its parent — nothing is
     /// selected there, something is being authored inside; the
     /// pending row carries the highlight itself.
-    fn selected(&self, path: &[Id]) -> bool {
+    fn selected(&self, path: &[Step]) -> bool {
         match self.selection {
             Some(Selection::Edge { path: selected, .. })
             | Some(Selection::Pending {
@@ -246,9 +232,9 @@ impl Cx<'_> {
         }
     }
 
-    /// The pending child label under `path`, when the selection is
+    /// The pending child step under `path`, when the selection is
     /// authoring one there.
-    fn pending_child_of(&self, path: &[Id]) -> Option<Id> {
+    fn pending_child_of(&self, path: &[Step]) -> Option<Step> {
         match self.selection {
             Some(Selection::Pending { path: pending, .. })
                 if pending.split_last().is_some_and(|(_, parent)| parent == path) =>
@@ -260,7 +246,7 @@ impl Cx<'_> {
     }
 
     /// The label query of a new edge being authored on `path`.
-    fn pending_edge_under(&self, path: &[Id]) -> Option<(&LineEditState, usize)> {
+    fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
         match self.selection {
             Some(Selection::PendingEdge {
                 parent,
@@ -272,19 +258,20 @@ impl Cx<'_> {
     }
 }
 
-/// A location in the projected spanning tree: the sequence of edge
-/// labels from the root. The same node or edge can be projected at
-/// several paths, so the path — not the id — is the identity a
-/// selection names. List elements sit at position labels sibling
-/// edits never move; wraps and unwraps will adjust path-keyed state
-/// through one general rewrite — see `docs/model.md`.
-pub type Path = Vec<Id>;
+/// A location in the projected spanning tree: key steps through map
+/// edges, element steps into list values. The same value can be
+/// projected at several paths, so the path — not the value — is the
+/// identity a selection names. List elements sit at positions
+/// sibling edits never move; wraps and unwraps will adjust
+/// path-keyed state through one general rewrite — see
+/// `docs/model.md`.
+pub type Path = Vec<Step>;
 
 /// What is selected: the value at a path, or a nonexistent edge being
 /// authored. A selected atom carries its live editor state — every
 /// atom is a text editor, focused by selection, and the graph is
 /// written through as it edits. A pending selection carries the
-/// completion query instead; the query resolves to the identity that
+/// completion query instead; the query resolves to the value that
 /// commits, and until then the graph is untouched — deselecting
 /// discards the pending edge entirely.
 pub enum Selection {
@@ -325,14 +312,8 @@ impl Selection {
             return pending_value(path);
         }
         // An editor mounts only where write-through can land: the
-        // parent entity must not be external.
-        let parent_writable = match path.split_last() {
-            Some((_, parent_path)) => sources
-                .resolve(parent_path)
-                .is_some_and(|parent| sources.writable(parent)),
-            None => true,
-        };
-        let edit = parent_writable
+        // spine's owning entity must not be external.
+        let edit = spine_writable(sources, &path)
             .then(|| {
                 sources.resolve(&path).and_then(|value| {
                     value
@@ -353,7 +334,7 @@ impl Selection {
         }
     }
 
-    pub fn path(&self) -> &[Id] {
+    pub fn path(&self) -> &[Step] {
         match self {
             Selection::Edge { path, .. } | Selection::Pending { path, .. } => path,
             Selection::PendingEdge { parent, .. } => parent,
@@ -387,35 +368,77 @@ fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
     LineEditState::new(text, 14.0, Brush::from(Color::new(color))).with_cursor_at_end()
 }
 
-/// Deletes the value at `path`. Deletion is detachment: the value and
-/// anything under it stay in the graph for the orphan pool. The empty
-/// path empties the document's root; paths that no longer resolve
-/// decline.
-pub fn delete_edge(doc: &mut Document, library: &MutGid, path: &[Id]) -> bool {
+/// The path's last Key step: the map edge every write below it lands
+/// on. Everything after it is Element steps — a value spine.
+fn last_key(path: &[Step]) -> Option<(usize, &Atom)> {
+    path.iter()
+        .enumerate()
+        .rev()
+        .find_map(|(index, step)| match step {
+            Step::Key(key) => Some((index, key)),
+            Step::Element(_) => None,
+        })
+}
+
+/// Whether a write at `path` can land: the owning entity — the one
+/// holding the edge at the path's last Key step — must not be
+/// external. A pure element spine above the root is the document's
+/// own and always writable.
+fn spine_writable(sources: &Sources, path: &[Step]) -> bool {
+    match last_key(path) {
+        Some((index, _)) => sources
+            .resolve(&path[..index])
+            .and_then(Value::as_node)
+            .is_some_and(|entity| sources.writable(entity)),
+        None => true,
+    }
+}
+
+/// Deletes the value at `path`. A key step is detachment: the value
+/// and anything under it stay in the graph for the orphan pool. An
+/// element step rebuilds the list value without it, at the owning
+/// edge. The empty path empties the document's root; paths that no
+/// longer resolve decline.
+pub fn delete_edge(doc: &mut Document, library: &MutGid, path: &[Step]) -> bool {
     match path.split_last() {
-        Some((label, parent_path)) => {
+        None => doc.root.take().is_some(),
+        Some((Step::Key(key), parent_path)) => {
             let sources = Sources { doc: &*doc, library };
-            let parent = sources
+            let entity = sources
                 .resolve(path)
                 .and(sources.resolve(parent_path))
-                .and_then(Id::as_node_id)
-                .filter(|parent| sources.writable(&Id::from(*parent)));
-            match parent {
-                Some(parent) => {
-                    doc.gid.delete(&parent, label);
+                .and_then(Value::as_node)
+                .filter(|entity| sources.writable(*entity));
+            match entity {
+                Some(entity) => {
+                    let key = key.clone();
+                    doc.gid.delete(entity, &key);
                     true
                 }
                 None => false,
             }
         }
-        None => doc.root.take().is_some(),
+        Some((Step::Element(position), parent_path)) => {
+            let next = {
+                let sources = Sources { doc: &*doc, library };
+                sources
+                    .resolve(parent_path)
+                    .and_then(Value::as_list)
+                    .filter(|elements| elements.contains_key(position))
+                    .map(|elements| Value::List(elements.without(position)))
+            };
+            match next {
+                Some(next) => set_value(doc, library, parent_path, next),
+                None => false,
+            }
+        }
     }
 }
 
 /// Where the selection lands after deleting `path`: the next sibling,
 /// else the previous, else the parent. Also where a discarded pending
 /// edge returns to.
-pub fn selection_after_delete(descends: &[Descend], path: &[Id]) -> Path {
+pub fn selection_after_delete(descends: &[Descend], path: &[Step]) -> Path {
     sibling(descends, path, true)
         .or_else(|| sibling(descends, path, false))
         .unwrap_or_else(|| {
@@ -423,22 +446,6 @@ pub fn selection_after_delete(descends: &[Descend], path: &[Id]) -> Path {
                 .map(|(_, parent)| parent.to_vec())
                 .unwrap_or_default()
         })
-}
-
-/// The sorted position labels of a node's element edges.
-fn positions_of(sources: &Sources, node: &Id) -> Vec<Id> {
-    let mut positions: Vec<Id> = sources
-        .edges(node)
-        .map(|edges| {
-            edges
-                .keys()
-                .filter(|label| position::as_position(label).is_some())
-                .cloned()
-                .collect()
-        })
-        .unwrap_or_default();
-    positions.sort();
-    positions
 }
 
 /// A value-stage pending: the edge named by `path` does not exist,
@@ -452,16 +459,16 @@ pub fn pending_value(path: Path) -> Selection {
 }
 
 /// A new edge on the node at `parent`, its label to be authored.
-/// Raw's one insertion: a node is a bag of labeled edges, and adding
-/// to it means adding an edge. EXTERNAL entities — the library the
+/// Raw's one insertion: a node is a bag of keyed edges, and adding
+/// to it means adding an edge. Only nodes qualify — atoms and lists
+/// have no edges, structurally. EXTERNAL entities — the library the
 /// authority — decline: a lone document edge would shadow the
 /// library's facts wholesale (the per-entity fallback), silently
 /// de-naming the conventions. A document that owns the entity (a
 /// fork, copy/paste's job) authors freely.
 pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
-    let value = sources.resolve(&parent)?;
-    value.as_node_id()?;
-    sources.writable(value).then_some(())?;
+    let entity = sources.resolve(&parent)?.as_node()?;
+    sources.writable(entity).then_some(())?;
     Some(Selection::PendingEdge {
         parent,
         query: line_edit("", QUERY_COLOR),
@@ -470,77 +477,72 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
 }
 
 /// A pending sibling next to the element at `path` (which must sit at
-/// a position label), minted between it and its neighbor. The list
-/// projection's gesture — raw's own gestures never mint positions.
-fn pending_beside(sources: &Sources, path: &[Id], after: bool) -> Option<Selection> {
-    let (label, parent_path) = path.split_last()?;
-    position::as_position(label)?;
-    let parent = sources.resolve(parent_path)?;
-    // Stated, not incidental: an external list takes no minted
-    // siblings (doc-only positions would decline anyway, but a
+/// an element step), minted between it and its neighbor. The list
+/// projection's gesture.
+fn pending_beside(sources: &Sources, path: &[Step], after: bool) -> Option<Selection> {
+    let (step, parent_path) = path.split_last()?;
+    let Step::Element(position) = step else {
+        return None;
+    };
+    let elements = sources.resolve(parent_path)?.as_list()?;
+    // Stated, not incidental: a list under an external entity takes
+    // no minted siblings (the write would decline anyway, but a
     // pending that opens and cannot commit is an affordance lie).
-    sources.writable(parent).then_some(())?;
-    let positions = positions_of(sources, parent);
-    let index = positions.iter().position(|p| p == label)?;
+    spine_writable(sources, parent_path).then_some(())?;
+    let positions: Vec<&Position> = elements.keys().collect();
+    let index = positions.iter().position(|p| *p == position)?;
     let fresh = if after {
-        position::between(Some(label), positions.get(index + 1))?
+        position::between(Some(position), positions.get(index + 1).copied())?
     } else {
-        position::between(index.checked_sub(1).map(|i| &positions[i]), Some(label))?
+        position::between(index.checked_sub(1).map(|i| positions[i]), Some(position))?
     };
     let mut fresh_path = parent_path.to_vec();
-    fresh_path.push(fresh);
+    fresh_path.push(Step::Element(fresh));
     Some(pending_value(fresh_path))
 }
 
-pub fn pending_after(sources: &Sources, path: &[Id]) -> Option<Selection> {
+pub fn pending_after(sources: &Sources, path: &[Step]) -> Option<Selection> {
     pending_beside(sources, path, true)
 }
 
-pub fn pending_before(sources: &Sources, path: &[Id]) -> Option<Selection> {
+pub fn pending_before(sources: &Sources, path: &[Step]) -> Option<Selection> {
     pending_beside(sources, path, false)
 }
 
-/// A pending element inside the node at `path`, appended at the end
-/// or prepended at the front. Element insertion applies where
-/// elements plausibly live — nodes with position edges, or empty
-/// nodes, which is how lists begin; a node with only record fields
-/// declines (field insertion, with its pending label, is a separate
-/// gesture). External entities decline, as in [`pending_edge`].
-fn pending_into_at(sources: &Sources, path: &[Id], end: bool) -> Option<Selection> {
-    let value = sources.resolve(path)?;
-    value.as_node_id()?;
-    sources.writable(value).then_some(())?;
-    let positions = positions_of(sources, value);
-    let record_only =
-        positions.is_empty() && sources.edges(value).is_some_and(|edges| !edges.is_empty());
-    (!record_only).then_some(())?;
+/// A pending element inside the list at `path`, appended at the end
+/// or prepended at the front. Only lists take elements — by type, not
+/// by gate — and the owning entity must be writable, as in
+/// [`pending_edge`].
+fn pending_into_at(sources: &Sources, path: &[Step], end: bool) -> Option<Selection> {
+    let elements = sources.resolve(path)?.as_list()?;
+    spine_writable(sources, path).then_some(())?;
+    let positions: Vec<&Position> = elements.keys().collect();
     let fresh = if end {
-        position::between(positions.last(), None)?
+        position::between(positions.last().copied(), None)?
     } else {
-        position::between(None, positions.first())?
+        position::between(None, positions.first().copied())?
     };
     let mut fresh_path = path.to_vec();
-    fresh_path.push(fresh);
+    fresh_path.push(Step::Element(fresh));
     Some(pending_value(fresh_path))
 }
 
-/// Appends: "add to this list" goes at the end. Parked since the
-/// beside/within gesture split — append is Enter on the last element
-/// — ready if a list-node append gesture returns.
-#[allow(dead_code)]
-pub fn pending_into(sources: &Sources, path: &[Id]) -> Option<Selection> {
+/// Appends: "add to this list" goes at the end — the within chord's
+/// meaning on a list, where field edges don't exist.
+pub fn pending_into(sources: &Sources, path: &[Step]) -> Option<Selection> {
     pending_into_at(sources, path, true)
 }
 
-pub fn pending_into_first(sources: &Sources, path: &[Id]) -> Option<Selection> {
+pub fn pending_into_first(sources: &Sources, path: &[Step]) -> Option<Selection> {
     pending_into_at(sources, path, false)
 }
 
 /// Plain Enter: a new peer BESIDE the selection — continue the
 /// enumeration you are in. An element pends a sibling (before with
 /// shift); a field value pends a new field on its parent; the root
-/// has nothing beside it and falls within, a field edge on itself.
-pub fn pending_enter(sources: &Sources, path: &[Id], before: bool) -> Option<Selection> {
+/// has nothing beside it and falls within — a field edge on a map, an
+/// appended element on a list.
+pub fn pending_enter(sources: &Sources, path: &[Step], before: bool) -> Option<Selection> {
     let beside = if before {
         pending_before(sources, path)
     } else {
@@ -552,17 +554,18 @@ pub fn pending_enter(sources: &Sources, path: &[Id], before: bool) -> Option<Sel
                 .and_then(|(_, parent)| pending_edge(sources, parent.to_vec()))
         })
         .or_else(|| pending_edge(sources, path.to_vec()))
+        .or_else(|| pending_into(sources, path))
 }
 
 /// The command chord: author WITHIN the selection — a new field edge
-/// on the selected node. With shift, the positional variant instead:
-/// a first element at the front — how lists begin, empty nodes
-/// included, and prepend on a list. Atoms have no within and decline.
-pub fn pending_insert(sources: &Sources, path: &[Id], front: bool) -> Option<Selection> {
+/// on the selected node, or, on a list, which has no fields, an
+/// element appended at the end. With shift, the front instead —
+/// prepend. Atoms have no within and decline.
+pub fn pending_insert(sources: &Sources, path: &[Step], front: bool) -> Option<Selection> {
     if front {
         pending_into_first(sources, path)
     } else {
-        pending_edge(sources, path.to_vec())
+        pending_edge(sources, path.to_vec()).or_else(|| pending_into(sources, path))
     }
 }
 
@@ -571,18 +574,18 @@ pub fn pending_root(sources: &Sources) -> Option<Selection> {
     sources.root().is_none().then(|| pending_value(Vec::new()))
 }
 
-/// The identity a pending query resolves to: a leading quote forces a
+/// The value a pending query resolves to: a leading quote forces a
 /// string (the closing quote optional, so string mode holds while
 /// typing), text that parses is a number, anything else is the string
 /// as typed.
-pub fn resolve_query(text: &str) -> Id {
+pub fn resolve_query(text: &str) -> Value {
     let trimmed = text.trim();
     match trimmed.strip_prefix('"') {
-        Some(inner) => Id::from(inner.strip_suffix('"').unwrap_or(inner)),
+        Some(inner) => Value::from(inner.strip_suffix('"').unwrap_or(inner)),
         None => trimmed
             .parse::<f64>()
-            .map(Id::from)
-            .unwrap_or_else(|_| Id::from(text)),
+            .map(Value::from)
+            .unwrap_or_else(|_| Value::from(text)),
     }
 }
 
@@ -599,10 +602,13 @@ pub struct Entry {
 
 #[derive(Clone)]
 pub enum EntryAction {
-    /// Commit this identity: an inferred atom or a reference.
-    Value(Id),
+    /// Commit this value: an inferred atom or a reference.
+    Value(Value),
     /// Mint a node, optionally named, and commit it.
     NewNode { name: Option<String> },
+    /// Commit an empty list value. Never named: a list holds elements
+    /// only, and is named by the edge that holds it.
+    NewList,
 }
 
 /// The completion popup a pending row emits during placement; the
@@ -623,8 +629,15 @@ pub trait HasPopup {
 /// references to everything named (document and orphans alike, ranked
 /// by the fuzzy tiers), and a fresh node — named after the query when
 /// there is one, the create-on-reference of the floating-definitions
-/// design.
-fn completion_entries(sources: &Sources, names: &Names, query: &str) -> Vec<Entry> {
+/// design. The label stage (`labels`) offers atoms only: a key must
+/// mean, so "new list" stays a value offer.
+fn completion_entries(
+    sources: &Sources,
+    names: &Names,
+    raw: bool,
+    labels: bool,
+    query: &str,
+) -> Vec<Entry> {
     let atom = resolve_query(query);
     let display = match atom.as_str() {
         Some(s) => format!("\"{s}\""),
@@ -646,7 +659,7 @@ fn completion_entries(sources: &Sources, names: &Names, query: &str) -> Vec<Entr
         display: format!("\"{query}\""),
         detail: None,
         matches: Vec::new(),
-        action: EntryAction::Value(Id::from(query)),
+        action: EntryAction::Value(Value::from(query)),
     });
     let atom_entry = Entry {
         display,
@@ -658,35 +671,42 @@ fn completion_entries(sources: &Sources, names: &Names, query: &str) -> Vec<Entr
     // by name, unnamed ones by the short id they render as — what
     // you see is what you can type. Unnamed keys start with the
     // ellipsis, which sorts after names, so they trail on an empty
-    // query.
-    let mut nodes: Vec<(String, Id)> = document_nodes(sources)
+    // query. "new list" ranks among them under its own display text:
+    // type toward it and it surfaces, type away and it leaves.
+    let mut nodes: Vec<(String, EntryAction)> = document_nodes(sources)
         .into_iter()
         .map(|node| {
-            let id = Id::from(node);
-            let key = names
-                .of(sources, &id)
+            let key = (!raw)
+                .then(|| names.of(sources, node))
+                .flatten()
                 .map(|name| name.text)
                 .unwrap_or_else(|| short_id(node));
-            (key, id)
+            (key, EntryAction::Value(Value::from(node)))
         })
         .collect();
-    nodes.sort();
+    nodes.sort_by(|a, b| a.0.cmp(&b.0));
+    if !labels {
+        nodes.push(("new list".to_string(), EntryAction::NewList));
+    }
     let references: Vec<(Entry, bool)> = filter::rank(nodes, |(key, _)| key, query)
         .into_iter()
         .take(8)
         .map(|ranked| {
             let fuzzy = ranked.fuzzy();
             let matches = ranked.matches;
-            let (display, id) = ranked.item;
-            let detail = id
-                .as_node_id()
-                .map(short_id)
-                .filter(|detail| *detail != display);
+            let (display, action) = ranked.item;
+            let detail = match &action {
+                EntryAction::Value(value) => value
+                    .as_node()
+                    .map(short_id)
+                    .filter(|detail| *detail != display),
+                _ => None,
+            };
             let entry = Entry {
                 display,
                 detail,
                 matches,
-                action: EntryAction::Value(id),
+                action,
             };
             (entry, fuzzy)
         })
@@ -721,94 +741,140 @@ fn completion_entries(sources: &Sources, names: &Names, query: &str) -> Vec<Entr
     entries
 }
 
-/// Every GUID node the document or its library contains — entity
-/// sources, nodes appearing only as labels or values (an edgeless
-/// node referenced somewhere is still referenceable), and the root,
-/// whose reference is a Document field rather than a gid edge — a
-/// fresh edgeless node at root is still in the document. Library
+/// The node references a value carries, lists walked inline —
+/// they're values, so their contents are right here.
+fn value_nodes(value: &Value, nodes: &mut Vec<NodeId>) {
+    match value {
+        Value::Atom(atom) => nodes.extend(atom.as_node()),
+        Value::List(elements) => {
+            for element in elements.values() {
+                value_nodes(element, nodes);
+            }
+        }
+    }
+}
+
+/// Every node the document or its library contains — entity sources,
+/// nodes appearing as keys or inside values (an edgeless node
+/// referenced somewhere is still referenceable), and the root, whose
+/// reference is a Document field rather than a gid edge. Library
 /// nodes are offered so the conventions are typeable from keystroke
 /// one. Sorted for a deterministic offer order.
 fn document_nodes(sources: &Sources) -> Vec<NodeId> {
-    let mut nodes: Vec<NodeId> = sources
-        .entities()
-        .flat_map(|entity| {
-            let edge_nodes = sources
-                .edges(&Id::from(*entity))
-                .into_iter()
-                .flatten()
-                .flat_map(|(label, value)| [label.as_node_id(), value.as_node_id()])
-                .flatten();
-            std::iter::once(*entity).chain(edge_nodes)
-        })
-        .chain(sources.root().and_then(Id::as_node_id))
-        .collect();
+    let mut nodes = Vec::new();
+    for entity in sources.entities() {
+        nodes.push(*entity);
+        for (key, value) in sources.edges(*entity).into_iter().flatten() {
+            nodes.extend(key.as_node());
+            value_nodes(value, &mut nodes);
+        }
+    }
+    if let Some(root) = sources.root() {
+        value_nodes(root, &mut nodes);
+    }
     nodes.sort();
     nodes.dedup();
     nodes
 }
 
-/// Resolves a chosen entry to the identity it denotes, minting and
-/// naming for a new node. Labels and values resolve alike.
-pub fn resolve_entry(doc: &mut Document, action: &EntryAction) -> Id {
+/// Resolves a chosen entry to the value it denotes, minting and
+/// naming for a new node. Labels and values resolve alike — the label
+/// stage never offers a non-atom action.
+pub fn resolve_entry(doc: &mut Document, action: &EntryAction) -> Value {
     match action {
-        EntryAction::Value(id) => id.clone(),
+        EntryAction::Value(value) => value.clone(),
         EntryAction::NewNode { name } => {
             let node = new_node_id();
             if let Some(name) = name {
-                doc.gid.set(node, Id::from(NAME), Id::from(name.as_str()));
+                doc.gid
+                    .set(node, Atom::Node(NAME), Value::from(name.as_str()));
             }
-            Id::from(node)
+            Value::from(node)
         }
+        EntryAction::NewList => Value::list([]),
     }
 }
 
 /// Commits a pending edge from a chosen entry: resolves the action to
-/// an identity and writes it.
+/// a value and writes it.
 pub fn commit_pending(
     doc: &mut Document,
     library: &MutGid,
-    path: &[Id],
+    path: &[Step],
     action: &EntryAction,
 ) -> bool {
     let value = resolve_entry(doc, action);
     set_value(doc, library, path, value)
 }
 
-/// Writes `value` at `path` — the empty path writes the document
-/// root. The single-location write every edit reduces to.
-pub fn set_value(doc: &mut Document, library: &MutGid, path: &[Id], value: Id) -> bool {
-    match path.split_last() {
-        Some((label, parent_path)) => {
-            let sources = Sources { doc: &*doc, library };
-            let parent = sources
-                .resolve(parent_path)
-                .and_then(Id::as_node_id)
-                .filter(|parent| sources.writable(&Id::from(*parent)));
-            match parent {
-                Some(parent) => {
-                    doc.gid.set(parent, label.clone(), value);
-                    true
-                }
-                None => false,
+/// Rebuilds the value spine along `elements` (element steps only),
+/// replacing the leaf: surviving elements keep their positions, and
+/// the final step inserts or replaces at its position. Deeper steps
+/// need an existing element to descend through.
+fn respine(current: Option<&Value>, elements: &[Step], leaf: Value) -> Option<Value> {
+    match elements.split_first() {
+        None => Some(leaf),
+        Some((Step::Element(position), rest)) => {
+            let list = current?.as_list()?;
+            let child = list.get(position);
+            if !rest.is_empty() && child.is_none() {
+                return None;
             }
+            let rebuilt = respine(child, rest, leaf)?;
+            Some(Value::List(list.update(position.clone(), rebuilt)))
         }
-        None => {
-            doc.root = Some(value);
-            true
-        }
+        Some((Step::Key(_), _)) => None,
     }
 }
 
-/// Toggle the collapse override for the node at `path`, staying
+/// Writes `value` at `path` — the empty path writes the document
+/// root. The single write every edit reduces to: the path's last Key
+/// step names the owning, authority-gated entity edge; the element
+/// steps below it are a value spine, rebuilt around the new leaf.
+pub fn set_value(doc: &mut Document, library: &MutGid, path: &[Step], value: Value) -> bool {
+    let write = {
+        let sources = Sources { doc: &*doc, library };
+        match last_key(path) {
+            Some((index, key)) => sources
+                .resolve(&path[..index])
+                .and_then(Value::as_node)
+                .filter(|entity| sources.writable(*entity))
+                .and_then(|entity| {
+                    let current = sources.get(entity, key);
+                    respine(current, &path[index + 1..], value)
+                        .map(|rebuilt| (Some((entity, key.clone())), rebuilt))
+                }),
+            None => respine(sources.root(), path, value).map(|rebuilt| (None, rebuilt)),
+        }
+    };
+    match write {
+        Some((Some((entity, key)), rebuilt)) => {
+            doc.gid.set(entity, key, rebuilt);
+            true
+        }
+        Some((None, rebuilt)) => {
+            doc.root = Some(rebuilt);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Toggle the collapse override for the value at `path`, staying
 /// sparse: an override matching the default (collapsed inside a
 /// cycle, expanded otherwise) is removed rather than stored. Declines
-/// unless the value is a node with edges — anything else has nothing
-/// to collapse.
-pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Id]) -> bool {
+/// unless there is something to collapse — a node with edges, or a
+/// list with elements.
+pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Step]) -> bool {
     sources
         .resolve(path)
-        .filter(|value| value.as_node_id().is_some())
-        .filter(|value| sources.edges(value).is_some_and(|edges| !edges.is_empty()))
+        .filter(|value| match value {
+            Value::Atom(atom) => atom
+                .as_node()
+                .and_then(|node| sources.edges(node))
+                .is_some_and(|edges| !edges.is_empty()),
+            Value::List(elements) => !elements.is_empty(),
+        })
         .map(|value| {
             let in_cycle = (0..path.len())
                 .filter_map(|end| sources.resolve(&path[..end]))
@@ -827,12 +893,13 @@ pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Id]) 
 /// every handled event — the graph is the source of truth. The edited
 /// kind follows the current value: strings write every keystroke;
 /// numbers only when the text parses, since a half-typed state like
-/// `3.` has no identity to write. The empty path commits to the
-/// document's root field; an edge whose parent no longer resolves to
-/// a node drops the write silently — the malformed-graph rule at the
-/// mutation boundary. Returns whether this write OPENED an undo step:
-/// true exactly on the first write of the mounted editor's life, so a
-/// typing run is one step and history stays a dumb stack.
+/// `3.` has no value to write. Everything funnels through
+/// [`set_value`], so an element edit rebuilds its list at the owning
+/// edge and a location that no longer takes the write drops it
+/// silently — the malformed-graph rule at the mutation boundary.
+/// Returns whether this write OPENED an undo step: true exactly on
+/// the first write of the mounted editor's life, so a typing run is
+/// one step and history stays a dumb stack.
 pub fn write_through(doc: &mut Document, library: &MutGid, selection: &mut Selection) -> bool {
     let Selection::Edge {
         path,
@@ -842,36 +909,29 @@ pub fn write_through(doc: &mut Document, library: &MutGid, selection: &mut Selec
     else {
         return false;
     };
-    let sources = Sources { doc: &*doc, library };
-    let target = match path.split_last() {
-        Some((label, parent_path)) => sources
-            .resolve(parent_path)
-            .and_then(Id::as_node_id)
-            .filter(|parent| sources.writable(&Id::from(*parent)))
-            .map(|parent| Some((label, parent))),
-        None => Some(None),
+    let Some(edit) = edit else {
+        return false;
     };
-    if let (Some(edit), Some(target)) = (edit, target) {
-        let text = edit.text().to_string();
+    let text = edit.text().to_string();
+    let (current, next) = {
+        let sources = Sources { doc: &*doc, library };
         let current = sources.resolve(path);
         let next = match current {
-            Some(current) if current.as_str().is_some() => Some(Id::from(text)),
-            Some(current) if current.as_number().is_some() => {
-                text.trim().parse::<f64>().ok().map(Id::from)
+            Some(Value::Atom(Atom::String(_))) => Some(Value::from(text)),
+            Some(Value::Atom(Atom::Number(_))) => {
+                text.trim().parse::<f64>().ok().map(Value::from)
             }
             _ => None,
         };
-        if let Some(next) = next
-            && current != Some(&next)
-        {
-            match target {
-                Some((label, parent)) => doc.gid.set(parent, label.clone(), next),
-                None => doc.root = Some(next),
-            }
-            let first = !*recorded;
-            *recorded = true;
-            return first;
-        }
+        (current.cloned(), next)
+    };
+    if let Some(next) = next
+        && current.as_ref() != Some(&next)
+        && set_value(doc, library, path, next)
+    {
+        let first = !*recorded;
+        *recorded = true;
+        return first;
     }
     false
 }
@@ -942,7 +1002,7 @@ pub fn step_selection(
 /// The neighboring sibling, continuing through ancestors at the
 /// ends: past the last child, Down flows to the enclosing next
 /// sibling (and Up mirrors), instead of dead-ending.
-fn sibling(descends: &[Descend], path: &[Id], next: bool) -> Option<Path> {
+fn sibling(descends: &[Descend], path: &[Step], next: bool) -> Option<Path> {
     let mut path = path.to_vec();
     loop {
         let (_, parent) = path.split_last()?;
@@ -965,7 +1025,6 @@ fn sibling(descends: &[Descend], path: &[Id], next: bool) -> Option<Path> {
         }
     }
 }
-
 
 /// Placement contexts that accumulate descends as the projection
 /// places, so the shell can step selection by keyboard.
@@ -995,7 +1054,7 @@ fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
 fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     cx: &Cx,
     path: Path,
-    value: Option<Id>,
+    value: Option<Value>,
     hooks: &Hooks<C>,
     child: Node<P>,
 ) -> Node<P> {
@@ -1018,7 +1077,7 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
                     let picked = command(&event.state.modifiers)
                         && value
                             .as_ref()
-                            .is_some_and(|id| pick(ctx, id.clone()));
+                            .is_some_and(|value| pick(ctx, value.clone()));
                     if !picked {
                         select(ctx, target.clone(), None);
                     }
@@ -1029,11 +1088,11 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     })
 }
 
-/// The identity marked as the secondary selection: the one at the end
-/// of the selected edge. An identity can project in many places —
-/// GUID nodes, but equally SID strings, NID numbers, and labels — and
-/// the marks make that sameness visible, uniformly across spaces.
-fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Id> {
+/// The value marked as the secondary selection: the one at the end
+/// of the selected edge. A value can project in many places — node
+/// references, but equally strings, numbers, and equal lists — and
+/// the marks make that sameness visible.
+fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Value> {
     match selection? {
         Selection::Edge { path, .. } => sources.resolve(path).cloned(),
         _ => None,
@@ -1045,7 +1104,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Id> 
 pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     sources: &Sources,
     selection: Option<&Selection>,
-    graph_node: Option<&Id>,
+    graph_node: Option<&Value>,
     collapse: &Collapse,
     names: &Names,
     raw: bool,
@@ -1061,13 +1120,12 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         styles,
         selection,
         // The graph view's selected node is a secondary here too:
-        // its projections are the same identity.
+        // its projections are the same value.
         secondary: secondary_of(sources, selection).or_else(|| graph_node.cloned()),
     };
-    // Raw shows the pure graph with no assumptions: the root is
-    // projected directly, so a list root renders as its
-    // position-labeled edges, not as `[a, b, c]`. List sugar belongs
-    // to a convention-aware projection. An empty document is a
+    // The Raw view derives from the one bit: names answer None and
+    // nothing else changes — lists render as lists there too, since
+    // kind is data, not convention. An empty document is a
     // selectable placeholder at the root path.
     match sources.root() {
         Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, &hooks),
@@ -1094,23 +1152,22 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[Id],
-    ancestors: &HashSet<Id>,
+    path: &[Step],
+    ancestors: &HashSet<NodeId>,
     node: NodeId,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
-    let id = Id::from(node);
-    let name = cx.names.of(&cx.sources, &id);
+    let name = cx.name(node);
     let name_label = name.as_ref().and_then(|name| name.label.clone());
     // The name edge is consumed by the header, so the listing skips it.
-    let mut entries: Vec<(Id, Option<Id>)> = sorted_edges(&cx.sources, &id)
+    let mut entries: Vec<(Atom, Option<Value>)> = sorted_edges(&cx.sources, node)
         .into_iter()
-        .filter(|(label, _)| name_label.as_ref() != Some(label))
-        .map(|(label, value)| (label, Some(value)))
+        .filter(|(key, _)| name_label.as_ref() != Some(key))
+        .map(|(key, value)| (key, Some(value)))
         .collect();
-    if let Some(label) = cx.pending_child_of(path) {
-        entries.push((label, None));
+    if let Some(Step::Key(key)) = cx.pending_child_of(path) {
+        entries.push((key, None));
         entries.sort_by(|a, b| a.0.cmp(&b.0));
     }
     let head = head_view(cx, tcx, path, node, &name, hooks);
@@ -1122,7 +1179,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // A pending child or edge forces the node open so it can be seen.
     let collapsed = !pending_edge
         && entries.iter().all(|(_, value)| value.is_some())
-        && cx.collapse.collapsed(path, ancestors.contains(&id));
+        && cx.collapse.collapsed(path, ancestors.contains(&node));
     let header = row(
         4.0 * scale,
         vec![head, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
@@ -1132,10 +1189,10 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     }
 
     let mut inner = ancestors.clone();
-    inner.insert(id);
+    inner.insert(node);
     let mut rows: Vec<Node<P>> = entries
         .into_iter()
-        .map(|(label, value)| edge_row(cx, tcx, path, &inner, label, value, hooks))
+        .map(|(key, value)| edge_row(cx, tcx, path, &inner, key, value, hooks))
         .collect();
     // A new edge being authored: the label query, unsorted until it
     // has a label to sort by.
@@ -1161,7 +1218,7 @@ fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[Id],
+    path: &[Step],
     node: NodeId,
     name: &Option<Name>,
     hooks: &Hooks<C>,
@@ -1173,11 +1230,11 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let Some(label) = &name.label else {
         return fallback;
     };
-    let Some(value) = cx.sources.get(&Id::from(node), label).cloned() else {
+    let Some(value) = cx.sources.get(node, label).cloned() else {
         return fallback;
     };
     let mut edge = path.to_vec();
-    edge.push(label.clone());
+    edge.push(Step::Key(label.clone()));
     let editing = cx
         .selection
         .filter(|selection| selection.path() == edge.as_slice())
@@ -1216,7 +1273,7 @@ fn block<P: Canvas>(header: Node<P>, rows: Vec<Node<P>>, styles: &RawStyles) -> 
     )
 }
 
-/// One labeled edge row: the label-and-arrow head, then the value (or
+/// One keyed edge row: the label-and-arrow head, then the value (or
 /// its pending query). A real edge's label and arrow select the edge,
 /// like its value — grouped so one target spans both and the gap
 /// between. A pending row's plain click falls through (the
@@ -1225,22 +1282,19 @@ fn block<P: Canvas>(header: Node<P>, rows: Vec<Node<P>>, styles: &RawStyles) -> 
 fn edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[Id],
-    ancestors: &HashSet<Id>,
-    label: Id,
-    value: Option<Id>,
+    path: &[Step],
+    ancestors: &HashSet<NodeId>,
+    key: Atom,
+    value: Option<Value>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let mut child = path.to_vec();
-    child.push(label.clone());
-    let head = row(
-        6.0 * scale,
-        vec![label_view(cx, tcx, &label), arrow(cx.styles)],
-    );
+    child.push(Step::Key(key.clone()));
+    let head = row(6.0 * scale, vec![label_view(cx, tcx, &key), arrow(cx.styles)]);
     let head = match &value {
-        Some(_) => select_target(child.clone(), label.clone(), hooks, head),
-        None => pick_target(label.clone(), hooks, head),
+        Some(_) => select_target(child.clone(), key.clone(), hooks, head),
+        None => pick_target(key.clone(), hooks, head),
     };
     let content = match value {
         Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
@@ -1263,7 +1317,7 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
     let pending_row = row(
         6.0 * scale,
         vec![
-            query_content(cx, tcx, query, choice, hooks),
+            query_content(cx, tcx, query, choice, true, hooks),
             arrow(cx.styles),
             text(tcx, "…", &cx.styles.dim),
         ],
@@ -1280,87 +1334,49 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
     })
 }
 
-/// Whether the list projection claims a node: it has ordered elements
-/// — position-labeled edges — or is about to (`pending` being the
-/// pending child label under its path).
-fn list_shaped(sources: &Sources, id: &Id, pending: Option<&Id>) -> bool {
-    sources
-        .edges(id)
-        .into_iter()
-        .flatten()
-        .map(|(label, _)| label)
-        .chain(pending)
-        .any(|label| position::as_position(label).is_some())
-}
-
-/// A list-shaped node: its position-labeled edges are the ordered
-/// elements, rendered as bare value rows — the position is identity,
-/// not information; order carries it — below any other edges, which
-/// stay ordinary field rows. Collapsed shows the element count.
-/// Paths are untouched underneath: positions are real labels, so
-/// selection, undo, marks, and the graph view work unchanged.
+/// A list value: its elements as bare ordered rows — the position is
+/// session identity, not information; order carries it. An atom-only
+/// list reads as an inline literal; collapsed shows the element
+/// count. Lists have no identity, so there is no header id and no
+/// cycle through them — only their node elements can recurse.
 fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[Id],
-    ancestors: &HashSet<Id>,
-    node: NodeId,
+    path: &[Step],
+    ancestors: &HashSet<NodeId>,
+    elements: &im::OrdMap<Position, Value>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
-    let id = Id::from(node);
-    let name = cx.names.of(&cx.sources, &id);
-    let name_label = name.as_ref().and_then(|name| name.label.clone());
-    // The name edge is consumed by the header, so the listing skips it.
-    let (mut elements, mut fields): (Vec<(Id, Option<Id>)>, Vec<(Id, Option<Id>)>) =
-        sorted_edges(&cx.sources, &id)
-            .into_iter()
-            .filter(|(label, _)| name_label.as_ref() != Some(label))
-            .map(|(label, value)| (label, Some(value)))
-            .partition(|(label, _)| position::as_position(label).is_some());
-    if let Some(label) = cx.pending_child_of(path) {
-        let section = if position::as_position(&label).is_some() {
-            &mut elements
-        } else {
-            &mut fields
-        };
-        section.push((label, None));
-        section.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut items: Vec<(Position, Option<Value>)> = elements
+        .iter()
+        .map(|(position, value)| (position.clone(), Some(value.clone())))
+        .collect();
+    if let Some(Step::Element(position)) = cx.pending_child_of(path) {
+        items.push((position, None));
+        items.sort_by(|a, b| a.0.cmp(&b.0));
     }
-    let pending_edge = cx.pending_edge_under(path).is_some();
-    let mut inner = ancestors.clone();
-    inner.insert(id.clone());
 
-    // A fieldless atom list reads as a literal: `[1, "two", 3]` on
-    // one line, dim punctuation, each element still an ordinary
-    // descend (click, edit, mark) — a pending one included. Fields
-    // or node elements take the block form; width-aware grouping
-    // (Wadler) waits, so a long list will run wide for now.
-    let inline = fields.is_empty()
-        && !pending_edge
-        && elements.iter().all(|(_, value)| {
-            value
-                .as_ref()
-                .is_none_or(|v| v.as_str().is_some() || v.as_number().is_some())
-        });
+    // An atom list reads as a literal: `[1, "two", 3]` on one line,
+    // dim punctuation, each element still an ordinary descend (click,
+    // edit, mark) — a pending one included. Node elements and nested
+    // lists take the block form; width-aware grouping (Wadler) waits,
+    // so a long list will run wide for now.
+    let inline = items.iter().all(|(_, value)| {
+        value
+            .as_ref()
+            .is_none_or(|v| v.as_str().is_some() || v.as_number().is_some())
+    });
     if inline {
-        let mut cells: Vec<Node<P>> = Vec::new();
-        if name.is_some() {
-            cells.push(head_view(cx, tcx, path, node, &name, hooks));
-        }
-        cells.push(text(
-            tcx,
-            if name.is_some() { " [" } else { "[" },
-            &cx.styles.dim,
-        ));
-        for (index, (label, value)) in elements.into_iter().enumerate() {
+        let mut cells: Vec<Node<P>> = vec![text(tcx, "[", &cx.styles.dim)];
+        for (index, (position, value)) in items.into_iter().enumerate() {
             if index > 0 {
                 cells.push(text(tcx, ", ", &cx.styles.dim));
             }
             let mut child = path.to_vec();
-            child.push(label);
+            child.push(Step::Element(position));
             cells.push(match value {
-                Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
+                Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
                 None => pending_view(cx, tcx, child, hooks),
             });
         }
@@ -1368,43 +1384,51 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         return row(0.0, cells);
     }
 
-    // A pending child or edge forces the node open so it can be seen.
-    let collapsed = !pending_edge
-        && elements.iter().chain(&fields).all(|(_, value)| value.is_some())
-        && cx.collapse.collapsed(path, ancestors.contains(&id));
-    let head = head_view(cx, tcx, path, node, &name, hooks);
-    let mut header = vec![
-        head,
-        disclosure(path.to_vec(), collapsed, hooks, cx.styles),
-    ];
+    // A pending child forces the list open so it can be seen. Lists
+    // have no identity to be an ancestor, so only an override
+    // collapses one.
+    let collapsed = items.iter().all(|(_, value)| value.is_some())
+        && cx.collapse.collapsed(path, false);
+    let head = text(tcx, "[", &cx.styles.dim);
+    let mut header = vec![head, disclosure(path.to_vec(), collapsed, hooks, cx.styles)];
     if collapsed {
         let count = format!(
             "{} element{}",
-            elements.len(),
-            if elements.len() == 1 { "" } else { "s" }
+            items.len(),
+            if items.len() == 1 { "" } else { "s" }
         );
         header.push(text(tcx, &count, &cx.styles.dim));
+        header.push(text(tcx, "]", &cx.styles.dim));
         return row(4.0 * scale, header);
     }
-    let mut rows: Vec<Node<P>> = fields
+    let rows: Vec<Node<P>> = items
         .into_iter()
-        .map(|(label, value)| edge_row(cx, tcx, path, &inner, label, value, hooks))
+        .map(|(position, value)| {
+            let mut child = path.to_vec();
+            child.push(Step::Element(position));
+            let content = match value {
+                Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
+                None => pending_view(cx, tcx, child, hooks),
+            };
+            // The list vernacular: a dim leading dash marks the
+            // element rows.
+            row(6.0 * scale, vec![text(tcx, "-", &cx.styles.dim), content])
+        })
         .collect();
-    rows.extend(elements.into_iter().map(|(label, value)| {
-        let mut child = path.to_vec();
-        child.push(label);
-        let content = match value {
-            Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
-            None => pending_view(cx, tcx, child, hooks),
-        };
-        // The list vernacular: a dim leading dash marks an element
-        // row apart from the labeled field rows above.
-        row(6.0 * scale, vec![text(tcx, "-", &cx.styles.dim), content])
-    }));
-    if let Some((query, choice)) = cx.pending_edge_under(path) {
-        rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
-    }
-    block(row(4.0 * scale, header), rows, cx.styles)
+    // The block form closes its bracket at the header's indent.
+    col(
+        HAlign::Start,
+        0,
+        4.0 * scale,
+        vec![
+            row(4.0 * scale, header),
+            pad(
+                Insets::new(26.0 * scale, 0.0, 0.0, 0.0),
+                col(HAlign::Start, 0, 4.0 * scale, rows),
+            ),
+            text(tcx, "]", &cx.styles.dim),
+        ],
+    )
 }
 
 /// Git-style short form of a node id: an ellipsis and the last five
@@ -1419,52 +1443,48 @@ pub fn short_id(id: NodeId) -> String {
 
 /// A node's edges, sorted for stable order. All of them — `name` is not
 /// special here.
-fn sorted_edges(sources: &Sources, id: &Id) -> Vec<(Id, Id)> {
-    let mut edges: Vec<(Id, Id)> = sources
-        .edges(id)
+fn sorted_edges(sources: &Sources, node: NodeId) -> Vec<(Atom, Value)> {
+    let mut edges: Vec<(Atom, Value)> = sources
+        .edges(node)
         .map(|edges| edges.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
         .unwrap_or_default();
     edges.sort();
     edges
 }
 
-fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, label: &Id) -> Node<P> {
-    let inner = if let Some(s) = label.as_str() {
-        text(tcx, s, &cx.styles.label)
-    } else if let Some(n) = label.as_number() {
-        text(tcx, &n.to_string(), &cx.styles.number)
-    } else if let Some(uuid) = label.as_node_id() {
-        // A named node used as a label reads by its name, through
-        // the editor's one name policy.
-        match cx.names.of(&cx.sources, label) {
+fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Atom) -> Node<P> {
+    let inner = match key {
+        Atom::String(s) => text(tcx, s, &cx.styles.label),
+        Atom::Number(n) => text(tcx, &n.get().to_string(), &cx.styles.number),
+        // A named node used as a key reads by its name, through the
+        // editor's one name policy.
+        Atom::Node(node) => match cx.name(*node) {
             Some(name) => text(tcx, &name.text, &cx.styles.label),
-            None => text(tcx, &short_id(uuid), &cx.styles.id),
-        }
-    } else if let Some(bytes) = position::as_position(label) {
-        text(tcx, &hex(bytes), &cx.styles.id)
-    } else {
-        unknown_view(cx, tcx, label)
+            None => text(tcx, &short_id(*node), &cx.styles.id),
+        },
     };
-    secondary_mark(cx, label, inner)
+    secondary_mark(cx, &Value::Atom(key.clone()), inner)
 }
 
 /// A node projection's ground, painted only at authority
-/// TRANSITIONS: an external entity under a document-authority parent
-/// takes the dark tint — no lock, just "from elsewhere" — and a
-/// document-authority entity under an external parent takes its
-/// light ground back (opaque, since an alpha wash can't be undone by
+/// TRANSITIONS: an external entity under document authority takes
+/// the dark tint — no lock, just "from elsewhere" — and a
+/// document-authority entity under an external one takes its light
+/// ground back (opaque, since an alpha wash can't be undone by
 /// another wash). Runs of the same authority draw nothing, so
-/// nesting never stacks tints. Wraps outside the descend so the
-/// node's own selection highlight draws over its ground.
-fn ground<P: Canvas>(cx: &Cx, path: &[Id], id: &Id, content: Node<P>) -> Node<P> {
-    if id.as_node_id().is_none() {
+/// nesting never stacks tints. The enclosing authority is the
+/// spine's owning entity, so a node inside a list carries its list's
+/// owner as context. Wraps outside the descend so the node's own
+/// selection highlight draws over its ground.
+fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) -> Node<P> {
+    let Some(node) = value.as_node() else {
         return content;
-    }
-    let external = cx.sources.external(id);
-    let parent_external = path
-        .split_last()
-        .and_then(|(_, parent)| cx.sources.resolve(parent))
-        .is_some_and(|parent| cx.sources.external(parent));
+    };
+    let external = cx.sources.external(node);
+    let parent_external = last_key(path)
+        .and_then(|(index, _)| cx.sources.resolve(&path[..index]))
+        .and_then(Value::as_node)
+        .is_some_and(|entity| cx.sources.external(entity));
     if external == parent_external {
         return content;
     }
@@ -1481,11 +1501,11 @@ fn ground<P: Canvas>(cx: &Cx, path: &[Id], id: &Id, content: Node<P>) -> Node<P>
 }
 
 /// The secondary selection's mark: a subtle wash over another whole
-/// projection of the selected edge's node — an expanded block, a
-/// collapsed header, or a GUID label. The primary selection's
-/// geometry at lower strength, so the two read as one family.
-fn secondary_mark<P: Canvas>(cx: &Cx, id: &Id, content: Node<P>) -> Node<P> {
-    if cx.secondary.as_ref() != Some(id) {
+/// projection of the selected edge's value — an expanded block, a
+/// collapsed header, or a label. The primary selection's geometry at
+/// lower strength, so the two read as one family.
+fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P> {
+    if cx.secondary.as_ref() != Some(value) {
         return content;
     }
     let scale = cx.styles.scale;
@@ -1499,10 +1519,6 @@ fn secondary_mark<P: Canvas>(cx: &Cx, id: &Id, content: Node<P>) -> Node<P> {
             Affine::IDENTITY,
         );
     })
-}
-
-pub fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// The disclosure delta to the right of a node header: down when
@@ -1557,9 +1573,8 @@ fn disclosure<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 }
 
 /// A small drawn arrow between a label and its value. Reading
-/// "label → value", and being a stroke rather than an id, it
-/// separates an edge's key from its target — labels and values are
-/// otherwise both ids.
+/// "label → value", and being a stroke rather than text, it
+/// separates an edge's key from its target.
 fn arrow<P: Canvas>(styles: &RawStyles) -> Node<P> {
     let scale = styles.scale;
     let width = 16.0 * scale;
@@ -1591,43 +1606,38 @@ fn arrow<P: Canvas>(styles: &RawStyles) -> Node<P> {
 fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
-    path: &[Id],
-    ancestors: &HashSet<Id>,
-    value: &Id,
+    path: &[Step],
+    ancestors: &HashSet<NodeId>,
+    value: &Value,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let editing = cx
         .selection
         .filter(|selection| selection.path() == path)
         .and_then(Selection::edit);
-    let inner = if let Some(s) = value.as_str() {
-        let fallback = text(tcx, s, &cx.styles.string);
-        let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
-        row(0.0, vec![
-            text(tcx, "\"", &cx.styles.string),
-            cursor_target(path.to_vec(), value.clone(), hooks, content),
-            text(tcx, "\"", &cx.styles.string),
-        ])
-    } else if let Some(n) = value.as_number() {
-        let fallback = text(tcx, &n.to_string(), &cx.styles.number);
-        let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
-        cursor_target(path.to_vec(), value.clone(), hooks, content)
-    } else if let Some(node) = value.as_node_id() {
-        // The hardcoded projection chain, decided per node: the list
-        // projection claims list-shaped nodes, everything else stays
-        // the raw block. A registry waits for user-defined
-        // projections; the Raw view empties the chain.
-        if !cx.raw && list_shaped(&cx.sources, value, cx.pending_child_of(path).as_ref()) {
-            list_view(cx, tcx, path, ancestors, node, hooks)
-        } else {
-            node_view(cx, tcx, path, ancestors, node, hooks)
+    let inner = match value {
+        Value::Atom(Atom::String(s)) => {
+            let fallback = text(tcx, s, &cx.styles.string);
+            let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
+            row(0.0, vec![
+                text(tcx, "\"", &cx.styles.string),
+                cursor_target(path.to_vec(), value.clone(), hooks, content),
+                text(tcx, "\"", &cx.styles.string),
+            ])
         }
-    } else if let Some(bytes) = position::as_position(value) {
-        text(tcx, &hex(bytes), &cx.styles.id)
-    } else {
-        unknown_view(cx, tcx, value)
+        Value::Atom(Atom::Number(n)) => {
+            let fallback = text(tcx, &n.get().to_string(), &cx.styles.number);
+            let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
+            cursor_target(path.to_vec(), value.clone(), hooks, content)
+        }
+        // The hardcoded projection chain, decided per value: lists
+        // render as lists — in the Raw view too, the kind being data
+        // — nodes as raw blocks. A registry waits for user-defined
+        // projections.
+        Value::Atom(Atom::Node(node)) => node_view(cx, tcx, path, ancestors, *node, hooks),
+        Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, hooks),
     };
-    // Other projections of the selected edge's node carry the
+    // Other projections of the selected edge's value carry the
     // secondary mark; the selected one has the primary highlight.
     let inner = if cx.selected(path) {
         inner
@@ -1655,7 +1665,7 @@ fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             query,
             choice,
         }) if pending.as_slice() == path.as_slice() => {
-            query_content(cx, tcx, query, *choice, hooks)
+            query_content(cx, tcx, query, *choice, false, hooks)
         }
         _ => text(tcx, "…", &cx.styles.dim),
     };
@@ -1664,15 +1674,17 @@ fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 
 /// A focused completion query: the editor plus its popup, emitted at
 /// placement for the shell to draw over the body. Serves both pending
-/// stages — a value and a new edge's label.
+/// stages — a value and a new edge's label (`labels` narrows the
+/// offers to atoms there).
 fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
     choice: usize,
+    labels: bool,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let entries = completion_entries(&cx.sources, cx.names, query.text());
+    let entries = completion_entries(&cx.sources, cx.names, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let content = atom_content(Some(query), fallback, tcx, cx.styles, hooks);
     let edit = hooks.edit.clone();
@@ -1728,10 +1740,10 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
         .iter()
         .map(|entry| {
             let style = match &entry.action {
-                EntryAction::Value(id) if id.as_str().is_some() => &styles.string,
-                EntryAction::Value(id) if id.as_number().is_some() => &styles.number,
+                EntryAction::Value(value) if value.as_str().is_some() => &styles.string,
+                EntryAction::Value(value) if value.as_number().is_some() => &styles.number,
                 EntryAction::Value(_) => &styles.label,
-                EntryAction::NewNode { .. } => &styles.dim,
+                EntryAction::NewNode { .. } | EntryAction::NewList => &styles.dim,
             };
             let display = highlighted(tcx, &entry.display, &entry.matches, style);
             let detail = entry
@@ -1865,30 +1877,30 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 /// parts like a pending row's label, whose plain click deliberately
 /// falls through.
 fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
-    id: Id,
+    key: Atom,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
     let pick = hooks.pick.clone();
     decorate(content, move |p, rect| {
         let pick = pick.clone();
-        let id = id.clone();
+        let key = key.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && command(&event.state.modifiers)
-                && pick(ctx, id.clone())
+                && pick(ctx, Value::Atom(key.clone()))
         });
     })
 }
 
 /// A plain click-to-select target for `path` — for edge parts like
 /// labels that select without carrying an editor click. With the
-/// command modifier and a pending open, picks `label` — the identity
-/// the label displays — into it instead.
+/// command modifier and a pending open, picks `key` — the value the
+/// label displays — into it instead.
 fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
     path: Path,
-    label: Id,
+    key: Atom,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
@@ -1898,13 +1910,13 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
-        let label = label.clone();
+        let key = key.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
-                    let picked =
-                        command(&event.state.modifiers) && pick(ctx, label.clone());
+                    let picked = command(&event.state.modifiers)
+                        && pick(ctx, Value::Atom(key.clone()));
                     if !picked {
                         select(ctx, target.clone(), None);
                     }
@@ -1918,10 +1930,10 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
 /// text-local position — and nothing more; the shell's selection
 /// transition decides what it means. One report serves the first
 /// click and every one after. With the command modifier and a pending
-/// open, picks the atom's identity into it instead.
+/// open, picks the atom's value into it instead.
 fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     path: Path,
-    value: Id,
+    value: Value,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
@@ -1952,20 +1964,6 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     })
 }
 
-/// A value from a space the editor doesn't know — or a known space's
-/// non-canonical spelling: the space (named when the library names
-/// it, its short id otherwise) plus the payload as hex.
-fn unknown_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, id: &Id) -> Node<P> {
-    let space = match cx.names.of(&cx.sources, &Id::from(id.space())) {
-        Some(name) => text(tcx, &name.text, &cx.styles.label),
-        None => text(tcx, &short_id(id.space()), &cx.styles.id),
-    };
-    row(
-        4.0 * cx.styles.scale,
-        vec![space, text(tcx, &hex(id.payload()), &cx.styles.id)],
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1976,39 +1974,48 @@ mod tests {
         Sources { doc, library }
     }
 
+    fn key(s: &str) -> Step {
+        Step::Key(Atom::from(s))
+    }
+
+    /// The ordered positions of a list value's elements.
+    fn positions(value: &Value) -> Vec<Position> {
+        value.as_list().unwrap().keys().cloned().collect()
+    }
+
     fn descends(paths: &[Vec<&str>]) -> Vec<Descend> {
         paths
             .iter()
             .map(|path| Descend {
-                path: path.iter().map(|s| Id::from(*s)).collect(),
+                path: path.iter().map(|s| key(s)).collect(),
                 rect: Rect::ZERO,
             })
             .collect()
     }
 
-    fn arrow(key: NamedKey) -> KeyboardEvent {
+    fn arrow(named: NamedKey) -> KeyboardEvent {
         KeyboardEvent {
-            key: Key::Named(key),
+            key: Key::Named(named),
             state: KeyState::Down,
             modifiers: Modifiers::empty(),
             ..Default::default()
         }
     }
 
-    fn stepped(ds: &[Descend], from: Option<&[&str]>, key: NamedKey) -> Option<Path> {
+    fn stepped(ds: &[Descend], from: Option<&[&str]>, named: NamedKey) -> Option<Path> {
         let selection = from.map(|p| Selection::Edge {
-            path: p.iter().map(|s| Id::from(*s)).collect(),
+            path: p.iter().map(|s| key(s)).collect(),
             edit: None,
             recorded: false,
         });
-        step_selection(ds, selection.as_ref(), &arrow(key))
+        step_selection(ds, selection.as_ref(), &arrow(named))
     }
 
     #[test]
     fn arrows_step_selection_through_the_tree() {
         // Placement order: pre-order, parents before children.
         let ds = descends(&[vec![], vec!["a"], vec!["a", "x"], vec!["a", "y"], vec!["b"]]);
-        let path = |p: &[&str]| p.iter().map(|s| Id::from(*s)).collect::<Vec<_>>();
+        let path = |p: &[&str]| p.iter().map(|s| key(s)).collect::<Vec<_>>();
         // Nothing selected: any arrow lands on the root.
         assert_eq!(stepped(&ds, None, NamedKey::ArrowDown), Some(vec![]));
         // Right descends to the first placed child, left back to the parent.
@@ -2053,14 +2060,14 @@ mod tests {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("name"), Id::from("old"));
-        gid.set(node, Id::from("x"), Id::from(1.5));
+        gid.set(node, Atom::from("name"), Value::from("old"));
+        gid.set(node, Atom::from("x"), Value::from(1.5));
         let doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
         let at = |labels: &[&str]| {
-            Selection::edge(&src(&doc, &lib), labels.iter().map(|s| Id::from(*s)).collect())
+            Selection::edge(&src(&doc, &lib), labels.iter().map(|s| key(s)).collect())
         };
         assert!(at(&["name"]).edit().is_some());
         assert!(at(&["x"]).edit().is_some());
@@ -2075,28 +2082,28 @@ mod tests {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("x"), Id::from(1.5));
+        gid.set(node, Atom::from("x"), Value::from(1.5));
         let mut doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
-        let path = vec![Id::from("x")];
+        let path = vec![key("x")];
         let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
 
         selection.edit_mut().unwrap().set_text("2.5");
         write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Id::from(2.5)));
+        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from(2.5)));
 
         // Half-typed states leave the last parsed value in place.
         for unparsable in ["2.5e", "", "-", "abc"] {
             selection.edit_mut().unwrap().set_text(unparsable);
             write_through(&mut doc, &lib, &mut selection);
-            assert_eq!(src(&doc, &lib).resolve(&path), Some(&Id::from(2.5)));
+            assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from(2.5)));
         }
 
         selection.edit_mut().unwrap().set_text("-3");
         write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Id::from(-3.0)));
+        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from(-3.0)));
     }
 
     #[test]
@@ -2104,19 +2111,100 @@ mod tests {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("name"), Id::from("old"));
+        gid.set(node, Atom::from("name"), Value::from("old"));
         let mut doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
-        let mut selection = Selection::edge(&src(&doc, &lib), vec![Id::from("name")]);
+        let mut selection = Selection::edge(&src(&doc, &lib), vec![key("name")]);
         selection.edit_mut().unwrap().set_text("new");
         write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(src(&doc, &lib).resolve(&[Id::from("name")]), Some(&Id::from("new")));
+        assert_eq!(src(&doc, &lib).resolve(&[key("name")]), Some(&Value::from("new")));
         // A selection without an editor writes nothing.
-        let mut plain = Selection::edge(&src(&doc, &lib), vec![Id::from("missing")]);
+        let mut plain = Selection::edge(&src(&doc, &lib), vec![key("missing")]);
         assert!(!write_through(&mut doc, &lib, &mut plain));
-        assert_eq!(src(&doc, &lib).resolve(&[Id::from("name")]), Some(&Id::from("new")));
+        assert_eq!(src(&doc, &lib).resolve(&[key("name")]), Some(&Value::from("new")));
+    }
+
+    #[test]
+    fn element_edits_rebuild_the_list_at_its_edge() {
+        let mut gid = MutGid::new();
+        let lib = MutGid::new();
+        let node = new_node_id();
+        gid.set(
+            node,
+            Atom::from("dash"),
+            Value::list([Value::from(2.0), Value::from(3.0)]),
+        );
+        let mut doc = Document {
+            root: Some(Value::from(node)),
+            gid,
+        };
+        let list_path = vec![key("dash")];
+        let ps = positions(src(&doc, &lib).resolve(&list_path).unwrap());
+        let element = vec![key("dash"), Step::Element(ps[1].clone())];
+
+        // Editing an element writes the whole rebuilt list at the
+        // owning edge; the sibling keeps its position and value.
+        let mut selection = Selection::edge(&src(&doc, &lib), element.clone());
+        selection.edit_mut().unwrap().set_text("9");
+        assert!(write_through(&mut doc, &lib, &mut selection));
+        assert_eq!(src(&doc, &lib).resolve(&element), Some(&Value::from(9.0)));
+        assert_eq!(
+            src(&doc, &lib).resolve(&list_path),
+            Some(&Value::list([Value::from(2.0), Value::from(9.0)]))
+        );
+        assert_eq!(positions(src(&doc, &lib).resolve(&list_path).unwrap()), ps);
+    }
+
+    #[test]
+    fn set_value_writes_edges_elements_and_the_root() {
+        let mut gid = MutGid::new();
+        let lib = MutGid::new();
+        let node = new_node_id();
+        gid.set(node, Atom::from("x"), Value::from(1.0));
+        let mut doc = Document {
+            root: Some(Value::from(node)),
+            gid,
+        };
+        assert!(set_value(&mut doc, &lib, &[key("x")], Value::from(2.0)));
+        assert_eq!(src(&doc, &lib).resolve(&[key("x")]), Some(&Value::from(2.0)));
+
+        // A fresh element step INSERTS at its position — commit's
+        // shape — and a deep spine rebuilds through nested lists.
+        let inner = Value::list([Value::from(1.0)]);
+        gid_set(&mut doc, node, "items", Value::list([inner]));
+        let items = src(&doc, &lib).resolve(&[key("items")]).unwrap().clone();
+        let outer = positions(&items);
+        let inner_positions = positions(items.as_list().unwrap().values().next().unwrap());
+        let deep = vec![
+            key("items"),
+            Step::Element(outer[0].clone()),
+            Step::Element(inner_positions[0].clone()),
+        ];
+        assert!(set_value(&mut doc, &lib, &deep, Value::from(7.0)));
+        assert_eq!(src(&doc, &lib).resolve(&deep), Some(&Value::from(7.0)));
+        let fresh = position::between(Some(&outer[0]), None).unwrap();
+        let appended = vec![key("items"), Step::Element(fresh.clone())];
+        assert!(set_value(&mut doc, &lib, &appended, Value::from("tail")));
+        assert_eq!(src(&doc, &lib).resolve(&appended), Some(&Value::from("tail")));
+        // A deeper step under a missing element declines.
+        let gone = position::between(Some(&fresh), None).unwrap();
+        assert!(!set_value(
+            &mut doc,
+            &lib,
+            &[key("items"), Step::Element(gone), Step::Element(fresh)],
+            Value::from(0.0)
+        ));
+
+        assert!(set_value(&mut doc, &lib, &[], Value::from("root")));
+        assert_eq!(doc.root, Some(Value::from("root")));
+        // A parent that is not a node declines.
+        assert!(!set_value(&mut doc, &lib, &[key("x"), key("y")], Value::from(0.0)));
+    }
+
+    fn gid_set(doc: &mut Document, entity: NodeId, label: &str, value: Value) {
+        doc.gid.set(entity, Atom::from(label), value);
     }
 
     #[test]
@@ -2124,12 +2212,12 @@ mod tests {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("name"), Id::from("a"));
+        gid.set(node, Atom::from("name"), Value::from("a"));
         let mut doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
-        let mut selection = Selection::edge(&src(&doc, &lib), vec![Id::from("name")]);
+        let mut selection = Selection::edge(&src(&doc, &lib), vec![key("name")]);
 
         // First write opens the step; the rest of the run is silent,
         // as are no-op rewrites.
@@ -2145,7 +2233,7 @@ mod tests {
         assert!(write_through(&mut doc, &lib, &mut selection));
 
         // A re-minted editor is a new run by construction.
-        let mut fresh = Selection::edge(&src(&doc, &lib), vec![Id::from("name")]);
+        let mut fresh = Selection::edge(&src(&doc, &lib), vec![key("name")]);
         fresh.edit_mut().unwrap().set_text("x");
         assert!(write_through(&mut doc, &lib, &mut fresh));
     }
@@ -2156,21 +2244,21 @@ mod tests {
         let lib = MutGid::new();
         let root = new_node_id();
         let child = new_node_id();
-        gid.set(root, Id::from("child"), Id::from(child));
-        gid.set(child, Id::from("name"), Id::from("c"));
+        gid.set(root, Atom::from("child"), Value::from(child));
+        gid.set(child, Atom::from("name"), Value::from("c"));
         let mut doc = Document {
-            root: Some(Id::from(root)),
+            root: Some(Value::from(root)),
             gid,
         };
 
-        assert!(!delete_edge(&mut doc, &lib, &[Id::from("missing")]));
+        assert!(!delete_edge(&mut doc, &lib, &[key("missing")]));
 
-        assert!(delete_edge(&mut doc, &lib, &[Id::from("child")]));
-        assert_eq!(src(&doc, &lib).resolve(&[Id::from("child")]), None);
+        assert!(delete_edge(&mut doc, &lib, &[key("child")]));
+        assert_eq!(src(&doc, &lib).resolve(&[key("child")]), None);
         // Detachment, not destruction: the orphan keeps its edges.
-        assert!(doc.gid.edges(&Id::from(child)).is_some());
+        assert!(doc.gid.edges(child).is_some());
         // Already gone: declines.
-        assert!(!delete_edge(&mut doc, &lib, &[Id::from("child")]));
+        assert!(!delete_edge(&mut doc, &lib, &[key("child")]));
 
         assert!(delete_edge(&mut doc, &lib, &[]));
         assert_eq!(doc.root, None);
@@ -2179,22 +2267,59 @@ mod tests {
     }
 
     #[test]
+    fn deleting_an_element_rebuilds_the_list_without_it() {
+        let mut gid = MutGid::new();
+        let lib = MutGid::new();
+        let node = new_node_id();
+        gid.set(
+            node,
+            Atom::from("dash"),
+            Value::list([Value::from(2.0), Value::from(3.0)]),
+        );
+        let mut doc = Document {
+            root: Some(Value::from(node)),
+            gid,
+        };
+        let list_path = vec![key("dash")];
+        let ps = positions(src(&doc, &lib).resolve(&list_path).unwrap());
+        let first = vec![key("dash"), Step::Element(ps[0].clone())];
+
+        assert!(delete_edge(&mut doc, &lib, &first));
+        assert_eq!(
+            src(&doc, &lib).resolve(&list_path),
+            Some(&Value::list([Value::from(3.0)]))
+        );
+        // The survivor keeps its position; the deleted one is a
+        // stale path now and declines again.
+        assert_eq!(
+            positions(src(&doc, &lib).resolve(&list_path).unwrap()),
+            vec![ps[1].clone()]
+        );
+        assert!(!delete_edge(&mut doc, &lib, &first));
+
+        // Emptying the list leaves the empty list, not nothing.
+        let second = vec![key("dash"), Step::Element(ps[1].clone())];
+        assert!(delete_edge(&mut doc, &lib, &second));
+        assert_eq!(src(&doc, &lib).resolve(&list_path), Some(&Value::list([])));
+    }
+
+    #[test]
     fn root_edits_commit_to_the_document_root() {
         let lib = MutGid::new();
         let mut doc = Document {
-            root: Some(Id::from("old")),
+            root: Some(Value::from("old")),
             gid: MutGid::new(),
         };
         let mut selection = Selection::edge(&src(&doc, &lib), vec![]);
         selection.edit_mut().unwrap().set_text("new");
         write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(doc.root, Some(Id::from("new")));
+        assert_eq!(doc.root, Some(Value::from("new")));
     }
 
     #[test]
     fn selection_after_delete_prefers_next_then_previous_then_parent() {
         let ds = descends(&[vec![], vec!["a"], vec!["a", "x"], vec!["a", "y"], vec!["b"]]);
-        let path = |p: &[&str]| p.iter().map(|s| Id::from(*s)).collect::<Vec<_>>();
+        let path = |p: &[&str]| p.iter().map(|s| key(s)).collect::<Vec<_>>();
         assert_eq!(selection_after_delete(&ds, &path(&["a"])), path(&["b"]));
         assert_eq!(selection_after_delete(&ds, &path(&["b"])), path(&["a"]));
         assert_eq!(selection_after_delete(&ds, &path(&["a", "x"])), path(&["a", "y"]));
@@ -2205,50 +2330,58 @@ mod tests {
 
     #[test]
     fn pending_insertions_mint_between_neighbors() {
-        let mut gid = MutGid::new();
         let lib = MutGid::new();
-        let items = list(&mut gid, vec![Id::from("a"), Id::from("b")]);
         let doc = Document {
-            root: Some(items.clone()),
-            gid,
+            root: Some(Value::list([Value::from("a"), Value::from("b")])),
+            gid: MutGid::new(),
         };
-        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
-        let first = vec![positions[0].clone()];
+        let ps = positions(doc.root.as_ref().unwrap());
+        let first = vec![Step::Element(ps[0].clone())];
 
         let Some(Selection::Pending { path, .. }) = pending_after(&src(&doc, &lib), &first) else {
             panic!("pending after");
         };
-        assert!(positions[0] < path[0] && path[0] < positions[1]);
+        let Step::Element(minted) = &path[0] else {
+            panic!("an element step");
+        };
+        assert!(ps[0] < *minted && *minted < ps[1]);
 
         let Some(Selection::Pending { path, .. }) = pending_before(&src(&doc, &lib), &first) else {
             panic!("pending before");
         };
-        assert!(path[0] < positions[0]);
+        let Step::Element(minted) = &path[0] else {
+            panic!("an element step");
+        };
+        assert!(*minted < ps[0]);
 
         // Into the root list appends at the end; the first variant
         // prepends.
         let Some(Selection::Pending { path, .. }) = pending_into(&src(&doc, &lib), &[]) else {
             panic!("pending into");
         };
-        assert!(positions[1] < path[0]);
+        let Step::Element(minted) = &path[0] else {
+            panic!("an element step");
+        };
+        assert!(ps[1] < *minted);
         let Some(Selection::Pending { path, .. }) = pending_into_first(&src(&doc, &lib), &[]) else {
             panic!("pending into first");
         };
-        assert!(path[0] < positions[0]);
+        let Step::Element(minted) = &path[0] else {
+            panic!("an element step");
+        };
+        assert!(*minted < ps[0]);
 
-        // A record field has no position to sit beside.
+        // A record field has no position to sit beside, and a record
+        // takes no positional element — lists do, by type.
         let mut gid = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("name"), Id::from("x"));
+        gid.set(node, Atom::from("name"), Value::from("x"));
         let doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
-        assert!(pending_after(&src(&doc, &lib), &[Id::from("name")]).is_none());
-        // Its value being an atom declines "into", and so does the
-        // record itself — a node with only field edges takes no
-        // positional element.
-        assert!(pending_into(&src(&doc, &lib), &[Id::from("name")]).is_none());
+        assert!(pending_after(&src(&doc, &lib), &[key("name")]).is_none());
+        assert!(pending_into(&src(&doc, &lib), &[key("name")]).is_none());
         assert!(pending_into(&src(&doc, &lib), &[]).is_none());
         assert!(pending_into_first(&src(&doc, &lib), &[]).is_none());
         // An empty document offers the root; a rooted one does not.
@@ -2269,6 +2402,149 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_list_takes_its_first_element() {
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        gid.set(root, Atom::from("holes"), Value::list([]));
+        gid.set(root, Atom::from("x"), Value::from(1.0));
+        let doc = Document {
+            root: Some(Value::from(root)),
+            gid,
+        };
+        let lib = MutGid::new();
+
+        let Some(Selection::Pending { path, .. }) =
+            pending_insert(&src(&doc, &lib), &[key("holes")], true)
+        else {
+            panic!("first element into the empty list");
+        };
+        assert_eq!(path.len(), 2);
+        assert!(matches!(&path[1], Step::Element(_)));
+
+        // A record still declines the positional chord.
+        assert!(pending_insert(&src(&doc, &lib), &[], true).is_none());
+    }
+
+    #[test]
+    fn within_on_a_list_appends_an_element() {
+        let mut gid = MutGid::new();
+        let root = new_node_id();
+        let items = Value::list([Value::from(1.0)]);
+        gid.set(root, Atom::from("items"), items.clone());
+        let doc = Document {
+            root: Some(Value::from(root)),
+            gid,
+        };
+        let lib = MutGid::new();
+        let sources = src(&doc, &lib);
+
+        // Lists hold no fields — structurally: the label pending
+        // declines, and the within chord appends an element instead.
+        let path = vec![key("items")];
+        assert!(pending_edge(&sources, path.clone()).is_none());
+        let Some(Selection::Pending { path: fresh, .. }) = pending_insert(&sources, &path, false)
+        else {
+            panic!("within on a list appends");
+        };
+        let Step::Element(minted) = &fresh[1] else {
+            panic!("an element step");
+        };
+        assert!(positions(&items).last().unwrap() < minted);
+
+        // Enter on a root list falls within the same way.
+        let doc = Document {
+            root: Some(items),
+            gid: doc.gid.clone(),
+        };
+        assert!(matches!(
+            pending_enter(&src(&doc, &lib), &[], false),
+            Some(Selection::Pending { .. })
+        ));
+    }
+
+    #[test]
+    fn enter_continues_beside_and_the_chord_authors_within() {
+        let mut gid = MutGid::new();
+        let lib = MutGid::new();
+        let nested = new_node_id();
+        let items = Value::list([Value::from("a"), Value::from(nested)]);
+        let record = new_node_id();
+        gid.set(record, Atom::from("items"), items.clone());
+        gid.set(record, Atom::from("x"), Value::from(1.0));
+        let doc = Document {
+            root: Some(Value::from(record)),
+            gid,
+        };
+        let ps = positions(&items);
+        let items_path = vec![key("items")];
+        let first = vec![key("items"), Step::Element(ps[0].clone())];
+        let second = vec![key("items"), Step::Element(ps[1].clone())];
+        let minted_in = |path: &[Step]| match path.last() {
+            Some(Step::Element(position)) => position.clone(),
+            _ => panic!("an element step"),
+        };
+
+        // Enter continues the enumeration: any element — atom or node
+        // — pends a sibling (before with shift).
+        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, false) else {
+            panic!("sibling after");
+        };
+        let minted = minted_in(&path);
+        assert!(ps[0] < minted && minted < ps[1]);
+        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, true) else {
+            panic!("sibling before");
+        };
+        assert!(minted_in(&path) < ps[0]);
+        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &second, false) else {
+            panic!("node element sibling");
+        };
+        assert!(ps[1] < minted_in(&path));
+
+        // A field value — atom or node — pends the parent's next
+        // field; the root has nothing beside it and takes the field
+        // on itself.
+        assert!(matches!(
+            pending_enter(&src(&doc, &lib), &[key("x")], false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
+        assert!(matches!(
+            pending_enter(&src(&doc, &lib), &items_path, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
+        assert!(matches!(
+            pending_enter(&src(&doc, &lib), &[], false),
+            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
+        ));
+
+        // The chord authors within: a field edge on the selected map
+        // — empty nodes included — and an appended element on a
+        // list, which holds no fields; atoms decline.
+        let Some(Selection::Pending { path, .. }) =
+            pending_insert(&src(&doc, &lib), &items_path, false)
+        else {
+            panic!("within on a list appends");
+        };
+        assert!(ps[1] < minted_in(&path));
+        assert!(matches!(
+            pending_insert(&src(&doc, &lib), &second, false),
+            Some(Selection::PendingEdge { parent, .. }) if parent == second
+        ));
+        assert!(pending_insert(&src(&doc, &lib), &first, false).is_none());
+
+        // Shift is the positional variant: a first element at the
+        // front — prepend on a list — declining on records, empty
+        // nodes (maps take fields, not elements), and atoms.
+        let Some(Selection::Pending { path, .. }) = pending_insert(&src(&doc, &lib), &items_path, true)
+        else {
+            panic!("prepend");
+        };
+        assert!(minted_in(&path) < ps[0]);
+        assert!(pending_insert(&src(&doc, &lib), &second, true).is_none());
+        assert!(pending_insert(&src(&doc, &lib), &[], true).is_none());
+        assert!(pending_insert(&src(&doc, &lib), &first, true).is_none());
+    }
+
+    #[test]
     fn sibling_stepping_continues_through_ancestors() {
         let all = descends(&[
             vec![],
@@ -2277,7 +2553,7 @@ mod tests {
             vec!["a", "y"],
             vec!["b"],
         ]);
-        let at = |labels: &[&str]| -> Path { labels.iter().map(|s| Id::from(*s)).collect() };
+        let at = |labels: &[&str]| -> Path { labels.iter().map(|s| key(s)).collect() };
 
         // Within a parent: plain sibling steps.
         assert_eq!(sibling(&all, &at(&["a", "x"]), true), Some(at(&["a", "y"])));
@@ -2291,36 +2567,42 @@ mod tests {
     }
 
     #[test]
-    fn secondary_is_the_selected_edges_value_in_any_space() {
+    fn secondary_is_the_selected_edges_value_lists_included() {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let shared = new_node_id();
-        gid.set(shared, Id::from("x"), Id::from(1.0));
+        gid.set(shared, Atom::from("x"), Value::from(1.0));
         let root = new_node_id();
-        gid.set(root, Id::from("a"), Id::from(shared));
-        gid.set(root, Id::from("b"), Id::from(shared));
+        gid.set(root, Atom::from("a"), Value::from(shared));
+        gid.set(root, Atom::from("b"), Value::from(shared));
+        gid.set(root, Atom::from("pair"), Value::list([Value::from(2.0)]));
         let doc = Document {
-            root: Some(Id::from(root)),
+            root: Some(Value::from(root)),
             gid,
         };
-        let edge = |path: Vec<Id>| Selection::Edge {
+        let edge = |path: Vec<Step>| Selection::Edge {
             path,
             edit: None,
             recorded: false,
         };
 
         assert_eq!(
-            secondary_of(&src(&doc, &lib), Some(&edge(vec![Id::from("a")]))),
-            Some(Id::from(shared))
+            secondary_of(&src(&doc, &lib), Some(&edge(vec![key("a")]))),
+            Some(Value::from(shared))
         );
-        // Atoms are identities too — SIDs and NIDs mark like GUIDs.
+        // Atoms are values too, and so are lists — equal lists mark
+        // alike, value semantics displayed honestly.
         assert_eq!(
-            secondary_of(&src(&doc, &lib), Some(&edge(vec![Id::from("a"), Id::from("x")]))),
-            Some(Id::from(1.0))
+            secondary_of(&src(&doc, &lib), Some(&edge(vec![key("a"), key("x")]))),
+            Some(Value::from(1.0))
+        );
+        assert_eq!(
+            secondary_of(&src(&doc, &lib), Some(&edge(vec![key("pair")]))),
+            Some(Value::list([Value::from(2.0)]))
         );
         // Pendings and no selection don't mark.
         assert_eq!(
-            secondary_of(&src(&doc, &lib), Some(&pending_value(vec![Id::from("c")]))),
+            secondary_of(&src(&doc, &lib), Some(&pending_value(vec![key("c")]))),
             None
         );
         assert_eq!(secondary_of(&src(&doc, &lib), None), None);
@@ -2331,9 +2613,9 @@ mod tests {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("name"), Id::from("x"));
+        gid.set(node, Atom::from("name"), Value::from("x"));
         let doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
         assert!(matches!(
@@ -2341,7 +2623,7 @@ mod tests {
             Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
         ));
         // An atom takes no edges; an empty document has no node.
-        assert!(pending_edge(&src(&doc, &lib), vec![Id::from("name")]).is_none());
+        assert!(pending_edge(&src(&doc, &lib), vec![key("name")]).is_none());
         let empty = Document {
             root: None,
             gid: MutGid::new(),
@@ -2354,17 +2636,17 @@ mod tests {
         let mut gid = MutGid::new();
         for name in ["origin", "corner"] {
             let node = new_node_id();
-            gid.set(node, Id::from(NAME), Id::from(name));
+            gid.set(node, Atom::Node(NAME), Value::from(name));
         }
         let names = Names::convention();
         // An empty library keeps the offer counts about the document.
         let empty = MutGid::new();
-        let complete = |gid: &MutGid, root: Option<&Id>, query: &str, names: &Names| {
+        let complete = |gid: &MutGid, root: Option<&Value>, query: &str, names: &Names| {
             let doc = Document {
                 root: root.cloned(),
                 gid: gid.clone(),
             };
-            completion_entries(&src(&doc, &empty), names, query)
+            completion_entries(&src(&doc, &empty), names, false, false, query)
         };
 
         // A confident reference match outranks the typed string;
@@ -2373,7 +2655,9 @@ mod tests {
         assert_eq!(entries[0].display, "origin");
         assert!(entries[0].detail.is_some());
         assert_eq!(entries[1].display, "\"orig\"");
-        assert!(matches!(&entries[1].action, EntryAction::Value(id) if id.as_str().is_some()));
+        assert!(matches!(&entries[1].action, EntryAction::Value(v) if v.as_str().is_some()));
+        // "new list" ranks like a reference and "orig" doesn't match
+        // it, so the named creation offer is the one trailer.
         assert_eq!(entries.len(), 3);
         assert!(matches!(
             &entries.last().unwrap().action,
@@ -2383,42 +2667,69 @@ mod tests {
         // A leading quote forces the string back on top, closed or
         // not, and the new node's name drops the quotes.
         let entries = complete(&gid, None, "\"orig", &names);
-        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str() == Some("orig")));
+        assert!(matches!(&entries[0].action, EntryAction::Value(v) if v.as_str() == Some("orig")));
         assert!(matches!(
             &entries.last().unwrap().action,
             EntryAction::NewNode { name: Some(name) } if name == "orig"
         ));
 
         // An empty query offers every node — the NAME label is
-        // itself an unnamed node here — plus unnamed creation and
-        // the empty string.
+        // itself an unnamed node here — plus "new list", unnamed
+        // creation, and the empty string.
         let entries = complete(&gid, None, "", &names);
-        assert_eq!(entries.len(), 5);
+        assert_eq!(entries.len(), 6);
+        assert!(
+            entries
+                .iter()
+                .any(|entry| matches!(entry.action, EntryAction::NewList))
+        );
         assert!(matches!(
             &entries.last().unwrap().action,
             EntryAction::NewNode { name: None }
         ));
 
-        // Numbers infer as the atom entry and lead — with the typed
-        // text always insertable as a string right below.
-        let entries = complete(&gid, None, "2.5", &names);
-        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_number() == Some(2.5)));
-        assert!(matches!(&entries[1].action, EntryAction::Value(id) if id.as_str() == Some("2.5")));
-        // A quote is stated string intent: no number offer rides along.
-        let entries = complete(&gid, None, "\"2.5", &names);
-        assert!(matches!(&entries[0].action, EntryAction::Value(id) if id.as_str() == Some("2.5")));
+        // Typing toward "new list" surfaces it (a prefix match leads
+        // the references); typing away drops it entirely. The label
+        // stage never offers it: a key must mean.
+        let entries = complete(&gid, None, "new li", &names);
+        assert!(matches!(entries[0].action, EntryAction::NewList));
+        let entries = complete(&gid, None, "asdf", &names);
         assert!(
             !entries
                 .iter()
-                .any(|entry| matches!(&entry.action, EntryAction::Value(id) if id.as_number().is_some()))
+                .any(|entry| matches!(entry.action, EntryAction::NewList))
+        );
+        let doc = Document {
+            root: None,
+            gid: gid.clone(),
+        };
+        let label_entries = completion_entries(&src(&doc, &empty), &names, false, true, "");
+        assert!(
+            !label_entries
+                .iter()
+                .any(|entry| matches!(entry.action, EntryAction::NewList))
+        );
+
+        // Numbers infer as the atom entry and lead — with the typed
+        // text always insertable as a string right below.
+        let entries = complete(&gid, None, "2.5", &names);
+        assert!(matches!(&entries[0].action, EntryAction::Value(v) if v.as_number() == Some(2.5)));
+        assert!(matches!(&entries[1].action, EntryAction::Value(v) if v.as_str() == Some("2.5")));
+        // A quote is stated string intent: no number offer rides along.
+        let entries = complete(&gid, None, "\"2.5", &names);
+        assert!(matches!(&entries[0].action, EntryAction::Value(v) if v.as_str() == Some("2.5")));
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| matches!(&entry.action, EntryAction::Value(v) if v.as_number().is_some()))
         );
 
         // Unnamed nodes are offered too, searchable by the short id
-        // they render as — including edgeless ones only referenced
-        // as values — and an exact suffix ranks first. A hex suffix
-        // can happen to parse as a number ("12345", "12e45") and
-        // legitimately cede the lead to the atom, so pick one that
-        // doesn't.
+        // they render as — including edgeless ones referenced only
+        // inside a list value — and an exact suffix ranks first. A
+        // hex suffix can happen to parse as a number ("12345",
+        // "12e45") and legitimately cede the lead to the atom, so
+        // pick one that doesn't.
         let orphan = std::iter::repeat_with(new_node_id)
             .find(|node| {
                 short_id(*node)
@@ -2428,22 +2739,22 @@ mod tests {
             })
             .unwrap();
         let scratch = new_node_id();
-        gid.set(scratch, Id::from("ref"), Id::from(orphan));
+        gid.set(scratch, Atom::from("refs"), Value::list([Value::from(orphan)]));
         let suffix = short_id(orphan);
         let entries = complete(&gid, None, suffix.trim_start_matches('…'), &names);
         assert_eq!(entries[0].display, suffix);
         assert!(entries[0].detail.is_none());
         assert!(
-            matches!(&entries[0].action, EntryAction::Value(id) if id.as_node_id() == Some(orphan))
+            matches!(&entries[0].action, EntryAction::Value(v) if v.as_node() == Some(orphan))
         );
 
         // The root's reference is a Document field, not a gid edge -
         // a fresh edgeless node at root is still offered.
         let root = new_node_id();
-        let root_id = Id::from(root);
-        let entries = complete(&gid, Some(&root_id), "", &names);
+        let root_value = Value::from(root);
+        let entries = complete(&gid, Some(&root_value), "", &names);
         assert!(entries.iter().any(
-            |entry| matches!(&entry.action, EntryAction::Value(id) if id.as_node_id() == Some(root))
+            |entry| matches!(&entry.action, EntryAction::Value(v) if v.as_node() == Some(root))
         ));
     }
 
@@ -2452,7 +2763,7 @@ mod tests {
         let library = crate::conventions::library();
         let mut gid = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from(NAME), Id::from("origin"));
+        gid.set(node, Atom::Node(NAME), Value::from("origin"));
         let doc = Document {
             root: None,
             gid: gid.clone(),
@@ -2460,31 +2771,27 @@ mod tests {
         let sources = src(&doc, &library);
 
         // The name carries its provenance: the consumed edge label.
-        let name = Names::convention().of(&sources, &Id::from(node)).unwrap();
+        let name = Names::convention().of(&sources, node).unwrap();
         assert_eq!(name.text, "origin");
-        assert_eq!(name.label, Some(Id::from(NAME)));
-        assert!(Names::none().of(&sources, &Id::from(node)).is_none());
+        assert_eq!(name.label, Some(Atom::Node(NAME)));
 
         // The convention node's own name is library DATA, and a
         // document's stored name shadows it.
-        let convention = Names::convention().of(&sources, &Id::from(NAME)).unwrap();
+        let convention = Names::convention().of(&sources, NAME).unwrap();
         assert_eq!(convention.text, "name");
-        assert_eq!(convention.label, Some(Id::from(NAME)));
-        gid.set(NAME, Id::from(NAME), Id::from("nombre"));
-        let doc = Document {
-            root: None,
-            gid,
-        };
+        assert_eq!(convention.label, Some(Atom::Node(NAME)));
+        gid.set(NAME, Atom::Node(NAME), Value::from("nombre"));
+        let doc = Document { root: None, gid };
         let sources = src(&doc, &library);
-        let stored = Names::convention().of(&sources, &Id::from(NAME)).unwrap();
+        let stored = Names::convention().of(&sources, NAME).unwrap();
         assert_eq!(stored.text, "nombre");
 
-        // Completion keys through the policy: with names disabled,
-        // the node falls back to its short id and the name no longer
-        // matches.
-        let entries = completion_entries(&sources, &Names::none(), "orig");
+        // Completion keys derive from the raw bit: raw offers the
+        // node by its short id, so the name no longer matches — the
+        // policy itself is never swapped.
+        let entries = completion_entries(&sources, &Names::convention(), true, false, "orig");
         assert!(!entries.iter().any(|entry| entry.display == "origin"));
-        let entries = completion_entries(&sources, &Names::convention(), "orig");
+        let entries = completion_entries(&sources, &Names::convention(), false, false, "orig");
         assert_eq!(entries[0].display, "origin");
     }
 
@@ -2492,35 +2799,36 @@ mod tests {
     fn the_library_reads_through_but_never_writes() {
         let library = crate::conventions::library();
         let mut doc = Document {
-            root: Some(Id::from(NAME)),
+            root: Some(Value::from(NAME)),
             gid: MutGid::new(),
         };
         let sources = src(&doc, &library);
+        let name_path = vec![Step::Key(Atom::Node(NAME))];
 
         // Completion offers the conventions from keystroke one, as
         // references: picking "name" yields the NAME node, not a
         // lookalike string label.
-        let entries = completion_entries(&sources, &Names::convention(), "nam");
+        let entries = completion_entries(&sources, &Names::convention(), false, false, "nam");
         assert_eq!(entries[0].display, "name");
         assert!(matches!(
             &entries[0].action,
-            EntryAction::Value(id) if id.as_node_id() == Some(NAME)
+            EntryAction::Value(v) if v.as_node() == Some(NAME)
         ));
 
         // Library facts render through the sources, and paths now
         // RESOLVE through them...
-        assert_eq!(sorted_edges(&sources, &Id::from(NAME)).len(), 1);
+        assert_eq!(sorted_edges(&sources, NAME).len(), 1);
         assert_eq!(
-            src(&doc, &library).resolve(&[Id::from(NAME)]),
-            Some(&Id::from("name"))
+            src(&doc, &library).resolve(&name_path),
+            Some(&Value::from("name"))
         );
         // ...but writes gate on entity authority: the NAME entity is
         // external, so editing and deleting decline with no read-only
         // flag anywhere.
-        assert!(!delete_edge(&mut doc, &library, &[Id::from(NAME)]));
-        assert!(!set_value(&mut doc, &library, &[Id::from(NAME)], Id::from("x")));
+        assert!(!delete_edge(&mut doc, &library, &name_path));
+        assert!(!set_value(&mut doc, &library, &name_path, Value::from("x")));
         assert!(
-            Selection::edge(&src(&doc, &library), vec![Id::from(NAME)])
+            Selection::edge(&src(&doc, &library), name_path.clone())
                 .edit()
                 .is_none()
         );
@@ -2530,12 +2838,12 @@ mod tests {
         // while authoring BESIDE the reference stays a document edit.
         let mut gid = MutGid::new();
         let root = new_node_id();
-        gid.set(root, Id::from("k"), Id::from(NAME));
+        gid.set(root, Atom::from("k"), Value::from(NAME));
         let doc = Document {
-            root: Some(Id::from(root)),
+            root: Some(Value::from(root)),
             gid,
         };
-        let path = vec![Id::from("k")];
+        let path = vec![key("k")];
         assert!(pending_edge(&src(&doc, &library), path.clone()).is_none());
         assert!(pending_insert(&src(&doc, &library), &path, false).is_none());
         assert!(pending_insert(&src(&doc, &library), &path, true).is_none());
@@ -2546,16 +2854,16 @@ mod tests {
     }
 
     #[test]
-    fn commit_pending_mints_named_nodes() {
+    fn commit_pending_mints_named_nodes_and_bare_lists() {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let root = new_node_id();
-        gid.set(root, Id::from("x"), Id::from(1.0));
+        gid.set(root, Atom::from("x"), Value::from(1.0));
         let mut doc = Document {
-            root: Some(Id::from(root)),
+            root: Some(Value::from(root)),
             gid,
         };
-        let path = vec![Id::from("fresh")];
+        let path = vec![key("fresh")];
         assert!(commit_pending(
             &mut doc,
             &lib,
@@ -2565,46 +2873,33 @@ mod tests {
             }
         ));
         let value = src(&doc, &lib).resolve(&path).unwrap().clone();
-        assert!(value.as_node_id().is_some());
+        let node = value.as_node().unwrap();
         assert_eq!(
-            doc.gid.get(&value, &Id::from(NAME)),
-            Some(&Id::from("thing"))
+            doc.gid.get(node, &Atom::Node(NAME)),
+            Some(&Value::from("thing"))
         );
+
+        // "new list" commits the empty list value — pure, no entity
+        // minted anywhere.
+        let entities = doc.gid.entities().count();
+        assert!(commit_pending(&mut doc, &lib, &[key("items")], &EntryAction::NewList));
+        assert_eq!(
+            src(&doc, &lib).resolve(&[key("items")]),
+            Some(&Value::list([]))
+        );
+        assert_eq!(doc.gid.entities().count(), entities);
     }
 
     #[test]
-    fn resolve_query_infers_the_identity() {
-        assert_eq!(resolve_query("3.5"), Id::from(3.5));
-        assert_eq!(resolve_query(" -2 "), Id::from(-2.0));
-        assert_eq!(resolve_query("abc"), Id::from("abc"));
-        assert_eq!(resolve_query("\"3.5\""), Id::from("3.5"));
-        assert_eq!(resolve_query(""), Id::from(""));
+    fn resolve_query_infers_the_value() {
+        assert_eq!(resolve_query("3.5"), Value::from(3.5));
+        assert_eq!(resolve_query(" -2 "), Value::from(-2.0));
+        assert_eq!(resolve_query("abc"), Value::from("abc"));
+        assert_eq!(resolve_query("\"3.5\""), Value::from("3.5"));
+        assert_eq!(resolve_query(""), Value::from(""));
         // A leading quote is string mode even before it closes.
-        assert_eq!(resolve_query("\"3.5"), Id::from("3.5"));
-        assert_eq!(resolve_query("\""), Id::from(""));
-    }
-
-    #[test]
-    fn set_value_writes_edges_and_the_root() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Id::from("x"), Id::from(1.0));
-        let mut doc = Document {
-            root: Some(Id::from(node)),
-            gid,
-        };
-        assert!(set_value(&mut doc, &lib, &[Id::from("x")], Id::from(2.0)));
-        assert_eq!(src(&doc, &lib).resolve(&[Id::from("x")]), Some(&Id::from(2.0)));
-        assert!(set_value(&mut doc, &lib, &[], Id::from("root")));
-        assert_eq!(doc.root, Some(Id::from("root")));
-        // A parent that is not a node declines.
-        assert!(!set_value(
-            &mut doc,
-            &lib,
-            &[Id::from("x"), Id::from("y")],
-            Id::from(0.0)
-        ));
+        assert_eq!(resolve_query("\"3.5"), Value::from("3.5"));
+        assert_eq!(resolve_query("\""), Value::from(""));
     }
 
     #[test]
@@ -2613,16 +2908,17 @@ mod tests {
         let lib = MutGid::new();
         let root = new_node_id();
         let child = new_node_id();
-        gid.set(root, Id::from("child"), Id::from(child));
-        gid.set(child, Id::from("back"), Id::from(root));
-        gid.set(child, Id::from("name"), Id::from("c"));
+        gid.set(root, Atom::from("child"), Value::from(child));
+        gid.set(child, Atom::from("back"), Value::from(root));
+        gid.set(child, Atom::from("name"), Value::from("c"));
+        gid.set(root, Atom::from("pair"), Value::list([Value::from(1.0)]));
         let doc = Document {
-            root: Some(Id::from(root)),
+            root: Some(Value::from(root)),
             gid,
         };
         let mut collapse = Collapse::default();
-        let child_path = vec![Id::from("child")];
-        let back_path = vec![Id::from("child"), Id::from("back")];
+        let child_path = vec![key("child")];
+        let back_path = vec![key("child"), key("back")];
 
         // Expanded by default: toggling stores a collapse override,
         // toggling again removes it.
@@ -2636,19 +2932,21 @@ mod tests {
         assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &back_path));
         assert!(!collapse.collapsed(&back_path, true));
 
-        // Strings and missing paths have nothing to collapse.
+        // A list with elements collapses too; strings and missing
+        // paths have nothing to collapse.
+        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &[key("pair")]));
         assert!(!toggle_collapse(
             &src(&doc, &lib),
             &mut collapse,
-            &[Id::from("child"), Id::from("name")]
+            &[key("child"), key("name")]
         ));
-        assert!(!toggle_collapse(&src(&doc, &lib), &mut collapse, &[Id::from("nope")]));
+        assert!(!toggle_collapse(&src(&doc, &lib), &mut collapse, &[key("nope")]));
     }
 
     #[test]
     fn collapse_default_follows_cycle_and_overrides_win() {
         let mut collapse = Collapse::default();
-        let path = vec![Id::from("a"), Id::from("b")];
+        let path = vec![key("a"), key("b")];
         // Absent from the overrides: expanded outside a cycle, collapsed in.
         assert!(!collapse.collapsed(&path, false));
         assert!(collapse.collapsed(&path, true));
@@ -2657,109 +2955,6 @@ mod tests {
         assert!(collapse.collapsed(&path, false));
         collapse.overrides.insert(path.clone(), false);
         assert!(!collapse.collapsed(&path, true));
-    }
-
-    #[test]
-    fn list_shape_is_positions_or_a_pending_position() {
-        let empty = MutGid::new();
-        let mut gid = MutGid::new();
-        let items = list(&mut gid, vec![Id::from(1.0)]);
-        let record = new_node_id();
-        gid.set(record, Id::from(NAME), Id::from("r"));
-        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("l"));
-        let doc = Document { root: None, gid };
-        let sources = src(&doc, &empty);
-        // Positions make the list; a name doesn't unmake it —
-        // partition, not all-or-nothing.
-        assert!(list_shaped(&sources, &items, None));
-        assert!(!list_shaped(&sources, &Id::from(record), None));
-        // A pending element claims an empty node for the projection;
-        // a pending field does not.
-        let fresh = Id::from(new_node_id());
-        let pos = position::between(None, None).unwrap();
-        assert!(!list_shaped(&sources, &fresh, None));
-        assert!(list_shaped(&sources, &fresh, Some(&pos)));
-        assert!(!list_shaped(&sources, &fresh, Some(&Id::from("field"))));
-    }
-
-    #[test]
-    fn enter_continues_beside_and_the_chord_authors_within() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let nested = new_node_id();
-        let items = list(&mut gid, vec![Id::from("a"), Id::from(nested)]);
-        let record = new_node_id();
-        gid.set(record, Id::from("items"), items.clone());
-        gid.set(record, Id::from("x"), Id::from(1.0));
-        let doc = Document {
-            root: Some(Id::from(record)),
-            gid,
-        };
-        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
-        let items_path = vec![Id::from("items")];
-        let first = vec![Id::from("items"), positions[0].clone()];
-        let second = vec![Id::from("items"), positions[1].clone()];
-
-        // Enter continues the enumeration: any element — atom or node
-        // — pends a sibling (before with shift).
-        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, false) else {
-            panic!("sibling after");
-        };
-        assert!(positions[0] < path[1] && path[1] < positions[1]);
-        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, true) else {
-            panic!("sibling before");
-        };
-        assert!(path[1] < positions[0]);
-        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &second, false) else {
-            panic!("node element sibling");
-        };
-        assert!(positions[1] < path[1]);
-
-        // A field value — atom or node — pends the parent's next
-        // field; the root has nothing beside it and takes the field
-        // on itself.
-        assert!(matches!(
-            pending_enter(&src(&doc, &lib), &[Id::from("x")], false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-        assert!(matches!(
-            pending_enter(&src(&doc, &lib), &items_path, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-        assert!(matches!(
-            pending_enter(&src(&doc, &lib), &[], false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-
-        // The chord authors within: a field edge on the selected node
-        // — the list included, empty nodes included — and atoms
-        // decline.
-        assert!(matches!(
-            pending_insert(&src(&doc, &lib), &items_path, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent == items_path
-        ));
-        assert!(matches!(
-            pending_insert(&src(&doc, &lib), &second, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent == second
-        ));
-        assert!(pending_insert(&src(&doc, &lib), &first, false).is_none());
-
-        // Shift is the positional variant: a first element at the
-        // front — prepend on a list, how an empty node becomes a list
-        // (nested as an element included) — declining on records and
-        // atoms.
-        let Some(Selection::Pending { path, .. }) = pending_insert(&src(&doc, &lib), &items_path, true)
-        else {
-            panic!("prepend");
-        };
-        assert!(path[1] < positions[0]);
-        let Some(Selection::Pending { path, .. }) = pending_insert(&src(&doc, &lib), &second, true) else {
-            panic!("into the empty element");
-        };
-        assert!(path.starts_with(&second) && path.len() == 3);
-        assert!(position::as_position(&path[2]).is_some());
-        assert!(pending_insert(&src(&doc, &lib), &[], true).is_none());
-        assert!(pending_insert(&src(&doc, &lib), &first, true).is_none());
     }
 
     use puri::draw::{GlyphRun, Shape};
@@ -2878,28 +3073,28 @@ mod tests {
     }
 
     #[test]
-    fn list_projection_places_fields_above_ordered_elements() {
+    fn node_elements_take_the_block_form_in_position_order() {
         let mut gid = MutGid::new();
-        let items = list(&mut gid, vec![Id::from(1.0), Id::from(2.0)]);
-        gid.set(items.as_node_id().unwrap(), Id::from("k"), Id::from(9.0));
+        let nested = new_node_id();
+        gid.set(nested, Atom::from("x"), Value::from(9.0));
+        let items = Value::list([Value::from(1.0), Value::from(nested)]);
+        let ps = positions(&items);
         let doc = Document {
-            root: Some(items.clone()),
+            root: Some(items),
             gid,
         };
-        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
         let probe = place_probe(&doc);
 
-        // Placement order: the block, its field, then the elements in
-        // position order — fields above elements (the field keeps
-        // this list in block form).
+        // A node element takes the list off the inline literal:
+        // element rows in position order, each below the last.
         let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
         assert_eq!(
             paths,
             vec![
                 Vec::new(),
-                vec![Id::from("k")],
-                vec![positions[0].clone()],
-                vec![positions[1].clone()],
+                vec![Step::Element(ps[0].clone())],
+                vec![Step::Element(ps[1].clone())],
+                vec![Step::Element(ps[1].clone()), key("x")],
             ]
         );
         let tops: Vec<f64> = probe.descends.iter().skip(1).map(|d| d.rect.y0).collect();
@@ -2910,10 +3105,10 @@ mod tests {
     fn named_nodes_project_the_name_as_their_header() {
         let mut gid = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from(NAME), Id::from("thing"));
-        gid.set(node, Id::from("x"), Id::from(1.0));
+        gid.set(node, Atom::Node(NAME), Value::from("thing"));
+        gid.set(node, Atom::from("x"), Value::from(1.0));
         let doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
         let probe = place_probe(&doc);
@@ -2924,7 +3119,11 @@ mod tests {
         let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
         assert_eq!(
             paths,
-            vec![Vec::new(), vec![Id::from(NAME)], vec![Id::from("x")]]
+            vec![
+                Vec::new(),
+                vec![Step::Key(Atom::Node(NAME))],
+                vec![key("x")]
+            ]
         );
         let name_rect = probe.descends[1].rect;
         let x_rect = probe.descends[2].rect;
@@ -2934,44 +3133,14 @@ mod tests {
         // A node whose only edge is its name is just its name.
         let mut gid = MutGid::new();
         let sole = new_node_id();
-        gid.set(sole, Id::from(NAME), Id::from("leaf"));
+        gid.set(sole, Atom::Node(NAME), Value::from("leaf"));
         let doc = Document {
-            root: Some(Id::from(sole)),
+            root: Some(Value::from(sole)),
             gid,
         };
         let probe = place_probe(&doc);
         let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(paths, vec![Vec::new(), vec![Id::from(NAME)]]);
-    }
-
-    #[test]
-    fn named_atom_lists_stay_inline_with_the_name_leading() {
-        let mut gid = MutGid::new();
-        let items = list(&mut gid, vec![Id::from(1.0), Id::from(2.0)]);
-        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("pair"));
-        let doc = Document {
-            root: Some(items.clone()),
-            gid,
-        };
-        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
-        let probe = place_probe(&doc);
-
-        // The consumed name is no field: the list stays inline, the
-        // name leading the brackets on the same line.
-        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(
-            paths,
-            vec![
-                Vec::new(),
-                vec![Id::from(NAME)],
-                vec![positions[0].clone()],
-                vec![positions[1].clone()],
-            ]
-        );
-        let name_rect = probe.descends[1].rect;
-        let first = probe.descends[2].rect;
-        assert!((name_rect.y0 - first.y0).abs() < 0.5, "{name_rect:?} vs {first:?}");
-        assert!(name_rect.x1 <= first.x0);
+        assert_eq!(paths, vec![Vec::new(), vec![Step::Key(Atom::Node(NAME))]]);
     }
 
     #[test]
@@ -2979,10 +3148,10 @@ mod tests {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from(NAME), Id::from("thing"));
-        gid.set(node, Id::from("x"), Id::from(1.0));
+        gid.set(node, Atom::Node(NAME), Value::from("thing"));
+        gid.set(node, Atom::from("x"), Value::from(1.0));
         let doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
 
@@ -2992,7 +3161,7 @@ mod tests {
         let name_rect = probe.descends[1].rect;
         let mut log: Vec<Path> = Vec::new();
         assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(name_rect.center())));
-        assert_eq!(log, vec![Vec::<Id>::new()]);
+        assert_eq!(log, vec![Vec::<Step>::new()]);
 
         // With the node selected, the successor pass engages the
         // name as a text target: the same click now selects the name
@@ -3008,7 +3177,7 @@ mod tests {
         let name_rect = probe.descends[1].rect;
         let mut log: Vec<Path> = Vec::new();
         assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(name_rect.center())));
-        assert_eq!(log, vec![vec![Id::from(NAME)]]);
+        assert_eq!(log, vec![vec![Step::Key(Atom::Node(NAME))]]);
     }
 
     #[test]
@@ -3016,9 +3185,9 @@ mod tests {
         let mut gid = MutGid::new();
         let lib = MutGid::new();
         let node = new_node_id();
-        gid.set(node, Id::from("x"), Id::from(1.0));
+        gid.set(node, Atom::from("x"), Value::from(1.0));
         let doc = Document {
-            root: Some(Id::from(node)),
+            root: Some(Value::from(node)),
             gid,
         };
         let pending = pending_edge(&src(&doc, &lib), Vec::new()).unwrap();
@@ -3046,7 +3215,7 @@ mod tests {
             &mut log,
             &down_at(Point::new(header.x0 + 2.0, header.y0 + 2.0)),
         ));
-        assert_eq!(log, vec![Vec::<Id>::new()]);
+        assert_eq!(log, vec![Vec::<Step>::new()]);
     }
 
     #[test]
@@ -3055,105 +3224,124 @@ mod tests {
         let s_node = new_node_id();
         let b = new_node_id();
         let mut library = MutGid::new();
-        library.set(s_node, Id::from("x"), Id::from(b));
-        library.set(b, Id::from("y"), Id::from(1.0));
+        library.set(s_node, Atom::from("x"), Value::from(b));
+        library.set(b, Atom::from("y"), Value::from(1.0));
         // The document references S.
         let mut gid = MutGid::new();
         let root = new_node_id();
-        gid.set(root, Id::from("k"), Id::from(s_node));
+        gid.set(root, Atom::from("k"), Value::from(s_node));
         let mut doc = Document {
-            root: Some(Id::from(root)),
+            root: Some(Value::from(root)),
             gid,
         };
-        let b_path = vec![Id::from("k"), Id::from("x")];
-        let y_path = vec![Id::from("k"), Id::from("x"), Id::from("y")];
+        let b_path = vec![key("k"), key("x")];
+        let y_path = vec![key("k"), key("x"), key("y")];
 
         // Reading resolves through the library; writing declines
         // while the library is the authority for B.
-        assert_eq!(src(&doc, &library).resolve(&b_path), Some(&Id::from(b)));
+        assert_eq!(src(&doc, &library).resolve(&b_path), Some(&Value::from(b)));
         assert!(pending_edge(&src(&doc, &library), b_path.clone()).is_none());
         assert!(
             Selection::edge(&src(&doc, &library), y_path.clone())
                 .edit()
                 .is_none()
         );
-        assert!(!set_value(&mut doc, &library, &y_path, Id::from(2.0)));
+        assert!(!set_value(&mut doc, &library, &y_path, Value::from(2.0)));
         assert!(!delete_edge(&mut doc, &library, &y_path));
 
         // The fork: the document takes B over (copy/paste's eventual
         // job — same identity, copied wholesale). The structure now
         // shows the document's B, editable IN PLACE under S.
-        doc.gid.set(b, Id::from("y"), Id::from(1.0));
+        doc.gid.set(b, Atom::from("y"), Value::from(1.0));
         assert!(pending_edge(&src(&doc, &library), b_path.clone()).is_some());
         assert!(
             Selection::edge(&src(&doc, &library), y_path.clone())
                 .edit()
                 .is_some()
         );
-        assert!(set_value(&mut doc, &library, &y_path, Id::from(2.0)));
-        assert_eq!(src(&doc, &library).resolve(&y_path), Some(&Id::from(2.0)));
+        assert!(set_value(&mut doc, &library, &y_path, Value::from(2.0)));
+        assert_eq!(src(&doc, &library).resolve(&y_path), Some(&Value::from(2.0)));
         assert!(delete_edge(&mut doc, &library, &y_path));
 
         // S itself stays external and inert: no fields on it, no
         // retargeting its edges.
-        assert!(pending_edge(&src(&doc, &library), vec![Id::from("k")]).is_none());
-        assert!(!set_value(&mut doc, &library, &b_path, Id::from(9.0)));
+        assert!(pending_edge(&src(&doc, &library), vec![key("k")]).is_none());
+        assert!(!set_value(&mut doc, &library, &b_path, Value::from(9.0)));
     }
 
     #[test]
-    fn external_lists_take_no_minted_siblings() {
+    fn lists_under_external_entities_take_no_edits() {
+        // A library entity holding a list value: the list reads
+        // through, but its spine owner is external, so nothing mints
+        // beside or into it and elements take no editors.
         let mut library = MutGid::new();
-        let items = new_node_id();
-        let pos = position::between(None, None).unwrap();
-        library.set(items, pos.clone(), Id::from("a"));
+        let entity = new_node_id();
+        library.set(entity, Atom::from("items"), Value::list([Value::from("a")]));
         let mut gid = MutGid::new();
         let root = new_node_id();
-        gid.set(root, Id::from("m"), Id::from(items));
+        gid.set(root, Atom::from("m"), Value::from(entity));
         let doc = Document {
-            root: Some(Id::from(root)),
+            root: Some(Value::from(root)),
             gid,
         };
-        let element = vec![Id::from("m"), pos];
+        let list_path = vec![key("m"), key("items")];
+        let ps = positions(src(&doc, &library).resolve(&list_path).unwrap());
+        let element = vec![key("m"), key("items"), Step::Element(ps[0].clone())];
 
-        // The element reads through, but nothing mints beside it and
-        // nothing appends into the list while it is external.
-        assert_eq!(src(&doc, &library).resolve(&element), Some(&Id::from("a")));
+        assert_eq!(src(&doc, &library).resolve(&element), Some(&Value::from("a")));
         assert!(pending_enter(&src(&doc, &library), &element, false).is_none());
-        assert!(pending_insert(&src(&doc, &library), &[Id::from("m")], true).is_none());
+        assert!(pending_insert(&src(&doc, &library), &list_path, true).is_none());
+        assert!(
+            Selection::edge(&src(&doc, &library), element.clone())
+                .edit()
+                .is_none()
+        );
     }
 
     #[test]
-    fn the_raw_view_stands_the_convention_layers_down() {
+    fn the_raw_view_stands_names_down_but_lists_stay_lists() {
         let mut gid = MutGid::new();
-        let items = list(&mut gid, vec![Id::from(1.0), Id::from(2.0)]);
-        gid.set(items.as_node_id().unwrap(), Id::from(NAME), Id::from("pair"));
+        let node = new_node_id();
+        gid.set(node, Atom::Node(NAME), Value::from("thing"));
+        gid.set(
+            node,
+            Atom::from("items"),
+            Value::list([Value::from(1.0), Value::from(2.0)]),
+        );
         let doc = Document {
-            root: Some(items.clone()),
+            root: Some(Value::from(node)),
             gid,
         };
-        let probe = place_probe_in(&doc, &Names::none(), true);
+        let probe = place_probe_in(&doc, &Names::convention(), true);
 
-        // No list projection: the name and the elements are plain
-        // rows again — stacked, not inline — and nothing is consumed
-        // into a header.
+        // The name is a plain labeled row again — nothing consumed
+        // into a header — but the list still projects as a list:
+        // kind is data, not convention, so Raw keeps the brackets
+        // (and the session-minted positions stay out of view).
         let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(paths.len(), 4);
-        assert!(paths.contains(&vec![Id::from(NAME)]));
-        let tops: Vec<f64> = probe.descends.iter().skip(1).map(|d| d.rect.y0).collect();
-        assert!(tops.is_sorted_by(|a, b| a < b), "{tops:?}");
+        assert_eq!(paths.len(), 5);
+        assert!(paths.contains(&vec![Step::Key(Atom::Node(NAME))]));
         // Rows are indented under the id header, the name's included.
         assert!(probe.descends[1].rect.x0 > probe.descends[0].rect.x0);
+        // The two atom elements sit inline on one line.
+        let elements: Vec<Rect> = probe
+            .descends
+            .iter()
+            .filter(|d| d.path.len() == 2)
+            .map(|d| d.rect)
+            .collect();
+        let (a, b) = (elements[0], elements[1]);
+        assert!((a.y0 - b.y0).abs() < 0.5, "{a:?} vs {b:?}");
     }
 
     #[test]
     fn atom_only_lists_project_inline() {
-        let mut gid = MutGid::new();
-        let items = list(&mut gid, vec![Id::from(1.0), Id::from("two")]);
+        let items = Value::list([Value::from(1.0), Value::from("two")]);
+        let ps = positions(&items);
         let doc = Document {
-            root: Some(items.clone()),
-            gid,
+            root: Some(items),
+            gid: MutGid::new(),
         };
-        let positions = positions_of(&src(&doc, &MutGid::new()), &items);
         let probe = place_probe(&doc);
 
         let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
@@ -3161,8 +3349,8 @@ mod tests {
             paths,
             vec![
                 Vec::new(),
-                vec![positions[0].clone()],
-                vec![positions[1].clone()],
+                vec![Step::Element(ps[0].clone())],
+                vec![Step::Element(ps[1].clone())],
             ]
         );
         // One line, reading left to right.
