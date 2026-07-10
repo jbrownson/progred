@@ -146,11 +146,11 @@ does not exist; `value_view` matches the Value enum. Completion's
 "new list" commits `Value::list([])` — PURE, no entity minted, so
 the orphan-on-failed-commit wart died for lists — and the label
 stage simply lacks the offer. Graph view: nodes are Values (equal
-lists = one node, value semantics displayed honestly), list nodes
-draw square with their inline literal as content, position edges
-don't exist so the ordinal pills went away entirely, and node
-deletion detaches occurrences INSIDE list values too (a `without`
-walk), the root list included. The one intentional main.rs seam:
+lists = one node, value semantics displayed honestly), lists draw
+square and fan ordinal element edges (see the Graph View section —
+the first cut drew the inline literal instead and read as a uuid
+blob), and node deletion detaches occurrences INSIDE list values too
+(a `without` walk), the root list included. The one intentional main.rs seam:
 `commit_label` narrows the resolved entry to an Atom and declines a
 list — unreachable by construction, stated in one match. Tests:
 87 across the workspace, clippy at the pre-rebuild baseline.
@@ -1274,14 +1274,21 @@ PinchGesture, handled outside the reducer, which doesn't cover
 gestures), and wheel lines zoom toward the cursor; text re-lays-out
 at the zoomed size, so it stays crisp rather than scaling glyphs.
 Scroll over the panel routes to the graph ahead of the document.
-List edges (2026-07-09, with lists in the data model): the pill
-shows the element's 1-BASED ORDINAL, dim like the tree's dashes —
-the order is the data; the position bytes are its session spelling
-and stay out of view here as everywhere. Computed per source from
-the snapshot's sorted position labels; selection and deletion still
-key by the real label underneath. List NODES draw square-cornered
-where maps stay rounded (user suggestion, same day) — kind is data,
-worth a silhouette. Still scoped out: position
+List values in the graph (2026-07-09; final form same day after the
+typed model's first cut drew a list as its inline literal and a
+points list became one giant uuid blob — user-caught): a list is a
+small square-cornered node (maps stay rounded — kind is data, worth
+a silhouette) whose content is just the bracket mark (`[…]`, `[ ]`
+when empty), fanning ORDINAL EDGES to its element nodes — 1-based
+dim pills, the order shown structurally, positions never. Shared
+values are walked once, so two equal lists are one node with one set
+of element edges. Ordinal pills are display only — no selection, no
+deletion — because the value is immutable and shared (removing "an
+element" of a twice-referenced value is ill-defined); element edits
+belong to the tree. Known cost of value identity: editing an element
+mints a NEW list value, which reseeds at a fresh spot — the
+spot-transfer continuity problem (already scoped out) now visibly
+applies to lists. Still scoped out: position
 continuity across identity changes (the Haskell spot-transfer).
 
 ## Types And Autocomplete

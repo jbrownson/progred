@@ -2,8 +2,10 @@
 //! demos on small graphs. Every value that appears as an entity or at
 //! the end of an edge is a node — atoms and lists included, keyed by
 //! value equality, so a shared `2` (or two equal `[2, 3]`s) is
-//! visibly one node — and every (entity, key, value) is a directed
-//! edge with a label pill. Layout is the force simulation carried
+//! visibly one node — every (entity, key, value) is a directed edge
+//! with a key pill, and a list fans ordinal edges to its element
+//! nodes: structure shown structurally, positions never. Layout is
+//! the force simulation carried
 //! from the TypeScript/egui/Haskell prototypes (same constants),
 //! stepped every frame while the view is open; positions and
 //! velocities are explicit model state, seeded deterministically per
@@ -98,24 +100,45 @@ pub enum Release {
 
 struct Snapshot {
     nodes: Vec<Value>,
-    edges: Vec<(NodeId, Atom, Value)>,
+    edges: Vec<(Value, Label, Value)>,
 }
 
-/// Every value in the document: entities plus every edge value.
-/// Keys appear on edge pills, not as nodes.
+/// An edge's pill: a map key, or an element's 1-based ordinal — the
+/// order is the data; positions never show.
+enum Label {
+    Key(Atom),
+    Ordinal(usize),
+}
+
+/// Every value in the document: entities plus every edge value, list
+/// values walked into their elements — a list is a node with ordinal
+/// edges, its structure shown structurally. Shared values (a `2`, an
+/// equal list) are one node, walked once.
 fn snapshot(doc: &Document) -> Snapshot {
-    let mut nodes: Vec<Value> = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let mut add = |nodes: &mut Vec<Value>, value: &Value| {
-        if seen.insert(value.clone()) {
-            nodes.push(value.clone());
+    fn add(
+        value: &Value,
+        nodes: &mut Vec<Value>,
+        edges: &mut Vec<(Value, Label, Value)>,
+        seen: &mut std::collections::HashSet<Value>,
+    ) {
+        if !seen.insert(value.clone()) {
+            return;
         }
-    };
+        nodes.push(value.clone());
+        if let Value::List(elements) = value {
+            for (index, element) in elements.values().enumerate() {
+                add(element, nodes, edges, seen);
+                edges.push((value.clone(), Label::Ordinal(index + 1), element.clone()));
+            }
+        }
+    }
+    let mut nodes = Vec::new();
     let mut edges = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     let mut entities: Vec<NodeId> = doc.gid.entities().copied().collect();
     entities.sort();
     for entity in entities {
-        add(&mut nodes, &Value::from(entity));
+        add(&Value::from(entity), &mut nodes, &mut edges, &mut seen);
         let mut outgoing: Vec<(Atom, Value)> = doc
             .gid
             .edges(entity)
@@ -123,12 +146,12 @@ fn snapshot(doc: &Document) -> Snapshot {
             .unwrap_or_default();
         outgoing.sort();
         for (key, value) in outgoing {
-            add(&mut nodes, &value);
-            edges.push((entity, key, value));
+            add(&value, &mut nodes, &mut edges, &mut seen);
+            edges.push((Value::from(entity), Label::Key(key), value));
         }
     }
     if let Some(root) = &doc.root {
-        add(&mut nodes, root);
+        add(root, &mut nodes, &mut edges, &mut seen);
     }
     Snapshot { nodes, edges }
 }
@@ -238,13 +261,12 @@ impl GraphView {
             }
         }
         for (source, _, target) in &snapshot.edges {
-            let source = Value::from(*source);
-            let delta = self.positions[target] - self.positions[&source];
+            let delta = self.positions[target] - self.positions[source];
             let distance = delta.hypot().max(0.1);
             let magnitude =
                 (ATTRACTION_K * (distance - REST_LENGTH)).clamp(-MAX_FORCE, MAX_FORCE);
             let force = unit(delta) * magnitude;
-            *forces.get_mut(&source).unwrap() += force;
+            *forces.get_mut(source).unwrap() += force;
             *forces.get_mut(target).unwrap() -= force;
         }
         for id in &snapshot.nodes {
@@ -498,8 +520,10 @@ enum Strength {
 }
 
 struct EdgeView {
-    source: NodeId,
-    label: Atom,
+    /// The selectable identity — a real entity edge; ordinal element
+    /// edges are display only (the value is immutable and shared;
+    /// element edits happen in the tree).
+    select: Option<(NodeId, Atom)>,
     path: BezPath,
     arrow: BezPath,
     pill: Rect,
@@ -556,7 +580,15 @@ fn content(
                 None => layout_text(tcx, &short_id(*node), size, DIM_TEXT, mono),
             }
         }
-        Value::List(_) => layout_text(tcx, &value.to_string(), size, DIM_TEXT, ui),
+        // A list's structure is its ordinal edges; the box is just
+        // the bracket mark.
+        Value::List(elements) => layout_text(
+            tcx,
+            if elements.is_empty() { "[ ]" } else { "[…]" },
+            size,
+            DIM_TEXT,
+            ui,
+        ),
     }
 }
 
@@ -694,7 +726,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         }
     };
     for (source, _, target) in &snapshot.edges {
-        *pair_counts.entry(pair(&Value::from(*source), target)).or_default() += 1;
+        *pair_counts.entry(pair(source, target)).or_default() += 1;
     }
     let mut pair_seen: HashMap<(Value, Value), usize> = HashMap::new();
 
@@ -702,10 +734,13 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         .edges
         .iter()
         .filter_map(|(source, label, target)| {
-            let source_value = Value::from(*source);
-            let source_rect = rect_of(&source_value)?;
+            let source_rect = rect_of(source)?;
             let target_rect = rect_of(target)?;
-            let key = pair(&source_value, target);
+            let select = match label {
+                Label::Key(key) => source.as_node().map(|entity| (entity, key.clone())),
+                Label::Ordinal(_) => None,
+            };
+            let key = pair(source, target);
             let total = pair_counts[&key];
             let index = {
                 let seen = pair_seen.entry(key).or_default();
@@ -716,14 +751,15 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             let offset =
                 (index as f64 - (total as f64 - 1.0) / 2.0) * PARALLEL_SPACING * px;
             let strength = if matches!(
-                selection,
-                Some(GraphSelection::Edge { source: s, label: l }) if s == source && l == label
+                (selection, &select),
+                (Some(GraphSelection::Edge { source: s, label: l }), Some((entity, key)))
+                    if entity == s && key == l
             ) {
                 Strength::Primary
             } else {
                 Strength::None
             };
-            let (path, mid, tip, tip_direction) = if source_value == *target {
+            let (path, mid, tip, tip_direction) = if source == target {
                 // Self-loop: a cubic arch above the node, growing
                 // with its index so stacked loops separate.
                 let top = Point::new(source_rect.center().x, source_rect.y0);
@@ -756,8 +792,20 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 let mid = quadratic_point(start, control, end, 0.5);
                 (path, mid, end, end - control)
             };
-            let pill_content =
-                content(sources, names, raw, &Value::Atom(label.clone()), tcx, zoom);
+            let pill_content = match label {
+                Label::Key(key) => {
+                    content(sources, names, raw, &Value::Atom(key.clone()), tcx, zoom)
+                }
+                // The ordinal IS the pill, dim like the tree's
+                // dashes; positions never show.
+                Label::Ordinal(n) => layout_text(
+                    tcx,
+                    &n.to_string(),
+                    FONT_SIZE * zoom as f32,
+                    DIM_TEXT,
+                    GenericFamily::SystemUi,
+                ),
+            };
             let (w, h) = (
                 f64::from(pill_content.width()),
                 f64::from(pill_content.height()),
@@ -774,21 +822,24 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             // edge's own value used as a label elsewhere).
             let pill_strength = if strength == Strength::Primary {
                 Strength::Primary
-            } else if secondary.as_ref() == Some(&Value::Atom(label.clone())) {
+            } else if matches!(
+                label,
+                Label::Key(key) if secondary.as_ref() == Some(&Value::Atom(key.clone()))
+            ) {
                 Strength::Secondary
             } else {
                 Strength::None
             };
             Some(EdgeView {
-                source: *source,
-                label: label.clone(),
+                select,
                 path,
                 arrow: arrowhead(tip, tip_direction, px),
                 pill,
                 pill_content,
-                external: label
-                    .as_node()
-                    .is_some_and(|node| sources.external(node)),
+                external: matches!(
+                    label,
+                    Label::Key(key) if key.as_node().is_some_and(|node| sources.external(node))
+                ),
                 strength,
                 pill_strength,
             })
@@ -891,7 +942,10 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             .collect();
         let pill_hits: Vec<(Rect, NodeId, Atom)> = edge_views
             .iter()
-            .map(|edge| (edge.pill, edge.source, edge.label.clone()))
+            .filter_map(|edge| {
+                let (entity, key) = edge.select.clone()?;
+                Some((edge.pill, entity, key))
+            })
             .collect();
         let from_panel = move |window: Point| {
             (((window - panel.center()) / px) - pan).to_point()
@@ -969,7 +1023,8 @@ mod tests {
         assert!(snapshot.nodes.contains(&Value::from(2.0)));
 
         // Equal list values are one node too — value semantics
-        // displayed honestly.
+        // displayed honestly — walked into their elements ONCE: the
+        // element is a node and the ordinal edge exists once.
         doc.gid.set(a, Atom::from("p"), Value::list([Value::from(1.0)]));
         doc.gid.set(b, Atom::from("q"), Value::list([Value::from(1.0)]));
         let snapshot = super::snapshot(&doc);
@@ -981,6 +1036,14 @@ mod tests {
                 .count(),
             1
         );
+        assert!(snapshot.nodes.contains(&Value::from(1.0)));
+        let ordinals: Vec<_> = snapshot
+            .edges
+            .iter()
+            .filter(|(_, label, _)| matches!(label, Label::Ordinal(_)))
+            .collect();
+        assert_eq!(ordinals.len(), 1);
+        assert!(matches!(ordinals[0], (Value::List(_), Label::Ordinal(1), v) if *v == Value::from(1.0)));
     }
 
     #[test]

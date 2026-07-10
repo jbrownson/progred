@@ -72,8 +72,8 @@ impl RawStyles {
 
 /// A rooted graph: the document is its `root` value plus the entity
 /// table that stores its maps. Every projection path starts at
-/// `root`; several top-level items are just a root that is a list.
-/// The root is a location like any other — the empty path — so edits
+/// `root` — typically a map keying the document's parts by role. The
+/// root is a location like any other — the empty path — so edits
 /// there commit to this field, and deleting it empties the document.
 /// Clones are O(1): the gid and list values share structure, which is
 /// what makes snapshot undo free.
@@ -83,13 +83,19 @@ pub struct Document {
     pub gid: MutGid,
 }
 
-/// A small document exercising the model's range: named nodes, string
-/// and node keys, inline lists (an empty one included), and an
-/// unnamed scratch node with a self-reference. Its root is a list of
-/// the top-level entities.
+/// A small document shaped like a real one. The root is a MAP of
+/// roles — a scene holding a shape and a shared style — because a
+/// document keys its parts by what they are to it; lists collect
+/// same-kind elements only (points, dash lengths, holes). Names name
+/// individuals ("roof", not its kind — kinds are a future isa
+/// convention's job). The stroke-width field definition FLOATS:
+/// referenced as a key, never enumerated. The corner knows its roof
+/// (cycle collapse on a real pattern); the style is unnamed and
+/// referenced twice (short-id headers, secondary marks).
 pub fn sample_document() -> Document {
     let mut gid = MutGid::new();
     let name = Atom::Node(NAME);
+    let roof = new_node_id();
 
     let origin = new_node_id();
     gid.set(origin, name.clone(), Value::from("origin"));
@@ -100,42 +106,38 @@ pub fn sample_document() -> Document {
     gid.set(corner, name.clone(), Value::from("corner"));
     gid.set(corner, Atom::from("x"), Value::from(4.0));
     gid.set(corner, Atom::from("y"), Value::from(2.5));
+    // A part that knows its whole: the cycle a real document has,
+    // rendered as a collapsed header rather than recursing forever.
+    gid.set(corner, Atom::from("of"), Value::from(roof));
 
     let stroke_width = new_node_id();
     gid.set(stroke_width, name.clone(), Value::from("stroke-width"));
 
-    let polygon = new_node_id();
-    gid.set(polygon, name.clone(), Value::from("polygon"));
+    let style = new_node_id();
+    gid.set(style, Atom::from("color"), Value::from("rebeccapurple"));
+
+    gid.set(roof, name, Value::from("roof"));
     // Lists are values, inline at their edges; the edge that holds
     // one is its name in context.
     gid.set(
-        polygon,
+        roof,
         Atom::from("points"),
         Value::list([Value::from(origin), Value::from(corner)]),
     );
-    gid.set(polygon, Atom::Node(stroke_width), Value::from(1.5));
+    gid.set(roof, Atom::Node(stroke_width), Value::from(1.5));
     gid.set(
-        polygon,
+        roof,
         Atom::from("dash"),
         Value::list([Value::from(2.0), Value::from(3.0)]),
     );
-    gid.set(polygon, Atom::from("holes"), Value::list([]));
+    gid.set(roof, Atom::from("holes"), Value::list([]));
+    gid.set(roof, Atom::from("style"), Value::from(style));
 
-    let scratch = new_node_id();
-    gid.set(scratch, Atom::from("color"), Value::from("rebeccapurple"));
-    // A self-reference: exercises cycle-collapse, which renders the
-    // back-edge as a collapsed header rather than recursing forever.
-    gid.set(scratch, Atom::from("self"), Value::from(scratch));
-
-    let root = Value::list([
-        Value::from(polygon),
-        Value::from(origin),
-        Value::from(corner),
-        Value::from(stroke_width),
-        Value::from(scratch),
-    ]);
+    let scene = new_node_id();
+    gid.set(scene, Atom::from("shape"), Value::from(roof));
+    gid.set(scene, Atom::from("style"), Value::from(style));
     Document {
-        root: Some(root),
+        root: Some(Value::from(scene)),
         gid,
     }
 }
