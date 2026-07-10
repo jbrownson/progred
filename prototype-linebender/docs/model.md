@@ -1344,3 +1344,18 @@ Deferred behind projections.
   nodes. Orphans are the pool: autocomplete searches it alongside
   module-scoped definitions, and a pool browser lists and manages it.
 - Garbage collection is explicit only.
+- Re-examined under the typed model (2026-07-10, the lingering-
+  pure-graph sweep): the doctrine stands, with its justification
+  corrected. Undo does NOT need detachment — history is snapshots of
+  a persistent gid, so undoing a purge would restore the purged
+  entities identically. What detachment actually buys: deletion
+  stays one edge operation with no reachability policy in the hot
+  path, and a detached subtree stays re-attachable through
+  completion without rewinding history. The WATCH ITEM: the pool is
+  invisible and serializes into every save, so files grow
+  monotonically, and the data cannot distinguish a wanted floater
+  from a dead draft — the pool browser above is the eventual answer
+  (visibility plus explicit cleanup), not a save-time sweep. If a
+  sweep is ever built anyway, reachability must count KEYS as
+  references, or the floating field definitions it exists to protect
+  (stroke-width) die with the garbage.
