@@ -37,6 +37,21 @@ use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
+/// Everything arriving through the event-loop proxy: menu commands,
+/// and the unsaved-changes sheet's answer coming back to the loop.
+enum UserEvent {
+    Menu(MenuEvent),
+    Discard(bool),
+}
+
+/// The action a discard confirmation gates. One at a time: requests
+/// while a sheet is up are dropped.
+enum AfterDiscard {
+    New,
+    Open,
+    Quit,
+}
+
 enum RenderState {
     Active {
         surface: Box<RenderSurface<'static>>,
@@ -85,6 +100,9 @@ struct App {
     revealed: Option<(raw::Path, std::mem::Discriminant<raw::Selection>)>,
     dispatch: Option<Dispatch>,
     reducer: WindowEventReducer,
+    /// Routes the discard sheet's answer back into the loop.
+    proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+    pending_discard: Option<AfterDiscard>,
 }
 
 struct MenuIds {
@@ -236,20 +254,28 @@ fn dialog() -> rfd::FileDialog {
     rfd::FileDialog::new().add_filter("progred", &["progred"])
 }
 
-impl ApplicationHandler<MenuEvent> for App {
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: MenuEvent) {
+impl ApplicationHandler<UserEvent> for App {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        let event = match event {
+            UserEvent::Menu(event) => event,
+            UserEvent::Discard(accepted) => {
+                let pending = self.pending_discard.take();
+                if accepted && let Some(then) = pending {
+                    self.proceed(event_loop, then);
+                }
+                return;
+            }
+        };
         if *event.id() == self.menu_ids.new {
-            self.menu_new();
+            self.request_discard(event_loop, AfterDiscard::New);
         } else if *event.id() == self.menu_ids.open {
-            self.menu_open();
+            self.request_discard(event_loop, AfterDiscard::Open);
         } else if *event.id() == self.menu_ids.save {
             self.menu_save(false);
         } else if *event.id() == self.menu_ids.save_as {
             self.menu_save(true);
         } else if *event.id() == self.menu_ids.quit {
-            if self.confirm_discard() {
-                _event_loop.exit();
-            }
+            self.request_discard(event_loop, AfterDiscard::Quit);
         } else if *event.id() == self.menu_ids.undo {
             self.step_history(true);
         } else if *event.id() == self.menu_ids.redo {
@@ -442,9 +468,7 @@ impl ApplicationHandler<MenuEvent> for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                if self.confirm_discard() {
-                    event_loop.exit();
-                }
+                self.request_discard(event_loop, AfterDiscard::Quit);
             }
 
             // KNOWN ISSUE: a live drag-resize can still glitch on macOS
@@ -493,7 +517,7 @@ fn main() {
         _ => raw::sample_document(),
     };
 
-    let mut builder = EventLoop::<MenuEvent>::with_user_event();
+    let mut builder = EventLoop::<UserEvent>::with_user_event();
     #[cfg(target_os = "macos")]
     {
         use winit::platform::macos::EventLoopBuilderExtMacOS;
@@ -504,8 +528,9 @@ fn main() {
     // its events arrive as user events through the proxy.
     let (menu, menu_ids, menu_items) = build_menu();
     let proxy = event_loop.create_proxy();
+    let menu_proxy = proxy.clone();
     MenuEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(event);
+        let _ = menu_proxy.send_event(UserEvent::Menu(event));
     }));
 
     let mut app = App {
@@ -533,6 +558,8 @@ fn main() {
         revealed: None,
         dispatch: None,
         reducer: WindowEventReducer::default(),
+        proxy,
+        pending_discard: None,
     };
 
     event_loop
@@ -778,18 +805,70 @@ impl App {
     /// parentless, rfd falls back to a CFUserNotification panel that
     /// arrives unfocused (a click to focus, then a click to answer)
     /// and warns on the console.
-    fn confirm_discard(&self) -> bool {
+    /// Gate an action on unsaved changes: a clean document proceeds
+    /// immediately; a dirty one presents the standard window sheet
+    /// and continues through a [`UserEvent::Discard`] when it
+    /// resolves. Async is the one rfd path that presents natively on
+    /// macOS (begin-sheet with a completion; the sync API falls back
+    /// to CFUserNotification parentless and a sheet-plus-modal-loop
+    /// double-present parented). The sheet's completion lands on the
+    /// main run loop, so the answer is awaited on a throwaway thread
+    /// and routed back through the proxy — blocking here would
+    /// deadlock the loop the sheet needs.
+    fn request_discard(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
         if !self.model.history.dirty() {
-            return true;
+            self.proceed(event_loop, then);
+            return;
         }
-        let mut dialog = rfd::MessageDialog::new()
-            .set_title("Unsaved Changes")
-            .set_description("Discard unsaved changes?")
-            .set_buttons(rfd::MessageButtons::OkCancel);
-        if let RenderState::Active { window, .. } = &self.state {
-            dialog = dialog.set_parent(window.as_ref());
+        if self.pending_discard.is_some() {
+            return;
         }
-        dialog.show() == rfd::MessageDialogResult::Ok
+        let RenderState::Active { window, .. } = &self.state else {
+            return;
+        };
+        self.pending_discard = Some(then);
+        // rfd reports a custom button by its label; one spelling.
+        const DISCARD: &str = "Discard";
+        let sheet = rfd::AsyncMessageDialog::new()
+            .set_title("Discard unsaved changes?")
+            .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                DISCARD.to_string(),
+                "Cancel".to_string(),
+            ))
+            .set_parent(window.as_ref())
+            .show();
+        let proxy = self.proxy.clone();
+        std::thread::spawn(move || {
+            let accepted = matches!(
+                pollster::block_on(sheet),
+                rfd::MessageDialogResult::Custom(choice) if choice == DISCARD
+            );
+            let _ = proxy.send_event(UserEvent::Discard(accepted));
+        });
+    }
+
+    /// The action a confirmed (or unneeded) discard proceeds to.
+    fn proceed(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
+        match then {
+            AfterDiscard::New => self.adopt_model(
+                raw::Document {
+                    root: None,
+                    gid: progred_graph::MutGid::new(),
+                },
+                None,
+            ),
+            AfterDiscard::Open => {
+                if let Some(path) = dialog().pick_file() {
+                    match store::load(&path) {
+                        Ok(doc) => self.adopt_model(doc, Some(path)),
+                        Err(error) => {
+                            eprintln!("failed to open {}: {error}", path.display());
+                        }
+                    }
+                }
+            }
+            AfterDiscard::Quit => event_loop.exit(),
+        }
     }
 
     /// Save saves in place, or asks for a path when untitled; save-as
@@ -843,33 +922,6 @@ impl App {
                 Size::new(size.width as f64, size.height as f64),
             );
             window.request_redraw();
-        }
-    }
-
-    /// A fresh untitled document, gated on unsaved changes.
-    fn menu_new(&mut self) {
-        if self.confirm_discard() {
-            self.adopt_model(
-                raw::Document {
-                    root: None,
-                    gid: progred_graph::MutGid::new(),
-                },
-                None,
-            );
-        }
-    }
-
-    fn menu_open(&mut self) {
-        if !self.confirm_discard() {
-            return;
-        }
-        if let Some(path) = dialog().pick_file() {
-            match store::load(&path) {
-                Ok(doc) => self.adopt_model(doc, Some(path)),
-                Err(error) => {
-                    eprintln!("failed to open {}: {error}", path.display());
-                }
-            }
         }
     }
 
