@@ -405,6 +405,7 @@ impl ApplicationHandler<UserEvent> for App {
                     // selected string's editor always wins over both.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         dispatch.handler.dispatch_key(self, &key_event)
+                            || self.clipboard_key(&key_event)
                             || self.graph_key(&key_event)
                             || self.delete_key(&dispatch.descends, &key_event)
                             || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
@@ -1191,6 +1192,92 @@ impl App {
                 None => raw::pending_value(path),
             },
         ));
+    }
+
+    /// Structural copy/paste, the shell's fallback: a focused text
+    /// editor's own clipboard handling wins by dispatch order, so
+    /// these fire on node, list, and graph selections. Deliberately
+    /// NOT menu items — muda accelerators intercept ahead of key
+    /// dispatch, which would take Cmd+C/V away from text editing.
+    fn clipboard_key(&mut self, event: &KeyboardEvent) -> bool {
+        if !event.state.is_down() || !raw::command(&event.modifiers) {
+            return false;
+        }
+        let Key::Character(c) = &event.key else {
+            return false;
+        };
+        match c.to_lowercase().as_str() {
+            "c" => self.copy_selection(),
+            "v" => self.paste_clipboard(),
+            _ => false,
+        }
+    }
+
+    /// Copies the selected value — SHALLOW: a node reference is its
+    /// identity, no entity edges travel. Tree selections copy what
+    /// the path resolves to; graph selections their node value or
+    /// edge value.
+    fn copy_selection(&self) -> bool {
+        use clipboard_rs::{Clipboard, ClipboardContext};
+        let value = match &self.model.selection {
+            Some(Selected::Tree(selection)) => {
+                self.model.sources().resolve(selection.path()).cloned()
+            }
+            Some(Selected::Graph(graph_view::GraphSelection::Node(value))) => {
+                Some(value.clone())
+            }
+            Some(Selected::Graph(graph_view::GraphSelection::Edge { source, label })) => {
+                self.model.sources().get(*source, label).cloned()
+            }
+            None => None,
+        };
+        let Some(value) = value else {
+            return false;
+        };
+        ClipboardContext::new()
+            .and_then(|cb| cb.set_text(raw::to_clipboard(&value)))
+            .is_ok()
+    }
+
+    /// Pastes the clipboard's value: into an open pending first (the
+    /// label stage narrows to atoms through the pick), else over the
+    /// selected edge — one undo step, the selection remounted so a
+    /// pasted atom gets its editor.
+    fn paste_clipboard(&mut self) -> bool {
+        use clipboard_rs::{Clipboard, ClipboardContext};
+        let Some(text) = ClipboardContext::new().ok().and_then(|cb| cb.get_text().ok())
+        else {
+            return false;
+        };
+        if text.is_empty() {
+            return false;
+        }
+        let value = raw::from_clipboard(&text);
+        if self.pick_identity(value.clone()) {
+            return true;
+        }
+        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection
+        else {
+            return false;
+        };
+        let path = path.clone();
+        // Idempotent pastes stay off the undo stack, as write_through
+        // keeps no-op rewrites off it.
+        if self.model.sources().resolve(&path) == Some(&value) {
+            return true;
+        }
+        let before = self.model.doc.clone();
+        if raw::set_value(&mut self.model.doc, &self.model.library, &path, value) {
+            self.model.history.record(before, Some(path.clone()));
+            self.refresh_title();
+            self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                &self.model.sources(),
+                path,
+            )));
+            true
+        } else {
+            false
+        }
     }
 
     /// Enter advances a pending stage or begins one (the chains live

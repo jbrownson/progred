@@ -351,8 +351,15 @@ Considered and settled 2026-07-05:
   beside/within, replace-by-rebuild, graph detach); the ones that
   assumed the mixed entity — naming, arbitrary metadata — now have
   nowhere to land, and their landing place is the WRAP idiom (a map
-  that holds the list plus its metadata), manual today, the reserved
-  path-rewrite wrap gesture eventually. Kind CONVERSION has no
+  that holds the list plus its metadata), manual today. Wrap itself
+  was demoted by the typed model (2026-07-10, user-observed): under
+  value lists, x → [x] is one set_value — no entities, no positions
+  to invent — so wrap is ergonomic sugar that copy/paste mostly
+  subsumes (cut, new list, paste in), not a structural gesture. The
+  reserved path-rewrite mechanism's forcing customer is MOVES;
+  wrap rides along whenever that arrives. (Wrap SELECTIONS never
+  existed in code — they were the splice design's edge-gap reading,
+  demoted with splice 2026-07-06.) Kind CONVERSION has no
   identity-preserving path, and the stickiness is asymmetric: a map
   emptied of its fields vanishes from the gid and is reborn
   kind-free (delete the fields, then Cmd+Shift+Enter — map→list
@@ -1213,6 +1220,32 @@ names function should be a function of the bit. `Names::none()` is
 gone with the swap. An even-rawer all-space-and-bytes inspection
 view (positions visible) remains a separate hypothetical, as the
 module doc always framed it.
+
+## Copy/Paste
+
+Shallow shipped 2026-07-10 (user call: only the selected
+value/identity, no recursion — deep copy waits on domain-specific
+projections deciding the boundary, per the paste-axes design in Data
+Layer v2). The clipboard carries ONE VALUE as text: atoms spell as
+the query language — "quoted" strings, bare numbers — so they read
+in other apps and round-trip exactly (the string "42" keeps its
+quotes); nodes and lists spell as Value JSON. Paste is
+try-Value-JSON-else-the-query-reading, so text copied anywhere
+pastes sensibly. Copy takes the tree selection's resolved value or
+the graph selection's node/edge value; paste goes into an open
+pending first (both stages — the label stage narrows to atoms
+through the same pick gate as command-click) and otherwise replaces
+the selected edge's value as one undo step, remounting the selection
+so a pasted atom gets its editor. Layering: the chord lives in the
+shell's key FALLBACK, so a focused text editor's own Cmd+C/X/V wins
+by dispatch order — and copy/paste are deliberately NOT menu items,
+because muda accelerators intercept ahead of key dispatch and would
+take the chord away from text editing everywhere. Consequences of
+shallow: pasting a node reference aliases (no entity rows travel),
+so pasting an external reference does NOT fork the entity — the
+identity-preserving fork still requires deep copy, which arrives
+with the projection-boundary design. Cut is deferred (copy plus
+delete when wanted).
 
 ## Graph View
 

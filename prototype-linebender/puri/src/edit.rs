@@ -193,31 +193,38 @@ impl LineEditState {
             let mut drv = editor.driver(fonts, layouts);
             match &event.key {
                 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+                // Copy and cut handle only when text is actually
+                // selected: with nothing to copy they decline, so the
+                // caller can interpret the chord (structural copy of
+                // the edited value). Paste always lands in the text.
                 Key::Character(c)
                     if action_mod && matches!(c.to_lowercase().as_str(), "c" | "x" | "v") =>
                 {
                     use clipboard_rs::{Clipboard, ClipboardContext};
-                    if let Ok(cb) = ClipboardContext::new() {
-                        match c.to_lowercase().as_str() {
-                            "c" => {
-                                if let Some(text) = drv.editor.selected_text() {
-                                    cb.set_text(text.to_owned()).ok();
-                                }
+                    let selected = drv.editor.selected_text().map(str::to_owned);
+                    match (c.to_lowercase().as_str(), selected) {
+                        ("c", Some(text)) => {
+                            if let Ok(cb) = ClipboardContext::new() {
+                                cb.set_text(text).ok();
                             }
-                            "x" => {
-                                if let Some(text) = drv.editor.selected_text() {
-                                    cb.set_text(text.to_owned()).ok();
-                                    drv.delete_selection();
-                                }
+                            true
+                        }
+                        ("x", Some(text)) => {
+                            if let Ok(cb) = ClipboardContext::new() {
+                                cb.set_text(text).ok();
                             }
-                            "v" => {
+                            drv.delete_selection();
+                            true
+                        }
+                        ("v", _) => {
+                            if let Ok(cb) = ClipboardContext::new() {
                                 let text = cb.get_text().unwrap_or_default();
                                 drv.insert_or_replace_selection(&text);
                             }
-                            _ => {}
+                            true
                         }
+                        _ => false,
                     }
-                    true
                 }
                 Key::Character(c) if action_mod && c.to_lowercase() == "a" => {
                     if shift {

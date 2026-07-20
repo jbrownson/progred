@@ -591,6 +591,27 @@ pub fn resolve_query(text: &str) -> Value {
     }
 }
 
+/// The clipboard spelling of a value — SHALLOW by design: one value,
+/// a node reference being its identity alone, no entity edges
+/// traveling (deep copy waits on the projection-boundary design; see
+/// docs/model.md). Atoms spell as the query language — "quoted"
+/// strings, bare numbers — so they read in other apps and
+/// [`from_clipboard`] reads them back; nodes and lists spell as
+/// Value JSON.
+pub fn to_clipboard(value: &Value) -> String {
+    match value {
+        Value::Atom(Atom::String(_) | Atom::Number(_)) => value.to_string(),
+        _ => serde_json::to_string(value).expect("values serialize"),
+    }
+}
+
+/// The value a clipboard text denotes: Value JSON when it parses,
+/// else the query reading — numbers, quoted strings, bare text — so
+/// text copied anywhere pastes sensibly.
+pub fn from_clipboard(text: &str) -> Value {
+    serde_json::from_str(text).unwrap_or_else(|_| resolve_query(text))
+}
+
 /// A completion offer on a pending edge. The display styles itself by
 /// the action's kind at draw time.
 #[derive(Clone)]
@@ -2890,6 +2911,30 @@ mod tests {
             Some(&Value::list([]))
         );
         assert_eq!(doc.gid.entities().count(), entities);
+    }
+
+    #[test]
+    fn the_clipboard_round_trips_values_and_reads_foreign_text() {
+        let node = new_node_id();
+        let cases = [
+            Value::from("hello"),
+            Value::from("42"),
+            Value::from(2.5),
+            Value::from(node),
+            Value::list([Value::from(1.0), Value::from(node)]),
+            Value::list([]),
+        ];
+        for value in cases {
+            assert_eq!(from_clipboard(&to_clipboard(&value)), value, "{value}");
+        }
+        // Atoms travel as the query language, readable elsewhere; the
+        // string "42" keeps its quotes so it comes back a string.
+        assert_eq!(to_clipboard(&Value::from("hello")), "\"hello\"");
+        assert_eq!(to_clipboard(&Value::from("42")), "\"42\"");
+        assert_eq!(to_clipboard(&Value::from(2.5)), "2.5");
+        // Foreign text pastes by the query reading.
+        assert_eq!(from_clipboard("3.5"), Value::from(3.5));
+        assert_eq!(from_clipboard("plain words"), Value::from("plain words"));
     }
 
     #[test]
