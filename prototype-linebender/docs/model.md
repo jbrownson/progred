@@ -2,6 +2,147 @@
 
 Date: 2026-07-03
 
+## Data Layer v3: Values and Cells (Design Brief, 2026-07-20)
+
+Decided across the lambda-foundations exploration (the
+~/git/lambda-editor sessions, 2026-07-14..20; verified research map
+in the session artifact; journey record with the dead ends in
+experiments/lambda-calculus-exploration.md). Written as a brief so
+the next session starts warm; v2 below remains the shipped baseline until this lands.
+
+The arc. The JSON-shaped rejection (below) gave as a reason:
+"coupling identity semantics to shape (records mutable with
+identity, lists immutable values) is an arbitrary asymmetry" — and
+v2 built exactly that coupling with the poles swapped: maps are the
+identity-bearing entities, lists are values. The smell it left
+("some things have identity and some don't, by shape") is that
+paragraph's own indictment. The third design neither v1 nor v2
+considered: NO shape has identity — identity is its own construct.
+All shapes (records, lists, atoms) are pure structural values
+compared by content; identity is a CELL — a minted uuid holding one
+current value. The lineage is Clojure/Datomic (values immutable and
+structural; an identity is a succession of values; egal equality:
+identity-compared mutables, content-compared immutables), and the
+frame is unapologetically "what if JSON were a graph": JSON with the
+atom set corrected and refs added.
+
+```rust
+pub type CellId = Uuid;                          // was NodeId
+pub enum Atom  { Cell(CellId), String(String), Blob(Vec<u8>) }
+pub enum Label { Cell(CellId), String(String) }  // narrowed from Atom
+pub enum Value {
+    Atom(Atom),
+    List(im::OrdMap<Position, Value>),           // unchanged from v2
+    Record(im::HashMap<Label, Value>),           // v2's entity map, moved inside
+}
+pub struct Cells { data: im::HashMap<CellId, Value> }  // one value per identity
+```
+
+Mechanically small — the v2 entity map moves inside the Value enum —
+and each thing it buys was previously a wart:
+
+- Kind machinery fully unrepresentable. A cell holds a record today
+  and a list tomorrow; "conversion" is set_value. The sticky-kind
+  asymmetry (emptied map vanishes, emptied list persists) and the
+  no-identity-preserving-conversion-path wart both dissolve — kind
+  is a property of the current value, not the identity.
+- Inline records. `{x: 1, y: 2}` as a content-compared anonymous
+  value — v2 cannot say this; every map pays 16 bytes of identity
+  and acquires aliasing semantics whether wanted or not. CAD is full
+  of point-shaped data that wants to be a value. Shallow copy/paste
+  (2026-07-10, below) becomes expressive rather than limited: inline
+  structure travels by value, references alias — the per-gesture
+  identity-fate question answered in data.
+- Value-vs-reference is the projection signal. An anonymous inline
+  definition renders inline BECAUSE it is not a reference; a cell
+  reference renders as a name with unfold. (Independently converged
+  with the lambda-workbench's declaration/reference model.)
+- Identity priced per use. Mint a cell exactly when something must
+  refer to it durably — the unifying form of v2's three
+  justifications (mutate-while-shared, cycles,
+  distinct-despite-equal) is REFERABILITY. Extract-to-cell is an
+  authoring gesture (the tree's extract-to-definition). Tooling
+  references — selection, diagnostics — are NOT that: they stay
+  paths, maintained by the existing rewrite discipline or
+  recomputed. Paths are primitive; identity is a durability upgrade;
+  a diagnostic never edits the document to point at line 3.
+
+Atom roster. The admission criteria, sharpened: an atom is admitted
+when it (a) maps onto the machine world, (b) matters to users, (c)
+canNOT be efficiently encoded by the other constructs, and (d) for
+the bootstrap set, is required for a human-usable editor that knows
+zero conventions. Under these:
+
+- String stays (fails (c) only in principle — encoding text as
+  blobs would leave the zero-convention editor unable to show a
+  human anything, failing (d)).
+- Blob arrives — the anticipated raw-bytes atom, identity = the
+  bytes, memcmp equality, a mini hex editor as the projection floor.
+  The old codepages rejection is answered, not overruled: codepages
+  were bytes masquerading as text; a blob pretends nothing —
+  identity stays decidable by strangers, and interpretation is
+  projection-level by design. Deliberately an atom, not a
+  list-of-bytes: a "byte" value would readmit numbers through the
+  service door, and atoms have no interior structure to address.
+- Number(f64) LEAVES. Numbers fail (c): the substrate does no
+  arithmetic, so a number is a canonical spelling plus an intent
+  bit — a projection convention, not an atom. The general convention
+  is decimal m·10^e (mantissa + point position; integers are the
+  e >= 0 shapes), spelled canonically (10 does not divide m), stored
+  as its canonical decimal string. One-spelling-per-value survives
+  as convention law owned by the convention, not substrate
+  machinery. f64 takes the Blob posture: parked until a real asset
+  needs lossless machine-float round-trip (the Fidget boundary
+  converts; NaN/-0 canonicalization work shelves with the space).
+  Rationals: excluded, library-over-decimals if ever. Reals:
+  excluded by this doc's own law — no computable normal form, so
+  never a value space; computable reals are computation-layer
+  codata.
+- Labels narrow to String | CellId. A label MEANS: strings mean
+  casually, cells mean by metadata lookup; blobs deliberately don't
+  mean, so they can't be labels; number labels die with Number.
+  Value-keyed dictionaries are collections, not records — encodable
+  as lists of pairs, promotable if a real customer appears.
+
+Migration: format 2; loaders refuse format 1 (house pattern,
+prototype scratch); samples re-authored. The number-editing
+machinery (parse-gated write-through, dual atom offer, numeric
+completion ranking) transfers nearly unchanged as the decimal
+CONVENTION's projection — the first atom-level convention layer,
+sibling of the list projection.
+
+What re-roots in the editor, the expected cost ledger:
+
+- Write unit: (entity, label) becomes (cell, path). set_value's
+  split-at-last-Key generalizes — the last Key step may now address
+  a record field at any depth inside a cell's value; respine already
+  covers list suffixes; spine_writable becomes cell-of-path with the
+  same shape. write_through and History are unchanged in design
+  (snapshots of persistent Cells).
+- Completion: "fresh node" offers become "fresh cell"; a new inline
+  record offer joins (the anonymous `{}`); the label stage narrows
+  to Label. Pending machinery otherwise transfers.
+- Secondary selection: identity marks are cells and atom
+  occurrences; inline records are structure, not identity — no
+  marks. (Strings/blobs remain identities like any atom.)
+- Graph view: drawn nodes are cells plus shared atom values as
+  today; whether inline records render inside their parent or as
+  square-cornered value nodes like lists is decided in-session
+  (the list precedent: kind is worth a silhouette).
+- Sources/library: per-entity fallback becomes per-cell fallback,
+  unchanged in spirit; read-only gating keeps the cell as the
+  authority unit.
+- Floating definitions/orphan pool: unchanged — cells float; the
+  keys-as-references note extends to Label::Cell at any depth.
+
+Open questions for the implementing session: root stays
+Option<Value> (records may now be the root inline); Record has no
+ambient order (raw sorts by label as today — the ordered-edge-set
+rejection stands); wrap is now fully subsumed (x -> {k: x} is one
+set_value, like lists); naming adopted here — CELL for the identity
+construct, RECORD for the value shape, "node" surviving only as the
+graph view's colloquial word for whatever it draws.
+
 ## Data Layer v2: The Typed Model (2026-07-09)
 
 The substrate, whole:
