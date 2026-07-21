@@ -1241,11 +1241,16 @@ fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
     );
 }
 
-/// Marks `child` as the projection of the value at `path`. On placement
-/// it draws the highlight when this is the selected path, registers a
-/// click that selects it (innermost wins by handler precedence) — or,
-/// with the command modifier and a pending open, picks `value` into it
-/// — and records itself for keyboard navigation.
+/// Marks CONTENT-SHAPED `child` as the projection of the value at
+/// `path` — its bounding box is all ink (a pending's query, an
+/// engaged name, the empty-document placeholder), so the whole box
+/// is an honest click target. On placement it draws the highlight
+/// when this is the selected path, registers a click that selects it
+/// (innermost wins by handler precedence) — or, with the command
+/// modifier and a pending open, picks `value` into it — and records
+/// itself for keyboard navigation. Views whose boxes span structural
+/// whitespace use [`descend_landmark`] plus explicit content claims
+/// instead.
 fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     cx: &Cx,
     path: Path,
@@ -1375,28 +1380,42 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let name = cx.name(cell);
-    let head = row(
-        2.0 * scale,
-        vec![
-            text(tcx, "(", &cx.styles.dim),
-            head_view(cx, tcx, path, cell, &name, hooks),
-        ],
+    let target = Value::from(cell);
+    // The head claims cell-selection — the paren and the gap beside
+    // the name included; an engaged name inside still wins its own
+    // clicks.
+    let head = select_target(
+        path.to_vec(),
+        target.clone(),
+        hooks,
+        row(
+            2.0 * scale,
+            vec![
+                text(tcx, "(", &cx.styles.dim),
+                head_view(cx, tcx, path, cell, &name, hooks),
+            ],
+        ),
     );
     let mut followed = path.to_vec();
     followed.push(Step::Follow);
     let Some(value) = cx.sources.value(cell).cloned() else {
-        return row(
-            4.0 * scale,
-            vec![
-                head,
-                row(
-                    2.0 * scale,
-                    vec![
-                        pending_view(cx, tcx, followed.clone(), hooks),
-                        text(tcx, ")", &cx.styles.dim),
-                    ],
-                ),
-            ],
+        return select_target(
+            path.to_vec(),
+            target,
+            hooks,
+            row(
+                4.0 * scale,
+                vec![
+                    head,
+                    row(
+                        2.0 * scale,
+                        vec![
+                            pending_view(cx, tcx, followed.clone(), hooks),
+                            text(tcx, ")", &cx.styles.dim),
+                        ],
+                    ),
+                ],
+            ),
         );
     };
     let mut inner = ancestors.clone();
@@ -1410,28 +1429,51 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         head,
         path: path.to_vec(),
         collapsed,
+        target: target.clone(),
     };
     match &value {
-        Value::Atom(_) if collapsed => row(
-            4.0 * scale,
-            vec![
-                held.head,
-                disclosure(path.to_vec(), true, hooks, cx.styles),
-                text(tcx, ")", &cx.styles.dim),
-            ],
+        Value::Atom(_) if collapsed => select_target(
+            path.to_vec(),
+            target,
+            hooks,
+            row(
+                4.0 * scale,
+                vec![
+                    held.head,
+                    disclosure(path.to_vec(), true, hooks, cx.styles),
+                    text(tcx, ")", &cx.styles.dim),
+                ],
+            ),
         ),
         // Leaf-only records and lists (pendings included) read
-        // inline between the parens, as do atoms and links.
-        Value::Atom(_) => inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
+        // inline between the parens, as do atoms and links; the
+        // one-line form is all content, so the whole row selects the
+        // cell (inner targets winning their own spans).
+        Value::Atom(_) => select_target(
+            path.to_vec(),
+            target,
+            hooks,
+            inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
+        ),
         Value::Record(fields)
             if !collapsed
                 && fields.values().all(leaf_atom)
                 && cx.pending_edge_under(&followed).is_none() =>
         {
-            inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks)
+            select_target(
+                path.to_vec(),
+                target,
+                hooks,
+                inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
+            )
         }
         Value::List(elements) if !collapsed && elements.values().all(leaf_atom) => {
-            inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks)
+            select_target(
+                path.to_vec(),
+                target,
+                hooks,
+                inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
+            )
         }
         Value::Record(fields) => {
             record_view(cx, tcx, &followed, &inner, fields, Some(held), hooks)
@@ -1446,11 +1488,13 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// container's delimiter line, the close paren its closer (`})`,
 /// `])`), and collapse — decided by the cell, cycle default and
 /// pending-forcing included — keys its disclosure at the cell's own
-/// path.
+/// path. `target` is what the container's delimiters select and
+/// pick: the link, at the cell's path.
 struct Held<P> {
     head: Node<P>,
     path: Path,
     collapsed: bool,
+    target: Value,
 }
 
 /// Leaf atoms — strings and blobs — read inline; anything with
@@ -1485,13 +1529,17 @@ fn inline_cell<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     )
 }
 
-/// Registers a held value at its own (Follow) path — keyboard-
-/// reachable and primary-highlighted, no pointer target: clicks
-/// belong to the rows and the cell.
-fn held_body<P: Canvas + HasDescends>(cx: &Cx, path: Path, body: Node<P>) -> Node<P> {
+/// Marks `child` as the projection of `path` WITHOUT claiming any
+/// clicks: the highlight, reveal rect, and keyboard reach of
+/// [`descend`] over the full bounds, while pointer selection belongs
+/// to the content targets the view registers — heads, delimiters,
+/// rows — so clicks on structural whitespace (gutters, inter-row
+/// gaps, the dead space inside a bounding box) fall through to the
+/// background's deselect.
+fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>) -> Node<P> {
     let selected = cx.selected(&path);
     let scale = cx.styles.scale;
-    decorate(body, move |p: &mut P, rect| {
+    decorate(child, move |p: &mut P, rect| {
         if selected {
             primary_highlight(scale, p, rect);
         }
@@ -1685,7 +1733,14 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             });
         }
         cells.push(text(tcx, "]", &cx.styles.dim));
-        return row(0.0, cells);
+        // The one-line literal is all content: it selects the list
+        // whole, elements winning their own spans.
+        return select_target(
+            path.to_vec(),
+            Value::List(elements.clone()),
+            hooks,
+            row(0.0, cells),
+        );
     }
 
     // Standalone, a pending child forces the list open and only an
@@ -1701,43 +1756,67 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             "]",
         ),
     };
+    // What the delimiters select and pick: the cell when held, the
+    // list itself standalone.
+    let (target_path, target) = match &held {
+        Some(held) => (held.path.clone(), held.target.clone()),
+        None => (path.to_vec(), Value::List(elements.clone())),
+    };
     let mut header: Vec<Node<P>> = held.map(|held| held.head).into_iter().collect();
     header.push(text(tcx, "[", &cx.styles.dim));
     header.push(disclosure(delta_path, collapsed, hooks, cx.styles));
     if collapsed {
         header.push(text(tcx, &count_text(items.len(), "element"), &cx.styles.dim));
         header.push(text(tcx, close, &cx.styles.dim));
-        return row(4.0 * scale, header);
+        return select_target(target_path, target, hooks, row(4.0 * scale, header));
     }
     let rows: Vec<Node<P>> = items
         .into_iter()
         .map(|(position, value)| {
             let mut child = path.to_vec();
             child.push(Step::Element(position));
-            let content = match value {
-                Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
-                None => pending_view(cx, tcx, child, hooks),
-            };
             // The list vernacular: a dim leading dash marks the
-            // element rows.
-            row(6.0 * scale, vec![text(tcx, "-", &cx.styles.dim), content])
+            // element rows — ink, so it selects its element (a
+            // pending's dash stays quiet).
+            let (dash, content) = match value {
+                Some(value) => (
+                    select_target(
+                        child.clone(),
+                        value.clone(),
+                        hooks,
+                        text(tcx, "-", &cx.styles.dim),
+                    ),
+                    value_view(cx, tcx, &child, ancestors, &value, hooks),
+                ),
+                None => (
+                    text(tcx, "-", &cx.styles.dim),
+                    pending_view(cx, tcx, child.clone(), hooks),
+                ),
+            };
+            row(6.0 * scale, vec![dash, content])
         })
         .collect();
     let body = col(HAlign::Start, 0, 4.0 * scale, rows);
     let body = if framed {
-        held_body(cx, path.to_vec(), body)
+        descend_landmark(cx, path.to_vec(), body)
     } else {
         body
     };
-    // The block form closes its bracket at the header's indent.
+    // The block form closes its bracket at the header's indent; the
+    // header band and the closer are the block's click claims.
     col(
         HAlign::Start,
         0,
         4.0 * scale,
         vec![
-            row(4.0 * scale, header),
+            select_target(
+                target_path.clone(),
+                target.clone(),
+                hooks,
+                row(4.0 * scale, header),
+            ),
             pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
-            text(tcx, close, &cx.styles.dim),
+            select_target(target_path, target, hooks, text(tcx, close, &cx.styles.dim)),
         ],
     )
 }
@@ -1789,7 +1868,14 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             });
         }
         cells.push(text(tcx, "}", &cx.styles.dim));
-        return row(0.0, cells);
+        // The one-line literal is all content: it selects the record
+        // whole, fields winning their own spans.
+        return select_target(
+            path.to_vec(),
+            Value::Record(fields.clone()),
+            hooks,
+            row(0.0, cells),
+        );
     }
 
     let framed = held.is_some();
@@ -1803,13 +1889,19 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             "}",
         ),
     };
+    // What the delimiters select and pick: the cell when held, the
+    // record itself standalone.
+    let (target_path, target) = match &held {
+        Some(held) => (held.path.clone(), held.target.clone()),
+        None => (path.to_vec(), Value::Record(fields.clone())),
+    };
     let mut header: Vec<Node<P>> = held.map(|held| held.head).into_iter().collect();
     header.push(text(tcx, "{", &cx.styles.dim));
     header.push(disclosure(delta_path, collapsed, hooks, cx.styles));
     if collapsed {
         header.push(text(tcx, &count_text(items.len(), "field"), &cx.styles.dim));
         header.push(text(tcx, close, &cx.styles.dim));
-        return row(4.0 * scale, header);
+        return select_target(target_path, target, hooks, row(4.0 * scale, header));
     }
     let mut rows: Vec<Node<P>> = items
         .into_iter()
@@ -1822,18 +1914,24 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     }
     let body = col(HAlign::Start, 0, 4.0 * scale, rows);
     let body = if framed {
-        held_body(cx, path.to_vec(), body)
+        descend_landmark(cx, path.to_vec(), body)
     } else {
         body
     };
+    // The header band and the closer are the block's click claims.
     col(
         HAlign::Start,
         0,
         4.0 * scale,
         vec![
-            row(4.0 * scale, header),
+            select_target(
+                target_path.clone(),
+                target.clone(),
+                hooks,
+                row(4.0 * scale, header),
+            ),
             pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
-            text(tcx, close, &cx.styles.dim),
+            select_target(target_path, target, hooks, text(tcx, close, &cx.styles.dim)),
         ],
     )
 }
@@ -2031,13 +2129,24 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         Value::Atom(Atom::String(s)) => {
             let fallback = text(tcx, s, &cx.styles.string);
             let content = atom_content(editing, fallback, None, tcx, cx.styles, hooks);
-            row(0.0, vec![
-                text(tcx, "\"", &cx.styles.string),
-                cursor_target(path.to_vec(), value.clone(), hooks, content),
-                text(tcx, "\"", &cx.styles.string),
-            ])
+            // The quotes select; the text inside places the caret.
+            select_target(
+                path.to_vec(),
+                value.clone(),
+                hooks,
+                row(0.0, vec![
+                    text(tcx, "\"", &cx.styles.string),
+                    cursor_target(path.to_vec(), value.clone(), hooks, content),
+                    text(tcx, "\"", &cx.styles.string),
+                ]),
+            )
         }
-        Value::Atom(Atom::Blob(bytes)) => text(tcx, &blob_text(bytes), &cx.styles.id),
+        Value::Atom(Atom::Blob(bytes)) => select_target(
+            path.to_vec(),
+            value.clone(),
+            hooks,
+            text(tcx, &blob_text(bytes), &cx.styles.id),
+        ),
         // The hardcoded projection chain, decided per value: links
         // render as their cells, lists and records as themselves —
         // in the Raw view too, kind being data. A registry waits for
@@ -2053,7 +2162,10 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     } else {
         secondary_mark(cx, value, inner)
     };
-    let placed = descend(cx, path.to_vec(), Some(value.clone()), hooks, inner);
+    // A landmark, not a target: highlight and keyboard reach span
+    // the full bounds, while clicks belong to the content each arm
+    // claimed above — structural whitespace deselects.
+    let placed = descend_landmark(cx, path.to_vec(), inner);
     ground(cx, path, value, placed)
 }
 

@@ -372,6 +372,28 @@ nothing today); cell_view's block scaffolding stays deliberately
 un-unified until the rendering is polished enough to know what the
 shared shape is.
 
+CLICK TARGETS NARROWED TO CONTENT (2026-07-20, user: deselecting was
+unfindable because every hit zone was a bounding box — a block's box
+spans its structural whitespace, so most of the window selected
+SOMETHING). The rule now: selection highlights, the reveal rect, and
+keyboard reach keep the full bounds (`descend` split into the
+click-free `descend_landmark` plus explicit content claims), but
+POINTER selection requires ink — clicking blank space outside any
+content falls through to the background's deselect. What counts as
+content, per form: atoms claim their span, quotes included; inline
+literals claim their whole line (delimiters, commas, the gaps
+between items — the "spaces between words"); field rows keep their
+label→value span whole (the gap between is a deliberate target);
+block forms claim their header band and their closer line; a cell's
+parenthesized head claims the cell everywhere it appears; element
+dashes are ink and select their element. What deselects: indent
+gutters, inter-row gaps, the dead space right of narrow rows inside
+a block's width. The one affordance retired: clicking a block's
+interior whitespace no longer selects the block — its head and
+delimiters do (user-approved trade). The `Held` frame carries the
+cell's target so a held container's delimiters select the CELL
+while a standalone container's select the value.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:
