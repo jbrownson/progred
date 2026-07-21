@@ -1568,30 +1568,33 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         Some(value) => {
             let mut inner = ancestors.clone();
             inner.insert(cell);
-            // ONE build against the larger of the two positions'
-            // budgets, beside-or-drop read off the result by the
-            // general rule — the field-row discipline, inside the
-            // parens, the wrapping widths measured rather than
-            // assumed.
+            // The field-row discipline inside the parens: probe the
+            // value's narrowest form with a CLOSED zero-budget build,
+            // hug the head where it fits beside, else drop at the
+            // tab; one real build either way, and no probe when the
+            // decision is forced.
             let inside = avail - 2.0 * (delim_advance(cx.styles, Delim::Paren) + 2.0 * scale);
             let beside = inside - head.extent.width - 4.0 * scale;
             let tab = 20.0 * scale;
+            let hug = beside > 0.0 && {
+                let narrowest = value_view::<C, P>(cx, tcx, &followed, &inner, value, 0.0, hooks)
+                    .extent
+                    .width;
+                narrowest <= beside
+                    || (narrowest > inside - tab
+                        && head.extent.width + 4.0 * scale + narrowest
+                            < head.extent.width.max(tab + narrowest))
+            };
             let value_node = value_view(
                 cx,
                 tcx,
                 &followed,
                 &inner,
                 value,
-                beside.max(inside - tab).max(0.0),
+                if hug { beside } else { inside - tab }.max(0.0),
                 hooks,
             );
-            let dropped = head
-                .extent
-                .width
-                .max(tab + value_node.extent.width);
-            if value_node.extent.width <= beside
-                || dropped > head.extent.width + 4.0 * scale + value_node.extent.width
-            {
+            if hug {
                 row(4.0 * scale, vec![head, value_node])
             } else {
                 col(
@@ -1693,16 +1696,19 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     }
 }
 
-/// One record field row: the label-and-arrow head, then the value (or
+/// One record field row: the label-and-colon head, then the value (or
 /// its pending query). `parent` is the record's own path — a cell's
 /// followed path or an inline record's. A real field's label and
-/// arrow select the field, like its value — grouped so one target
+/// colon select the field, like its value — grouped so one target
 /// spans both and the gap between. A pending row's plain click falls
 /// through (the not-yet-field can't be selected), but command still
-/// picks its label's identity. When the value overflows the room
-/// beside the label it BREAKS AFTER THE LABEL instead: the value
-/// drops below at a fixed tab — never aligned under the label's own
-/// width, which is the indentation that drifts.
+/// picks its label's identity. Three alternatives, in the general
+/// rule's priority order: the value HUGS the label — built with the
+/// room beside it, breaking inside as needed (the lisp-flavored
+/// form); else it DROPS below at a fixed tab with the drop
+/// position's wider budget — never aligned under the label's own
+/// width, which is the indentation that drifts; when neither fits,
+/// the narrower attempt wins.
 #[allow(clippy::too_many_arguments)]
 fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
@@ -1717,7 +1723,10 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
     child.push(Step::Key(key.clone()));
-    let head = row(6.0 * scale, vec![label_view(cx, tcx, &key), arrow(cx.styles)]);
+    let head = row(
+        0.0,
+        vec![label_view(cx, tcx, &key), text(tcx, ":", &cx.styles.dim)],
+    );
     let head = match &value {
         Some(_) => select_target(
             child.clone(),
@@ -1733,37 +1742,57 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             vec![head, pending_view(cx, tcx, child, hooks)],
         );
     };
-    // ONE build against the larger of the two positions' budgets;
-    // whether it lands beside or drops is read off the result by the
-    // general rule — beside if it fits (the prior alternative), else
-    // the narrower of the two wrappings, MEASURED, not argued: the
-    // same content node wraps either way, so both widths are in hand.
+    // The hug decision probes the value's NARROWEST form: a
+    // zero-budget build is CLOSED — every nested fit test fails, so
+    // nothing branches inside (the dual of the literal candidates'
+    // unbounded budget) — and greedy only flattens where it fits, so
+    // a value whose narrowest form fits beside still fits there when
+    // built with the room. ONE real build follows at the chosen
+    // position; building both positions recursed probes-within-
+    // probes and went exponential exactly at narrow widths.
     let beside = avail - head.extent.width - 6.0 * scale;
     let tab = 20.0 * scale;
+    // No room beside means no probe: the decision is forced, and
+    // skipping it is what keeps a zero-budget build CLOSED — a probe
+    // that probed would recurse the exponential right back.
+    if beside <= 0.0 {
+        let content = value_view(cx, tcx, &child, ancestors, &value, (avail - tab).max(0.0), hooks);
+        return col(
+            HAlign::Start,
+            0,
+            2.0 * scale,
+            vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), content)],
+        );
+    }
+    let narrowest = value_view::<C, P>(cx, tcx, &child, ancestors, &value, 0.0, hooks)
+        .extent
+        .width;
+    // Overflow territory (narrowest fits neither position): both
+    // builds bottom out near the narrowest form, so the narrower
+    // loss is decided by the wrapping arithmetic alone.
+    let hug = narrowest <= beside
+        || (narrowest > avail - tab
+            && head.extent.width + 6.0 * scale + narrowest
+                < head.extent.width.max(tab + narrowest));
     let content = value_view(
         cx,
         tcx,
         &child,
         ancestors,
         &value,
-        beside.max(avail - tab).max(0.0),
+        if hug { beside } else { avail - tab }.max(0.0),
         hooks,
     );
-    let dropped = head
-        .extent
-        .width
-        .max(tab + content.extent.width);
-    if content.extent.width <= beside
-        || dropped > head.extent.width + 6.0 * scale + content.extent.width
-    {
-        return row(6.0 * scale, vec![head, content]);
+    if hug {
+        row(6.0 * scale, vec![head, content])
+    } else {
+        col(
+            HAlign::Start,
+            0,
+            2.0 * scale,
+            vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), content)],
+        )
     }
-    col(
-        HAlign::Start,
-        0,
-        2.0 * scale,
-        vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), content)],
-    )
 }
 
 /// The label-query row of a new field being authored on a record. The
@@ -1778,11 +1807,10 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let pending_row = row(
-        6.0 * scale,
+        0.0,
         vec![
             query_content(cx, tcx, query, choice, true, hooks),
-            arrow(cx.styles),
-            text(tcx, "…", &cx.styles.dim),
+            text(tcx, ": …", &cx.styles.dim),
         ],
     );
     decorate(pending_row, move |p: &mut P, rect| {
@@ -1857,7 +1885,9 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // one all-flat construction — no branching inside; this enclosing
     // test is the one gate (Wadler's fits test, operationally). On
     // rejection the block form rebuilds them against its own columns.
-    let mut flat = Some({
+    // At zero budget no literal can be accepted; skipping the
+    // candidate keeps zero-budget probe builds closed and cheap.
+    let mut flat = (avail > 0.0).then(|| {
         let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Bracket, true)];
         for (index, (position, value)) in items.iter().enumerate() {
             if index > 0 {
@@ -1998,33 +2028,42 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 
     // The literal candidate, kept when it FITS: within the width
     // remaining here and one line tall (a pending inside can force a
-    // child open). Children build against an UNBOUNDED budget, so
-    // every nested fit test passes and the candidate materializes in
-    // one all-flat construction — no branching inside; this enclosing
+    // child open). A new field's label query rides the literal like
+    // any other fragment — authoring alone never forces the block
+    // form. Children build against an UNBOUNDED budget, so every
+    // nested fit test passes and the candidate materializes in one
+    // all-flat construction — no branching inside; this enclosing
     // test is the one gate (Wadler's fits test, operationally). On
     // rejection the block form rebuilds them against its own columns.
-    let mut flat = (!pending_edge)
-        .then(|| {
-            let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Brace, true)];
-            for (index, (key, value)) in items.iter().enumerate() {
-                if index > 0 {
-                    cells.push(text(tcx, ", ", &cx.styles.dim));
-                }
-                cells.push(label_view(cx, tcx, key));
-                cells.push(text(tcx, ": ", &cx.styles.dim));
-                let mut child = path.to_vec();
-                child.push(Step::Key(key.clone()));
-                cells.push(match value {
-                    Some(value) => {
-                        value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
-                    }
-                    None => pending_view(cx, tcx, child, hooks),
-                });
+    // At zero budget no literal can be accepted; skipping the
+    // candidate keeps zero-budget probe builds closed and cheap.
+    let mut flat = (avail > 0.0).then(|| {
+        let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Brace, true)];
+        for (index, (key, value)) in items.iter().enumerate() {
+            if index > 0 {
+                cells.push(text(tcx, ", ", &cx.styles.dim));
             }
-            cells.push(flat_delim(cx.styles, Delim::Brace, false));
-            row(0.0, cells)
-        })
-        .filter(|candidate| one_line(candidate.extent, scale));
+            cells.push(label_view(cx, tcx, key));
+            cells.push(text(tcx, ": ", &cx.styles.dim));
+            let mut child = path.to_vec();
+            child.push(Step::Key(key.clone()));
+            cells.push(match value {
+                Some(value) => {
+                    value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
+                }
+                None => pending_view(cx, tcx, child, hooks),
+            });
+        }
+        if let Some((query, choice)) = cx.pending_edge_under(path) {
+            if !items.is_empty() {
+                cells.push(text(tcx, ", ", &cx.styles.dim));
+            }
+            cells.push(pending_edge_row(cx, tcx, query, choice, hooks));
+        }
+        cells.push(flat_delim(cx.styles, Delim::Brace, false));
+        row(0.0, cells)
+    })
+    .filter(|candidate| one_line(candidate.extent, scale));
     if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail) {
         // The one-line literal is all content: it selects the record
         // whole, fields winning their own spans.
@@ -2218,37 +2257,6 @@ fn disclosure<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
             });
         },
     )
-}
-
-/// A small drawn arrow between a label and its value. Reading
-/// "label → value", and being a stroke rather than text, it
-/// separates a field's key from its target.
-fn arrow<P: Canvas>(styles: &RawStyles) -> Node<P> {
-    let scale = styles.scale;
-    let width = 16.0 * scale;
-    let extent = Extent {
-        width,
-        ascent: 11.0 * scale,
-        descent: 3.0 * scale,
-    };
-    leaf(extent, move |p: &mut P, at| {
-        let y = at.y - 4.0 * scale;
-        let x0 = at.x + 2.0 * scale;
-        let x1 = at.x + width - 2.0 * scale;
-        let head = 3.5 * scale;
-        let mut path = BezPath::new();
-        path.move_to((x0, y));
-        path.line_to((x1, y));
-        path.move_to((x1 - head, y - head));
-        path.line_to((x1, y));
-        path.line_to((x1 - head, y + head));
-        p.stroke(
-            path,
-            Stroke::new(1.4 * scale),
-            Color::new([0.58, 0.61, 0.67, 1.0]),
-            Affine::IDENTITY,
-        );
-    })
 }
 
 fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
@@ -3516,6 +3524,12 @@ mod svg_bench {
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
         };
+        // Timed as the layout perf canary: a projection is a
+        // per-keystroke cost, and the fallback-heavy narrow widths
+        // are where accidental exponentials have surfaced twice. The
+        // bound is generous — an exponential blows through it by
+        // orders of magnitude, an honest regression doesn't flake.
+        let start = std::time::Instant::now();
         let node = project::<(), Bench>(
             &sources,
             None,
@@ -3527,6 +3541,12 @@ mod svg_bench {
             &styles,
             width - 48.0,
             hooks,
+        );
+        let elapsed = start.elapsed();
+        eprintln!("project at {width:.0}px: {elapsed:.1?}");
+        assert!(
+            elapsed < std::time::Duration::from_secs(2),
+            "projection at {width:.0}px took {elapsed:.1?} — layout cost blew up"
         );
         let extent = node.extent;
         let mut bench = Bench {
@@ -3554,5 +3574,9 @@ mod svg_bench {
     fn svg_bench_renders_the_sample_projection() {
         render(900.0, "../target/raw_projection.svg");
         render(560.0, "../target/raw_projection_narrow.svg");
+        // The deep-fallback regime: hugging fails at most levels, so
+        // this render is also the canary against layout cost blowing
+        // up when width is scarce.
+        render(320.0, "../target/raw_projection_tight.svg");
     }
 }

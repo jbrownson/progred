@@ -70,6 +70,7 @@ struct Dispatch {
     handler: Handler<App>,
     descends: Vec<raw::Descend>,
     max_scroll: f64,
+    max_scroll_x: f64,
     popup: Option<raw::Popup>,
 }
 
@@ -439,7 +440,13 @@ impl ApplicationHandler<UserEvent> for App {
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update)))) => {
                         dispatch.handler.dispatch_scroll(self, &update)
                             || self.graph_scroll(&update, scale, size.width as f64, viewport)
-                            || self.scroll_document(&update, scale, viewport, dispatch.max_scroll)
+                            || self.scroll_document(
+                                &update,
+                                scale,
+                                viewport,
+                                dispatch.max_scroll,
+                                dispatch.max_scroll_x,
+                            )
                     }
                     _ => false,
                 };
@@ -552,6 +559,7 @@ fn main() {
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
+            scroll_x: 0.0,
         },
         doc_path,
         menu,
@@ -592,12 +600,14 @@ struct Model {
     library: progred_graph::Cells,
     graph: graph_view::GraphView,
     history: history::History,
-    /// Vertical document scroll offset in logical pixels, so the
-    /// position survives moving between monitor scales. May exceed
-    /// the current maximum after a resize: placement clamps
-    /// effectively, so a transient shrink-and-grow restores the
-    /// position; scrolling collapses it to the clamped reality.
+    /// Document scroll offsets in logical pixels, so the position
+    /// survives moving between monitor scales. May exceed the
+    /// current maximum after a resize: placement clamps effectively,
+    /// so a transient shrink-and-grow restores the position;
+    /// scrolling collapses it to the clamped reality. Both axes ride
+    /// the same gesture; scroll BARS are a later affordance.
     scroll: f64,
+    scroll_x: f64,
 }
 
 impl Model {
@@ -657,6 +667,7 @@ struct Frame<'a> {
     /// How far the document can scroll given this frame's content and
     /// viewport; dispatch clamps against it.
     max_scroll: f64,
+    max_scroll_x: f64,
     /// The pending row's completion popup, emitted during placement;
     /// drawn after the body and committed from at dispatch.
     popup: Option<raw::Popup>,
@@ -725,6 +736,7 @@ impl App {
         scale: f64,
         viewport: f64,
         max_scroll: f64,
+        max_scroll_x: f64,
     ) -> bool {
         let line = 40.0 * scale;
         let delta = update.delta.to_pixel_delta(
@@ -734,15 +746,19 @@ impl App {
                 y: viewport,
             },
         );
-        // ScrollDelta documents positive Y as viewport-down, but
+        // ScrollDelta documents positive as viewport-down/right, but
         // ui-events-winit passes winit deltas through raw, where
-        // positive Y is scroll-up; subtract to match reality. Stepping
-        // from the clamped position keeps the first tick responsive
-        // when a resize left the stored offset out of bounds.
+        // positive is scroll-up/left; subtract to match reality.
+        // Stepping from the clamped position keeps the first tick
+        // responsive when a resize left the stored offset out of
+        // bounds.
         let next =
             (self.model.scroll.clamp(0.0, max_scroll) - delta.y / scale).clamp(0.0, max_scroll);
-        (next != self.model.scroll) && {
+        let next_x = (self.model.scroll_x.clamp(0.0, max_scroll_x) - delta.x / scale)
+            .clamp(0.0, max_scroll_x);
+        (next != self.model.scroll || next_x != self.model.scroll_x) && {
             self.model.scroll = next;
+            self.model.scroll_x = next_x;
             true
         }
     }
@@ -918,6 +934,7 @@ impl App {
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
+            scroll_x: 0.0,
         };
         self.doc_path = path;
         self.revealed = None;
@@ -1003,6 +1020,7 @@ impl App {
             handler: Handler::new(),
             descends: Vec::new(),
             max_scroll: 0.0,
+            max_scroll_x: 0.0,
             popup: None,
         };
         let view = self.view_flags();
@@ -1020,6 +1038,7 @@ impl App {
             handler,
             descends,
             max_scroll,
+            max_scroll_x,
             popup,
             ..
         } = frame;
@@ -1027,6 +1046,7 @@ impl App {
             handler,
             descends,
             max_scroll,
+            max_scroll_x,
             popup,
         });
     }
@@ -1449,6 +1469,7 @@ impl App {
             handler: Handler::new(),
             descends: Vec::new(),
             max_scroll: 0.0,
+            max_scroll_x: 0.0,
             popup: None,
         };
         run_frame(
@@ -1465,6 +1486,7 @@ impl App {
             handler,
             descends,
             max_scroll,
+            max_scroll_x,
             popup,
             ..
         } = frame;
@@ -1472,6 +1494,7 @@ impl App {
             handler,
             descends,
             max_scroll,
+            max_scroll_x,
             popup,
         });
 
@@ -1654,14 +1677,26 @@ fn run_frame(
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
         },
     );
-    frame.max_scroll = ((body.extent.height() + 2.0 * margin - viewport_height) / scale).max(0.0);
-    place_top_left(
-        body,
+    // The body rides puri's scroll viewport: margins pad into the
+    // content, the window is the viewport, and the app's clamped
+    // offsets (its state, never puri's) shift it. The horizontal
+    // maximum answers to the LAYOUT width — content should only
+    // scroll where even the block forms overflowed it — not the
+    // window edge the viewport clips at.
+    let content = puri::layout::pad(vello::kurbo::Insets::uniform(margin), body);
+    frame.max_scroll = ((content.extent.height() - viewport_height) / scale).max(0.0);
+    frame.max_scroll_x =
+        ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
+    let offset = Vec2::new(
+        model.scroll_x.clamp(0.0, frame.max_scroll_x) * scale,
+        model.scroll.clamp(0.0, frame.max_scroll) * scale,
+    );
+    puri::scroll::place_scrolled(
+        content,
         frame,
-        Point::new(
-            margin,
-            margin - model.scroll.clamp(0.0, frame.max_scroll) * scale,
-        ),
+        Point::ZERO,
+        Size::new(viewport_width, viewport_height),
+        offset,
     );
     // The graph pane draws over the document's right side; placed
     // after the body so its handlers win inside the panel.

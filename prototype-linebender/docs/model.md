@@ -591,10 +591,94 @@ rule this instantiates, now canonical: alternatives are tried in
 priority order, the FIRST THAT FITS wins; when none fits, the
 NARROWEST ATTEMPTED wins, priority breaking ties. (An alternative's
 width is only known by building it — measurement IS construction —
-so the rule selects among built forms rather than pruning builds.) Noted for later, not a priority
-(user): there is no horizontal scroll, and vertical scroll is
-trackpad/wheel only — some clickable/draggable scroll affordance is
-queued.
+so the rule selects among built forms rather than pruning builds.) HORIZONTAL SCROLL landed in the
+vertical gesture's exact flavor (2026-07-21): both axes ride the
+same trackpad/wheel event through `scroll_document`, clamped
+against per-frame maxima (the horizontal maximum is the body width
+over the layout width, so it only exists where even the block
+forms overflow), same resize semantics (stored offsets may exceed
+the max; placement clamps, scrolling collapses to reality), and
+the graph panel still wins scrolls inside its own bounds.
+Directionality verified on macOS wheel and trackpad (user);
+Windows may want the horizontal axis inverted — deferred. Scroll
+STATE stays app-side by Puri's own rules (state custody is never
+Puri's); the puri-shaped piece — a pure clipped-viewport combinator
+and the bar drawing — extracts when SCROLL BARS land, which remain
+queued, not a priority (user).
+
+THE HUG, TRIED (2026-07-21, user: "I'd be open to trying it", and
+their lisp-style preference — closers at line ends, not new lines —
+is the same instinct). Field rows and cell values now have THREE
+alternatives in the general rule's priority order: HUG — the value
+is built with the room beside its label and breaks inside it as
+needed, so a record can open right after the label and cascade —
+then DROP below at the tab with the drop position's wider budget,
+then the narrower attempt when neither fits. Hug outranks drop
+(prettier's priority for its hug style); the cost is a second
+build only when hugging fails. The look shifted lisp-ward at every
+width: chains hug rightward, closers pile at line ends, the wide
+render got denser and the narrow render deeper — values now break
+WITHIN their beside column rather than dropping for more room.
+DENSITY is a flagged, DEFERRED question (user: "the current layout
+looks very dense, I think most people won't like it") — the lever
+when taken up is heuristics that preemptively choose block forms
+before width forces them. The user kept the hug after use: it
+reduces the number of large layout jumps under window shrinking.
+
+The hug's first cut went EXPONENTIAL AT NARROW WIDTHS (user hit it
+and diagnosed it exactly: "the tighter the width the more it has
+to fall back, and if we have 3 options that goes exponential") —
+building both positions meant probes containing probes, felt only
+when hugging fails at every level. The fix is the DUAL of the
+unbounded-budget candidates: the hug decision probes the value's
+NARROWEST form with a ZERO-budget build — every nested fit test
+fails, so nothing branches inside and the probe is one closed
+construction — and since greedy only flattens where it fits, a
+value whose narrowest form fits beside still fits there when built
+with the room. One real build follows at the chosen position.
+Guards keep the fixpoints closed: no probe when there is no room
+beside (the decision is forced), and no literal candidates at zero
+budget (they can never be accepted). raw_projection_tight.svg
+(320px) joined the svg bench as the permanent canary for the
+deep-fallback regime; all three renders complete together in
+about a second.
+
+SCROLLING SPLIT ALONG PURI'S OWN SEAM (user: "if we don't already
+have a Scroll widget in Puri pull that out now, just don't bother
+w/ the scroll bars"): `puri::scroll` owns the pure geometry —
+`max_offset` (the per-axis clamp from extents) and
+`place_scrolled` (the child shifted by the caller's offsets inside
+a clipped viewport) — while offset CUSTODY stays app state, the
+LineEditState pattern. The document body now places through it,
+with real clipping for the first time. It is a placement ENTRY,
+not a composable node, deliberately: wrapping a child inside a
+'static leaf closure cannot capture Node<P> for lifetime-carrying
+P, so nesting scroll areas needs a first-class clip node kind in
+layout — that lands with SCROLL BARS, still deferred. The GRAPH
+pane already uses the same clip idiom inline (a leaf that clips
+and draws pre-lowered data — which is exactly why it composes
+where a node-wrapping scroll area cannot), but its viewport is a
+CAMERA (pan plus zoom-toward-cursor, unclamped), not a clamped
+scroll; whether both should ride one puri viewport primitive is
+QUEUED FOR A DEEPER EVALUATION with the clip-node/scroll-bars
+round (user: not digging in now). Candidates
+for the same treatment later, toward the typical-widget-library-
+with-combinators Puri wants to be (user): the completion popup's
+card/list chrome (once completion is nailed down further) and the
+scroll bar itself; the disclosure triangle was considered and
+DEFERRED as fairly progred-specific (user) — both extraction
+candidates parked, noted here. The svg bench now TIMES each
+projection (printed per run, asserted under a generous 2s bound):
+a projection is a per-keystroke cost and narrow widths are where
+accidental exponentials surfaced twice, so the tight render is a
+canary that FAILS rather than merely feels slow. THE COLON REPLACED THE ARROW (user: the
+inline/block syntax split read inconsistent, and "now that it's not
+really a graph maybe ':' makes more sense for both"): field rows
+and the pending-edge query spell `label: value` everywhere; the
+drawn arrow is deleted. THE PENDING EDGE RIDES THE LITERAL: a new
+field's label query renders inline in a record literal like any
+fragment — authoring alone no longer forces the block form, which
+only appears when the literal genuinely stops fitting.
 
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
