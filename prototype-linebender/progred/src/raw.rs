@@ -1354,14 +1354,17 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// name-or-short-id value `)` — completing the delimiter family
 /// (brackets say list, braces say record). The name, when there is
 /// one, is the identity's own metadata projected at the Name step —
-/// selectable, editable, two-stage. A leaf or inline value sits
-/// between head and close paren; a record or list value opens its
-/// own delimiter beside the head and closes `})` or `])` at the
-/// block's foot; a valueless cell — bare, or the named red link —
-/// is head and parens alone. Clicks on the parens and gaps fall
-/// through to the cell's own descend. Collapsed (by default in a
-/// cycle, or forced by an override) only the parenthesized head
-/// shows.
+/// selectable, editable, two-stage. Leaf and inline values sit
+/// between head and close paren; a record or list value is the SAME
+/// record or list view, held here through [`Held`] — one rendering
+/// per container kind, whatever holds it. A valueless cell — bare,
+/// or the named red link — renders the pending placeholder in the
+/// value's place (the empty-slot rule in [`Selection::edge`] makes
+/// selecting it begin the first value). Clicks on the parens and
+/// gaps fall through to the cell's own descend. Collapsed (by
+/// default in a cycle, or forced by an override), containers show
+/// their usual summary inside the parens and an atom elides
+/// entirely.
 fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -1372,20 +1375,20 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let name = cx.name(cell);
-    let open = text(tcx, "(", &cx.styles.dim);
-    let head = head_view(cx, tcx, path, cell, &name, hooks);
+    let head = row(
+        2.0 * scale,
+        vec![
+            text(tcx, "(", &cx.styles.dim),
+            head_view(cx, tcx, path, cell, &name, hooks),
+        ],
+    );
     let mut followed = path.to_vec();
     followed.push(Step::Follow);
     let Some(value) = cx.sources.value(cell).cloned() else {
-        // Valueless: nothing held yet — bare, or the named red link.
-        // The Follow slot renders as a pending placeholder ("…", or
-        // the open query): clicking or stepping onto it begins the
-        // first value, through the empty-slot rule in
-        // [`Selection::edge`].
         return row(
             4.0 * scale,
             vec![
-                row(2.0 * scale, vec![open, head]),
+                head,
                 row(
                     2.0 * scale,
                     vec![
@@ -1403,84 +1406,63 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         || cx.pending_edge_under(&followed).is_some();
     let collapsed =
         !pending_inside && cx.collapse.collapsed(path, ancestors.contains(&cell));
-    if collapsed {
-        return row(
-            2.0 * scale,
+    let held = Held {
+        head,
+        path: path.to_vec(),
+        collapsed,
+    };
+    match &value {
+        Value::Atom(_) if collapsed => row(
+            4.0 * scale,
             vec![
-                open,
-                head,
+                held.head,
                 disclosure(path.to_vec(), true, hooks, cx.styles),
                 text(tcx, ")", &cx.styles.dim),
             ],
-        );
-    }
-    let leaf = |value: &Value| value.as_str().is_some() || value.as_blob().is_some();
-    match &value {
+        ),
         // Leaf-only records and lists (pendings included) read
         // inline between the parens, as do atoms and links.
+        Value::Atom(_) => inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
         Value::Record(fields)
-            if fields.values().all(leaf) && cx.pending_edge_under(&followed).is_none() =>
+            if !collapsed
+                && fields.values().all(leaf_atom)
+                && cx.pending_edge_under(&followed).is_none() =>
         {
-            inline_cell(cx, tcx, open, head, &followed, &inner, &value, hooks)
+            inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks)
         }
-        Value::List(elements) if elements.values().all(leaf) => {
-            inline_cell(cx, tcx, open, head, &followed, &inner, &value, hooks)
+        Value::List(elements) if !collapsed && elements.values().all(leaf_atom) => {
+            inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks)
         }
-        Value::Atom(_) => inline_cell(cx, tcx, open, head, &followed, &inner, &value, hooks),
         Value::Record(fields) => {
-            let mut entries: Vec<(Label, Option<Value>)> = fields
-                .iter()
-                .map(|(key, value)| (key.clone(), Some(value.clone())))
-                .collect();
-            if let Some(Step::Key(key)) = cx.pending_child_of(&followed) {
-                entries.push((key, None));
-                entries.sort_by(|a, b| a.0.cmp(&b.0));
-            }
-            let mut rows: Vec<Node<P>> = entries
-                .into_iter()
-                .map(|(key, value)| field_row(cx, tcx, &followed, &inner, key, value, hooks))
-                .collect();
-            // A new field being authored: the label query, unsorted
-            // until it has a label to sort by.
-            if let Some((query, choice)) = cx.pending_edge_under(&followed) {
-                rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
-            }
-            cell_block(cx, tcx, path, open, head, "{", "})", followed, rows, hooks)
+            record_view(cx, tcx, &followed, &inner, fields, Some(held), hooks)
         }
         Value::List(elements) => {
-            let mut items: Vec<(Position, Option<Value>)> = elements
-                .iter()
-                .map(|(position, value)| (position.clone(), Some(value.clone())))
-                .collect();
-            if let Some(Step::Element(position)) = cx.pending_child_of(&followed) {
-                items.push((position, None));
-                items.sort_by(|a, b| a.0.cmp(&b.0));
-            }
-            let rows: Vec<Node<P>> = items
-                .into_iter()
-                .map(|(position, value)| {
-                    let mut child = followed.clone();
-                    child.push(Step::Element(position));
-                    let content = match value {
-                        Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
-                        None => pending_view(cx, tcx, child, hooks),
-                    };
-                    // The list vernacular: a dim leading dash marks
-                    // the element rows.
-                    row(6.0 * scale, vec![text(tcx, "-", &cx.styles.dim), content])
-                })
-                .collect();
-            cell_block(cx, tcx, path, open, head, "[", "])", followed, rows, hooks)
+            list_view(cx, tcx, &followed, &inner, elements, Some(held), hooks)
         }
     }
 }
 
+/// A container view held by a cell: the parenthesized head joins the
+/// container's delimiter line, the close paren its closer (`})`,
+/// `])`), and collapse — decided by the cell, cycle default and
+/// pending-forcing included — keys its disclosure at the cell's own
+/// path.
+struct Held<P> {
+    head: Node<P>,
+    path: Path,
+    collapsed: bool,
+}
+
+/// Leaf atoms — strings and blobs — read inline; anything with
+/// interior structure or identity blocks.
+fn leaf_atom(value: &Value) -> bool {
+    value.as_str().is_some() || value.as_blob().is_some()
+}
+
 /// A cell whose value reads on one line: `(head value)`.
-#[allow(clippy::too_many_arguments)]
 fn inline_cell<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
-    open: Node<P>,
     head: Node<P>,
     followed: &[Step],
     ancestors: &HashSet<CellId>,
@@ -1491,7 +1473,7 @@ fn inline_cell<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     row(
         4.0 * scale,
         vec![
-            row(2.0 * scale, vec![open, head]),
+            head,
             row(
                 2.0 * scale,
                 vec![
@@ -1503,57 +1485,21 @@ fn inline_cell<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     )
 }
 
-/// A cell whose value blocks: the head and the value's opening
-/// delimiter share the header line, the rows indent, and the value's
-/// closer joins the cell's paren at the foot — `})` or `])`. The
-/// followed value stays keyboard-reachable and primary-highlighted
-/// at its own path, with no pointer target: clicks belong to the
-/// rows and the cell.
-#[allow(clippy::too_many_arguments)]
-fn cell_block<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    open: Node<P>,
-    head: Node<P>,
-    opener: &str,
-    closer: &str,
-    followed: Path,
-    rows: Vec<Node<P>>,
-    hooks: &Hooks<C>,
-) -> Node<P> {
+/// Registers a held value at its own (Follow) path — keyboard-
+/// reachable and primary-highlighted, no pointer target: clicks
+/// belong to the rows and the cell.
+fn held_body<P: Canvas + HasDescends>(cx: &Cx, path: Path, body: Node<P>) -> Node<P> {
+    let selected = cx.selected(&path);
     let scale = cx.styles.scale;
-    let header = row(
-        4.0 * scale,
-        vec![
-            row(2.0 * scale, vec![open, head]),
-            text(tcx, opener, &cx.styles.dim),
-            disclosure(path.to_vec(), false, hooks, cx.styles),
-        ],
-    );
-    let selected = cx.selected(&followed);
-    let body = decorate(
-        col(HAlign::Start, 0, 4.0 * scale, rows),
-        move |p: &mut P, rect| {
-            if selected {
-                primary_highlight(scale, p, rect);
-            }
-            p.descends().push(Descend {
-                path: followed.clone(),
-                rect,
-            });
-        },
-    );
-    col(
-        HAlign::Start,
-        0,
-        4.0 * scale,
-        vec![
-            header,
-            pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
-            text(tcx, closer, &cx.styles.dim),
-        ],
-    )
+    decorate(body, move |p: &mut P, rect| {
+        if selected {
+            primary_highlight(scale, p, rect);
+        }
+        p.descends().push(Descend {
+            path: path.clone(),
+            rect,
+        });
+    })
 }
 
 /// A cell's head: the name — identity metadata at the Name step —
@@ -1690,16 +1636,18 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
 }
 
 /// A list value: its elements as bare ordered rows — the position is
-/// session identity, not information; order carries it. An atom-only
+/// session identity, not information; order carries it. A leaf-atom
 /// list reads as an inline literal; collapsed shows the element
-/// count. Lists have no identity, so there is no handle and no cycle
-/// through them — only linked cells can recurse.
+/// count. Lists have no identity, so there is no head of their own
+/// and no cycle through them — only linked cells can recurse — but a
+/// cell HOLDING a list frames this same view through [`Held`].
 fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
     elements: &OrdMap<Position, Value>,
+    held: Option<Held<P>>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
@@ -1716,12 +1664,13 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // dim punctuation, each element still an ordinary descend (click,
     // edit, secondary-mark) — a pending one included. Links, records,
     // and nested lists take the block form; width-aware grouping
-    // (Wadler) waits, so a long list will run wide for now.
-    let inline = items.iter().all(|(_, value)| {
-        value
-            .as_ref()
-            .is_none_or(|v| v.as_str().is_some() || v.as_blob().is_some())
-    });
+    // (Wadler) waits, so a long list will run wide for now. A held
+    // call is block by dispatch; the guard keeps the frame from being
+    // dropped if that ever drifts.
+    let inline = held.is_none()
+        && items
+            .iter()
+            .all(|(_, value)| value.as_ref().is_none_or(leaf_atom));
     if inline {
         let mut cells: Vec<Node<P>> = vec![text(tcx, "[", &cx.styles.dim)];
         for (index, (position, value)) in items.into_iter().enumerate() {
@@ -1739,21 +1688,25 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         return row(0.0, cells);
     }
 
-    // A pending child forces the list open so it can be seen. Lists
-    // have no identity to be an ancestor, so only an override
-    // collapses one.
-    let collapsed = items.iter().all(|(_, value)| value.is_some())
-        && cx.collapse.collapsed(path, false);
-    let head = text(tcx, "[", &cx.styles.dim);
-    let mut header = vec![head, disclosure(path.to_vec(), collapsed, hooks, cx.styles)];
+    // Standalone, a pending child forces the list open and only an
+    // override collapses it (no identity to be an ancestor); held,
+    // the cell decided.
+    let framed = held.is_some();
+    let (delta_path, collapsed, close) = match &held {
+        Some(held) => (held.path.clone(), held.collapsed, "])"),
+        None => (
+            path.to_vec(),
+            items.iter().all(|(_, value)| value.is_some())
+                && cx.collapse.collapsed(path, false),
+            "]",
+        ),
+    };
+    let mut header: Vec<Node<P>> = held.map(|held| held.head).into_iter().collect();
+    header.push(text(tcx, "[", &cx.styles.dim));
+    header.push(disclosure(delta_path, collapsed, hooks, cx.styles));
     if collapsed {
-        let count = format!(
-            "{} element{}",
-            items.len(),
-            if items.len() == 1 { "" } else { "s" }
-        );
-        header.push(text(tcx, &count, &cx.styles.dim));
-        header.push(text(tcx, "]", &cx.styles.dim));
+        header.push(text(tcx, &count_text(items.len(), "element"), &cx.styles.dim));
+        header.push(text(tcx, close, &cx.styles.dim));
         return row(4.0 * scale, header);
     }
     let rows: Vec<Node<P>> = items
@@ -1770,6 +1723,12 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             row(6.0 * scale, vec![text(tcx, "-", &cx.styles.dim), content])
         })
         .collect();
+    let body = col(HAlign::Start, 0, 4.0 * scale, rows);
+    let body = if framed {
+        held_body(cx, path.to_vec(), body)
+    } else {
+        body
+    };
     // The block form closes its bracket at the header's indent.
     col(
         HAlign::Start,
@@ -1777,27 +1736,25 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         4.0 * scale,
         vec![
             row(4.0 * scale, header),
-            pad(
-                Insets::new(26.0 * scale, 0.0, 0.0, 0.0),
-                col(HAlign::Start, 0, 4.0 * scale, rows),
-            ),
-            text(tcx, "]", &cx.styles.dim),
+            pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
+            text(tcx, close, &cx.styles.dim),
         ],
     )
 }
 
-/// An inline record: an anonymous content-compared value, BRACED —
-/// braces mark records the way the handle marks cells. Field rows
-/// like a cell's, at the record's own path (no Follow: this is
-/// structure in place, not a link). An all-leaf-atom record reads as
-/// an inline literal `{x: "1", y: "2"}`; collapse is override-only,
-/// since a value has no identity to recur through.
+/// A record value: an anonymous content-compared value, BRACED —
+/// braces mark records the way parens mark cells. Field rows at the
+/// record's own path. An all-leaf-atom record reads as an inline
+/// literal `{x: "1", y: "2"}`; standalone collapse is override-only,
+/// since a value has no identity to recur through; a cell HOLDING a
+/// record frames this same view through [`Held`].
 fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
     fields: &OrdMap<Label, Value>,
+    held: Option<Held<P>>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
@@ -1811,12 +1768,11 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     }
     let pending_edge = cx.pending_edge_under(path).is_some();
 
-    let inline = !pending_edge
-        && items.iter().all(|(_, value)| {
-            value
-                .as_ref()
-                .is_none_or(|v| v.as_str().is_some() || v.as_blob().is_some())
-        });
+    let inline = held.is_none()
+        && !pending_edge
+        && items
+            .iter()
+            .all(|(_, value)| value.as_ref().is_none_or(leaf_atom));
     if inline {
         let mut cells: Vec<Node<P>> = vec![text(tcx, "{", &cx.styles.dim)];
         for (index, (key, value)) in items.into_iter().enumerate() {
@@ -1836,41 +1792,54 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         return row(0.0, cells);
     }
 
-    let collapsed = !pending_edge
-        && items.iter().all(|(_, value)| value.is_some())
-        && cx.collapse.collapsed(path, false);
-    let head = text(tcx, "{", &cx.styles.dim);
-    let mut header = vec![head, disclosure(path.to_vec(), collapsed, hooks, cx.styles)];
+    let framed = held.is_some();
+    let (delta_path, collapsed, close) = match &held {
+        Some(held) => (held.path.clone(), held.collapsed, "})"),
+        None => (
+            path.to_vec(),
+            !pending_edge
+                && items.iter().all(|(_, value)| value.is_some())
+                && cx.collapse.collapsed(path, false),
+            "}",
+        ),
+    };
+    let mut header: Vec<Node<P>> = held.map(|held| held.head).into_iter().collect();
+    header.push(text(tcx, "{", &cx.styles.dim));
+    header.push(disclosure(delta_path, collapsed, hooks, cx.styles));
     if collapsed {
-        let count = format!(
-            "{} field{}",
-            items.len(),
-            if items.len() == 1 { "" } else { "s" }
-        );
-        header.push(text(tcx, &count, &cx.styles.dim));
-        header.push(text(tcx, "}", &cx.styles.dim));
+        header.push(text(tcx, &count_text(items.len(), "field"), &cx.styles.dim));
+        header.push(text(tcx, close, &cx.styles.dim));
         return row(4.0 * scale, header);
     }
     let mut rows: Vec<Node<P>> = items
         .into_iter()
         .map(|(key, value)| field_row(cx, tcx, path, ancestors, key, value, hooks))
         .collect();
+    // A new field being authored: the label query, unsorted until it
+    // has a label to sort by.
     if let Some((query, choice)) = cx.pending_edge_under(path) {
         rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
     }
+    let body = col(HAlign::Start, 0, 4.0 * scale, rows);
+    let body = if framed {
+        held_body(cx, path.to_vec(), body)
+    } else {
+        body
+    };
     col(
         HAlign::Start,
         0,
         4.0 * scale,
         vec![
             row(4.0 * scale, header),
-            pad(
-                Insets::new(26.0 * scale, 0.0, 0.0, 0.0),
-                col(HAlign::Start, 0, 4.0 * scale, rows),
-            ),
-            text(tcx, "}", &cx.styles.dim),
+            pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
+            text(tcx, close, &cx.styles.dim),
         ],
     )
+}
+
+fn count_text(n: usize, noun: &str) -> String {
+    format!("{n} {noun}{}", if n == 1 { "" } else { "s" })
 }
 
 /// Git-style short form of a cell id: an ellipsis and the last five
@@ -2074,8 +2043,8 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         // in the Raw view too, kind being data. A registry waits for
         // user-defined projections.
         Value::Atom(Atom::Cell(cell)) => cell_view(cx, tcx, path, ancestors, *cell, hooks),
-        Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, hooks),
-        Value::Record(fields) => record_view(cx, tcx, path, ancestors, fields, hooks),
+        Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, None, hooks),
+        Value::Record(fields) => record_view(cx, tcx, path, ancestors, fields, None, hooks),
     };
     // Other projections of the selected value carry the secondary
     // mark; the selected one has the primary highlight.
