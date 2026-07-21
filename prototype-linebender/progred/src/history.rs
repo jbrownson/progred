@@ -85,26 +85,26 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Atom, MutGid, Step, Value, new_node_id};
+    use progred_graph::{Cells, Label, Step, Value, new_cell_id};
 
     fn x() -> Step {
-        Step::Key(Atom::from("x"))
+        Step::Key(Label::from("x"))
     }
 
-    fn doc(value: f64) -> Document {
-        let mut gid = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("x"), Value::from(value));
+    fn doc(value: &str) -> Document {
+        let mut cells = Cells::new();
+        let cell = new_cell_id();
+        cells.set_value(cell, Value::record([(Label::from("x"), Value::from(value))]));
         Document {
-            root: Some(Value::from(node)),
-            gid,
+            root: Some(Value::from(cell)),
+            cells,
         }
     }
 
     fn x_of(doc: &Document) -> Value {
-        let lib = MutGid::new();
+        let lib = Cells::new();
         crate::sources::Sources { doc, library: &lib }
-            .resolve(&[x()])
+            .resolve(&[Step::Follow, x()])
             .unwrap()
             .clone()
     }
@@ -112,43 +112,43 @@ mod tests {
     #[test]
     fn undo_and_redo_roundtrip_with_selection() {
         let mut history = History::default();
-        let path = vec![x()];
-        history.record(doc(1.0), Some(path.clone()));
+        let path = vec![Step::Follow, x()];
+        history.record(doc("1"), Some(path.clone()));
 
-        let (back, selection) = history.undo(doc(2.0), None).unwrap();
-        assert_eq!(x_of(&back), Value::from(1.0));
+        let (back, selection) = history.undo(doc("2"), None).unwrap();
+        assert_eq!(x_of(&back), Value::from("1"));
         assert_eq!(selection, Some(path));
 
         let (forward, _) = history.redo(back, selection).unwrap();
-        assert_eq!(x_of(&forward), Value::from(2.0));
-        assert!(history.redo(doc(9.9), None).is_none());
+        assert_eq!(x_of(&forward), Value::from("2"));
+        assert!(history.redo(doc("9"), None).is_none());
     }
 
     #[test]
     fn recording_clears_redo() {
         let mut history = History::default();
-        let x = vec![x()];
-        history.record(doc(1.0), Some(x.clone()));
-        let (back, _) = history.undo(doc(1.5), Some(x.clone())).unwrap();
+        let x = vec![Step::Follow, x()];
+        history.record(doc("1"), Some(x.clone()));
+        let (back, _) = history.undo(doc("1.5"), Some(x.clone())).unwrap();
         history.record(back, Some(x));
-        assert!(history.redo(doc(0.0), None).is_none());
+        assert!(history.redo(doc("0"), None).is_none());
     }
 
     #[test]
     fn dirty_is_position_relative_to_the_save_mark() {
         let mut history = History::default();
         assert!(!history.dirty());
-        let x = vec![x()];
-        history.record(doc(1.0), Some(x.clone()));
+        let x = vec![Step::Follow, x()];
+        history.record(doc("1"), Some(x.clone()));
         assert!(history.dirty());
 
         history.mark_saved();
         assert!(!history.dirty());
-        history.record(doc(1.2), Some(x.clone()));
+        history.record(doc("1.2"), Some(x.clone()));
         assert!(history.dirty());
 
         // Undoing back to the mark is clean; past it, dirty again.
-        let (one_back, sel) = history.undo(doc(1.3), Some(x.clone())).unwrap();
+        let (one_back, sel) = history.undo(doc("1.3"), Some(x.clone())).unwrap();
         assert!(!history.dirty());
         let (_, _) = history.undo(one_back, sel).unwrap();
         assert!(history.dirty());

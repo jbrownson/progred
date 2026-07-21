@@ -1,14 +1,17 @@
-//! The raw projection: any document rendered as entity blocks of
-//! edge rows, with no schema — every node is just its short id, every
-//! edge a row, including `name` — plus the list projection, which
-//! renders list values as inline literals or dashed element rows.
-//! Atoms render as their values, node ids as git-style suffixes;
+//! The raw projection: any document rendered with no schema, in the
+//! delimiter family — `(` cell `)`, `[` list `]`, `{` record `}`.
+//! A cell heads with its name (identity metadata, editable in
+//! place) or its short id; records are field rows, lists inline
+//! literals or dashed element rows; atoms render as their values;
 //! positions are session bookkeeping and never render at all.
 
-use crate::conventions::{NAME, Name, Names};
+use crate::conventions::Names;
 use crate::filter;
 use crate::sources::Sources;
-use progred_graph::{Atom, MutGid, NodeId, Position, Step, Value, new_node_id, position};
+use im::OrdMap;
+use progred_graph::{
+    Atom, CellId, Cells, Label, Position, Step, Value, hex_string, new_cell_id, position, spine,
+};
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
@@ -23,19 +26,18 @@ use vello::peniko::{Brush, Color};
 
 /// Shared with the mounted editors so edited atoms keep their colors.
 const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
-const NUMBER_COLOR: [f32; 4] = [0.16, 0.40, 0.62, 1.0];
+const NAME_COLOR: [f32; 4] = [0.13, 0.14, 0.16, 1.0];
 const QUERY_COLOR: [f32; 4] = [0.46, 0.49, 0.55, 1.0];
 
 pub struct RawStyles {
     pub label: TextStyle,
-    /// A node's own name, projected as its header: the strongest text
+    /// A cell's own name, projected as its handle: the strongest text
     /// in a block.
     pub name: TextStyle,
     pub string: TextStyle,
-    pub number: TextStyle,
     pub dim: TextStyle,
-    /// Byte-identity renderings — short ids — in monospace, so ids
-    /// read as ids and align when compared.
+    /// Byte-identity renderings — short ids, blob hex — in monospace,
+    /// so ids read as ids and align when compared.
     pub id: TextStyle,
     pub edit: EditStyle,
     pub scale: f64,
@@ -55,7 +57,6 @@ impl RawStyles {
             label: style(14.0, [0.46, 0.49, 0.55, 1.0], None),
             name: style(14.0, [0.13, 0.14, 0.16, 1.0], None),
             string: style(14.0, STRING_COLOR, None),
-            number: style(14.0, NUMBER_COLOR, None),
             dim: style(13.0, [0.55, 0.58, 0.64, 1.0], None),
             id: TextStyle {
                 family: parley::style::GenericFamily::Monospace,
@@ -70,75 +71,114 @@ impl RawStyles {
     }
 }
 
-/// A rooted graph: the document is its `root` value plus the entity
-/// table that stores its maps. Every projection path starts at
-/// `root` — typically a map keying the document's parts by role. The
-/// root is a location like any other — the empty path — so edits
-/// there commit to this field, and deleting it empties the document.
-/// Clones are O(1): the gid and list values share structure, which is
-/// what makes snapshot undo free.
+/// A document: its `root` value plus the cell table holding every
+/// identity's current value. Every projection path starts at `root` —
+/// typically a link, or an inline record keying the document's parts
+/// by role. The root is a location like any other — the empty path —
+/// so edits there commit to this field, and deleting it empties the
+/// document. Clones are O(1): the table and its values share
+/// structure, which is what makes snapshot undo free.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Document {
     pub root: Option<Value>,
-    pub gid: MutGid,
+    pub cells: Cells,
 }
 
-/// A small document shaped like a real one. The root is a MAP of
-/// roles — a scene holding a shape and a shared style — because a
-/// document keys its parts by what they are to it; lists collect
-/// same-kind elements only (points, dash lengths, holes). Names name
-/// individuals ("roof", not its kind — kinds are a future isa
-/// convention's job). The stroke-width field definition FLOATS:
-/// referenced as a key, never enumerated. The corner knows its roof
-/// (cycle collapse on a real pattern); the style is unnamed and
-/// referenced twice (short-id headers, secondary marks).
+/// A small document shaped like a real one. The root is an inline
+/// RECORD of roles — a document keys its parts by what they are to
+/// it, and needs no identity of its own to do so. Names live in the
+/// cell table and name individuals ("roof", not its kind — kinds are
+/// a future isa convention's job). The corner knows its roof (cycle
+/// collapse on a real pattern); the style cell is unnamed and
+/// referenced twice (short-id heads, secondary marks); the stroke
+/// cell is a NAMED BARE floating field definition — a name and
+/// nothing else, referenced as a label, never enumerated; the
+/// material cell is fully bare — referenced before anything at all
+/// is said about it; the swatch is a blob; each point's position is
+/// an inline record, point-shaped data that wants to be a value; and
+/// the favorite cell holds a bare LINK to the corner — the alias
+/// pattern, and the standing repro for the block-in-row rendering
+/// seam (a cell whose value blocks inside another cell's parens).
 pub fn sample_document() -> Document {
-    let mut gid = MutGid::new();
-    let name = Atom::Node(NAME);
-    let roof = new_node_id();
+    let mut cells = Cells::new();
+    let roof = new_cell_id();
 
-    let origin = new_node_id();
-    gid.set(origin, name.clone(), Value::from("origin"));
-    gid.set(origin, Atom::from("x"), Value::from(0.0));
-    gid.set(origin, Atom::from("y"), Value::from(0.0));
-
-    let corner = new_node_id();
-    gid.set(corner, name.clone(), Value::from("corner"));
-    gid.set(corner, Atom::from("x"), Value::from(4.0));
-    gid.set(corner, Atom::from("y"), Value::from(2.5));
-    // A part that knows its whole: the cycle a real document has,
-    // rendered as a collapsed header rather than recursing forever.
-    gid.set(corner, Atom::from("of"), Value::from(roof));
-
-    let stroke_width = new_node_id();
-    gid.set(stroke_width, name.clone(), Value::from("stroke-width"));
-
-    let style = new_node_id();
-    gid.set(style, Atom::from("color"), Value::from("rebeccapurple"));
-
-    gid.set(roof, name, Value::from("roof"));
-    // Lists are values, inline at their edges; the edge that holds
-    // one is its name in context.
-    gid.set(
-        roof,
-        Atom::from("points"),
-        Value::list([Value::from(origin), Value::from(corner)]),
+    let origin = new_cell_id();
+    cells.set_name(origin, "origin");
+    cells.set_value(
+        origin,
+        Value::record([(
+            Label::from("at"),
+            Value::record([
+                (Label::from("row"), Value::from("top")),
+                (Label::from("col"), Value::from("left")),
+            ]),
+        )]),
     );
-    gid.set(roof, Atom::Node(stroke_width), Value::from(1.5));
-    gid.set(
-        roof,
-        Atom::from("dash"),
-        Value::list([Value::from(2.0), Value::from(3.0)]),
-    );
-    gid.set(roof, Atom::from("holes"), Value::list([]));
-    gid.set(roof, Atom::from("style"), Value::from(style));
 
-    let scene = new_node_id();
-    gid.set(scene, Atom::from("shape"), Value::from(roof));
-    gid.set(scene, Atom::from("style"), Value::from(style));
+    let corner = new_cell_id();
+    cells.set_name(corner, "corner");
+    cells.set_value(
+        corner,
+        Value::record([
+            (
+                Label::from("at"),
+                Value::record([
+                    (Label::from("row"), Value::from("bottom")),
+                    (Label::from("col"), Value::from("right")),
+                ]),
+            ),
+            // A part that knows its whole: the cycle a real document
+            // has, rendered as a collapsed head rather than recursing
+            // forever.
+            (Label::from("of"), Value::from(roof)),
+        ]),
+    );
+
+    let stroke = new_cell_id();
+    cells.set_name(stroke, "stroke");
+
+    let style = new_cell_id();
+    cells.set_value(
+        style,
+        Value::record([
+            (Label::from("color"), Value::from("rebeccapurple")),
+            // #663399, as bytes.
+            (Label::from("swatch"), Value::from(vec![0x66, 0x33, 0x99])),
+        ]),
+    );
+
+    let material = new_cell_id();
+
+    let favorite = new_cell_id();
+    cells.set_name(favorite, "favorite");
+    cells.set_value(favorite, Value::from(corner));
+
+    cells.set_name(roof, "roof");
+    cells.set_value(
+        roof,
+        Value::record([
+            (
+                Label::from("points"),
+                Value::list([Value::from(origin), Value::from(corner)]),
+            ),
+            (Label::Cell(stroke), Value::from("hairline")),
+            (
+                Label::from("tags"),
+                Value::list([Value::from("draft"), Value::from("gabled")]),
+            ),
+            (Label::from("material"), Value::from(material)),
+            (Label::from("style"), Value::from(style)),
+        ]),
+    );
+
     Document {
-        root: Some(Value::from(scene)),
-        gid,
+        root: Some(Value::record([
+            (Label::from("shape"), Value::from(roof)),
+            (Label::from("style"), Value::from(style)),
+            (Label::from("favorite"), Value::from(favorite)),
+        ])),
+        cells,
     }
 }
 
@@ -188,9 +228,9 @@ pub struct TextClick {
 }
 
 /// Dispatch-time callbacks the shell injects: what selecting a path
-/// (optionally with a text click) does, what toggling a node's
-/// collapse does, and how a dispatch reaches the selection's editor
-/// state and measurement caches.
+/// (optionally with a text click) does, what toggling a collapse
+/// does, and how a dispatch reaches the selection's editor state and
+/// measurement caches.
 pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
@@ -213,11 +253,11 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
 }
 
 impl Cx<'_> {
-    /// The display name at this projection: the policy's answer,
-    /// derived through the raw bit — Raw shows bare identities with
-    /// no policy swapped anywhere.
-    fn name(&self, node: NodeId) -> Option<Name> {
-        (!self.raw).then(|| self.names.of(&self.sources, node))?
+    /// The display name at this projection, through the editor's one
+    /// read: names are identity data, so Raw shows the table's own —
+    /// only the policy stands down there.
+    fn name(&self, cell: CellId) -> Option<String> {
+        crate::conventions::display_name(&self.sources, self.names, self.raw, cell)
     }
 
     /// Whether `path` carries the primary highlight. A label-stage
@@ -247,7 +287,8 @@ impl Cx<'_> {
         }
     }
 
-    /// The label query of a new edge being authored on `path`.
+    /// The label query of a new field being authored on the record at
+    /// `path`.
     fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
         match self.selection {
             Some(Selection::PendingEdge {
@@ -260,22 +301,24 @@ impl Cx<'_> {
     }
 }
 
-/// A location in the projected spanning tree: key steps through map
-/// edges, element steps into list values. The same value can be
-/// projected at several paths, so the path — not the value — is the
-/// identity a selection names. List elements sit at positions
-/// sibling edits never move; wraps and unwraps will adjust
+/// A location in the projected spanning tree: Key steps into record
+/// fields, Element steps into list values, Follow steps through a
+/// link to its cell's current value. The same value can be projected
+/// at several paths, so the path — not the value — is the identity a
+/// selection names; every reference site unfolds through its own
+/// Follow, and no site is the value's home. List elements sit at
+/// positions sibling edits never move; wraps and unwraps will adjust
 /// path-keyed state through one general rewrite — see
 /// `docs/model.md`.
 pub type Path = Vec<Step>;
 
-/// What is selected: the value at a path, or a nonexistent edge being
-/// authored. A selected atom carries its live editor state — every
-/// atom is a text editor, focused by selection, and the graph is
-/// written through as it edits. A pending selection carries the
+/// What is selected: the value at a path, or a nonexistent field
+/// being authored. A selected string carries its live editor state —
+/// every string is a text editor, focused by selection, and the graph
+/// is written through as it edits. A pending selection carries the
 /// completion query instead; the query resolves to the value that
 /// commits, and until then the graph is untouched — deselecting
-/// discards the pending edge entirely.
+/// discards the pending entirely.
 pub enum Selection {
     Edge {
         path: Path,
@@ -285,7 +328,8 @@ pub enum Selection {
         /// write records and the rest coalesce by staying silent.
         recorded: bool,
     },
-    /// A nonexistent edge's value being authored (the root included).
+    /// A nonexistent location's value being authored (the root and a
+    /// bare cell's value included).
     Pending {
         path: Path,
         query: LineEditState,
@@ -293,9 +337,9 @@ pub enum Selection {
         /// frame's recomputed entries at use.
         choice: usize,
     },
-    /// A new edge on `parent` whose label is being authored; resolving
-    /// the label advances to the value stage (or selects the existing
-    /// edge if the label is taken).
+    /// A new field on the record at `parent` whose label is being
+    /// authored; resolving the label advances to the value stage (or
+    /// selects the existing field if the label is taken).
     PendingEdge {
         parent: Path,
         query: LineEditState,
@@ -304,29 +348,40 @@ pub enum Selection {
 }
 
 impl Selection {
-    /// Select the edge at `path`; a string or number value brings a
-    /// focused editor (the root included — its commits target the
-    /// document's root field). Selecting the empty document's root is
-    /// already authoring it: there is nothing there to select, only
-    /// something to begin, so it pends immediately.
+    /// Select the value at `path`; a string value — or a cell's name
+    /// at a Name step — brings a focused editor (the root included —
+    /// its commits target the document's root field). Selecting an
+    /// EMPTY VALUE SLOT is already authoring it — there is nothing
+    /// there to select, only something to begin, so it pends
+    /// immediately: the empty document's root, and a valueless
+    /// writable cell's Follow slot (its rendered placeholder).
     pub fn edge(sources: &Sources, path: Path) -> Self {
-        if path.is_empty() && sources.root().is_none() {
+        let empty_slot = match path.split_last() {
+            None => sources.root().is_none(),
+            Some((Step::Follow, parent)) => sources
+                .resolve(parent)
+                .and_then(Value::as_cell)
+                .is_some_and(|cell| {
+                    sources.value(cell).is_none() && sources.writable(cell)
+                }),
+            _ => false,
+        };
+        if empty_slot {
             return pending_value(path);
         }
         // An editor mounts only where write-through can land: the
-        // spine's owning entity must not be external.
-        let edit = spine_writable(sources, &path)
-            .then(|| {
-                sources.resolve(&path).and_then(|value| {
-                    value
-                        .as_str()
-                        .map(|s| line_edit(s, STRING_COLOR))
-                        .or_else(|| {
-                            value
-                                .as_number()
-                                .map(|n| line_edit(&n.to_string(), NUMBER_COLOR))
-                        })
-                })
+        // owning cell must not be external.
+        let edit = writable_at(sources, &path)
+            .then(|| match path.split_last() {
+                // An unnamed cell mounts an EMPTY name editor: typing
+                // names it.
+                Some((Step::Name, parent)) => sources
+                    .resolve(parent)
+                    .and_then(Value::as_cell)
+                    .map(|cell| line_edit(sources.name(cell).unwrap_or(""), NAME_COLOR)),
+                _ => sources
+                    .resolve(&path)
+                    .and_then(|value| value.as_str().map(|s| line_edit(s, STRING_COLOR))),
             })
             .flatten();
         Selection::Edge {
@@ -370,67 +425,90 @@ fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
     LineEditState::new(text, 14.0, Brush::from(Color::new(color))).with_cursor_at_end()
 }
 
-/// The path's last Key step: the map edge every write below it lands
-/// on. Everything after it is Element steps — a value spine.
-fn last_key(path: &[Step]) -> Option<(usize, &Atom)> {
-    path.iter()
-        .enumerate()
-        .rev()
-        .find_map(|(index, step)| match step {
-            Step::Key(key) => Some((index, key)),
-            Step::Element(_) => None,
-        })
+/// The index of the path's last Follow step: the identity crossing
+/// every write below it lands through. The link before it names the
+/// owning cell; everything after it is a value spine.
+fn last_follow(path: &[Step]) -> Option<usize> {
+    path.iter().rposition(|step| matches!(step, Step::Follow))
 }
 
-/// Whether a write at `path` can land: the owning entity — the one
-/// holding the edge at the path's last Key step — must not be
-/// external. A pure element spine above the root is the document's
-/// own and always writable.
-fn spine_writable(sources: &Sources, path: &[Step]) -> bool {
-    match last_key(path) {
-        Some((index, _)) => sources
-            .resolve(&path[..index])
-            .and_then(Value::as_node)
-            .is_some_and(|entity| sources.writable(entity)),
-        None => true,
+/// Whether a write at `path` can land: the owning cell — the one the
+/// path's last Follow crosses into, or for a Name step the named
+/// cell itself — must not be external. A path with no Follow is the
+/// document's own root spine and always writable.
+fn writable_at(sources: &Sources, path: &[Step]) -> bool {
+    match path.split_last() {
+        Some((Step::Name, parent)) => sources
+            .resolve(parent)
+            .and_then(Value::as_cell)
+            .is_some_and(|cell| sources.writable(cell)),
+        _ => match last_follow(path) {
+            Some(index) => sources
+                .resolve(&path[..index])
+                .and_then(Value::as_cell)
+                .is_some_and(|cell| sources.writable(cell)),
+            None => true,
+        },
     }
 }
 
-/// Deletes the value at `path`. A key step is detachment: the value
-/// and anything under it stay in the graph for the orphan pool. An
-/// element step rebuilds the list value without it, at the owning
-/// edge. The empty path empties the document's root; paths that no
-/// longer resolve decline.
-pub fn delete_edge(doc: &mut Document, library: &MutGid, path: &[Step]) -> bool {
+/// Deletes the value at `path`. A field or element step rebuilds the
+/// owning value without it — unlinking; anything the dropped value
+/// linked stays in the table for the orphan pool. A trailing Follow
+/// removes the cell's own value: bare again, the symmetric partner
+/// of authoring a value into one. The empty path empties the
+/// document's root; paths that no longer resolve decline.
+pub fn delete_edge(doc: &mut Document, library: &Cells, path: &[Step]) -> bool {
     match path.split_last() {
         None => doc.root.take().is_some(),
-        Some((Step::Key(key), parent_path)) => {
-            let sources = Sources { doc: &*doc, library };
-            let entity = sources
-                .resolve(path)
-                .and(sources.resolve(parent_path))
-                .and_then(Value::as_node)
-                .filter(|entity| sources.writable(*entity));
-            match entity {
-                Some(entity) => {
-                    let key = key.clone();
-                    doc.gid.delete(entity, &key);
+        Some((Step::Follow, parent)) => {
+            let cell = {
+                let sources = Sources { doc: &*doc, library };
+                sources
+                    .resolve(parent)
+                    .and_then(Value::as_cell)
+                    .filter(|cell| sources.writable(*cell))
+                    .filter(|cell| doc.cells.value(*cell).is_some())
+            };
+            match cell {
+                Some(cell) => {
+                    doc.cells.clear_value(cell);
                     true
                 }
                 None => false,
             }
         }
-        Some((Step::Element(position), parent_path)) => {
-            let next = {
+        // Names are not edges: nothing to detach. Un-naming is
+        // emptying the name editor — the empty string being
+        // no-name's one spelling.
+        Some((Step::Name, _)) => false,
+        Some((Step::Key(_) | Step::Element(_), _)) => {
+            let write = {
                 let sources = Sources { doc: &*doc, library };
-                sources
-                    .resolve(parent_path)
-                    .and_then(Value::as_list)
-                    .filter(|elements| elements.contains_key(position))
-                    .map(|elements| Value::List(elements.without(position)))
+                match last_follow(path) {
+                    Some(index) => sources
+                        .resolve(&path[..index])
+                        .and_then(Value::as_cell)
+                        .filter(|cell| sources.writable(*cell))
+                        .and_then(|cell| {
+                            spine::without(sources.value(cell)?, &path[index + 1..])
+                                .map(|rebuilt| (Some(cell), rebuilt))
+                        }),
+                    None => sources
+                        .root()
+                        .and_then(|root| spine::without(root, path))
+                        .map(|rebuilt| (None, rebuilt)),
+                }
             };
-            match next {
-                Some(next) => set_value(doc, library, parent_path, next),
+            match write {
+                Some((Some(cell), rebuilt)) => {
+                    doc.cells.set_value(cell, rebuilt);
+                    true
+                }
+                Some((None, rebuilt)) => {
+                    doc.root = Some(rebuilt);
+                    true
+                }
                 None => false,
             }
         }
@@ -450,8 +528,8 @@ pub fn selection_after_delete(descends: &[Descend], path: &[Step]) -> Path {
         })
 }
 
-/// A value-stage pending: the edge named by `path` does not exist,
-/// and its value is being authored.
+/// A value-stage pending: the location named by `path` does not
+/// exist, and its value is being authored.
 pub fn pending_value(path: Path) -> Selection {
     Selection::Pending {
         path,
@@ -460,22 +538,44 @@ pub fn pending_value(path: Path) -> Selection {
     }
 }
 
-/// A new edge on the node at `parent`, its label to be authored.
-/// Raw's one insertion: a node is a bag of keyed edges, and adding
-/// to it means adding an edge. Only nodes qualify — atoms and lists
-/// have no edges, structurally. EXTERNAL entities — the library the
-/// authority — decline: a lone document edge would shadow the
-/// library's facts wholesale (the per-entity fallback), silently
-/// de-naming the conventions. A document that owns the entity (a
-/// fork, copy/paste's job) authors freely.
+/// A new field on the record at `parent` — inline, or a link's cell
+/// value, normalized through Follow so the pending lands where the
+/// field will live. Only records take fields, by type. EXTERNAL
+/// cells — the library the authority — decline: a lone document
+/// value would shadow the library's whole statement (per-cell
+/// fallback), silently de-naming the conventions. A document that
+/// owns the cell (a fork, copy/paste's job) authors freely.
 pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
-    let entity = sources.resolve(&parent)?.as_node()?;
-    sources.writable(entity).then_some(())?;
+    let value = sources.resolve(&parent)?;
+    let parent = match value {
+        Value::Record(_) => parent,
+        Value::Atom(atom) => {
+            let cell = atom.as_cell()?;
+            sources.value(cell)?.as_record()?;
+            let mut followed = parent;
+            followed.push(Step::Follow);
+            followed
+        }
+        Value::List(_) => return None,
+    };
+    writable_at(sources, &parent).then_some(())?;
     Some(Selection::PendingEdge {
         parent,
         query: line_edit("", QUERY_COLOR),
         choice: 0,
     })
+}
+
+/// A valueless cell's value being authored: the within-gesture's
+/// meaning on a cell with nothing held yet (bare, or named bare —
+/// the red link being filled in).
+pub fn pending_follow(sources: &Sources, path: &[Step]) -> Option<Selection> {
+    let cell = sources.resolve(path)?.as_cell()?;
+    sources.value(cell).is_none().then_some(())?;
+    sources.writable(cell).then_some(())?;
+    let mut followed = path.to_vec();
+    followed.push(Step::Follow);
+    Some(pending_value(followed))
 }
 
 /// A pending sibling next to the element at `path` (which must sit at
@@ -487,10 +587,10 @@ fn pending_beside(sources: &Sources, path: &[Step], after: bool) -> Option<Selec
         return None;
     };
     let elements = sources.resolve(parent_path)?.as_list()?;
-    // Stated, not incidental: a list under an external entity takes
-    // no minted siblings (the write would decline anyway, but a
-    // pending that opens and cannot commit is an affordance lie).
-    spine_writable(sources, parent_path).then_some(())?;
+    // Stated, not incidental: a list under an external cell takes no
+    // minted siblings (the write would decline anyway, but a pending
+    // that opens and cannot commit is an affordance lie).
+    writable_at(sources, parent_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let index = positions.iter().position(|p| *p == position)?;
     let fresh = if after {
@@ -511,26 +611,37 @@ pub fn pending_before(sources: &Sources, path: &[Step]) -> Option<Selection> {
     pending_beside(sources, path, false)
 }
 
-/// A pending element inside the list at `path`, appended at the end
-/// or prepended at the front. Only lists take elements — by type, not
-/// by gate — and the owning entity must be writable, as in
-/// [`pending_edge`].
+/// A pending element inside the list at `path` — inline, or a link's
+/// cell value, normalized through Follow — appended at the end or
+/// prepended at the front. Only lists take elements, by type, and
+/// the owning cell must be writable, as in [`pending_edge`].
 fn pending_into_at(sources: &Sources, path: &[Step], end: bool) -> Option<Selection> {
-    let elements = sources.resolve(path)?.as_list()?;
-    spine_writable(sources, path).then_some(())?;
+    let value = sources.resolve(path)?;
+    let (list_path, elements) = match value {
+        Value::List(elements) => (path.to_vec(), elements),
+        Value::Atom(atom) => {
+            let cell = atom.as_cell()?;
+            let elements = sources.value(cell)?.as_list()?;
+            let mut followed = path.to_vec();
+            followed.push(Step::Follow);
+            (followed, elements)
+        }
+        Value::Record(_) => return None,
+    };
+    writable_at(sources, &list_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
     let fresh = if end {
         position::between(positions.last().copied(), None)?
     } else {
         position::between(None, positions.first().copied())?
     };
-    let mut fresh_path = path.to_vec();
+    let mut fresh_path = list_path;
     fresh_path.push(Step::Element(fresh));
     Some(pending_value(fresh_path))
 }
 
 /// Appends: "add to this list" goes at the end — the within chord's
-/// meaning on a list, where field edges don't exist.
+/// meaning on a list, where fields don't exist.
 pub fn pending_into(sources: &Sources, path: &[Step]) -> Option<Selection> {
     pending_into_at(sources, path, true)
 }
@@ -542,7 +653,7 @@ pub fn pending_into_first(sources: &Sources, path: &[Step]) -> Option<Selection>
 /// Plain Enter: a new peer BESIDE the selection — continue the
 /// enumeration you are in. An element pends a sibling (before with
 /// shift); a field value pends a new field on its parent; the root
-/// has nothing beside it and falls within — a field edge on a map, an
+/// has nothing beside it and falls within — a field on a record, an
 /// appended element on a list.
 pub fn pending_enter(sources: &Sources, path: &[Step], before: bool) -> Option<Selection> {
     let beside = if before {
@@ -559,15 +670,17 @@ pub fn pending_enter(sources: &Sources, path: &[Step], before: bool) -> Option<S
         .or_else(|| pending_into(sources, path))
 }
 
-/// The command chord: author WITHIN the selection — a new field edge
-/// on the selected node, or, on a list, which has no fields, an
-/// element appended at the end. With shift, the front instead —
-/// prepend. Atoms have no within and decline.
+/// The command chord: author WITHIN the selection — a new field on
+/// the selected record or cell, an element appended into a list, or
+/// a bare cell's first value. With shift, the front instead —
+/// prepend. Atoms other than links have no within and decline.
 pub fn pending_insert(sources: &Sources, path: &[Step], front: bool) -> Option<Selection> {
     if front {
         pending_into_first(sources, path)
     } else {
-        pending_edge(sources, path.to_vec()).or_else(|| pending_into(sources, path))
+        pending_edge(sources, path.to_vec())
+            .or_else(|| pending_into(sources, path))
+            .or_else(|| pending_follow(sources, path))
     }
 }
 
@@ -576,44 +689,60 @@ pub fn pending_root(sources: &Sources) -> Option<Selection> {
     sources.root().is_none().then(|| pending_value(Vec::new()))
 }
 
+/// The bytes a `0x` query denotes: hex digits, any case (the value
+/// is the bytes; lowercase is the canonical spelling), whole bytes
+/// only.
+fn parse_blob(text: &str) -> Option<Vec<u8>> {
+    let hex = text.strip_prefix("0x")?;
+    let digit = |c: u8| match c {
+        b'0'..=b'9' => Some(c - b'0'),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        b'A'..=b'F' => Some(c - b'A' + 10),
+        _ => None,
+    };
+    hex.len().is_multiple_of(2).then_some(())?;
+    hex.as_bytes()
+        .chunks(2)
+        .map(|pair| Some(digit(pair[0])? << 4 | digit(pair[1])?))
+        .collect()
+}
+
 /// The value a pending query resolves to: a leading quote forces a
 /// string (the closing quote optional, so string mode holds while
-/// typing), text that parses is a number, anything else is the string
-/// as typed.
+/// typing), `0x` hex reads as a blob, anything else is the string as
+/// typed.
 pub fn resolve_query(text: &str) -> Value {
     let trimmed = text.trim();
     match trimmed.strip_prefix('"') {
         Some(inner) => Value::from(inner.strip_suffix('"').unwrap_or(inner)),
-        None => trimmed
-            .parse::<f64>()
+        None => parse_blob(trimmed)
             .map(Value::from)
-            .unwrap_or_else(|_| Value::from(text)),
+            .unwrap_or_else(|| Value::from(text)),
     }
 }
 
 /// The clipboard spelling of a value — SHALLOW by design: one value,
-/// a node reference being its identity alone, no entity edges
-/// traveling (deep copy waits on the projection-boundary design; see
-/// docs/model.md). Atoms spell as the query language — "quoted"
-/// strings, bare numbers — so they read in other apps and
-/// [`from_clipboard`] reads them back; nodes and lists spell as
-/// Value JSON.
+/// a link being its identity alone, no cell values traveling (deep
+/// copy waits on the projection-boundary design; see docs/model.md).
+/// Strings and blobs spell as the query language — "quoted" strings,
+/// `0x` hex — so they read in other apps and [`from_clipboard`] reads
+/// them back; links, lists, and records spell as Value JSON.
 pub fn to_clipboard(value: &Value) -> String {
     match value {
-        Value::Atom(Atom::String(_) | Atom::Number(_)) => value.to_string(),
+        Value::Atom(Atom::String(_) | Atom::Blob(_)) => value.to_string(),
         _ => serde_json::to_string(value).expect("values serialize"),
     }
 }
 
 /// The value a clipboard text denotes: Value JSON when it parses,
-/// else the query reading — numbers, quoted strings, bare text — so
-/// text copied anywhere pastes sensibly.
+/// else the query reading — quoted strings, `0x` blobs, bare text —
+/// so text copied anywhere pastes sensibly.
 pub fn from_clipboard(text: &str) -> Value {
     serde_json::from_str(text).unwrap_or_else(|_| resolve_query(text))
 }
 
-/// A completion offer on a pending edge. The display styles itself by
-/// the action's kind at draw time.
+/// A completion offer on a pending. The display styles itself by the
+/// action's kind at draw time.
 #[derive(Clone)]
 pub struct Entry {
     pub display: String,
@@ -627,11 +756,15 @@ pub struct Entry {
 pub enum EntryAction {
     /// Commit this value: an inferred atom or a reference.
     Value(Value),
-    /// Mint a node, optionally named, and commit it.
-    NewNode { name: Option<String> },
-    /// Commit an empty list value. Never named: a list holds elements
-    /// only, and is named by the edge that holds it.
+    /// Mint a cell and commit a link to it. Named, the cell's table
+    /// entry starts as the name alone — the red link; unnamed, it
+    /// starts fully bare, nothing said at all.
+    NewCell { name: Option<String> },
+    /// Commit an empty list value.
     NewList,
+    /// Commit an empty inline record value — anonymous structure, no
+    /// cell minted.
+    NewRecord,
 }
 
 /// The completion popup a pending row emits during placement; the
@@ -650,10 +783,11 @@ pub trait HasPopup {
 
 /// The universal completion layer for `query`: the inferred atom,
 /// references to everything named (document and orphans alike, ranked
-/// by the fuzzy tiers), and a fresh node — named after the query when
+/// by the fuzzy tiers), and a fresh cell — named after the query when
 /// there is one, the create-on-reference of the floating-definitions
-/// design. The label stage (`labels`) offers atoms only: a key must
-/// mean, so "new list" stays a value offer.
+/// design. The label stage (`labels`) offers only what can label:
+/// strings and cell references — no blobs, and "new list"/"new
+/// record" stay value offers.
 fn completion_entries(
     sources: &Sources,
     names: &Names,
@@ -661,57 +795,63 @@ fn completion_entries(
     labels: bool,
     query: &str,
 ) -> Vec<Entry> {
-    let atom = resolve_query(query);
-    let display = match atom.as_str() {
-        Some(s) => format!("\"{s}\""),
-        None => atom
-            .as_number()
-            .map(|n| n.to_string())
-            .unwrap_or_default(),
+    let trimmed = query.trim();
+    let quoted = trimmed.trim_start().starts_with('"');
+    let blob = (!labels).then(|| parse_blob(trimmed)).flatten();
+    let atom = match (&blob, labels) {
+        (Some(bytes), _) => Value::from(bytes.clone()),
+        (None, false) => resolve_query(query),
+        // A label is a name: quotes strip, everything else is the
+        // text as typed — never a blob.
+        (None, true) => match trimmed.strip_prefix('"') {
+            Some(inner) => Value::from(inner.strip_suffix('"').unwrap_or(inner)),
+            None => Value::from(query),
+        },
     };
-    // Quotes and numbers state atom intent, so the atom leads;
-    // otherwise a confident (non-fuzzy) reference match is likelier
-    // the intent than a new literal — typing a visible name or short
-    // id should default to the reference, and quoting always forces
-    // the string.
-    let atom_leads = query.trim_start().starts_with('"') || atom.as_number().is_some();
-    // The typed text is always insertable as itself: a numeric query
-    // offers its string form right below the number (a quote already
+    // Quotes and `0x` state atom intent, so the atom leads; otherwise
+    // a confident (non-fuzzy) reference match is likelier the intent
+    // than a new literal — typing a visible name or short id should
+    // default to the reference, and quoting always forces the string.
+    let atom_leads = quoted || blob.is_some();
+    // The typed text is always insertable as itself: a blob query
+    // offers its string form right below the blob (a quote already
     // states string intent, so quoted queries stay string-only).
-    let string_entry = atom.as_number().is_some().then(|| Entry {
+    let string_entry = blob.is_some().then(|| Entry {
         display: format!("\"{query}\""),
         detail: None,
         matches: Vec::new(),
         action: EntryAction::Value(Value::from(query)),
     });
     let atom_entry = Entry {
-        display,
+        display: match &atom {
+            Value::Atom(Atom::String(s)) => format!("\"{s}\""),
+            other => other.to_string(),
+        },
         detail: None,
         matches: Vec::new(),
         action: EntryAction::Value(atom),
     };
-    // Every node the document contains is referenceable: named ones
+    // Every cell the document contains is referenceable: named ones
     // by name, unnamed ones by the short id they render as — what
     // you see is what you can type. Unnamed keys start with the
     // ellipsis, which sorts after names, so they trail on an empty
-    // query. "new list" ranks among them under its own display text:
-    // type toward it and it surfaces, type away and it leaves.
-    let mut nodes: Vec<(String, EntryAction)> = document_nodes(sources)
+    // query. "new list" and "new record" rank among them under their
+    // own display text: type toward one and it surfaces, type away
+    // and it leaves.
+    let mut references_pool: Vec<(String, EntryAction)> = document_cells(sources)
         .into_iter()
-        .map(|node| {
-            let key = (!raw)
-                .then(|| names.of(sources, node))
-                .flatten()
-                .map(|name| name.text)
-                .unwrap_or_else(|| short_id(node));
-            (key, EntryAction::Value(Value::from(node)))
+        .map(|cell| {
+            let key = crate::conventions::display_name(sources, names, raw, cell)
+                .unwrap_or_else(|| short_id(cell));
+            (key, EntryAction::Value(Value::from(cell)))
         })
         .collect();
-    nodes.sort_by(|a, b| a.0.cmp(&b.0));
+    references_pool.sort_by(|a, b| a.0.cmp(&b.0));
     if !labels {
-        nodes.push(("new list".to_string(), EntryAction::NewList));
+        references_pool.push(("new list".to_string(), EntryAction::NewList));
+        references_pool.push(("new record".to_string(), EntryAction::NewRecord));
     }
-    let references: Vec<(Entry, bool)> = filter::rank(nodes, |(key, _)| key, query)
+    let references: Vec<(Entry, bool)> = filter::rank(references_pool, |(key, _)| key, query)
         .into_iter()
         .take(8)
         .map(|ranked| {
@@ -720,7 +860,7 @@ fn completion_entries(
             let (display, action) = ranked.item;
             let detail = match &action {
                 EntryAction::Value(value) => value
-                    .as_node()
+                    .as_cell()
                     .map(short_id)
                     .filter(|detail| *detail != display),
                 _ => None,
@@ -746,7 +886,6 @@ fn completion_entries(
         entries.push(atom_entry);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
-    let trimmed = query.trim();
     let name_text = trimmed
         .strip_prefix('"')
         .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
@@ -754,75 +893,81 @@ fn completion_entries(
     let name = (!name_text.is_empty()).then(|| name_text.to_string());
     entries.push(Entry {
         display: match &name {
-            Some(name) => format!("new node \"{name}\""),
-            None => "new node".to_string(),
+            Some(name) => format!("new cell \"{name}\""),
+            None => "new cell".to_string(),
         },
         detail: None,
         matches: Vec::new(),
-        action: EntryAction::NewNode { name },
+        action: EntryAction::NewCell { name },
     });
     entries
 }
 
-/// The node references a value carries, lists walked inline —
-/// they're values, so their contents are right here.
-fn value_nodes(value: &Value, nodes: &mut Vec<NodeId>) {
+/// The cells a value links, walked structurally — lists and records
+/// are values, so their contents are right here; record labels
+/// reference too.
+fn value_cells(value: &Value, cells: &mut Vec<CellId>) {
     match value {
-        Value::Atom(atom) => nodes.extend(atom.as_node()),
+        Value::Atom(atom) => cells.extend(atom.as_cell()),
         Value::List(elements) => {
             for element in elements.values() {
-                value_nodes(element, nodes);
+                value_cells(element, cells);
+            }
+        }
+        Value::Record(fields) => {
+            for (label, field) in fields {
+                cells.extend(label.as_cell());
+                value_cells(field, cells);
             }
         }
     }
 }
 
-/// Every node the document or its library contains — entity sources,
-/// nodes appearing as keys or inside values (an edgeless node
-/// referenced somewhere is still referenceable), and the root, whose
-/// reference is a Document field rather than a gid edge. Library
-/// nodes are offered so the conventions are typeable from keystroke
-/// one. Sorted for a deterministic offer order.
-fn document_nodes(sources: &Sources) -> Vec<NodeId> {
-    let mut nodes = Vec::new();
-    for entity in sources.entities() {
-        nodes.push(*entity);
-        for (key, value) in sources.edges(*entity).into_iter().flatten() {
-            nodes.extend(key.as_node());
-            value_nodes(value, &mut nodes);
+/// Every cell the document or its library mentions — table entries,
+/// links inside values, cells used as labels, and the root's own
+/// links. Bare cells referenced anywhere are included: still
+/// referenceable. Library cells are offered so the conventions are
+/// typeable from keystroke one. Sorted for a deterministic offer
+/// order.
+fn document_cells(sources: &Sources) -> Vec<CellId> {
+    let mut cells = Vec::new();
+    for cell in sources.cells() {
+        cells.push(*cell);
+        if let Some(value) = sources.value(*cell) {
+            value_cells(value, &mut cells);
         }
     }
     if let Some(root) = sources.root() {
-        value_nodes(root, &mut nodes);
+        value_cells(root, &mut cells);
     }
-    nodes.sort();
-    nodes.dedup();
-    nodes
+    cells.sort();
+    cells.dedup();
+    cells
 }
 
-/// Resolves a chosen entry to the value it denotes, minting and
-/// naming for a new node. Labels and values resolve alike — the label
-/// stage never offers a non-atom action.
+/// Resolves a chosen entry to the value it denotes, minting (and
+/// naming) for a new cell. Labels and values resolve alike — the
+/// label stage never offers a non-label action.
 pub fn resolve_entry(doc: &mut Document, action: &EntryAction) -> Value {
     match action {
         EntryAction::Value(value) => value.clone(),
-        EntryAction::NewNode { name } => {
-            let node = new_node_id();
+        EntryAction::NewCell { name } => {
+            let cell = new_cell_id();
             if let Some(name) = name {
-                doc.gid
-                    .set(node, Atom::Node(NAME), Value::from(name.as_str()));
+                doc.cells.set_name(cell, name);
             }
-            Value::from(node)
+            Value::from(cell)
         }
         EntryAction::NewList => Value::list([]),
+        EntryAction::NewRecord => Value::record([]),
     }
 }
 
-/// Commits a pending edge from a chosen entry: resolves the action to
-/// a value and writes it.
+/// Commits a pending from a chosen entry: resolves the action to a
+/// value and writes it.
 pub fn commit_pending(
     doc: &mut Document,
-    library: &MutGid,
+    library: &Cells,
     path: &[Step],
     action: &EntryAction,
 ) -> bool {
@@ -830,49 +975,29 @@ pub fn commit_pending(
     set_value(doc, library, path, value)
 }
 
-/// Rebuilds the value spine along `elements` (element steps only),
-/// replacing the leaf: surviving elements keep their positions, and
-/// the final step inserts or replaces at its position. Deeper steps
-/// need an existing element to descend through.
-fn respine(current: Option<&Value>, elements: &[Step], leaf: Value) -> Option<Value> {
-    match elements.split_first() {
-        None => Some(leaf),
-        Some((Step::Element(position), rest)) => {
-            let list = current?.as_list()?;
-            let child = list.get(position);
-            if !rest.is_empty() && child.is_none() {
-                return None;
-            }
-            let rebuilt = respine(child, rest, leaf)?;
-            Some(Value::List(list.update(position.clone(), rebuilt)))
-        }
-        Some((Step::Key(_), _)) => None,
-    }
-}
-
 /// Writes `value` at `path` — the empty path writes the document
-/// root. The single write every edit reduces to: the path's last Key
-/// step names the owning, authority-gated entity edge; the element
-/// steps below it are a value spine, rebuilt around the new leaf.
-pub fn set_value(doc: &mut Document, library: &MutGid, path: &[Step], value: Value) -> bool {
+/// root. The single write every edit reduces to: the path's last
+/// Follow names the owning, authority-gated cell; the steps below it
+/// are a value spine, rebuilt around the new leaf through the lens.
+/// A bare cell takes its first value through the empty spine.
+pub fn set_value(doc: &mut Document, library: &Cells, path: &[Step], value: Value) -> bool {
     let write = {
         let sources = Sources { doc: &*doc, library };
-        match last_key(path) {
-            Some((index, key)) => sources
+        match last_follow(path) {
+            Some(index) => sources
                 .resolve(&path[..index])
-                .and_then(Value::as_node)
-                .filter(|entity| sources.writable(*entity))
-                .and_then(|entity| {
-                    let current = sources.get(entity, key);
-                    respine(current, &path[index + 1..], value)
-                        .map(|rebuilt| (Some((entity, key.clone())), rebuilt))
+                .and_then(Value::as_cell)
+                .filter(|cell| sources.writable(*cell))
+                .and_then(|cell| {
+                    spine::set(sources.value(cell), &path[index + 1..], value)
+                        .map(|rebuilt| (Some(cell), rebuilt))
                 }),
-            None => respine(sources.root(), path, value).map(|rebuilt| (None, rebuilt)),
+            None => spine::set(sources.root(), path, value).map(|rebuilt| (None, rebuilt)),
         }
     };
     match write {
-        Some((Some((entity, key)), rebuilt)) => {
-            doc.gid.set(entity, key, rebuilt);
+        Some((Some(cell), rebuilt)) => {
+            doc.cells.set_value(cell, rebuilt);
             true
         }
         Some((None, rebuilt)) => {
@@ -883,20 +1008,47 @@ pub fn set_value(doc: &mut Document, library: &MutGid, path: &[Step], value: Val
     }
 }
 
+/// Writes the name of the cell the path's trailing Name step
+/// addresses — the empty string un-names, its canonical spelling.
+/// Names are identity metadata, so the write targets the named cell
+/// directly, gated on its own authority; clearing a name that isn't
+/// there declines, keeping no-ops distinguishable.
+pub fn set_name(doc: &mut Document, library: &Cells, path: &[Step], name: &str) -> bool {
+    let cell = {
+        let sources = Sources { doc: &*doc, library };
+        match path.split_last() {
+            Some((Step::Name, parent)) => sources
+                .resolve(parent)
+                .and_then(Value::as_cell)
+                .filter(|cell| sources.writable(*cell))
+                .filter(|cell| !name.is_empty() || sources.name(*cell).is_some()),
+            _ => None,
+        }
+    };
+    match cell {
+        Some(cell) => {
+            doc.cells.set_name(cell, name);
+            true
+        }
+        None => false,
+    }
+}
+
 /// Toggle the collapse override for the value at `path`, staying
 /// sparse: an override matching the default (collapsed inside a
 /// cycle, expanded otherwise) is removed rather than stored. Declines
-/// unless there is something to collapse — a node with edges, or a
-/// list with elements.
+/// unless there is something to collapse — a cell with a value, or a
+/// nonempty list or record.
 pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Step]) -> bool {
     sources
         .resolve(path)
         .filter(|value| match value {
             Value::Atom(atom) => atom
-                .as_node()
-                .and_then(|node| sources.edges(node))
-                .is_some_and(|edges| !edges.is_empty()),
+                .as_cell()
+                .and_then(|cell| sources.value(cell))
+                .is_some(),
             Value::List(elements) => !elements.is_empty(),
+            Value::Record(fields) => !fields.is_empty(),
         })
         .map(|value| {
             let in_cycle = (0..path.len())
@@ -913,17 +1065,16 @@ pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Step]
 }
 
 /// Writes the selection's editor text through to its location after
-/// every handled event — the graph is the source of truth. The edited
-/// kind follows the current value: strings write every keystroke;
-/// numbers only when the text parses, since a half-typed state like
-/// `3.` has no value to write. Everything funnels through
-/// [`set_value`], so an element edit rebuilds its list at the owning
-/// edge and a location that no longer takes the write drops it
-/// silently — the malformed-graph rule at the mutation boundary.
-/// Returns whether this write OPENED an undo step: true exactly on
-/// the first write of the mounted editor's life, so a typing run is
-/// one step and history stays a dumb stack.
-pub fn write_through(doc: &mut Document, library: &MutGid, selection: &mut Selection) -> bool {
+/// every handled event — the graph is the source of truth. The
+/// edited kind follows the current value: only strings mount
+/// editors, and they write every keystroke. Everything funnels
+/// through [`set_value`], so an element edit rebuilds its list at
+/// the owning cell and a location that no longer takes the write
+/// drops it silently — the malformed-graph rule at the mutation
+/// boundary. Returns whether this write OPENED an undo step: true
+/// exactly on the first write of the mounted editor's life, so a
+/// typing run is one step and history stays a dumb stack.
+pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Selection) -> bool {
     let Selection::Edge {
         path,
         edit,
@@ -936,22 +1087,43 @@ pub fn write_through(doc: &mut Document, library: &MutGid, selection: &mut Selec
         return false;
     };
     let text = edit.text().to_string();
-    let (current, next) = {
-        let sources = Sources { doc: &*doc, library };
-        let current = sources.resolve(path);
-        let next = match current {
-            Some(Value::Atom(Atom::String(_))) => Some(Value::from(text)),
-            Some(Value::Atom(Atom::Number(_))) => {
-                text.trim().parse::<f64>().ok().map(Value::from)
+    let wrote = match path.split_last() {
+        // A Name step edits the cell's name — the same run shape,
+        // through the name write instead of the value write. The
+        // empty string spells no name: an empty editor over an
+        // unnamed cell writes nothing, and emptying a name un-names
+        // live.
+        Some((Step::Name, parent)) => {
+            let current = {
+                let sources = Sources { doc: &*doc, library };
+                sources
+                    .resolve(parent)
+                    .and_then(Value::as_cell)
+                    .and_then(|cell| sources.name(cell))
+                    .map(str::to_owned)
+                    .unwrap_or_default()
+            };
+            current != text && set_name(doc, library, path, &text)
+        }
+        _ => {
+            let (current, next) = {
+                let sources = Sources { doc: &*doc, library };
+                let current = sources.resolve(path);
+                let next = match current {
+                    Some(Value::Atom(Atom::String(_))) => Some(Value::from(text)),
+                    _ => None,
+                };
+                (current.cloned(), next)
+            };
+            match next {
+                Some(next) => {
+                    current.as_ref() != Some(&next) && set_value(doc, library, path, next)
+                }
+                None => false,
             }
-            _ => None,
-        };
-        (current.cloned(), next)
+        }
     };
-    if let Some(next) = next
-        && current.as_ref() != Some(&next)
-        && set_value(doc, library, path, next)
-    {
+    if wrote {
         let first = !*recorded;
         *recorded = true;
         return first;
@@ -1069,11 +1241,11 @@ fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
     );
 }
 
-/// Marks `child` as the projection of the edge at `path`. On placement
-/// it draws the highlight when this is the selected edge, registers a
-/// click that selects the edge (innermost wins by handler precedence)
-/// — or, with the command modifier and a pending open, picks `value`
-/// into it — and records itself for keyboard navigation.
+/// Marks `child` as the projection of the value at `path`. On placement
+/// it draws the highlight when this is the selected path, registers a
+/// click that selects it (innermost wins by handler precedence) — or,
+/// with the command modifier and a pending open, picks `value` into it
+/// — and records itself for keyboard navigation.
 fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     cx: &Cx,
     path: Path,
@@ -1111,13 +1283,24 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     })
 }
 
-/// The value marked as the secondary selection: the one at the end
-/// of the selected edge. A value can project in many places — node
-/// references, but equally strings, numbers, and equal lists — and
-/// the marks make that sameness visible.
+/// The value marked as the secondary selection: the one at the
+/// selected path. A value can project in many places — links, but
+/// equally strings, blobs, and equal lists — and the marks make that
+/// sameness visible. Inline records are structure, not identity: no
+/// marks. A selected name marks as its string.
 fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Value> {
     match selection? {
-        Selection::Edge { path, .. } => sources.resolve(path).cloned(),
+        Selection::Edge { path, .. } => match path.split_last() {
+            Some((Step::Name, parent)) => sources
+                .resolve(parent)
+                .and_then(Value::as_cell)
+                .and_then(|cell| sources.name(cell))
+                .map(Value::from),
+            _ => sources
+                .resolve(path)
+                .filter(|value| !matches!(value, Value::Record(_)))
+                .cloned(),
+        },
         _ => None,
     }
 }
@@ -1142,14 +1325,14 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         collapse,
         styles,
         selection,
-        // The graph view's selected node is a secondary here too:
+        // The graph view's selected cell is a secondary here too:
         // its projections are the same value.
         secondary: secondary_of(sources, selection).or_else(|| graph_node.cloned()),
     };
     // The Raw view derives from the one bit: names answer None and
-    // nothing else changes — lists render as lists there too, since
-    // kind is data, not convention. An empty document is a
-    // selectable placeholder at the root path.
+    // nothing else changes — lists and records render as themselves
+    // there too, since kind is data, not convention. An empty
+    // document is a selectable placeholder at the root path.
     match sources.root() {
         Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, &hooks),
         None => match cx.selection {
@@ -1167,156 +1350,305 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     }
 }
 
-/// A node rendered as a block: its short-id header over its edges,
-/// indented and recursively projected. A node with edges carries a
-/// disclosure delta to the right of the header — outside the indent —
-/// that toggles collapse; collapsed (by default a cycle, or forced by
-/// an override) it shows only the header.
-fn node_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+/// A link rendered as its cell: PARENS are the cell's syntax — `(`
+/// name-or-short-id value `)` — completing the delimiter family
+/// (brackets say list, braces say record). The name, when there is
+/// one, is the identity's own metadata projected at the Name step —
+/// selectable, editable, two-stage. A leaf or inline value sits
+/// between head and close paren; a record or list value opens its
+/// own delimiter beside the head and closes `})` or `])` at the
+/// block's foot; a valueless cell — bare, or the named red link —
+/// is head and parens alone. Clicks on the parens and gaps fall
+/// through to the cell's own descend. Collapsed (by default in a
+/// cycle, or forced by an override) only the parenthesized head
+/// shows.
+fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<NodeId>,
-    node: NodeId,
+    ancestors: &HashSet<CellId>,
+    cell: CellId,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
-    let name = cx.name(node);
-    let name_label = name.as_ref().and_then(|name| name.label.clone());
-    // The name edge is consumed by the header, so the listing skips it.
-    let mut entries: Vec<(Atom, Option<Value>)> = sorted_edges(&cx.sources, node)
-        .into_iter()
-        .filter(|(key, _)| name_label.as_ref() != Some(key))
-        .map(|(key, value)| (key, Some(value)))
-        .collect();
-    if let Some(Step::Key(key)) = cx.pending_child_of(path) {
-        entries.push((key, None));
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-    }
-    let head = head_view(cx, tcx, path, node, &name, hooks);
-
-    let pending_edge = cx.pending_edge_under(path).is_some();
-    if entries.is_empty() && !pending_edge {
-        return head;
-    }
-    // A pending child or edge forces the node open so it can be seen.
-    let collapsed = !pending_edge
-        && entries.iter().all(|(_, value)| value.is_some())
-        && cx.collapse.collapsed(path, ancestors.contains(&node));
-    let header = row(
-        4.0 * scale,
-        vec![head, disclosure(path.to_vec(), collapsed, hooks, cx.styles)],
-    );
-    if collapsed {
-        return header;
-    }
-
+    let name = cx.name(cell);
+    let open = text(tcx, "(", &cx.styles.dim);
+    let head = head_view(cx, tcx, path, cell, &name, hooks);
+    let mut followed = path.to_vec();
+    followed.push(Step::Follow);
+    let Some(value) = cx.sources.value(cell).cloned() else {
+        // Valueless: nothing held yet — bare, or the named red link.
+        // The Follow slot renders as a pending placeholder ("…", or
+        // the open query): clicking or stepping onto it begins the
+        // first value, through the empty-slot rule in
+        // [`Selection::edge`].
+        return row(
+            4.0 * scale,
+            vec![
+                row(2.0 * scale, vec![open, head]),
+                row(
+                    2.0 * scale,
+                    vec![
+                        pending_view(cx, tcx, followed.clone(), hooks),
+                        text(tcx, ")", &cx.styles.dim),
+                    ],
+                ),
+            ],
+        );
+    };
     let mut inner = ancestors.clone();
-    inner.insert(node);
-    let mut rows: Vec<Node<P>> = entries
-        .into_iter()
-        .map(|(key, value)| edge_row(cx, tcx, path, &inner, key, value, hooks))
-        .collect();
-    // A new edge being authored: the label query, unsorted until it
-    // has a label to sort by.
-    if let Some((query, choice)) = cx.pending_edge_under(path) {
-        rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
+    inner.insert(cell);
+    // A pending inside the value forces the cell open.
+    let pending_inside = cx.pending_child_of(&followed).is_some()
+        || cx.pending_edge_under(&followed).is_some();
+    let collapsed =
+        !pending_inside && cx.collapse.collapsed(path, ancestors.contains(&cell));
+    if collapsed {
+        return row(
+            2.0 * scale,
+            vec![
+                open,
+                head,
+                disclosure(path.to_vec(), true, hooks, cx.styles),
+                text(tcx, ")", &cx.styles.dim),
+            ],
+        );
     }
-    block(header, rows, cx.styles)
+    let leaf = |value: &Value| value.as_str().is_some() || value.as_blob().is_some();
+    match &value {
+        // Leaf-only records and lists (pendings included) read
+        // inline between the parens, as do atoms and links.
+        Value::Record(fields)
+            if fields.values().all(leaf) && cx.pending_edge_under(&followed).is_none() =>
+        {
+            inline_cell(cx, tcx, open, head, &followed, &inner, &value, hooks)
+        }
+        Value::List(elements) if elements.values().all(leaf) => {
+            inline_cell(cx, tcx, open, head, &followed, &inner, &value, hooks)
+        }
+        Value::Atom(_) => inline_cell(cx, tcx, open, head, &followed, &inner, &value, hooks),
+        Value::Record(fields) => {
+            let mut entries: Vec<(Label, Option<Value>)> = fields
+                .iter()
+                .map(|(key, value)| (key.clone(), Some(value.clone())))
+                .collect();
+            if let Some(Step::Key(key)) = cx.pending_child_of(&followed) {
+                entries.push((key, None));
+                entries.sort_by(|a, b| a.0.cmp(&b.0));
+            }
+            let mut rows: Vec<Node<P>> = entries
+                .into_iter()
+                .map(|(key, value)| field_row(cx, tcx, &followed, &inner, key, value, hooks))
+                .collect();
+            // A new field being authored: the label query, unsorted
+            // until it has a label to sort by.
+            if let Some((query, choice)) = cx.pending_edge_under(&followed) {
+                rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
+            }
+            cell_block(cx, tcx, path, open, head, "{", "})", followed, rows, hooks)
+        }
+        Value::List(elements) => {
+            let mut items: Vec<(Position, Option<Value>)> = elements
+                .iter()
+                .map(|(position, value)| (position.clone(), Some(value.clone())))
+                .collect();
+            if let Some(Step::Element(position)) = cx.pending_child_of(&followed) {
+                items.push((position, None));
+                items.sort_by(|a, b| a.0.cmp(&b.0));
+            }
+            let rows: Vec<Node<P>> = items
+                .into_iter()
+                .map(|(position, value)| {
+                    let mut child = followed.clone();
+                    child.push(Step::Element(position));
+                    let content = match value {
+                        Some(value) => value_view(cx, tcx, &child, &inner, &value, hooks),
+                        None => pending_view(cx, tcx, child, hooks),
+                    };
+                    // The list vernacular: a dim leading dash marks
+                    // the element rows.
+                    row(6.0 * scale, vec![text(tcx, "-", &cx.styles.dim), content])
+                })
+                .collect();
+            cell_block(cx, tcx, path, open, head, "[", "])", followed, rows, hooks)
+        }
+    }
 }
 
-/// A named node's head: the consumed name edge projected as the
-/// header — the text is the name, and it selects, edits, marks, and
-/// deletes as the edge it is, replacing that edge's ordinary row.
-/// An unnamed node heads with its short id; a name without an edge
-/// (computed) is plain text.
-///
-/// The name text stands for the NODE until the node is selected: a
-/// cold click falls through to the block's own target — click the
-/// thing to select it, click again to rename — and only then does
-/// the name engage as a text target. The pass decides from current
-/// state; single-shot dispatch means the second click always sees
-/// the engaged successor. Cold, the edge stays keyboard-reachable
-/// and markable, just not a pointer target.
-fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+/// A cell whose value reads on one line: `(head value)`.
+#[allow(clippy::too_many_arguments)]
+fn inline_cell<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    open: Node<P>,
+    head: Node<P>,
+    followed: &[Step],
+    ancestors: &HashSet<CellId>,
+    value: &Value,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    row(
+        4.0 * scale,
+        vec![
+            row(2.0 * scale, vec![open, head]),
+            row(
+                2.0 * scale,
+                vec![
+                    value_view(cx, tcx, followed, ancestors, value, hooks),
+                    text(tcx, ")", &cx.styles.dim),
+                ],
+            ),
+        ],
+    )
+}
+
+/// A cell whose value blocks: the head and the value's opening
+/// delimiter share the header line, the rows indent, and the value's
+/// closer joins the cell's paren at the foot — `})` or `])`. The
+/// followed value stays keyboard-reachable and primary-highlighted
+/// at its own path, with no pointer target: clicks belong to the
+/// rows and the cell.
+#[allow(clippy::too_many_arguments)]
+fn cell_block<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
-    node: NodeId,
-    name: &Option<Name>,
+    open: Node<P>,
+    head: Node<P>,
+    opener: &str,
+    closer: &str,
+    followed: Path,
+    rows: Vec<Node<P>>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let Some(name) = name else {
-        return text(tcx, &short_id(node), &cx.styles.id);
-    };
-    let fallback = text(tcx, &name.text, &cx.styles.name);
-    let Some(label) = &name.label else {
-        return fallback;
-    };
-    let Some(value) = cx.sources.get(node, label).cloned() else {
-        return fallback;
-    };
-    let mut edge = path.to_vec();
-    edge.push(Step::Key(label.clone()));
-    let editing = cx
-        .selection
-        .filter(|selection| selection.path() == edge.as_slice())
-        .and_then(Selection::edit);
-    let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
-    if cx.selected(path) || cx.selected(&edge) {
-        let content = cursor_target(edge.clone(), value.clone(), hooks, content);
-        let content = if cx.selected(&edge) {
-            content
-        } else {
-            secondary_mark(cx, &value, content)
-        };
-        descend(cx, edge, Some(value), hooks, content)
-    } else {
-        let content = secondary_mark(cx, &value, content);
-        decorate(content, move |p: &mut P, rect| {
-            p.descends().push(Descend { path: edge, rect });
-        })
-    }
-}
-
-/// A node block: the header over its indented rows.
-fn block<P: Canvas>(header: Node<P>, rows: Vec<Node<P>>, styles: &RawStyles) -> Node<P> {
-    let scale = styles.scale;
+    let scale = cx.styles.scale;
+    let header = row(
+        4.0 * scale,
+        vec![
+            row(2.0 * scale, vec![open, head]),
+            text(tcx, opener, &cx.styles.dim),
+            disclosure(path.to_vec(), false, hooks, cx.styles),
+        ],
+    );
+    let selected = cx.selected(&followed);
+    let body = decorate(
+        col(HAlign::Start, 0, 4.0 * scale, rows),
+        move |p: &mut P, rect| {
+            if selected {
+                primary_highlight(scale, p, rect);
+            }
+            p.descends().push(Descend {
+                path: followed.clone(),
+                rect,
+            });
+        },
+    );
     col(
         HAlign::Start,
         0,
         4.0 * scale,
         vec![
             header,
-            pad(
-                Insets::new(26.0 * scale, 0.0, 0.0, 0.0),
-                col(HAlign::Start, 0, 4.0 * scale, rows),
-            ),
+            pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
+            text(tcx, closer, &cx.styles.dim),
         ],
     )
 }
 
-/// One keyed edge row: the label-and-arrow head, then the value (or
-/// its pending query). A real edge's label and arrow select the edge,
-/// like its value — grouped so one target spans both and the gap
-/// between. A pending row's plain click falls through (the
-/// not-yet-edge can't be selected), but command still picks its
-/// label's identity.
-fn edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+/// A cell's head: the name — identity metadata at the Name step —
+/// projected as the header text, or the short id when unnamed. It
+/// selects, edits, marks, and deletes at the Name step; deleting it
+/// un-names the cell, and an unnamed cell's id engages as an EMPTY
+/// name editor, so typing names it — click to select, click again
+/// to (re)name, the Finder pattern either way.
+///
+/// The head text stands for the CELL until the cell is selected: a
+/// cold click falls through to the block's own target and selects the
+/// cell, and only then does the text engage as a target. The pass
+/// decides from current state; single-shot dispatch means the second
+/// click always sees the engaged successor. Cold, the head stays
+/// keyboard-reachable (and markable, when named), just not a pointer
+/// target.
+fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<NodeId>,
-    key: Atom,
+    cell: CellId,
+    name: &Option<String>,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let mut edge = path.to_vec();
+    edge.push(Step::Name);
+    let editing = cx
+        .selection
+        .filter(|selection| selection.path() == edge.as_slice())
+        .and_then(Selection::edit);
+    let short = short_id(cell);
+    let fallback = match name {
+        Some(name) => text(tcx, name, &cx.styles.name),
+        None => text(tcx, &short, &cx.styles.id),
+    };
+    // While the name buffer is empty, the short id ghosts in place —
+    // the field keeps its width and shows what an empty name falls
+    // back to.
+    let content = atom_content(
+        editing,
+        fallback,
+        Some((&short, &cx.styles.id)),
+        tcx,
+        cx.styles,
+        hooks,
+    );
+    // The name string is the identity the head marks and picks; an
+    // unnamed head stands in for the cell itself and marks nothing.
+    let mark = name.as_ref().map(|name| Value::from(name.as_str()));
+    let target = mark.clone().unwrap_or_else(|| Value::from(cell));
+    if cx.selected(path) || cx.selected(&edge) {
+        let content = cursor_target(edge.clone(), target.clone(), hooks, content);
+        let content = match &mark {
+            Some(value) if !cx.selected(&edge) => secondary_mark(cx, value, content),
+            _ => content,
+        };
+        descend(cx, edge, Some(target), hooks, content)
+    } else {
+        let content = match &mark {
+            Some(value) => secondary_mark(cx, value, content),
+            None => content,
+        };
+        decorate(content, move |p: &mut P, rect| {
+            p.descends().push(Descend { path: edge, rect });
+        })
+    }
+}
+
+/// One record field row: the label-and-arrow head, then the value (or
+/// its pending query). `parent` is the record's own path — a cell's
+/// followed path or an inline record's. A real field's label and
+/// arrow select the field, like its value — grouped so one target
+/// spans both and the gap between. A pending row's plain click falls
+/// through (the not-yet-field can't be selected), but command still
+/// picks its label's identity.
+fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    parent: &[Step],
+    ancestors: &HashSet<CellId>,
+    key: Label,
     value: Option<Value>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
-    let mut child = path.to_vec();
+    let mut child = parent.to_vec();
     child.push(Step::Key(key.clone()));
     let head = row(6.0 * scale, vec![label_view(cx, tcx, &key), arrow(cx.styles)]);
     let head = match &value {
-        Some(_) => select_target(child.clone(), key.clone(), hooks, head),
+        Some(_) => select_target(
+            child.clone(),
+            Value::Atom(Atom::from(key.clone())),
+            hooks,
+            head,
+        ),
         None => pick_target(key.clone(), hooks, head),
     };
     let content = match value {
@@ -1326,7 +1658,7 @@ fn edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     row(6.0 * scale, vec![head, content])
 }
 
-/// The label-query row of a new edge being authored on a node. The
+/// The label-query row of a new field being authored on a record. The
 /// authoring locus carries the primary itself; its parent is
 /// deliberately unmarked.
 fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
@@ -1360,14 +1692,14 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
 /// A list value: its elements as bare ordered rows — the position is
 /// session identity, not information; order carries it. An atom-only
 /// list reads as an inline literal; collapsed shows the element
-/// count. Lists have no identity, so there is no header id and no
-/// cycle through them — only their node elements can recurse.
+/// count. Lists have no identity, so there is no handle and no cycle
+/// through them — only linked cells can recurse.
 fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<NodeId>,
-    elements: &im::OrdMap<Position, Value>,
+    ancestors: &HashSet<CellId>,
+    elements: &OrdMap<Position, Value>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
@@ -1380,15 +1712,15 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         items.sort_by(|a, b| a.0.cmp(&b.0));
     }
 
-    // An atom list reads as a literal: `[1, "two", 3]` on one line,
+    // A leaf-atom list reads as a literal: `["a", "b"]` on one line,
     // dim punctuation, each element still an ordinary descend (click,
-    // edit, mark) — a pending one included. Node elements and nested
-    // lists take the block form; width-aware grouping (Wadler) waits,
-    // so a long list will run wide for now.
+    // edit, secondary-mark) — a pending one included. Links, records,
+    // and nested lists take the block form; width-aware grouping
+    // (Wadler) waits, so a long list will run wide for now.
     let inline = items.iter().all(|(_, value)| {
         value
             .as_ref()
-            .is_none_or(|v| v.as_str().is_some() || v.as_number().is_some())
+            .is_none_or(|v| v.as_str().is_some() || v.as_blob().is_some())
     });
     if inline {
         let mut cells: Vec<Node<P>> = vec![text(tcx, "[", &cx.styles.dim)];
@@ -1454,60 +1786,148 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     )
 }
 
-/// Git-style short form of a node id: an ellipsis and the last five
+/// An inline record: an anonymous content-compared value, BRACED —
+/// braces mark records the way the handle marks cells. Field rows
+/// like a cell's, at the record's own path (no Follow: this is
+/// structure in place, not a link). An all-leaf-atom record reads as
+/// an inline literal `{x: "1", y: "2"}`; collapse is override-only,
+/// since a value has no identity to recur through.
+fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    fields: &OrdMap<Label, Value>,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let mut items: Vec<(Label, Option<Value>)> = fields
+        .iter()
+        .map(|(key, value)| (key.clone(), Some(value.clone())))
+        .collect();
+    if let Some(Step::Key(key)) = cx.pending_child_of(path) {
+        items.push((key, None));
+        items.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+    let pending_edge = cx.pending_edge_under(path).is_some();
+
+    let inline = !pending_edge
+        && items.iter().all(|(_, value)| {
+            value
+                .as_ref()
+                .is_none_or(|v| v.as_str().is_some() || v.as_blob().is_some())
+        });
+    if inline {
+        let mut cells: Vec<Node<P>> = vec![text(tcx, "{", &cx.styles.dim)];
+        for (index, (key, value)) in items.into_iter().enumerate() {
+            if index > 0 {
+                cells.push(text(tcx, ", ", &cx.styles.dim));
+            }
+            cells.push(label_view(cx, tcx, &key));
+            cells.push(text(tcx, ": ", &cx.styles.dim));
+            let mut child = path.to_vec();
+            child.push(Step::Key(key));
+            cells.push(match value {
+                Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
+                None => pending_view(cx, tcx, child, hooks),
+            });
+        }
+        cells.push(text(tcx, "}", &cx.styles.dim));
+        return row(0.0, cells);
+    }
+
+    let collapsed = !pending_edge
+        && items.iter().all(|(_, value)| value.is_some())
+        && cx.collapse.collapsed(path, false);
+    let head = text(tcx, "{", &cx.styles.dim);
+    let mut header = vec![head, disclosure(path.to_vec(), collapsed, hooks, cx.styles)];
+    if collapsed {
+        let count = format!(
+            "{} field{}",
+            items.len(),
+            if items.len() == 1 { "" } else { "s" }
+        );
+        header.push(text(tcx, &count, &cx.styles.dim));
+        header.push(text(tcx, "}", &cx.styles.dim));
+        return row(4.0 * scale, header);
+    }
+    let mut rows: Vec<Node<P>> = items
+        .into_iter()
+        .map(|(key, value)| field_row(cx, tcx, path, ancestors, key, value, hooks))
+        .collect();
+    if let Some((query, choice)) = cx.pending_edge_under(path) {
+        rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
+    }
+    col(
+        HAlign::Start,
+        0,
+        4.0 * scale,
+        vec![
+            row(4.0 * scale, header),
+            pad(
+                Insets::new(26.0 * scale, 0.0, 0.0, 0.0),
+                col(HAlign::Start, 0, 4.0 * scale, rows),
+            ),
+            text(tcx, "}", &cx.styles.dim),
+        ],
+    )
+}
+
+/// Git-style short form of a cell id: an ellipsis and the last five
 /// hex digits, fixed length even where fewer would disambiguate.
 /// A collision within a document is unlikely (about 0.5% somewhere in
-/// a hundred-node document) and the display can grow if it ever
+/// a hundred-cell document) and the display can grow if it ever
 /// matters.
-pub fn short_id(id: NodeId) -> String {
+pub fn short_id(id: CellId) -> String {
     let hex = id.simple().to_string();
     format!("…{}", &hex[hex.len() - 5..])
 }
 
-/// A node's edges, sorted for stable order. All of them — `name` is not
-/// special here.
-fn sorted_edges(sources: &Sources, node: NodeId) -> Vec<(Atom, Value)> {
-    let mut edges: Vec<(Atom, Value)> = sources
-        .edges(node)
-        .map(|edges| edges.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-        .unwrap_or_default();
-    edges.sort();
-    edges
+/// A blob's display: `0x` and its bytes, truncated past sixteen —
+/// the mini hex editor is a later projection; this is the floor.
+fn blob_text(bytes: &[u8]) -> String {
+    if bytes.len() <= 16 {
+        format!("0x{}", hex_string(bytes))
+    } else {
+        format!("0x{}… ({} bytes)", hex_string(&bytes[..8]), bytes.len())
+    }
 }
 
-fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Atom) -> Node<P> {
+fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Label) -> Node<P> {
     let inner = match key {
-        Atom::String(s) => text(tcx, s, &cx.styles.label),
-        Atom::Number(n) => text(tcx, &n.get().to_string(), &cx.styles.number),
-        // A named node used as a key reads by its name, through the
+        // A string label wears its quotes: it IS a string, and the
+        // quotes are what distinguish it from a cell label read by
+        // name (the open styling question, answered 2026-07-20).
+        Label::String(s) => text(tcx, &format!("\"{s}\""), &cx.styles.label),
+        // A named cell used as a label reads by its name, through the
         // editor's one name policy.
-        Atom::Node(node) => match cx.name(*node) {
-            Some(name) => text(tcx, &name.text, &cx.styles.label),
-            None => text(tcx, &short_id(*node), &cx.styles.id),
+        Label::Cell(cell) => match cx.name(*cell) {
+            Some(name) => text(tcx, &name, &cx.styles.label),
+            None => text(tcx, &short_id(*cell), &cx.styles.id),
         },
     };
-    secondary_mark(cx, &Value::Atom(key.clone()), inner)
+    secondary_mark(cx, &Value::Atom(Atom::from(key.clone())), inner)
 }
 
-/// A node projection's ground, painted only at authority
-/// TRANSITIONS: an external entity under document authority takes
-/// the dark tint — no lock, just "from elsewhere" — and a
-/// document-authority entity under an external one takes its light
+/// A cell projection's ground, painted only at authority
+/// TRANSITIONS: an external cell under document authority takes the
+/// dark tint — no lock, just "from elsewhere" — and a
+/// document-authority cell under an external one takes its light
 /// ground back (opaque, since an alpha wash can't be undone by
 /// another wash). Runs of the same authority draw nothing, so
-/// nesting never stacks tints. The enclosing authority is the
-/// spine's owning entity, so a node inside a list carries its list's
-/// owner as context. Wraps outside the descend so the node's own
-/// selection highlight draws over its ground.
+/// nesting never stacks tints. The enclosing authority is the owning
+/// cell at the path's last Follow, so a cell inside a list carries
+/// its list's owner as context. Wraps outside the descend so the
+/// cell's own selection highlight draws over its ground.
 fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) -> Node<P> {
-    let Some(node) = value.as_node() else {
+    let Some(cell) = value.as_cell() else {
         return content;
     };
-    let external = cx.sources.external(node);
-    let parent_external = last_key(path)
-        .and_then(|(index, _)| cx.sources.resolve(&path[..index]))
-        .and_then(Value::as_node)
-        .is_some_and(|entity| cx.sources.external(entity));
+    let external = cx.sources.external(cell);
+    let parent_external = last_follow(path)
+        .and_then(|index| cx.sources.resolve(&path[..index]))
+        .and_then(Value::as_cell)
+        .is_some_and(|cell| cx.sources.external(cell));
     if external == parent_external {
         return content;
     }
@@ -1524,9 +1944,9 @@ fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) ->
 }
 
 /// The secondary selection's mark: a subtle wash over another whole
-/// projection of the selected edge's value — an expanded block, a
-/// collapsed header, or a label. The primary selection's geometry at
-/// lower strength, so the two read as one family.
+/// projection of the selected value — an expanded block, a collapsed
+/// handle, or a label. The primary selection's geometry at lower
+/// strength, so the two read as one family.
 fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P> {
     if cx.secondary.as_ref() != Some(value) {
         return content;
@@ -1544,10 +1964,10 @@ fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P
     })
 }
 
-/// The disclosure delta to the right of a node header: down when
-/// expanded, right when collapsed. Clicking it reports a toggle for
-/// this path without selecting; the extent spans the header height so
-/// the target is comfortable, and living outside the child indent it
+/// The disclosure delta to the right of a handle: down when expanded,
+/// right when collapsed. Clicking it reports a toggle for this path
+/// without selecting; the extent spans the header height so the
+/// target is comfortable, and living outside the child indent it
 /// costs no horizontal space.
 fn disclosure<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     path: Path,
@@ -1597,7 +2017,7 @@ fn disclosure<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 
 /// A small drawn arrow between a label and its value. Reading
 /// "label → value", and being a stroke rather than text, it
-/// separates an edge's key from its target.
+/// separates a field's key from its target.
 fn arrow<P: Canvas>(styles: &RawStyles) -> Node<P> {
     let scale = styles.scale;
     let width = 16.0 * scale;
@@ -1630,7 +2050,7 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<NodeId>,
+    ancestors: &HashSet<CellId>,
     value: &Value,
     hooks: &Hooks<C>,
 ) -> Node<P> {
@@ -1641,27 +2061,24 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let inner = match value {
         Value::Atom(Atom::String(s)) => {
             let fallback = text(tcx, s, &cx.styles.string);
-            let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
+            let content = atom_content(editing, fallback, None, tcx, cx.styles, hooks);
             row(0.0, vec![
                 text(tcx, "\"", &cx.styles.string),
                 cursor_target(path.to_vec(), value.clone(), hooks, content),
                 text(tcx, "\"", &cx.styles.string),
             ])
         }
-        Value::Atom(Atom::Number(n)) => {
-            let fallback = text(tcx, &n.get().to_string(), &cx.styles.number);
-            let content = atom_content(editing, fallback, tcx, cx.styles, hooks);
-            cursor_target(path.to_vec(), value.clone(), hooks, content)
-        }
-        // The hardcoded projection chain, decided per value: lists
-        // render as lists — in the Raw view too, the kind being data
-        // — nodes as raw blocks. A registry waits for user-defined
-        // projections.
-        Value::Atom(Atom::Node(node)) => node_view(cx, tcx, path, ancestors, *node, hooks),
+        Value::Atom(Atom::Blob(bytes)) => text(tcx, &blob_text(bytes), &cx.styles.id),
+        // The hardcoded projection chain, decided per value: links
+        // render as their cells, lists and records as themselves —
+        // in the Raw view too, kind being data. A registry waits for
+        // user-defined projections.
+        Value::Atom(Atom::Cell(cell)) => cell_view(cx, tcx, path, ancestors, *cell, hooks),
         Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, hooks),
+        Value::Record(fields) => record_view(cx, tcx, path, ancestors, fields, hooks),
     };
-    // Other projections of the selected edge's value carry the
-    // secondary mark; the selected one has the primary highlight.
+    // Other projections of the selected value carry the secondary
+    // mark; the selected one has the primary highlight.
     let inner = if cx.selected(path) {
         inner
     } else {
@@ -1671,11 +2088,11 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     ground(cx, path, value, placed)
 }
 
-/// A nonexistent edge the selection is authoring: the completion
+/// A nonexistent location the selection is authoring: the completion
 /// query's focused editor, wrapped as an ordinary descend so it
-/// highlights, clicks, and navigates like the edge it may become. Its
-/// placement emits the completion popup for the shell to draw over
-/// the body.
+/// highlights, clicks, and navigates like the value it may become.
+/// Its placement emits the completion popup for the shell to draw
+/// over the body.
 fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -1697,8 +2114,8 @@ fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 
 /// A focused completion query: the editor plus its popup, emitted at
 /// placement for the shell to draw over the body. Serves both pending
-/// stages — a value and a new edge's label (`labels` narrows the
-/// offers to atoms there).
+/// stages — a value and a new field's label (`labels` narrows the
+/// offers there).
 fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -1709,7 +2126,7 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
 ) -> Node<P> {
     let entries = completion_entries(&cx.sources, cx.names, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
-    let content = atom_content(Some(query), fallback, tcx, cx.styles, hooks);
+    let content = atom_content(Some(query), fallback, None, tcx, cx.styles, hooks);
     let edit = hooks.edit.clone();
     let scale = cx.styles.scale;
     decorate(content, move |p: &mut P, rect| {
@@ -1764,9 +2181,11 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
         .map(|entry| {
             let style = match &entry.action {
                 EntryAction::Value(value) if value.as_str().is_some() => &styles.string,
-                EntryAction::Value(value) if value.as_number().is_some() => &styles.number,
+                EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
                 EntryAction::Value(_) => &styles.label,
-                EntryAction::NewNode { .. } | EntryAction::NewList => &styles.dim,
+                EntryAction::NewCell { .. } | EntryAction::NewList | EntryAction::NewRecord => {
+                    &styles.dim
+                }
             };
             let display = highlighted(tcx, &entry.display, &entry.matches, style);
             let detail = entry
@@ -1879,10 +2298,12 @@ fn highlighted<P: Canvas>(
 }
 
 /// An editable atom's content: the selection's focused editor when
-/// this atom is being edited, its static text otherwise.
+/// this atom is being edited — with `placeholder` as its ghost while
+/// empty — its static text otherwise.
 fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     editing: Option<&LineEditState>,
     fallback: Node<P>,
+    placeholder: Option<(&str, &TextStyle)>,
     tcx: &mut TextCtx,
     styles: &RawStyles,
     hooks: &Hooks<C>,
@@ -1890,7 +2311,7 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     match editing {
         Some(line) => {
             let edit_ctx = hooks.edit.clone();
-            text_edit(line, true, &styles.edit, tcx, move |c| edit_ctx(c))
+            text_edit(line, true, &styles.edit, placeholder, tcx, move |c| edit_ctx(c))
         }
         None => fallback,
     }
@@ -1900,7 +2321,7 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 /// parts like a pending row's label, whose plain click deliberately
 /// falls through.
 fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
-    key: Atom,
+    key: Label,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
@@ -1912,18 +2333,18 @@ fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && command(&event.state.modifiers)
-                && pick(ctx, Value::Atom(key.clone()))
+                && pick(ctx, Value::Atom(Atom::from(key.clone())))
         });
     })
 }
 
-/// A plain click-to-select target for `path` — for edge parts like
-/// labels that select without carrying an editor click. With the
-/// command modifier and a pending open, picks `key` — the value the
-/// label displays — into it instead.
+/// A plain click-to-select target for `path` — for parts like labels
+/// and the cell star that select without carrying an editor click.
+/// With the command modifier and a pending open, picks `value` — the
+/// identity the part displays — into it instead.
 fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
     path: Path,
-    key: Atom,
+    value: Value,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
@@ -1933,13 +2354,13 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
-        let key = key.clone();
+        let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
                     let picked = command(&event.state.modifiers)
-                        && pick(ctx, Value::Atom(key.clone()));
+                        && pick(ctx, value.clone());
                     if !picked {
                         select(ctx, target.clone(), None);
                     }
@@ -1990,15 +2411,28 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::Gid;
     use ui_events::keyboard::{KeyState, Modifiers};
 
-    fn src<'a>(doc: &'a Document, library: &'a MutGid) -> Sources<'a> {
+    fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
         Sources { doc, library }
     }
 
     fn key(s: &str) -> Step {
-        Step::Key(Atom::from(s))
+        Step::Key(Label::from(s))
+    }
+
+    /// A one-cell document: the root links a cell holding `fields`.
+    fn doc_of(fields: Vec<(Label, Value)>) -> (Document, CellId) {
+        let mut cells = Cells::new();
+        let cell = new_cell_id();
+        cells.set_value(cell, Value::record(fields));
+        (
+            Document {
+                root: Some(Value::from(cell)),
+                cells,
+            },
+            cell,
+        )
     }
 
     /// The ordered positions of a list value's elements.
@@ -2079,168 +2513,194 @@ mod tests {
     }
 
     #[test]
-    fn selecting_an_atom_edge_brings_an_editor() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("name"), Value::from("old"));
-        gid.set(node, Atom::from("x"), Value::from(1.5));
-        let doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let at = |labels: &[&str]| {
-            Selection::edge(&src(&doc, &lib), labels.iter().map(|s| key(s)).collect())
-        };
-        assert!(at(&["name"]).edit().is_some());
-        assert!(at(&["x"]).edit().is_some());
-        // Missing edges and node values carry no editor (this root is
-        // a node; an atom root would).
-        assert!(at(&["missing"]).edit().is_none());
-        assert!(at(&[]).edit().is_none());
+    fn selecting_a_string_brings_an_editor() {
+        let lib = Cells::new();
+        let (mut doc, cell) = doc_of(vec![
+            (Label::from("name"), Value::from("old")),
+            (Label::from("x"), Value::from("1.5")),
+        ]);
+        let at = |doc: &Document, path: Vec<Step>| Selection::edge(&src(doc, &lib), path);
+        assert!(at(&doc, vec![Step::Follow, key("name")]).edit().is_some());
+        assert!(at(&doc, vec![Step::Follow, key("x")]).edit().is_some());
+        // Missing fields, links, and blobs carry no editor.
+        assert!(at(&doc, vec![Step::Follow, key("missing")]).edit().is_none());
+        assert!(at(&doc, vec![]).edit().is_none());
+        doc.cells
+            .set_value(cell, Value::record([(Label::from("b"), Value::from(vec![0xff_u8]))]));
+        assert!(at(&doc, vec![Step::Follow, key("b")]).edit().is_none());
+        // A cell holding a string edits at its Follow path.
+        doc.cells.set_value(cell, Value::from("held"));
+        assert!(at(&doc, vec![Step::Follow]).edit().is_some());
+        // A named cell's name edits at its Name path.
+        doc.cells.set_name(cell, "roof");
+        assert!(at(&doc, vec![Step::Name]).edit().is_some());
+        assert!(at(&doc, vec![Step::Follow, Step::Name]).edit().is_none());
     }
 
     #[test]
-    fn number_edits_write_only_when_they_parse() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("x"), Value::from(1.5));
-        let mut doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let path = vec![key("x")];
+    fn edits_write_through_to_the_field() {
+        let lib = Cells::new();
+        let (mut doc, _) = doc_of(vec![(Label::from("name"), Value::from("old"))]);
+        let path = vec![Step::Follow, key("name")];
         let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
-
-        selection.edit_mut().unwrap().set_text("2.5");
-        write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from(2.5)));
-
-        // Half-typed states leave the last parsed value in place.
-        for unparsable in ["2.5e", "", "-", "abc"] {
-            selection.edit_mut().unwrap().set_text(unparsable);
-            write_through(&mut doc, &lib, &mut selection);
-            assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from(2.5)));
-        }
-
-        selection.edit_mut().unwrap().set_text("-3");
-        write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from(-3.0)));
-    }
-
-    #[test]
-    fn edits_write_through_to_the_edge() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("name"), Value::from("old"));
-        let mut doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let mut selection = Selection::edge(&src(&doc, &lib), vec![key("name")]);
         selection.edit_mut().unwrap().set_text("new");
         write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(src(&doc, &lib).resolve(&[key("name")]), Some(&Value::from("new")));
+        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from("new")));
         // A selection without an editor writes nothing.
-        let mut plain = Selection::edge(&src(&doc, &lib), vec![key("missing")]);
+        let mut plain = Selection::edge(&src(&doc, &lib), vec![Step::Follow, key("missing")]);
         assert!(!write_through(&mut doc, &lib, &mut plain));
-        assert_eq!(src(&doc, &lib).resolve(&[key("name")]), Some(&Value::from("new")));
+        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from("new")));
     }
 
     #[test]
-    fn element_edits_rebuild_the_list_at_its_edge() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(
-            node,
-            Atom::from("dash"),
-            Value::list([Value::from(2.0), Value::from(3.0)]),
-        );
-        let mut doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let list_path = vec![key("dash")];
+    fn element_edits_rebuild_the_list_at_the_owning_cell() {
+        let lib = Cells::new();
+        let (mut doc, _) = doc_of(vec![(
+            Label::from("dash"),
+            Value::list([Value::from("2"), Value::from("3")]),
+        )]);
+        let list_path = vec![Step::Follow, key("dash")];
         let ps = positions(src(&doc, &lib).resolve(&list_path).unwrap());
-        let element = vec![key("dash"), Step::Element(ps[1].clone())];
+        let element = vec![Step::Follow, key("dash"), Step::Element(ps[1].clone())];
 
         // Editing an element writes the whole rebuilt list at the
-        // owning edge; the sibling keeps its position and value.
+        // owning cell; the sibling keeps its position and value.
         let mut selection = Selection::edge(&src(&doc, &lib), element.clone());
         selection.edit_mut().unwrap().set_text("9");
         assert!(write_through(&mut doc, &lib, &mut selection));
-        assert_eq!(src(&doc, &lib).resolve(&element), Some(&Value::from(9.0)));
+        assert_eq!(src(&doc, &lib).resolve(&element), Some(&Value::from("9")));
         assert_eq!(
             src(&doc, &lib).resolve(&list_path),
-            Some(&Value::list([Value::from(2.0), Value::from(9.0)]))
+            Some(&Value::list([Value::from("2"), Value::from("9")]))
         );
         assert_eq!(positions(src(&doc, &lib).resolve(&list_path).unwrap()), ps);
     }
 
     #[test]
-    fn set_value_writes_edges_elements_and_the_root() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("x"), Value::from(1.0));
-        let mut doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        assert!(set_value(&mut doc, &lib, &[key("x")], Value::from(2.0)));
-        assert_eq!(src(&doc, &lib).resolve(&[key("x")]), Some(&Value::from(2.0)));
+    fn set_value_writes_fields_elements_roots_and_bare_cells() {
+        let lib = Cells::new();
+        let (mut doc, cell) = doc_of(vec![(Label::from("x"), Value::from("1"))]);
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[Step::Follow, key("x")],
+            Value::from("2")
+        ));
+        assert_eq!(
+            src(&doc, &lib).resolve(&[Step::Follow, key("x")]),
+            Some(&Value::from("2"))
+        );
 
-        // A fresh element step INSERTS at its position — commit's
-        // shape — and a deep spine rebuilds through nested lists.
-        let inner = Value::list([Value::from(1.0)]);
-        gid_set(&mut doc, node, "items", Value::list([inner]));
-        let items = src(&doc, &lib).resolve(&[key("items")]).unwrap().clone();
-        let outer = positions(&items);
-        let inner_positions = positions(items.as_list().unwrap().values().next().unwrap());
-        let deep = vec![
-            key("items"),
-            Step::Element(outer[0].clone()),
-            Step::Element(inner_positions[0].clone()),
-        ];
-        assert!(set_value(&mut doc, &lib, &deep, Value::from(7.0)));
-        assert_eq!(src(&doc, &lib).resolve(&deep), Some(&Value::from(7.0)));
-        let fresh = position::between(Some(&outer[0]), None).unwrap();
-        let appended = vec![key("items"), Step::Element(fresh.clone())];
-        assert!(set_value(&mut doc, &lib, &appended, Value::from("tail")));
-        assert_eq!(src(&doc, &lib).resolve(&appended), Some(&Value::from("tail")));
-        // A deeper step under a missing element declines.
-        let gone = position::between(Some(&fresh), None).unwrap();
+        // A fresh Key step INSERTS a field; a deep spine rebuilds
+        // through nested records and lists.
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[Step::Follow, key("at")],
+            Value::record([(Label::from("row"), Value::from("top"))]),
+        ));
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[Step::Follow, key("at"), key("row")],
+            Value::from("bottom")
+        ));
+        assert_eq!(
+            src(&doc, &lib).resolve(&[Step::Follow, key("at"), key("row")]),
+            Some(&Value::from("bottom"))
+        );
+
+        // The whole cell value is addressable at Follow: conversion
+        // is one set.
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[Step::Follow],
+            Value::list([Value::from("a")])
+        ));
+        assert_eq!(
+            src(&doc, &lib).resolve(&[Step::Follow]),
+            Some(&Value::list([Value::from("a")]))
+        );
+
+        // A bare cell takes its first value through the empty spine;
+        // deeper steps into nothing decline.
+        let bare = new_cell_id();
+        doc.root = Some(Value::from(bare));
         assert!(!set_value(
             &mut doc,
             &lib,
-            &[key("items"), Step::Element(gone), Step::Element(fresh)],
-            Value::from(0.0)
+            &[Step::Follow, key("x")],
+            Value::from("v")
         ));
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[Step::Follow],
+            Value::record([(Label::from("x"), Value::from("v"))])
+        ));
+        assert_eq!(
+            src(&doc, &lib).resolve(&[Step::Follow, key("x")]),
+            Some(&Value::from("v"))
+        );
 
+        // An inline record at the root writes on the root spine — no
+        // cell involved.
+        doc.root = Some(Value::record([(Label::from("shape"), Value::from(cell))]));
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[key("title")],
+            Value::from("scene")
+        ));
+        assert_eq!(
+            src(&doc, &lib).resolve(&[key("title")]),
+            Some(&Value::from("scene"))
+        );
         assert!(set_value(&mut doc, &lib, &[], Value::from("root")));
         assert_eq!(doc.root, Some(Value::from("root")));
-        // A parent that is not a node declines.
-        assert!(!set_value(&mut doc, &lib, &[key("x"), key("y")], Value::from(0.0)));
+        // A parent that is not a record declines.
+        assert!(!set_value(&mut doc, &lib, &[key("x")], Value::from("0")));
     }
 
-    fn gid_set(doc: &mut Document, entity: NodeId, label: &str, value: Value) {
-        doc.gid.set(entity, Atom::from(label), value);
+    #[test]
+    fn external_cells_decline_writes_and_bare_cells_accept() {
+        let mut lib = Cells::new();
+        let lib_cell = new_cell_id();
+        lib.set_name(lib_cell, "convention");
+        lib.set_value(lib_cell, Value::record([(Label::from("a"), Value::from("1"))]));
+        let mut doc = Document {
+            root: Some(Value::from(lib_cell)),
+            cells: Cells::new(),
+        };
+        // The library's cell declines writes wholesale — fields,
+        // value, and name alike.
+        assert!(!set_value(
+            &mut doc,
+            &lib,
+            &[Step::Follow, key("a")],
+            Value::from("2")
+        ));
+        assert!(!set_name(&mut doc, &lib, &[Step::Name], "mine"));
+        assert!(!delete_edge(&mut doc, &lib, &[Step::Follow, key("a")]));
+        assert!(!delete_edge(&mut doc, &lib, &[Step::Follow]));
+        // Forking — the document taking the cell over — writes.
+        doc.cells
+            .set_value(lib_cell, Value::record([(Label::from("a"), Value::from("1"))]));
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[Step::Follow, key("a")],
+            Value::from("2")
+        ));
     }
 
     #[test]
     fn write_through_opens_one_step_per_editor_life() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("name"), Value::from("a"));
-        let mut doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let mut selection = Selection::edge(&src(&doc, &lib), vec![key("name")]);
+        let lib = Cells::new();
+        let (mut doc, _) = doc_of(vec![(Label::from("name"), Value::from("a"))]);
+        let path = vec![Step::Follow, key("name")];
+        let mut selection = Selection::edge(&src(&doc, &lib), path);
 
         // First write opens the step; the rest of the run is silent,
         // as are no-op rewrites.
@@ -2256,1153 +2716,366 @@ mod tests {
         assert!(write_through(&mut doc, &lib, &mut selection));
 
         // A re-minted editor is a new run by construction.
-        let mut fresh = Selection::edge(&src(&doc, &lib), vec![key("name")]);
+        let mut fresh =
+            Selection::edge(&src(&doc, &lib), vec![Step::Follow, key("name")]);
         fresh.edit_mut().unwrap().set_text("x");
         assert!(write_through(&mut doc, &lib, &mut fresh));
     }
 
     #[test]
-    fn delete_edge_detaches_and_the_root_empties_the_document() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let root = new_node_id();
-        let child = new_node_id();
-        gid.set(root, Atom::from("child"), Value::from(child));
-        gid.set(child, Atom::from("name"), Value::from("c"));
-        let mut doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
+    fn delete_unlinks_fields_and_elements_and_bares_cells() {
+        let lib = Cells::new();
+        let child = new_cell_id();
+        let (mut doc, cell) = doc_of(vec![
+            (Label::from("child"), Value::from(child)),
+            (
+                Label::from("dash"),
+                Value::list([Value::from("2"), Value::from("3")]),
+            ),
+        ]);
+        doc.cells.set_name(child, "c");
 
-        assert!(!delete_edge(&mut doc, &lib, &[key("missing")]));
+        assert!(!delete_edge(&mut doc, &lib, &[Step::Follow, key("missing")]));
 
-        assert!(delete_edge(&mut doc, &lib, &[key("child")]));
-        assert_eq!(src(&doc, &lib).resolve(&[key("child")]), None);
-        // Detachment, not destruction: the orphan keeps its edges.
-        assert!(doc.gid.edges(child).is_some());
-        // Already gone: declines.
-        assert!(!delete_edge(&mut doc, &lib, &[key("child")]));
+        // Unlinking a field drops the link; the linked cell floats in
+        // the table for the orphan pool.
+        assert!(delete_edge(&mut doc, &lib, &[Step::Follow, key("child")]));
+        assert_eq!(src(&doc, &lib).resolve(&[Step::Follow, key("child")]), None);
+        assert!(doc.cells.entry(child).is_some());
 
+        // An element step rebuilds the list without it.
+        let dash = vec![Step::Follow, key("dash")];
+        let ps = positions(src(&doc, &lib).resolve(&dash).unwrap());
+        assert!(delete_edge(
+            &mut doc,
+            &lib,
+            &[Step::Follow, key("dash"), Step::Element(ps[0].clone())]
+        ));
+        assert_eq!(
+            src(&doc, &lib).resolve(&dash),
+            Some(&Value::list([Value::from("3")]))
+        );
+
+        // A trailing Follow removes the cell's value: valueless
+        // again, and a second delete declines.
+        assert!(delete_edge(&mut doc, &lib, &[Step::Follow]));
+        assert!(doc.cells.value(cell).is_none());
+        assert!(src(&doc, &lib).resolve(&[]).is_some());
+        assert!(!delete_edge(&mut doc, &lib, &[Step::Follow]));
+
+        // The empty path empties the document.
         assert!(delete_edge(&mut doc, &lib, &[]));
-        assert_eq!(doc.root, None);
-        assert_eq!(src(&doc, &lib).resolve(&[]), None);
+        assert!(doc.root.is_none());
         assert!(!delete_edge(&mut doc, &lib, &[]));
     }
 
     #[test]
-    fn deleting_an_element_rebuilds_the_list_without_it() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(
-            node,
-            Atom::from("dash"),
-            Value::list([Value::from(2.0), Value::from(3.0)]),
-        );
-        let mut doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let list_path = vec![key("dash")];
-        let ps = positions(src(&doc, &lib).resolve(&list_path).unwrap());
-        let first = vec![key("dash"), Step::Element(ps[0].clone())];
+    fn pendings_normalize_through_links_and_gate_on_authority() {
+        let mut lib = Cells::new();
+        let lib_cell = new_cell_id();
+        lib.set_value(lib_cell, Value::record([(Label::from("a"), Value::from("1"))]));
+        let bare = new_cell_id();
+        let (mut doc, _) = doc_of(vec![
+            (Label::from("at"), Value::record([])),
+            (Label::from("tags"), Value::list([Value::from("x")])),
+            (Label::from("lib"), Value::from(lib_cell)),
+            (Label::from("material"), Value::from(bare)),
+            (Label::from("s"), Value::from("leaf")),
+        ]);
+        doc.root = doc.root.clone();
+        let sources = src(&doc, &lib);
 
-        assert!(delete_edge(&mut doc, &lib, &first));
+        // A link to a record cell pends its field under Follow; an
+        // inline record pends at its own path.
+        let on_cell = pending_edge(&sources, vec![]).unwrap();
+        assert_eq!(on_cell.path(), &[Step::Follow]);
+        let inline = pending_edge(&sources, vec![Step::Follow, key("at")]).unwrap();
+        assert_eq!(inline.path(), &[Step::Follow, key("at")]);
+
+        // Lists, leaf atoms, external cells, and bare cells decline
+        // fields.
+        assert!(pending_edge(&sources, vec![Step::Follow, key("tags")]).is_none());
+        assert!(pending_edge(&sources, vec![Step::Follow, key("s")]).is_none());
+        assert!(pending_edge(&sources, vec![Step::Follow, key("lib")]).is_none());
+        assert!(pending_edge(&sources, vec![Step::Follow, key("material")]).is_none());
+
+        // A bare cell pends its first value at Follow — the
+        // within-gesture's meaning there.
+        let filling = pending_follow(&sources, &[Step::Follow, key("material")]).unwrap();
         assert_eq!(
-            src(&doc, &lib).resolve(&list_path),
-            Some(&Value::list([Value::from(3.0)]))
+            filling.path(),
+            &[Step::Follow, key("material"), Step::Follow]
         );
-        // The survivor keeps its position; the deleted one is a
-        // stale path now and declines again.
-        assert_eq!(
-            positions(src(&doc, &lib).resolve(&list_path).unwrap()),
-            vec![ps[1].clone()]
-        );
-        assert!(!delete_edge(&mut doc, &lib, &first));
+        assert!(pending_follow(&sources, &[Step::Follow, key("lib")]).is_none());
+        assert!(pending_follow(&sources, &[Step::Follow, key("at")]).is_none());
 
-        // Emptying the list leaves the empty list, not nothing.
-        let second = vec![key("dash"), Step::Element(ps[1].clone())];
-        assert!(delete_edge(&mut doc, &lib, &second));
-        assert_eq!(src(&doc, &lib).resolve(&list_path), Some(&Value::list([])));
+        // Into a list through its link, appended at the end.
+        let into = pending_into(&sources, &[Step::Follow, key("tags")]).unwrap();
+        assert!(matches!(
+            into.path().last(),
+            Some(Step::Element(_))
+        ));
+        assert_eq!(into.path().len(), 3);
+
+        // The within chord: fields on records, elements into lists,
+        // first values into bare cells.
+        assert!(pending_insert(&sources, &[], false).is_some());
+        assert!(pending_insert(&sources, &[Step::Follow, key("tags")], false).is_some());
+        assert!(pending_insert(&sources, &[Step::Follow, key("material")], false).is_some());
+        assert!(pending_insert(&sources, &[Step::Follow, key("s")], false).is_none());
     }
 
     #[test]
-    fn root_edits_commit_to_the_document_root() {
-        let lib = MutGid::new();
+    fn queries_resolve_strings_and_blobs() {
+        assert_eq!(resolve_query("hello"), Value::from("hello"));
+        assert_eq!(resolve_query("\"quoted\""), Value::from("quoted"));
+        assert_eq!(resolve_query("\"open"), Value::from("open"));
+        assert_eq!(resolve_query("\"0xff\""), Value::from("0xff"));
+        assert_eq!(resolve_query("0xff00"), Value::from(vec![0xff, 0x00]));
+        // Input is case-tolerant — the value is the bytes, lowercase
+        // just the canonical spelling — and whole bytes only.
+        assert_eq!(resolve_query("0xDEad"), Value::from(vec![0xde, 0xad]));
+        assert_eq!(resolve_query("0xf"), Value::from("0xf"));
+        assert_eq!(resolve_query("0x"), Value::from(vec![]));
+    }
+
+    #[test]
+    fn clipboard_spellings_round_trip() {
+        let cell = new_cell_id();
+        let cases = [
+            Value::from("plain"),
+            Value::from("\"tricky\""),
+            Value::from(vec![0xde, 0xad]),
+            Value::from(cell),
+            Value::list([Value::from("a"), Value::from(cell)]),
+            Value::record([(Label::from("x"), Value::from("1"))]),
+            Value::record([(Label::Cell(cell), Value::from(vec![0x00_u8]))]),
+        ];
+        for value in cases {
+            assert_eq!(from_clipboard(&to_clipboard(&value)), value);
+        }
+        // Atoms read in other apps; alien text pastes sensibly.
+        assert_eq!(to_clipboard(&Value::from("hi")), "\"hi\"");
+        assert_eq!(to_clipboard(&Value::from(vec![0xff_u8])), "0xff");
+        assert_eq!(from_clipboard("loose text"), Value::from("loose text"));
+    }
+
+    #[test]
+    fn completion_offers_follow_the_stage() {
+        let lib = crate::conventions::library();
+        let (mut doc, cell) = doc_of(vec![(Label::from("kind"), Value::from("building"))]);
+        doc.cells.set_name(cell, "roof");
+        let sources = src(&doc, &lib);
+        let names = Names::table();
+        let displays = |labels: bool, query: &str| -> Vec<String> {
+            completion_entries(&sources, &names, false, labels, query)
+                .into_iter()
+                .map(|entry| entry.display)
+                .collect()
+        };
+
+        // The value stage offers the string, references, the value
+        // constructors, and the mint.
+        let value_stage = displays(false, "");
+        assert!(value_stage.iter().any(|d| d == "roof"));
+        assert!(value_stage.iter().any(|d| d == "new list"));
+        assert!(value_stage.iter().any(|d| d == "new record"));
+        assert!(value_stage.iter().any(|d| d == "new cell"));
+
+        // The label stage narrows to what can label: no list, record,
+        // or blob offers.
+        let label_stage = displays(true, "");
+        assert!(label_stage.iter().all(|d| d != "new list"));
+        assert!(label_stage.iter().all(|d| d != "new record"));
+        assert!(label_stage.iter().any(|d| d == "new cell"));
+        let label_blob = completion_entries(&sources, &names, false, true, "0xff");
+        assert!(matches!(
+            &label_blob[0].action,
+            EntryAction::Value(value) if value.as_str() == Some("0xff")
+        ));
+
+        // A blob query leads with the blob, its string form below.
+        let value_blob = displays(false, "0xff");
+        assert_eq!(value_blob[0], "0xff");
+        assert_eq!(value_blob[1], "\"0xff\"");
+
+        // Reference commits are links.
+        let roof = completion_entries(&sources, &names, false, false, "roof");
+        assert!(matches!(
+            &roof[0].action,
+            EntryAction::Value(value) if value.as_cell() == Some(cell)
+        ));
+    }
+
+    #[test]
+    fn minting_seeds_names_and_bare_cells() {
         let mut doc = Document {
-            root: Some(Value::from("old")),
-            gid: MutGid::new(),
+            root: None,
+            cells: Cells::new(),
         };
-        let mut selection = Selection::edge(&src(&doc, &lib), vec![]);
-        selection.edit_mut().unwrap().set_text("new");
-        write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(doc.root, Some(Value::from("new")));
+        // A named mint is the red link: a name and nothing else.
+        let named = resolve_entry(
+            &mut doc,
+            &EntryAction::NewCell {
+                name: Some("roof".to_string()),
+            },
+        );
+        let named_cell = named.as_cell().unwrap();
+        assert_eq!(doc.cells.name(named_cell), Some("roof"));
+        assert!(doc.cells.value(named_cell).is_none());
+        // An unnamed mint is fully bare: a link with nothing said at
+        // all.
+        let bare = resolve_entry(&mut doc, &EntryAction::NewCell { name: None });
+        assert!(doc.cells.entry(bare.as_cell().unwrap()).is_none());
+        // The value constructors commit pure values — nothing minted.
+        assert_eq!(
+            resolve_entry(&mut doc, &EntryAction::NewList),
+            Value::list([])
+        );
+        assert_eq!(
+            resolve_entry(&mut doc, &EntryAction::NewRecord),
+            Value::record([])
+        );
     }
 
     #[test]
-    fn selection_after_delete_prefers_next_then_previous_then_parent() {
-        let ds = descends(&[vec![], vec!["a"], vec!["a", "x"], vec!["a", "y"], vec!["b"]]);
-        let path = |p: &[&str]| p.iter().map(|s| key(s)).collect::<Vec<_>>();
-        assert_eq!(selection_after_delete(&ds, &path(&["a"])), path(&["b"]));
-        assert_eq!(selection_after_delete(&ds, &path(&["b"])), path(&["a"]));
-        assert_eq!(selection_after_delete(&ds, &path(&["a", "x"])), path(&["a", "y"]));
-        // An only child falls back to its parent.
-        let only = descends(&[vec![], vec!["a"], vec!["a", "x"]]);
-        assert_eq!(selection_after_delete(&only, &path(&["a", "x"])), path(&["a"]));
+    fn the_sample_document_shows_the_constructs() {
+        let doc = sample_document();
+        let lib = crate::conventions::library();
+        let sources = src(&doc, &lib);
+        // The root is an inline record of roles.
+        assert!(doc.root.as_ref().unwrap().as_record().is_some());
+        let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
+        assert_eq!(sources.name(roof), Some("roof"));
+        // The material cell is referenced and fully bare.
+        let material = sources
+            .resolve(&[key("shape"), Step::Follow, key("material")])
+            .unwrap()
+            .as_cell()
+            .unwrap();
+        assert!(sources.entry(material).is_none());
+        // The stroke cell is the named bare floater, referenced only
+        // as a label.
+        let stroke = sources
+            .value(roof)
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .keys()
+            .find_map(Label::as_cell)
+            .unwrap();
+        assert_eq!(sources.name(stroke), Some("stroke"));
+        assert!(sources.value(stroke).is_none());
+        // The style cell is shared by the root and the roof.
+        assert_eq!(
+            sources.resolve(&[key("style")]),
+            sources.resolve(&[key("shape"), Step::Follow, key("style")])
+        );
+        // Points hold inline records; the swatch is a blob.
+        let points = sources
+            .resolve(&[key("shape"), Step::Follow, key("points")])
+            .unwrap();
+        let origin = points.as_list().unwrap().values().next().unwrap().as_cell().unwrap();
+        assert!(matches!(
+            sources
+                .value(origin)
+                .and_then(|value| value.as_record())
+                .and_then(|fields| fields.get(&Label::from("at"))),
+            Some(Value::Record(_))
+        ));
+        assert!(sources
+            .resolve(&[key("style"), Step::Follow, key("swatch")])
+            .unwrap()
+            .as_blob()
+            .is_some());
+        // Documents round trip, names included.
+        let json = serde_json::to_string(&doc).unwrap();
+        let loaded: Document = serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded.root, doc.root);
+        assert_eq!(loaded.cells.name(roof), Some("roof"));
+        assert_eq!(serde_json::to_string(&loaded).unwrap(), json);
     }
 
     #[test]
-    fn pending_insertions_mint_between_neighbors() {
-        let lib = MutGid::new();
-        let doc = Document {
-            root: Some(Value::list([Value::from("a"), Value::from("b")])),
-            gid: MutGid::new(),
+    fn selecting_an_empty_value_slot_pends() {
+        let mut lib = Cells::new();
+        let bare = new_cell_id();
+        let mut doc = Document {
+            root: Some(Value::from(bare)),
+            cells: Cells::new(),
         };
-        let ps = positions(doc.root.as_ref().unwrap());
-        let first = vec![Step::Element(ps[0].clone())];
-
-        let Some(Selection::Pending { path, .. }) = pending_after(&src(&doc, &lib), &first) else {
-            panic!("pending after");
-        };
-        let Step::Element(minted) = &path[0] else {
-            panic!("an element step");
-        };
-        assert!(ps[0] < *minted && *minted < ps[1]);
-
-        let Some(Selection::Pending { path, .. }) = pending_before(&src(&doc, &lib), &first) else {
-            panic!("pending before");
-        };
-        let Step::Element(minted) = &path[0] else {
-            panic!("an element step");
-        };
-        assert!(*minted < ps[0]);
-
-        // Into the root list appends at the end; the first variant
-        // prepends.
-        let Some(Selection::Pending { path, .. }) = pending_into(&src(&doc, &lib), &[]) else {
-            panic!("pending into");
-        };
-        let Step::Element(minted) = &path[0] else {
-            panic!("an element step");
-        };
-        assert!(ps[1] < *minted);
-        let Some(Selection::Pending { path, .. }) = pending_into_first(&src(&doc, &lib), &[]) else {
-            panic!("pending into first");
-        };
-        let Step::Element(minted) = &path[0] else {
-            panic!("an element step");
-        };
-        assert!(*minted < ps[0]);
-
-        // A record field has no position to sit beside, and a record
-        // takes no positional element — lists do, by type.
-        let mut gid = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("name"), Value::from("x"));
-        let doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        assert!(pending_after(&src(&doc, &lib), &[key("name")]).is_none());
-        assert!(pending_into(&src(&doc, &lib), &[key("name")]).is_none());
-        assert!(pending_into(&src(&doc, &lib), &[]).is_none());
-        assert!(pending_into_first(&src(&doc, &lib), &[]).is_none());
-        // An empty document offers the root; a rooted one does not.
-        assert!(pending_root(&src(&doc, &lib)).is_none());
+        // A writable valueless cell's Follow slot is already
+        // authoring: selecting it (the rendered placeholder) pends.
+        assert!(matches!(
+            Selection::edge(&src(&doc, &lib), vec![Step::Follow]),
+            Selection::Pending { .. }
+        ));
+        // Valued, it selects normally.
+        doc.cells.set_value(bare, Value::from("v"));
+        assert!(matches!(
+            Selection::edge(&src(&doc, &lib), vec![Step::Follow]),
+            Selection::Edge { .. }
+        ));
+        // An EXTERNAL valueless cell declines the pend — a pending
+        // that cannot commit is an affordance lie.
+        let lib_bare = new_cell_id();
+        lib.set_name(lib_bare, "convention");
+        doc.root = Some(Value::from(lib_bare));
+        assert!(matches!(
+            Selection::edge(&src(&doc, &lib), vec![Step::Follow]),
+            Selection::Edge { edit: None, .. }
+        ));
+        // The empty document's root is the same rule.
         let empty = Document {
             root: None,
-            gid: MutGid::new(),
+            cells: Cells::new(),
         };
         assert!(matches!(
-            pending_root(&src(&empty, &lib)),
-            Some(Selection::Pending { path, .. }) if path.is_empty()
-        ));
-        // Selecting the empty root pends immediately.
-        assert!(matches!(
-            Selection::edge(&src(&empty, &lib), Vec::new()),
+            Selection::edge(&src(&empty, &lib), vec![]),
             Selection::Pending { .. }
         ));
     }
 
     #[test]
-    fn an_empty_list_takes_its_first_element() {
-        let mut gid = MutGid::new();
-        let root = new_node_id();
-        gid.set(root, Atom::from("holes"), Value::list([]));
-        gid.set(root, Atom::from("x"), Value::from(1.0));
-        let doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let lib = MutGid::new();
-
-        let Some(Selection::Pending { path, .. }) =
-            pending_insert(&src(&doc, &lib), &[key("holes")], true)
-        else {
-            panic!("first element into the empty list");
-        };
-        assert_eq!(path.len(), 2);
-        assert!(matches!(&path[1], Step::Element(_)));
-
-        // A record still declines the positional chord.
-        assert!(pending_insert(&src(&doc, &lib), &[], true).is_none());
-    }
-
-    #[test]
-    fn within_on_a_list_appends_an_element() {
-        let mut gid = MutGid::new();
-        let root = new_node_id();
-        let items = Value::list([Value::from(1.0)]);
-        gid.set(root, Atom::from("items"), items.clone());
-        let doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let lib = MutGid::new();
-        let sources = src(&doc, &lib);
-
-        // Lists hold no fields — structurally: the label pending
-        // declines, and the within chord appends an element instead.
-        let path = vec![key("items")];
-        assert!(pending_edge(&sources, path.clone()).is_none());
-        let Some(Selection::Pending { path: fresh, .. }) = pending_insert(&sources, &path, false)
-        else {
-            panic!("within on a list appends");
-        };
-        let Step::Element(minted) = &fresh[1] else {
-            panic!("an element step");
-        };
-        assert!(positions(&items).last().unwrap() < minted);
-
-        // Enter on a root list falls within the same way.
-        let doc = Document {
-            root: Some(items),
-            gid: doc.gid.clone(),
-        };
-        assert!(matches!(
-            pending_enter(&src(&doc, &lib), &[], false),
-            Some(Selection::Pending { .. })
-        ));
-    }
-
-    #[test]
-    fn enter_continues_beside_and_the_chord_authors_within() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let nested = new_node_id();
-        let items = Value::list([Value::from("a"), Value::from(nested)]);
-        let record = new_node_id();
-        gid.set(record, Atom::from("items"), items.clone());
-        gid.set(record, Atom::from("x"), Value::from(1.0));
-        let doc = Document {
-            root: Some(Value::from(record)),
-            gid,
-        };
-        let ps = positions(&items);
-        let items_path = vec![key("items")];
-        let first = vec![key("items"), Step::Element(ps[0].clone())];
-        let second = vec![key("items"), Step::Element(ps[1].clone())];
-        let minted_in = |path: &[Step]| match path.last() {
-            Some(Step::Element(position)) => position.clone(),
-            _ => panic!("an element step"),
-        };
-
-        // Enter continues the enumeration: any element — atom or node
-        // — pends a sibling (before with shift).
-        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, false) else {
-            panic!("sibling after");
-        };
-        let minted = minted_in(&path);
-        assert!(ps[0] < minted && minted < ps[1]);
-        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &first, true) else {
-            panic!("sibling before");
-        };
-        assert!(minted_in(&path) < ps[0]);
-        let Some(Selection::Pending { path, .. }) = pending_enter(&src(&doc, &lib), &second, false) else {
-            panic!("node element sibling");
-        };
-        assert!(ps[1] < minted_in(&path));
-
-        // A field value — atom or node — pends the parent's next
-        // field; the root has nothing beside it and takes the field
-        // on itself.
-        assert!(matches!(
-            pending_enter(&src(&doc, &lib), &[key("x")], false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-        assert!(matches!(
-            pending_enter(&src(&doc, &lib), &items_path, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-        assert!(matches!(
-            pending_enter(&src(&doc, &lib), &[], false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-
-        // The chord authors within: a field edge on the selected map
-        // — empty nodes included — and an appended element on a
-        // list, which holds no fields; atoms decline.
-        let Some(Selection::Pending { path, .. }) =
-            pending_insert(&src(&doc, &lib), &items_path, false)
-        else {
-            panic!("within on a list appends");
-        };
-        assert!(ps[1] < minted_in(&path));
-        assert!(matches!(
-            pending_insert(&src(&doc, &lib), &second, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent == second
-        ));
-        assert!(pending_insert(&src(&doc, &lib), &first, false).is_none());
-
-        // Shift is the positional variant: a first element at the
-        // front — prepend on a list — declining on records, empty
-        // nodes (maps take fields, not elements), and atoms.
-        let Some(Selection::Pending { path, .. }) = pending_insert(&src(&doc, &lib), &items_path, true)
-        else {
-            panic!("prepend");
-        };
-        assert!(minted_in(&path) < ps[0]);
-        assert!(pending_insert(&src(&doc, &lib), &second, true).is_none());
-        assert!(pending_insert(&src(&doc, &lib), &[], true).is_none());
-        assert!(pending_insert(&src(&doc, &lib), &first, true).is_none());
-    }
-
-    #[test]
-    fn sibling_stepping_continues_through_ancestors() {
-        let all = descends(&[
-            vec![],
-            vec!["a"],
-            vec!["a", "x"],
-            vec!["a", "y"],
-            vec!["b"],
-        ]);
-        let at = |labels: &[&str]| -> Path { labels.iter().map(|s| key(s)).collect() };
-
-        // Within a parent: plain sibling steps.
-        assert_eq!(sibling(&all, &at(&["a", "x"]), true), Some(at(&["a", "y"])));
-        // Past the last child, Down flows to the enclosing next
-        // sibling; Up mirrors from the first child.
-        assert_eq!(sibling(&all, &at(&["a", "y"]), true), Some(at(&["b"])));
-        assert_eq!(sibling(&all, &at(&["b"]), false), Some(at(&["a"])));
-        assert_eq!(sibling(&all, &at(&["a", "x"]), false), None);
-        // The document's ends still end.
-        assert_eq!(sibling(&all, &at(&["b"]), true), None);
-    }
-
-    #[test]
-    fn secondary_is_the_selected_edges_value_lists_included() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let shared = new_node_id();
-        gid.set(shared, Atom::from("x"), Value::from(1.0));
-        let root = new_node_id();
-        gid.set(root, Atom::from("a"), Value::from(shared));
-        gid.set(root, Atom::from("b"), Value::from(shared));
-        gid.set(root, Atom::from("pair"), Value::list([Value::from(2.0)]));
-        let doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let edge = |path: Vec<Step>| Selection::Edge {
-            path,
-            edit: None,
-            recorded: false,
-        };
-
-        assert_eq!(
-            secondary_of(&src(&doc, &lib), Some(&edge(vec![key("a")]))),
-            Some(Value::from(shared))
-        );
-        // Atoms are values too, and so are lists — equal lists mark
-        // alike, value semantics displayed honestly.
-        assert_eq!(
-            secondary_of(&src(&doc, &lib), Some(&edge(vec![key("a"), key("x")]))),
-            Some(Value::from(1.0))
-        );
-        assert_eq!(
-            secondary_of(&src(&doc, &lib), Some(&edge(vec![key("pair")]))),
-            Some(Value::list([Value::from(2.0)]))
-        );
-        // Pendings and no selection don't mark.
-        assert_eq!(
-            secondary_of(&src(&doc, &lib), Some(&pending_value(vec![key("c")]))),
-            None
-        );
-        assert_eq!(secondary_of(&src(&doc, &lib), None), None);
-    }
-
-    #[test]
-    fn pending_edge_targets_nodes_only() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("name"), Value::from("x"));
-        let doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        assert!(matches!(
-            pending_edge(&src(&doc, &lib), Vec::new()),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-        // An atom takes no edges; an empty document has no node.
-        assert!(pending_edge(&src(&doc, &lib), vec![key("name")]).is_none());
-        let empty = Document {
-            root: None,
-            gid: MutGid::new(),
-        };
-        assert!(pending_edge(&src(&empty, &lib), Vec::new()).is_none());
-    }
-
-    #[test]
-    fn completion_offers_atom_references_and_new_node() {
-        let mut gid = MutGid::new();
-        for name in ["origin", "corner"] {
-            let node = new_node_id();
-            gid.set(node, Atom::Node(NAME), Value::from(name));
-        }
-        let names = Names::convention();
-        // An empty library keeps the offer counts about the document.
-        let empty = MutGid::new();
-        let complete = |gid: &MutGid, root: Option<&Value>, query: &str, names: &Names| {
-            let doc = Document {
-                root: root.cloned(),
-                gid: gid.clone(),
-            };
-            completion_entries(&src(&doc, &empty), names, false, false, query)
-        };
-
-        // A confident reference match outranks the typed string;
-        // "corner" has no i, so only "origin" matches the query.
-        let entries = complete(&gid, None, "orig", &names);
-        assert_eq!(entries[0].display, "origin");
-        assert!(entries[0].detail.is_some());
-        assert_eq!(entries[1].display, "\"orig\"");
-        assert!(matches!(&entries[1].action, EntryAction::Value(v) if v.as_str().is_some()));
-        // "new list" ranks like a reference and "orig" doesn't match
-        // it, so the named creation offer is the one trailer.
-        assert_eq!(entries.len(), 3);
-        assert!(matches!(
-            &entries.last().unwrap().action,
-            EntryAction::NewNode { name: Some(name) } if name == "orig"
-        ));
-
-        // A leading quote forces the string back on top, closed or
-        // not, and the new node's name drops the quotes.
-        let entries = complete(&gid, None, "\"orig", &names);
-        assert!(matches!(&entries[0].action, EntryAction::Value(v) if v.as_str() == Some("orig")));
-        assert!(matches!(
-            &entries.last().unwrap().action,
-            EntryAction::NewNode { name: Some(name) } if name == "orig"
-        ));
-
-        // An empty query offers every node — the NAME label is
-        // itself an unnamed node here — plus "new list", unnamed
-        // creation, and the empty string.
-        let entries = complete(&gid, None, "", &names);
-        assert_eq!(entries.len(), 6);
-        assert!(
-            entries
-                .iter()
-                .any(|entry| matches!(entry.action, EntryAction::NewList))
-        );
-        assert!(matches!(
-            &entries.last().unwrap().action,
-            EntryAction::NewNode { name: None }
-        ));
-
-        // Typing toward "new list" surfaces it (a prefix match leads
-        // the references); typing away drops it entirely. The label
-        // stage never offers it: a key must mean.
-        let entries = complete(&gid, None, "new li", &names);
-        assert!(matches!(entries[0].action, EntryAction::NewList));
-        let entries = complete(&gid, None, "asdf", &names);
-        assert!(
-            !entries
-                .iter()
-                .any(|entry| matches!(entry.action, EntryAction::NewList))
-        );
-        let doc = Document {
-            root: None,
-            gid: gid.clone(),
-        };
-        let label_entries = completion_entries(&src(&doc, &empty), &names, false, true, "");
-        assert!(
-            !label_entries
-                .iter()
-                .any(|entry| matches!(entry.action, EntryAction::NewList))
-        );
-
-        // Numbers infer as the atom entry and lead — with the typed
-        // text always insertable as a string right below.
-        let entries = complete(&gid, None, "2.5", &names);
-        assert!(matches!(&entries[0].action, EntryAction::Value(v) if v.as_number() == Some(2.5)));
-        assert!(matches!(&entries[1].action, EntryAction::Value(v) if v.as_str() == Some("2.5")));
-        // A quote is stated string intent: no number offer rides along.
-        let entries = complete(&gid, None, "\"2.5", &names);
-        assert!(matches!(&entries[0].action, EntryAction::Value(v) if v.as_str() == Some("2.5")));
-        assert!(
-            !entries
-                .iter()
-                .any(|entry| matches!(&entry.action, EntryAction::Value(v) if v.as_number().is_some()))
-        );
-
-        // Unnamed nodes are offered too, searchable by the short id
-        // they render as — including edgeless ones referenced only
-        // inside a list value — and an exact suffix ranks first. A
-        // hex suffix can happen to parse as a number ("12345",
-        // "12e45") and legitimately cede the lead to the atom, so
-        // pick one that doesn't.
-        let orphan = std::iter::repeat_with(new_node_id)
-            .find(|node| {
-                short_id(*node)
-                    .trim_start_matches('…')
-                    .parse::<f64>()
-                    .is_err()
-            })
-            .unwrap();
-        let scratch = new_node_id();
-        gid.set(scratch, Atom::from("refs"), Value::list([Value::from(orphan)]));
-        let suffix = short_id(orphan);
-        let entries = complete(&gid, None, suffix.trim_start_matches('…'), &names);
-        assert_eq!(entries[0].display, suffix);
-        assert!(entries[0].detail.is_none());
-        assert!(
-            matches!(&entries[0].action, EntryAction::Value(v) if v.as_node() == Some(orphan))
-        );
-
-        // The root's reference is a Document field, not a gid edge -
-        // a fresh edgeless node at root is still offered.
-        let root = new_node_id();
-        let root_value = Value::from(root);
-        let entries = complete(&gid, Some(&root_value), "", &names);
-        assert!(entries.iter().any(
-            |entry| matches!(&entry.action, EntryAction::Value(v) if v.as_node() == Some(root))
-        ));
-    }
-
-    #[test]
-    fn the_name_policy_is_editor_state() {
-        let library = crate::conventions::library();
-        let mut gid = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::Node(NAME), Value::from("origin"));
-        let doc = Document {
-            root: None,
-            gid: gid.clone(),
-        };
-        let sources = src(&doc, &library);
-
-        // The name carries its provenance: the consumed edge label.
-        let name = Names::convention().of(&sources, node).unwrap();
-        assert_eq!(name.text, "origin");
-        assert_eq!(name.label, Some(Atom::Node(NAME)));
-
-        // The convention node's own name is library DATA, and a
-        // document's stored name shadows it.
-        let convention = Names::convention().of(&sources, NAME).unwrap();
-        assert_eq!(convention.text, "name");
-        assert_eq!(convention.label, Some(Atom::Node(NAME)));
-        gid.set(NAME, Atom::Node(NAME), Value::from("nombre"));
-        let doc = Document { root: None, gid };
-        let sources = src(&doc, &library);
-        let stored = Names::convention().of(&sources, NAME).unwrap();
-        assert_eq!(stored.text, "nombre");
-
-        // Completion keys derive from the raw bit: raw offers the
-        // node by its short id, so the name no longer matches — the
-        // policy itself is never swapped.
-        let entries = completion_entries(&sources, &Names::convention(), true, false, "orig");
-        assert!(!entries.iter().any(|entry| entry.display == "origin"));
-        let entries = completion_entries(&sources, &Names::convention(), false, false, "orig");
-        assert_eq!(entries[0].display, "origin");
-    }
-
-    #[test]
-    fn the_library_reads_through_but_never_writes() {
-        let library = crate::conventions::library();
-        let mut doc = Document {
-            root: Some(Value::from(NAME)),
-            gid: MutGid::new(),
-        };
-        let sources = src(&doc, &library);
-        let name_path = vec![Step::Key(Atom::Node(NAME))];
-
-        // Completion offers the conventions from keystroke one, as
-        // references: picking "name" yields the NAME node, not a
-        // lookalike string label.
-        let entries = completion_entries(&sources, &Names::convention(), false, false, "nam");
-        assert_eq!(entries[0].display, "name");
-        assert!(matches!(
-            &entries[0].action,
-            EntryAction::Value(v) if v.as_node() == Some(NAME)
-        ));
-
-        // Library facts render through the sources, and paths now
-        // RESOLVE through them...
-        assert_eq!(sorted_edges(&sources, NAME).len(), 1);
-        assert_eq!(
-            src(&doc, &library).resolve(&name_path),
-            Some(&Value::from("name"))
-        );
-        // ...but writes gate on entity authority: the NAME entity is
-        // external, so editing and deleting decline with no read-only
-        // flag anywhere.
-        assert!(!delete_edge(&mut doc, &library, &name_path));
-        assert!(!set_value(&mut doc, &library, &name_path, Value::from("x")));
-        assert!(
-            Selection::edge(&src(&doc, &library), name_path.clone())
-                .edit()
-                .is_none()
-        );
-
-        // Authoring gestures decline on a library-described entity
-        // too — one document edge would shadow its facts wholesale —
-        // while authoring BESIDE the reference stays a document edit.
-        let mut gid = MutGid::new();
-        let root = new_node_id();
-        gid.set(root, Atom::from("k"), Value::from(NAME));
-        let doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let path = vec![key("k")];
-        assert!(pending_edge(&src(&doc, &library), path.clone()).is_none());
-        assert!(pending_insert(&src(&doc, &library), &path, false).is_none());
-        assert!(pending_insert(&src(&doc, &library), &path, true).is_none());
-        assert!(matches!(
-            pending_enter(&src(&doc, &library), &path, false),
-            Some(Selection::PendingEdge { parent, .. }) if parent.is_empty()
-        ));
-    }
-
-    #[test]
-    fn commit_pending_mints_named_nodes_and_bare_lists() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let root = new_node_id();
-        gid.set(root, Atom::from("x"), Value::from(1.0));
-        let mut doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let path = vec![key("fresh")];
-        assert!(commit_pending(
-            &mut doc,
-            &lib,
-            &path,
-            &EntryAction::NewNode {
-                name: Some("thing".into())
-            }
-        ));
-        let value = src(&doc, &lib).resolve(&path).unwrap().clone();
-        let node = value.as_node().unwrap();
-        assert_eq!(
-            doc.gid.get(node, &Atom::Node(NAME)),
-            Some(&Value::from("thing"))
-        );
-
-        // "new list" commits the empty list value — pure, no entity
-        // minted anywhere.
-        let entities = doc.gid.entities().count();
-        assert!(commit_pending(&mut doc, &lib, &[key("items")], &EntryAction::NewList));
-        assert_eq!(
-            src(&doc, &lib).resolve(&[key("items")]),
-            Some(&Value::list([]))
-        );
-        assert_eq!(doc.gid.entities().count(), entities);
-    }
-
-    #[test]
-    fn the_clipboard_round_trips_values_and_reads_foreign_text() {
-        let node = new_node_id();
-        let cases = [
-            Value::from("hello"),
-            Value::from("42"),
-            Value::from(2.5),
-            Value::from(node),
-            Value::list([Value::from(1.0), Value::from(node)]),
-            Value::list([]),
-        ];
-        for value in cases {
-            assert_eq!(from_clipboard(&to_clipboard(&value)), value, "{value}");
-        }
-        // Atoms travel as the query language, readable elsewhere; the
-        // string "42" keeps its quotes so it comes back a string.
-        assert_eq!(to_clipboard(&Value::from("hello")), "\"hello\"");
-        assert_eq!(to_clipboard(&Value::from("42")), "\"42\"");
-        assert_eq!(to_clipboard(&Value::from(2.5)), "2.5");
-        // Foreign text pastes by the query reading.
-        assert_eq!(from_clipboard("3.5"), Value::from(3.5));
-        assert_eq!(from_clipboard("plain words"), Value::from("plain words"));
-    }
-
-    #[test]
-    fn resolve_query_infers_the_value() {
-        assert_eq!(resolve_query("3.5"), Value::from(3.5));
-        assert_eq!(resolve_query(" -2 "), Value::from(-2.0));
-        assert_eq!(resolve_query("abc"), Value::from("abc"));
-        assert_eq!(resolve_query("\"3.5\""), Value::from("3.5"));
-        assert_eq!(resolve_query(""), Value::from(""));
-        // A leading quote is string mode even before it closes.
-        assert_eq!(resolve_query("\"3.5"), Value::from("3.5"));
-        assert_eq!(resolve_query("\""), Value::from(""));
-    }
-
-    #[test]
-    fn toggle_collapse_stays_sparse_and_respects_cycle_defaults() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let root = new_node_id();
-        let child = new_node_id();
-        gid.set(root, Atom::from("child"), Value::from(child));
-        gid.set(child, Atom::from("back"), Value::from(root));
-        gid.set(child, Atom::from("name"), Value::from("c"));
-        gid.set(root, Atom::from("pair"), Value::list([Value::from(1.0)]));
-        let doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let mut collapse = Collapse::default();
-        let child_path = vec![key("child")];
-        let back_path = vec![key("child"), key("back")];
-
-        // Expanded by default: toggling stores a collapse override,
-        // toggling again removes it.
-        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &child_path));
-        assert!(collapse.collapsed(&child_path, false));
-        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &child_path));
-        assert!(collapse.overrides.is_empty());
-
-        // The back-edge to the root is in a cycle, so its default is
-        // collapsed; toggling expands it.
-        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &back_path));
-        assert!(!collapse.collapsed(&back_path, true));
-
-        // A list with elements collapses too; strings and missing
-        // paths have nothing to collapse.
-        assert!(toggle_collapse(&src(&doc, &lib), &mut collapse, &[key("pair")]));
-        assert!(!toggle_collapse(
-            &src(&doc, &lib),
-            &mut collapse,
-            &[key("child"), key("name")]
-        ));
-        assert!(!toggle_collapse(&src(&doc, &lib), &mut collapse, &[key("nope")]));
-    }
-
-    #[test]
-    fn collapse_default_follows_cycle_and_overrides_win() {
-        let mut collapse = Collapse::default();
-        let path = vec![key("a"), key("b")];
-        // Absent from the overrides: expanded outside a cycle, collapsed in.
-        assert!(!collapse.collapsed(&path, false));
-        assert!(collapse.collapsed(&path, true));
-        // An override forces the state against the default either way.
-        collapse.overrides.insert(path.clone(), true);
-        assert!(collapse.collapsed(&path, false));
-        collapse.overrides.insert(path.clone(), false);
-        assert!(!collapse.collapsed(&path, true));
-    }
-
-    use puri::draw::{GlyphRun, Shape};
-    use puri::handler::Handler;
-    use puri::layout::place_top_left;
-
-    /// A placement context that keeps only what assertions need:
-    /// descends, the popup, and a dispatchable handler; drawing is
-    /// discarded.
-    #[derive(Default)]
-    struct Probe<C = ()> {
-        handler: Handler<C>,
-        descends: Vec<Descend>,
-        popup: Option<Popup>,
-    }
-
-    impl<C> Canvas for Probe<C> {
-        fn fill(&mut self, _: impl Into<Shape>, _: impl Into<Brush>, _: Affine) {}
-        fn stroke(&mut self, _: impl Into<Shape>, _: Stroke, _: impl Into<Brush>, _: Affine) {}
-        fn glyph_run(&mut self, _: GlyphRun) {}
-        fn clip(&mut self, _: impl Into<Shape>, _: Affine, content: impl FnOnce(&mut Self)) {
-            content(self);
-        }
-    }
-
-    impl<C> HasHandler<C> for Probe<C> {
-        fn handler(&mut self) -> &mut Handler<C> {
-            &mut self.handler
-        }
-    }
-
-    impl<C> HasDescends for Probe<C> {
-        fn descends(&mut self) -> &mut Vec<Descend> {
-            &mut self.descends
-        }
-    }
-
-    impl<C> HasPopup for Probe<C> {
-        fn popup(&mut self) -> &mut Option<Popup> {
-            &mut self.popup
-        }
-    }
-
-    fn probe_hooks() -> Hooks<()> {
-        Hooks {
-            select: Rc::new(|_, _, _| {}),
-            toggle: Rc::new(|_, _| {}),
-            edit: Rc::new(|_: &mut ()| None),
-            pick: Rc::new(|_, _| false),
-        }
-    }
-
-    /// Hooks whose context records every select's path.
-    fn logging_hooks() -> Hooks<Vec<Path>> {
-        Hooks {
-            select: Rc::new(|log: &mut Vec<Path>, path, _| log.push(path)),
-            toggle: Rc::new(|_, _| {}),
-            edit: Rc::new(|_: &mut Vec<Path>| None),
-            pick: Rc::new(|_, _| false),
-        }
-    }
-
-    fn down_at(point: Point) -> ui_events::pointer::PointerButtonEvent {
-        let mut state = ui_events::pointer::PointerState::default();
-        state.position.x = point.x;
-        state.position.y = point.y;
-        ui_events::pointer::PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: ui_events::pointer::PointerInfo {
-                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: ui_events::pointer::PointerType::Mouse,
-            },
-            state,
-        }
-    }
-
-    fn place_probe_with<C: 'static + Default>(
-        doc: &Document,
-        selection: Option<&Selection>,
-        names: &Names,
-        raw: bool,
-        hooks: Hooks<C>,
-    ) -> Probe<C> {
-        let mut fonts = parley::FontContext::new();
-        let mut layouts = parley::LayoutContext::new();
-        let mut tcx = TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            scale: 1.0,
-        };
-        let styles = RawStyles::new(1.0);
-        let library = crate::conventions::library();
-        let node = project::<C, Probe<C>>(
-            &src(doc, &library),
-            selection,
-            None,
-            &Collapse::default(),
-            names,
-            raw,
-            &mut tcx,
-            &styles,
-            hooks,
-        );
-        let mut probe = Probe::default();
-        place_top_left(node, &mut probe, Point::ZERO);
-        probe
-    }
-
-    fn place_probe_in(doc: &Document, names: &Names, raw: bool) -> Probe {
-        place_probe_with(doc, None, names, raw, probe_hooks())
-    }
-
-    fn place_probe(doc: &Document) -> Probe {
-        place_probe_in(doc, &Names::convention(), false)
-    }
-
-    #[test]
-    fn node_elements_take_the_block_form_in_position_order() {
-        let mut gid = MutGid::new();
-        let nested = new_node_id();
-        gid.set(nested, Atom::from("x"), Value::from(9.0));
-        let items = Value::list([Value::from(1.0), Value::from(nested)]);
-        let ps = positions(&items);
-        let doc = Document {
-            root: Some(items),
-            gid,
-        };
-        let probe = place_probe(&doc);
-
-        // A node element takes the list off the inline literal:
-        // element rows in position order, each below the last.
-        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(
-            paths,
-            vec![
-                Vec::new(),
-                vec![Step::Element(ps[0].clone())],
-                vec![Step::Element(ps[1].clone())],
-                vec![Step::Element(ps[1].clone()), key("x")],
-            ]
-        );
-        let tops: Vec<f64> = probe.descends.iter().skip(1).map(|d| d.rect.y0).collect();
-        assert!(tops.is_sorted_by(|a, b| a < b), "{tops:?}");
-    }
-
-    #[test]
-    fn named_nodes_project_the_name_as_their_header() {
-        let mut gid = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::Node(NAME), Value::from("thing"));
-        gid.set(node, Atom::from("x"), Value::from(1.0));
-        let doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let probe = place_probe(&doc);
-
-        // The name edge is consumed by the header: it still descends
-        // (selectable, editable), but as the un-indented head above
-        // the field rows, not as a row of its own.
-        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(
-            paths,
-            vec![
-                Vec::new(),
-                vec![Step::Key(Atom::Node(NAME))],
-                vec![key("x")]
-            ]
-        );
-        let name_rect = probe.descends[1].rect;
-        let x_rect = probe.descends[2].rect;
-        assert!(name_rect.y0 < x_rect.y0);
-        assert!(name_rect.x0 < x_rect.x0);
-
-        // A node whose only edge is its name is just its name.
-        let mut gid = MutGid::new();
-        let sole = new_node_id();
-        gid.set(sole, Atom::Node(NAME), Value::from("leaf"));
-        let doc = Document {
-            root: Some(Value::from(sole)),
-            gid,
-        };
-        let probe = place_probe(&doc);
-        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(paths, vec![Vec::new(), vec![Step::Key(Atom::Node(NAME))]]);
-    }
-
-    #[test]
-    fn a_named_header_selects_its_node_first_then_engages_as_text() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::Node(NAME), Value::from("thing"));
-        gid.set(node, Atom::from("x"), Value::from(1.0));
-        let doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-
-        // Cold: a click on the name falls through to the block,
-        // selecting the NODE edge.
-        let probe = place_probe_with(&doc, None, &Names::convention(), false, logging_hooks());
-        let name_rect = probe.descends[1].rect;
-        let mut log: Vec<Path> = Vec::new();
-        assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(name_rect.center())));
-        assert_eq!(log, vec![Vec::<Step>::new()]);
-
-        // With the node selected, the successor pass engages the
-        // name as a text target: the same click now selects the name
-        // edge (and carries the caret placement).
-        let selection = Selection::edge(&src(&doc, &lib), Vec::new());
-        let probe = place_probe_with(
-            &doc,
-            Some(&selection),
-            &Names::convention(),
-            false,
-            logging_hooks(),
-        );
-        let name_rect = probe.descends[1].rect;
-        let mut log: Vec<Path> = Vec::new();
-        assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(name_rect.center())));
-        assert_eq!(log, vec![vec![Step::Key(Atom::Node(NAME))]]);
-    }
-
-    #[test]
-    fn a_label_pending_owns_its_clicks_and_the_parent_stays_clickable() {
-        let mut gid = MutGid::new();
-        let lib = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::from("x"), Value::from(1.0));
-        let doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let pending = pending_edge(&src(&doc, &lib), Vec::new()).unwrap();
-        let probe = place_probe_with(
-            &doc,
-            Some(&pending),
-            &Names::convention(),
-            false,
-            logging_hooks(),
-        );
-
-        // A click on the pending row is swallowed — handled, but no
-        // selection reported — so the pending survives its own
-        // clicks. (The caret target declines here because the
-        // logging hooks expose no editor.)
-        let anchor = probe.popup.as_ref().unwrap().anchor;
-        let mut log: Vec<Path> = Vec::new();
-        assert!(probe.handler.dispatch_pointer_down(&mut log, &down_at(anchor.center())));
-        assert!(log.is_empty());
-
-        // A click on the parent's header reports the parent — a real
-        // selection change, not a nudge of the pending.
-        let header = probe.descends[0].rect;
-        assert!(probe.handler.dispatch_pointer_down(
-            &mut log,
-            &down_at(Point::new(header.x0 + 2.0, header.y0 + 2.0)),
-        ));
-        assert_eq!(log, vec![Vec::<Step>::new()]);
-    }
-
-    #[test]
-    fn forked_entities_edit_in_place_under_library_structure() {
-        // A library with real structure: S --x--> B, B --y--> 1.
-        let s_node = new_node_id();
-        let b = new_node_id();
-        let mut library = MutGid::new();
-        library.set(s_node, Atom::from("x"), Value::from(b));
-        library.set(b, Atom::from("y"), Value::from(1.0));
-        // The document references S.
-        let mut gid = MutGid::new();
-        let root = new_node_id();
-        gid.set(root, Atom::from("k"), Value::from(s_node));
-        let mut doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let b_path = vec![key("k"), key("x")];
-        let y_path = vec![key("k"), key("x"), key("y")];
-
-        // Reading resolves through the library; writing declines
-        // while the library is the authority for B.
-        assert_eq!(src(&doc, &library).resolve(&b_path), Some(&Value::from(b)));
-        assert!(pending_edge(&src(&doc, &library), b_path.clone()).is_none());
-        assert!(
-            Selection::edge(&src(&doc, &library), y_path.clone())
-                .edit()
-                .is_none()
-        );
-        assert!(!set_value(&mut doc, &library, &y_path, Value::from(2.0)));
-        assert!(!delete_edge(&mut doc, &library, &y_path));
-
-        // The fork: the document takes B over (copy/paste's eventual
-        // job — same identity, copied wholesale). The structure now
-        // shows the document's B, editable IN PLACE under S.
-        doc.gid.set(b, Atom::from("y"), Value::from(1.0));
-        assert!(pending_edge(&src(&doc, &library), b_path.clone()).is_some());
-        assert!(
-            Selection::edge(&src(&doc, &library), y_path.clone())
-                .edit()
-                .is_some()
-        );
-        assert!(set_value(&mut doc, &library, &y_path, Value::from(2.0)));
-        assert_eq!(src(&doc, &library).resolve(&y_path), Some(&Value::from(2.0)));
-        assert!(delete_edge(&mut doc, &library, &y_path));
-
-        // S itself stays external and inert: no fields on it, no
-        // retargeting its edges.
-        assert!(pending_edge(&src(&doc, &library), vec![key("k")]).is_none());
-        assert!(!set_value(&mut doc, &library, &b_path, Value::from(9.0)));
-    }
-
-    #[test]
-    fn lists_under_external_entities_take_no_edits() {
-        // A library entity holding a list value: the list reads
-        // through, but its spine owner is external, so nothing mints
-        // beside or into it and elements take no editors.
-        let mut library = MutGid::new();
-        let entity = new_node_id();
-        library.set(entity, Atom::from("items"), Value::list([Value::from("a")]));
-        let mut gid = MutGid::new();
-        let root = new_node_id();
-        gid.set(root, Atom::from("m"), Value::from(entity));
-        let doc = Document {
-            root: Some(Value::from(root)),
-            gid,
-        };
-        let list_path = vec![key("m"), key("items")];
-        let ps = positions(src(&doc, &library).resolve(&list_path).unwrap());
-        let element = vec![key("m"), key("items"), Step::Element(ps[0].clone())];
-
-        assert_eq!(src(&doc, &library).resolve(&element), Some(&Value::from("a")));
-        assert!(pending_enter(&src(&doc, &library), &element, false).is_none());
-        assert!(pending_insert(&src(&doc, &library), &list_path, true).is_none());
-        assert!(
-            Selection::edge(&src(&doc, &library), element.clone())
-                .edit()
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn the_raw_view_stands_names_down_but_lists_stay_lists() {
-        let mut gid = MutGid::new();
-        let node = new_node_id();
-        gid.set(node, Atom::Node(NAME), Value::from("thing"));
-        gid.set(
-            node,
-            Atom::from("items"),
-            Value::list([Value::from(1.0), Value::from(2.0)]),
-        );
-        let doc = Document {
-            root: Some(Value::from(node)),
-            gid,
-        };
-        let probe = place_probe_in(&doc, &Names::convention(), true);
-
-        // The name is a plain labeled row again — nothing consumed
-        // into a header — but the list still projects as a list:
-        // kind is data, not convention, so Raw keeps the brackets
-        // (and the session-minted positions stay out of view).
-        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(paths.len(), 5);
-        assert!(paths.contains(&vec![Step::Key(Atom::Node(NAME))]));
-        // Rows are indented under the id header, the name's included.
-        assert!(probe.descends[1].rect.x0 > probe.descends[0].rect.x0);
-        // The two atom elements sit inline on one line.
-        let elements: Vec<Rect> = probe
-            .descends
-            .iter()
-            .filter(|d| d.path.len() == 2)
-            .map(|d| d.rect)
-            .collect();
-        let (a, b) = (elements[0], elements[1]);
-        assert!((a.y0 - b.y0).abs() < 0.5, "{a:?} vs {b:?}");
-    }
-
-    #[test]
-    fn atom_only_lists_project_inline() {
-        let items = Value::list([Value::from(1.0), Value::from("two")]);
-        let ps = positions(&items);
-        let doc = Document {
-            root: Some(items),
-            gid: MutGid::new(),
-        };
-        let probe = place_probe(&doc);
-
-        let paths: Vec<Path> = probe.descends.iter().map(|d| d.path.clone()).collect();
-        assert_eq!(
-            paths,
-            vec![
-                Vec::new(),
-                vec![Step::Element(ps[0].clone())],
-                vec![Step::Element(ps[1].clone())],
-            ]
-        );
-        // One line, reading left to right.
-        let (a, b) = (probe.descends[1].rect, probe.descends[2].rect);
-        assert!((a.y0 - b.y0).abs() < 0.5, "{a:?} vs {b:?}");
-        assert!(a.x1 <= b.x0);
+    fn renaming_writes_and_deleting_unnames_at_the_name_step() {
+        let lib = Cells::new();
+        let (mut doc, cell) = doc_of(vec![(Label::from("x"), Value::from("1"))]);
+        doc.cells.set_name(cell, "old");
+        let path = vec![Step::Name];
+
+        // The name edits like any string, through the same run shape.
+        let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
+        selection.edit_mut().unwrap().set_text("new");
+        assert!(write_through(&mut doc, &lib, &mut selection));
+        assert_eq!(doc.cells.name(cell), Some("new"));
+        assert!(!write_through(&mut doc, &lib, &mut selection));
+
+        // Emptying the buffer un-names live — the empty string is
+        // the canonical spelling of no name — and typing again
+        // re-names.
+        selection.edit_mut().unwrap().set_text("");
+        write_through(&mut doc, &lib, &mut selection);
+        assert_eq!(doc.cells.name(cell), None);
+        selection.edit_mut().unwrap().set_text("back");
+        write_through(&mut doc, &lib, &mut selection);
+        assert_eq!(doc.cells.name(cell), Some("back"));
+
+        // Names are not edges: delete declines — un-naming is the
+        // empty write above; the value is untouched throughout.
+        assert!(!delete_edge(&mut doc, &lib, &path));
+        assert_eq!(doc.cells.name(cell), Some("back"));
+        selection.edit_mut().unwrap().set_text("");
+        write_through(&mut doc, &lib, &mut selection);
+        assert!(doc.cells.value(cell).is_some());
+
+        // An unnamed cell mounts an EMPTY name editor: idle it
+        // writes nothing, typing names the cell.
+        let mut naming = Selection::edge(&src(&doc, &lib), path.clone());
+        assert_eq!(naming.edit().unwrap().text(), "");
+        assert!(!write_through(&mut doc, &lib, &mut naming));
+        assert_eq!(doc.cells.name(cell), None);
+        naming.edit_mut().unwrap().set_text("fresh");
+        assert!(write_through(&mut doc, &lib, &mut naming));
+        assert_eq!(doc.cells.name(cell), Some("fresh"));
     }
 }

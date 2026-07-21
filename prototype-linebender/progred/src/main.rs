@@ -569,7 +569,7 @@ fn main() {
 }
 
 /// The app's one selection: the tree's edge or pending, or the
-/// graph's node or edge. A single slot, so selecting in either pane
+/// graph's node. A single slot, so selecting in either pane
 /// inherently clears the other — there is nothing to synchronize.
 // One instance lives in the model; the variants' size gap is moot.
 #[allow(clippy::large_enum_variant)]
@@ -587,7 +587,7 @@ struct Model {
     names: conventions::Names,
     /// The built-in library, read under every document; never
     /// written, never saved.
-    library: progred_graph::MutGid,
+    library: progred_graph::Cells,
     graph: graph_view::GraphView,
     history: history::History,
     /// Vertical document scroll offset in logical pixels, so the
@@ -628,10 +628,15 @@ impl Model {
         }
     }
 
-    /// The graph-selected node, for the tree's secondary marks.
-    fn graph_node(&self) -> Option<&Value> {
+    /// The graph-selected node's value, for the tree's secondary
+    /// marks. Inline records are structure, not identity, so a
+    /// record root's node mirrors no mark.
+    fn graph_node(&self) -> Option<Value> {
         match self.graph_selection() {
-            Some(graph_view::GraphSelection::Node(id)) => Some(id),
+            Some(graph_view::GraphSelection::Node(node)) => {
+                graph_view::node_value(&self.doc, node)
+                    .filter(|value| !matches!(value, Value::Record(_)))
+            }
             _ => None,
         }
     }
@@ -854,7 +859,7 @@ impl App {
             AfterDiscard::New => self.adopt_model(
                 raw::Document {
                     root: None,
-                    gid: progred_graph::MutGid::new(),
+                    cells: progred_graph::Cells::new(),
                 },
                 None,
             ),
@@ -1046,11 +1051,11 @@ impl App {
         }
     }
 
-    /// Graph-view keys: Delete removes the graph selection — one
-    /// detachment for an edge, full detachment everywhere for a node.
-    /// The one selection slot means this and the document delete
-    /// below can never both match; Escape falls through to the
-    /// universal clear in `insert_key`.
+    /// Graph-view keys: Delete detaches the selected node — the
+    /// cell's whole entry removed and every link to it unlinked, or
+    /// the root emptied. The one selection slot means this and the
+    /// document delete below can never both match; Escape falls
+    /// through to the universal clear in `insert_key`.
     fn graph_key(&mut self, event: &KeyboardEvent) -> bool {
         event.state.is_down()
             && plain(event)
@@ -1060,7 +1065,7 @@ impl App {
             )
             && match self.model.graph_selection() {
                 Some(selection) => {
-                    let selection = selection.clone();
+                    let selection = *selection;
                     let before = self.model.doc.clone();
                     if graph_view::delete_selection(&mut self.model.doc, &selection) {
                         self.model.history.record(before, None);
@@ -1130,14 +1135,14 @@ impl App {
     /// Commits a pointed-at value into the open pending — the
     /// command-click gesture. A value-stage pending commits and
     /// selects the edge; a label stage advances to its value stage.
-    /// False when nothing is pending — or when a list is picked at
-    /// the label stage, which only atoms fit — so the click falls
-    /// through rather than spending the pending.
+    /// False when nothing is pending — or when the picked value
+    /// cannot label (a list, a record, a blob) at the label stage —
+    /// so the click falls through rather than spending the pending.
     fn pick_identity(&mut self, id: Value) -> bool {
         if matches!(
             self.model.selection,
             Some(Selected::Tree(raw::Selection::PendingEdge { .. }))
-        ) && id.as_atom().is_none()
+        ) && id.as_atom().and_then(|atom| atom.as_label()).is_none()
         {
             return false;
         }
@@ -1169,18 +1174,22 @@ impl App {
     }
 
     /// A resolved label advances the pending edge to its value stage —
-    /// or selects the existing edge when the label is taken. Minting a
-    /// new-node label writes its name: an undo step.
+    /// or selects the existing field when the label is taken. Minting
+    /// a named cell as a label writes its name: an undo step.
     fn commit_label(&mut self, parent: raw::Path, action: &raw::EntryAction) {
         let before = self.model.doc.clone();
-        let label = match raw::resolve_entry(&mut self.model.doc, action) {
-            Value::Atom(atom) => atom,
-            // The label stage offers atoms only; nothing else arrives.
-            Value::List(_) => return,
+        // The label stage offers only what can label; a Value action
+        // resolving otherwise (alien paste text reading as a blob)
+        // declines before any mutation.
+        let Some(label) = (match raw::resolve_entry(&mut self.model.doc, action) {
+            Value::Atom(atom) => atom.as_label(),
+            _ => None,
+        }) else {
+            return;
         };
-        // Only a NAMED mint writes an edge; an unnamed one is just a
-        // fresh id, no mutation to record.
-        if matches!(action, raw::EntryAction::NewNode { name: Some(_) }) {
+        // Only a NAMED mint writes the table; an unnamed one is a
+        // bare id, no mutation to record.
+        if matches!(action, raw::EntryAction::NewCell { name: Some(_) }) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
@@ -1196,7 +1205,7 @@ impl App {
 
     /// Structural copy/paste, the shell's fallback: a focused text
     /// editor's own clipboard handling wins by dispatch order, so
-    /// these fire on node, list, and graph selections. Deliberately
+    /// these fire on cell, list, and graph selections. Deliberately
     /// NOT menu items — muda accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
     fn clipboard_key(&mut self, event: &KeyboardEvent) -> bool {
@@ -1213,21 +1222,17 @@ impl App {
         }
     }
 
-    /// Copies the selected value — SHALLOW: a node reference is its
-    /// identity, no entity edges travel. Tree selections copy what
-    /// the path resolves to; graph selections their node value or
-    /// edge value.
+    /// Copies the selected value — SHALLOW: a link is its identity
+    /// alone, no cell values travel. Tree selections copy what the
+    /// path resolves to; graph selections their node's value.
     fn copy_selection(&self) -> bool {
         use clipboard_rs::{Clipboard, ClipboardContext};
         let value = match &self.model.selection {
             Some(Selected::Tree(selection)) => {
                 self.model.sources().resolve(selection.path()).cloned()
             }
-            Some(Selected::Graph(graph_view::GraphSelection::Node(value))) => {
-                Some(value.clone())
-            }
-            Some(Selected::Graph(graph_view::GraphSelection::Edge { source, label })) => {
-                self.model.sources().get(*source, label).cloned()
+            Some(Selected::Graph(graph_view::GraphSelection::Node(node))) => {
+                graph_view::node_value(&self.model.doc, node)
             }
             None => None,
         };
@@ -1285,7 +1290,7 @@ impl App {
     /// sibling element in a list (Shift+Enter before), a new field on
     /// the parent record otherwise; the root has nothing beside it
     /// and takes the field on itself. The command chord authors
-    /// WITHIN the selection: a field edge on the selected node, an
+    /// WITHIN the selection: a field on the selected cell, an
     /// appended element on a list (with Shift, at the front). Labels
     /// author first, then values; list elements are one-stage value
     /// pendings, the projection minting the position.
@@ -1392,7 +1397,7 @@ impl App {
             }
     }
 
-    /// Space toggles the selected node's collapse override; a focused
+    /// Space toggles the selection's collapse override; a focused
     /// string editor claims the key first and types a space instead.
     fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
         event.state.is_down()
@@ -1558,10 +1563,11 @@ fn run_frame(
     // derive from it downstream, no policy swapped here, and the
     // model's configured policy rides along untouched.
     let sources = model.sources();
+    let graph_node = model.graph_node();
     let body = raw::project(
         &sources,
         model.tree_selection(),
-        model.graph_node(),
+        graph_node.as_ref(),
         &model.collapse,
         &model.names,
         view.raw,
@@ -1598,7 +1604,7 @@ fn run_frame(
                 {
                     // A tap sequence never spans targets: the click
                     // that mounts an editor is its first, whatever
-                    // the physical count says — selecting the node
+                    // the physical count says — selecting the cell
                     // was stage one, not half a double-click, and a
                     // quick click on a neighboring atom is not a
                     // double-click in this one.
@@ -1660,11 +1666,6 @@ fn run_frame(
                         app.model.selection = None;
                     }
                     app.model.graph.press_node(id, grab, world);
-                }),
-                press_edge: Rc::new(|app: &mut App, source, label| {
-                    app.model.selection = Some(Selected::Graph(
-                        graph_view::GraphSelection::Edge { source, label },
-                    ));
                 }),
                 press_background: Rc::new(|app: &mut App, panel| {
                     app.model.graph.press_background(panel);

@@ -43,7 +43,7 @@ pub fn paragraph<P: Canvas>(
     )
 }
 
-fn build_layout(
+pub(crate) fn build_layout(
     ctx: &mut TextCtx,
     s: &str,
     style: &TextStyle,

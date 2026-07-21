@@ -2,13 +2,16 @@
 
 Date: 2026-07-03
 
-## Data Layer v3: Values and Cells (Design Brief, 2026-07-20)
+## Data Layer v3: Values and Cells (2026-07-20)
 
 Decided across the lambda-foundations exploration (the
 ~/git/lambda-editor sessions, 2026-07-14..20; verified research map
 in the session artifact; journey record with the dead ends in
 experiments/lambda-calculus-exploration.md). Written as a brief so
-the next session starts warm; v2 below remains the shipped baseline until this lands.
+the next session starts warm; SHIPPED that session, same day — see
+the postscript for what landed and the corrections made in
+conversation (the brief was an LLM summary of the exploration and
+overreached in one place, the number convention).
 
 The arc. The JSON-shaped rejection (below) gave as a reason:
 "coupling identity semantics to shape (records mutable with
@@ -98,6 +101,18 @@ zero conventions. Under these:
   excluded by this doc's own law — no computable normal form, so
   never a value space; computable reals are computation-layer
   codata.
+  (CORRECTED at the landing session, 2026-07-20, user call: the
+  decimal-convention half of this bullet overreached — a summary
+  artifact, not the decision; the idea had been considered and
+  pulled back. Numbers leave with NOTHING replacing them now: no
+  decimal convention, no canonical-spelling law, no wrapper shape,
+  and the editor's number machinery — the number atom arm, numeric
+  query inference, the dual atom offer, the parse-gated number
+  write — was REMOVED, not transferred. Number encodings arrive
+  later as libraries, plural, over blobs or records as they please,
+  none anointed by the data model, and probably not by overloading
+  strings. What stands: numbers fail the admission test;
+  f64/rationals/reals stay out.)
 - Labels narrow to String | CellId. A label MEANS: strings mean
   casually, cells mean by metadata lookup; blobs deliberately don't
   mean, so they can't be labels; number labels die with Number.
@@ -109,7 +124,11 @@ prototype scratch); samples re-authored. The number-editing
 machinery (parse-gated write-through, dual atom offer, numeric
 completion ranking) transfers nearly unchanged as the decimal
 CONVENTION's projection — the first atom-level convention layer,
-sibling of the list projection.
+sibling of the list projection. (At landing: the format NUMBER
+stayed 1 — no files exist outside this repo to refuse, so only the
+grammar changed and old scratch refuses by grammar — and the decimal
+transfer did not happen, per the correction above; the machinery was
+deleted.)
 
 What re-roots in the editor, the expected cost ledger:
 
@@ -143,7 +162,217 @@ set_value, like lists); naming adopted here — CELL for the identity
 construct, RECORD for the value shape, "node" surviving only as the
 graph view's colloquial word for whatever it draws.
 
-## Data Layer v2: The Typed Model (2026-07-09)
+Shipped 2026-07-20, the session after the brief. What landed matches
+the sketch, with these calls made in conversation:
+
+- Records are `im::OrdMap<Label, Value>`, not the sketch's HashMap
+  (user, after a first HashMap instinct, on the consistent-ordering
+  point): content-compared values want deterministic iteration —
+  Eq/Hash/serialization all read it — and label order is the raw
+  row order anyway.
+- Paths gained a third step: `Step::Follow`, the identity crossing.
+  `[]` is the link at the root, `[Follow]` the value its cell holds,
+  `[Follow, Key(f)]` a field inside. Forced by cells holding
+  non-records: with links followed silently, a cell holding a string
+  gives one path two meanings — the link (select, replace, delete
+  the reference) and the string (mount the editor) — and the write
+  side would need a selection-path-isn't-write-path special case.
+  Every write now splits at its LAST Follow: the link before it
+  names the owning, authority-gated cell; the Key/Element suffix is
+  a pure value spine rebuilt through the new `spine` lens
+  (get/set/without in progred_graph) — the brief's "(cell, path)"
+  write unit made literal. Each reference site unfolds through its
+  own Follow: paths stay per-site, and no site is the value's home
+  (the table entry is).
+- A cell need not hold a value: BARE = absent from the table, never
+  Option (user). Unnamed "new cell" mints a bare id and writes
+  nothing; the named mint seeds `{name: …}`, the one convention
+  write; "new record" is the separate `{}` value offer — cells and
+  records fully separate constructs in authoring (user: don't bias
+  what a cell holds). The within chord on a bare cell pends its
+  first value at `[…, Follow]`; delete at a trailing Follow removes
+  the table entry — bare again, the mint's symmetric partner. In
+  data, bare-minted and dangling are one honest state: a uuid in
+  link position.
+- Blobs: `{"blob": "<lowercase hex>"}` in files (strict reads,
+  parsable-means-canonical), `0x` hex as the query and clipboard
+  spelling (case-tolerant in — the value is the bytes — canonical
+  out), a dim truncated hex form in the tree with no editor. The
+  mini hex editor and tagged domain projections (a record pairing a
+  reader-identity with the bytes) stay future.
+- On screen the HANDLE (name if named, short id otherwise) marks a
+  cell and BRACES mark an inline record — two constructs, two
+  syntaxes; a `()` cell-delimiter idea was considered and kept in
+  reserve if the handle proves too subtle. A cell's record value
+  renders as the familiar block under the handle; `{}` after a
+  handle distinguishes an empty record from bare; inline records
+  read `{x: "1"}` with a braced block form, collapse override-only
+  like lists. The record value under a handle stays selectable and
+  keyboard-reachable at `[…, Follow]` (no pointer target — clicks
+  belong to rows and the cell) — select it to copy or delete the
+  value as a whole. (Corrected on first run, below: "handle" here
+  misread the user's word — the name text is not cell SYNTAX — and
+  the reserve idea landed the same day as the star.)
+- The graph view became the IDENTITY graph (user sketched the
+  problem — edges from within a cell — and delegated): nodes are
+  cells, plus one synthetic node for a non-link root value (a link
+  root tints its cell, as before); every link occurrence inside a
+  value is an edge, its pill naming the field label, the element's
+  1-based ordinal, or a dotted chain for deeper nesting; bare cells
+  draw dashed — the red-link look. Edge deletion unlinks exactly
+  the field or element holding the link (`spine::without`); cell
+  deletion removes the table entry and strips its links everywhere,
+  a cell whose whole value was such a link going bare. Values are
+  content, shown in the tree; the graph shows who refers to whom.
+  Strings and lists no longer draw as nodes (v2's shared-value
+  display); whether the boxes should hint at their cell's value
+  kind iterates live.
+- `Sources` kept its two-sided shape with per-cell fallback —
+  cleaner than v2's per-entity, one table entry being the whole
+  statement — and the `Gid` trait died with the abstraction (user:
+  moving from abstract to concrete).
+- The sample: an inline-record root of roles; the roof/points/style
+  scene preserved (the cycle, the shared unnamed style, the floating
+  `stroke` label cell); the new constructs shown — point positions
+  as inline `{row, col}` records, a `swatch` blob, and a bare
+  `material` cell referenced before anything is said about it.
+
+Tests: 77 across the workspace; clippy at the pre-rebuild baseline.
+
+First run (2026-07-20, user) pulled three corrections forward. (1)
+The STAR is the cell syntax: "handle" had meant a clickable REGION
+standing for the cell — like the brackets are the list's — not the
+name text, which reads as content. Every cell occurrence now leads
+with a dim `*` (the user's suggested spelling), the always-cell
+click target — the name text still engages for renaming on the
+second click, but the star never means anything but the cell.
+Graph boxes speak it too (`*roof`), so the unstarred `{…}` root
+value node reads as the value it is, and the dashed outline reads
+as what it marks: a BARE cell (the sample's `material`, the red
+link). (2) String labels wear their quotes everywhere — tree rows,
+inline records, pill chains — answering v2's open styling question
+(a quoted string label vs a name-read cell label), and making the
+inline record read like the JSON it resembles. A pill like
+`"points"·1` is the identity graph's compound: the link at element
+1 of the points list, where v2 interposed a list node. (3)
+Opposite-direction edges between one pair (roof→corner beside
+corner→`of`→roof) arced to the SAME side and overlapped — the
+parallel-edge normal flips with edge direction, latent since the
+egui era and exposed the moment lists stopped being nodes; offsets
+now live in the canonical pair's frame.
+
+NAMES JOINED THE IDENTITY TABLE the same evening (user proposal:
+"relatively speaking very ugly, but it makes the editor so nice"),
+and the trade turned out better than its billing — three standing
+warts dissolved at once. With the name a field of the cell's record
+VALUE, conversion destroyed it (set a named cell's record to a list
+and the name went with the record, though it named the identity,
+which survived); the named mint had to conjure `{name: …}` — a
+record forced into existence to carry a name, exactly the
+what-a-cell-holds bias the minting design had just rejected; and
+the NAME well-known cell, its name-names-itself library entry, and
+the consumed-edge machinery existed only to bootstrap the
+convention. The exploration's own Unison finding says the quiet
+part: names are editor-needs metadata that terms cannot hold,
+living in an engineered layer OUTSIDE them — the table IS that
+layer. Naming is per-identity, not per-reference (the filesystem
+does the opposite: names live in directory entries); a per-reference
+URL/URI for locating missing references across documents is parked
+as future reference metadata, not foreclosed. The entry is a SUM —
+`Cell = Named(String) | Valued(Value) | Both(String, Value)` — after
+the user rejected a struct of two Options: a cell with neither is
+not distinct from no cell, so the state is unrepresentable and
+absence stays the one bare form (a fourth state may earn its way
+back when libraries load, with evidence). File form:
+`{"name": …, "value": …}`, either half omitted, the empty object
+refused. The editor reaches names through a terminal `Step::Name` —
+names are not values, so `resolve` never resolves one; instead
+Selection::edge, write_through, delete, and writability each grew
+one arm (`set_name` beside `set_value`, gating on the NAMED cell's
+own authority, not the enclosing owner), which buys selection,
+editing, undo, secondary marks, and the two-stage rename click
+through the existing machinery. An unnamed cell's short id engages
+as an EMPTY name editor on the second click — typing names it — so
+keyboard and pointer naming survive the death of the name field
+(the old flow, Enter + "name" + value, has no field to complete
+into anymore). Named bare cells are now exactly the red link:
+create-on-reference mints a name and nothing else, and delete at a
+trailing Follow clears the VALUE while the name stays. The name
+policy became `Names::table` (still the one swap point for computed
+names); the built-in library is EMPTY — the authority machinery
+stays, unexercised until real libraries load.
+
+THE PARENS LANDED with it (user: the `()` `[]` `{}` symmetry):
+`(` name-or-short-id value `)` is the cell's syntax, the star
+retired after one session, and braces returned uniformly — a cell
+holding a record reads `(roof {…})`, the closers joining as `})`
+and `])` at the block foot; leaf values inline, `(material)` a
+named bare cell, `(…4be21 "hello")` an unnamed one. The parens are
+plain syntax: clicks on them fall through to the cell's own
+descend, which was already the select-the-cell region.
+
+THE GRAPH VIEW simplified to REFERENCE TOPOLOGY (user questioned
+whether it still makes sense — "the data structure isn't really a
+graph" — and delegated; the call: it keeps earning its demo keep as
+the picture of exactly what the tree hides). Nodes are cells (plus
+the synthetic root-value node), speaking the paren syntax; an arrow
+means "this value mentions that cell," deduplicated, labels counted
+as mentions; pills, ordinals, compound spines, and edge selection —
+v2 vocabulary with no v3 referent — are deleted, and node
+select/detach is the only mutation (which field held a link is the
+tree's business). Cycles, sharing, floaters (the stroke cell hangs
+unconnected — labels draw no arrows), and dashed red links all read
+directly. The someday design if the view earns more: boxes
+containing their cell's value as a miniature projection, links as
+wires from where they occur.
+
+Second-run corrections (2026-07-20, user), three: (1) THE EMPTY
+STRING IS THE CANONICAL SPELLING OF NO NAME — the user asked whether
+the name even needs Option ("what does it mean to be named or both
+with an empty string?"), and the answer keeps the sum while
+normalizing the spelling: `set_name` treats `""` as un-naming, so
+`Named("")` and `Both("", …)` are unrepresentable by construction
+(the same one-spelling-per-value law the atoms live by), the file
+form refuses a spelled empty name (omission is the spelling), and
+the editor consequence is pleasant — emptying the name field
+un-names LIVE, typing re-names, and the empty editor over an
+unnamed cell writes nothing. (2) The empty name editor showed a
+collapsed sliver: `text_edit` grew PLACEHOLDER support (the one
+Puri extension this needed — ghost text in its own style that sizes
+the field while the buffer is empty, the first typed character
+snapping the field to fit), and the name editor ghosts the cell's
+short id — what an empty name falls back to. (3) A valueless cell
+read as a dead end — `(…4be21)` with no way in by pointer. The
+Follow slot now renders the pending placeholder (`…`) inside the
+parens, and selecting it — click or arrow — begins the first value,
+by extending the empty-root rule: selecting an empty value slot is
+already authoring it (`Selection::edge` pends on the empty root AND
+on a writable valueless cell's Follow). Cmd+Enter still works; the
+placeholder makes it discoverable.
+
+Third-run settlements (2026-07-20, from the how-did-it-land review):
+RAW SHOWS NAMES — names are identity data now, and Raw shows data;
+what stands down in Raw is only the POLICY (computed names,
+convention layers to come), so `display_name` is the editor's one
+read (raw side the table, normal side the policy) and the Raw
+toggle is visually inert today, standing by for the first real
+convention layer. No bootstrapping identities remain anywhere —
+NAME was the last, and the built-in library is empty. NAMES ARE NOT
+EDGES, stated in code: the delete arm at the Name step is gone
+(there is nothing to detach — un-naming is emptying the name
+editor, "" being no-name's one spelling); the deletion vocabulary
+stays for values and fields. The sample gained a `favorite` cell
+holding a bare link to the corner — the alias pattern, and the
+standing repro for the block-in-row seam (a cell whose value blocks
+inside another cell's parens floats the outer paren beside the
+block). The empty-slot pend rule got its direct test, external
+decline included. Parked from the same review: copy/paste needs a
+rethink for name selections (copying a selected name yields
+nothing today); cell_view's block scaffolding stays deliberately
+un-unified until the rendering is polished enough to know what the
+shared shape is.
+
+## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:
 

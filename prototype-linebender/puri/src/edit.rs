@@ -19,8 +19,9 @@
 use crate::draw::Canvas;
 use crate::handler::{HasHandler, ImeEvent};
 use crate::layout::{Extent, Node, leaf};
-use crate::text::{TextCtx, draw_layout};
+use crate::text::{TextCtx, TextStyle, build_layout, draw_layout};
 use kurbo::{Affine, Point, Rect};
+use parley::Layout;
 use parley::style::GenericFamily;
 use parley::{FontContext, LayoutContext, PlainEditor, StyleProperty};
 use peniko::Brush;
@@ -418,36 +419,53 @@ impl LineEditState {
 }
 
 /// Bare editable text sized to its content, drawn from a transient
-/// editor built off the true state. Registers keyboard and IME
-/// dispatch (through `with`) only while focused; pointer wiring is the
-/// caller's, via the state's pointer methods and its own settled rect.
-/// Dispatch targets the last rendered frame, which can outlive the
-/// editor (deselect, then a move in the same gesture), so `with`
-/// returns None when the editor is gone and the handlers decline.
+/// editor built off the true state. While the text is empty, an
+/// optional `placeholder` shows as ghost content — sized and drawn in
+/// its own style, the field keeping the ghost's width instead of
+/// collapsing — and the first typed character replaces it, the field
+/// snapping to fit. Registers keyboard and IME dispatch (through
+/// `with`) only while focused; pointer wiring is the caller's, via
+/// the state's pointer methods and its own settled rect. Dispatch
+/// targets the last rendered frame, which can outlive the editor
+/// (deselect, then a move in the same gesture), so `with` returns
+/// None when the editor is gone and the handlers decline.
 pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
     state: &LineEditState,
     focused: bool,
     style: &EditStyle,
+    placeholder: Option<(&str, &TextStyle)>,
     tcx: &mut TextCtx,
     with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
 ) -> Node<P> {
     let scale = tcx.scale;
+    let ghost = placeholder
+        .filter(|_| state.text.is_empty() && !state.is_composing())
+        .map(|(text, style)| build_layout(tcx, text, style, None, None));
     let editor = state.editor(tcx.fonts, tcx.layouts, scale);
     let layout = editor.try_layout().cloned();
-    let (extent, layout_baseline) = layout
+    let metrics_of = |layout: &Layout<Brush>| {
+        let metrics = *layout.lines().next()?.metrics();
+        let baseline = metrics.baseline as f64;
+        Some((
+            Extent {
+                width: metrics.advance as f64,
+                ascent: baseline,
+                descent: layout.height() as f64 - baseline,
+            },
+            baseline,
+        ))
+    };
+    let editor_baseline = layout
         .as_ref()
-        .and_then(|layout| {
-            let metrics = *layout.lines().next()?.metrics();
-            let baseline = metrics.baseline as f64;
-            Some((
-                Extent {
-                    width: metrics.advance as f64,
-                    ascent: baseline,
-                    descent: layout.height() as f64 - baseline,
-                },
-                baseline,
-            ))
-        })
+        .and_then(metrics_of)
+        .map(|(_, baseline)| baseline)
+        .unwrap_or(0.0);
+    // The ghost's metrics size the field while it shows; both it and
+    // the cursor hang from the shared visual baseline.
+    let (extent, layout_baseline) = ghost
+        .as_ref()
+        .and_then(metrics_of)
+        .or_else(|| layout.as_ref().and_then(metrics_of))
         .unwrap_or((Extent::default(), 0.0));
 
     let selection: Vec<Rect> = focused
@@ -473,14 +491,21 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
         for rect in &selection {
             p.fill(*rect, selection_brush.clone(), transform);
         }
+        if let Some(ghost) = &ghost {
+            draw_layout(p, ghost, transform);
+        }
         if let Some(layout) = &layout {
             draw_layout(p, layout, transform);
         }
         if let Some(cursor) = cursor {
-            p.fill(cursor, cursor_brush.clone(), transform);
+            p.fill(
+                cursor,
+                cursor_brush.clone(),
+                Affine::translate((at.x, at.y - editor_baseline)),
+            );
         }
         if focused {
-            let text_origin = Point::new(at.x, at.y - layout_baseline);
+            let text_origin = Point::new(at.x, at.y - editor_baseline);
             let with_key = with.clone();
             p.handler().on_key(move |ctx, event| {
                 with_key(ctx).is_some_and(

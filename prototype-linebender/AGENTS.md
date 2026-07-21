@@ -44,7 +44,7 @@ EOF
 
 ## Key Design Rules
 
-- Documents are pure graph structure — no semantic interpretation baked in; name/isa/cons are editor conventions, not data-layer features
+- Documents are structural values plus the cell table; a cell's NAME is identity metadata in the data layer (2026-07-20) — everything else semantic (isa and friends) stays editor conventions, never data-layer features
 - Resilient to invalid graph states — projections specify the happy path but must fall through gracefully to default/raw rendering; never crash or hide data on unexpected values
 - Compile-time code generation must fail loudly — if the semantics-driven codegen returns, malformed graph data must produce a clear compile error, never be silently skipped
 

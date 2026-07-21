@@ -1,10 +1,9 @@
-mod gid;
-mod mutgid;
+mod cells;
 pub mod position;
+pub mod spine;
 mod value;
 
-pub use gid::Gid;
-pub use mutgid::MutGid;
+pub use cells::{Cell, Cells};
 pub use position::Position;
-pub use value::{Atom, NodeId, Number, Step, Value, new_node_id};
 pub use uuid::Uuid;
+pub use value::{Atom, CellId, Label, Step, Value, hex_string, new_cell_id};

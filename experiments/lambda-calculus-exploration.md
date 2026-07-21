@@ -221,6 +221,9 @@ kind is the smallest type system, and it's load-bearing for
 identity ("1" vs "1.0"), ordering ("10" < "2" as strings), and
 interop (JSON's 5 vs "5"). Resolution: numbers fail the admission
 test — NOT atoms; a projection convention over canonical spellings.
+(The convention half was pulled back at implementation, 2026-07-20:
+numbers left the model with nothing replacing them — encodings
+arrive later as libraries; see model.md's v3 correction.)
 The admission criteria themselves crystallized late: an atom earns
 admission when it maps to the machine world, matters to users,
 CANNOT be efficiently encoded by the other constructs, or is needed

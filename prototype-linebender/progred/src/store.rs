@@ -5,7 +5,7 @@
 //! precise refusal today, a migration hook if a file ever matters.
 
 use crate::raw::Document;
-use progred_graph::MutGid;
+use progred_graph::Cells;
 use progred_graph::Value;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -16,7 +16,7 @@ const FORMAT: u32 = 1;
 struct FileDoc {
     format: u32,
     root: Option<Value>,
-    gid: MutGid,
+    cells: Cells,
 }
 
 pub fn load(path: &Path) -> Result<Document, String> {
@@ -27,7 +27,7 @@ pub fn load(path: &Path) -> Result<Document, String> {
     }
     Ok(Document {
         root: file.root,
-        gid: file.gid,
+        cells: file.cells,
     })
 }
 
@@ -35,7 +35,7 @@ pub fn save(path: &Path, doc: &Document) -> Result<(), String> {
     let file = FileDoc {
         format: FORMAT,
         root: doc.root.clone(),
-        gid: doc.gid.clone(),
+        cells: doc.cells.clone(),
     };
     let json = serde_json::to_string_pretty(&file).map_err(|error| error.to_string())?;
     // Write-then-rename, so a crash mid-write cannot truncate the
@@ -70,10 +70,10 @@ mod tests {
     fn unversioned_and_future_files_refuse() {
         let dir = std::env::temp_dir();
         let old = dir.join(format!("progred-store-old-{}.progred", std::process::id()));
-        std::fs::write(&old, r#"{"root": null, "gid": {}}"#).unwrap();
+        std::fs::write(&old, r#"{"root": null, "cells": {}}"#).unwrap();
         assert!(load(&old).is_err());
         let future = dir.join(format!("progred-store-new-{}.progred", std::process::id()));
-        std::fs::write(&future, r#"{"format": 99, "root": null, "gid": {}}"#).unwrap();
+        std::fs::write(&future, r#"{"format": 99, "root": null, "cells": {}}"#).unwrap();
         assert!(load(&future).unwrap_err().contains("99"));
         std::fs::remove_file(&old).ok();
         std::fs::remove_file(&future).ok();
