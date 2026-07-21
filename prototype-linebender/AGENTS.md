@@ -52,6 +52,7 @@ EOF
 
 - Test pure logic directly; don't write UI tests that just verify strings pass through to draw calls
 - Pure `render`/`update` functions mean snapshot/property tests on draw-list data need no windowing harness — prefer them; use vello headless readback only when a visual golden is genuinely needed
+- Visual changes are checkable without launching the app: `cargo test -p progred svg_bench` renders the sample document through the real projection to `target/raw_projection.svg`, and `cargo run -p puri --example delimiter_bench` renders the drawn-delimiter family against the font's own outlines; view either with `qlmanage -t -s 1600 -o <dir> <svg>`
 
 ## Code Style
 

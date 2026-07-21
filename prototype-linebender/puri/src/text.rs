@@ -8,11 +8,59 @@ use parley::layout::{Alignment, Layout, PositionedLayoutItem};
 use parley::style::{FontWeight, GenericFamily};
 use parley::{AlignmentOptions, FontContext, LayoutContext, LineHeight, StyleProperty};
 use peniko::Brush;
+use std::collections::HashMap;
 
 pub struct TextCtx<'a> {
     pub fonts: &'a mut FontContext,
     pub layouts: &'a mut LayoutContext<Brush>,
     pub scale: f32,
+    pub cache: &'a mut TextCache,
+}
+
+/// A shaping memo, caller-owned and caller-swept — the anticipated
+/// memo table for a pure function, never hidden state. Keys carry
+/// the full style identity, so an entry can never be WRONG, only
+/// unused; retention is mark-and-sweep by frame: [`TextCache::sweep`]
+/// at the top of each pass drops entries the previous pass never
+/// touched and resets the marks, so the steady state is exactly the
+/// text on screen, shaped once.
+#[derive(Default)]
+pub struct TextCache(HashMap<TextKey, CacheEntry>);
+
+struct CacheEntry {
+    layout: Layout<Brush>,
+    used: bool,
+}
+
+impl TextCache {
+    pub fn sweep(&mut self) {
+        self.0.retain(|_, entry| std::mem::replace(&mut entry.used, false));
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub struct TextKey {
+    text: String,
+    size: u32,
+    weight: Option<u32>,
+    family: GenericFamily,
+    color: [u32; 4],
+    scale: u32,
+}
+
+/// Only solid brushes key — anything fancier shapes uncached.
+fn text_key(s: &str, style: &TextStyle, scale: f32) -> Option<TextKey> {
+    let Brush::Solid(color) = &style.brush else {
+        return None;
+    };
+    Some(TextKey {
+        text: s.to_owned(),
+        size: style.size.to_bits(),
+        weight: style.weight.map(f32::to_bits),
+        family: style.family,
+        color: color.components.map(f32::to_bits),
+        scale: scale.to_bits(),
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -50,6 +98,15 @@ pub(crate) fn build_layout(
     line_height: Option<f32>,
     max_width: Option<f32>,
 ) -> Layout<Brush> {
+    let key = (line_height.is_none() && max_width.is_none())
+        .then(|| text_key(s, style, ctx.scale))
+        .flatten();
+    if let Some(key) = &key
+        && let Some(hit) = ctx.cache.0.get_mut(key)
+    {
+        hit.used = true;
+        return hit.layout.clone();
+    }
     let mut builder = ctx.layouts.ranged_builder(ctx.fonts, s, ctx.scale, true);
     builder.push_default(StyleProperty::Brush(style.brush.clone()));
     builder.push_default(style.family);
@@ -63,6 +120,15 @@ pub(crate) fn build_layout(
     let mut layout: Layout<Brush> = builder.build(s);
     layout.break_all_lines(max_width);
     layout.align(Alignment::Start, AlignmentOptions::default());
+    if let Some(key) = key {
+        ctx.cache.0.insert(
+            key,
+            CacheEntry {
+                layout: layout.clone(),
+                used: true,
+            },
+        );
+    }
     layout
 }
 
@@ -154,10 +220,12 @@ mod tests {
     fn text_of_different_sizes_shares_a_baseline_in_a_row() {
         let mut fonts = FontContext::new();
         let mut layouts = LayoutContext::new();
+        let mut cache = TextCache::default();
         let mut ctx = TextCtx {
             fonts: &mut fonts,
             layouts: &mut layouts,
             scale: 1.0,
+            cache: &mut cache,
         };
         let big = TextStyle {
             size: 28.0,

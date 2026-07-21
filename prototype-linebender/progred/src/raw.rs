@@ -12,6 +12,7 @@ use im::OrdMap;
 use progred_graph::{
     Atom, CellId, Cells, Label, Position, Step, Value, hex_string, new_cell_id, position, spine,
 };
+use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
@@ -1227,6 +1228,141 @@ pub trait HasDescends {
     fn descends(&mut self) -> &mut Vec<Descend>;
 }
 
+/// The delimiter metrics that marry the drawn family to the text:
+/// the system font's own glyphs span -0.704..+0.171 em around the
+/// baseline while its line box spans -0.929..+0.249, so a stretched
+/// delimiter trims the difference at each end — it meets the glyph
+/// span on its first and last lines, and a one-line span IS the
+/// glyph's. Measured by `puri`'s delimiter_bench example.
+const GLYPH_ASC_EM: f64 = 0.704;
+const GLYPH_DESC_EM: f64 = 0.171;
+const TOP_TRIM_EM: f64 = 0.929 - GLYPH_ASC_EM;
+const BOTTOM_TRIM_EM: f64 = 0.249 - GLYPH_DESC_EM;
+const SIDE_BEARING_EM: f64 = 0.05;
+
+fn delim_style(styles: &RawStyles) -> DelimStyle {
+    DelimStyle::for_text_size(14.0 * styles.scale)
+}
+
+/// A delimiter's advance: the FLAT ink plus both side bearings —
+/// what layout charges at any height. A grown tall delimiter
+/// OVERHANGS its advance on the outward side, the way a glyph's ink
+/// may exceed its advance; layout never pays for growth.
+fn delim_advance(styles: &RawStyles, delim: Delim) -> f64 {
+    delim_style(styles).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * styles.scale
+}
+
+/// Whether a candidate stayed one line tall — the flat forms' second
+/// gate beside width: a literal whose child broke inside is not flat,
+/// however narrow it came out.
+fn one_line(extent: Extent, scale: f64) -> bool {
+    extent.height() <= 20.0 * scale
+}
+
+/// A drawn delimiter leaf: `extent` is what layout sees (the FLAT
+/// advance, the span it must cover) while the ink inside spans
+/// `ink_top..ink_bottom` relative to the baseline, stroked in the dim
+/// brush like the text delimiters it replaces. A grown tall
+/// delimiter keeps its terminals where the flat form's would be and
+/// bulges OUTWARD past its advance — typographic overhang, so growth
+/// costs layout nothing and nested delimiters bow into each other's
+/// empty sides.
+fn delim_leaf<P: Canvas>(
+    styles: &RawStyles,
+    delim: Delim,
+    open: bool,
+    extent: Extent,
+    ink_top: f64,
+    ink_bottom: f64,
+) -> Node<P> {
+    let style = delim_style(styles);
+    let bearing = SIDE_BEARING_EM * 14.0 * styles.scale;
+    let brush = styles.dim.brush.clone();
+    let path = if open {
+        delim::open(delim, &style, ink_top, ink_bottom)
+    } else {
+        delim::close(delim, &style, ink_top, ink_bottom)
+    };
+    let overhang = style.bow_for(delim, ink_bottom - ink_top) - style.bow(delim);
+    let ink_x = if open { bearing - overhang } else { bearing };
+    leaf(
+        Extent {
+            width: style.bow(delim) + 2.0 * bearing,
+            ..extent
+        },
+        move |p: &mut P, at| {
+            p.fill(
+                path.clone(),
+                brush.clone(),
+                Affine::translate((at.x + ink_x, at.y)),
+            );
+        },
+    )
+}
+
+/// A one-line delimiter at the font's own glyph span: the drawn
+/// family's flat form, sitting in a text row exactly where the glyph
+/// would.
+fn flat_delim<P: Canvas>(styles: &RawStyles, delim: Delim, open: bool) -> Node<P> {
+    let em = 14.0 * styles.scale;
+    let (asc, desc) = (GLYPH_ASC_EM * em, GLYPH_DESC_EM * em);
+    delim_leaf(
+        styles,
+        delim,
+        open,
+        Extent {
+            width: 0.0,
+            ascent: asc,
+            descent: desc,
+        },
+        -asc,
+        desc,
+    )
+}
+
+/// A delimiter stretched over `content`'s extent, ink trimmed to meet
+/// the glyph span on the first and last lines.
+fn tall_delim<P: Canvas>(styles: &RawStyles, delim: Delim, open: bool, content: Extent) -> Node<P> {
+    let em = 14.0 * styles.scale;
+    let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
+    let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
+    delim_leaf(styles, delim, open, content, ink_top, ink_bottom)
+}
+
+/// Wraps `content` in the stretched delimiter pair claiming
+/// `path`/`target`: the delimiters are the container's handles —
+/// their ink selects it (command-picks it) — and they grow with the
+/// content, so a tall value gets tall delimiters instead of a
+/// floating closer.
+fn bracketed<C: 'static, P: Canvas + HasHandler<C>>(
+    cx: &Cx,
+    delim: Delim,
+    path: &[Step],
+    target: &Value,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let extent = content.extent;
+    row(
+        2.0 * cx.styles.scale,
+        vec![
+            select_target(
+                path.to_vec(),
+                target.clone(),
+                hooks,
+                tall_delim(cx.styles, delim, true, extent),
+            ),
+            content,
+            select_target(
+                path.to_vec(),
+                target.clone(),
+                hooks,
+                tall_delim(cx.styles, delim, false, extent),
+            ),
+        ],
+    )
+}
+
 /// The pane-local primary: translucent system blue, like the Swift
 /// version's selection, ringed at full strength — the strongest mark
 /// in the shared vocabulary.
@@ -1311,6 +1447,11 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
 }
 
 // The explicit-state boundary: everything a pass reads arrives here.
+// `width` is the space the projection may fill: layout is a function
+// of it — containers render flat where their flat form fits the
+// width remaining at their position and break otherwise, decided
+// greedily from the root down (each choice is one local fit test;
+// nothing global, nothing that jumps).
 #[allow(clippy::too_many_arguments)]
 pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     sources: &Sources,
@@ -1321,6 +1462,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     raw: bool,
     tcx: &mut TextCtx,
     styles: &RawStyles,
+    width: f64,
     hooks: Hooks<C>,
 ) -> Node<P> {
     let cx = Cx {
@@ -1339,7 +1481,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // there too, since kind is data, not convention. An empty
     // document is a selectable placeholder at the root path.
     match sources.root() {
-        Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, &hooks),
+        Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, width, &hooks),
         None => match cx.selection {
             Some(Selection::Pending { path, .. }) if path.is_empty() => {
                 pending_view(&cx, tcx, Vec::new(), &hooks)
@@ -1359,174 +1501,109 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// name-or-short-id value `)` — completing the delimiter family
 /// (brackets say list, braces say record). The name, when there is
 /// one, is the identity's own metadata projected at the Name step —
-/// selectable, editable, two-stage. Leaf and inline values sit
-/// between head and close paren; a record or list value is the SAME
-/// record or list view, held here through [`Held`] — one rendering
-/// per container kind, whatever holds it. A valueless cell — bare,
+/// selectable, editable, two-stage. The value after the head is an
+/// ordinary [`value_view`] at the Follow step, whatever its kind:
+/// the drawn parens stretch over whatever height it takes, and when
+/// head-beside-value overflows the width remaining here the cell
+/// BREAKS like a field row — head on its own line, value dropped
+/// below at the tab, parens spanning both. A valueless cell — bare,
 /// or the named red link — renders the pending placeholder in the
 /// value's place (the empty-slot rule in [`Selection::edge`] makes
-/// selecting it begin the first value). Clicks on the parens and
-/// gaps fall through to the cell's own descend. Collapsed (by
-/// default in a cycle, or forced by an override), containers show
-/// their usual summary inside the parens and an atom elides
-/// entirely.
+/// selecting it begin the first value). Cells do NOT collapse — the
+/// value's own collapsed form is the one collapse there is; the
+/// exception is CYCLE RE-ENTRY, where the repeated cell renders
+/// `( … )` — a mark of recursion, not a summary — and a collapse
+/// override at the cell's path (Space) is what expands one more
+/// turn. The parens and the head claim cell-selection; gaps between
+/// claims fall through.
 fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
     cell: CellId,
+    avail: f64,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let name = cx.name(cell);
     let target = Value::from(cell);
-    // The head claims cell-selection — the paren and the gap beside
-    // the name included; an engaged name inside still wins its own
-    // clicks.
+    let mut followed = path.to_vec();
+    followed.push(Step::Follow);
+    let value = cx.sources.value(cell).cloned();
+    // A pending inside the value forces the cell open.
+    let pending_inside = cx.pending_child_of(&followed).is_some()
+        || cx.pending_edge_under(&followed).is_some();
+    let elided = value.is_some()
+        && !pending_inside
+        && cx.collapse.collapsed(path, ancestors.contains(&cell));
+    if elided {
+        return bracketed(
+            cx,
+            Delim::Paren,
+            path,
+            &target,
+            hooks,
+            select_target(
+                path.to_vec(),
+                target.clone(),
+                hooks,
+                text(tcx, "…", &cx.styles.dim),
+            ),
+        );
+    }
+    // The head claims cell-selection — the gap beside the name
+    // included; an engaged name inside still wins its own clicks.
     let head = select_target(
         path.to_vec(),
         target.clone(),
         hooks,
-        row(
-            2.0 * scale,
-            vec![
-                text(tcx, "(", &cx.styles.dim),
-                head_view(cx, tcx, path, cell, &name, hooks),
-            ],
-        ),
+        head_view(cx, tcx, path, cell, &name, hooks),
     );
-    let mut followed = path.to_vec();
-    followed.push(Step::Follow);
-    let Some(value) = cx.sources.value(cell).cloned() else {
-        return select_target(
-            path.to_vec(),
-            target,
-            hooks,
-            row(
-                4.0 * scale,
-                vec![
-                    head,
-                    row(
-                        2.0 * scale,
-                        vec![
-                            pending_view(cx, tcx, followed.clone(), hooks),
-                            text(tcx, ")", &cx.styles.dim),
-                        ],
-                    ),
-                ],
-            ),
-        );
-    };
-    let mut inner = ancestors.clone();
-    inner.insert(cell);
-    // A pending inside the value forces the cell open.
-    let pending_inside = cx.pending_child_of(&followed).is_some()
-        || cx.pending_edge_under(&followed).is_some();
-    let collapsed =
-        !pending_inside && cx.collapse.collapsed(path, ancestors.contains(&cell));
-    let held = Held {
-        head,
-        path: path.to_vec(),
-        collapsed,
-        target: target.clone(),
-    };
-    match &value {
-        Value::Atom(_) if collapsed => select_target(
-            path.to_vec(),
-            target,
-            hooks,
-            row(
-                4.0 * scale,
-                vec![
-                    held.head,
-                    disclosure(path.to_vec(), true, hooks, cx.styles),
-                    text(tcx, ")", &cx.styles.dim),
-                ],
-            ),
+    let content = match &value {
+        None => row(
+            4.0 * scale,
+            vec![head, pending_view(cx, tcx, followed, hooks)],
         ),
-        // Leaf-only records and lists (pendings included) read
-        // inline between the parens, as do atoms and links; the
-        // one-line form is all content, so the whole row selects the
-        // cell (inner targets winning their own spans).
-        Value::Atom(_) => select_target(
-            path.to_vec(),
-            target,
-            hooks,
-            inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
-        ),
-        Value::Record(fields)
-            if !collapsed
-                && fields.values().all(leaf_atom)
-                && cx.pending_edge_under(&followed).is_none() =>
-        {
-            select_target(
-                path.to_vec(),
-                target,
+        Some(value) => {
+            let mut inner = ancestors.clone();
+            inner.insert(cell);
+            // ONE build against the larger of the two positions'
+            // budgets, beside-or-drop read off the result by the
+            // general rule — the field-row discipline, inside the
+            // parens, the wrapping widths measured rather than
+            // assumed.
+            let inside = avail - 2.0 * (delim_advance(cx.styles, Delim::Paren) + 2.0 * scale);
+            let beside = inside - head.extent.width - 4.0 * scale;
+            let tab = 20.0 * scale;
+            let value_node = value_view(
+                cx,
+                tcx,
+                &followed,
+                &inner,
+                value,
+                beside.max(inside - tab).max(0.0),
                 hooks,
-                inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
-            )
+            );
+            let dropped = head
+                .extent
+                .width
+                .max(tab + value_node.extent.width);
+            if value_node.extent.width <= beside
+                || dropped > head.extent.width + 4.0 * scale + value_node.extent.width
+            {
+                row(4.0 * scale, vec![head, value_node])
+            } else {
+                col(
+                    HAlign::Start,
+                    0,
+                    2.0 * scale,
+                    vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), value_node)],
+                )
+            }
         }
-        Value::List(elements) if !collapsed && elements.values().all(leaf_atom) => {
-            select_target(
-                path.to_vec(),
-                target,
-                hooks,
-                inline_cell(cx, tcx, held.head, &followed, &inner, &value, hooks),
-            )
-        }
-        Value::Record(fields) => {
-            record_view(cx, tcx, &followed, &inner, fields, Some(held), hooks)
-        }
-        Value::List(elements) => {
-            list_view(cx, tcx, &followed, &inner, elements, Some(held), hooks)
-        }
-    }
-}
-
-/// A container view held by a cell: the parenthesized head joins the
-/// container's delimiter line, the close paren its closer (`})`,
-/// `])`), and collapse — decided by the cell, cycle default and
-/// pending-forcing included — keys its disclosure at the cell's own
-/// path. `target` is what the container's delimiters select and
-/// pick: the link, at the cell's path.
-struct Held<P> {
-    head: Node<P>,
-    path: Path,
-    collapsed: bool,
-    target: Value,
-}
-
-/// Leaf atoms — strings and blobs — read inline; anything with
-/// interior structure or identity blocks.
-fn leaf_atom(value: &Value) -> bool {
-    value.as_str().is_some() || value.as_blob().is_some()
-}
-
-/// A cell whose value reads on one line: `(head value)`.
-fn inline_cell<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    head: Node<P>,
-    followed: &[Step],
-    ancestors: &HashSet<CellId>,
-    value: &Value,
-    hooks: &Hooks<C>,
-) -> Node<P> {
-    let scale = cx.styles.scale;
-    row(
-        4.0 * scale,
-        vec![
-            head,
-            row(
-                2.0 * scale,
-                vec![
-                    value_view(cx, tcx, followed, ancestors, value, hooks),
-                    text(tcx, ")", &cx.styles.dim),
-                ],
-            ),
-        ],
-    )
+    };
+    bracketed(cx, Delim::Paren, path, &target, hooks, content)
 }
 
 /// Marks `child` as the projection of `path` WITHOUT claiming any
@@ -1622,7 +1699,11 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// arrow select the field, like its value — grouped so one target
 /// spans both and the gap between. A pending row's plain click falls
 /// through (the not-yet-field can't be selected), but command still
-/// picks its label's identity.
+/// picks its label's identity. When the value overflows the room
+/// beside the label it BREAKS AFTER THE LABEL instead: the value
+/// drops below at a fixed tab — never aligned under the label's own
+/// width, which is the indentation that drifts.
+#[allow(clippy::too_many_arguments)]
 fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -1630,6 +1711,7 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     ancestors: &HashSet<CellId>,
     key: Label,
     value: Option<Value>,
+    avail: f64,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
@@ -1645,11 +1727,43 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         ),
         None => pick_target(key.clone(), hooks, head),
     };
-    let content = match value {
-        Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
-        None => pending_view(cx, tcx, child, hooks),
+    let Some(value) = value else {
+        return row(
+            6.0 * scale,
+            vec![head, pending_view(cx, tcx, child, hooks)],
+        );
     };
-    row(6.0 * scale, vec![head, content])
+    // ONE build against the larger of the two positions' budgets;
+    // whether it lands beside or drops is read off the result by the
+    // general rule — beside if it fits (the prior alternative), else
+    // the narrower of the two wrappings, MEASURED, not argued: the
+    // same content node wraps either way, so both widths are in hand.
+    let beside = avail - head.extent.width - 6.0 * scale;
+    let tab = 20.0 * scale;
+    let content = value_view(
+        cx,
+        tcx,
+        &child,
+        ancestors,
+        &value,
+        beside.max(avail - tab).max(0.0),
+        hooks,
+    );
+    let dropped = head
+        .extent
+        .width
+        .max(tab + content.extent.width);
+    if content.extent.width <= beside
+        || dropped > head.extent.width + 6.0 * scale + content.extent.width
+    {
+        return row(6.0 * scale, vec![head, content]);
+    }
+    col(
+        HAlign::Start,
+        0,
+        2.0 * scale,
+        vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), content)],
+    )
 }
 
 /// The label-query row of a new field being authored on a record. The
@@ -1684,18 +1798,22 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
 }
 
 /// A list value: its elements as bare ordered rows — the position is
-/// session identity, not information; order carries it. A leaf-atom
-/// list reads as an inline literal; collapsed shows the element
-/// count. Lists have no identity, so there is no head of their own
-/// and no cycle through them — only linked cells can recurse — but a
-/// cell HOLDING a list frames this same view through [`Held`].
+/// session identity, not information; order carries it. Collapsed —
+/// override-only; a value has no identity to recur through — it
+/// shows the element count; a list whose literal `["a", "b"]` fits
+/// the width and stays one line reads as that literal; anything else
+/// takes the block form, the drawn brackets spanning the element
+/// rows as a column. Lists have no identity, so there is no head of
+/// their own and no cycle through them — only linked cells can
+/// recurse; a cell holding one wraps this same view in its stretched
+/// parens.
 fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
     elements: &OrdMap<Position, Value>,
-    held: Option<Held<P>>,
+    avail: f64,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
@@ -1707,69 +1825,69 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         items.push((position, None));
         items.sort_by(|a, b| a.0.cmp(&b.0));
     }
+    let target = Value::List(elements.clone());
 
-    // A leaf-atom list reads as a literal: `["a", "b"]` on one line,
-    // dim punctuation, each element still an ordinary descend (click,
-    // edit, secondary-mark) — a pending one included. Links, records,
-    // and nested lists take the block form; width-aware grouping
-    // (Wadler) waits, so a long list will run wide for now. A held
-    // call is block by dispatch; the guard keeps the frame from being
-    // dropped if that ever drifts.
-    let inline = held.is_none()
-        && items
-            .iter()
-            .all(|(_, value)| value.as_ref().is_none_or(leaf_atom));
-    if inline {
-        let mut cells: Vec<Node<P>> = vec![text(tcx, "[", &cx.styles.dim)];
-        for (index, (position, value)) in items.into_iter().enumerate() {
+    // A pending child forces the list open; the collapse override
+    // outranks the layout the content would pick.
+    let collapsed = !items.is_empty()
+        && items.iter().all(|(_, value)| value.is_some())
+        && cx.collapse.collapsed(path, false);
+    if collapsed {
+        return select_target(
+            path.to_vec(),
+            target,
+            hooks,
+            row(
+                4.0 * scale,
+                vec![
+                    flat_delim(cx.styles, Delim::Bracket, true),
+                    disclosure(path.to_vec(), true, hooks, cx.styles),
+                    text(tcx, &count_text(items.len(), "element"), &cx.styles.dim),
+                    flat_delim(cx.styles, Delim::Bracket, false),
+                ],
+            ),
+        );
+    }
+
+    // The literal candidate, kept when it FITS: within the width
+    // remaining here and one line tall (a pending inside can force a
+    // child open, and a broken child disqualifies the literal,
+    // however narrow). Children build against an UNBOUNDED budget, so
+    // every nested fit test passes and the candidate materializes in
+    // one all-flat construction — no branching inside; this enclosing
+    // test is the one gate (Wadler's fits test, operationally). On
+    // rejection the block form rebuilds them against its own columns.
+    let mut flat = Some({
+        let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Bracket, true)];
+        for (index, (position, value)) in items.iter().enumerate() {
             if index > 0 {
                 cells.push(text(tcx, ", ", &cx.styles.dim));
             }
             let mut child = path.to_vec();
-            child.push(Step::Element(position));
+            child.push(Step::Element(position.clone()));
             cells.push(match value {
-                Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
+                Some(value) => {
+                    value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
+                }
                 None => pending_view(cx, tcx, child, hooks),
             });
         }
-        cells.push(text(tcx, "]", &cx.styles.dim));
+        cells.push(flat_delim(cx.styles, Delim::Bracket, false));
+        row(0.0, cells)
+    })
+    .filter(|candidate| one_line(candidate.extent, scale));
+    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail) {
         // The one-line literal is all content: it selects the list
         // whole, elements winning their own spans.
-        return select_target(
-            path.to_vec(),
-            Value::List(elements.clone()),
-            hooks,
-            row(0.0, cells),
-        );
+        return select_target(path.to_vec(), target, hooks, candidate);
     }
 
-    // Standalone, a pending child forces the list open and only an
-    // override collapses it (no identity to be an ancestor); held,
-    // the cell decided.
-    let framed = held.is_some();
-    let (delta_path, collapsed, close) = match &held {
-        Some(held) => (held.path.clone(), held.collapsed, "])"),
-        None => (
-            path.to_vec(),
-            items.iter().all(|(_, value)| value.is_some())
-                && cx.collapse.collapsed(path, false),
-            "]",
-        ),
-    };
-    // What the delimiters select and pick: the cell when held, the
-    // list itself standalone.
-    let (target_path, target) = match &held {
-        Some(held) => (held.path.clone(), held.target.clone()),
-        None => (path.to_vec(), Value::List(elements.clone())),
-    };
-    let mut header: Vec<Node<P>> = held.map(|held| held.head).into_iter().collect();
-    header.push(text(tcx, "[", &cx.styles.dim));
-    header.push(disclosure(delta_path, collapsed, hooks, cx.styles));
-    if collapsed {
-        header.push(text(tcx, &count_text(items.len(), "element"), &cx.styles.dim));
-        header.push(text(tcx, close, &cx.styles.dim));
-        return select_target(target_path, target, hooks, row(4.0 * scale, header));
-    }
+    let inside = (avail
+        - 2.0 * (delim_advance(cx.styles, Delim::Bracket) + 2.0 * scale)
+        - 16.0 * scale
+        - text::<P>(tcx, "-", &cx.styles.dim).extent.width
+        - 6.0 * scale)
+        .max(0.0);
     let rows: Vec<Node<P>> = items
         .into_iter()
         .map(|(position, value)| {
@@ -1786,7 +1904,7 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                         hooks,
                         text(tcx, "-", &cx.styles.dim),
                     ),
-                    value_view(cx, tcx, &child, ancestors, &value, hooks),
+                    value_view(cx, tcx, &child, ancestors, &value, inside, hooks),
                 ),
                 None => (
                     text(tcx, "-", &cx.styles.dim),
@@ -1796,44 +1914,51 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             row(6.0 * scale, vec![dash, content])
         })
         .collect();
-    let body = col(HAlign::Start, 0, 4.0 * scale, rows);
-    let body = if framed {
-        descend_landmark(cx, path.to_vec(), body)
-    } else {
-        body
-    };
-    // The block form closes its bracket at the header's indent; the
-    // header band and the closer are the block's click claims.
-    col(
-        HAlign::Start,
-        0,
-        4.0 * scale,
-        vec![
-            select_target(
-                target_path.clone(),
-                target.clone(),
-                hooks,
-                row(4.0 * scale, header),
-            ),
-            pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
-            select_target(target_path, target, hooks, text(tcx, close, &cx.styles.dim)),
-        ],
-    )
+    // The block form: the brackets span the element column, the
+    // disclosure on its first line; the brackets are the list's click
+    // claims, and everything between the rows falls through.
+    let block = bracketed(
+        cx,
+        Delim::Bracket,
+        path,
+        &target,
+        hooks,
+        row(
+            4.0 * scale,
+            vec![
+                disclosure(path.to_vec(), false, hooks, cx.styles),
+                col(HAlign::Start, 0, 4.0 * scale, rows),
+            ],
+        ),
+    );
+    // The general rule: first alternative that FITS, in priority
+    // order; when none fits, the NARROWEST attempted, priority
+    // breaking ties. A small list's block form can be WIDER than its
+    // literal (the disclosure and dash overhead), and kicking to it
+    // would overflow more.
+    match flat {
+        Some(candidate) if candidate.extent.width <= block.extent.width => {
+            select_target(path.to_vec(), target, hooks, candidate)
+        }
+        _ => block,
+    }
 }
 
 /// A record value: an anonymous content-compared value, BRACED —
 /// braces mark records the way parens mark cells. Field rows at the
-/// record's own path. An all-leaf-atom record reads as an inline
-/// literal `{x: "1", y: "2"}`; standalone collapse is override-only,
-/// since a value has no identity to recur through; a cell HOLDING a
-/// record frames this same view through [`Held`].
+/// record's own path. Collapsed — override-only, since a value has
+/// no identity to recur through — it shows the field count; a
+/// record whose literal `{x: "1", y: "2"}` fits the width and stays
+/// one line reads as that literal; anything else takes the block
+/// form, the drawn braces spanning the field rows as a column. A
+/// cell holding one wraps this same view in its stretched parens.
 fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
     fields: &OrdMap<Label, Value>,
-    held: Option<Held<P>>,
+    avail: f64,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
@@ -1846,94 +1971,107 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         items.sort_by(|a, b| a.0.cmp(&b.0));
     }
     let pending_edge = cx.pending_edge_under(path).is_some();
+    let target = Value::Record(fields.clone());
 
-    let inline = held.is_none()
+    // A pending inside forces the record open; the collapse override
+    // outranks the layout the content would pick.
+    let collapsed = !items.is_empty()
         && !pending_edge
-        && items
-            .iter()
-            .all(|(_, value)| value.as_ref().is_none_or(leaf_atom));
-    if inline {
-        let mut cells: Vec<Node<P>> = vec![text(tcx, "{", &cx.styles.dim)];
-        for (index, (key, value)) in items.into_iter().enumerate() {
-            if index > 0 {
-                cells.push(text(tcx, ", ", &cx.styles.dim));
-            }
-            cells.push(label_view(cx, tcx, &key));
-            cells.push(text(tcx, ": ", &cx.styles.dim));
-            let mut child = path.to_vec();
-            child.push(Step::Key(key));
-            cells.push(match value {
-                Some(value) => value_view(cx, tcx, &child, ancestors, &value, hooks),
-                None => pending_view(cx, tcx, child, hooks),
-            });
-        }
-        cells.push(text(tcx, "}", &cx.styles.dim));
-        // The one-line literal is all content: it selects the record
-        // whole, fields winning their own spans.
+        && items.iter().all(|(_, value)| value.is_some())
+        && cx.collapse.collapsed(path, false);
+    if collapsed {
         return select_target(
             path.to_vec(),
-            Value::Record(fields.clone()),
+            target,
             hooks,
-            row(0.0, cells),
+            row(
+                4.0 * scale,
+                vec![
+                    flat_delim(cx.styles, Delim::Brace, true),
+                    disclosure(path.to_vec(), true, hooks, cx.styles),
+                    text(tcx, &count_text(items.len(), "field"), &cx.styles.dim),
+                    flat_delim(cx.styles, Delim::Brace, false),
+                ],
+            ),
         );
     }
 
-    let framed = held.is_some();
-    let (delta_path, collapsed, close) = match &held {
-        Some(held) => (held.path.clone(), held.collapsed, "})"),
-        None => (
-            path.to_vec(),
-            !pending_edge
-                && items.iter().all(|(_, value)| value.is_some())
-                && cx.collapse.collapsed(path, false),
-            "}",
-        ),
-    };
-    // What the delimiters select and pick: the cell when held, the
-    // record itself standalone.
-    let (target_path, target) = match &held {
-        Some(held) => (held.path.clone(), held.target.clone()),
-        None => (path.to_vec(), Value::Record(fields.clone())),
-    };
-    let mut header: Vec<Node<P>> = held.map(|held| held.head).into_iter().collect();
-    header.push(text(tcx, "{", &cx.styles.dim));
-    header.push(disclosure(delta_path, collapsed, hooks, cx.styles));
-    if collapsed {
-        header.push(text(tcx, &count_text(items.len(), "field"), &cx.styles.dim));
-        header.push(text(tcx, close, &cx.styles.dim));
-        return select_target(target_path, target, hooks, row(4.0 * scale, header));
+    // The literal candidate, kept when it FITS: within the width
+    // remaining here and one line tall (a pending inside can force a
+    // child open). Children build against an UNBOUNDED budget, so
+    // every nested fit test passes and the candidate materializes in
+    // one all-flat construction — no branching inside; this enclosing
+    // test is the one gate (Wadler's fits test, operationally). On
+    // rejection the block form rebuilds them against its own columns.
+    let mut flat = (!pending_edge)
+        .then(|| {
+            let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Brace, true)];
+            for (index, (key, value)) in items.iter().enumerate() {
+                if index > 0 {
+                    cells.push(text(tcx, ", ", &cx.styles.dim));
+                }
+                cells.push(label_view(cx, tcx, key));
+                cells.push(text(tcx, ": ", &cx.styles.dim));
+                let mut child = path.to_vec();
+                child.push(Step::Key(key.clone()));
+                cells.push(match value {
+                    Some(value) => {
+                        value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
+                    }
+                    None => pending_view(cx, tcx, child, hooks),
+                });
+            }
+            cells.push(flat_delim(cx.styles, Delim::Brace, false));
+            row(0.0, cells)
+        })
+        .filter(|candidate| one_line(candidate.extent, scale));
+    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail) {
+        // The one-line literal is all content: it selects the record
+        // whole, fields winning their own spans.
+        return select_target(path.to_vec(), target, hooks, candidate);
     }
+
+    let inside = (avail
+        - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)
+        - 16.0 * scale)
+        .max(0.0);
     let mut rows: Vec<Node<P>> = items
         .into_iter()
-        .map(|(key, value)| field_row(cx, tcx, path, ancestors, key, value, hooks))
+        .map(|(key, value)| field_row(cx, tcx, path, ancestors, key, value, inside, hooks))
         .collect();
     // A new field being authored: the label query, unsorted until it
     // has a label to sort by.
     if let Some((query, choice)) = cx.pending_edge_under(path) {
         rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
     }
-    let body = col(HAlign::Start, 0, 4.0 * scale, rows);
-    let body = if framed {
-        descend_landmark(cx, path.to_vec(), body)
-    } else {
-        body
-    };
-    // The header band and the closer are the block's click claims.
-    col(
-        HAlign::Start,
-        0,
-        4.0 * scale,
-        vec![
-            select_target(
-                target_path.clone(),
-                target.clone(),
-                hooks,
-                row(4.0 * scale, header),
-            ),
-            pad(Insets::new(26.0 * scale, 0.0, 0.0, 0.0), body),
-            select_target(target_path, target, hooks, text(tcx, close, &cx.styles.dim)),
-        ],
-    )
+    // The block form: the braces span the field column, the
+    // disclosure on its first line; the braces are the record's click
+    // claims, and everything between the rows falls through.
+    let block = bracketed(
+        cx,
+        Delim::Brace,
+        path,
+        &target,
+        hooks,
+        row(
+            4.0 * scale,
+            vec![
+                disclosure(path.to_vec(), false, hooks, cx.styles),
+                col(HAlign::Start, 0, 4.0 * scale, rows),
+            ],
+        ),
+    );
+    // The general rule: first alternative that FITS, in priority
+    // order; when none fits, the NARROWEST attempted, priority
+    // breaking ties. A small record's block form can be WIDER than
+    // its literal (the disclosure and arrow overhead), and kicking to
+    // it would overflow more.
+    match flat {
+        Some(candidate) if candidate.extent.width <= block.extent.width => {
+            select_target(path.to_vec(), target, hooks, candidate)
+        }
+        _ => block,
+    }
 }
 
 fn count_text(n: usize, noun: &str) -> String {
@@ -2119,6 +2257,7 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     path: &[Step],
     ancestors: &HashSet<CellId>,
     value: &Value,
+    avail: f64,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let editing = cx
@@ -2151,9 +2290,9 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         // render as their cells, lists and records as themselves —
         // in the Raw view too, kind being data. A registry waits for
         // user-defined projections.
-        Value::Atom(Atom::Cell(cell)) => cell_view(cx, tcx, path, ancestors, *cell, hooks),
-        Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, None, hooks),
-        Value::Record(fields) => record_view(cx, tcx, path, ancestors, fields, None, hooks),
+        Value::Atom(Atom::Cell(cell)) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks),
+        Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, avail, hooks),
+        Value::Record(fields) => record_view(cx, tcx, path, ancestors, fields, avail, hooks),
     };
     // Other projections of the selected value carry the secondary
     // mark; the selected one has the primary highlight.
@@ -3158,5 +3297,262 @@ mod tests {
         naming.edit_mut().unwrap().set_text("fresh");
         assert!(write_through(&mut doc, &lib, &mut naming));
         assert_eq!(doc.cells.name(cell), Some("fresh"));
+    }
+}
+
+/// Headless visual bench: the sample document through the real
+/// projection, written as an SVG — the qlmanage trick for the whole
+/// editor frame, no window needed. `cargo test -p progred svg_bench`
+/// writes target/raw_projection.svg.
+#[cfg(test)]
+mod svg_bench {
+    use super::*;
+    use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
+    use puri::handler::Handler;
+    use skrifa::instance::{LocationRef, NormalizedCoord, Size};
+    use skrifa::outline::{DrawSettings, OutlinePen};
+    use skrifa::{FontRef, GlyphId, MetadataProvider};
+    use std::fmt::Write as _;
+    use vello::kurbo::Shape as KurboShape;
+
+    struct Bench {
+        list: DrawList,
+        handler: Handler<()>,
+        descends: Vec<Descend>,
+        popup: Option<Popup>,
+    }
+
+    impl Canvas for Bench {
+        fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+            self.list.fill(shape, brush, transform);
+        }
+        fn stroke(
+            &mut self,
+            shape: impl Into<Shape>,
+            style: Stroke,
+            brush: impl Into<Brush>,
+            transform: Affine,
+        ) {
+            self.list.stroke(shape, style, brush, transform);
+        }
+        fn glyph_run(&mut self, run: GlyphRun) {
+            self.list.glyph_run(run);
+        }
+        fn clip(
+            &mut self,
+            shape: impl Into<Shape>,
+            transform: Affine,
+            content: impl FnOnce(&mut Self),
+        ) {
+            let _ = (shape.into(), transform);
+            content(self);
+        }
+    }
+
+    impl HasHandler<()> for Bench {
+        fn handler(&mut self) -> &mut Handler<()> {
+            &mut self.handler
+        }
+    }
+
+    impl HasDescends for Bench {
+        fn descends(&mut self) -> &mut Vec<Descend> {
+            &mut self.descends
+        }
+    }
+
+    impl HasPopup for Bench {
+        fn popup(&mut self) -> &mut Option<Popup> {
+            &mut self.popup
+        }
+    }
+
+    fn css(brush: &Brush) -> String {
+        match brush {
+            Brush::Solid(color) => {
+                let [r, g, b, a] = color.components;
+                format!(
+                    "rgba({},{},{},{:.3})",
+                    (r * 255.0).round(),
+                    (g * 255.0).round(),
+                    (b * 255.0).round(),
+                    a
+                )
+            }
+            _ => "magenta".to_string(),
+        }
+    }
+
+    struct BezPen {
+        path: BezPath,
+        offset: Point,
+    }
+
+    impl OutlinePen for BezPen {
+        fn move_to(&mut self, x: f32, y: f32) {
+            self.path
+                .move_to((self.offset.x + x as f64, self.offset.y - y as f64));
+        }
+        fn line_to(&mut self, x: f32, y: f32) {
+            self.path
+                .line_to((self.offset.x + x as f64, self.offset.y - y as f64));
+        }
+        fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+            self.path.quad_to(
+                (self.offset.x + cx0 as f64, self.offset.y - cy0 as f64),
+                (self.offset.x + x as f64, self.offset.y - y as f64),
+            );
+        }
+        fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+            self.path.curve_to(
+                (self.offset.x + cx0 as f64, self.offset.y - cy0 as f64),
+                (self.offset.x + cx1 as f64, self.offset.y - cy1 as f64),
+                (self.offset.x + x as f64, self.offset.y - y as f64),
+            );
+        }
+        fn close(&mut self) {
+            self.path.close_path();
+        }
+    }
+
+    fn svg_shape(shape: &Shape, transform: Affine) -> String {
+        let mut path = match shape {
+            Shape::Rect(rect) => rect.to_path(0.05),
+            Shape::RoundedRect(rect) => rect.to_path(0.05),
+            Shape::Circle(circle) => circle.to_path(0.05),
+            Shape::Line(line) => {
+                let mut p = BezPath::new();
+                p.move_to(line.p0);
+                p.line_to(line.p1);
+                p
+            }
+            Shape::Path(path) => path.clone(),
+        };
+        path.apply_affine(transform);
+        path.to_svg()
+    }
+
+    fn write_cmds(out: &mut String, cmds: &[DrawCmd]) {
+        for cmd in cmds {
+            match cmd {
+                DrawCmd::Fill {
+                    shape,
+                    brush,
+                    transform,
+                } => writeln!(
+                    out,
+                    r#"<path d="{}" fill="{}"/>"#,
+                    svg_shape(shape, *transform),
+                    css(brush)
+                )
+                .unwrap(),
+                DrawCmd::Stroke {
+                    shape,
+                    style,
+                    brush,
+                    transform,
+                } => writeln!(
+                    out,
+                    r#"<path d="{}" fill="none" stroke="{}" stroke-width="{}" stroke-linecap="round" stroke-linejoin="round"/>"#,
+                    svg_shape(shape, *transform),
+                    css(brush),
+                    style.width
+                )
+                .unwrap(),
+                DrawCmd::GlyphRun(run) => {
+                    let Ok(font_ref) = FontRef::from_index(run.font.data.as_ref(), run.font.index)
+                    else {
+                        continue;
+                    };
+                    let outlines = font_ref.outline_glyphs();
+                    let coords: Vec<NormalizedCoord> = run
+                        .normalized_coords
+                        .iter()
+                        .map(|bits| NormalizedCoord::from_bits(*bits))
+                        .collect();
+                    let size = Size::new(run.size);
+                    let mut path = BezPath::new();
+                    for glyph in &run.glyphs {
+                        let mut pen = BezPen {
+                            path: std::mem::take(&mut path),
+                            offset: run.transform * Point::new(glyph.x as f64, glyph.y as f64),
+                        };
+                        if let Some(outline) = outlines.get(GlyphId::new(glyph.id)) {
+                            let settings = DrawSettings::unhinted(size, LocationRef::new(&coords));
+                            let _ = outline.draw(settings, &mut pen);
+                        }
+                        path = pen.path;
+                    }
+                    writeln!(out, r#"<path d="{}" fill="{}"/>"#, path.to_svg(), css(&run.brush))
+                        .unwrap();
+                }
+                DrawCmd::Clip { children, .. } => write_cmds(out, children),
+            }
+        }
+    }
+
+    fn render(width: f64, out_path: &str) {
+        let doc = sample_document();
+        let library = crate::conventions::library();
+        let sources = Sources {
+            doc: &doc,
+            library: &library,
+        };
+        let names = Names::table();
+        let styles = RawStyles::new(1.0);
+        let collapse = Collapse::default();
+        let mut fonts = parley::FontContext::new();
+        let mut layouts = parley::LayoutContext::new();
+        let mut cache = puri::text::TextCache::default();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let hooks = Hooks::<()> {
+            select: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+        };
+        let node = project::<(), Bench>(
+            &sources,
+            None,
+            None,
+            &collapse,
+            &names,
+            false,
+            &mut tcx,
+            &styles,
+            width - 48.0,
+            hooks,
+        );
+        let extent = node.extent;
+        let mut bench = Bench {
+            list: DrawList::new(),
+            handler: Handler::default(),
+            descends: Vec::new(),
+            popup: None,
+        };
+        puri::layout::place_top_left(node, &mut bench, Point::new(24.0, 24.0));
+
+        let (width, height) = (width.max(extent.width + 48.0), extent.height() + 48.0);
+        let mut out = String::new();
+        writeln!(
+            out,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0}" height="{height:.0}" viewBox="0 0 {width:.0} {height:.0}">"#
+        )
+        .unwrap();
+        writeln!(out, r##"<rect width="{width:.0}" height="{height:.0}" fill="#FFFFFF"/>"##).unwrap();
+        write_cmds(&mut out, &bench.list.0);
+        writeln!(out, "</svg>").unwrap();
+        std::fs::write(out_path, out).unwrap();
+    }
+
+    #[test]
+    fn svg_bench_renders_the_sample_projection() {
+        render(900.0, "../target/raw_projection.svg");
+        render(560.0, "../target/raw_projection_narrow.svg");
     }
 }

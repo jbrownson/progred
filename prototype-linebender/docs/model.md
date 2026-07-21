@@ -394,6 +394,208 @@ delimiters do (user-approved trade). The `Held` frame carries the
 cell's target so a held container's delimiters select the CELL
 while a standalone container's select the value.
 
+DELIMITERS ARE DRAWN AND STRETCH (2026-07-21, the queued
+single/multiline discussion, resolved in one move). The seam on the
+table was multiline content in an inline position — the floating
+`)` — with two candidate fixes: (a) blockness infects upward, text
+style, or (b) delimiters grow to wrap their content, embracing the
+non-text medium. The user was inclined to (b); the discussion
+sharpened it into something stronger: (b) makes layout
+COMPOSITIONAL — every container is a rectangle that wraps whatever
+its children turned out to be, no fixpoint, no infection, which is
+also what Puri's box-with-baseline model (extents known at
+construction) was built for — and it makes the inline-vs-block
+choice a typography PREFERENCE instead of a correctness question,
+since a "wrong" choice just renders tall. The user then dissolved
+the remaining asymmetry: in a rectangle model the textual
+dangling-`{` idiom (which buys non-rectangular flow in the DOM) is
+not worth rebuilding; a drawn bracket occupies a narrow COLUMN, not
+a line, so the block form needs no header or closer line at all.
+Delimiters are now drawn vector paths at EVERY height — the
+math-font extensible recipe (fixed hooks, stretched waist, constant
+stroke), proportions sampled from the system font's own glyphs so
+the flat form passes for text (`puri::delim`, tuned in the
+delimiter_bench example against skrifa-extracted outlines; stem
+0.075 em, paren/bracket ink 0.21 em, brace 0.30 em, glyph span
+-0.704..+0.171 em, a stretched delimiter trimming to meet the glyph
+span on its first and last lines).
+
+What changed structurally: `Held` IS DELETED — a cell is always `(
+head value )` with the parens minted after the content and
+stretched over its extent, so cell_view is one shape and the
+container views never fuse across a boundary. Records and lists
+keep three forms — collapsed count, inline literal (all-leaf, the
+arbitrary policy the width pass will replace), and block — but
+block is now `row[tall-open, disclosure, rows-column, tall-close]`:
+the delimiters span the column, the disclosure sits on the first
+line, and both header band and closer line are gone. Claims follow
+the ink rule: the delimiters are the container's handles (select,
+command-pick); collapsed lines and inline literals stay whole-row
+claims. Two phantom-Space bugs retire structurally: inline forms
+now check the collapse override first (an override outranks the
+layout the content would pick), and a container inside a cell
+consults its OWN path's override since nothing overrides it from
+above — cell collapse (cycle default, `( head ▸ n fields )`) and
+value collapse (`{ ▸ n fields }`) are now two honest layers, each
+keyed at its own path. The favorite repro retires with the seam:
+closers hug their content at full height, and the overbroad
+whole-row claim is gone because only flat forms claim their row.
+
+Rendering is verifiable headlessly now: `cargo test -p progred
+svg_bench` renders the sample document through the real projection
+into target/raw_projection.svg and a narrower
+raw_projection_narrow.svg (glyphs outlined via skrifa) — the
+identicon-era qlmanage trick, kept as a test since the crate is a
+binary. Graph-view node text still spells `(name)` textually — same
+category as popup labels, not part of the delimiter family.
+
+LAYOUT IS A FUNCTION OF WIDTH (2026-07-21, same session — the user
+called keeping the all-leaf policy "fiddling around w/ the
+incorrect solution"; the width pass landed instead of being
+queued). The discipline is greedy outermost-first fit — the Wadler
+algorithm, which the user's root-first instinct reinvented; the
+fancy global-optimal search (Knuth–Plass territory) was rejected by
+both of us as unstable under resize. `project` takes the viewport
+width; every container view takes the width remaining at its
+position; each decision is one local test. A record or list builds
+its literal candidate and keeps it iff it fits the remaining width
+AND stayed one line tall (a child that broke inside disqualifies
+the literal, however narrow — flat means flat); otherwise the block
+form rebuilds the children against its own columns. Build-and-
+discard is exactly the side-effect-free-construction invariant
+puri's layout was designed around; candidates cost O(depth)
+rebuilds and nothing is cached until it hurts. Literal children
+build against the parent's full budget rather than a sequentially
+decremented one — if a child overflows it, the total does too, so
+the parent's own fit test is the gate either way (Wadler's fits
+test, verbatim). Field rows are the drift killer: a value that
+overflows the room beside its label BREAKS AFTER THE LABEL and
+drops to the next line at a fixed 20px tab — never aligned under
+the label's width, which is the indentation that accumulates.
+Cells never break: head and value share the row, the parens
+stretch, and room comes from the field row above them dropping.
+Known and accepted: layout can flip literal/block while typing (the
+soft-wrap category of motion — revisit with hysteresis only if it
+annoys), and when even the block forms overflow a too-narrow
+window the content just runs off the right edge (no horizontal
+scroll yet). The all-leaf policy and `leaf_atom` are deleted; no
+kind-based layout heuristic remains anywhere.
+
+Corrected the same day after first use (user: unusably slow): the
+first cut measured candidates by building them with the parent's
+budget, so every level built its children twice and the recursion
+went EXPONENTIAL in nesting depth. The fix makes the candidate BE
+the measurement, built once: literal children get an UNBOUNDED
+budget, so every nested fit test passes and the flat form
+materializes with no branching inside — the enclosing width test is
+the single gate (Wadler's fits test, operationally; the user's
+"offer both layouts and let the system choose" model, with the
+losing alternative never materialized). Field rows likewise build
+their value ONCE against the larger of the two positions' budgets
+and read beside-or-drop off the result — a node that fits beside as
+a whole cannot overflow there. Construction is now O(n · blocking
+depth); the shaping inside is deduplicated by a WITHIN-FRAME memo
+(`puri::text::TextCache`, a field on `TextCtx`): caller-owned,
+cleared at the top of each pass, keyed by text + full style
+identity + scale — the caller-threaded memo table the Puri rules
+anticipated, with no invalidation and no cross-frame state. From
+the same review: layout answers to the width LEFT OF THE GRAPH
+PANEL when it is up, instead of running beneath it; a collapsed
+cell is PURE ELISION — no field count — because a cell never
+introspects what it holds (user rule; the counting summaries belong
+to a container's own collapsed form, where a record describes
+itself); and the brace found its identity — waist toward the
+terminals so the mid point juts, point vertically tighter than the
+hooks — trading a little SF fidelity for paren/brace legibility at
+a glance.
+
+Second round of user feedback, same day: CELLS DO NOT COLLAPSE —
+"it's always 2 things, we collapse the thing inside the cell" — so
+the cell-collapse arm and its disclosure are gone; the one place a
+cell still elides is CYCLE RE-ENTRY, where the repeated cell
+renders `( … )` (the user's form — a mark of recursion, not a
+summary; no head, no triangle) and the collapse override at the
+cell's path, via Space on the selection, expands one more turn.
+CELLS GAINED A BLOCK MODE (user call, from nested heads eating the
+demo's width): the field-row discipline inside the parens — value
+built once against the larger budget, beside the head where it
+fits, else dropped below at the tab with the parens spanning both.
+The TEXT CACHE went CROSS-FRAME by mark-and-sweep (user design):
+entries carry a used flag, `sweep` at the top of each pass drops
+what the previous pass never touched and resets the marks — keys
+carry full identity so a stale entry can never be wrong, only
+unused, and the steady state is the visible text shaped once.
+
+Third round, same day: CURVATURE FOLLOWS THE FULL HEIGHT (user: a
+sharper mid-point was the wrong axis — at tall sizes both shapes
+were mostly a straight vertical line, distinguishable only at the
+very center). The fixed-hook-plus-straight-waist recipe is gone
+from the curved delimiters: the paren is ONE half-ellipse spanning
+the whole height, the brace TWO mirrored S-waves — four
+quarter-ellipses, each a quarter of the height, meeting at the mid
+point — so a tall delimiter reads by silhouette along its entire
+span, and the one-line form is the same shape at glyph height (the
+1x brace reverted to its natural proportions by construction; the
+extreme waist/point round is superseded). `DelimStyle.hook` is
+deleted. TALL DELIMITERS GROW WIDER (user: same-width tall braces
+are "super squished") — the math-font rule, TeX's \big through
+\Bigg: ink width ramps with the square root of height in lines,
+capped at 2x, one-line forms exactly the base widths. Growth costs
+layout NOTHING: the first cut reserved the cap in the width budgets
+and the over-reservation visibly deepened narrow layouts, so the
+model is typographic OVERHANG instead — a delimiter's advance is
+always its flat width, the terminals stay where the flat form's
+would be, and the grown bow bulges OUTWARD past the advance, the
+way a glyph's ink may exceed its advance. Nested delimiters compose
+because each bulges at mid-height into the empty side of its
+neighbor's column. The brace's halves also split unevenly again
+(hook two thirds, point one third) so the mid kink turns twice as
+fast as the ends — sharpness WITH full curvature, now that the
+straight waist isn't the frame it reads against. Color-per-kind
+stays in reserve if shape alone proves insufficient in use.
+
+STROKE CONTRAST (user: "doesn't look like math — any other
+inspiration?"; the honest answer was that math delimiters are never
+monoline). Delimiters are now FILLED OUTLINES with modulated
+weight, the way math fonts actually draw them: thick at the bellies,
+thin at terminals and the brace's point, blunt-cut ends instead of
+round caps. Construction: boundary curves are radius-adjusted
+ellipse arcs — the paren a crescent (outer and inner half-ellipses
+meeting at thin vertical caps), the brace two S-wave bands built
+the same way per half and overlapped at a blunt point face, the
+bracket a thick upright with thin arms. Contrast ramps with height
+like width does (near-monoline at one line, so the flat forms keep
+their SF match) — TeX display delimiters gain weight the same way —
+but the cap is a deliberately modest 1.6x the stem: a display-grade
+2.5x read HEAVY against the near-monoline UI face (user), and the
+mathy quality comes from the modulation being present, not from
+absolute weight. `stem` remains the one base
+weight everything derives from. Still available from the same
+tradition, unadopted: optical overshoot (curves slightly exceeding
+flat bounds) and axis-centering (N/A — ours align to content
+spans). The beside-vs-drop choices in field rows and cells now
+apply the general rule MEASURED rather than argued (user: "maybe
+your version of the check was more honest, the perf difference
+seems negligible"): both wrapping widths are computed from the one
+built content node, and the narrower violator wins when neither
+fits. The one alternative still never tried: re-breaking a value
+at the narrower beside budget specifically to keep it beside (the
+analog of prettier's hug style) — a second construction, noted,
+not built. OVERFLOW PICKS THE NARROWER FORM: a small
+container's block form can be WIDER than its literal (disclosure,
+dash, and arrow overhead — the user asked exactly this), so when
+neither form fits the width, the container keeps whichever is
+narrower instead of always breaking; both are in hand at that
+point, so the comparison is free. The user then stated the general
+rule this instantiates, now canonical: alternatives are tried in
+priority order, the FIRST THAT FITS wins; when none fits, the
+NARROWEST ATTEMPTED wins, priority breaking ties. (An alternative's
+width is only known by building it — measurement IS construction —
+so the rule selects among built forms rather than pruning builds.) Noted for later, not a priority
+(user): there is no horizontal scroll, and vertical scroll is
+trackpad/wheel only — some clickable/draggable scroll affordance is
+queued.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:

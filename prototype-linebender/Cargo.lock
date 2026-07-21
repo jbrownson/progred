@@ -2742,6 +2742,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "skrifa",
  "ui-events",
  "ui-events-winit",
  "vello",
@@ -2767,6 +2768,7 @@ dependencies = [
  "kurbo",
  "parley",
  "peniko",
+ "skrifa",
  "ui-events",
 ]
 

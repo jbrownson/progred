@@ -80,6 +80,7 @@ struct App {
     scene: Scene,
     font_cx: FontContext,
     layout_cx: LayoutContext<Brush>,
+    text_cache: puri::text::TextCache,
     model: Model,
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
@@ -541,6 +542,7 @@ fn main() {
         scene: Scene::new(),
         font_cx: FontContext::new(),
         layout_cx: LayoutContext::new(),
+        text_cache: puri::text::TextCache::default(),
         model: Model {
             doc,
             selection: None,
@@ -1010,6 +1012,7 @@ impl App {
             view,
             &mut self.font_cx,
             &mut self.layout_cx,
+            &mut self.text_cache,
             scale,
             viewport,
         );
@@ -1454,6 +1457,7 @@ impl App {
             view,
             &mut self.font_cx,
             &mut self.layout_cx,
+            &mut self.text_cache,
             scale,
             Size::new(width as f64, height as f64),
         );
@@ -1535,12 +1539,14 @@ impl App {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_frame(
     frame: &mut Frame<'_>,
     model: &Model,
     view: ViewFlags,
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<Brush>,
+    text_cache: &mut puri::text::TextCache,
     scale: f64,
     viewport: Size,
 ) {
@@ -1553,10 +1559,15 @@ fn run_frame(
         event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
     });
 
+    // Mark-and-sweep by pass: entries the previous pass never used
+    // are dropped here, everything else carries over — the steady
+    // state is the visible text, shaped once.
+    text_cache.sweep();
     let mut tcx = TextCtx {
         fonts: font_cx,
         layouts: layout_cx,
         scale: scale as f32,
+        cache: text_cache,
     };
     let styles = raw::RawStyles::new(scale);
     // The Raw view is ONE bit, threaded as itself: name lookups
@@ -1564,6 +1575,15 @@ fn run_frame(
     // model's configured policy rides along untouched.
     let sources = model.sources();
     let graph_node = model.graph_node();
+    let margin = 12.0 * scale;
+    // The width layout answers to: the window, less the graph panel
+    // when it is up — the panel overlays the right side, and content
+    // should break rather than run beneath it.
+    let body_width = if view.graph {
+        graph_view::panel(viewport_width, viewport_height).x0 - 2.0 * margin
+    } else {
+        viewport_width - 2.0 * margin
+    };
     let body = raw::project(
         &sources,
         model.tree_selection(),
@@ -1573,6 +1593,7 @@ fn run_frame(
         view.raw,
         &mut tcx,
         &styles,
+        body_width,
         raw::Hooks {
             // The selection transition: re-selecting the same path
             // keeps its editor state, and a reported text click seeds
@@ -1633,7 +1654,6 @@ fn run_frame(
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
         },
     );
-    let margin = 12.0 * scale;
     frame.max_scroll = ((body.extent.height() + 2.0 * margin - viewport_height) / scale).max(0.0);
     place_top_left(
         body,
