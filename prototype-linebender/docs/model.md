@@ -935,7 +935,12 @@ the flat literal like any authoring query; Backspace on the empty
 query returns to the field, Escape deselects. Name editors stay
 write-through by the same principle's other half: a name is the
 cell's own metadata, duplicates legal, no shared namespace to
-collide in. Scene raw_label_rename.svg pins the notation.
+collide in. Scene raw_label_rename.svg pins the notation. (Later
+the same day, user: the two-click gate RETIRED — a writable
+label's FIRST click renames. Its select claim was as redundant as
+the dash's: every value's own ink selects the same Key path, so
+the label's one pointer job is its own edit; read-only labels
+keep the head's select rather than eating the click.)
 
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 

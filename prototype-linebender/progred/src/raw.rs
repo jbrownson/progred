@@ -236,8 +236,7 @@ pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
     /// Re-open the label of the field at `path` (a Key path) as its
-    /// seeded query — the click-again gesture on a selected field's
-    /// label.
+    /// seeded query — the click gesture on a writable field's label.
     pub rename: Rc<dyn Fn(&mut C, Path)>,
     /// None when the editor is already gone — retained-frame dispatch
     /// may fire a frame late, and absent state declines.
@@ -1840,17 +1839,17 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
     child.push(Step::Key(key.clone()));
-    // A re-opened label renders as its seeded query; cold, it is the
-    // label text, and on a selected field the click-again Finder
-    // pattern re-opens it (the head's outer select still takes the
-    // colon and the cold first click).
+    // A re-opened label renders as its seeded query; cold, a
+    // writable label's one click is its own edit — selecting the
+    // field belongs to the value's ink (and the head's colon), which
+    // already claims the same path.
     let label = match cx.pending_rename_under(parent) {
         Some((replacing, query, choice)) if replacing == &key => {
             rename_query(cx, tcx, query, choice, hooks)
         }
         _ => {
             let cold = label_view(cx, tcx, &key);
-            if cx.selected(&child) && writable_at(&cx.sources, parent) {
+            if writable_at(&cx.sources, parent) {
                 rename_target(child.clone(), hooks, cold)
             } else {
                 cold
@@ -2167,7 +2166,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 }
                 _ => {
                     let cold = label_view(cx, tcx, key);
-                    if cx.selected(&child) && writable_at(&cx.sources, path) {
+                    if writable_at(&cx.sources, path) {
                         rename_target(child.clone(), hooks, cold)
                     } else {
                         cold
@@ -2697,10 +2696,11 @@ fn rename_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     })
 }
 
-/// The Finder pattern's second act on a field label: cold, the label
-/// shares the head's select claim; on the selected field a plain
-/// click re-opens it as its seeded query. Command-clicks decline so
-/// the head's pick still wins.
+/// A writable field label's one pointer job: a plain click re-opens
+/// it as its seeded query — selecting the field belongs to the
+/// value's own ink, which claims the same path. Command-clicks
+/// decline so the head's pick still wins; read-only labels never
+/// register and keep the head's select.
 fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
     path: Path,
     hooks: &Hooks<C>,
