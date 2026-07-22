@@ -69,6 +69,9 @@ enum RenderState {
 struct Dispatch {
     handler: Handler<App>,
     descends: Vec<raw::Descend>,
+    /// One nominal line height at the frame's scale — the quantum
+    /// keyboard navigation reads rows with.
+    line: f64,
     max_scroll: f64,
     max_scroll_x: f64,
     popup: Option<raw::Popup>,
@@ -402,25 +405,31 @@ impl ApplicationHandler<UserEvent> for App {
                 let viewport = size.height as f64;
                 let handled = match (ime, translation) {
                     (Some(ime), _) => dispatch.handler.dispatch_ime(self, &ime),
-                    // Keys nothing claims fall through to the collapse
-                    // toggle and then selection stepping, so the
-                    // selected string's editor always wins over both.
+                    // Keys nothing claims fall through to the rename
+                    // chord, the collapse fold, and then selection
+                    // stepping, so the selected string's editor always
+                    // wins over all three.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         dispatch.handler.dispatch_key(self, &key_event)
                             || self.clipboard_key(&key_event)
                             || self.graph_key(&key_event)
                             || self.delete_key(&dispatch.descends, &key_event)
                             || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
+                            || self.rename_key(&key_event)
                             || self.collapse_key(&key_event)
                             || match raw::step_selection(
                                 &dispatch.descends,
                                 self.model.tree_selection(),
+                                dispatch.line,
                                 &key_event,
                             ) {
                                 Some(path) => {
-                                    self.model.selection = Some(Selected::Tree(
-                                        raw::Selection::edge(&self.model.sources(), path),
-                                    ));
+                                    self.model.selection =
+                                        Some(Selected::Tree(raw::selected_by_arrow(
+                                            &self.model.sources(),
+                                            path,
+                                            &key_event,
+                                        )));
                                     true
                                 }
                                 None => false,
@@ -1061,6 +1070,7 @@ impl App {
         self.dispatch = Some(Dispatch {
             handler,
             descends,
+            line: 14.0 * scale,
             max_scroll,
             max_scroll_x,
             popup,
@@ -1378,8 +1388,11 @@ impl App {
     ) -> bool {
         event.state.is_down()
             && match &event.key {
-                // While pending, vertical arrows drive the popup choice.
-                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown)) => {
+                // While pending, plain vertical arrows drive the popup
+                // choice; chorded arrows stay structure keys.
+                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
+                    if !raw::command(&event.modifiers) =>
+                {
                     match &mut self.model.selection {
                         Some(Selected::Tree(
                             raw::Selection::Pending { choice, .. }
@@ -1477,25 +1490,56 @@ impl App {
             }
     }
 
-    /// Space toggles the selection's collapse override; a focused
-    /// string editor claims the key first and types a space instead.
-    fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
+    /// Cmd+L re-opens the selected field's label as its seeded rename
+    /// query — the keyboard route to what clicking the label does. The
+    /// popup opens only on this explicit ask, never during navigation.
+    /// (Cmd+R belongs to the Raw view toggle.)
+    fn rename_key(&mut self, event: &KeyboardEvent) -> bool {
         event.state.is_down()
-            && matches!(&event.key, Key::Character(c) if c.as_str() == " ")
-            && match self.model.tree_selection() {
-                Some(selection) => {
-                    let path = selection.path().to_vec();
-                    raw::toggle_collapse(
-                        &sources::Sources {
-                            doc: &self.model.doc,
-                            library: &self.model.library,
-                        },
-                        &mut self.model.collapse,
-                        &path,
-                    )
+            && raw::command(&event.modifiers)
+            && matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "l")
+            && match &self.model.selection {
+                Some(Selected::Tree(raw::Selection::Edge { path, .. })) => {
+                    let path = path.clone();
+                    match raw::pending_rename(&self.model.sources(), &path) {
+                        Some(pending) => {
+                            self.model.selection = Some(Selected::Tree(pending));
+                            true
+                        }
+                        None => false,
+                    }
                 }
-                None => false,
+                _ => false,
             }
+    }
+
+    /// Space toggles the selection's collapse override, and Cmd+Up /
+    /// Cmd+Down close and open it — the fold axis of the keyboard's
+    /// third dimension, under the same keys that walk the rows. A
+    /// focused string editor claims Space first and types instead.
+    fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
+        if !event.state.is_down() {
+            return false;
+        }
+        let set = match &event.key {
+            Key::Character(c) if c.as_str() == " " => None,
+            Key::Named(NamedKey::ArrowUp) if raw::command(&event.modifiers) => Some(true),
+            Key::Named(NamedKey::ArrowDown) if raw::command(&event.modifiers) => Some(false),
+            _ => return false,
+        };
+        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection
+        else {
+            return false;
+        };
+        let path = path.clone();
+        let sources = sources::Sources {
+            doc: &self.model.doc,
+            library: &self.model.library,
+        };
+        match set {
+            None => raw::toggle_collapse(&sources, &mut self.model.collapse, &path),
+            Some(closed) => raw::set_collapse(&sources, &mut self.model.collapse, &path, closed),
+        }
     }
 
     /// Renders the current model to the surface, from `RedrawRequested`.
@@ -1550,6 +1594,7 @@ impl App {
         self.dispatch = Some(Dispatch {
             handler,
             descends,
+            line: 14.0 * scale,
             max_scroll,
             max_scroll_x,
             popup,

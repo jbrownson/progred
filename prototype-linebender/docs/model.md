@@ -942,6 +942,69 @@ the dash's: every value's own ink selects the same Key path, so
 the label's one pointer job is its own edit; read-only labels
 keep the head's select rather than eating the click.)
 
+NAVIGATION IS THREE-DIMENSIONAL, AND THE ARROWS READ THE FRAME
+(2026-07-22, user: "keyboard nav is confusing with the switching
+between block/inline... maybe it's simpler to make it a function of
+the block/inline layout"). The old mapping was fixed — left parent,
+right first child, up/down siblings — while the layout flips the
+axis those moves land on: flat siblings run sideways (so Down moved
+right), dropped children sit below (so Right moved down), and the
+bubble-out at run ends made Up not invert Down. The user named the
+deeper structure: nav is 3D — two screen axes plus the fold. The
+shipped mapping: DOWN and UP walk the ROWS in reading order, file-
+tree style — every stop that opens a new line of its container,
+entering open blocks (first press on a block is its first row, the
+folder-then-first-child step), exiting past the last — so Down is
+always the next line down the screen and Up retraces exactly (they
+are true inverses now, which the sibling walk never was). RIGHT and
+LEFT walk WITHIN the line — into a hugged value, across flat
+content, back out — and Left from a row widens to the parent, still
+leftward on screen. The fold rides the same keys chorded: Cmd+Up
+closes the selection, Cmd+Down opens it (Space stays as the
+toggle), which also fills the old gap where collapse had a key but
+expand only had the ellipsis click. Collapse is the row walk's skim:
+a folded block registers one stop. Labels are NOT stops — a label
+engagement IS its rename query, and popups must never come and go
+under passive navigation (user constraint) — so the rename is an
+explicit chord, Cmd+L on the selected field (Cmd+R belongs to the
+Raw view), invoking exactly what the label click does. Cell heads
+stopped being full sibling stops and became line stops: Right
+reaches a cell's name, Down passes over it. THE MECHANISM, and the
+custom-projection theory it proves: the row/beside bit is COMPUTED
+FROM THE SETTLED GEOMETRY, not plumbed — `reading_order` rebuilds
+pre-order from the descends' per-parent registration order (the raw
+list settles children first), then classifies each stop by rect: no
+shared line band with the sibling before it → row; first into a
+container taller than ~1.5 lines → row; a Name step → beside, the
+one structural fact geometry can't see (a head shares its owner's
+first line in a tall cell, where the height test alone would call
+it a row — the record case needs that same test to call the first
+field a row, since a headless block's first line IS its first
+child's). Descend itself is unchanged (path + rect); any future
+custom projection that registers descends gets the 2D walk for
+free, its nav space literally computed from its visual description
+— the user's hoped-for property, demonstrated in the core
+projection. `sibling()` survives only as delete-landing. The walk
+is rebuilt per keypress from the frame (immediate-mode honest; the
+reactive layer is the designated answer if it ever costs).
+Integration scene: the 560px sample walk asserts Down never climbs
+(y0 monotone), Up retraces exactly, and any cell's first rightward
+step is its own head. (Same day, in-app: the user's "expand/
+collapse" had meant SELECTION widening/narrowing — the fold chord
+was a misreading — but playing with the walk resolved the
+question the right way: the parent MANIFESTS as a stop in the 2D
+walk, so nav really is two-dimensional and no depth chord is
+needed; the fold on Cmd+Up/Down stays as a happy accident, folding
+being the one thing that genuinely isn't a position move. And one
+caret rule from feel: a LEFTWARD landing on a string seeds the
+caret at the START — `selected_by_arrow` — so continuing left
+crosses the string in one press, the mirror of the end-seeded
+caret rightward travel already exits in one press; every other
+mount keeps the appending end-caret.) Parked: line-height quantum
+is passed as `Dispatch.line` (14·scale) rather than derived;
+Alt+Down as skip-subtree skim if walking big open blocks ever
+feels slow.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:

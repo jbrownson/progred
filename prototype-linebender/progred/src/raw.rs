@@ -18,7 +18,7 @@ use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
 use puri::layout::{Extent, HAlign, Node, col, decorate, leaf, min_width, pad, row};
 use puri::text::{TextCtx, TextStyle, text};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButton;
@@ -446,9 +446,25 @@ impl Selection {
 // Seeded with the caret at the end: an editor mounted without a text
 // click — label click, keyboard landing — starts appending (a
 // select-all trial read as dangerous), and a click's caret placement
-// overrides it.
+// overrides it. The one exception is a LEFTWARD keyboard landing,
+// which seeds the start (`selected_by_arrow`).
 fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
     LineEditState::new(text, 14.0, Brush::from(Color::new(color))).with_cursor_at_end()
+}
+
+/// The selection an arrow step lands on: the caret seeds the side the
+/// travel direction exits from, so the next same-direction press
+/// crosses a string in one press. The end-seeded default already IS
+/// the rightward case; a leftward landing seeds the START instead of
+/// grinding back through every character.
+pub fn selected_by_arrow(sources: &Sources, path: Path, event: &KeyboardEvent) -> Selection {
+    let mut selection = Selection::edge(sources, path);
+    if matches!(&event.key, Key::Named(NamedKey::ArrowLeft))
+        && let Some(edit) = selection.edit_mut()
+    {
+        edit.cursor_to_start();
+    }
+    selection
 }
 
 /// The index of the path's last Follow step: the identity crossing
@@ -1104,12 +1120,41 @@ pub fn set_name(doc: &mut Document, library: &Cells, path: &[Step], name: &str) 
     }
 }
 
-/// Toggle the collapse override for the value at `path`, staying
-/// sparse: an override matching the default (collapsed inside a
-/// cycle, expanded otherwise) is removed rather than stored. Declines
+/// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
 pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Step]) -> bool {
+    match collapse_default(sources, path) {
+        Some(default) => {
+            let next = !collapse.collapsed(path, default);
+            store_collapse(collapse, path, default, next);
+            true
+        }
+        None => false,
+    }
+}
+
+/// The directional twin: close or open the value at `path` — the fold
+/// axis of keyboard navigation. Returns whether the state changed.
+pub fn set_collapse(
+    sources: &Sources,
+    collapse: &mut Collapse,
+    path: &[Step],
+    closed: bool,
+) -> bool {
+    match collapse_default(sources, path) {
+        Some(default) if collapse.collapsed(path, default) != closed => {
+            store_collapse(collapse, path, default, closed);
+            true
+        }
+        _ => false,
+    }
+}
+
+/// The default collapse for the value at `path` — collapsed inside a
+/// cycle, expanded otherwise — or `None` when there is nothing to
+/// collapse.
+fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
     sources
         .resolve(path)
         .filter(|value| match value {
@@ -1121,17 +1166,20 @@ pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Step]
             Value::Record(fields) => !fields.is_empty(),
         })
         .map(|value| {
-            let in_cycle = (0..path.len())
+            (0..path.len())
                 .filter_map(|end| sources.resolve(&path[..end]))
-                .any(|ancestor| ancestor == value);
-            let next = !collapse.collapsed(path, in_cycle);
-            if next == in_cycle {
-                collapse.overrides.remove(path);
-            } else {
-                collapse.overrides.insert(path.to_vec(), next);
-            }
+                .any(|ancestor| ancestor == value)
         })
-        .is_some()
+}
+
+/// Stays sparse: an override matching the default is removed rather
+/// than stored.
+fn store_collapse(collapse: &mut Collapse, path: &[Step], default: bool, next: bool) {
+    if next == default {
+        collapse.overrides.remove(path);
+    } else {
+        collapse.overrides.insert(path.to_vec(), next);
+    }
 }
 
 /// Writes the selection's editor text through to its location after
@@ -1219,15 +1267,20 @@ pub struct Descend {
     pub rect: Rect,
 }
 
-/// Keyboard navigation over the frame's descends: a plain arrow steps
-/// the selection through the projected tree — left to the parent,
-/// right into the first placed child, up and down between siblings in
-/// placement order — and any arrow selects the root when nothing is
-/// selected. Returns the path to select, or `None` for keys
-/// navigation doesn't own.
+/// Keyboard navigation over the frame's descends, reading the layout
+/// the frame actually chose. Down and up walk the ROWS — every stop
+/// that opens a new line of its container — in reading order,
+/// entering open blocks the way a file tree walks its visible rows,
+/// so each press moves down (or up) the screen. Right and left walk
+/// WITHIN the line, into and across the content beside the current
+/// stop; left from a row widens to the parent. Any arrow selects the
+/// root when nothing is selected. `line` is one nominal line height,
+/// the quantum separating "beside" from "below". Returns the path to
+/// select, or `None` for keys navigation doesn't own.
 pub fn step_selection(
     descends: &[Descend],
     selection: Option<&Selection>,
+    line: f64,
     event: &KeyboardEvent,
 ) -> Option<Path> {
     let modified = event.modifiers.ctrl()
@@ -1244,29 +1297,107 @@ pub fn step_selection(
         _ => None,
     }
     .filter(|_| event.state.is_down() && !modified)?;
-    match (arrow, selection) {
-        (_, None) => Some(Vec::new()),
-        (NamedKey::ArrowLeft, Some(selection)) => selection
-            .path()
-            .split_last()
-            .map(|(_, parent)| parent.to_vec()),
-        (NamedKey::ArrowRight, Some(selection)) => {
-            let path = selection.path();
-            descends
-                .iter()
-                .map(|descend| &descend.path)
-                .find(|p| p.len() == path.len() + 1 && p.starts_with(path))
-                .cloned()
+    let Some(selection) = selection else {
+        return Some(Vec::new());
+    };
+    let path = selection.path();
+    let order = reading_order(descends, line);
+    let at = order
+        .iter()
+        .position(|stop| descends[stop.descend].path.as_slice() == path);
+    let found = |stop: &Stop| Some(descends[stop.descend].path.clone());
+    match (arrow, at) {
+        (NamedKey::ArrowDown, Some(at)) => {
+            order[at + 1..].iter().find(|stop| stop.row).and_then(found)
         }
-        (NamedKey::ArrowUp, Some(selection)) => sibling(descends, selection.path(), false),
-        (NamedKey::ArrowDown, Some(selection)) => sibling(descends, selection.path(), true),
+        (NamedKey::ArrowUp, Some(at)) => order[..at]
+            .iter()
+            .rev()
+            .find(|stop| stop.row)
+            .and_then(found),
+        (NamedKey::ArrowRight, Some(at)) => {
+            order.get(at + 1).filter(|stop| !stop.row).and_then(found)
+        }
+        (NamedKey::ArrowLeft, Some(at)) if !order[at].row => found(&order[at - 1]),
+        (NamedKey::ArrowLeft, _) => path.split_last().map(|(_, parent)| parent.to_vec()),
         _ => None,
     }
 }
 
-/// The neighboring sibling, continuing through ancestors at the
-/// ends: past the last child, Down flows to the enclosing next
-/// sibling (and Up mirrors), instead of dead-ending.
+/// One stop in the frame's reading order: pre-order over the
+/// descends, with the bit saying whether the stop opens a new line of
+/// its container (a row) or rides one beside its predecessor.
+struct Stop {
+    descend: usize,
+    row: bool,
+}
+
+/// The frame's stops in pre-order, each classified as row or beside
+/// from the geometry the layout settled: a stop is a row when its
+/// container stacked it — no shared line band with the sibling before
+/// it, or first into a multi-line container — and beside when it
+/// rides the same line. A cell's name is its owner's own first line,
+/// never a row. Order is rebuilt from per-parent registration order,
+/// which is document order; the raw list settles children first.
+fn reading_order(descends: &[Descend], line: f64) -> Vec<Stop> {
+    let by_path: HashMap<&[Step], usize> = descends
+        .iter()
+        .enumerate()
+        .map(|(index, descend)| (descend.path.as_slice(), index))
+        .collect();
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); descends.len()];
+    let mut roots = Vec::new();
+    for (index, descend) in descends.iter().enumerate() {
+        let parent = (0..descend.path.len())
+            .rev()
+            .find_map(|end| by_path.get(&descend.path[..end]).copied());
+        match parent {
+            Some(parent) => children[parent].push(index),
+            None => roots.push(index),
+        }
+    }
+    let mut order = Vec::with_capacity(descends.len());
+    let mut stack: Vec<(usize, Option<usize>, Option<usize>)> = roots
+        .into_iter()
+        .rev()
+        .map(|root| (root, None, None))
+        .collect();
+    while let Some((index, parent, before)) = stack.pop() {
+        let descend = &descends[index];
+        let row = match (parent, before) {
+            (None, _) => true,
+            _ if matches!(descend.path.last(), Some(Step::Name)) => false,
+            (Some(_), Some(before)) => !same_line(descend.rect, descends[before].rect, line),
+            (Some(parent), None) => descends[parent].rect.height() > line * 1.5,
+        };
+        order.push(Stop {
+            descend: index,
+            row,
+        });
+        let mut before = None;
+        let entries: Vec<_> = children[index]
+            .iter()
+            .map(|&child| {
+                let entry = (child, Some(index), before);
+                before = Some(child);
+                entry
+            })
+            .collect();
+        stack.extend(entries.into_iter().rev());
+    }
+    order
+}
+
+/// Whether two settled rects share a line: their vertical bands
+/// overlap by more than half a line — baseline-aligned neighbors
+/// overlap by most of one, stacked rows touch at the edges at most.
+fn same_line(a: Rect, b: Rect, line: f64) -> bool {
+    a.y1.min(b.y1) - a.y0.max(b.y0) > line * 0.5
+}
+
+/// The neighboring sibling in placement order, continuing through
+/// ancestors at the ends — where the selection lands after a delete,
+/// via [`selection_after_delete`].
 fn sibling(descends: &[Descend], path: &[Step], next: bool) -> Option<Path> {
     let mut path = path.to_vec();
     loop {
@@ -2824,14 +2955,13 @@ mod tests {
         value.as_list().unwrap().keys().cloned().collect()
     }
 
-    fn descends(paths: &[Vec<&str>]) -> Vec<Descend> {
-        paths
-            .iter()
-            .map(|path| Descend {
-                path: path.iter().map(|s| key(s)).collect(),
-                rect: Rect::ZERO,
-            })
-            .collect()
+    const LINE: f64 = 16.0;
+
+    fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend {
+        Descend {
+            path,
+            rect: Rect::new(x0, y0, x1, y1),
+        }
     }
 
     fn arrow(named: NamedKey) -> KeyboardEvent {
@@ -2843,57 +2973,156 @@ mod tests {
         }
     }
 
-    fn stepped(ds: &[Descend], from: Option<&[&str]>, named: NamedKey) -> Option<Path> {
-        let selection = from.map(|p| Selection::Edge {
-            path: p.iter().map(|s| key(s)).collect(),
+    fn stepped(ds: &[Descend], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
+        let selection = from.map(|path| Selection::Edge {
+            path,
             edit: None,
             recorded: false,
         });
-        step_selection(ds, selection.as_ref(), &arrow(named))
+        step_selection(ds, selection.as_ref(), LINE, &arrow(named))
     }
 
     #[test]
-    fn arrows_step_selection_through_the_tree() {
-        // Placement order: pre-order, parents before children.
-        let ds = descends(&[vec![], vec!["a"], vec!["a", "x"], vec!["a", "y"], vec!["b"]]);
-        let path = |p: &[&str]| p.iter().map(|s| key(s)).collect::<Vec<_>>();
+    fn arrows_walk_rows_down_and_lines_across() {
+        // A block record: field `a` hugs a flat record on line one,
+        // field `b` drops a two-row block, field `e` closes. Settled
+        // in placement order — children before parents.
+        let a = || vec![key("a")];
+        let a1 = || vec![key("a"), key("p")];
+        let a2 = || vec![key("a"), key("q")];
+        let b = || vec![key("b")];
+        let c = || vec![key("b"), key("c")];
+        let d = || vec![key("b"), key("d")];
+        let e = || vec![key("e")];
+        let ds = vec![
+            stop(a1(), 60.0, 2.0, 80.0, 18.0),
+            stop(a2(), 100.0, 2.0, 120.0, 18.0),
+            stop(a(), 40.0, 2.0, 140.0, 18.0),
+            stop(c(), 60.0, 24.0, 80.0, 40.0),
+            stop(d(), 60.0, 44.0, 80.0, 60.0),
+            stop(b(), 20.0, 22.0, 280.0, 62.0),
+            stop(e(), 40.0, 66.0, 80.0, 82.0),
+            stop(vec![], 0.0, 0.0, 300.0, 84.0),
+        ];
         // Nothing selected: any arrow lands on the root.
         assert_eq!(stepped(&ds, None, NamedKey::ArrowDown), Some(vec![]));
-        // Right descends to the first placed child, left back to the parent.
-        assert_eq!(stepped(&ds, Some(&[]), NamedKey::ArrowRight), Some(path(&["a"])));
+        // Down walks every row in reading order, entering the open
+        // block; up reverses it exactly.
+        let rows = [vec![], a(), b(), c(), d(), e()];
+        for pair in rows.windows(2) {
+            let (above, below) = (&pair[0], &pair[1]);
+            assert_eq!(
+                stepped(&ds, Some(above.clone()), NamedKey::ArrowDown),
+                Some(below.clone())
+            );
+            assert_eq!(
+                stepped(&ds, Some(below.clone()), NamedKey::ArrowUp),
+                Some(above.clone())
+            );
+        }
+        assert_eq!(stepped(&ds, Some(e()), NamedKey::ArrowDown), None);
+        assert_eq!(stepped(&ds, Some(vec![]), NamedKey::ArrowUp), None);
+        // Right walks the hugged line's content; the walk ends with
+        // the line, and left retraces it back out to the row.
+        assert_eq!(stepped(&ds, Some(a()), NamedKey::ArrowRight), Some(a1()));
+        assert_eq!(stepped(&ds, Some(a1()), NamedKey::ArrowRight), Some(a2()));
+        assert_eq!(stepped(&ds, Some(a2()), NamedKey::ArrowRight), None);
+        assert_eq!(stepped(&ds, Some(a2()), NamedKey::ArrowLeft), Some(a1()));
+        assert_eq!(stepped(&ds, Some(a1()), NamedKey::ArrowLeft), Some(a()));
+        // Left from a row widens to the parent; the root has none.
+        assert_eq!(stepped(&ds, Some(a()), NamedKey::ArrowLeft), Some(vec![]));
+        assert_eq!(stepped(&ds, Some(vec![]), NamedKey::ArrowLeft), None);
+        // Mid-line, down exits to the next row and up collects to the
+        // line's own stop.
+        assert_eq!(stepped(&ds, Some(a2()), NamedKey::ArrowDown), Some(b()));
+        assert_eq!(stepped(&ds, Some(a1()), NamedKey::ArrowUp), Some(a()));
+        // A dropped block is entered by down, never right.
+        assert_eq!(stepped(&ds, Some(b()), NamedKey::ArrowRight), None);
+    }
+
+    #[test]
+    fn the_cell_head_rides_its_first_line() {
+        // Dropped: the name shares the cell's head line while the
+        // value opens a row below it.
+        let f = || vec![Step::Follow, key("f")];
+        let ds = vec![
+            stop(vec![Step::Name], 0.0, 2.0, 60.0, 18.0),
+            stop(f(), 30.0, 24.0, 100.0, 40.0),
+            stop(vec![Step::Follow], 20.0, 22.0, 180.0, 48.0),
+            stop(vec![], 0.0, 0.0, 200.0, 50.0),
+        ];
         assert_eq!(
-            stepped(&ds, Some(&["a", "x"]), NamedKey::ArrowLeft),
-            Some(path(&["a"]))
+            stepped(&ds, Some(vec![]), NamedKey::ArrowRight),
+            Some(vec![Step::Name])
         );
-        // Up and down move between siblings in placement order.
-        assert_eq!(stepped(&ds, Some(&["a"]), NamedKey::ArrowDown), Some(path(&["b"])));
-        assert_eq!(stepped(&ds, Some(&["b"]), NamedKey::ArrowUp), Some(path(&["a"])));
         assert_eq!(
-            stepped(&ds, Some(&["a", "x"]), NamedKey::ArrowDown),
-            Some(path(&["a", "y"]))
+            stepped(&ds, Some(vec![]), NamedKey::ArrowDown),
+            Some(vec![Step::Follow])
         );
-        // Boundaries decline: no parent or sibling above the root, no
-        // children below a leaf, no sibling past the last.
-        assert_eq!(stepped(&ds, Some(&[]), NamedKey::ArrowLeft), None);
-        assert_eq!(stepped(&ds, Some(&[]), NamedKey::ArrowUp), None);
-        assert_eq!(stepped(&ds, Some(&["a", "x"]), NamedKey::ArrowRight), None);
-        assert_eq!(stepped(&ds, Some(&["b"]), NamedKey::ArrowDown), None);
+        assert_eq!(
+            stepped(&ds, Some(vec![Step::Follow]), NamedKey::ArrowDown),
+            Some(f())
+        );
+        assert_eq!(
+            stepped(&ds, Some(vec![Step::Name]), NamedKey::ArrowLeft),
+            Some(vec![])
+        );
+        // Hugged: head and value share the one line; there is no row
+        // below, only the line to walk.
+        let ds = vec![
+            stop(vec![Step::Name], 0.0, 2.0, 60.0, 18.0),
+            stop(vec![Step::Follow], 70.0, 2.0, 150.0, 18.0),
+            stop(vec![], 0.0, 0.0, 160.0, 20.0),
+        ];
+        assert_eq!(stepped(&ds, Some(vec![]), NamedKey::ArrowDown), None);
+        assert_eq!(
+            stepped(&ds, Some(vec![]), NamedKey::ArrowRight),
+            Some(vec![Step::Name])
+        );
+        assert_eq!(
+            stepped(&ds, Some(vec![Step::Name]), NamedKey::ArrowRight),
+            Some(vec![Step::Follow])
+        );
+        assert_eq!(
+            stepped(&ds, Some(vec![Step::Follow]), NamedKey::ArrowRight),
+            None
+        );
     }
 
     #[test]
     fn navigation_declines_modified_keys_releases_and_other_keys() {
-        let ds = descends(&[vec![], vec!["a"]]);
+        let ds = vec![
+            stop(vec![key("a")], 0.0, 2.0, 60.0, 18.0),
+            stop(vec![], 0.0, 0.0, 300.0, 40.0),
+        ];
         let shifted = KeyboardEvent {
             modifiers: Modifiers::SHIFT,
             ..arrow(NamedKey::ArrowDown)
         };
-        assert!(step_selection(&ds, None, &shifted).is_none());
+        assert!(step_selection(&ds, None, LINE, &shifted).is_none());
         let released = KeyboardEvent {
             state: KeyState::Up,
             ..arrow(NamedKey::ArrowDown)
         };
-        assert!(step_selection(&ds, None, &released).is_none());
-        assert!(step_selection(&ds, None, &arrow(NamedKey::Escape)).is_none());
+        assert!(step_selection(&ds, None, LINE, &released).is_none());
+        assert!(step_selection(&ds, None, LINE, &arrow(NamedKey::Escape)).is_none());
+    }
+
+    #[test]
+    fn set_collapse_is_directional_and_stays_sparse() {
+        let lib = Cells::new();
+        let (doc, _) = doc_of(vec![(Label::from("a"), Value::from("1"))]);
+        let sources = src(&doc, &lib);
+        let mut collapse = Collapse::default();
+        assert!(set_collapse(&sources, &mut collapse, &[], true));
+        assert!(!set_collapse(&sources, &mut collapse, &[], true));
+        assert!(set_collapse(&sources, &mut collapse, &[], false));
+        assert!(!set_collapse(&sources, &mut collapse, &[], false));
+        // Matching the default stores nothing.
+        assert!(collapse.overrides.is_empty());
+        // A leaf has nothing to fold.
+        let leaf = vec![Step::Follow, key("a")];
+        assert!(!set_collapse(&sources, &mut collapse, &leaf, true));
     }
 
     #[test]
@@ -3782,7 +4011,7 @@ mod svg_bench {
         }
     }
 
-    fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
+    fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
         let library = crate::conventions::library();
         let sources = Sources {
             doc,
@@ -3835,7 +4064,11 @@ mod svg_bench {
             popup: None,
         };
         puri::layout::place_top_left(node, &mut bench, Point::new(24.0, 24.0));
+        (bench, extent)
+    }
 
+    fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
+        let (bench, extent) = place(doc, selection, width);
         let (width, height) = (width.max(extent.width + 48.0), extent.height() + 48.0);
         let mut out = String::new();
         writeln!(
@@ -3858,6 +4091,91 @@ mod svg_bench {
         // this render is also the canary against layout cost blowing
         // up when width is scarce.
         render(&doc, None, 320.0, "../target/raw_projection_tight.svg");
+    }
+
+    /// The keyboard walk against real settled geometry: down visits
+    /// rows in screen order — never climbing back up — and up
+    /// retraces the same stops exactly.
+    #[test]
+    fn the_row_walk_descends_the_sample_projection_in_screen_order() {
+        use ui_events::keyboard::{KeyState, Modifiers};
+        let doc = sample_document();
+        let (bench, _) = place(&doc, None, 560.0);
+        let line = 14.0;
+        let press = |named: NamedKey| KeyboardEvent {
+            key: Key::Named(named),
+            state: KeyState::Down,
+            modifiers: Modifiers::empty(),
+            ..Default::default()
+        };
+        let rect_of = |path: &Path| {
+            bench
+                .descends
+                .iter()
+                .find(|descend| &descend.path == path)
+                .expect("walk stops on placed descends")
+                .rect
+        };
+        let select = |path: &Path| Selection::Edge {
+            path: path.clone(),
+            edit: None,
+            recorded: false,
+        };
+        let mut selection: Option<Selection> = None;
+        let mut walk: Vec<Path> = Vec::new();
+        while walk.len() < 200 {
+            match step_selection(
+                &bench.descends,
+                selection.as_ref(),
+                line,
+                &press(NamedKey::ArrowDown),
+            ) {
+                Some(path) => {
+                    selection = Some(select(&path));
+                    walk.push(path);
+                }
+                None => break,
+            }
+        }
+        assert!(walk.len() >= 5 && walk.len() < 200, "walked {}", walk.len());
+        assert!(walk.iter().any(|path| path.len() >= 2), "walk enters open blocks");
+        for pair in walk.windows(2) {
+            assert!(
+                rect_of(&pair[1]).y0 >= rect_of(&pair[0]).y0,
+                "down never climbs: {:?} -> {:?}",
+                pair[0],
+                pair[1]
+            );
+        }
+        for expect in walk.iter().rev().skip(1) {
+            let up = step_selection(
+                &bench.descends,
+                selection.as_ref(),
+                line,
+                &press(NamedKey::ArrowUp),
+            )
+            .expect("up retraces the walk");
+            assert_eq!(&up, expect);
+            selection = Some(select(&up));
+        }
+        // Any cell's first rightward step is its own head: the name
+        // rides the cell's line, never a row of its own.
+        let head = bench
+            .descends
+            .iter()
+            .map(|descend| descend.path.clone())
+            .find(|path| matches!(path.last(), Some(Step::Name)))
+            .expect("the sample has a cell head");
+        let cell = head[..head.len() - 1].to_vec();
+        assert_eq!(
+            step_selection(
+                &bench.descends,
+                Some(&select(&cell)),
+                line,
+                &press(NamedKey::ArrowRight),
+            ),
+            Some(head)
+        );
     }
 
     #[test]

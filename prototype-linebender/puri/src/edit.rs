@@ -119,6 +119,13 @@ impl LineEditState {
         self.focus = self.text.len();
     }
 
+    /// Land the caret at the start — the mirror, for fields entered
+    /// walking backward.
+    pub fn cursor_to_start(&mut self) {
+        self.anchor = 0;
+        self.focus = 0;
+    }
+
     /// The base text: what edits commit. Excludes any IME preedit and
     /// the affixes, which are display only.
     pub fn text(&self) -> &str {
@@ -682,6 +689,45 @@ mod tests {
             Key::Named(NamedKey::Escape),
             Modifiers::empty(),
         ));
+    }
+
+    #[test]
+    fn boundary_arrows_decline_from_either_seeded_end() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut state = state("abc").with_cursor_at_end();
+        // At the end, right declines and left grinds inward.
+        assert!(!press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowRight),
+            Modifiers::empty(),
+        ));
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowLeft),
+            Modifiers::empty(),
+        ));
+        // Re-seeded at the start, left declines immediately and
+        // typing prepends.
+        state.cursor_to_start();
+        assert!(!press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowLeft),
+            Modifiers::empty(),
+        ));
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Character("z".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(state.text(), "zabc");
     }
 
     #[test]
