@@ -753,7 +753,13 @@ changes its paint. What still changes is honest: quotes appear if
 you didn't type them, and a string narrower than the frame minimum
 tightens. The cold box touches neighbors exactly where the ring
 would — the box previews the ring's footprint; tuning that
-crowding is `highlight_rect`'s one knob, queued with aesthetics.
+crowding is `highlight_rect`'s one knob. TUNED same day (user: the
+ring-sized box overlapped adjoining brackets and read too
+prominent): outset 3 → 2, radius 5 → 4 — sized for the QUIET
+wearer, since the cold box stands beside delimiters permanently
+where the ring only visits. The whole family moved together
+(selection rings included — commit parity requires it), and the
+cold hairline now clears a paren's ink.
 The CARET itself was parley's leaded line box,
 box-filling; `text_edit` now refits it to the native shape — the
 line's ascent above the baseline plus half its descent below
@@ -808,7 +814,36 @@ strong-before-atom promotion now requires a NAME. Named cells and
 the constructors keep it; an unnamed cell's short-id match,
 however exact, ranks after the atom the query spells — ids are
 for reading, names are for reaching. Pinned by test: an exact
-short-id query still offers the string first. The frame minimum became `puri::layout::min_width`
+short-id query still offers the string first.
+
+CELL COLLAPSE, THE STORY STRAIGHTENED (2026-07-21, later — user:
+"I think there was some miscommunication"). Cells DO collapse,
+generally: the earlier "cells do not collapse" round retired only
+the SUMMARY form; the elision `( … )` is every valued cell's
+collapsed form, one Space away. The mechanics were never the gap —
+the semantics are exactly the user's statement of them: a SPARSE
+map of per-path overrides (a flat HashMap, not a trie — no prefix
+structure), empty on fresh launch; every render looks its path up
+and an absent entry means the default, which is FALSE except a
+cell inside a cycle. Layout never enters into it: inline literals
+collapse exactly like block forms. What was missing was the way
+back open by pointer: the elided cell's ellipsis was a select
+target. It now TOGGLES via `toggle_target`. And the COUNT
+SUMMARIES ARE GONE (user): collapsed containers no longer say
+`{ ▸ n fields }` — every collapsed thing is UNIFORM ELISION,
+`( … )` `{ … }` `[ … ]`, delimiters selecting (so a collapsed
+thing still copies and deletes), ellipsis expanding; `count_text`
+deleted. THE TRIANGLES WENT WITH THEM (user: "the > buttons just
+sort of pollute, maybe we get rid of them altogether"): SPACE ON
+THE SELECTION IS THE COLLAPSE GESTURE, the one way to close
+anything, and the clickable `…` the one way back open by pointer
+— `disclosure` deleted whole, block forms tightened by the gutter
+it occupied. CYCLES are
+the same machinery with the default flipped: the repeated cell
+defaults collapsed at each depth's OWN path, so expansion follows
+the cycle turn by turn, as deep as wanted. Test-pinned:
+turn-by-turn expansion, sparse overrides restoring defaults,
+plain cells and containers toggling alike, valueless declining. The frame minimum became `puri::layout::min_width`
 — a real combinator (pad-to-minimum on the right), not inline
 arithmetic — the name editor's content-persists-chrome-marks-
 engagement pattern applied to absence itself. The pending

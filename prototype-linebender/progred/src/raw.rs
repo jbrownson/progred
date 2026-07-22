@@ -22,7 +22,7 @@ use std::collections::HashSet;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButton;
-use vello::kurbo::{Affine, BezPath, Insets, Point, Rect, RoundedRect, Stroke};
+use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
 
 /// Shared with the mounted editors so edited atoms keep their colors.
@@ -1399,9 +1399,12 @@ fn placeholder_box<P: Canvas>(tcx: &mut TextCtx, styles: &RawStyles) -> Node<P> 
 /// content rect plus breathing room, rounded. The selection ring
 /// draws it in blue, the cold placeholder in dim; sharing the shape
 /// is what keeps slot → pending → committed value from ever
-/// changing the box.
+/// changing the box. Sized so the QUIET wearer fits: the cold box
+/// stands beside delimiters permanently, and this outset keeps its
+/// hairline clear of a paren's ink where the old ring-sized box
+/// overlapped.
 fn highlight_rect(scale: f64, rect: Rect) -> RoundedRect {
-    RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale)
+    RoundedRect::from_rect(rect.inset(2.0 * scale), 4.0 * scale)
 }
 
 /// The pane-local primary: translucent system blue, like the Swift
@@ -1540,13 +1543,15 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// — bare, or the named red link — renders the [`placeholder`] box in
 /// the value's place (the empty-slot rule in [`Selection::edge`]
 /// makes selecting it begin the first value); an external valueless
-/// cell renders head-only, complete. Cells do NOT collapse — the
-/// value's own collapsed form is the one collapse there is; the
-/// exception is CYCLE RE-ENTRY, where the repeated cell renders
-/// `( … )` — a mark of recursion, not a summary — and a collapse
-/// override at the cell's path (Space) is what expands one more
-/// turn. The parens and the head claim cell-selection; gaps between
-/// claims fall through.
+/// cell renders head-only, complete. Cells COLLAPSE like containers
+/// — Space toggles the override at the cell's path — but the
+/// collapsed form is `( … )`: pure elision, never a summary, a cell
+/// does not introspect its value. CYCLE RE-ENTRY is the same
+/// machinery with the DEFAULT flipped: the repeated cell defaults
+/// collapsed, and expanding — Space, or clicking the ellipsis —
+/// opens one more turn, as deep as you care to follow. The parens
+/// and the head claim cell-selection; gaps between claims fall
+/// through.
 fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
@@ -1569,18 +1574,15 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         && !pending_inside
         && cx.collapse.collapsed(path, ancestors.contains(&cell));
     if elided {
+        // The ellipsis is the way back open: clicking it expands one
+        // turn (the parens still select the cell).
         return bracketed(
             cx,
             Delim::Paren,
             path,
             &target,
             hooks,
-            select_target(
-                path.to_vec(),
-                target.clone(),
-                hooks,
-                text(tcx, "…", &cx.styles.dim),
-            ),
+            toggle_target(path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
         );
     }
     // The head claims cell-selection — the gap beside the name
@@ -1895,7 +1897,8 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let target = Value::List(elements.clone());
 
     // A pending child forces the list open; the collapse override
-    // outranks the layout the content would pick.
+    // outranks the layout the content would pick. Collapsed is pure
+    // elision — no summary — and the ellipsis is the way back open.
     let collapsed = !items.is_empty()
         && items.iter().all(|(_, value)| value.is_some())
         && cx.collapse.collapsed(path, false);
@@ -1908,8 +1911,7 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 4.0 * scale,
                 vec![
                     flat_delim(cx.styles, Delim::Bracket, true),
-                    disclosure(path.to_vec(), true, hooks, cx.styles),
-                    text(tcx, &count_text(items.len(), "element"), &cx.styles.dim),
+                    toggle_target(path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
                     flat_delim(cx.styles, Delim::Bracket, false),
                 ],
             ),
@@ -1957,7 +1959,6 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 
     let inside = (avail
         - 2.0 * (delim_advance(cx.styles, Delim::Bracket) + 2.0 * scale)
-        - 16.0 * scale
         - text::<P>(tcx, "-", &cx.styles.dim).extent.width
         - 6.0 * scale)
         .max(0.0);
@@ -1987,28 +1988,22 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             row(6.0 * scale, vec![dash, content])
         })
         .collect();
-    // The block form: the brackets span the element column, the
-    // disclosure on its first line; the brackets are the list's click
-    // claims, and everything between the rows falls through.
+    // The block form: the brackets span the element column and are
+    // the list's click claims; everything between the rows falls
+    // through. Collapsing is Space on the selection — no button.
     let block = bracketed(
         cx,
         Delim::Bracket,
         path,
         &target,
         hooks,
-        row(
-            4.0 * scale,
-            vec![
-                disclosure(path.to_vec(), false, hooks, cx.styles),
-                col(HAlign::Start, 0, 4.0 * scale, rows),
-            ],
-        ),
+        col(HAlign::Start, 0, 4.0 * scale, rows),
     );
     // The general rule: first alternative that FITS, in priority
     // order; when none fits, the NARROWEST attempted, priority
     // breaking ties. A small list's block form can be WIDER than its
-    // literal (the disclosure and dash overhead), and kicking to it
-    // would overflow more.
+    // literal (the dash overhead), and kicking to it would overflow
+    // more.
     match flat {
         Some(candidate) if candidate.extent.width <= block.extent.width => {
             select_target(path.to_vec(), target, hooks, candidate)
@@ -2047,7 +2042,8 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let target = Value::Record(fields.clone());
 
     // A pending inside forces the record open; the collapse override
-    // outranks the layout the content would pick.
+    // outranks the layout the content would pick. Collapsed is pure
+    // elision — no summary — and the ellipsis is the way back open.
     let collapsed = !items.is_empty()
         && !pending_edge
         && items.iter().all(|(_, value)| value.is_some())
@@ -2061,8 +2057,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 4.0 * scale,
                 vec![
                     flat_delim(cx.styles, Delim::Brace, true),
-                    disclosure(path.to_vec(), true, hooks, cx.styles),
-                    text(tcx, &count_text(items.len(), "field"), &cx.styles.dim),
+                    toggle_target(path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
                     flat_delim(cx.styles, Delim::Brace, false),
                 ],
             ),
@@ -2118,10 +2113,8 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         return select_target(path.to_vec(), target, hooks, candidate);
     }
 
-    let inside = (avail
-        - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)
-        - 16.0 * scale)
-        .max(0.0);
+    let inside =
+        (avail - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)).max(0.0);
     let mut rows: Vec<Node<P>> = items
         .into_iter()
         .map(|(key, value)| field_row(cx, tcx, path, ancestors, key, value, inside, hooks))
@@ -2131,38 +2124,27 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     if let Some((query, choice)) = cx.pending_edge_under(path) {
         rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
     }
-    // The block form: the braces span the field column, the
-    // disclosure on its first line; the braces are the record's click
-    // claims, and everything between the rows falls through.
+    // The block form: the braces span the field column and are the
+    // record's click claims; everything between the rows falls
+    // through. Collapsing is Space on the selection — no button.
     let block = bracketed(
         cx,
         Delim::Brace,
         path,
         &target,
         hooks,
-        row(
-            4.0 * scale,
-            vec![
-                disclosure(path.to_vec(), false, hooks, cx.styles),
-                col(HAlign::Start, 0, 4.0 * scale, rows),
-            ],
-        ),
+        col(HAlign::Start, 0, 4.0 * scale, rows),
     );
     // The general rule: first alternative that FITS, in priority
     // order; when none fits, the NARROWEST attempted, priority
     // breaking ties. A small record's block form can be WIDER than
-    // its literal (the disclosure and arrow overhead), and kicking to
-    // it would overflow more.
+    // its literal, and kicking to it would overflow more.
     match flat {
         Some(candidate) if candidate.extent.width <= block.extent.width => {
             select_target(path.to_vec(), target, hooks, candidate)
         }
         _ => block,
     }
-}
-
-fn count_text(n: usize, noun: &str) -> String {
-    format!("{n} {noun}{}", if n == 1 { "" } else { "s" })
 }
 
 /// Git-style short form of a cell id: an ellipsis and the last five
@@ -2256,56 +2238,6 @@ fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P
     })
 }
 
-/// The disclosure delta to the right of a handle: down when expanded,
-/// right when collapsed. Clicking it reports a toggle for this path
-/// without selecting; the extent spans the header height so the
-/// target is comfortable, and living outside the child indent it
-/// costs no horizontal space.
-fn disclosure<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
-    path: Path,
-    collapsed: bool,
-    hooks: &Hooks<C>,
-    styles: &RawStyles,
-) -> Node<P> {
-    let scale = styles.scale;
-    let toggle = hooks.toggle.clone();
-    let brush = styles.dim.brush.clone();
-    let (width, ascent, descent) = (12.0 * scale, 14.4 * scale, 3.6 * scale);
-    leaf(
-        Extent {
-            width,
-            ascent,
-            descent,
-        },
-        move |p: &mut P, at| {
-            let rect = Rect::new(at.x, at.y - ascent, at.x + width, at.y + descent);
-            let (x, y) = (at.x + width / 2.0 - 1.0 * scale, at.y - 5.4 * scale);
-            let h = 3.8 * scale;
-            let mut tri = BezPath::new();
-            if collapsed {
-                tri.move_to((x - h * 0.5, y - h * 0.9));
-                tri.line_to((x - h * 0.5, y + h * 0.9));
-                tri.line_to((x + h * 0.9, y));
-            } else {
-                tri.move_to((x - h * 0.9, y - h * 0.5));
-                tri.line_to((x + h * 0.9, y - h * 0.5));
-                tri.line_to((x, y + h * 0.9));
-            }
-            tri.close_path();
-            p.fill(tri, brush.clone(), Affine::IDENTITY);
-            let toggle = toggle.clone();
-            let target = path.clone();
-            p.handler().on_pointer_down(move |ctx, event| {
-                event.button == Some(PointerButton::Primary)
-                    && rect.contains(Point::new(event.state.position.x, event.state.position.y))
-                    && {
-                        toggle(ctx, target.clone());
-                        true
-                    }
-            });
-        },
-    )
-}
 
 fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
@@ -2615,6 +2547,29 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
         }
         None => fallback,
     }
+}
+
+/// A click that reports a collapse toggle for `path` without
+/// selecting — [`disclosure`]'s click on arbitrary content, the
+/// collapsed forms' way back open.
+fn toggle_target<C: 'static, P: Canvas + HasHandler<C>>(
+    path: Path,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let toggle = hooks.toggle.clone();
+    decorate(content, move |p, rect| {
+        let toggle = toggle.clone();
+        let target = path.clone();
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && {
+                    toggle(ctx, target.clone());
+                    true
+                }
+        });
+    })
 }
 
 /// A command-click pick target with no plain-click behavior — for
@@ -3228,6 +3183,62 @@ mod tests {
     }
 
     #[test]
+    fn cycles_collapse_by_default_and_expand_turn_by_turn() {
+        // A: { next: A } — the re-entry at [Follow, next] repeats the
+        // root value.
+        let a = new_cell_id();
+        let mut cells = Cells::new();
+        cells.set_value(a, Value::record([(Label::from("next"), Value::from(a))]));
+        let doc = Document {
+            root: Some(Value::from(a)),
+            cells,
+        };
+        let lib = Cells::new();
+        let sources = src(&doc, &lib);
+        let mut collapse = Collapse::default();
+        let reentry = vec![Step::Follow, key("next")];
+        // Space's toggle expands the default-collapsed re-entry.
+        assert!(toggle_collapse(&sources, &mut collapse, &reentry));
+        assert!(!collapse.collapsed(&reentry, true));
+        // The next turn defaults collapsed at its own deeper path and
+        // expands the same way — follow the cycle as far as wanted.
+        let deeper: Vec<Step> = reentry.iter().chain(reentry.iter()).cloned().collect();
+        assert!(collapse.collapsed(&deeper, true));
+        assert!(toggle_collapse(&sources, &mut collapse, &deeper));
+        assert!(!collapse.collapsed(&deeper, true));
+        // Toggling back restores the default (the override is sparse).
+        assert!(toggle_collapse(&sources, &mut collapse, &deeper));
+        assert!(collapse.collapsed(&deeper, true));
+        assert!(collapse.overrides.is_empty() || !collapse.overrides.contains_key(&deeper));
+    }
+
+    #[test]
+    fn any_valued_cell_and_any_container_collapse() {
+        let lib = Cells::new();
+        let (doc, _) = doc_of(vec![(Label::from("kind"), Value::from("building"))]);
+        let sources = src(&doc, &lib);
+        let mut collapse = Collapse::default();
+        // A plain (non-cycle) cell collapses to ( … ) via the same
+        // toggle.
+        assert!(toggle_collapse(&sources, &mut collapse, &[]));
+        assert!(collapse.collapsed(&[], false));
+        // Its record collapses too — layout never enters into it, so
+        // inline literals toggle exactly like block forms.
+        assert!(toggle_collapse(&sources, &mut collapse, &[Step::Follow]));
+        assert!(collapse.collapsed(&[Step::Follow], false));
+        // A valueless location declines.
+        let empty = Document {
+            root: None,
+            cells: Cells::new(),
+        };
+        assert!(!toggle_collapse(
+            &src(&empty, &lib),
+            &mut collapse,
+            &[] as &[Step]
+        ));
+    }
+
+    #[test]
     fn minting_seeds_bare_cells() {
         // A mint is fully bare: a link with nothing said at all —
         // naming happens on the head afterward.
@@ -3393,7 +3404,7 @@ mod svg_bench {
     use skrifa::outline::{DrawSettings, OutlinePen};
     use skrifa::{FontRef, GlyphId, MetadataProvider};
     use std::fmt::Write as _;
-    use vello::kurbo::Shape as KurboShape;
+    use vello::kurbo::{BezPath, Shape as KurboShape};
 
     struct Bench {
         list: DrawList,
