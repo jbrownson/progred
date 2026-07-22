@@ -17,7 +17,8 @@ use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
 use puri::layout::{Extent, HAlign, Node, col, decorate, leaf, min_width, pad, row};
-use puri::text::{TextCtx, TextStyle, text};
+use parley::layout::Layout;
+use puri::text::{TextCtx, TextStyle, caret_index, line_layout, text};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -237,7 +238,10 @@ pub struct Hooks<C> {
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
     /// Re-open the label of the field at `path` (a Key path) as its
     /// seeded query — the click gesture on a writable field's label.
-    pub rename: Rc<dyn Fn(&mut C, Path)>,
+    /// The byte index is the click hit-tested against the label's own
+    /// layout; the seed shares its spelling, so the shell lands the
+    /// caret there in whatever face the editor draws.
+    pub rename: Rc<dyn Fn(&mut C, Path, usize)>,
     /// None when the editor is already gone — retained-frame dispatch
     /// may fire a frame late, and absent state declines.
     pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
@@ -443,11 +447,11 @@ impl Selection {
     }
 }
 
-// Seeded with the caret at the end: an editor mounted without a text
-// click — label click, keyboard landing — starts appending (a
-// select-all trial read as dangerous), and a click's caret placement
-// overrides it. The one exception is a LEFTWARD keyboard landing,
-// which seeds the start (`selected_by_arrow`).
+// Seeded with the caret at the end: an editor mounted without a
+// click — a keyboard landing, Cmd+L — starts appending (a select-all
+// trial read as dangerous), and a mounting click's caret placement
+// overrides it (`select`, `rename`). The one exception is a LEFTWARD
+// keyboard landing, which seeds the start (`selected_by_arrow`).
 fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
     LineEditState::new(text, 14.0, Brush::from(Color::new(color))).with_cursor_at_end()
 }
@@ -817,6 +821,9 @@ pub struct Entry {
     pub detail: Option<String>,
     /// Byte spans of `display` the query matched, for highlighting.
     pub matches: Vec<filter::Match>,
+    /// The display spells a bare short id — an unnamed cell — so it
+    /// draws in the id face, as ids do everywhere.
+    pub id: bool,
     pub action: EntryAction,
 }
 
@@ -889,6 +896,7 @@ fn completion_entries(
         display: format!("\"{query}\""),
         detail: None,
         matches: Vec::new(),
+        id: false,
         action: EntryAction::Value(Value::from(query)),
     });
     let atom_entry = Entry {
@@ -898,6 +906,7 @@ fn completion_entries(
         },
         detail: None,
         matches: Vec::new(),
+        id: false,
         action: EntryAction::Value(atom),
     };
     // Every cell the document contains is referenceable: named ones
@@ -932,9 +941,10 @@ fn completion_entries(
             // A DEMOTED reference ranks after the typed atom: fuzzy,
             // or an unnamed cell's bare id — ids are for reading,
             // names are for reaching (want it reachable? name it).
-            let demoted = ranked.fuzzy() || !ranked.item.1;
+            let fuzzy = ranked.fuzzy();
             let matches = ranked.matches;
-            let (display, _, action) = ranked.item;
+            let (display, named, action) = ranked.item;
+            let demoted = fuzzy || !named;
             let detail = match &action {
                 EntryAction::Value(value) => value
                     .as_cell()
@@ -946,6 +956,7 @@ fn completion_entries(
                 display,
                 detail,
                 matches,
+                id: !named,
                 action,
             };
             (entry, demoted)
@@ -1978,14 +1989,7 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         Some((replacing, query, choice)) if replacing == &key => {
             rename_query(cx, tcx, query, choice, hooks)
         }
-        _ => {
-            let cold = label_view(cx, tcx, &key);
-            if writable_at(&cx.sources, parent) {
-                rename_target(child.clone(), hooks, cold)
-            } else {
-                cold
-            }
-        }
+        _ => field_label(cx, tcx, parent, child.clone(), &key, hooks),
     };
     let head = row(0.0, vec![label, text(tcx, ":", &cx.styles.dim)]);
     let head = match &value {
@@ -2295,14 +2299,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 Some((replacing, query, choice)) if replacing == key => {
                     rename_query(cx, tcx, query, choice, hooks)
                 }
-                _ => {
-                    let cold = label_view(cx, tcx, key);
-                    if writable_at(&cx.sources, path) {
-                        rename_target(child.clone(), hooks, cold)
-                    } else {
-                        cold
-                    }
-                }
+                _ => field_label(cx, tcx, path, child.clone(), key, hooks),
             });
             cells.push(text(tcx, ": ", &cx.styles.dim));
             cells.push(match value {
@@ -2382,20 +2379,47 @@ fn blob_text(bytes: &[u8]) -> String {
     }
 }
 
-fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Label) -> Node<P> {
-    let inner = match key {
+/// The spelling and face a label draws with — one truth for the view
+/// and for hit-testing a click against what was actually drawn.
+fn label_spelling<'a>(cx: &'a Cx, key: &Label) -> (String, &'a TextStyle) {
+    match key {
         // A string label wears its quotes: it IS a string, and the
         // quotes are what distinguish it from a cell label read by
         // name (the open styling question, answered 2026-07-20).
-        Label::String(s) => text(tcx, &format!("\"{s}\""), &cx.styles.label),
+        Label::String(s) => (format!("\"{s}\""), &cx.styles.label),
         // A named cell used as a label reads by its name, through the
         // editor's one name policy.
         Label::Cell(cell) => match cx.name(*cell) {
-            Some(name) => text(tcx, &name, &cx.styles.label),
-            None => text(tcx, &short_id(*cell), &cx.styles.id),
+            Some(name) => (name, &cx.styles.label),
+            None => (short_id(*cell), &cx.styles.id),
         },
-    };
+    }
+}
+
+fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Label) -> Node<P> {
+    let (spelling, style) = label_spelling(cx, key);
+    let inner = text(tcx, &spelling, style);
     secondary_mark(cx, &Value::Atom(Atom::from(key.clone())), inner)
+}
+
+/// A cold field label; writable, its one click re-opens it as the
+/// seeded rename, the caret hit-tested against this very layout.
+fn field_label<C: 'static, P: Canvas + HasHandler<C>>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    parent: &[Step],
+    child: Path,
+    key: &Label,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let cold = label_view(cx, tcx, key);
+    if writable_at(&cx.sources, parent) {
+        let (spelling, style) = label_spelling(cx, key);
+        let layout = line_layout(tcx, &spelling, style);
+        rename_target(child, layout, hooks, cold)
+    } else {
+        cold
+    }
 }
 
 /// A cell projection's ground, painted only at authority
@@ -2629,6 +2653,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
             let style = match &entry.action {
                 EntryAction::Value(value) if value.as_str().is_some() => &styles.string,
                 EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
+                EntryAction::Value(_) if entry.id => &styles.id,
                 EntryAction::Value(_) => &styles.label,
                 EntryAction::NewCell | EntryAction::NewList | EntryAction::NewRecord => {
                     &styles.dim
@@ -2834,6 +2859,7 @@ fn rename_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// register and keep the head's select.
 fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
     path: Path,
+    layout: Layout<Brush>,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
@@ -2841,12 +2867,20 @@ fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
     decorate(content, move |p, rect| {
         let rename = rename.clone();
         let target = path.clone();
+        let layout = layout.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && !command(&event.state.modifiers)
                 && {
-                    rename(ctx, target.clone());
+                    let index = caret_index(
+                        &layout,
+                        Point::new(
+                            event.state.position.x - rect.x0,
+                            event.state.position.y - rect.y0,
+                        ),
+                    );
+                    rename(ctx, target.clone(), index);
                     true
                 }
         });
@@ -3651,6 +3685,52 @@ mod tests {
     }
 
     #[test]
+    fn a_mounting_click_can_place_the_rename_caret() {
+        // The caret index is hit-tested against the label's OWN
+        // layout — the text that was clicked, in its face — and lands
+        // in the seed by byte index, so nothing depends on the
+        // editor's font agreeing with the label's (short ids draw
+        // monospace; the editor draws system-ui).
+        let doc = sample_document();
+        let lib = crate::conventions::library();
+        let sources = src(&doc, &lib);
+        let styles = RawStyles::new(1.0);
+        let mut fonts = parley::FontContext::new();
+        let mut layouts = parley::LayoutContext::new();
+        let mut cache = puri::text::TextCache::default();
+        let layout = line_layout(
+            &mut TextCtx {
+                fonts: &mut fonts,
+                layouts: &mut layouts,
+                scale: 1.0,
+                cache: &mut cache,
+            },
+            "\"tags\"",
+            &styles.label,
+        );
+        let z = KeyboardEvent {
+            key: Key::Character("z".into()),
+            modifiers: Modifiers::empty(),
+            state: KeyState::Down,
+            ..Default::default()
+        };
+        let tags = vec![key("shape"), Step::Follow, key("tags")];
+        // A click at the label's left edge prepends, where an
+        // unclicked mount appends...
+        let mut pending = pending_rename(&sources, &tags).unwrap();
+        let edit = pending.edit_mut().unwrap();
+        edit.cursor_to(caret_index(&layout, Point::ZERO));
+        edit.handle_key(&mut fonts, &mut layouts, &z);
+        assert_eq!(edit.text(), "z\"tags\"");
+        // ...and one past the right edge still appends.
+        let mut pending = pending_rename(&sources, &tags).unwrap();
+        let edit = pending.edit_mut().unwrap();
+        edit.cursor_to(caret_index(&layout, Point::new(10_000.0, 7.0)));
+        edit.handle_key(&mut fonts, &mut layouts, &z);
+        assert_eq!(edit.text(), "\"tags\"z");
+    }
+
+    #[test]
     fn rename_carries_the_value_and_never_a_sibling() {
         let lib = Cells::new();
         let (mut doc, _cell) = doc_of(vec![
@@ -4032,7 +4112,7 @@ mod svg_bench {
         let hooks = Hooks::<()> {
             select: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
-            rename: Rc::new(|_, _| {}),
+            rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
         };

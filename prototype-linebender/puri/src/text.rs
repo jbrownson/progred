@@ -6,7 +6,7 @@ use crate::layout::{Extent, Node, leaf};
 use kurbo::{Affine, Line, Point, Stroke};
 use parley::layout::{Alignment, Layout, PositionedLayoutItem};
 use parley::style::{FontWeight, GenericFamily};
-use parley::{AlignmentOptions, FontContext, LayoutContext, LineHeight, StyleProperty};
+use parley::{AlignmentOptions, Cursor, FontContext, LayoutContext, LineHeight, StyleProperty};
 use peniko::Brush;
 use std::collections::HashMap;
 
@@ -89,6 +89,18 @@ pub fn paragraph<P: Canvas>(
         build_layout(ctx, s, style, Some(line_height), Some(max_width)),
         false,
     )
+}
+
+/// The single-line layout [`text`] draws for `s`, shared through the
+/// cache — for callers that hit-test a text leaf after the fact.
+pub fn line_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Layout<Brush> {
+    build_layout(ctx, s, style, None, None)
+}
+
+/// The caret boundary nearest `point` (leaf-local, physical pixels),
+/// as a byte index into the laid-out text.
+pub fn caret_index(layout: &Layout<Brush>, point: Point) -> usize {
+    Cursor::from_point(layout, point.x as f32, point.y as f32).index()
 }
 
 pub(crate) fn build_layout(

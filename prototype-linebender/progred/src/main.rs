@@ -1775,8 +1775,15 @@ fn run_frame(
                     &path,
                 );
             }),
-            rename: Rc::new(|app: &mut App, path| {
-                if let Some(pending) = raw::pending_rename(&app.model.sources(), &path) {
+            rename: Rc::new(|app: &mut App, path, index| {
+                if let Some(mut pending) = raw::pending_rename(&app.model.sources(), &path) {
+                    // The index was hit-tested against the label that
+                    // was clicked, in the label's own face; the seed
+                    // shares its spelling, so the caret lands under
+                    // the pointer in whatever face the editor draws.
+                    if let Some(line) = pending.edit_mut() {
+                        line.cursor_to(index);
+                    }
                     app.model.selection = Some(Selected::Tree(pending));
                 }
             }),

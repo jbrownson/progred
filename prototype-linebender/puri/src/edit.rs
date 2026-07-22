@@ -126,6 +126,18 @@ impl LineEditState {
         self.focus = 0;
     }
 
+    /// Land the caret at a byte index, clamped to the nearest char
+    /// boundary at or before it — for mounts whose caret was
+    /// hit-tested against another projection of the same spelling.
+    pub fn cursor_to(&mut self, index: usize) {
+        let mut index = index.min(self.text.len());
+        while !self.text.is_char_boundary(index) {
+            index -= 1;
+        }
+        self.anchor = index;
+        self.focus = index;
+    }
+
     /// The base text: what edits commit. Excludes any IME preedit and
     /// the affixes, which are display only.
     pub fn text(&self) -> &str {
@@ -689,6 +701,21 @@ mod tests {
             Key::Named(NamedKey::Escape),
             Modifiers::empty(),
         ));
+    }
+
+    #[test]
+    fn cursor_to_floors_to_a_char_boundary() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut state = state("héllo");
+        state.cursor_to(2);
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Character("z".into()),
+            Modifiers::empty(),
+        ));
+        assert!(state.text() == "hzéllo");
     }
 
     #[test]

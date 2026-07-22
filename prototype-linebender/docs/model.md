@@ -1000,7 +1000,16 @@ caret rule from feel: a LEFTWARD landing on a string seeds the
 caret at the START — `selected_by_arrow` — so continuing left
 crosses the string in one press, the mirror of the end-seeded
 caret rightward travel already exits in one press; every other
-mount keeps the appending end-caret.) Parked: line-height quantum
+mount keeps the appending end-caret. Label clicks joined the click
+arrival next: the click is hit-tested against the label's OWN
+layout — the text that was drawn, in its face (`label_spelling`,
+one truth for view and hit-test; puri grew `line_layout` +
+`caret_index` over the shaping cache) — and the rename hook
+carries the resulting BYTE INDEX, which the shell lands in the
+seed with `cursor_to`. The seed shares the label's spelling, so
+the index maps into whatever face the editor draws — no font
+agreement required, and the mounted box not being the clicked
+form doesn't matter.) Parked: line-height quantum
 is passed as `Dispatch.line` (14·scale) rather than derived;
 Alt+Down as skip-subtree skim if walking big open blocks ever
 feels slow.
