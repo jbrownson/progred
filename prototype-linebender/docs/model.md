@@ -891,6 +891,19 @@ delimiter hugging the head line, prettier's object style, which
 needs a first-line-offset layout Puri does not have. Bench
 timings held single-digit milliseconds at all three widths.
 
+THE DASH RETIRES (2026-07-22, user: "I'm not sure the - is
+necessary on the list projection in block mode?"). The block
+list's leading dash was YAML's crutch — the element-start marker
+for a notation that has no brackets. Raw's block lists have drawn
+brackets spanning the column, every multi-line element carries its
+own delimiter, and each value's ink already selects its element
+path; the dash restated all three, and its select_target
+duplicated a selection the value's own view offers. Element rows
+are bare values now, flush inside the bracket, and their budget
+recovered the dash-and-gap overhead. (The earlier click-claims
+note "dashes are ink and select their element" describes the
+retired form.)
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:

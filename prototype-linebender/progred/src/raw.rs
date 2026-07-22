@@ -2,7 +2,7 @@
 //! delimiter family — `(` cell `)`, `[` list `]`, `{` record `}`.
 //! A cell heads with its name (identity metadata, editable in
 //! place) or its short id; records are field rows, lists inline
-//! literals or dashed element rows; atoms render as their values;
+//! literals or bare element rows; atoms render as their values;
 //! positions are session bookkeeping and never render at all.
 
 use crate::conventions::Names;
@@ -1861,7 +1861,7 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
 /// A list value: its elements as bare ordered rows — the position is
 /// session identity, not information; order carries it. Collapsed —
 /// override-only; a value has no identity to recur through — it
-/// shows the element count; a list whose literal `["a", "b"]` fits
+/// elides to `[ … ]`; a list whose literal `["a", "b"]` fits
 /// the width and stays one line reads as that literal; anything else
 /// takes the block form, the drawn brackets spanning the element
 /// rows as a column. Lists have no identity, so there is no head of
@@ -1949,35 +1949,21 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         return select_target(path.to_vec(), target, hooks, candidate);
     }
 
-    let inside = (avail
-        - 2.0 * (delim_advance(cx.styles, Delim::Bracket) + 2.0 * scale)
-        - text::<P>(tcx, "-", &cx.styles.dim).extent.width
-        - 6.0 * scale)
-        .max(0.0);
+    let inside =
+        (avail - 2.0 * (delim_advance(cx.styles, Delim::Bracket) + 2.0 * scale)).max(0.0);
+    // Element rows are bare values: the spanning brackets already
+    // say "list", every multi-line element carries its own
+    // delimiter, and each value's ink selects its element — a
+    // leading dash would restate all three.
     let rows: Vec<Node<P>> = items
         .into_iter()
         .map(|(position, value)| {
             let mut child = path.to_vec();
             child.push(Step::Element(position));
-            // The list vernacular: a dim leading dash marks the
-            // element rows — ink, so it selects its element (a
-            // pending's dash stays quiet).
-            let (dash, content) = match value {
-                Some(value) => (
-                    select_target(
-                        child.clone(),
-                        value.clone(),
-                        hooks,
-                        text(tcx, "-", &cx.styles.dim),
-                    ),
-                    value_view(cx, tcx, &child, ancestors, &value, inside, hooks),
-                ),
-                None => (
-                    text(tcx, "-", &cx.styles.dim),
-                    pending_view(cx, tcx, child.clone(), hooks),
-                ),
-            };
-            row(6.0 * scale, vec![dash, content])
+            match value {
+                Some(value) => value_view(cx, tcx, &child, ancestors, &value, inside, hooks),
+                None => pending_view(cx, tcx, child, hooks),
+            }
         })
         .collect();
     // The block form: the brackets span the element column and are
@@ -2007,7 +1993,7 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// A record value: an anonymous content-compared value, BRACED —
 /// braces mark records the way parens mark cells. Field rows at the
 /// record's own path. Collapsed — override-only, since a value has
-/// no identity to recur through — it shows the field count; a
+/// no identity to recur through — it elides to `{ … }`; a
 /// record whose literal `{x: "1", y: "2"}` fits the width and stays
 /// one line reads as that literal; anything else takes the block
 /// form, the drawn braces spanning the field rows as a column. A
