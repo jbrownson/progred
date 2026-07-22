@@ -762,7 +762,7 @@ pub enum EntryAction {
     /// Mint a cell and commit a link to it. Named, the cell's table
     /// entry starts as the name alone — the red link; unnamed, it
     /// starts fully bare, nothing said at all.
-    NewCell { name: Option<String> },
+    NewCell,
     /// Commit an empty list value.
     NewList,
     /// Commit an empty inline record value — anonymous structure, no
@@ -850,6 +850,10 @@ fn completion_entries(
         })
         .collect();
     references_pool.sort_by(|a, b| a.0.cmp(&b.0));
+    // "new cell" is one of them — a plain constructor like list and
+    // record (the mint is bare; naming happens on the head after).
+    // Cells can label, so it alone survives the label stage.
+    references_pool.push(("new cell".to_string(), EntryAction::NewCell));
     if !labels {
         references_pool.push(("new list".to_string(), EntryAction::NewList));
         references_pool.push(("new record".to_string(), EntryAction::NewRecord));
@@ -889,20 +893,6 @@ fn completion_entries(
         entries.push(atom_entry);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
     }
-    let name_text = trimmed
-        .strip_prefix('"')
-        .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
-        .unwrap_or(trimmed);
-    let name = (!name_text.is_empty()).then(|| name_text.to_string());
-    entries.push(Entry {
-        display: match &name {
-            Some(name) => format!("new cell \"{name}\""),
-            None => "new cell".to_string(),
-        },
-        detail: None,
-        matches: Vec::new(),
-        action: EntryAction::NewCell { name },
-    });
     entries
 }
 
@@ -948,19 +938,14 @@ fn document_cells(sources: &Sources) -> Vec<CellId> {
     cells
 }
 
-/// Resolves a chosen entry to the value it denotes, minting (and
-/// naming) for a new cell. Labels and values resolve alike — the
-/// label stage never offers a non-label action.
-pub fn resolve_entry(doc: &mut Document, action: &EntryAction) -> Value {
+/// Resolves a chosen entry to the value it denotes. Pure: a new
+/// cell's mint is a bare id — nothing said until a value or name is
+/// written. Labels and values resolve alike — the label stage never
+/// offers a non-label action.
+pub fn resolve_entry(action: &EntryAction) -> Value {
     match action {
         EntryAction::Value(value) => value.clone(),
-        EntryAction::NewCell { name } => {
-            let cell = new_cell_id();
-            if let Some(name) = name {
-                doc.cells.set_name(cell, name);
-            }
-            Value::from(cell)
-        }
+        EntryAction::NewCell => Value::from(new_cell_id()),
         EntryAction::NewList => Value::list([]),
         EntryAction::NewRecord => Value::record([]),
     }
@@ -974,7 +959,7 @@ pub fn commit_pending(
     path: &[Step],
     action: &EntryAction,
 ) -> bool {
-    let value = resolve_entry(doc, action);
+    let value = resolve_entry(action);
     set_value(doc, library, path, value)
 }
 
@@ -2493,7 +2478,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
                 EntryAction::Value(value) if value.as_str().is_some() => &styles.string,
                 EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
                 EntryAction::Value(_) => &styles.label,
-                EntryAction::NewCell { .. } | EntryAction::NewList | EntryAction::NewRecord => {
+                EntryAction::NewCell | EntryAction::NewList | EntryAction::NewRecord => {
                     &styles.dim
                 }
             };
@@ -3218,34 +3203,14 @@ mod tests {
     }
 
     #[test]
-    fn minting_seeds_names_and_bare_cells() {
-        let mut doc = Document {
-            root: None,
-            cells: Cells::new(),
-        };
-        // A named mint is the red link: a name and nothing else.
-        let named = resolve_entry(
-            &mut doc,
-            &EntryAction::NewCell {
-                name: Some("roof".to_string()),
-            },
-        );
-        let named_cell = named.as_cell().unwrap();
-        assert_eq!(doc.cells.name(named_cell), Some("roof"));
-        assert!(doc.cells.value(named_cell).is_none());
-        // An unnamed mint is fully bare: a link with nothing said at
-        // all.
-        let bare = resolve_entry(&mut doc, &EntryAction::NewCell { name: None });
-        assert!(doc.cells.entry(bare.as_cell().unwrap()).is_none());
+    fn minting_seeds_bare_cells() {
+        // A mint is fully bare: a link with nothing said at all —
+        // naming happens on the head afterward.
+        let bare = resolve_entry(&EntryAction::NewCell);
+        assert!(bare.as_cell().is_some());
         // The value constructors commit pure values — nothing minted.
-        assert_eq!(
-            resolve_entry(&mut doc, &EntryAction::NewList),
-            Value::list([])
-        );
-        assert_eq!(
-            resolve_entry(&mut doc, &EntryAction::NewRecord),
-            Value::record([])
-        );
+        assert_eq!(resolve_entry(&EntryAction::NewList), Value::list([]));
+        assert_eq!(resolve_entry(&EntryAction::NewRecord), Value::record([]));
     }
 
     #[test]

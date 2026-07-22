@@ -1213,25 +1213,19 @@ impl App {
     }
 
     /// A resolved label advances the pending edge to its value stage —
-    /// or selects the existing field when the label is taken. Minting
-    /// a named cell as a label writes its name: an undo step.
+    /// or selects the existing field when the label is taken. Resolving
+    /// mutates nothing (a new cell's mint is a bare id): the value
+    /// stage's write is the one undo step.
     fn commit_label(&mut self, parent: raw::Path, action: &raw::EntryAction) {
-        let before = self.model.doc.clone();
         // The label stage offers only what can label; a Value action
         // resolving otherwise (alien paste text reading as a blob)
         // declines before any mutation.
-        let Some(label) = (match raw::resolve_entry(&mut self.model.doc, action) {
+        let Some(label) = (match raw::resolve_entry(action) {
             Value::Atom(atom) => atom.as_label(),
             _ => None,
         }) else {
             return;
         };
-        // Only a NAMED mint writes the table; an unnamed one is a
-        // bare id, no mutation to record.
-        if matches!(action, raw::EntryAction::NewCell { name: Some(_) }) {
-            self.model.history.record(before, None);
-            self.refresh_title();
-        }
         let mut path = parent;
         path.push(Step::Key(label));
         self.model.selection = Some(Selected::Tree(

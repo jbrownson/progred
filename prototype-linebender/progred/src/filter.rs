@@ -82,19 +82,18 @@ fn fuzzy(needle: &str, haystack: &str, eq: CharEq) -> Option<Vec<Match>> {
 }
 
 /// Ranks `items` against `needle`: the accepted, in tier order. An
-/// empty needle accepts everything in the given order with full-span
-/// matches.
+/// empty needle accepts everything in the given order with NO match
+/// spans — a span means "these characters matched your query", and
+/// an empty query matched none (the popup bolds spans; nothing typed,
+/// nothing bold).
 pub fn rank<A>(items: Vec<A>, key: impl Fn(&A) -> &str, needle: &str) -> Vec<Ranked<A>> {
     if needle.is_empty() {
         return items
             .into_iter()
-            .map(|item| {
-                let len = key(&item).len();
-                Ranked {
-                    item,
-                    matches: vec![Match { start: 0, len }],
-                    tier: 0,
-                }
+            .map(|item| Ranked {
+                item,
+                matches: Vec::new(),
+                tier: 0,
             })
             .collect();
     }
@@ -150,13 +149,13 @@ mod tests {
     }
 
     #[test]
-    fn empty_needle_accepts_everything_in_order_with_full_spans() {
+    fn empty_needle_accepts_everything_in_order_with_no_spans() {
         let ranked = rank(WORDS.to_vec(), |w| w, "");
         assert_eq!(
             ranked.iter().map(|r| r.item).collect::<Vec<_>>(),
             WORDS.to_vec()
         );
-        assert_eq!(ranked[0].matches, vec![Match { start: 0, len: 5 }]);
+        assert_eq!(ranked[0].matches, Vec::new());
     }
 
     #[test]

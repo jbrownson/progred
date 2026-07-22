@@ -787,7 +787,21 @@ obvious next wearer. Dispatch behaviors locked by test
 COARSENESS: leading whitespace in content lets a word-delete's
 boundary reach through it into the prefix, and the bite declines
 WHOLE — a swallowed no-op where trimming was arguable (parley owns
-the range; the decline is the contract). The frame minimum became `puri::layout::min_width`
+the range; the decline is the contract).
+
+Popup rounds, same day (2026-07-21): AN EMPTY QUERY BOLDS NOTHING —
+the filter's empty needle accepted everything with full-span
+matches, and the popup bolded them as if typed; spans now mean
+"these characters matched your query", so an empty needle accepts
+with NO spans. And "NEW CELL" IS A PLAIN CONSTRUCTOR (user: no
+asymmetry) — it was a tail template embedding the typed text as
+the name-to-be (`new cell "hi"`, unranked, never bold); now it
+sits in the ranked pool beside "new list"/"new record" (and alone
+survives the label stage — cells label). The mint is BARE:
+`resolve_entry` is pure, no document mutation, naming happens on
+the head afterward — the one-step named mint (create-on-
+reference's popup vehicle) is retired, and with it the label
+stage's mint-records-history special case. The frame minimum became `puri::layout::min_width`
 — a real combinator (pad-to-minimum on the right), not inline
 arithmetic — the name editor's content-persists-chrome-marks-
 engagement pattern applied to absence itself. The pending
@@ -2169,7 +2183,10 @@ Deferred behind projections.
 - Create-on-reference: committing an unresolved placeholder mints a
   floating node with just a name (wiki red links). Duplicate names
   cannot collide, and two stubs discovered to be the same thing are
-  merged — a refactor text cannot express.
+  merged — a refactor text cannot express. (2026-07-21: the popup's
+  one-step named mint retired for uniformity — "new cell" mints
+  bare and naming follows on the head; the doctrine's two-step
+  spelling.)
 - Nothing needs to live under anything; the graph allows floating
   nodes. Orphans are the pool: autocomplete searches it alongside
   module-scoped definitions, and a pool browser lists and manages it.
