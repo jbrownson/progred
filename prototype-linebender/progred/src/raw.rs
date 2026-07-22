@@ -1605,23 +1605,23 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         Some(value) => {
             let mut inner = ancestors.clone();
             inner.insert(cell);
-            // The field-row discipline inside the parens: probe the
-            // value's narrowest form with a CLOSED zero-budget build,
-            // hug the head where it fits beside, else drop at the
-            // tab; one real build either way, and no probe when the
-            // decision is forced.
+            // The field-row discipline inside the parens: hug only
+            // where the value stays WHOLE beside the head, probed
+            // with a CLOSED unbounded build; else drop at the tab
+            // with its wider budget. A head narrower than the tab
+            // hugs whatever the value does — dropping there buys no
+            // room — and that guard, or the short-circuit at no room
+            // beside, decides the unbounded and crushed budgets
+            // without probing.
             let inside = avail - 2.0 * (delim_advance(cx.styles, Delim::Paren) + 2.0 * scale);
             let beside = inside - head.extent.width - 4.0 * scale;
             let tab = 20.0 * scale;
-            let hug = beside > 0.0 && {
-                let narrowest = value_view::<C, P>(cx, tcx, &followed, &inner, value, 0.0, hooks)
-                    .extent
-                    .width;
-                narrowest <= beside
-                    || (narrowest > inside - tab
-                        && head.extent.width + 4.0 * scale + narrowest
-                            < head.extent.width.max(tab + narrowest))
-            };
+            let hug = beside >= inside - tab
+                || (beside > 0.0
+                    && value_view::<C, P>(cx, tcx, &followed, &inner, value, f64::INFINITY, hooks)
+                        .extent
+                        .width
+                        <= beside);
             let value_node = value_view(
                 cx,
                 tcx,
@@ -1739,13 +1739,14 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// colon select the field, like its value — grouped so one target
 /// spans both and the gap between. A pending row's plain click falls
 /// through (the not-yet-field can't be selected), but command still
-/// picks its label's identity. Three alternatives, in the general
-/// rule's priority order: the value HUGS the label — built with the
-/// room beside it, breaking inside as needed (the lisp-flavored
-/// form); else it DROPS below at a fixed tab with the drop
+/// picks its label's identity. Three alternatives, the outermost
+/// level degrading first: the value HUGS the label while it stays
+/// whole beside it; else it DROPS below at a fixed tab with the drop
 /// position's wider budget — never aligned under the label's own
-/// width, which is the indentation that drifts; when neither fits,
-/// the narrower attempt wins.
+/// width, which is the indentation that drifts. A head narrower than
+/// the tab hugs whatever the value does — dropping there buys no
+/// room — which is where the lisp-flavored broken-beside form
+/// survives, and the overflow answer when nothing fits anywhere.
 #[allow(clippy::too_many_arguments)]
 fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
@@ -1779,38 +1780,29 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             vec![head, pending_view(cx, tcx, child, hooks)],
         );
     };
-    // The hug decision probes the value's NARROWEST form: a
-    // zero-budget build is CLOSED — every nested fit test fails, so
-    // nothing branches inside (the dual of the literal candidates'
-    // unbounded budget) — and greedy only flattens where it fits, so
-    // a value whose narrowest form fits beside still fits there when
-    // built with the room. ONE real build follows at the chosen
-    // position; building both positions recursed probes-within-
-    // probes and went exponential exactly at narrow widths.
+    // The hug decision probes the value's FLAT form: hug only where
+    // the value stays WHOLE beside the label, so the first break
+    // lands at the outermost level that cannot stay flat — the
+    // literal gate's ordering carried into the hug seam. The
+    // unbounded probe is CLOSED — every nested fit test passes, so
+    // nothing branches inside (the literal candidates' own build) —
+    // and ONE real build follows at the chosen position; building
+    // both positions recursed probes-within-probes and went
+    // exponential exactly at narrow widths.
     let beside = avail - head.extent.width - 6.0 * scale;
     let tab = 20.0 * scale;
-    // No room beside means no probe: the decision is forced, and
-    // skipping it is what keeps a zero-budget build CLOSED — a probe
-    // that probed would recurse the exponential right back.
-    if beside <= 0.0 {
-        let content = value_view(cx, tcx, &child, ancestors, &value, (avail - tab).max(0.0), hooks);
-        return col(
-            HAlign::Start,
-            0,
-            2.0 * scale,
-            vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), content)],
-        );
-    }
-    let narrowest = value_view::<C, P>(cx, tcx, &child, ancestors, &value, 0.0, hooks)
-        .extent
-        .width;
-    // Overflow territory (narrowest fits neither position): both
-    // builds bottom out near the narrowest form, so the narrower
-    // loss is decided by the wrapping arithmetic alone.
-    let hug = narrowest <= beside
-        || (narrowest > avail - tab
-            && head.extent.width + 6.0 * scale + narrowest
-                < head.extent.width.max(tab + narrowest));
+    // A head narrower than the tab hugs whatever the value does: the
+    // drop would offer LESS room and overflow wider, so the guard is
+    // both the lisp-flavored form's remaining home and the overflow
+    // tie-break. That guard at unbounded budgets, and the short-
+    // circuit at no room beside, keep forced builds probe-free — a
+    // probe that probed would recurse the exponential right back.
+    let hug = beside >= avail - tab
+        || (beside > 0.0
+            && value_view::<C, P>(cx, tcx, &child, ancestors, &value, f64::INFINITY, hooks)
+                .extent
+                .width
+                <= beside);
     let content = value_view(
         cx,
         tcx,

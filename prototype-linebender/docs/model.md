@@ -855,6 +855,42 @@ is the engaged pending's `Option<(query, choice)>`, None IS the
 inactive pending, and identity chrome (descend, highlight, clicks)
 stays with the caller.
 
+THE HUG INVERTED — OUTERMOST BREAKS FIRST (2026-07-22, user: "the
+higher level constructs seem to be reluctant to start going down
+to the next line putting all the compression on the inner
+constructs, that seems backwards to me"). The 07-21 hug probed the
+value's NARROWEST form — hug whenever the value could SURVIVE
+beside its head in any shape — so a parent surrendered its
+preferred position only when the child, fully crushed, still
+failed to fit: inner alternatives exhausted before outer ones
+moved, every hugging level's head bitten out of every descendant's
+budget, density piling rightward. The probe now asks the literal
+gate's own question — can the child stay WHOLE beside? — an
+UNBOUNDED build (closed: every nested fit passes; it is the
+literal candidates' construction) in place of the zero-budget one,
+so the first break lands at the outermost level that cannot stay
+flat and the drop's wider budget lets leaves keep their literals:
+Wadler's ordering at both choice points instead of one. The old
+overflow tie-break (narrower total when nothing fits) FELL OUT of
+the rewrite: hug's total is narrower exactly when head+gap <= tab,
+which is the new guard — a head narrower than the tab hugs
+whatever the value does, since dropping there buys no room — and
+the guard doubles as the lisp-flavored broken-beside form's
+remaining home and as the unbounded fixpoint's closure (beside >=
+avail-tab at infinity), while the no-room short-circuit closes the
+crushed one: forced budgets still never probe, and field_row's
+forced-drop early return is subsumed. Evidence at 560px: before,
+`origin`'s record shattered one token per line in the right-edge
+ravine while the favorite chain sat flat on line one; after, every
+leaf literal survives whole at NEARLY THE SAME HEIGHT (483 -> 492)
+— the ravine was wasting the vertical it hoarded. The 900px render
+pays real height (290 -> 419) as head-only lines stair-step where
+chains used to hug — the accepted trade, and the open question if
+the dangling-colon lines grate is a HANGING form: the value's open
+delimiter hugging the head line, prettier's object style, which
+needs a first-line-offset layout Puri does not have. Bench
+timings held single-digit milliseconds at all three widths.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:
