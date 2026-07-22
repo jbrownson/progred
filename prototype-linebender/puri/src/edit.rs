@@ -476,11 +476,22 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
             rects
         })
         .unwrap_or_default();
+    // Parley's caret spans the leaded line box; a native-feeling
+    // caret spans the ascent and a taste of the descent.
+    let caret_span = layout.as_ref().and_then(|l| l.lines().next()).map(|line| {
+        let m = *line.metrics();
+        let baseline = m.baseline as f64;
+        (
+            baseline - m.ascent as f64,
+            baseline + 0.5 * m.descent as f64,
+        )
+    });
     let cursor = focused
         .then(|| {
-            editor
-                .cursor_geometry(1.5 * scale)
-                .map(|bb| Rect::new(bb.x0, bb.y0, bb.x1, bb.y1))
+            editor.cursor_geometry(1.5 * scale).map(|bb| {
+                let (top, bottom) = caret_span.unwrap_or((bb.y0, bb.y1));
+                Rect::new(bb.x0, top, bb.x1, bottom)
+            })
         })
         .flatten();
     let selection_brush = style.selection.clone();

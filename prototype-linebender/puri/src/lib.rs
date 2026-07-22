@@ -17,6 +17,8 @@ pub use draw::{Canvas, DrawCmd, DrawList, Glyph, GlyphRun, Shape, replay};
 pub use edit::{EditCtx, EditStyle, LineEditState, text_edit};
 pub use handler::{Handler, HasHandler, ImeEvent, capture};
 pub use interact::clickable;
-pub use layout::{Extent, HAlign, Node, col, decorate, leaf, pad, place, place_top_left, row};
+pub use layout::{
+    Extent, HAlign, Node, col, decorate, leaf, min_width, pad, place, place_top_left, row,
+};
 pub use scroll::{max_offset, place_scrolled};
 pub use text::{TextCache, TextCtx, TextStyle, paragraph, text};

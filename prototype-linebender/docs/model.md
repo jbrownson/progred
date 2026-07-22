@@ -698,6 +698,78 @@ field's label query renders inline in a record literal like any
 fragment — authoring alone no longer forces the block form, which
 only appears when the literal genuinely stops fitting.
 
+THE PLACEHOLDER IS A BOX (2026-07-21, the empty-document editing
+round's first nit: "empty document" was prose and the bare cell's
+slot was `…` — the elision mark doing double duty). The
+standardized notation for an EMPTY SLOT awaiting a value is a small
+rounded-rect outline — a shape from outside the projectional
+syntax, the user's carry-over from earlier prototypes — and it is
+`highlight_rect` in the dim brush (user: the slot and a string
+editor's box "should be the same"). Its charge is the empty line
+SHAPED AT RUNTIME (the same parley metrics the engaged editor's
+frame takes — no measured constants, one source; user caught the
+constants version: "shouldn't we just be computing that value at
+runtime?"), which also keeps the charge under the one-line
+threshold so a container holding a bare slot can still go flat.
+It renders exactly where
+authoring can begin by selection: the empty document's root and a
+WRITABLE bare cell's Follow slot, where the empty-slot rule in
+`Selection::edge` makes clicking the box pend in place (the box
+lights into the query editor — the transition is the selection
+system's own). An EXTERNAL bare cell renders head-only, `( name )`:
+by the affordance-lie rule, a slot that cannot pend must not
+invite — a library sentinel is complete, not holed. `…` now means
+elision only (cycle re-entry's `( … )`). Everything else still
+shows no placeholder until a pending exists — insertion points are
+selections, not standing holes. The svg_bench gained a placeholder
+scene (empty root + bare cell) beside the sample renders. Second
+nit, same round: the EMPTY QUERY was a sliver around the caret.
+Role ghosts ("value"/"label" dim in the field, tried first) were
+RETIRED — the user didn't love words standing in for absence — and
+the settlement is BLANK WITH A MINIMUM WIDTH: the box stays empty,
+and the engaged query's FRAME holds the box's own width
+(`slot_width`, single-sourced) as its minimum. The minimum belongs
+to the frame, not the text box — puri's `text_edit` stays
+content-sized (a blank query is a bare caret) and `query_content`
+pads the deficit, framed BEFORE its decorate so the popup anchor,
+the caret clicks, and the caller's ring all span the frame.
+The chrome converged through three user catches into ONE RULE:
+custom slot chrome (tighter than the ring) made the box change at
+commit; a charged top inset moved the baseline ("the text jumps up
+a bit"; fonts were identical — editor and text both pin
+SystemUi/14); charged side insets moved it left. The settlement
+(user: "we should just draw them in the same way"): `highlight_rect`
+is THE box — content rect plus breathing room, rounded — the
+selection ring paints it blue, the cold placeholder strokes it
+dim, and every box is UNCHARGED overhang over exactly the text
+frame. The slot's brief custom-chrome era (slot_rect, slot_ink,
+slot_insets, descend's highlight opt-out) is deleted; the engaged
+pending is back to the plain generic ring, now over a frame that
+matches. THE COMMIT INVARIANT, verified by the bench's transition
+pair (`"asdf"` typed vs committed-selected): every glyph AND the
+ring path itself are byte-identical across the commit — the whole
+slot → pending → value transition redraws one shape and only
+changes its paint. What still changes is honest: quotes appear if
+you didn't type them, and a string narrower than the frame minimum
+tightens. The cold box touches neighbors exactly where the ring
+would — the box previews the ring's footprint; tuning that
+crowding is `highlight_rect`'s one knob, queued with aesthetics.
+The CARET itself was parley's leaded line box,
+box-filling; `text_edit` now refits it to the native shape — the
+line's ascent above the baseline plus half its descent below
+(user: "the height above the baseline, maybe a bit more") — for
+every editor, not just slots. The frame minimum became `puri::layout::min_width`
+— a real combinator (pad-to-minimum on the right), not inline
+arithmetic — the name editor's content-persists-chrome-marks-
+engagement pattern applied to absence itself. The pending
+edge's `label: …` tail became `label: ▢` — the value to come is an
+empty slot, and empty slots are boxes. THE BOX IS THE INACTIVE
+PENDING in code as well (user's picture): `placeholder` is ONE
+WIDGET in the Puri idiom, progred-owned — its single state input
+is the engaged pending's `Option<(query, choice)>`, None IS the
+inactive pending, and identity chrome (descend, highlight, clicks)
+stays with the caller.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:

@@ -16,7 +16,7 @@ use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
 use puri::handler::HasHandler;
-use puri::layout::{Extent, HAlign, Node, col, decorate, leaf, pad, row};
+use puri::layout::{Extent, HAlign, Node, col, decorate, leaf, min_width, pad, row};
 use puri::text::{TextCtx, TextStyle, text};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -1363,11 +1363,60 @@ fn bracketed<C: 'static, P: Canvas + HasHandler<C>>(
     )
 }
 
+/// The one width every slot state shares: the cold box IS this wide,
+/// and the engaged query's frame never lets the field get narrower —
+/// the parity that keeps engagement from moving anything sideways.
+fn slot_width(styles: &RawStyles) -> f64 {
+    1.5 * 14.0 * styles.scale
+}
+
+/// The cold slot's ink: an empty rounded outline, the box marking
+/// absence apart from projectional syntax (`…` is elision) — blank
+/// on purpose, no ghost words. It is [`highlight_rect`] itself in
+/// the dim brush — THE box, drawn the one way every box is drawn —
+/// so engaging (the ring, blue over the same frame) and committing
+/// (the ring over the same glyphs) redraw the same shape and only
+/// the paint changes. The charge is exactly the text frame: the
+/// empty line SHAPED, the same runtime metrics the engaged editor's
+/// frame takes — no measured constants, one source.
+fn placeholder_box<P: Canvas>(tcx: &mut TextCtx, styles: &RawStyles) -> Node<P> {
+    let line = text::<P>(tcx, "", &styles.name).extent;
+    let extent = Extent {
+        width: slot_width(styles),
+        ..line
+    };
+    let scale = styles.scale;
+    let brush = styles.dim.brush.clone();
+    leaf(extent, move |p: &mut P, at| {
+        let rect = Rect::new(
+            at.x,
+            at.y - extent.ascent,
+            at.x + extent.width,
+            at.y + extent.descent,
+        );
+        p.stroke(
+            highlight_rect(scale, rect),
+            Stroke::new(scale),
+            brush,
+            Affine::IDENTITY,
+        );
+    })
+}
+
+/// THE box: the one geometry every box around content takes — the
+/// content rect plus breathing room, rounded. The selection ring
+/// draws it in blue, the cold placeholder in dim; sharing the shape
+/// is what keeps slot → pending → committed value from ever
+/// changing the box.
+fn highlight_rect(scale: f64, rect: Rect) -> RoundedRect {
+    RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale)
+}
+
 /// The pane-local primary: translucent system blue, like the Swift
 /// version's selection, ringed at full strength — the strongest mark
 /// in the shared vocabulary.
 fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
-    let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
+    let bg = highlight_rect(scale, rect);
     p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.22]), Affine::IDENTITY);
     p.stroke(
         bg,
@@ -1482,18 +1531,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // document is a selectable placeholder at the root path.
     match sources.root() {
         Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, width, &hooks),
-        None => match cx.selection {
-            Some(Selection::Pending { path, .. }) if path.is_empty() => {
-                pending_view(&cx, tcx, Vec::new(), &hooks)
-            }
-            _ => descend(
-                &cx,
-                Vec::new(),
-                None,
-                &hooks,
-                text(tcx, "empty document", &cx.styles.dim),
-            ),
-        },
+        None => pending_view(&cx, tcx, Vec::new(), &hooks),
     }
 }
 
@@ -1506,10 +1544,11 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// the drawn parens stretch over whatever height it takes, and when
 /// head-beside-value overflows the width remaining here the cell
 /// BREAKS like a field row — head on its own line, value dropped
-/// below at the tab, parens spanning both. A valueless cell — bare,
-/// or the named red link — renders the pending placeholder in the
-/// value's place (the empty-slot rule in [`Selection::edge`] makes
-/// selecting it begin the first value). Cells do NOT collapse — the
+/// below at the tab, parens spanning both. A WRITABLE valueless cell
+/// — bare, or the named red link — renders the [`placeholder`] box in
+/// the value's place (the empty-slot rule in [`Selection::edge`]
+/// makes selecting it begin the first value); an external valueless
+/// cell renders head-only, complete. Cells do NOT collapse — the
 /// value's own collapsed form is the one collapse there is; the
 /// exception is CYCLE RE-ENTRY, where the repeated cell renders
 /// `( … )` — a mark of recursion, not a summary — and a collapse
@@ -1561,10 +1600,14 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         head_view(cx, tcx, path, cell, &name, hooks),
     );
     let content = match &value {
-        None => row(
+        // A writable bare cell's slot invites its first value; an
+        // EXTERNAL bare cell is complete as it stands — no hole, no
+        // invitation, the affordance-lie rule in notation.
+        None if cx.sources.writable(cell) => row(
             4.0 * scale,
             vec![head, pending_view(cx, tcx, followed, hooks)],
         ),
+        None => head,
         Some(value) => {
             let mut inner = ancestors.clone();
             inner.insert(cell);
@@ -1806,11 +1849,15 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
+    // Both stages through the slot widget: the label engaged, the
+    // value to come cold.
+    let label = placeholder(cx, tcx, Some((query, choice)), true, hooks);
     let pending_row = row(
         0.0,
         vec![
-            query_content(cx, tcx, query, choice, true, hooks),
-            text(tcx, ": …", &cx.styles.dim),
+            label,
+            text(tcx, ": ", &cx.styles.dim),
+            placeholder(cx, tcx, None, false, hooks),
         ],
     );
     decorate(pending_row, move |p: &mut P, rect| {
@@ -2325,28 +2372,51 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     ground(cx, path, value, placed)
 }
 
-/// A nonexistent location the selection is authoring: the completion
-/// query's focused editor, wrapped as an ordinary descend so it
-/// highlights, clicks, and navigates like the value it may become.
-/// Its placement emits the completion popup for the shell to draw
-/// over the body.
+/// An EMPTY SLOT at `path`: the [`placeholder`] widget wired to this
+/// projection — engagement derived from the selection, wrapped as an
+/// ordinary descend so it highlights, clicks, and navigates like the
+/// value it may become. Engaged, its placement emits the completion
+/// popup for the shell to draw over the body.
 fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let content = match cx.selection {
+    let engaged = match cx.selection {
         Some(Selection::Pending {
             path: pending,
             query,
             choice,
-        }) if pending.as_slice() == path.as_slice() => {
-            query_content(cx, tcx, query, *choice, false, hooks)
-        }
-        _ => text(tcx, "…", &cx.styles.dim),
+        }) if pending.as_slice() == path.as_slice() => Some((query, *choice)),
+        _ => None,
     };
+    let content = placeholder(cx, tcx, engaged, false, hooks);
+    // Engaged, the generic ring IS the slot's chrome: it draws
+    // [`highlight_rect`] over the same frame the cold box strokes,
+    // and the same ring survives the commit around the same glyphs —
+    // the box never changes, only its paint.
     descend(cx, path, None, hooks, content)
+}
+
+/// The slot widget, in the Puri idiom: its one state input is the
+/// engaged pending's `(query, choice)`, and None IS the inactive
+/// pending — the cold [`placeholder_box`], whose width the engaged
+/// query's frame holds as its minimum, so the two forms are one
+/// widget in two states and the transition between them is pure
+/// chrome. The caller owns identity (descend, highlight, clicks);
+/// `labels` picks the slot's role.
+fn placeholder<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    engaged: Option<(&LineEditState, usize)>,
+    labels: bool,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    match engaged {
+        Some((query, choice)) => query_content(cx, tcx, query, choice, labels, hooks),
+        None => placeholder_box(tcx, cx.styles),
+    }
 }
 
 /// A focused completion query: the editor plus its popup, emitted at
@@ -2364,6 +2434,12 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
     let entries = completion_entries(&cx.sources, cx.names, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let content = atom_content(Some(query), fallback, None, tcx, cx.styles, hooks);
+    // The FRAME holds the slot's width as a minimum — the text field
+    // stays content-sized (a blank query is a bare caret), and the
+    // frame around it is what never shrinks to a sliver. Framed
+    // before the decorate so the popup anchor and the caret clicks
+    // span it; the air around it is the caller's [`slot_insets`].
+    let content = min_width(slot_width(cx.styles), content);
     let edit = hooks.edit.clone();
     let scale = cx.styles.scale;
     decorate(content, move |p: &mut P, rect| {
@@ -3508,11 +3584,10 @@ mod svg_bench {
         }
     }
 
-    fn render(width: f64, out_path: &str) {
-        let doc = sample_document();
+    fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
         let library = crate::conventions::library();
         let sources = Sources {
-            doc: &doc,
+            doc,
             library: &library,
         };
         let names = Names::table();
@@ -3541,7 +3616,7 @@ mod svg_bench {
         let start = std::time::Instant::now();
         let node = project::<(), Bench>(
             &sources,
-            None,
+            selection,
             None,
             &collapse,
             &names,
@@ -3577,11 +3652,65 @@ mod svg_bench {
 
     #[test]
     fn svg_bench_renders_the_sample_projection() {
-        render(900.0, "../target/raw_projection.svg");
-        render(560.0, "../target/raw_projection_narrow.svg");
+        let doc = sample_document();
+        render(&doc, None, 900.0, "../target/raw_projection.svg");
+        render(&doc, None, 560.0, "../target/raw_projection_narrow.svg");
         // The deep-fallback regime: hugging fails at most levels, so
         // this render is also the canary against layout cost blowing
         // up when width is scarce.
-        render(320.0, "../target/raw_projection_tight.svg");
+        render(&doc, None, 320.0, "../target/raw_projection_tight.svg");
+    }
+
+    #[test]
+    fn svg_bench_renders_the_placeholder_notation() {
+        let empty = Document {
+            root: None,
+            cells: Cells::new(),
+        };
+        render(&empty, None, 320.0, "../target/raw_placeholder_root.svg");
+        // The engaged twin: same slot, same rect, selection blue.
+        render(
+            &empty,
+            Some(&pending_value(Vec::new())),
+            320.0,
+            "../target/raw_placeholder_engaged.svg",
+        );
+        let mut cells = Cells::new();
+        let bare = new_cell_id();
+        cells.set_name(bare, "greenhouse");
+        render(
+            &Document {
+                root: Some(Value::from(bare)),
+                cells,
+            },
+            None,
+            320.0,
+            "../target/raw_placeholder_cell.svg",
+        );
+        // The commit transition pair: the same spelling typed in the
+        // slot and committed as the string — glyphs should not move.
+        render(
+            &empty,
+            Some(&Selection::Pending {
+                path: Vec::new(),
+                query: line_edit("\"asdf\"", QUERY_COLOR),
+                choice: 0,
+            }),
+            320.0,
+            "../target/raw_placeholder_typed.svg",
+        );
+        render(
+            &Document {
+                root: Some(Value::from("asdf")),
+                cells: Cells::new(),
+            },
+            Some(&Selection::Edge {
+                path: Vec::new(),
+                edit: None,
+                recorded: false,
+            }),
+            320.0,
+            "../target/raw_placeholder_committed.svg",
+        );
     }
 }

@@ -134,6 +134,14 @@ pub fn pad<P>(insets: Insets, child: Node<P>) -> Node<P> {
     }
 }
 
+/// Holds `child` to at least `min` wide by padding on the right: a
+/// frame's minimum, not the child's — the child keeps its own extent
+/// and placement.
+pub fn min_width<P>(min: f64, child: Node<P>) -> Node<P> {
+    let deficit = (min - child.extent.width).max(0.0);
+    pad(Insets::new(0.0, 0.0, deficit, 0.0), child)
+}
+
 /// Runs `draw` with the subtree's settled rect before the subtree
 /// places: backgrounds draw behind, and `interact::clickable` reuses
 /// the rect to register a hit region.
@@ -278,6 +286,18 @@ mod tests {
         let mut placed = Vec::new();
         place(p, &mut placed, Point::new(0.0, 100.0));
         assert_eq!(placed, vec![Point::new(3.0, 100.0)]);
+    }
+
+    #[test]
+    fn min_width_pads_narrow_children_and_leaves_wide_ones() {
+        let narrow = min_width(25.0, probe(ext(10.0, 8.0, 2.0)));
+        assert_eq!(narrow.extent, ext(25.0, 8.0, 2.0));
+        let mut placed = Vec::new();
+        place(narrow, &mut placed, Point::new(0.0, 100.0));
+        assert_eq!(placed, vec![Point::new(0.0, 100.0)]);
+
+        let wide = min_width(25.0, probe(ext(30.0, 8.0, 2.0)));
+        assert_eq!(wide.extent, ext(30.0, 8.0, 2.0));
     }
 
     #[test]
