@@ -16,7 +16,7 @@ use std::sync::Arc;
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
-use progred_graph::{Step, Value};
+use progred_graph::{Label, Step, Value};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditState};
 use puri::handler::{Handler, HasHandler, ImeEvent};
@@ -1190,8 +1190,10 @@ impl App {
                 self.commit_value(path, &raw::EntryAction::Value(id));
                 true
             }
-            Some(Selected::Tree(raw::Selection::PendingEdge { parent, .. })) => {
-                self.commit_label(parent, &raw::EntryAction::Value(id));
+            Some(Selected::Tree(raw::Selection::PendingEdge {
+                parent, replacing, ..
+            })) => {
+                self.commit_label(parent, replacing, &raw::EntryAction::Value(id));
                 true
             }
             selection => {
@@ -1213,10 +1215,18 @@ impl App {
     }
 
     /// A resolved label advances the pending edge to its value stage —
-    /// or selects the existing field when the label is taken. Resolving
-    /// mutates nothing (a new cell's mint is a bare id): the value
-    /// stage's write is the one undo step.
-    fn commit_label(&mut self, parent: raw::Path, action: &raw::EntryAction) {
+    /// or selects the existing field when the label is taken (rename
+    /// included: a taken label never clobbers its field, selection
+    /// communicates it, and replacing it means deleting it first).
+    /// New fields resolve without mutating (a new cell's mint is a
+    /// bare id; the value stage's write is the one undo step); a
+    /// rename re-keys the field in one write, the value carried.
+    fn commit_label(
+        &mut self,
+        parent: raw::Path,
+        replacing: Option<Label>,
+        action: &raw::EntryAction,
+    ) {
         // The label stage offers only what can label; a Value action
         // resolving otherwise (alien paste text reading as a blob)
         // declines before any mutation.
@@ -1226,14 +1236,42 @@ impl App {
         }) else {
             return;
         };
-        let mut path = parent;
-        path.push(Step::Key(label));
-        self.model.selection = Some(Selected::Tree(
-            match self.model.sources().resolve(&path) {
-                Some(_) => raw::Selection::edge(&self.model.sources(), path),
-                None => raw::pending_value(path),
-            },
-        ));
+        let mut path = parent.clone();
+        path.push(Step::Key(label.clone()));
+        if self.model.sources().resolve(&path).is_some() {
+            self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                &self.model.sources(),
+                path,
+            )));
+            return;
+        }
+        match replacing {
+            Some(old) => {
+                let before = self.model.doc.clone();
+                let renamed = raw::rename_field(
+                    &mut self.model.doc,
+                    &self.model.library,
+                    &parent,
+                    &old,
+                    label,
+                );
+                if renamed {
+                    self.model.history.record(before, None);
+                    self.refresh_title();
+                } else {
+                    // The rename could not land; back to the field.
+                    path = parent;
+                    path.push(Step::Key(old));
+                }
+                self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                    &self.model.sources(),
+                    path,
+                )));
+            }
+            None => {
+                self.model.selection = Some(Selected::Tree(raw::pending_value(path)));
+            }
+        }
     }
 
     /// Structural copy/paste, the shell's fallback: a focused text
@@ -1371,9 +1409,10 @@ impl App {
                         parent,
                         query,
                         choice,
+                        replacing,
                     })) => {
                         let action = Self::chosen_action(popup, &query, choice);
-                        self.commit_label(parent, &action);
+                        self.commit_label(parent, replacing, &action);
                         true
                     }
                     selection => {
@@ -1416,10 +1455,18 @@ impl App {
                             });
                             true
                         }
-                        Some(Selected::Tree(raw::Selection::PendingEdge { parent, .. })) => {
+                        Some(Selected::Tree(raw::Selection::PendingEdge {
+                            parent, replacing, ..
+                        })) => {
+                            // A cancelled rename returns to its field;
+                            // a cancelled new field to the record.
+                            let mut back = parent.clone();
+                            if let Some(old) = replacing {
+                                back.push(Step::Key(old.clone()));
+                            }
                             self.model.selection = Some(Selected::Tree(raw::Selection::edge(
                                 &self.model.sources(),
-                                parent.clone(),
+                                back,
                             )));
                             true
                         }
@@ -1683,6 +1730,11 @@ fn run_frame(
                     &path,
                 );
             }),
+            rename: Rc::new(|app: &mut App, path| {
+                if let Some(pending) = raw::pending_rename(&app.model.sources(), &path) {
+                    app.model.selection = Some(Selected::Tree(pending));
+                }
+            }),
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
         },
@@ -1765,8 +1817,10 @@ fn run_frame(
                 Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
                     app.commit_value(path, action);
                 }
-                Some(Selected::Tree(raw::Selection::PendingEdge { parent, .. })) => {
-                    app.commit_label(parent, action);
+                Some(Selected::Tree(raw::Selection::PendingEdge {
+                    parent, replacing, ..
+                })) => {
+                    app.commit_label(parent, replacing, action);
                 }
                 selection => app.model.selection = selection,
             }

@@ -235,6 +235,10 @@ pub struct TextClick {
 pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
+    /// Re-open the label of the field at `path` (a Key path) as its
+    /// seeded query — the click-again gesture on a selected field's
+    /// label.
+    pub rename: Rc<dyn Fn(&mut C, Path)>,
     /// None when the editor is already gone — retained-frame dispatch
     /// may fire a frame late, and absent state declines.
     pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
@@ -296,7 +300,22 @@ impl Cx<'_> {
                 parent,
                 query,
                 choice,
+                replacing: None,
             }) if parent.as_slice() == path => Some((query, *choice)),
+            _ => None,
+        }
+    }
+
+    /// The re-opened label of an existing field on the record at
+    /// `path`, with the key it replaces.
+    fn pending_rename_under(&self, path: &[Step]) -> Option<(&Label, &LineEditState, usize)> {
+        match self.selection {
+            Some(Selection::PendingEdge {
+                parent,
+                query,
+                choice,
+                replacing: Some(replacing),
+            }) if parent.as_slice() == path => Some((replacing, query, *choice)),
             _ => None,
         }
     }
@@ -340,11 +359,16 @@ pub enum Selection {
     },
     /// A new field on the record at `parent` whose label is being
     /// authored; resolving the label advances to the value stage (or
-    /// selects the existing field if the label is taken).
+    /// selects the existing field if the label is taken). With
+    /// `replacing`, an EXISTING field's label re-opened: commit
+    /// re-keys the field whole, its value carried — values write
+    /// through, addresses stage (a label is a key in a shared map,
+    /// so intermediate spellings must never land).
     PendingEdge {
         parent: Path,
         query: LineEditState,
         choice: usize,
+        replacing: Option<Label>,
     },
 }
 
@@ -566,6 +590,32 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
         parent,
         query: line_edit("", QUERY_COLOR),
         choice: 0,
+        replacing: None,
+    })
+}
+
+/// An existing field's label re-opened as a pending edge, the query
+/// seeded with the current SPELLING — a string label with its quotes,
+/// a cell label by its name (another cell may share the name; the
+/// seed is a spelling, not the identity) or short id. Committing a
+/// taken label navigates to its field, the new-field rule.
+pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
+    let (step, parent) = path.split_last()?;
+    let Step::Key(key) = step else { return None };
+    sources.resolve(path)?;
+    writable_at(sources, parent).then_some(())?;
+    let seed = match key {
+        Label::String(s) => format!("\"{s}\""),
+        Label::Cell(cell) => sources
+            .name(*cell)
+            .map(str::to_string)
+            .unwrap_or_else(|| short_id(*cell)),
+    };
+    Some(Selection::PendingEdge {
+        parent: parent.to_vec(),
+        query: line_edit(&seed, QUERY_COLOR),
+        choice: 0,
+        replacing: Some(key.clone()),
     })
 }
 
@@ -997,6 +1047,34 @@ pub fn set_value(doc: &mut Document, library: &Cells, path: &[Step], value: Valu
             doc.root = Some(rebuilt);
             true
         }
+        None => false,
+    }
+}
+
+/// Re-keys the field `old` on the record at `parent` to `label`, the
+/// value carried — one write through [`set_value`]. Declines when
+/// the record or field is missing or the label is taken: a rename
+/// never destroys a sibling (the caller navigates to it instead).
+pub fn rename_field(
+    doc: &mut Document,
+    library: &Cells,
+    parent: &[Step],
+    old: &Label,
+    label: Label,
+) -> bool {
+    let rekeyed = {
+        let sources = Sources { doc: &*doc, library };
+        sources
+            .resolve(parent)
+            .and_then(Value::as_record)
+            .and_then(|fields| {
+                (!fields.contains_key(&label)).then_some(())?;
+                let value = fields.get(old)?.clone();
+                Some(Value::Record(fields.without(old).update(label, value)))
+            })
+    };
+    match rekeyed {
+        Some(record) => set_value(doc, library, parent, record),
         None => false,
     }
 }
@@ -1569,7 +1647,8 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let value = cx.sources.value(cell).cloned();
     // A pending inside the value forces the cell open.
     let pending_inside = cx.pending_child_of(&followed).is_some()
-        || cx.pending_edge_under(&followed).is_some();
+        || cx.pending_edge_under(&followed).is_some()
+        || cx.pending_rename_under(&followed).is_some();
     let elided = value.is_some()
         && !pending_inside
         && cx.collapse.collapsed(path, ancestors.contains(&cell));
@@ -1761,10 +1840,24 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
     child.push(Step::Key(key.clone()));
-    let head = row(
-        0.0,
-        vec![label_view(cx, tcx, &key), text(tcx, ":", &cx.styles.dim)],
-    );
+    // A re-opened label renders as its seeded query; cold, it is the
+    // label text, and on a selected field the click-again Finder
+    // pattern re-opens it (the head's outer select still takes the
+    // colon and the cold first click).
+    let label = match cx.pending_rename_under(parent) {
+        Some((replacing, query, choice)) if replacing == &key => {
+            rename_query(cx, tcx, query, choice, hooks)
+        }
+        _ => {
+            let cold = label_view(cx, tcx, &key);
+            if cx.selected(&child) && writable_at(&cx.sources, parent) {
+                rename_target(child.clone(), hooks, cold)
+            } else {
+                cold
+            }
+        }
+    };
+    let head = row(0.0, vec![label, text(tcx, ":", &cx.styles.dim)]);
     let head = match &value {
         Some(_) => select_target(
             child.clone(),
@@ -2017,6 +2110,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         items.sort_by(|a, b| a.0.cmp(&b.0));
     }
     let pending_edge = cx.pending_edge_under(path).is_some();
+    let renaming = cx.pending_rename_under(path);
     let target = Value::Record(fields.clone());
 
     // A pending inside forces the record open; the collapse override
@@ -2024,6 +2118,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // elision — no summary — and the ellipsis is the way back open.
     let collapsed = !items.is_empty()
         && !pending_edge
+        && renaming.is_none()
         && items.iter().all(|(_, value)| value.is_some())
         && cx.collapse.collapsed(path, false);
     if collapsed {
@@ -2064,10 +2159,22 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             if index > 0 {
                 cells.push(text(tcx, ", ", &cx.styles.dim));
             }
-            cells.push(label_view(cx, tcx, key));
-            cells.push(text(tcx, ": ", &cx.styles.dim));
             let mut child = path.to_vec();
             child.push(Step::Key(key.clone()));
+            cells.push(match renaming {
+                Some((replacing, query, choice)) if replacing == key => {
+                    rename_query(cx, tcx, query, choice, hooks)
+                }
+                _ => {
+                    let cold = label_view(cx, tcx, key);
+                    if cx.selected(&child) && writable_at(&cx.sources, path) {
+                        rename_target(child.clone(), hooks, cold)
+                    } else {
+                        cold
+                    }
+                }
+            });
+            cells.push(text(tcx, ": ", &cx.styles.dim));
             cells.push(match value {
                 Some(value) => {
                     value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
@@ -2567,6 +2674,50 @@ fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
                 && command(&event.state.modifiers)
                 && pick(ctx, Value::Atom(Atom::from(key.clone())))
+        });
+    })
+}
+
+/// The re-opened label: its engaged query wearing the primary ring
+/// explicitly — a pending edge has no path of its own for
+/// [`descend`] to mark — spanning the query frame the way a value
+/// pending's does. Clicks inside belong to the query's own caret
+/// target; clicks beside fall through like any pending's.
+fn rename_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    query: &LineEditState,
+    choice: usize,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let content = placeholder(cx, tcx, Some((query, choice)), true, hooks);
+    decorate(content, move |p: &mut P, rect| {
+        primary_highlight(scale, p, rect);
+    })
+}
+
+/// The Finder pattern's second act on a field label: cold, the label
+/// shares the head's select claim; on the selected field a plain
+/// click re-opens it as its seeded query. Command-clicks decline so
+/// the head's pick still wins.
+fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
+    path: Path,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let rename = hooks.rename.clone();
+    decorate(content, move |p, rect| {
+        let rename = rename.clone();
+        let target = path.clone();
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && !command(&event.state.modifiers)
+                && {
+                    rename(ctx, target.clone());
+                    true
+                }
         });
     })
 }
@@ -3228,6 +3379,77 @@ mod tests {
     }
 
     #[test]
+    fn pending_rename_seeds_the_current_spelling() {
+        let doc = sample_document();
+        let lib = crate::conventions::library();
+        let sources = src(&doc, &lib);
+        // A string label seeds QUOTED — the spelling whose choice
+        // zero resolves back to the same string, so committing
+        // untouched is a no-op rename.
+        let tags = vec![key("shape"), Step::Follow, key("tags")];
+        let pending = pending_rename(&sources, &tags).unwrap();
+        assert_eq!(pending.edit().unwrap().text(), "\"tags\"");
+        let Selection::PendingEdge {
+            parent, replacing, ..
+        } = &pending
+        else {
+            panic!("a rename pends the edge");
+        };
+        assert_eq!(parent.as_slice(), &tags[..2]);
+        assert_eq!(replacing.as_ref(), Some(&Label::from("tags")));
+        // A cell label seeds by NAME — a spelling, not the identity;
+        // another cell sharing the name may rank first, accepted.
+        let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
+        let stroke = sources
+            .value(roof)
+            .unwrap()
+            .as_record()
+            .unwrap()
+            .keys()
+            .find_map(Label::as_cell)
+            .unwrap();
+        let path = vec![key("shape"), Step::Follow, Step::Key(Label::Cell(stroke))];
+        assert_eq!(
+            pending_rename(&sources, &path)
+                .unwrap()
+                .edit()
+                .unwrap()
+                .text(),
+            "stroke"
+        );
+        // Missing fields have no label to re-open.
+        assert!(pending_rename(&sources, &[key("gone")]).is_none());
+    }
+
+    #[test]
+    fn rename_carries_the_value_and_never_a_sibling() {
+        let lib = Cells::new();
+        let (mut doc, _cell) = doc_of(vec![
+            (Label::from("a"), Value::from("1")),
+            (Label::from("b"), Value::from("2")),
+        ]);
+        let parent = vec![Step::Follow];
+        // A taken label declines whole: the sibling keeps its value.
+        assert!(!rename_field(&mut doc, &lib, &parent, &Label::from("a"), Label::from("b")));
+        // A fresh label re-keys in one write, the value carried.
+        assert!(rename_field(&mut doc, &lib, &parent, &Label::from("a"), Label::from("c")));
+        {
+            let sources = src(&doc, &lib);
+            assert_eq!(
+                sources.resolve(&[Step::Follow, key("c")]).cloned(),
+                Some(Value::from("1"))
+            );
+            assert!(sources.resolve(&[Step::Follow, key("a")]).is_none());
+            assert_eq!(
+                sources.resolve(&[Step::Follow, key("b")]).cloned(),
+                Some(Value::from("2"))
+            );
+        }
+        // A missing field has nothing to carry.
+        assert!(!rename_field(&mut doc, &lib, &parent, &Label::from("gone"), Label::from("d")));
+    }
+
+    #[test]
     fn the_sample_document_shows_the_constructs() {
         let doc = sample_document();
         let lib = crate::conventions::library();
@@ -3581,6 +3803,7 @@ mod svg_bench {
         let hooks = Hooks::<()> {
             select: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
+            rename: Rc::new(|_, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
         };
@@ -3708,5 +3931,27 @@ mod svg_bench {
             320.0,
             "../target/raw_empty_string_editing.svg",
         );
+    }
+
+    // The re-opened label: the tags field's query seeded with its
+    // quoted spelling, ringed in place, the value staying put.
+    #[test]
+    fn svg_bench_renders_a_label_rename() {
+        let doc = sample_document();
+        let library = crate::conventions::library();
+        let path = vec![
+            Step::Key(Label::from("shape")),
+            Step::Follow,
+            Step::Key(Label::from("tags")),
+        ];
+        let rename = pending_rename(
+            &Sources {
+                doc: &doc,
+                library: &library,
+            },
+            &path,
+        )
+        .unwrap();
+        render(&doc, Some(&rename), 560.0, "../target/raw_label_rename.svg");
     }
 }

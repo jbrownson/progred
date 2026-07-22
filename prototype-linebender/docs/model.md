@@ -904,6 +904,39 @@ recovered the dash-and-gap overhead. (The earlier click-claims
 note "dashes are ink and select their element" describes the
 retired form.)
 
+LABELS RENAME BY RE-OPENING THEIR QUERY (2026-07-22, user:
+"editing a label doesn't mean going into a string-edit... it means
+re-opening a pending and seeding it w/ the current thing"). The
+principle that shapes it: VALUES WRITE THROUGH; ADDRESSES STAGE. A
+string value edits per keystroke because every intermediate
+spelling is a legal value at the same address; a label is an
+address — a key in the record's OrdMap — so write-through would
+re-sort the row on every keystroke and a spelling that crossed a
+sibling's key would clobber its value. So the label re-opens as
+the pending-edge machinery itself: PendingEdge grew `replacing:
+Option<Label>`, the query seeded with the current SPELLING — a
+string label with its quotes, a cell label by its name (a
+same-named other cell may rank first; the seed is a spelling, not
+the identity — user-accepted) or short id. An untouched seed's
+choice zero resolves back to the same key, and committing a TAKEN
+label — that no-op included — NAVIGATES to its field, the
+new-field rule reused verbatim: a rename never clobbers a sibling;
+replacing one means deleting it first (user: "we simply change
+focus to it to communicate that it exists"). A fresh label re-keys
+through `rename_field` — one set_value of the record with the key
+swapped, the value carried, one history step. Engagement is the
+Finder pattern's second act (`rename_target`): cold, the label
+shares the head's select claim; on the SELECTED field a plain
+click re-opens it (command-click still picks). The query renders
+in place (`rename_query`) wearing the primary ring explicitly — a
+pending edge has no path of its own for descend to mark — colon
+and value staying put; a rename forces its record open and rides
+the flat literal like any authoring query; Backspace on the empty
+query returns to the field, Escape deselects. Name editors stay
+write-through by the same principle's other half: a name is the
+cell's own metadata, duplicates legal, no shared namespace to
+collide in. Scene raw_label_rename.svg pins the notation.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:
