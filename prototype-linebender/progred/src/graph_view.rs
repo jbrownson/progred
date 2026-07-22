@@ -468,6 +468,10 @@ pub struct Hooks<C> {
     /// Command-click: commit the pointed-at cell into the open
     /// pending; false when nothing is pending.
     pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
+    /// The pointer's resting claim inside the panel: the node under
+    /// it, or `None` for the pane's own ground — either way the pane
+    /// takes the pointer, so the tree beneath never lights.
+    pub hover: Rc<dyn Fn(&mut C, Option<GraphNode>)>,
 }
 
 const FONT_SIZE: f32 = 10.0;
@@ -492,6 +496,8 @@ const PRIMARY: [f32; 4] = [0.0, 0.48, 1.0, 1.0];
 /// clearly not it.
 const WASH: [f32; 4] = [0.0, 0.48, 1.0, 0.10];
 const SECONDARY_OUTLINE: [f32; 4] = [0.0, 0.48, 1.0, 0.55];
+/// The hover tier's wash: the secondary at half voice.
+const HOVER_WASH: [f32; 4] = [0.0, 0.48, 1.0, 0.05];
 const TEXT: [f32; 4] = [0.13, 0.14, 0.16, 1.0];
 const STRING_TEXT: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
 const DIM_TEXT: [f32; 4] = [0.55, 0.58, 0.64, 1.0];
@@ -510,6 +516,9 @@ struct NodeView {
 #[derive(Clone, Copy, PartialEq)]
 enum Strength {
     None,
+    /// The pointer's claim, here or projected from the other pane —
+    /// the secondary mark at half voice.
+    Hover,
     Secondary,
     Primary,
 }
@@ -621,6 +630,8 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     view: &GraphView,
     selection: Option<&GraphSelection>,
     doc_selection: Option<&Selection>,
+    hover: Option<&GraphNode>,
+    doc_hover: Option<&crate::raw::Hover>,
     names: &Names,
     raw: bool,
     tcx: &mut TextCtx,
@@ -650,6 +661,10 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
             _ => None,
         })
         .and_then(|value| value.as_cell());
+    // The document's hover projects in the same way, at half voice.
+    let hover_cell = doc_hover
+        .and_then(|hover| crate::raw::hover_value(sources, hover))
+        .and_then(|value| value.as_cell());
 
     let root_link = doc.root.as_ref().and_then(Value::as_cell);
     let node_views: Vec<NodeView> = snapshot
@@ -666,6 +681,10 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 Strength::Primary
             } else if matches!(id, GraphNode::Cell(cell) if secondary_cell == Some(*cell)) {
                 Strength::Secondary
+            } else if hover == Some(id)
+                || matches!(id, GraphNode::Cell(cell) if hover_cell == Some(*cell))
+            {
+                Strength::Hover
             } else {
                 Strength::None
             };
@@ -764,6 +783,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     let drag_to = hooks.drag_to.clone();
     let release = hooks.release.clone();
     let pick = hooks.pick.clone();
+    let hover_hook = hooks.hover.clone();
     let extent = Extent {
         width: panel.width(),
         ascent: 0.0,
@@ -801,10 +821,13 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
                 if node.strength == Strength::Secondary {
                     p.fill(shape, Color::new(WASH), Affine::IDENTITY);
                 }
+                if node.strength == Strength::Hover {
+                    p.fill(shape, Color::new(HOVER_WASH), Affine::IDENTITY);
+                }
                 let (color, width) = match node.strength {
                     Strength::Primary => (PRIMARY, 2.5),
                     Strength::Secondary => (SECONDARY_OUTLINE, 1.5),
-                    Strength::None => (BORDER, 1.2),
+                    Strength::Hover | Strength::None => (BORDER, 1.2),
                 };
                 let stroke = if node.bare {
                     Stroke::new(width * px).with_dashes(0.0, [4.0 * px, 3.0 * px])
@@ -832,6 +855,24 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         let from_panel = move |window: Point| {
             (((window - panel.center()) / px) - pan).to_point()
         };
+        // Moves inside the panel report the node under the pointer —
+        // or the pane's own ground — and never consume the event, so
+        // the drag handler registered after still sees every move.
+        let hover = hover_hook.clone();
+        let hover_hits = node_hits.clone();
+        p.handler().on_pointer_move(move |ctx, update| {
+            let point = Point::new(update.current.position.x, update.current.position.y);
+            if panel.contains(point) {
+                hover(
+                    ctx,
+                    hover_hits
+                        .iter()
+                        .find(|(rect, _)| rect.contains(point))
+                        .map(|(_, id)| *id),
+                );
+            }
+            false
+        });
         let press_node = press_node.clone();
         let press_background = press_background.clone();
         let pick = pick.clone();

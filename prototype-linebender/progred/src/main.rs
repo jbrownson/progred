@@ -98,6 +98,10 @@ struct App {
     menu_items: MenuItems,
     /// Last pointer position, for anchoring pinch zoom.
     cursor: Point,
+    /// Whether this move dispatch has its hover winner yet: claims
+    /// report innermost-first, and [`App::claim_hover`] keeps the
+    /// first. Reset before each move dispatch.
+    hover_claimed: bool,
     /// The selection identity last scrolled into view — path AND
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
@@ -439,10 +443,29 @@ impl ApplicationHandler<UserEvent> for App {
                         dispatch.handler.dispatch_pointer_down(self, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
-                        dispatch.handler.dispatch_pointer_move(self, &update)
+                        // A drag claims the move outright and hover
+                        // claims never run — pressed gestures keep the
+                        // hover they began with. Otherwise the claims
+                        // report through `claim_hover` and a changed
+                        // winner repaints without spending the
+                        // handler: nothing dispatch reads depends on
+                        // hover.
+                        let before = self.model.hover.clone();
+                        self.hover_claimed = false;
+                        let dragged = dispatch.handler.dispatch_pointer_move(self, &update);
+                        if self.model.hover != before {
+                            window.request_redraw();
+                        }
+                        dragged
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
                         dispatch.handler.dispatch_pointer_up(self, &button)
+                    }
+                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
+                        if self.model.hover.take().is_some() {
+                            window.request_redraw();
+                        }
+                        false
                     }
                     // Scrolls nothing claims pan or zoom the graph
                     // under the cursor, else move the document.
@@ -567,6 +590,7 @@ fn main() {
             library: conventions::library(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
+            hover: None,
             scroll: 0.0,
             scroll_x: 0.0,
         },
@@ -575,6 +599,7 @@ fn main() {
         menu_ids,
         menu_items,
         cursor: Point::ZERO,
+        hover_claimed: false,
         revealed: None,
         dispatch: None,
         reducer: WindowEventReducer::default(),
@@ -597,6 +622,14 @@ enum Selected {
     Graph(graph_view::GraphSelection),
 }
 
+/// The app's one hover, the selection's shape: what the resting
+/// pointer claims in whichever pane it rests over.
+#[derive(Clone, PartialEq)]
+enum Hovered {
+    Tree(raw::Hover),
+    Graph(graph_view::GraphNode),
+}
+
 struct Model {
     doc: raw::Document,
     selection: Option<Selected>,
@@ -609,6 +642,12 @@ struct Model {
     library: progred_graph::Cells,
     graph: graph_view::GraphView,
     history: history::History,
+    /// What the pointer rests on — the claim a click would fire —
+    /// previewed by the frame as the hover highlight. Written by move
+    /// dispatch like the selection is written by clicks; goes stale
+    /// under a still pointer until the next move, same as any
+    /// retained-frame dispatch.
+    hover: Option<Hovered>,
     /// Document scroll offsets in logical pixels, so the position
     /// survives moving between monitor scales. May exceed the
     /// current maximum after a resize: placement clamps effectively,
@@ -646,6 +685,30 @@ impl Model {
         match &self.selection {
             Some(Selected::Graph(selection)) => Some(selection),
             _ => None,
+        }
+    }
+
+    fn tree_hover(&self) -> Option<&raw::Hover> {
+        match &self.hover {
+            Some(Hovered::Tree(hover)) => Some(hover),
+            _ => None,
+        }
+    }
+
+    fn graph_hover(&self) -> Option<&graph_view::GraphNode> {
+        match &self.hover {
+            Some(Hovered::Graph(node)) => Some(node),
+            _ => None,
+        }
+    }
+
+    /// The graph-hovered node's value, for the tree's faint secondary
+    /// marks — [`Model::graph_node`]'s hover twin.
+    fn hover_node(&self) -> Option<Value> {
+        match self.graph_hover() {
+            Some(node) => graph_view::node_value(&self.doc, node)
+                .filter(|value| !matches!(value, Value::Record(_))),
+            None => None,
         }
     }
 
@@ -942,6 +1005,7 @@ impl App {
             library: conventions::library(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
+            hover: None,
             scroll: 0.0,
             scroll_x: 0.0,
         };
@@ -1075,6 +1139,16 @@ impl App {
             max_scroll_x,
             popup,
         });
+    }
+
+    /// A move dispatch's hover report: claims arrive innermost-first,
+    /// so the first per dispatch is the winner and the rest are the
+    /// containers behind it.
+    fn claim_hover(&mut self, hover: Option<Hovered>) {
+        if !self.hover_claimed {
+            self.hover_claimed = true;
+            self.model.hover = hover;
+        }
     }
 
     /// Scrolls over the graph panel drive its viewport — trackpad
@@ -1683,6 +1757,12 @@ fn run_frame(
     frame.handler().on_pointer_down(|app: &mut App, event| {
         event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
     });
+    // Empty space also hovers nothing: the same fall-through, for
+    // moves — every claim above reported first or not at all.
+    frame.handler().on_pointer_move(|app: &mut App, _| {
+        app.claim_hover(None);
+        false
+    });
 
     // Mark-and-sweep by pass: entries the previous pass never used
     // are dropped here, everything else carries over — the steady
@@ -1709,10 +1789,13 @@ fn run_frame(
     } else {
         viewport_width - 2.0 * margin
     };
+    let hover_node = model.hover_node();
     let body = raw::project(
         &sources,
         model.tree_selection(),
         graph_node.as_ref(),
+        model.tree_hover(),
+        hover_node.as_ref(),
         &model.collapse,
         &model.names,
         view.raw,
@@ -1789,6 +1872,7 @@ fn run_frame(
             }),
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
+            hover: Rc::new(|app: &mut App, hover| app.claim_hover(hover.map(Hovered::Tree))),
         },
     );
     // The body rides puri's scroll viewport: margins pad into the
@@ -1821,6 +1905,8 @@ fn run_frame(
             &model.graph,
             model.graph_selection(),
             model.tree_selection(),
+            model.graph_hover(),
+            model.tree_hover(),
             &model.names,
             view.raw,
             &mut tcx,
@@ -1856,6 +1942,9 @@ fn run_frame(
                     None => false,
                 }),
                 pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
+                hover: Rc::new(|app: &mut App, node| {
+                    app.claim_hover(node.map(Hovered::Graph));
+                }),
             },
         );
         place_top_left(pane, frame, Point::new(panel.x0, panel.y0));
@@ -1864,7 +1953,11 @@ fn run_frame(
     // The pending row's popup draws after the body, so it overlays
     // and its click targets win.
     if let Some(popup) = frame.popup.take() {
-        let card = raw::popup_view(&mut tcx, &styles, &popup, |app: &mut App, action| {
+        let hovered_entry = match model.tree_hover() {
+            Some(raw::Hover::Entry { index, .. }) => Some(*index),
+            _ => None,
+        };
+        let commit = |app: &mut App, action: &raw::EntryAction| {
             match app.model.selection.take() {
                 Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
                     app.commit_value(path, action);
@@ -1876,7 +1969,15 @@ fn run_frame(
                 }
                 selection => app.model.selection = selection,
             }
-        });
+        };
+        let card = raw::popup_view(
+            &mut tcx,
+            &styles,
+            &popup,
+            hovered_entry,
+            Rc::new(|app: &mut App, hover| app.claim_hover(hover.map(Hovered::Tree))),
+            commit,
+        );
         // Below the anchor, unless it would run off the bottom and
         // fits above — then flip on top, as the TypeScript prototype
         // did. The card's extent is known before placement.

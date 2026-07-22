@@ -1014,6 +1014,55 @@ is passed as `Dispatch.line` (14·scale) rather than derived;
 Alt+Down as skip-subtree skim if walking big open blocks ever
 feels slow.
 
+HOVER IS STATE WITH THE SELECTION'S LIFECYCLE (2026-07-22, same
+day; the design went through three shapes in one conversation).
+Bringing the UI alive: whatever a plain click would do, the
+pointer resting there previews it. First shape SHIPPED then
+REJECTED: a `HoverRegion` mirror of every claim, hit-tested at
+event time into a cached `Model.hover` patched by a
+`reconcile_hover` at every rebuild site — the model's only CACHED
+DERIVED value, carrying the whole desync bug class (forgotten
+reconcile sites, a corrective second frame, a freeze special
+case). Second shape argued and dropped: hover as a pure function
+of (pointer, settled frame) — philosophically right (it is
+memoryless), but the bool is a GLOBAL AGGREGATE (topmost claim
+containing the point), unanswerable during an interleaved
+settle+draw pass without two passes or a one-frame lag. Landed
+shape (user's): hover is honest STATE, written by move dispatch
+exactly as selection is written by clicks, read by the pass like
+any other state — no mirror, no purity machinery. Every claim
+helper registers an `on_pointer_move` that REPORTS its key when
+its rect contains the pointer and never consumes the move
+(`hover_claim`); reports arrive innermost-first because dispatch
+composes newest-first, and the shell's `claim_hover` keeps the
+FIRST report per dispatch (`App.hover_claimed` resets per move).
+Occluders report `None` (`hover_block`: popup card, engaged
+query, pending row); a run_frame background handler registered
+first — beside the deselect click — clears when nothing claims;
+`Leave` clears; drags freeze hover for free (a dragging editor
+CONSUMES moves before any claim runs). A changed winner repaints
+without re-minting: nothing dispatch reads depends on hover.
+Accepted honestly: hover goes stale under a still pointer when
+layout scrolls beneath it, until the next move — the same
+retained-frame honesty clicks have. The claim names what a click
+would do: `Value(path)` previews the selection box at its
+landmark (`hover_highlight`, the primary's `highlight_rect`
+washed 0.08; a whole string lights, never a caret; selection
+outranks hover), `Label`/`Toggle` light their own ink, `Entry`
+fills its popup row at 0.08 (chosen keeps 0.14) and CARRIES THE
+VALUE it would commit. SECONDARY HOVER rides the same state:
+`Hovered` is the shell's `Selected` twin (`Tree(raw::Hover) |
+Graph(GraphNode)`), and `hover_value` — `secondary_of`'s hover
+twin — feeds `cx.secondary_hover`, so hovering a value, a label,
+a popup reference, or a graph node marks the value's OTHER
+projections with the secondary mark at half voice (fill 0.05
+stroke 0.25 vs 0.10/0.55), in the tree and the graph pane both
+(`Strength::Hover`, wash 0.05, between None and Secondary).
+Tests dispatch REAL moves at the placed sample: every containing
+claim reports with the innermost first, off-content reports
+nothing, popup rows claim their entries (value riding along) and
+the card's padding claims-and-clears.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:

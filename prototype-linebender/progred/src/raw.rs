@@ -214,8 +214,13 @@ struct Cx<'a> {
     collapse: &'a Collapse,
     styles: &'a RawStyles,
     selection: Option<&'a Selection>,
+    /// The pointer's current claim, previewed by the target it names.
+    hover: Option<&'a Hover>,
     /// The value whose other projections carry the secondary mark.
     secondary: Option<Value>,
+    /// The value the hover refers to; its projections carry the faint
+    /// hover variant of the secondary mark.
+    secondary_hover: Option<Value>,
 }
 
 /// A reported click on a string's text, in text-local coordinates.
@@ -249,7 +254,16 @@ pub struct Hooks<C> {
     /// label stage); false when nothing is pending, so the click
     /// falls through to selection.
     pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
+    /// The pointer's resting claim, reported by every claim the move
+    /// crosses in dispatch order — innermost first, so the shell
+    /// keeps the FIRST report per move. `Some` names what a plain
+    /// click would engage; `None` is an occluder (the popup card, an
+    /// engaged query) taking the pointer and naming nothing.
+    pub hover: HoverHook<C>,
 }
+
+/// The hover hook's shape, shared by every claim site.
+pub type HoverHook<C> = Rc<dyn Fn(&mut C, Option<Hover>)>;
 
 /// The platform command modifier, for pointer gestures.
 pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
@@ -280,6 +294,10 @@ impl Cx<'_> {
             }) => selected.as_slice() == path,
             _ => false,
         }
+    }
+
+    fn hovered_value(&self, path: &[Step]) -> bool {
+        matches!(self.hover, Some(Hover::Value(hovered)) if hovered.as_slice() == path)
     }
 
     /// The pending child step under `path`, when the selection is
@@ -1439,6 +1457,42 @@ pub trait HasDescends {
     fn descends(&mut self) -> &mut Vec<Descend>;
 }
 
+/// What the pointer rests on: the claim a plain click at that point
+/// would fire. Values preview their selection; labels, toggles, and
+/// popup entries light their own ink. State like the selection —
+/// written by move dispatch through [`Hooks::hover`], read by the
+/// next pass.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Hover {
+    /// A click here selects the value at this path.
+    Value(Path),
+    /// A click here re-opens this field's label as its rename.
+    Label(Path),
+    /// A click here toggles this path's collapse.
+    Toggle(Path),
+    /// A click here commits this completion entry; the value it would
+    /// commit rides along for the secondary hover marks.
+    Entry { index: usize, value: Option<Value> },
+}
+
+/// The value a hover refers to — the hover's `secondary_of`, for
+/// marking its other projections. Inline records are structure, not
+/// identity: no marks.
+pub fn hover_value(sources: &Sources, hover: &Hover) -> Option<Value> {
+    match hover {
+        Hover::Value(path) => sources
+            .resolve(path)
+            .filter(|value| !matches!(value, Value::Record(_)))
+            .cloned(),
+        Hover::Label(path) => match path.last()? {
+            Step::Key(key) => Some(Value::Atom(Atom::from(key.clone()))),
+            _ => None,
+        },
+        Hover::Entry { value, .. } => value.clone(),
+        Hover::Toggle(_) => None,
+    }
+}
+
 /// The delimiter metrics that marry the drawn family to the text:
 /// the system font's own glyphs span -0.704..+0.171 em around the
 /// baseline while its line box spans -0.929..+0.249, so a stretched
@@ -1626,6 +1680,49 @@ fn highlight_rect(scale: f64, rect: Rect) -> RoundedRect {
     RoundedRect::from_rect(rect.inset(2.0 * scale), 4.0 * scale)
 }
 
+/// Report `key` as the pointer's claim for any move inside `rect`.
+/// Never consumes the move: every containing claim reports in
+/// dispatch order — innermost first — and the shell keeps the first,
+/// so the event still reaches drag handlers and outer claims.
+fn hover_claim<C: 'static, P: Canvas + HasHandler<C>>(
+    p: &mut P,
+    rect: Rect,
+    hover: HoverHook<C>,
+    key: Hover,
+) {
+    p.handler().on_pointer_move(move |ctx, update| {
+        if rect.contains(Point::new(update.current.position.x, update.current.position.y)) {
+            hover(ctx, Some(key.clone()));
+        }
+        false
+    });
+}
+
+/// An occluder's version of [`hover_claim`]: takes the pointer and
+/// names nothing, so targets beneath an overlay never light.
+fn hover_block<C: 'static, P: Canvas + HasHandler<C>>(
+    p: &mut P,
+    rect: Rect,
+    hover: HoverHook<C>,
+) {
+    p.handler().on_pointer_move(move |ctx, update| {
+        if rect.contains(Point::new(update.current.position.x, update.current.position.y)) {
+            hover(ctx, None);
+        }
+        false
+    });
+}
+
+/// The pointer's preview of a click's meaning: the same box the
+/// primary would ring, washed faint — hover never outranks selection.
+fn hover_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
+    p.fill(
+        highlight_rect(scale, rect),
+        Color::new([0.0, 0.48, 1.0, 0.08]),
+        Affine::IDENTITY,
+    );
+}
+
 /// The pane-local primary: translucent system blue, like the Swift
 /// version's selection, ringed at full strength — the strongest mark
 /// in the shared vocabulary.
@@ -1659,12 +1756,17 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let selected = cx.selected(&path);
+    let hovered = cx.hovered_value(&path);
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
+    let hover = hooks.hover.clone();
     decorate(child, move |p, rect| {
         if selected {
             primary_highlight(scale, p, rect);
+        } else if hovered {
+            hover_highlight(scale, p, rect);
         }
+        hover_claim(p, rect, hover.clone(), Hover::Value(path.clone()));
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
@@ -1720,6 +1822,8 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     sources: &Sources,
     selection: Option<&Selection>,
     graph_node: Option<&Value>,
+    hover: Option<&Hover>,
+    hover_node: Option<&Value>,
     collapse: &Collapse,
     names: &Names,
     raw: bool,
@@ -1735,9 +1839,14 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         collapse,
         styles,
         selection,
+        hover,
         // The graph view's selected cell is a secondary here too:
-        // its projections are the same value.
+        // its projections are the same value — and the graph view's
+        // HOVERED cell is a hover secondary the same way.
         secondary: secondary_of(sources, selection).or_else(|| graph_node.cloned()),
+        secondary_hover: hover
+            .and_then(|hover| hover_value(sources, hover))
+            .or_else(|| hover_node.cloned()),
     };
     // The Raw view derives from the one bit: names answer None and
     // nothing else changes — lists and records render as themselves
@@ -1802,7 +1911,7 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             path,
             &target,
             hooks,
-            toggle_target(path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
+            toggle_target(cx, path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
         );
     }
     // The head claims cell-selection — the gap beside the name
@@ -1875,10 +1984,13 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// background's deselect.
 fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>) -> Node<P> {
     let selected = cx.selected(&path);
+    let hovered = cx.hovered_value(&path);
     let scale = cx.styles.scale;
     decorate(child, move |p: &mut P, rect| {
         if selected {
             primary_highlight(scale, p, rect);
+        } else if hovered {
+            hover_highlight(scale, p, rect);
         }
         p.descends().push(Descend {
             path: path.clone(),
@@ -2073,11 +2185,13 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
             placeholder(cx, tcx, None, false, hooks),
         ],
     );
+    let hover = hooks.hover.clone();
     decorate(pending_row, move |p: &mut P, rect| {
         primary_highlight(scale, p, rect);
         // The row owns its clicks: nothing here means "select the
         // parent", so nothing may fall through to it. (The query's
         // caret target, registered after, still wins inside itself.)
+        hover_block(p, rect, hover.clone());
         p.handler().on_pointer_down(move |_, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
@@ -2130,7 +2244,7 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 4.0 * scale,
                 vec![
                     flat_delim(cx.styles, Delim::Bracket, true),
-                    toggle_target(path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
+                    toggle_target(cx, path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
                     flat_delim(cx.styles, Delim::Bracket, false),
                 ],
             ),
@@ -2264,7 +2378,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 4.0 * scale,
                 vec![
                     flat_delim(cx.styles, Delim::Brace, true),
-                    toggle_target(path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
+                    toggle_target(cx, path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
                     flat_delim(cx.styles, Delim::Brace, false),
                 ],
             ),
@@ -2416,7 +2530,7 @@ fn field_label<C: 'static, P: Canvas + HasHandler<C>>(
     if writable_at(&cx.sources, parent) {
         let (spelling, style) = label_spelling(cx, key);
         let layout = line_layout(tcx, &spelling, style);
-        rename_target(child, layout, hooks, cold)
+        rename_target(cx, child, layout, hooks, cold)
     } else {
         cold
     }
@@ -2461,17 +2575,21 @@ fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) ->
 /// handle, or a label. The primary selection's geometry at lower
 /// strength, so the two read as one family.
 fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P> {
-    if cx.secondary.as_ref() != Some(value) {
+    let strong = cx.secondary.as_ref() == Some(value);
+    let faint = !strong && cx.secondary_hover.as_ref() == Some(value);
+    if !strong && !faint {
         return content;
     }
     let scale = cx.styles.scale;
     decorate(content, move |p: &mut P, rect| {
         let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
-        p.fill(bg, Color::new([0.0, 0.48, 1.0, 0.10]), Affine::IDENTITY);
+        // The hover variant is the same mark at half voice.
+        let (fill, line) = if strong { (0.10, 0.55) } else { (0.05, 0.25) };
+        p.fill(bg, Color::new([0.0, 0.48, 1.0, fill]), Affine::IDENTITY);
         p.stroke(
             bg,
             Stroke::new(1.5 * scale),
-            Color::new([0.0, 0.48, 1.0, 0.55]),
+            Color::new([0.0, 0.48, 1.0, line]),
             Affine::IDENTITY,
         );
     })
@@ -2599,6 +2717,7 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
     // span it; the air around it is the caller's [`slot_insets`].
     let content = min_width(slot_width(cx.styles), content);
     let edit = hooks.edit.clone();
+    let hover = hooks.hover.clone();
     let scale = cx.styles.scale;
     decorate(content, move |p: &mut P, rect| {
         *p.popup() = Some(Popup {
@@ -2609,6 +2728,7 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
         // Clicks in the query place the caret, straight through the
         // edit hook — the selection transition is never involved, so
         // clicking what you are typing can't discard it.
+        hover_block(p, rect, hover.clone());
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
@@ -2640,6 +2760,8 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
     tcx: &mut TextCtx,
     styles: &RawStyles,
     popup: &Popup,
+    hovered: Option<usize>,
+    hover: HoverHook<C>,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
 ) -> Node<P> {
     let scale = styles.scale;
@@ -2696,8 +2818,10 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
                 row(8.0 * scale, cells),
             );
             let chosen = index == choice;
+            let lit = hovered == Some(index) && !chosen;
             let action = popup.entries[index].action.clone();
             let commit = commit.clone();
+            let hover = hover.clone();
             decorate(content, move |p: &mut P, rect| {
                 if chosen {
                     p.fill(
@@ -2705,7 +2829,18 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
                         Color::new([0.0, 0.48, 1.0, 0.14]),
                         Affine::IDENTITY,
                     );
+                } else if lit {
+                    p.fill(
+                        RoundedRect::from_rect(rect, 4.0 * scale),
+                        Color::new([0.0, 0.48, 1.0, 0.08]),
+                        Affine::IDENTITY,
+                    );
                 }
+                let value = match &action {
+                    EntryAction::Value(value) => Some(value.clone()),
+                    _ => None,
+                };
+                hover_claim(p, rect, hover.clone(), Hover::Entry { index, value });
                 p.handler().on_pointer_down(move |ctx, event| {
                     event.button == Some(PointerButton::Primary)
                         && rect.contains(Point::new(
@@ -2733,6 +2868,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
             Color::new([0.75, 0.77, 0.81, 1.0]),
             Affine::IDENTITY,
         );
+        hover_block(p, rect, hover.clone());
         p.handler().on_pointer_down(move |_, event| {
             rect.contains(Point::new(event.state.position.x, event.state.position.y))
         });
@@ -2793,12 +2929,20 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 /// selecting — [`disclosure`]'s click on arbitrary content, the
 /// collapsed forms' way back open.
 fn toggle_target<C: 'static, P: Canvas + HasHandler<C>>(
+    cx: &Cx,
     path: Path,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
+    let scale = cx.styles.scale;
+    let hovered = matches!(cx.hover, Some(Hover::Toggle(hovered)) if hovered.as_slice() == path.as_slice());
     let toggle = hooks.toggle.clone();
+    let hover = hooks.hover.clone();
     decorate(content, move |p, rect| {
+        if hovered {
+            hover_highlight(scale, p, rect);
+        }
+        hover_claim(p, rect, hover.clone(), Hover::Toggle(path.clone()));
         let toggle = toggle.clone();
         let target = path.clone();
         p.handler().on_pointer_down(move |ctx, event| {
@@ -2858,13 +3002,21 @@ fn rename_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// decline so the head's pick still wins; read-only labels never
 /// register and keep the head's select.
 fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
+    cx: &Cx,
     path: Path,
     layout: Layout<Brush>,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
+    let scale = cx.styles.scale;
+    let hovered = matches!(cx.hover, Some(Hover::Label(hovered)) if hovered.as_slice() == path.as_slice());
     let rename = hooks.rename.clone();
+    let hover = hooks.hover.clone();
     decorate(content, move |p, rect| {
+        if hovered {
+            hover_highlight(scale, p, rect);
+        }
+        hover_claim(p, rect, hover.clone(), Hover::Label(path.clone()));
         let rename = rename.clone();
         let target = path.clone();
         let layout = layout.clone();
@@ -2899,7 +3051,9 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
 ) -> Node<P> {
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
+    let hover = hooks.hover.clone();
     decorate(content, move |p, rect| {
+        hover_claim(p, rect, hover.clone(), Hover::Value(path.clone()));
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
@@ -2932,7 +3086,9 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 ) -> Node<P> {
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
+    let hover = hooks.hover.clone();
     decorate(content, move |p, rect| {
+        hover_claim(p, rect, hover.clone(), Hover::Value(path.clone()));
         let pick = pick.clone();
         let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
@@ -3730,6 +3886,7 @@ mod tests {
         assert_eq!(edit.text(), "\"tags\"z");
     }
 
+
     #[test]
     fn rename_carries_the_value_and_never_a_sibling() {
         let lib = Cells::new();
@@ -3915,9 +4072,14 @@ mod svg_bench {
     use std::fmt::Write as _;
     use vello::kurbo::{BezPath, Shape as KurboShape};
 
+    /// The dispatch context for bench frames: every hover report the
+    /// move crossed, in claim order — the first is the winner the
+    /// shell would keep.
+    type Claims = Vec<Option<Hover>>;
+
     struct Bench {
         list: DrawList,
-        handler: Handler<()>,
+        handler: Handler<Claims>,
         descends: Vec<Descend>,
         popup: Option<Popup>,
     }
@@ -3949,8 +4111,8 @@ mod svg_bench {
         }
     }
 
-    impl HasHandler<()> for Bench {
-        fn handler(&mut self) -> &mut Handler<()> {
+    impl HasHandler<Claims> for Bench {
+        fn handler(&mut self) -> &mut Handler<Claims> {
             &mut self.handler
         }
     }
@@ -4109,12 +4271,13 @@ mod svg_bench {
             scale: 1.0,
             cache: &mut cache,
         };
-        let hooks = Hooks::<()> {
+        let hooks = Hooks::<Claims> {
             select: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
+            hover: Rc::new(|claims, hover| claims.push(hover)),
         };
         // Timed as the layout perf canary: a projection is a
         // per-keystroke cost, and the fallback-heavy narrow widths
@@ -4122,9 +4285,11 @@ mod svg_bench {
         // Numbers only, no assert (user call) — read them when the
         // bench runs; single-digit milliseconds is healthy.
         let start = std::time::Instant::now();
-        let node = project::<(), Bench>(
+        let node = project::<Claims, Bench>(
             &sources,
             selection,
+            None,
+            None,
             None,
             &collapse,
             &names,
@@ -4256,6 +4421,137 @@ mod svg_bench {
             ),
             Some(head)
         );
+    }
+
+    fn move_at(point: Point) -> ui_events::pointer::PointerUpdate {
+        let mut state = ui_events::pointer::PointerState::default();
+        state.position.x = point.x;
+        state.position.y = point.y;
+        ui_events::pointer::PointerUpdate {
+            pointer: ui_events::pointer::PointerInfo {
+                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: ui_events::pointer::PointerType::Mouse,
+            },
+            current: state,
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn moves_claim_the_hover_innermost_first() {
+        let doc = sample_document();
+        let (bench, _) = place(&doc, None, 560.0);
+        let library = crate::conventions::library();
+        let sources = Sources {
+            doc: &doc,
+            library: &library,
+        };
+        // Over a string leaf every containing claim reports, but the
+        // innermost reports FIRST — the string itself, not its
+        // containers — and the first report is what the shell keeps.
+        let string = bench
+            .descends
+            .iter()
+            .find(|descend| {
+                sources
+                    .resolve(&descend.path)
+                    .is_some_and(|value| value.as_str().is_some())
+            })
+            .expect("the sample has a string leaf");
+        let mut claims = Claims::new();
+        bench
+            .handler
+            .dispatch_pointer_move(&mut claims, &move_at(string.rect.center()));
+        assert_eq!(
+            claims.first(),
+            Some(&Some(Hover::Value(string.path.clone())))
+        );
+        assert!(claims.len() > 1);
+        // Off every claim, nothing reports at all — the shell clears.
+        let mut claims = Claims::new();
+        bench
+            .handler
+            .dispatch_pointer_move(&mut claims, &move_at(Point::new(-10.0, -10.0)));
+        assert!(claims.is_empty());
+    }
+
+    #[test]
+    fn popup_rows_claim_their_entries_and_the_card_occludes() {
+        let mut fonts = parley::FontContext::new();
+        let mut layouts = parley::LayoutContext::new();
+        let mut cache = puri::text::TextCache::default();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let styles = RawStyles::new(1.0);
+        let popup = Popup {
+            anchor: Rect::new(0.0, 0.0, 10.0, 10.0),
+            entries: vec![
+                Entry {
+                    display: "\"x\"".to_string(),
+                    detail: None,
+                    matches: Vec::new(),
+                    id: false,
+                    action: EntryAction::Value(Value::from("x")),
+                },
+                Entry {
+                    display: "new list".to_string(),
+                    detail: None,
+                    matches: Vec::new(),
+                    id: false,
+                    action: EntryAction::NewList,
+                },
+            ],
+            choice: 0,
+        };
+        let card = popup_view::<Claims, Bench>(
+            &mut tcx,
+            &styles,
+            &popup,
+            None,
+            Rc::new(|claims: &mut Claims, hover| claims.push(hover)),
+            |_, _| {},
+        );
+        let (width, height) = (card.extent.width, card.extent.height());
+        let mut bench = Bench {
+            list: DrawList::new(),
+            handler: Handler::default(),
+            descends: Vec::new(),
+            popup: None,
+        };
+        puri::layout::place_top_left(card, &mut bench, Point::ZERO);
+        // The card's own padding claims-and-clears: an overlay's
+        // pointer never falls through to what sits beneath it.
+        let mut claims = Claims::new();
+        bench
+            .handler
+            .dispatch_pointer_move(&mut claims, &move_at(Point::new(1.0, 1.0)));
+        assert_eq!(claims.first(), Some(&None));
+        // Scanning down the card crosses both rows: each claims its
+        // entry, the value one carrying the value it would commit.
+        let winners: Vec<Option<Hover>> = (0..height as usize)
+            .map(|y| {
+                let mut claims = Claims::new();
+                bench.handler.dispatch_pointer_move(
+                    &mut claims,
+                    &move_at(Point::new(width / 2.0, y as f64 + 0.5)),
+                );
+                claims.into_iter().next().flatten()
+            })
+            .collect();
+        assert!(winners.contains(&Some(Hover::Entry {
+            index: 0,
+            value: Some(Value::from("x")),
+        })));
+        assert!(winners.contains(&Some(Hover::Entry {
+            index: 1,
+            value: None,
+        })));
     }
 
     #[test]
