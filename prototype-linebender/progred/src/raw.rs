@@ -256,14 +256,17 @@ pub struct Hooks<C> {
     pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     /// The pointer's resting claim, reported by every claim the move
     /// crosses in dispatch order — innermost first, so the shell
-    /// keeps the FIRST report per move. `Some` names what a plain
-    /// click would engage; `None` is an occluder (the popup card, an
-    /// engaged query) taking the pointer and naming nothing.
+    /// keeps the FIRST report per move and resolves it against the
+    /// current hover with [`resolve_hover`].
     pub hover: HoverHook<C>,
+    /// Open a pending sibling after the element at `path` — the flat
+    /// list separator's click.
+    pub insert: Rc<dyn Fn(&mut C, Path)>,
 }
 
-/// The hover hook's shape, shared by every claim site.
-pub type HoverHook<C> = Rc<dyn Fn(&mut C, Option<Hover>)>;
+/// The hover hook's shape, shared by every claim site: the report,
+/// and the pointer position it was made at.
+pub type HoverHook<C> = Rc<dyn Fn(&mut C, HoverClaim, Point)>;
 
 /// The platform command modifier, for pointer gestures.
 pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
@@ -1470,9 +1473,54 @@ pub enum Hover {
     Label(Path),
     /// A click here toggles this path's collapse.
     Toggle(Path),
+    /// A click here opens a pending sibling after the element at
+    /// this path — the flat list separator's click.
+    Insert(Path),
     /// A click here commits this completion entry; the value it would
     /// commit rides along for the secondary hover marks.
     Entry { index: usize, value: Option<Value> },
+}
+
+/// What the pointer rests on plus the footprint it claimed — the
+/// identity for drawing, the rect for the little-gap hold.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hovering {
+    pub hover: Hover,
+    pub rect: Rect,
+}
+
+/// One pointer report from a move dispatch: what the claim under the
+/// pointer means for the hover state.
+#[derive(Clone, Debug, PartialEq)]
+pub enum HoverClaim {
+    /// The pointer names this claim outright; `None` is an occluder
+    /// naming nothing.
+    Direct(Option<Hovering>),
+    /// Unclaimed air, anywhere on the plane — the shell's backstop
+    /// for every pixel no claim took. Within a little gap's reach of
+    /// the current hover's footprint it HOLDS — crossing a separator
+    /// or the leading between rows never flickers — and beyond that
+    /// reach it clears, so open space keeps no distant focus.
+    Air,
+}
+
+/// What a claim does to the current hover: `Some(next)` replaces it,
+/// `None` keeps it. `reach` is the little-gap radius air holds
+/// across.
+pub fn resolve_hover(
+    claim: HoverClaim,
+    current: Option<&Hovering>,
+    point: Point,
+    reach: f64,
+) -> Option<Option<Hovering>> {
+    match claim {
+        HoverClaim::Direct(hovering) => Some(hovering),
+        HoverClaim::Air => {
+            let held = current
+                .is_some_and(|current| current.rect.inflate(reach, reach).contains(point));
+            if held { None } else { Some(None) }
+        }
+    }
 }
 
 /// The value a hover refers to — the hover's `secondary_of`, for
@@ -1489,7 +1537,7 @@ pub fn hover_value(sources: &Sources, hover: &Hover) -> Option<Value> {
             _ => None,
         },
         Hover::Entry { value, .. } => value.clone(),
-        Hover::Toggle(_) => None,
+        Hover::Toggle(_) | Hover::Insert(_) => None,
     }
 }
 
@@ -1608,21 +1656,32 @@ fn bracketed<C: 'static, P: Canvas + HasHandler<C>>(
     content: Node<P>,
 ) -> Node<P> {
     let extent = content.extent;
+    // The air between delimiter and content rides INSIDE the
+    // delimiter's claim — identical pixels, and the handle's thin
+    // hit zone gains the gap: hovering the air is hovering the
+    // bracket.
+    let gap = 2.0 * cx.styles.scale;
     row(
-        2.0 * cx.styles.scale,
+        0.0,
         vec![
             select_target(
                 path.to_vec(),
                 target.clone(),
                 hooks,
-                tall_delim(cx.styles, delim, true, extent),
+                pad(
+                    Insets::new(0.0, 0.0, gap, 0.0),
+                    tall_delim(cx.styles, delim, true, extent),
+                ),
             ),
             content,
             select_target(
                 path.to_vec(),
                 target.clone(),
                 hooks,
-                tall_delim(cx.styles, delim, false, extent),
+                pad(
+                    Insets::new(gap, 0.0, 0.0, 0.0),
+                    tall_delim(cx.styles, delim, false, extent),
+                ),
             ),
         ],
     )
@@ -1680,37 +1739,48 @@ fn highlight_rect(scale: f64, rect: Rect) -> RoundedRect {
     RoundedRect::from_rect(rect.inset(2.0 * scale), 4.0 * scale)
 }
 
-/// Report `key` as the pointer's claim for any move inside `rect`.
-/// Never consumes the move: every containing claim reports in
-/// dispatch order — innermost first — and the shell keeps the first,
-/// so the event still reaches drag handlers and outer claims.
+/// Report `claim` for any move inside `rect`. Never consumes the
+/// move: every containing claim reports in dispatch order —
+/// innermost first — and the shell keeps the first, so the event
+/// still reaches drag handlers and outer claims.
+fn hover_report<C: 'static, P: Canvas + HasHandler<C>>(
+    p: &mut P,
+    rect: Rect,
+    hover: HoverHook<C>,
+    claim: HoverClaim,
+) {
+    p.handler().on_pointer_move(move |ctx, update| {
+        let point = Point::new(update.current.position.x, update.current.position.y);
+        if rect.contains(point) {
+            hover(ctx, claim.clone(), point);
+        }
+        false
+    });
+}
+
+/// The pointer names `key` outright, with this ink as its footprint.
 fn hover_claim<C: 'static, P: Canvas + HasHandler<C>>(
     p: &mut P,
     rect: Rect,
     hover: HoverHook<C>,
     key: Hover,
 ) {
-    p.handler().on_pointer_move(move |ctx, update| {
-        if rect.contains(Point::new(update.current.position.x, update.current.position.y)) {
-            hover(ctx, Some(key.clone()));
-        }
-        false
-    });
+    hover_report(
+        p,
+        rect,
+        hover,
+        HoverClaim::Direct(Some(Hovering { hover: key, rect })),
+    );
 }
 
-/// An occluder's version of [`hover_claim`]: takes the pointer and
-/// names nothing, so targets beneath an overlay never light.
+/// An occluder: takes the pointer and names nothing, so targets
+/// beneath an overlay never light.
 fn hover_block<C: 'static, P: Canvas + HasHandler<C>>(
     p: &mut P,
     rect: Rect,
     hover: HoverHook<C>,
 ) {
-    p.handler().on_pointer_move(move |ctx, update| {
-        if rect.contains(Point::new(update.current.position.x, update.current.position.y)) {
-            hover(ctx, None);
-        }
-        false
-    });
+    hover_report(p, rect, hover, HoverClaim::Direct(None));
 }
 
 /// The pointer's preview of a click's meaning: the same box the
@@ -2265,11 +2335,25 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // a block of zero rows is not a representation — so it takes the
     // literal whatever the width says.
     let bare = items.is_empty();
+    let writable = writable_at(&cx.sources, path);
     let mut flat = (avail > 0.0 || bare).then(|| {
-        let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Bracket, true)];
+        let mut cells: Vec<Node<P>> = vec![hover_target(
+            path.to_vec(),
+            hooks,
+            flat_delim(cx.styles, Delim::Bracket, true),
+        )];
         for (index, (position, value)) in items.iter().enumerate() {
             if index > 0 {
-                cells.push(text(tcx, ", ", &cx.styles.dim));
+                // The separator is the between: writable, its click
+                // opens a pending right here.
+                let separator = text(tcx, ", ", &cx.styles.dim);
+                cells.push(if writable {
+                    let mut previous = path.to_vec();
+                    previous.push(Step::Element(items[index - 1].0.clone()));
+                    insert_target(cx, previous, hooks, separator)
+                } else {
+                    separator
+                });
             }
             let mut child = path.to_vec();
             child.push(Step::Element(position.clone()));
@@ -2280,14 +2364,19 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
                 None => pending_view(cx, tcx, child, hooks),
             });
         }
-        cells.push(flat_delim(cx.styles, Delim::Bracket, false));
+        cells.push(hover_target(
+            path.to_vec(),
+            hooks,
+            flat_delim(cx.styles, Delim::Bracket, false),
+        ));
         row(0.0, cells)
     })
     .filter(|candidate| one_line(candidate.extent, scale));
     if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
         // The one-line literal is all content: it selects the list
-        // whole, elements winning their own spans.
-        return select_target(path.to_vec(), target, hooks, candidate);
+        // whole, elements winning their own spans — and stays QUIET
+        // for the pointer, so its gaps hold whatever the hover was.
+        return quiet_select_target(path.to_vec(), target, hooks, candidate);
     }
 
     let inside =
@@ -2325,7 +2414,7 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // more.
     match flat {
         Some(candidate) if candidate.extent.width <= block.extent.width => {
-            select_target(path.to_vec(), target, hooks, candidate)
+            quiet_select_target(path.to_vec(), target, hooks, candidate)
         }
         _ => block,
     }
@@ -2402,7 +2491,11 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // as content and layouts normally.
     let bare = items.is_empty() && !pending_edge;
     let mut flat = (avail > 0.0 || bare).then(|| {
-        let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Brace, true)];
+        let mut cells: Vec<Node<P>> = vec![hover_target(
+            path.to_vec(),
+            hooks,
+            flat_delim(cx.styles, Delim::Brace, true),
+        )];
         for (index, (key, value)) in items.iter().enumerate() {
             if index > 0 {
                 cells.push(text(tcx, ", ", &cx.styles.dim));
@@ -2429,14 +2522,19 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             }
             cells.push(pending_edge_row(cx, tcx, query, choice, hooks));
         }
-        cells.push(flat_delim(cx.styles, Delim::Brace, false));
+        cells.push(hover_target(
+            path.to_vec(),
+            hooks,
+            flat_delim(cx.styles, Delim::Brace, false),
+        ));
         row(0.0, cells)
     })
     .filter(|candidate| one_line(candidate.extent, scale));
     if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
         // The one-line literal is all content: it selects the record
-        // whole, fields winning their own spans.
-        return select_target(path.to_vec(), target, hooks, candidate);
+        // whole, fields winning their own spans — and stays QUIET
+        // for the pointer, so its gaps hold whatever the hover was.
+        return quiet_select_target(path.to_vec(), target, hooks, candidate);
     }
 
     let inside =
@@ -2467,7 +2565,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // its literal, and kicking to it would overflow more.
     match flat {
         Some(candidate) if candidate.extent.width <= block.extent.width => {
-            select_target(path.to_vec(), target, hooks, candidate)
+            quiet_select_target(path.to_vec(), target, hooks, candidate)
         }
         _ => block,
     }
@@ -2956,6 +3054,38 @@ fn toggle_target<C: 'static, P: Canvas + HasHandler<C>>(
     })
 }
 
+/// A flat list separator: its click opens a pending sibling between
+/// the elements it separates — after the element at `path`. Only
+/// offered where the insert could commit, [`pending_beside`]'s
+/// affordance-lie rule.
+fn insert_target<C: 'static, P: Canvas + HasHandler<C>>(
+    cx: &Cx,
+    path: Path,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let hovered = matches!(cx.hover, Some(Hover::Insert(hovered)) if hovered.as_slice() == path.as_slice());
+    let insert = hooks.insert.clone();
+    let hover = hooks.hover.clone();
+    decorate(content, move |p, rect| {
+        if hovered {
+            hover_highlight(scale, p, rect);
+        }
+        hover_claim(p, rect, hover.clone(), Hover::Insert(path.clone()));
+        let insert = insert.clone();
+        let target = path.clone();
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && {
+                    insert(ctx, target.clone());
+                    true
+                }
+        });
+    })
+}
+
 /// A command-click pick target with no plain-click behavior — for
 /// parts like a pending row's label, whose plain click deliberately
 /// falls through.
@@ -3049,11 +3179,37 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
-    let select = hooks.select.clone();
-    let pick = hooks.pick.clone();
+    let claimed = hover_target(path.clone(), hooks, content);
+    quiet_select_target(path, value, hooks, claimed)
+}
+
+/// Name the value at `path` for the pointer over this ink, adding no
+/// click of its own — the hover half of [`select_target`], and the
+/// flat literal's delimiter dress.
+fn hover_target<C: 'static, P: Canvas + HasHandler<C>>(
+    path: Path,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
     let hover = hooks.hover.clone();
     decorate(content, move |p, rect| {
         hover_claim(p, rect, hover.clone(), Hover::Value(path.clone()));
+    })
+}
+
+/// [`select_target`] minus the pointer claim — for a container's
+/// one-line literal, whose interior air belongs to the landmark's
+/// hold and whose delimiter ink names the container through
+/// [`hover_target`].
+fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C>>(
+    path: Path,
+    value: Value,
+    hooks: &Hooks<C>,
+    content: Node<P>,
+) -> Node<P> {
+    let select = hooks.select.clone();
+    let pick = hooks.pick.clone();
+    decorate(content, move |p, rect| {
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
@@ -4074,8 +4230,8 @@ mod svg_bench {
 
     /// The dispatch context for bench frames: every hover report the
     /// move crossed, in claim order — the first is the winner the
-    /// shell would keep.
-    type Claims = Vec<Option<Hover>>;
+    /// shell would resolve.
+    type Claims = Vec<HoverClaim>;
 
     struct Bench {
         list: DrawList,
@@ -4277,7 +4433,8 @@ mod svg_bench {
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
-            hover: Rc::new(|claims, hover| claims.push(hover)),
+            hover: Rc::new(|claims: &mut Claims, claim, _| claims.push(claim)),
+            insert: Rc::new(|_, _| {}),
         };
         // Timed as the layout perf canary: a projection is a
         // per-keystroke cost, and the fallback-heavy narrow widths
@@ -4423,6 +4580,62 @@ mod svg_bench {
         );
     }
 
+    fn key(s: &str) -> Step {
+        Step::Key(Label::from(s))
+    }
+
+    #[test]
+    fn air_holds_only_within_a_little_gap_of_the_hover() {
+        let current = Hovering {
+            hover: Hover::Value(vec![key("shape")]),
+            rect: Rect::new(10.0, 10.0, 30.0, 20.0),
+        };
+        // Direct switches unconditionally, however close.
+        assert_eq!(
+            resolve_hover(
+                HoverClaim::Direct(None),
+                Some(&current),
+                Point::new(11.0, 11.0),
+                8.0
+            ),
+            Some(None)
+        );
+        // Air just past the footprint holds; air beyond the reach
+        // clears — open space keeps no distant focus.
+        assert_eq!(
+            resolve_hover(
+                HoverClaim::Air,
+                Some(&current),
+                Point::new(36.0, 15.0),
+                8.0
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_hover(
+                HoverClaim::Air,
+                Some(&current),
+                Point::new(25.0, 26.0),
+                8.0
+            ),
+            None
+        );
+        assert_eq!(
+            resolve_hover(
+                HoverClaim::Air,
+                Some(&current),
+                Point::new(60.0, 15.0),
+                8.0
+            ),
+            Some(None)
+        );
+        // With nothing held, air is just air.
+        assert_eq!(
+            resolve_hover(HoverClaim::Air, None, Point::new(11.0, 11.0), 8.0),
+            Some(None)
+        );
+    }
+
     fn move_at(point: Point) -> ui_events::pointer::PointerUpdate {
         let mut state = ui_events::pointer::PointerState::default();
         state.position.x = point.x;
@@ -4464,17 +4677,126 @@ mod svg_bench {
         bench
             .handler
             .dispatch_pointer_move(&mut claims, &move_at(string.rect.center()));
-        assert_eq!(
+        assert!(matches!(
             claims.first(),
-            Some(&Some(Hover::Value(string.path.clone())))
-        );
-        assert!(claims.len() > 1);
+            Some(HoverClaim::Direct(Some(Hovering {
+                hover: Hover::Value(path),
+                ..
+            }))) if *path == string.path
+        ));
         // Off every claim, nothing reports at all — the shell clears.
         let mut claims = Claims::new();
         bench
             .handler
             .dispatch_pointer_move(&mut claims, &move_at(Point::new(-10.0, -10.0)));
         assert!(claims.is_empty());
+    }
+
+    /// Two flat elements and two block rows, deterministically: the
+    /// short list stays a literal, the long strings force the block.
+    fn gap_document() -> Document {
+        Document {
+            root: Some(Value::record([
+                (
+                    Label::from("tags"),
+                    Value::list([Value::from("a"), Value::from("b")]),
+                ),
+                (
+                    Label::from("body"),
+                    Value::list([
+                        Value::from("a long enough string that the flat literal cannot fit"),
+                        Value::from("and another beside it overflowing any width we render"),
+                    ]),
+                ),
+            ])),
+            cells: Cells::new(),
+        }
+    }
+
+    /// The two descends under `field`, in the given axis order.
+    fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Descend, Descend) {
+        let mut found: Vec<&Descend> = bench
+            .descends
+            .iter()
+            .filter(|descend| {
+                descend.path.len() == 2 && descend.path.first() == Some(&key(field))
+            })
+            .collect();
+        found.sort_by(|a, b| {
+            let (a, b) = if by_y {
+                (a.rect.y0, b.rect.y0)
+            } else {
+                (a.rect.x0, b.rect.x0)
+            };
+            a.total_cmp(&b)
+        });
+        assert_eq!(found.len(), 2);
+        let clone = |d: &Descend| Descend {
+            path: d.path.clone(),
+            rect: d.rect,
+        };
+        (clone(found[0]), clone(found[1]))
+    }
+
+    #[test]
+    fn flat_separators_claim_the_insert_between() {
+        let doc = gap_document();
+        let (bench, _) = place(&doc, None, 560.0);
+        let (first, second) = elements_of(&bench, "tags", false);
+        let mid = Point::new(
+            (first.rect.x1 + second.rect.x0) / 2.0,
+            first.rect.center().y,
+        );
+        let mut claims = Claims::new();
+        bench.handler.dispatch_pointer_move(&mut claims, &move_at(mid));
+        assert!(matches!(
+            claims.first(),
+            Some(HoverClaim::Direct(Some(Hovering {
+                hover: Hover::Insert(path),
+                ..
+            }))) if *path == first.path
+        ));
+    }
+
+    #[test]
+    fn block_gaps_are_unclaimed_air_and_brackets_widen() {
+        let doc = gap_document();
+        let (bench, _) = place(&doc, None, 560.0);
+        let (upper, lower) = elements_of(&bench, "body", true);
+        let parent = vec![key("body")];
+        let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
+        // Between the rows nothing claims: the gap is air, and air is
+        // the SHELL's backstop — hold-or-clear by reach, never the
+        // container outright.
+        let mut claims = Claims::new();
+        bench.handler.dispatch_pointer_move(
+            &mut claims,
+            &move_at(Point::new(upper.rect.center().x, gap_y)),
+        );
+        assert!(claims.is_empty());
+        // Just inside the bracket's absorbed gap, the bracket claims
+        // the container outright — the widened handle.
+        let styles = RawStyles::new(1.0);
+        let list = bench
+            .descends
+            .iter()
+            .find(|descend| descend.path == parent)
+            .expect("the list has a landmark");
+        let mut claims = Claims::new();
+        bench.handler.dispatch_pointer_move(
+            &mut claims,
+            &move_at(Point::new(
+                list.rect.x0 + delim_advance(&styles, Delim::Bracket) + 1.0,
+                gap_y,
+            )),
+        );
+        assert!(matches!(
+            claims.first(),
+            Some(HoverClaim::Direct(Some(Hovering {
+                hover: Hover::Value(path),
+                ..
+            }))) if *path == parent
+        ));
     }
 
     #[test]
@@ -4514,7 +4836,7 @@ mod svg_bench {
             &styles,
             &popup,
             None,
-            Rc::new(|claims: &mut Claims, hover| claims.push(hover)),
+            Rc::new(|claims: &mut Claims, claim, _| claims.push(claim)),
             |_, _| {},
         );
         let (width, height) = (card.extent.width, card.extent.height());
@@ -4531,27 +4853,30 @@ mod svg_bench {
         bench
             .handler
             .dispatch_pointer_move(&mut claims, &move_at(Point::new(1.0, 1.0)));
-        assert_eq!(claims.first(), Some(&None));
+        assert_eq!(claims.first(), Some(&HoverClaim::Direct(None)));
         // Scanning down the card crosses both rows: each claims its
         // entry, the value one carrying the value it would commit.
-        let winners: Vec<Option<Hover>> = (0..height as usize)
-            .map(|y| {
+        let winners: Vec<Hover> = (0..height as usize)
+            .filter_map(|y| {
                 let mut claims = Claims::new();
                 bench.handler.dispatch_pointer_move(
                     &mut claims,
                     &move_at(Point::new(width / 2.0, y as f64 + 0.5)),
                 );
-                claims.into_iter().next().flatten()
+                match claims.into_iter().next() {
+                    Some(HoverClaim::Direct(Some(hovering))) => Some(hovering.hover),
+                    _ => None,
+                }
             })
             .collect();
-        assert!(winners.contains(&Some(Hover::Entry {
+        assert!(winners.contains(&Hover::Entry {
             index: 0,
             value: Some(Value::from("x")),
-        })));
-        assert!(winners.contains(&Some(Hover::Entry {
+        }));
+        assert!(winners.contains(&Hover::Entry {
             index: 1,
             value: None,
-        })));
+        }));
     }
 
     #[test]

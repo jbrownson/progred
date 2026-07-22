@@ -1063,6 +1063,53 @@ claim reports with the innermost first, off-content reports
 nothing, popup rows claim their entries (value riding along) and
 the card's padding claims-and-clears.
 
+GAPS HOLD, SEPARATORS MEAN, BRACKETS WIDEN (2026-07-22, same
+day). In-app the hover flickered crossing the little gaps — ", "
+separators, the air around delimiters, head-to-value spacing —
+because flat literals claimed their whole row (small → whole
+literal → small). Three answers, one per gap kind. (1) HYSTERESIS
+BY REACH: the claim report grew a second variant —
+`HoverClaim::Direct` switches outright, `HoverClaim::Air` is
+container interior air whose rule is pure PROXIMITY: the hover
+state carries the claimed footprint (`Hovering { hover, rect }`),
+and air holds the current hover only while the pointer stays
+within a little gap's reach of that rect (8·scale), clearing
+beyond it — so crossing a separator biases the neighbor you came
+from (left-to-right the left, right-to-left the right, vertical
+the row) but open space keeps no distant focus. A first cut held
+over a container's ENTIRE air keyed by path prefix — rejected in
+app: parking in the middle of nowhere kept faraway things lit;
+the reach is what scopes the hold to the little gaps, and it
+freed `Air` of any payload — which then freed it of any
+REGISTRATION: since all `Air` is identical, it moved to the top
+level (user's push), ONE shell backstop handler behind every
+claim, covering content gaps and the margins alike; landmarks
+report nothing, and the rule is a single sentence about the whole
+plane — the pointer keeps its claim while within reach of it,
+wherever air is. `resolve_hover(claim, current, point, reach)` is
+the pure rule; the shell just applies it. The flat separators,
+inter-row leading, and head↔value spacing all reach it as
+unclaimed pixels. The flat literals went QUIET
+(`quiet_select_target` —
+click still selects the container, pointer says nothing) so their
+gaps reach the landmark's hold; their delimiter ink keeps naming
+the container through `hover_target` (the hover half of
+`select_target`, now composed). (2) THE LIST SEPARATOR IS THE
+BETWEEN: a flat list's ", " is an `insert_target` — click opens a
+pending sibling right there (`pending_after`, the new `insert`
+hook), hover lights the comma as its own small thing
+(`Hover::Insert(path)` = after this element), gated by
+writability per pending_beside's affordance-lie rule. Record
+commas stay plain: no order, no between — hysteresis covers them.
+(3) BRACKETS ABSORB THEIR AIR: `bracketed`'s 2·scale row gap
+moved INSIDE the delimiter's claim as padding — identical pixels,
+and the thin handle's hit zone gains the gap for clicks and hover
+both. Tests: the reach matrix (near air holds, far air clears); a
+deterministic two-field doc (short list flat, long strings forced
+block) pins the comma's Insert claim, the inter-row `Air`, and
+the widened bracket claiming the container outright inside its
+absorbed gap.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:

@@ -626,7 +626,7 @@ enum Selected {
 /// pointer claims in whichever pane it rests over.
 #[derive(Clone, PartialEq)]
 enum Hovered {
-    Tree(raw::Hover),
+    Tree(raw::Hovering),
     Graph(graph_view::GraphNode),
 }
 
@@ -690,7 +690,7 @@ impl Model {
 
     fn tree_hover(&self) -> Option<&raw::Hover> {
         match &self.hover {
-            Some(Hovered::Tree(hover)) => Some(hover),
+            Some(Hovered::Tree(hovering)) => Some(&hovering.hover),
             _ => None,
         }
     }
@@ -1148,6 +1148,30 @@ impl App {
         if !self.hover_claimed {
             self.hover_claimed = true;
             self.model.hover = hover;
+        }
+    }
+
+    /// The tree's report, resolved against the current hover —
+    /// container air holds a hover the pointer is still within a
+    /// little gap's reach of, the hysteresis that keeps gap-crossing
+    /// from flickering without letting open space keep a distant
+    /// focus.
+    fn claim_tree_hover(&mut self, claim: raw::HoverClaim, point: Point) {
+        if self.hover_claimed {
+            return;
+        }
+        self.hover_claimed = true;
+        let reach = 8.0
+            * match &self.state {
+                RenderState::Active { window, .. } => window.scale_factor(),
+                _ => 1.0,
+            };
+        let current = match &self.model.hover {
+            Some(Hovered::Tree(hovering)) => Some(hovering),
+            _ => None,
+        };
+        if let Some(next) = raw::resolve_hover(claim, current, point, reach) {
+            self.model.hover = next.map(Hovered::Tree);
         }
     }
 
@@ -1757,10 +1781,12 @@ fn run_frame(
     frame.handler().on_pointer_down(|app: &mut App, event| {
         event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
     });
-    // Empty space also hovers nothing: the same fall-through, for
-    // moves — every claim above reported first or not at all.
-    frame.handler().on_pointer_move(|app: &mut App, _| {
-        app.claim_hover(None);
+    // Every pixel no claim took is AIR — content gaps and the
+    // margins alike: the hover holds while the pointer stays within
+    // a little gap's reach of it, and clears beyond that.
+    frame.handler().on_pointer_move(|app: &mut App, update| {
+        let point = Point::new(update.current.position.x, update.current.position.y);
+        app.claim_tree_hover(raw::HoverClaim::Air, point);
         false
     });
 
@@ -1872,7 +1898,12 @@ fn run_frame(
             }),
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-            hover: Rc::new(|app: &mut App, hover| app.claim_hover(hover.map(Hovered::Tree))),
+            hover: Rc::new(|app: &mut App, claim, point| app.claim_tree_hover(claim, point)),
+            insert: Rc::new(|app: &mut App, path| {
+                if let Some(pending) = raw::pending_after(&app.model.sources(), &path) {
+                    app.model.selection = Some(Selected::Tree(pending));
+                }
+            }),
         },
     );
     // The body rides puri's scroll viewport: margins pad into the
@@ -1975,7 +2006,7 @@ fn run_frame(
             &styles,
             &popup,
             hovered_entry,
-            Rc::new(|app: &mut App, hover| app.claim_hover(hover.map(Hovered::Tree))),
+            Rc::new(|app: &mut App, claim, point| app.claim_tree_hover(claim, point)),
             commit,
         );
         // Below the anchor, unless it would run off the bottom and
