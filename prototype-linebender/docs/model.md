@@ -801,7 +801,14 @@ survives the label stage — cells label). The mint is BARE:
 `resolve_entry` is pure, no document mutation, naming happens on
 the head afterward — the one-step named mint (create-on-
 reference's popup vehicle) is retired, and with it the label
-stage's mint-records-history special case. The frame minimum became `puri::layout::min_width`
+stage's mint-records-history special case. THE TYPED TEXT OUTRANKS
+BARE IDS (user typed "1" and had to arrow past id references —
+"if you want to reference something give it a name"): the
+strong-before-atom promotion now requires a NAME. Named cells and
+the constructors keep it; an unnamed cell's short-id match,
+however exact, ranks after the atom the query spells — ids are
+for reading, names are for reaching. Pinned by test: an exact
+short-id query still offers the string first. The frame minimum became `puri::layout::min_width`
 — a real combinator (pad-to-minimum on the right), not inline
 arithmetic — the name editor's content-persists-chrome-marks-
 engagement pattern applied to absence itself. The pending

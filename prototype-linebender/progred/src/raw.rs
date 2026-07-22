@@ -812,9 +812,10 @@ fn completion_entries(
         },
     };
     // Quotes and `0x` state atom intent, so the atom leads; otherwise
-    // a confident (non-fuzzy) reference match is likelier the intent
-    // than a new literal — typing a visible name or short id should
-    // default to the reference, and quoting always forces the string.
+    // a confident (non-fuzzy) NAMED match is likelier the intent than
+    // a new literal — typing a visible name should default to the
+    // reference, quoting always forces the string, and bare ids never
+    // outrank the typed text.
     let atom_leads = quoted || blob.is_some();
     // The typed text is always insertable as itself: a blob query
     // offers its string form right below the blob (a quote already
@@ -841,30 +842,34 @@ fn completion_entries(
     // query. "new list" and "new record" rank among them under their
     // own display text: type toward one and it surfaces, type away
     // and it leaves.
-    let mut references_pool: Vec<(String, EntryAction)> = document_cells(sources)
+    let mut references_pool: Vec<(String, bool, EntryAction)> = document_cells(sources)
         .into_iter()
-        .map(|cell| {
-            let key = crate::conventions::display_name(sources, names, raw, cell)
-                .unwrap_or_else(|| short_id(cell));
-            (key, EntryAction::Value(Value::from(cell)))
-        })
+        .map(
+            |cell| match crate::conventions::display_name(sources, names, raw, cell) {
+                Some(name) => (name, true, EntryAction::Value(Value::from(cell))),
+                None => (short_id(cell), false, EntryAction::Value(Value::from(cell))),
+            },
+        )
         .collect();
     references_pool.sort_by(|a, b| a.0.cmp(&b.0));
     // "new cell" is one of them — a plain constructor like list and
     // record (the mint is bare; naming happens on the head after).
     // Cells can label, so it alone survives the label stage.
-    references_pool.push(("new cell".to_string(), EntryAction::NewCell));
+    references_pool.push(("new cell".to_string(), true, EntryAction::NewCell));
     if !labels {
-        references_pool.push(("new list".to_string(), EntryAction::NewList));
-        references_pool.push(("new record".to_string(), EntryAction::NewRecord));
+        references_pool.push(("new list".to_string(), true, EntryAction::NewList));
+        references_pool.push(("new record".to_string(), true, EntryAction::NewRecord));
     }
-    let references: Vec<(Entry, bool)> = filter::rank(references_pool, |(key, _)| key, query)
+    let references: Vec<(Entry, bool)> = filter::rank(references_pool, |(key, _, _)| key, query)
         .into_iter()
         .take(8)
         .map(|ranked| {
-            let fuzzy = ranked.fuzzy();
+            // A DEMOTED reference ranks after the typed atom: fuzzy,
+            // or an unnamed cell's bare id — ids are for reading,
+            // names are for reaching (want it reachable? name it).
+            let demoted = ranked.fuzzy() || !ranked.item.1;
             let matches = ranked.matches;
-            let (display, action) = ranked.item;
+            let (display, _, action) = ranked.item;
             let detail = match &action {
                 EntryAction::Value(value) => value
                     .as_cell()
@@ -878,7 +883,7 @@ fn completion_entries(
                 matches,
                 action,
             };
-            (entry, fuzzy)
+            (entry, demoted)
         })
         .collect();
     let mut entries = Vec::new();
@@ -888,7 +893,7 @@ fn completion_entries(
         entries.extend(references.into_iter().map(|(entry, _)| entry));
     } else {
         let (weak, strong): (Vec<_>, Vec<_>) =
-            references.into_iter().partition(|(_, fuzzy)| *fuzzy);
+            references.into_iter().partition(|(_, demoted)| *demoted);
         entries.extend(strong.into_iter().map(|(entry, _)| entry));
         entries.push(atom_entry);
         entries.extend(weak.into_iter().map(|(entry, _)| entry));
@@ -3200,6 +3205,26 @@ mod tests {
             &roof[0].action,
             EntryAction::Value(value) if value.as_cell() == Some(cell)
         ));
+
+        // A bare id never outranks the typed text: the string the
+        // query spells comes before every unnamed reference, however
+        // exactly the id matches — ids are for reading; want it
+        // reachable, name it.
+        let unnamed = new_cell_id();
+        doc.cells.set_value(unnamed, Value::from("x"));
+        let sources = src(&doc, &lib);
+        let entries = completion_entries(&sources, &names, false, false, &short_id(unnamed));
+        let atom = entries
+            .iter()
+            .position(|e| matches!(&e.action, EntryAction::Value(v) if v.as_str().is_some()))
+            .unwrap();
+        let reference = entries
+            .iter()
+            .position(
+                |e| matches!(&e.action, EntryAction::Value(v) if v.as_cell() == Some(unnamed)),
+            )
+            .unwrap();
+        assert!(atom < reference);
     }
 
     #[test]
