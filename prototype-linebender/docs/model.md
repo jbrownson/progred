@@ -668,10 +668,28 @@ card/list chrome (once completion is nailed down further) and the
 scroll bar itself; the disclosure triangle was considered and
 DEFERRED as fairly progred-specific (user) — both extraction
 candidates parked, noted here. The svg bench now TIMES each
-projection (printed per run, asserted under a generous 2s bound):
-a projection is a per-keystroke cost and narrow widths are where
-accidental exponentials surfaced twice, so the tight render is a
-canary that FAILS rather than merely feels slow. THE COLON REPLACED THE ARROW (user: the
+projection, numbers only (user call: no assert — read them when it
+runs; single-digit milliseconds is healthy, and an exponential
+shows as orders of magnitude): a projection is a per-keystroke
+cost and narrow widths are where accidental exponentials surfaced
+twice.
+
+Post-audit settlements (2026-07-21, user): EMPTY CONTAINERS have
+one form — `{}` and `[]` take the literal whatever the width says;
+a block of zero rows is not a representation (an active label
+query counts as content and layouts normally). This also removes
+the probe's overstated width for empty containers. ROBUSTNESS
+POSTURE is explicit: layout is "enough to move forward", corner
+cases and a fuzzer are deliberately NOT being chased while the
+design is still moving — revisit when it settles. The
+field-row/cell hug-drop DUPLICATION stays inline on purpose
+(divergence likely while this area churns). `puri::scroll::
+max_offset` stays as the scroll-bar round's API surface despite
+progred keeping its own clamp formulas — the document pane's
+clamp answers to the LAYOUT width while its clip answers to the
+WINDOW width, a two-viewport subtlety the eventual widget must
+carry. REVEAL-ON-SELECTION now chases BOTH axes, horizontally
+against the width the graph panel leaves visible. THE COLON REPLACED THE ARROW (user: the
 inline/block syntax split read inconsistent, and "now that it's not
 really a graph maybe ':' makes more sense for both"): field rows
 and the pending-edge query spell `label: value` everywhere; the

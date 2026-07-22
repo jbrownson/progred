@@ -1886,8 +1886,12 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // test is the one gate (Wadler's fits test, operationally). On
     // rejection the block form rebuilds them against its own columns.
     // At zero budget no literal can be accepted; skipping the
-    // candidate keeps zero-budget probe builds closed and cheap.
-    let mut flat = (avail > 0.0).then(|| {
+    // candidate keeps zero-budget probe builds closed and cheap. An
+    // EMPTY list is the exception both ways: `[]` is its one form —
+    // a block of zero rows is not a representation — so it takes the
+    // literal whatever the width says.
+    let bare = items.is_empty();
+    let mut flat = (avail > 0.0 || bare).then(|| {
         let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Bracket, true)];
         for (index, (position, value)) in items.iter().enumerate() {
             if index > 0 {
@@ -1906,7 +1910,7 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         row(0.0, cells)
     })
     .filter(|candidate| one_line(candidate.extent, scale));
-    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail) {
+    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
         // The one-line literal is all content: it selects the list
         // whole, elements winning their own spans.
         return select_target(path.to_vec(), target, hooks, candidate);
@@ -2036,8 +2040,13 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // test is the one gate (Wadler's fits test, operationally). On
     // rejection the block form rebuilds them against its own columns.
     // At zero budget no literal can be accepted; skipping the
-    // candidate keeps zero-budget probe builds closed and cheap.
-    let mut flat = (avail > 0.0).then(|| {
+    // candidate keeps zero-budget probe builds closed and cheap. An
+    // EMPTY record is the exception both ways: `{}` is its one form —
+    // a block of zero rows is not a representation — so it takes the
+    // literal whatever the width says. An active label query counts
+    // as content and layouts normally.
+    let bare = items.is_empty() && !pending_edge;
+    let mut flat = (avail > 0.0 || bare).then(|| {
         let mut cells: Vec<Node<P>> = vec![flat_delim(cx.styles, Delim::Brace, true)];
         for (index, (key, value)) in items.iter().enumerate() {
             if index > 0 {
@@ -2064,7 +2073,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         row(0.0, cells)
     })
     .filter(|candidate| one_line(candidate.extent, scale));
-    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail) {
+    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
         // The one-line literal is all content: it selects the record
         // whole, fields winning their own spans.
         return select_target(path.to_vec(), target, hooks, candidate);
@@ -3526,9 +3535,9 @@ mod svg_bench {
         };
         // Timed as the layout perf canary: a projection is a
         // per-keystroke cost, and the fallback-heavy narrow widths
-        // are where accidental exponentials have surfaced twice. The
-        // bound is generous — an exponential blows through it by
-        // orders of magnitude, an honest regression doesn't flake.
+        // are where accidental exponentials have surfaced twice.
+        // Numbers only, no assert (user call) — read them when the
+        // bench runs; single-digit milliseconds is healthy.
         let start = std::time::Instant::now();
         let node = project::<(), Bench>(
             &sources,
@@ -3544,10 +3553,6 @@ mod svg_bench {
         );
         let elapsed = start.elapsed();
         eprintln!("project at {width:.0}px: {elapsed:.1?}");
-        assert!(
-            elapsed < std::time::Duration::from_secs(2),
-            "projection at {width:.0}px took {elapsed:.1?} — layout cost blew up"
-        );
         let extent = node.extent;
         let mut bench = Bench {
             list: DrawList::new(),

@@ -467,7 +467,7 @@ impl ApplicationHandler<UserEvent> for App {
                     // same gesture — never sees the spent one. The
                     // redraw derives the pixels from the same state.
                     self.retain_dispatch(scale, Size::new(size.width as f64, viewport));
-                    self.reveal_selection(scale, viewport);
+                    self.reveal_selection(scale, Size::new(size.width as f64, viewport));
                     window.request_redraw();
                 } else {
                     self.dispatch = Some(dispatch);
@@ -818,7 +818,7 @@ impl App {
                     scale,
                     Size::new(size.width as f64, size.height as f64),
                 );
-                self.reveal_selection(scale, size.height as f64);
+                self.reveal_selection(scale, Size::new(size.width as f64, size.height as f64));
                 window.request_redraw();
             }
         }
@@ -965,7 +965,7 @@ impl App {
     /// path while opening a pending), so it never fights manual
     /// scrolling. The target is the popup anchor while pending — it
     /// marks the authoring row — else the selection's rect.
-    fn reveal_selection(&mut self, scale: f64, viewport: f64) {
+    fn reveal_selection(&mut self, scale: f64, viewport: Size) {
         let reveal = self
             .model
             .tree_selection()
@@ -992,8 +992,8 @@ impl App {
             // The pad is the landing margin, not the trigger: fully
             // visible rects are left alone, so a click near an edge
             // doesn't nudge.
-            if rect.y1 > viewport {
-                scroll += (rect.y1 + pad - viewport) / scale;
+            if rect.y1 > viewport.height {
+                scroll += (rect.y1 + pad - viewport.height) / scale;
             }
             // Checked against the adjusted position, so when the rect
             // is taller than the viewport the top wins.
@@ -1002,6 +1002,22 @@ impl App {
                 scroll += (top - pad) / scale;
             }
             self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
+            // The same chase horizontally, against the width the
+            // graph panel leaves visible.
+            let visible = if self.menu_items.graph.is_checked() {
+                graph_view::panel(viewport.width, viewport.height).x0
+            } else {
+                viewport.width
+            };
+            let mut scroll_x = self.model.scroll_x;
+            if rect.x1 > visible {
+                scroll_x += (rect.x1 + pad - visible) / scale;
+            }
+            let left = rect.x0 - (scroll_x - self.model.scroll_x) * scale;
+            if left < 0.0 {
+                scroll_x += (left - pad) / scale;
+            }
+            self.model.scroll_x = scroll_x.clamp(0.0, dispatch.max_scroll_x);
         }
     }
 
