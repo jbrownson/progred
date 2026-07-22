@@ -58,6 +58,12 @@ pub struct LineEditState {
     /// `focus` may precede `anchor` for a backward selection.
     anchor: usize,
     focus: usize,
+    /// Display armor around `text`: shaped and measured as one run
+    /// with it — a string literal's quotes ride the field — but never
+    /// editable. An edit that would bite an affix declines whole, and
+    /// the selection lives strictly between them.
+    prefix: String,
+    suffix: String,
     preedit: Option<Preedit>,
     drag: Option<Drag>,
     font_size: f32,
@@ -83,6 +89,8 @@ impl LineEditState {
             text: text.to_string(),
             anchor: 0,
             focus: 0,
+            prefix: String::new(),
+            suffix: String::new(),
             preedit: None,
             drag: None,
             font_size,
@@ -96,15 +104,29 @@ impl LineEditState {
         self
     }
 
+    /// Dress the field in uneditable affixes — a string literal's
+    /// quotes, a blob's `0x` — laid out as one shaped run with the
+    /// text.
+    pub fn with_affixes(mut self, prefix: &str, suffix: &str) -> Self {
+        self.prefix = prefix.to_string();
+        self.suffix = suffix.to_string();
+        self
+    }
+
     /// Land the caret at the end — plain data, no contexts needed.
     pub fn cursor_to_end(&mut self) {
         self.anchor = self.text.len();
         self.focus = self.text.len();
     }
 
-    /// The base text: what edits commit. Excludes any IME preedit.
+    /// The base text: what edits commit. Excludes any IME preedit and
+    /// the affixes, which are display only.
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    fn dressed(&self) -> bool {
+        !self.prefix.is_empty() || !self.suffix.is_empty()
     }
 
     /// Replace the text wholesale — the caller's re-mint for external
@@ -136,7 +158,7 @@ impl LineEditState {
         scale: f32,
     ) -> PlainEditor<Brush> {
         let mut editor = PlainEditor::new(self.font_size);
-        editor.set_text(&self.text);
+        editor.set_text(&format!("{}{}{}", self.prefix, self.text, self.suffix));
         editor.set_width(None);
         editor.set_scale(scale);
         editor
@@ -144,7 +166,8 @@ impl LineEditState {
             .insert(StyleProperty::Brush(self.brush.clone()));
         editor.edit_styles().insert(GenericFamily::SystemUi.into());
         let mut driver = editor.driver(fonts, layouts);
-        driver.select_byte_range(self.anchor, self.focus);
+        let p = self.prefix.len();
+        driver.select_byte_range(p + self.anchor, p + self.focus);
         if let Some(preedit) = &self.preedit {
             driver.set_compose(&preedit.text, preedit.cursor);
         }
@@ -153,12 +176,24 @@ impl LineEditState {
 
     /// Read the mutated editor back into true state. Only called from
     /// compose-free paths: keys and pointers decline while composing,
-    /// and IME events never touch an editor.
+    /// and IME events never touch an editor. The affixes are not the
+    /// editor's to change: an edit that bit one declines WHOLE (the
+    /// state simply doesn't absorb it), and the selection clamps to
+    /// the span between them.
     fn absorb(&mut self, editor: &PlainEditor<Brush>) {
-        self.text = editor.text().to_string();
+        let composed = editor.text().to_string();
+        let Some(inner) = composed
+            .strip_prefix(self.prefix.as_str())
+            .and_then(|t| t.strip_suffix(self.suffix.as_str()))
+        else {
+            return;
+        };
+        let p = self.prefix.len();
+        let n = inner.len();
+        self.text = inner.to_string();
         let selection = editor.raw_selection();
-        self.anchor = selection.anchor().index();
-        self.focus = selection.focus().index();
+        self.anchor = selection.anchor().index().clamp(p, p + n) - p;
+        self.focus = selection.focus().index().clamp(p, p + n) - p;
     }
 
     /// Splice `text` over the selection and collapse the caret after
@@ -189,6 +224,12 @@ impl LineEditState {
             event.modifiers.ctrl()
         };
         let shift = event.modifiers.shift();
+        // The selection's reachable span: between the affixes. Motion
+        // that only wanders into an affix is no motion — clamped, it
+        // reads as the boundary it started at, so boundary arrows
+        // still decline to the caller.
+        let (lo, hi) = (self.prefix.len(), self.prefix.len() + self.text.len());
+        let clamp = move |(a, f): (usize, usize)| (a.clamp(lo, hi), f.clamp(lo, hi));
         let mut editor = self.editor(fonts, layouts, 1.0);
         let handled = {
             let mut drv = editor.driver(fonts, layouts);
@@ -239,24 +280,24 @@ impl LineEditState {
                 // at the text's boundary they decline, so the caller
                 // can interpret them (selection navigation).
                 Key::Named(NamedKey::ArrowLeft) => {
-                    let before = cursor_of(drv.editor.raw_selection());
+                    let before = clamp(cursor_of(drv.editor.raw_selection()));
                     match (action_mod, shift) {
                         (true, true) => drv.select_word_left(),
                         (true, false) => drv.move_word_left(),
                         (false, true) => drv.select_left(),
                         (false, false) => drv.move_left(),
                     }
-                    cursor_of(drv.editor.raw_selection()) != before
+                    clamp(cursor_of(drv.editor.raw_selection())) != before
                 }
                 Key::Named(NamedKey::ArrowRight) => {
-                    let before = cursor_of(drv.editor.raw_selection());
+                    let before = clamp(cursor_of(drv.editor.raw_selection()));
                     match (action_mod, shift) {
                         (true, true) => drv.select_word_right(),
                         (true, false) => drv.move_word_right(),
                         (false, true) => drv.select_right(),
                         (false, false) => drv.move_right(),
                     }
-                    cursor_of(drv.editor.raw_selection()) != before
+                    clamp(cursor_of(drv.editor.raw_selection())) != before
                 }
                 Key::Named(NamedKey::Home) => {
                     if shift {
@@ -274,10 +315,12 @@ impl LineEditState {
                     }
                     true
                 }
-                // Delete keys decline on an empty buffer — a no-op edit is
+                // Delete keys decline on empty CONTENT — a no-op edit is
                 // not a handled edit — so the caller can interpret them
-                // (delete the element, join, whatever).
-                Key::Named(NamedKey::Delete) if drv.editor.text() != "" => {
+                // (delete the element, join, whatever). With content, a
+                // delete that only bites an affix is swallowed instead:
+                // absorb declines it, and handled stays true.
+                Key::Named(NamedKey::Delete) if !self.text.is_empty() => {
                     if action_mod {
                         drv.delete_word();
                     } else {
@@ -285,7 +328,7 @@ impl LineEditState {
                     }
                     true
                 }
-                Key::Named(NamedKey::Backspace) if drv.editor.text() != "" => {
+                Key::Named(NamedKey::Backspace) if !self.text.is_empty() => {
                     if action_mod {
                         drv.backdelete_word();
                     } else {
@@ -439,7 +482,7 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
 ) -> Node<P> {
     let scale = tcx.scale;
     let ghost = placeholder
-        .filter(|_| state.text.is_empty() && !state.is_composing())
+        .filter(|_| state.text.is_empty() && !state.is_composing() && !state.dressed())
         .map(|(text, style)| build_layout(tcx, text, style, None, None));
     let editor = state.editor(tcx.fonts, tcx.layouts, scale);
     let layout = editor.try_layout().cloned();
@@ -663,6 +706,140 @@ mod tests {
                 Modifiers::empty(),
             ));
         }
+    }
+
+    #[test]
+    fn affixes_are_armor_not_content() {
+        let (mut fonts, mut layouts) = contexts();
+        let action = if cfg!(target_os = "macos") {
+            Modifiers::META
+        } else {
+            Modifiers::CONTROL
+        };
+        let mut state = state("hi").with_affixes("\"", "\"").with_cursor_at_end();
+
+        // Typing lands between the affixes; the text stays bare.
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Character("!".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(state.text(), "hi!");
+
+        // Backspace at content start bites the prefix: swallowed
+        // whole — handled, nothing changes.
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Home),
+            Modifiers::empty(),
+        ));
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Backspace),
+            Modifiers::empty(),
+        ));
+        assert_eq!(state.text(), "hi!");
+
+        // Motion that only wanders into an affix is no motion: the
+        // boundary arrow still declines to the caller.
+        assert!(!press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::ArrowLeft),
+            Modifiers::empty(),
+        ));
+
+        // Select-all reaches the content alone; typing replaces it
+        // and the affixes stand.
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Character("a".into()),
+            action,
+        ));
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Character("x".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(state.text(), "x");
+
+        // Delete at content end bites the suffix: swallowed too.
+        state.cursor_to_end();
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Delete),
+            Modifiers::empty(),
+        ));
+        assert_eq!(state.text(), "x");
+
+        // Emptied, the delete keys decline — the caller's
+        // delete-the-value idiom sees through the affixes.
+        assert!(press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Backspace),
+            Modifiers::empty(),
+        ));
+        assert_eq!(state.text(), "");
+        assert!(!press(
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Backspace),
+            Modifiers::empty(),
+        ));
+    }
+
+    #[test]
+    fn word_delete_stays_interior_or_declines_whole() {
+        let (mut fonts, mut layouts) = contexts();
+        let action = if cfg!(target_os = "macos") {
+            Modifiers::META
+        } else {
+            Modifiers::CONTROL
+        };
+        // Word-delete whose boundary lands in the interior works.
+        let mut words = state("hi there").with_affixes("\"", "\"");
+        words.anchor = 2;
+        words.focus = 2;
+        assert!(press(
+            &mut words,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Backspace),
+            action,
+        ));
+        assert_eq!(words.text(), " there");
+        // KNOWN COARSENESS: leading whitespace lets the word boundary
+        // reach through it into the prefix, and the bite declines
+        // WHOLE — a swallowed no-op where trimming to the interior
+        // was arguable. Parley owns the range; the decline is the
+        // affix contract.
+        let mut leading = state(" hi").with_affixes("\"", "\"");
+        leading.anchor = 1;
+        leading.focus = 1;
+        assert!(press(
+            &mut leading,
+            &mut fonts,
+            &mut layouts,
+            Key::Named(NamedKey::Backspace),
+            action,
+        ));
+        assert_eq!(leading.text(), " hi");
     }
 
     #[test]

@@ -758,7 +758,36 @@ The CARET itself was parley's leaded line box,
 box-filling; `text_edit` now refits it to the native shape — the
 line's ascent above the baseline plus half its descent below
 (user: "the height above the baseline, maybe a bit more") — for
-every editor, not just slots. The frame minimum became `puri::layout::min_width`
+every editor, not just slots. PARLEY'S EMPTY LINE REPORTS A
+PHANTOM ADVANCE (~0.19em; user caught dead air inside an edited
+`""`). A zero-width measurement override was tried first, then
+REVERTED (user: hand-patching measured values is not the way, and
+the structural fix below makes it moot): with quotes as affixes no
+code path renders bare empty text where width is observable —
+static strings are never-empty quoted runs, the affixed editor
+composes nonempty, the empty query sits inside the frame minimum,
+the empty name editor is ghost-sized, and the cold box probe reads
+only ascent/descent. The phantom stands upstream, unobserved. The
+composition itself went (user: "we should be measuring just one
+string with two quotes?"): `text_edit` grew AFFIXES — a
+prefix/suffix on `LineEditState`, shaped and measured as ONE RUN
+with the content but never editable. The affixes are armor: an
+edit that bites one declines WHOLE (absorb refuses it — backspace
+at content start swallows, on empty content it still declines to
+the caller's delete-the-value idiom), the selection clamps to the
+span between them, and boundary arrows compare cursors in CONTENT
+space so they still decline to outer navigation. String literals
+are the first wearer: the quotes are the field's affixes, static
+and editing render the same single shaped run (`format!` the
+quoted form cold, composed editor hot), and the quotes-select
+click vocabulary retired — every click on the literal reports a
+caret, a quote click landing at the nearest end. Blob `0x` is the
+obvious next wearer. Dispatch behaviors locked by test
+(`affixes_are_armor_not_content`), including one PINNED
+COARSENESS: leading whitespace in content lets a word-delete's
+boundary reach through it into the prefix, and the bite declines
+WHOLE — a swallowed no-op where trimming was arguable (parley owns
+the range; the decline is the contract). The frame minimum became `puri::layout::min_width`
 — a real combinator (pad-to-minimum on the right), not inline
 arithmetic — the name editor's content-persists-chrome-marks-
 engagement pattern applied to absence itself. The pending

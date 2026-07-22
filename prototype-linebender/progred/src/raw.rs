@@ -380,9 +380,11 @@ impl Selection {
                     .resolve(parent)
                     .and_then(Value::as_cell)
                     .map(|cell| line_edit(sources.name(cell).unwrap_or(""), NAME_COLOR)),
-                _ => sources
-                    .resolve(&path)
-                    .and_then(|value| value.as_str().map(|s| line_edit(s, STRING_COLOR))),
+                _ => sources.resolve(&path).and_then(|value| {
+                    value
+                        .as_str()
+                        .map(|s| line_edit(s, STRING_COLOR).with_affixes("\"", "\""))
+                }),
             })
             .flatten();
         Selection::Edge {
@@ -2330,19 +2332,14 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         .and_then(Selection::edit);
     let inner = match value {
         Value::Atom(Atom::String(s)) => {
-            let fallback = text(tcx, s, &cx.styles.string);
+            // ONE shaped run, static and editing alike: the quotes are
+            // the editor's affixes, so entering an edit reshapes
+            // nothing and the caret lives strictly between them. Every
+            // click on the literal reports a caret position — a quote
+            // click lands it at the nearest end.
+            let fallback = text(tcx, &format!("\"{s}\""), &cx.styles.string);
             let content = atom_content(editing, fallback, None, tcx, cx.styles, hooks);
-            // The quotes select; the text inside places the caret.
-            select_target(
-                path.to_vec(),
-                value.clone(),
-                hooks,
-                row(0.0, vec![
-                    text(tcx, "\"", &cx.styles.string),
-                    cursor_target(path.to_vec(), value.clone(), hooks, content),
-                    text(tcx, "\"", &cx.styles.string),
-                ]),
-            )
+            cursor_target(path.to_vec(), value.clone(), hooks, content)
         }
         Value::Atom(Atom::Blob(bytes)) => select_target(
             path.to_vec(),
@@ -3711,6 +3708,26 @@ mod svg_bench {
             }),
             320.0,
             "../target/raw_placeholder_committed.svg",
+        );
+        // The empty string under its write-through editor: quotes
+        // stay snug, no slot minimum applies to string literals.
+        let empty_string = Document {
+            root: Some(Value::from("")),
+            cells: Cells::new(),
+        };
+        let library = crate::conventions::library();
+        let sel = Selection::edge(
+            &Sources {
+                doc: &empty_string,
+                library: &library,
+            },
+            Vec::new(),
+        );
+        render(
+            &empty_string,
+            Some(&sel),
+            320.0,
+            "../target/raw_empty_string_editing.svg",
         );
     }
 }
