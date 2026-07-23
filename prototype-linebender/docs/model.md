@@ -928,11 +928,18 @@ swapped, the value carried, one history step. Engagement is the
 Finder pattern's second act (`rename_target`): cold, the label
 shares the head's select claim; on the SELECTED field a plain
 click re-opens it (command-click still picks). The query renders
-in place (`rename_query`) wearing the primary ring explicitly — a
-pending edge has no path of its own for descend to mark — colon
-and value staying put; a rename forces its record open and rides
-the flat literal like any authoring query; Backspace on the empty
-query returns to the field, Escape deselects. Name editors stay
+in place (`label_query`, née `rename_query`) wearing the primary
+ring explicitly — a pending edge has no path of its own for
+descend to mark — colon and value staying put; a rename forces
+its record open and rides the flat literal like any authoring
+query; Backspace on the empty query returns to the field, Escape
+deselects. (2026-07-22: the NEW-FIELD pending row joined this
+notation — it had ringed its whole row, so the cold value slot's
+box collided with the outline and read as a stray paren; now both
+label stages ring ONLY the engaged query through the shared
+`label_query`, whose ring outset rides inside the node as padding
+so glued neighbors — the colon, a flat comma — clear its ink.
+Scene raw_pending_edge.svg pins it.) Name editors stay
 write-through by the same principle's other half: a name is the
 cell's own metadata, duplicates legal, no shared namespace to
 collide in. Scene raw_label_rename.svg pins the notation. (Later

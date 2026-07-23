@@ -2198,7 +2198,7 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     // already claims the same path.
     let label = match cx.pending_rename_under(parent) {
         Some((replacing, query, choice)) if replacing == &key => {
-            rename_query(cx, tcx, query, choice, hooks)
+            label_query(cx, tcx, query, choice, hooks)
         }
         _ => field_label(cx, tcx, parent, child.clone(), &key, hooks),
     };
@@ -2272,21 +2272,20 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
     choice: usize,
     hooks: &Hooks<C>,
 ) -> Node<P> {
-    let scale = cx.styles.scale;
-    // Both stages through the slot widget: the label engaged, the
-    // value to come cold.
-    let label = placeholder(cx, tcx, Some((query, choice)), true, hooks);
+    // Both stages through the slot widget: the label engaged and
+    // wearing the ring — ONLY the label, as a re-opened rename wears
+    // it, so the cold value slot's box stands clear instead of
+    // colliding with a row-wide outline — the value to come cold.
     let pending_row = row(
         0.0,
         vec![
-            label,
+            label_query(cx, tcx, query, choice, hooks),
             text(tcx, ": ", &cx.styles.dim),
             placeholder(cx, tcx, None, false, hooks),
         ],
     );
     let hover = hooks.hover.clone();
     decorate(pending_row, move |p: &mut P, rect| {
-        primary_highlight(scale, p, rect);
         // The row owns its clicks: nothing here means "select the
         // parent", so nothing may fall through to it. (The query's
         // caret target, registered after, still wins inside itself.)
@@ -2533,7 +2532,7 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             child.push(Step::Key(key.clone()));
             cells.push(match renaming {
                 Some((replacing, query, choice)) if replacing == key => {
-                    rename_query(cx, tcx, query, choice, hooks)
+                    label_query(cx, tcx, query, choice, hooks)
                 }
                 _ => field_label(cx, tcx, path, child.clone(), key, hooks),
             });
@@ -3132,12 +3131,13 @@ fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
     })
 }
 
-/// The re-opened label: its engaged query wearing the primary ring
-/// explicitly — a pending edge has no path of its own for
-/// [`descend`] to mark — spanning the query frame the way a value
-/// pending's does. Clicks inside belong to the query's own caret
-/// target; clicks beside fall through like any pending's.
-fn rename_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+/// The label stage engaged — a rename's re-opened label or a new
+/// field's — its query wearing the primary ring explicitly: a
+/// pending edge has no path of its own for [`descend`] to mark, and
+/// the ring spans the QUERY frame alone, the way a value pending's
+/// does. Clicks inside belong to the query's own caret target;
+/// clicks beside fall through like any pending's.
+fn label_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
@@ -3146,9 +3146,12 @@ fn rename_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let content = placeholder(cx, tcx, Some((query, choice)), true, hooks);
-    decorate(content, move |p: &mut P, rect| {
+    let ringed = decorate(content, move |p: &mut P, rect| {
         primary_highlight(scale, p, rect);
-    })
+    });
+    // The ring's outset rides inside the node, so glued neighbors —
+    // the colon, a flat comma — clear its ink.
+    pad(Insets::new(4.0 * scale, 0.0, 4.0 * scale, 0.0), ringed)
 }
 
 /// A writable field label's one pointer job: a plain click re-opens
@@ -5055,5 +5058,32 @@ mod svg_bench {
         )
         .unwrap();
         render(&doc, Some(&rename), 560.0, "../target/raw_label_rename.svg");
+    }
+
+    #[test]
+    fn svg_bench_renders_a_pending_edge() {
+        let doc = sample_document();
+        let library = crate::conventions::library();
+        let edge = pending_edge(
+            &Sources {
+                doc: &doc,
+                library: &library,
+            },
+            vec![Step::Key(Label::from("shape"))],
+        )
+        .unwrap();
+        let Selection::PendingEdge {
+            parent, replacing, ..
+        } = edge
+        else {
+            panic!("a pending edge pends");
+        };
+        let typing = Selection::PendingEdge {
+            parent,
+            query: line_edit("na", QUERY_COLOR),
+            choice: 0,
+            replacing,
+        };
+        render(&doc, Some(&typing), 560.0, "../target/raw_pending_edge.svg");
     }
 }
