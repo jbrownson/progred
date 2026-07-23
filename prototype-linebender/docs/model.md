@@ -1108,7 +1108,43 @@ both. Tests: the reach matrix (near air holds, far air clears); a
 deterministic two-field doc (short list flat, long strings forced
 block) pins the comma's Insert claim, the inter-row `Air`, and
 the widened bracket claiming the container outright inside its
-absorbed gap.
+absorbed gap. Same day, a user-found bug named the invariant: A
+HOVER STORES ADDRESSES, NEVER VALUES. `Hover::Entry` had
+snapshotted the entry's value at claim time, so typing under a
+parked pointer kept marking the OLD entry (hover "A", type "B",
+the document's "A" stayed marked). Now `Entry(usize)` is bare and
+`hover_value` re-derives from the LIVE completion offers each
+frame — recomputing the entries for the open pending, the price
+of never marking a snapshot — so the marks follow the query as it
+is typed, and every variant re-derives what it displays the same
+way paths always did. The audit that followed found one sibling
+(a dead LABEL kept marking its ghost — now a dead address answers
+nothing, gated on resolve like Value always was) and then closed
+the whole class: THE POINTER REPLAYS AT EVERY MINT. The pointer
+position is stored as honest input (`App.pointer`), and after
+every dispatch mint — mutation, resize, each drawn frame —
+`refresh_hover` replays it as a synthetic move through the fresh
+handler: the same path a real move takes, claims and air and
+reach included, so every presented frame answers from CURRENT
+layout. Edits, scroll, reveals, and future animation can no
+longer strand the hover on where things were; the redraw-site
+refresh presents one corrective frame when layout moved under a
+still pointer. The refresh stands down while a button is down
+(`App.pressed` — gestures keep the hover they began with) and
+made the planned Entry-scoping fix REDUNDANT: a cross-pending
+index can't survive to be consumed when every mint re-claims, so
+`Entry(usize)` stays unscoped. The user's closing formulation
+names the state: the hover is the pointer RELATIVE TO CONTENT,
+and either side changing re-answers it — moves by event, content
+by the mint replay. The one edge where the relation changes with
+neither side measurable is a MOVED WINDOW (no pointer event; no
+way to query the pointer; a title-drag carries the mouse along
+while an OS move doesn't, so no delta correction exists) — there
+the state honestly becomes unknown: pointer and hover clear until
+the next move. Residue, stated: while the pointer rests in AIR,
+the hold still tests the held footprint's stored rect — ink
+re-claims fresh at every refresh, air does not — a wrongness
+bounded by the 8px reach.
 
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 

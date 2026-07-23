@@ -1476,9 +1476,12 @@ pub enum Hover {
     /// A click here opens a pending sibling after the element at
     /// this path — the flat list separator's click.
     Insert(Path),
-    /// A click here commits this completion entry; the value it would
-    /// commit rides along for the secondary hover marks.
-    Entry { index: usize, value: Option<Value> },
+    /// A click here commits the completion entry at this index. An
+    /// index, not the entry: a hover stores ADDRESSES, never values,
+    /// so what it means re-derives from the LIVE entries each frame —
+    /// typing under a parked pointer re-answers instead of marking a
+    /// snapshot.
+    Entry(usize),
 }
 
 /// What the pointer rests on plus the footprint it claimed — the
@@ -1525,18 +1528,44 @@ pub fn resolve_hover(
 
 /// The value a hover refers to — the hover's `secondary_of`, for
 /// marking its other projections. Inline records are structure, not
-/// identity: no marks.
-pub fn hover_value(sources: &Sources, hover: &Hover) -> Option<Value> {
+/// identity: no marks. An `Entry` hover re-derives from the LIVE
+/// completion offers of the open pending (recomputed here — the
+/// price of never marking a snapshot), so the marks follow the
+/// entries as the query is typed.
+pub fn hover_value(
+    sources: &Sources,
+    names: &Names,
+    raw: bool,
+    selection: Option<&Selection>,
+    hover: &Hover,
+) -> Option<Value> {
     match hover {
         Hover::Value(path) => sources
             .resolve(path)
             .filter(|value| !matches!(value, Value::Record(_)))
             .cloned(),
-        Hover::Label(path) => match path.last()? {
-            Step::Key(key) => Some(Value::Atom(Atom::from(key.clone()))),
-            _ => None,
-        },
-        Hover::Entry { value, .. } => value.clone(),
+        // A dead address answers nothing: the label must still be in
+        // the document, or a rename under a parked pointer would keep
+        // marking the old spelling's ghost.
+        Hover::Label(path) => {
+            sources.resolve(path)?;
+            match path.last()? {
+                Step::Key(key) => Some(Value::Atom(Atom::from(key.clone()))),
+                _ => None,
+            }
+        }
+        Hover::Entry(index) => {
+            let (query, labels) = match selection? {
+                Selection::Pending { query, .. } => (query, false),
+                Selection::PendingEdge { query, .. } => (query, true),
+                Selection::Edge { .. } => return None,
+            };
+            let entries = completion_entries(sources, names, raw, labels, query.text());
+            match &entries.get(*index)?.action {
+                EntryAction::Value(value) => Some(value.clone()),
+                _ => None,
+            }
+        }
         Hover::Toggle(_) | Hover::Insert(_) => None,
     }
 }
@@ -1915,7 +1944,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         // HOVERED cell is a hover secondary the same way.
         secondary: secondary_of(sources, selection).or_else(|| graph_node.cloned()),
         secondary_hover: hover
-            .and_then(|hover| hover_value(sources, hover))
+            .and_then(|hover| hover_value(sources, names, raw, selection, hover))
             .or_else(|| hover_node.cloned()),
     };
     // The Raw view derives from the one bit: names answer None and
@@ -2934,11 +2963,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
                         Affine::IDENTITY,
                     );
                 }
-                let value = match &action {
-                    EntryAction::Value(value) => Some(value.clone()),
-                    _ => None,
-                };
-                hover_claim(p, rect, hover.clone(), Hover::Entry { index, value });
+                hover_claim(p, rect, hover.clone(), Hover::Entry(index));
                 p.handler().on_pointer_down(move |ctx, event| {
                     event.button == Some(PointerButton::Primary)
                         && rect.contains(Point::new(
@@ -3997,6 +4022,70 @@ mod tests {
     }
 
     #[test]
+    fn entry_hover_marks_follow_the_live_query() {
+        // The reported bug: hover an entry, keep the mouse still,
+        // type — the mark must follow what the entry NOW is, not
+        // what it was when the pointer arrived.
+        let doc = sample_document();
+        let lib = crate::conventions::library();
+        let sources = src(&doc, &lib);
+        let names = Names::table();
+        let pending = |text: &str| Selection::Pending {
+            path: Vec::new(),
+            query: line_edit(text, QUERY_COLOR),
+            choice: 0,
+        };
+        // A quoted query leads with its atom, so entry zero IS the
+        // typed string — and re-derives as the query grows.
+        assert_eq!(
+            hover_value(
+                &sources,
+                &names,
+                false,
+                Some(&pending("\"a\"")),
+                &Hover::Entry(0)
+            ),
+            Some(Value::from("a"))
+        );
+        assert_eq!(
+            hover_value(
+                &sources,
+                &names,
+                false,
+                Some(&pending("\"ab\"")),
+                &Hover::Entry(0)
+            ),
+            Some(Value::from("ab"))
+        );
+        // Dead addresses answer nothing: a closed pending, a label
+        // no longer in the document.
+        assert_eq!(
+            hover_value(&sources, &names, false, None, &Hover::Entry(0)),
+            None
+        );
+        assert_eq!(
+            hover_value(
+                &sources,
+                &names,
+                false,
+                None,
+                &Hover::Label(vec![key("gone")])
+            ),
+            None
+        );
+        assert_eq!(
+            hover_value(
+                &sources,
+                &names,
+                false,
+                None,
+                &Hover::Label(vec![key("shape"), Step::Follow, key("tags")])
+            ),
+            Some(Value::from("tags"))
+        );
+    }
+
+    #[test]
     fn a_mounting_click_can_place_the_rename_caret() {
         // The caret index is hit-tested against the label's OWN
         // layout — the text that was clicked, in its face — and lands
@@ -4854,8 +4943,8 @@ mod svg_bench {
             .handler
             .dispatch_pointer_move(&mut claims, &move_at(Point::new(1.0, 1.0)));
         assert_eq!(claims.first(), Some(&HoverClaim::Direct(None)));
-        // Scanning down the card crosses both rows: each claims its
-        // entry, the value one carrying the value it would commit.
+        // Scanning down the card crosses both rows, each claiming its
+        // index — an address into the live entries, never a snapshot.
         let winners: Vec<Hover> = (0..height as usize)
             .filter_map(|y| {
                 let mut claims = Claims::new();
@@ -4869,14 +4958,8 @@ mod svg_bench {
                 }
             })
             .collect();
-        assert!(winners.contains(&Hover::Entry {
-            index: 0,
-            value: Some(Value::from("x")),
-        }));
-        assert!(winners.contains(&Hover::Entry {
-            index: 1,
-            value: None,
-        }));
+        assert!(winners.contains(&Hover::Entry(0)));
+        assert!(winners.contains(&Hover::Entry(1)));
     }
 
     #[test]

@@ -102,6 +102,14 @@ struct App {
     /// report innermost-first, and [`App::claim_hover`] keeps the
     /// first. Reset before each move dispatch.
     hover_claimed: bool,
+    /// The pointer position while it is inside the window — the
+    /// input [`App::refresh_hover`] replays at every mint, so the
+    /// hover re-answers against current layout instead of where
+    /// things were.
+    pointer: Option<Point>,
+    /// A button is down: gestures keep the hover they began with, so
+    /// the refresh stands down until release.
+    pressed: bool,
     /// The selection identity last scrolled into view — path AND
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
@@ -440,6 +448,7 @@ impl ApplicationHandler<UserEvent> for App {
                             }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
+                        self.pressed = true;
                         dispatch.handler.dispatch_pointer_down(self, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
@@ -450,6 +459,8 @@ impl ApplicationHandler<UserEvent> for App {
                         // winner repaints without spending the
                         // handler: nothing dispatch reads depends on
                         // hover.
+                        self.pointer =
+                            Some(Point::new(update.current.position.x, update.current.position.y));
                         let before = self.model.hover.clone();
                         self.hover_claimed = false;
                         let dragged = dispatch.handler.dispatch_pointer_move(self, &update);
@@ -459,9 +470,12 @@ impl ApplicationHandler<UserEvent> for App {
                         dragged
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
+                        self.pressed = false;
                         dispatch.handler.dispatch_pointer_up(self, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
+                        self.pointer = None;
+                        self.pressed = false;
                         if self.model.hover.take().is_some() {
                             window.request_redraw();
                         }
@@ -538,6 +552,21 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
 
+            // The hover is the pointer RELATIVE TO CONTENT, and a
+            // moved window shifts that relation with no pointer event
+            // — and no way to re-measure it (a title-bar drag carries
+            // the mouse along; an OS-driven move doesn't; winit can't
+            // say where the pointer now sits). The honest state is
+            // unknown until the next move.
+            WindowEvent::Moved(_) => {
+                self.pointer = None;
+                if self.model.hover.take().is_some()
+                    && let RenderState::Active { window, .. } = &self.state
+                {
+                    window.request_redraw();
+                }
+            }
+
             WindowEvent::RedrawRequested => self.redraw(),
             _ => {}
         }
@@ -600,6 +629,8 @@ fn main() {
         menu_items,
         cursor: Point::ZERO,
         hover_claimed: false,
+        pointer: None,
+        pressed: false,
         revealed: None,
         dispatch: None,
         reducer: WindowEventReducer::default(),
@@ -1139,6 +1170,46 @@ impl App {
             max_scroll_x,
             popup,
         });
+        // Every mint re-answers the hover; the caller's redraw paints
+        // the refreshed answer.
+        self.refresh_hover();
+    }
+
+    /// Re-ask the freshly minted frame what the pointer rests on: the
+    /// stored position replayed as a synthetic move through the same
+    /// dispatch a real one takes, so every presented frame answers
+    /// from current layout — edits, scroll, and animation never leave
+    /// the hover pointing at where things were. Stands down while a
+    /// button is down (gestures keep the hover they began with).
+    /// True when the hover changed.
+    fn refresh_hover(&mut self) -> bool {
+        if self.pressed {
+            return false;
+        }
+        let Some(point) = self.pointer else {
+            return false;
+        };
+        let Some(dispatch) = self.dispatch.take() else {
+            return false;
+        };
+        let mut state = ui_events::pointer::PointerState::default();
+        state.position.x = point.x;
+        state.position.y = point.y;
+        let replay = ui_events::pointer::PointerUpdate {
+            pointer: ui_events::pointer::PointerInfo {
+                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: ui_events::pointer::PointerType::Mouse,
+            },
+            current: state,
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        };
+        let before = self.model.hover.clone();
+        self.hover_claimed = false;
+        dispatch.handler.dispatch_pointer_move(self, &replay);
+        self.dispatch = Some(dispatch);
+        self.model.hover != before
     }
 
     /// A move dispatch's hover report: claims arrive innermost-first,
@@ -1697,6 +1768,13 @@ impl App {
             max_scroll_x,
             popup,
         });
+        // The scene above drew the hover it was given; if this
+        // frame's layout moved things under the still pointer —
+        // scroll, a reveal, the graph animating — re-answer and
+        // present one more frame with the truth.
+        if self.refresh_hover() {
+            window.request_redraw();
+        }
 
         let RenderState::Active { surface, .. } = &mut self.state else {
             return;
@@ -1985,7 +2063,7 @@ fn run_frame(
     // and its click targets win.
     if let Some(popup) = frame.popup.take() {
         let hovered_entry = match model.tree_hover() {
-            Some(raw::Hover::Entry { index, .. }) => Some(*index),
+            Some(raw::Hover::Entry(index)) => Some(*index),
             _ => None,
         };
         let commit = |app: &mut App, action: &raw::EntryAction| {
