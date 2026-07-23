@@ -43,7 +43,7 @@ impl Cell {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Cells {
     data: HashMap<CellId, Cell>,
 }

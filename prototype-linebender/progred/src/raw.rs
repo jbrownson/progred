@@ -814,24 +814,36 @@ pub fn resolve_query(text: &str) -> Value {
     }
 }
 
-/// The clipboard spelling of a value — SHALLOW by design: one value,
-/// a link being its identity alone, no cell values traveling (deep
-/// copy waits on the projection-boundary design; see docs/model.md).
-/// Strings and blobs spell as the query language — "quoted" strings,
-/// `0x` hex — so they read in other apps and [`from_clipboard`] reads
-/// them back; links, lists, and records spell as Value JSON.
-pub fn to_clipboard(value: &Value) -> String {
+/// The clipboard spelling of a value, and whether it is STRUCTURE.
+/// Values carry their own inline structure, and cell copies are
+/// ALWAYS SHALLOW — a link is its identity alone, no cell values
+/// travel: the value/cell boundary IS the copy boundary. Strings and
+/// blobs spell as the query language — "quoted" strings, `0x` hex —
+/// and are not structure: their text is their faithful form. Links,
+/// lists, and records spell as Value JSON and ARE: the shell writes
+/// that spelling under the private clipboard format too, whose
+/// presence is what says "structure" — never the text's shape, so
+/// text that happens to spell Value JSON stays text.
+pub fn to_clipboard(value: &Value) -> (String, bool) {
     match value {
-        Value::Atom(Atom::String(_) | Atom::Blob(_)) => value.to_string(),
-        _ => serde_json::to_string(value).expect("values serialize"),
+        Value::Atom(Atom::String(_) | Atom::Blob(_)) => (value.to_string(), false),
+        _ => (
+            serde_json::to_string(value).expect("values serialize"),
+            true,
+        ),
     }
 }
 
-/// The value a clipboard text denotes: Value JSON when it parses,
-/// else the query reading — quoted strings, `0x` blobs, bare text —
-/// so text copied anywhere pastes sensibly.
+/// The value clipboard TEXT denotes — always the query reading:
+/// quoted strings, `0x` blobs, bare text. Text is never structure;
+/// structure rides the private format, read by [`from_structure`].
 pub fn from_clipboard(text: &str) -> Value {
-    serde_json::from_str(text).unwrap_or_else(|_| resolve_query(text))
+    resolve_query(text)
+}
+
+/// The value the private clipboard format's bytes denote.
+pub fn from_structure(bytes: &[u8]) -> Option<Value> {
+    serde_json::from_slice(bytes).ok()
 }
 
 /// A completion offer on a pending. The display styles itself by the
@@ -3829,22 +3841,37 @@ mod tests {
     #[test]
     fn clipboard_spellings_round_trip() {
         let cell = new_cell_id();
-        let cases = [
+        // Atoms are text and round-trip through it; structure rides
+        // the private format and round-trips through its bytes.
+        let atoms = [
             Value::from("plain"),
             Value::from("\"tricky\""),
             Value::from(vec![0xde, 0xad]),
+        ];
+        for value in atoms {
+            let (text, structural) = to_clipboard(&value);
+            assert!(!structural);
+            assert_eq!(from_clipboard(&text), value);
+        }
+        let structures = [
             Value::from(cell),
             Value::list([Value::from("a"), Value::from(cell)]),
             Value::record([(Label::from("x"), Value::from("1"))]),
             Value::record([(Label::Cell(cell), Value::from(vec![0x00_u8]))]),
         ];
-        for value in cases {
-            assert_eq!(from_clipboard(&to_clipboard(&value)), value);
+        for value in structures {
+            let (text, structural) = to_clipboard(&value);
+            assert!(structural);
+            assert_eq!(from_structure(text.as_bytes()), Some(value));
         }
-        // Atoms read in other apps; alien text pastes sensibly.
-        assert_eq!(to_clipboard(&Value::from("hi")), "\"hi\"");
-        assert_eq!(to_clipboard(&Value::from(vec![0xff_u8])), "0xff");
+        // Atoms read in other apps; alien text pastes sensibly — and
+        // TEXT IS NEVER STRUCTURE: characters that happen to spell
+        // Value JSON read as the string they are.
+        assert_eq!(to_clipboard(&Value::from("hi")).0, "\"hi\"");
+        assert_eq!(to_clipboard(&Value::from(vec![0xff_u8])).0, "0xff");
         assert_eq!(from_clipboard("loose text"), Value::from("loose text"));
+        let spelled = to_clipboard(&Value::record([])).0;
+        assert_eq!(from_clipboard(&spelled), Value::from(spelled.as_str()));
     }
 
     #[test]

@@ -66,6 +66,11 @@ enum RenderState {
 /// shell's key fallbacks interpret. The user reacts to what was
 /// presented, so its geometry is the honest hit-test target — and the
 /// event path runs no pass at all.
+/// The pasteboard type structural copies ride under, beside their
+/// plain text; its PRESENCE is the structure/text distinction, so
+/// text that merely spells Value JSON is never mistaken for a copy.
+const CLIPBOARD_FORMAT: &str = "com.progred.value";
+
 struct Dispatch {
     handler: Handler<App>,
     descends: Vec<raw::Descend>,
@@ -420,10 +425,13 @@ impl ApplicationHandler<UserEvent> for App {
                     // Keys nothing claims fall through to the rename
                     // chord, the collapse fold, and then selection
                     // stepping, so the selected string's editor always
-                    // wins over all three.
+                    // wins over all three. The one key that outranks
+                    // the editor: Cmd+V of STRUCTURE while a pending
+                    // is open — the query must never eat Value JSON.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
-                        dispatch.handler.dispatch_key(self, &key_event)
-                            || self.clipboard_key(&key_event)
+                        self.pending_paste_key(&key_event)
+                            || dispatch.handler.dispatch_key(self, &key_event)
+                            || self.clipboard_key(&dispatch.descends, &key_event)
                             || self.graph_key(&key_event)
                             || self.delete_key(&dispatch.descends, &key_event)
                             || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
@@ -1308,30 +1316,38 @@ impl App {
                 &event.key,
                 Key::Named(NamedKey::Backspace | NamedKey::Delete)
             )
-            && match &self.model.selection {
-                // Only a real edge deletes; a pending's Backspace is
-                // its cancel, handled by insert_key.
-                Some(Selected::Tree(raw::Selection::Edge { path, recorded, .. })) => {
-                    let path = path.clone();
-                    // Backspacing through the value and once more to
-                    // delete the edge is one gesture: when this edge
-                    // has the open run, its frame (pre-run document,
-                    // edge intact) already covers the deletion.
-                    let covered = *recorded;
-                    let before = self.model.doc.clone();
-                    raw::delete_edge(&mut self.model.doc, &self.model.library, &path) && {
-                        if !covered {
-                            self.model.history.record(before, Some(path.clone()));
-                            self.refresh_title();
-                        }
-                        let next = raw::selection_after_delete(descends, &path);
-                        self.model.selection =
-                            Some(Selected::Tree(raw::Selection::edge(&self.model.sources(), next)));
-                        true
+            && self.delete_selected_edge(descends)
+    }
+
+    /// Deletes the selected edge and lands the selection on a
+    /// survivor — Backspace/Delete's action, and cut's second half.
+    fn delete_selected_edge(&mut self, descends: &[raw::Descend]) -> bool {
+        match &self.model.selection {
+            // Only a real edge deletes; a pending's Backspace is its
+            // cancel, handled by insert_key.
+            Some(Selected::Tree(raw::Selection::Edge { path, recorded, .. })) => {
+                let path = path.clone();
+                // Backspacing through the value and once more to
+                // delete the edge is one gesture: when this edge has
+                // the open run, its frame (pre-run document, edge
+                // intact) already covers the deletion.
+                let covered = *recorded;
+                let before = self.model.doc.clone();
+                raw::delete_edge(&mut self.model.doc, &self.model.library, &path) && {
+                    if !covered {
+                        self.model.history.record(before, Some(path.clone()));
+                        self.refresh_title();
                     }
+                    let next = raw::selection_after_delete(descends, &path);
+                    self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                        &self.model.sources(),
+                        next,
+                    )));
+                    true
                 }
-                _ => false,
             }
+            _ => false,
+        }
     }
 
     /// The chosen entry's action — from the frame's popup, else the
@@ -1458,7 +1474,7 @@ impl App {
     /// these fire on cell, list, and graph selections. Deliberately
     /// NOT menu items — muda accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
-    fn clipboard_key(&mut self, event: &KeyboardEvent) -> bool {
+    fn clipboard_key(&mut self, descends: &[raw::Descend], event: &KeyboardEvent) -> bool {
         if !event.state.is_down() || !raw::command(&event.modifiers) {
             return false;
         }
@@ -1467,19 +1483,30 @@ impl App {
         };
         match c.to_lowercase().as_str() {
             "c" => self.copy_selection(),
+            "x" => self.copy_selection() && self.delete_selected_edge(descends),
             "v" => self.paste_clipboard(),
             _ => false,
         }
     }
 
     /// Copies the selected value — SHALLOW: a link is its identity
-    /// alone, no cell values travel. Tree selections copy what the
-    /// path resolves to; graph selections their node's value.
+    /// alone, no cell values travel; the value carries its own inline
+    /// structure. A selected NAME copies its string; graph selections
+    /// copy their node's value.
     fn copy_selection(&self) -> bool {
         use clipboard_rs::{Clipboard, ClipboardContext};
+        let sources = self.model.sources();
         let value = match &self.model.selection {
             Some(Selected::Tree(selection)) => {
-                self.model.sources().resolve(selection.path()).cloned()
+                let path = selection.path();
+                match path.split_last() {
+                    Some((Step::Name, parent)) => sources
+                        .resolve(parent)
+                        .and_then(Value::as_cell)
+                        .and_then(|cell| sources.name(cell))
+                        .map(Value::from),
+                    _ => sources.resolve(path).cloned(),
+                }
             }
             Some(Selected::Graph(graph_view::GraphSelection::Node(node))) => {
                 graph_view::node_value(&self.model.doc, node)
@@ -1489,25 +1516,85 @@ impl App {
         let Some(value) = value else {
             return false;
         };
+        let (text, structural) = raw::to_clipboard(&value);
         ClipboardContext::new()
-            .and_then(|cb| cb.set_text(raw::to_clipboard(&value)))
+            .and_then(|cb| {
+                if structural {
+                    // Both representations: the private format says
+                    // "structure", the text reads anywhere.
+                    cb.set(vec![
+                        clipboard_rs::ClipboardContent::Other(
+                            CLIPBOARD_FORMAT.to_string(),
+                            text.clone().into_bytes(),
+                        ),
+                        clipboard_rs::ClipboardContent::Text(text),
+                    ])
+                } else {
+                    cb.set_text(text)
+                }
+            })
             .is_ok()
     }
 
-    /// Pastes the clipboard's value: into an open pending first (the
-    /// label stage narrows to atoms through the pick), else over the
-    /// selected edge — one undo step, the selection remounted so a
-    /// pasted atom gets its editor.
-    fn paste_clipboard(&mut self) -> bool {
+    /// The private format's payload, when the clipboard carries one.
+    fn clipboard_structure(&self) -> Option<Value> {
         use clipboard_rs::{Clipboard, ClipboardContext};
-        let Some(text) = ClipboardContext::new().ok().and_then(|cb| cb.get_text().ok())
-        else {
-            return false;
-        };
-        if text.is_empty() {
+        let bytes = ClipboardContext::new()
+            .ok()
+            .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
+        raw::from_structure(&bytes)
+    }
+
+    /// Cmd+V while a pending is open and the clipboard CARRIES
+    /// STRUCTURE — the private format, not a text shape — commits the
+    /// value into the pending, ahead of the focused query's own text
+    /// paste. Everything else keeps the text path: pasting "hi",
+    /// 0xff, or even text that happens to spell Value JSON lands in
+    /// the query as characters. Claims the chord even when the pick
+    /// declines (the label stage takes only what can label).
+    fn pending_paste_key(&mut self, event: &KeyboardEvent) -> bool {
+        if !event.state.is_down() || !raw::command(&event.modifiers) {
             return false;
         }
-        let value = raw::from_clipboard(&text);
+        if !matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "v") {
+            return false;
+        }
+        if !matches!(
+            self.model.selection,
+            Some(Selected::Tree(
+                raw::Selection::Pending { .. } | raw::Selection::PendingEdge { .. }
+            ))
+        ) {
+            return false;
+        }
+        let Some(value) = self.clipboard_structure() else {
+            return false;
+        };
+        self.pick_identity(value);
+        true
+    }
+
+    /// Pastes the clipboard's value — the private format's structure
+    /// when it carries one, else the text's query reading: into an
+    /// open pending first (the label stage narrows to atoms through
+    /// the pick), else over the selected edge — one undo step, the
+    /// selection remounted so a pasted atom gets its editor.
+    fn paste_clipboard(&mut self) -> bool {
+        use clipboard_rs::{Clipboard, ClipboardContext};
+        let value = match self.clipboard_structure() {
+            Some(value) => value,
+            None => {
+                let Some(text) =
+                    ClipboardContext::new().ok().and_then(|cb| cb.get_text().ok())
+                else {
+                    return false;
+                };
+                if text.is_empty() {
+                    return false;
+                }
+                raw::from_clipboard(&text)
+            }
+        };
         if self.pick_identity(value.clone()) {
             return true;
         }

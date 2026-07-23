@@ -368,9 +368,10 @@ inside another cell's parens floats the outer paren beside the
 block). The empty-slot pend rule got its direct test, external
 decline included. Parked from the same review: copy/paste needs a
 rethink for name selections (copying a selected name yields
-nothing today); cell_view's block scaffolding stays deliberately
-un-unified until the rendering is polished enough to know what the
-shared shape is.
+nothing today — resolved 2026-07-22, the clipboard entry below:
+a selected name copies its string); cell_view's block scaffolding
+stays deliberately un-unified until the rendering is polished
+enough to know what the shared shape is.
 
 CLICK TARGETS NARROWED TO CONTENT (2026-07-20, user: deselecting was
 unfindable because every hit zone was a bounding box — a block's box
@@ -939,7 +940,47 @@ box collided with the outline and read as a stray paren; now both
 label stages ring ONLY the engaged query through the shared
 `label_query`, whose ring outset rides inside the node as padding
 so glued neighbors — the colon, a flat comma — clear its ink.
-Scene raw_pending_edge.svg pins it.) Name editors stay
+Scene raw_pending_edge.svg pins it.)
+
+COPY/PASTE COMPLETED — AND CELL COPIES ARE ALWAYS SHALLOW
+(2026-07-22). The user's rule, stated after a first cut overshot:
+copy carries any VALUES under the selection — records and lists
+are values, so the value carries its own inline structure by
+construction — and cell copies are ALWAYS SHALLOW: a link is its
+identity alone, no cell values travel. The value/cell boundary IS
+the copy boundary; that is what "cells are explicit" bought. The
+first cut had read the RDF-round's parked note ("inline = carried,
+reference = kept") as the projection's display tree and built a
+carried-cells closure with per-gesture identity fate (remint vs
+keep — an envelope, substitution maps, fork-by-paste); the user's
+correction resolved the ambiguity — under v3, the REFERENCES are
+exactly the cells, so "kept" means shallow — and the machinery
+came back out the same day. A consequence worth remembering: the
+authority round's "the fork is copy/paste's job" no longer has a
+gesture — taking over a library entity needs its own home when it
+matters. What LANDED: Cmd+X (copy + the delete gesture's second
+half, `delete_selected_edge` extracted from delete_key with its
+landing and covered-run logic intact) and the parked name gap —
+a selected NAME copies its string. Spellings unchanged: strings
+and blobs as the query language for interop, everything else as
+Value JSON; paste reads structure first, then the text's query
+reading, into a pending first, else over the selected edge as one
+undo step. Two refinements surfaced in use. First: a pending's
+focused query claims Cmd+V ("paste always lands in the text"), so
+structural pastes never reached the pending — raw JSON spelled
+into the query; `pending_paste_key` now runs AHEAD of the editor
+for structural clipboards. Second (user: text matching the
+encoding should still paste as text): STRUCTURE IS A CLIPBOARD
+FORMAT, NOT A TEXT SHAPE. The pasteboard is multi-representation
+— a structural copy writes the Value JSON under the private
+`com.progred.value` type AND as plain text for other apps — and
+paste trusts only the format's PRESENCE: `from_structure` reads
+its bytes, `from_clipboard` reads text as the query language
+alone (the serde-on-text branch deleted), so characters that
+happen to spell Value JSON read as the string they are, in
+queries and over edges alike. Atoms deliberately carry no format:
+their text is their faithful form, and pasting them into a query
+stays an editable text landing — the query-language round-trip. Name editors stay
 write-through by the same principle's other half: a name is the
 cell's own metadata, duplicates legal, no shared namespace to
 collide in. Scene raw_label_rename.svg pins the notation. (Later
