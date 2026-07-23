@@ -1194,6 +1194,47 @@ the hold still tests the held footprint's stored rect — ink
 re-claims fresh at every refresh, air does not — a wrongness
 bounded by the 8px reach.
 
+THE GID NOTATION (2026-07-22, evening; docs/gid.md is the
+spec). The domains conversation ran the whole arc — language
+candidates surveyed (invented cores vs popular languages; JS/Boa
+verified AST-enterable, wasm/Rust weighed), Grap designed (one
+form: records headed by `is`, heads reduce or stand as tagged
+data; parameters are an abstraction's free bare cells, application
+binds by identity; templates by default, one quote; numbers argued
+OUT of the substrate — tagged blobs `{f64: 0x…}` via libraries,
+the user's "if gid has no numbers then no programming language has
+numbers") — and then the FILE FORMAT jumped the queue as first
+priority, because libraries are about to be authored and text is
+the bootstrap medium. Identifiers are GIDS (16 CSPRNG bytes, not
+UUIDs — the notation spells them as bare 32-hex, case-insensitive
+in, lowercase out). The format: one record — itself a well-formed
+gid value — with `binders` (binder → gid, pure read-sugar
+surviving load→save in a store-layer table, never in the model),
+`cells` (a RECORD from identity labels to `{name?, value?}`
+entries — the gid is the unique key so the structure says so, and
+the labels are literally cell labels; identity by bare token under
+the two-namespace rule: 32-hex is a gid, else a binder, unbound
+binders MINT — create-on-reference at the file layer; the same
+cell stated twice by ANY spelling FAILS, the user's call — failing
+beats clobbering, and it matches the value grammar's
+duplicate-label rule; duplicate NAMES coexist as ever), and
+`root`. Names are for humans, binders are for files, the two never
+mix. Doctrine shift, stated: SAVING CANONICALIZES — the parser is
+lenient in enumerated ways only (gid case, trailing commas,
+minting, absent sections), the printer is the canon (sorted
+binders, named-then-nameless entries, canonical label order,
+structural-only layout). JSON serialization deleted
+whole — no fallback, scratch files are disposable, the reader
+lives in git history. Parked in the spec: raw-structure load/save,
+a gid atom, numeric literals, the binary sibling. Naming SETTLED
+next day: GID is the format, a GID ID is the identifier
+(user-called; `.gid` verified unclaimed — WinHelp's dead index
+files and a niche simulator's project dirs are the only priors).
+Same day: the app starts EMPTY (the sample became sample.gid,
+checked in and pinned as the printer's golden fixed-point test;
+`sample_document()` lives on as the test fixture), and the file
+dialogs speak `.gid`.
+
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
 The substrate, whole:

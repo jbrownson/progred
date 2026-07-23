@@ -101,6 +101,9 @@ pub struct Document {
 /// the favorite cell holds a bare LINK to the corner — the alias
 /// pattern, and the standing repro for the block-in-row rendering
 /// seam (a cell whose value blocks inside another cell's parens).
+/// The app starts EMPTY now; this is the test fixture, and its
+/// printed form is checked in as sample.gid.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn sample_document() -> Document {
     let mut cells = Cells::new();
     let roof = new_cell_id();

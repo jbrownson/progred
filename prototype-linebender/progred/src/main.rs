@@ -6,6 +6,7 @@ mod filter;
 mod sources;
 mod graph_view;
 mod history;
+mod gid;
 mod raw;
 mod store;
 
@@ -94,6 +95,10 @@ struct App {
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
     doc_path: Option<PathBuf>,
+    /// The notation's file-local binder table, surviving load → save
+    /// so spellings round-trip; never part of the model, invisible
+    /// in the document.
+    binders: gid::Binders,
     /// Attached to the app once launched; commands arrive as user
     /// events.
     menu: Menu,
@@ -273,7 +278,7 @@ fn plain(event: &KeyboardEvent) -> bool {
 }
 
 fn dialog() -> rfd::FileDialog {
-    rfd::FileDialog::new().add_filter("progred", &["progred"])
+    rfd::FileDialog::new().add_filter("gid", &["gid"])
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -587,12 +592,20 @@ fn main() {
     // untitled until the first save asks. A file that exists but does
     // not parse is refused rather than silently replaced, so a save
     // cannot clobber it with the sample.
-    let doc = match &doc_path {
+    let (doc, binders) = match &doc_path {
         Some(path) if path.exists() => store::load(path).unwrap_or_else(|error| {
             eprintln!("failed to load {}: {error}", path.display());
             std::process::exit(1);
         }),
-        _ => raw::sample_document(),
+        // No path starts EMPTY — the sample lives in sample.gid now,
+        // opened like any document.
+        _ => (
+            raw::Document {
+                root: None,
+                cells: progred_graph::Cells::new(),
+            },
+            gid::Binders::new(),
+        ),
     };
 
     let mut builder = EventLoop::<UserEvent>::with_user_event();
@@ -632,6 +645,7 @@ fn main() {
             scroll_x: 0.0,
         },
         doc_path,
+        binders,
         menu,
         menu_ids,
         menu_items,
@@ -991,11 +1005,12 @@ impl App {
                     cells: progred_graph::Cells::new(),
                 },
                 None,
+                gid::Binders::new(),
             ),
             AfterDiscard::Open => {
                 if let Some(path) = dialog().pick_file() {
                     match store::load(&path) {
-                        Ok(doc) => self.adopt_model(doc, Some(path)),
+                        Ok((doc, binders)) => self.adopt_model(doc, Some(path), binders),
                         Err(error) => {
                             eprintln!("failed to open {}: {error}", path.display());
                         }
@@ -1012,9 +1027,9 @@ impl App {
     /// saves nothing.
     fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
-        let target = in_place.or_else(|| dialog().set_file_name("untitled.progred").save_file());
+        let target = in_place.or_else(|| dialog().set_file_name("untitled.gid").save_file());
         if let Some(path) = target {
-            match store::save(&path, &self.model.doc) {
+            match store::save(&path, &self.model.doc, &self.binders) {
                 Ok(()) => {
                     self.model.history.mark_saved();
                     // A run must not straddle the save mark, or edits
@@ -1035,7 +1050,13 @@ impl App {
     /// immediately, as every mutation site does: the retained handler
     /// was built from the old document, and its dispatches must not
     /// run against the new model.
-    fn adopt_model(&mut self, doc: raw::Document, path: Option<PathBuf>) {
+    fn adopt_model(
+        &mut self,
+        doc: raw::Document,
+        path: Option<PathBuf>,
+        binders: gid::Binders,
+    ) {
+        self.binders = binders;
         self.model = Model {
             doc,
             selection: None,

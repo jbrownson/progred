@@ -1,0 +1,48 @@
+{
+  "binders": {
+    "corner": a49597a96cf95d964ef74b53a595d0fa,
+    "favorite": 8c233b116206e0de95217827108a3046,
+    "origin": 14e404030754e167fedb1355c099ceeb,
+    "roof": 1c1d05806d62128e74118e73a7568812,
+    "stroke": 85e5ce37a0f8f98fe7a4b907e4744623,
+  },
+  "cells": {
+    corner: {"name": "corner", "value": {
+      "at": {
+        "col": "right",
+        "row": "bottom",
+      },
+      "of": roof,
+    }},
+    favorite: {"name": "favorite", "value": corner},
+    origin: {"name": "origin", "value": {
+      "at": {
+        "col": "left",
+        "row": "top",
+      },
+    }},
+    roof: {"name": "roof", "value": {
+      stroke: "hairline",
+      "material": 66d97eac461f31df1c25e1f594f4e84e,
+      "points": [
+        origin,
+        corner,
+      ],
+      "style": 1175560c307dc5a5f07952b9c14bd70e,
+      "tags": [
+        "draft",
+        "gabled",
+      ],
+    }},
+    stroke: {"name": "stroke"},
+    1175560c307dc5a5f07952b9c14bd70e: {"value": {
+      "color": "rebeccapurple",
+      "swatch": 0x663399,
+    }},
+  },
+  "root": {
+    "favorite": favorite,
+    "shape": roof,
+    "style": 1175560c307dc5a5f07952b9c14bd70e,
+  },
+}
