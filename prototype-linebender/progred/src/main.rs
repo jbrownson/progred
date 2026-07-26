@@ -1,12 +1,14 @@
 //! Window shell: winit + Vello plumbing around pure frame drawing.
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
+mod compile;
 mod conventions;
 mod filter;
 mod sources;
 mod graph_view;
 mod history;
 mod gid;
+mod plugins;
 mod raw;
 mod store;
 
@@ -99,6 +101,10 @@ struct App {
     /// so spellings round-trip; never part of the model, invisible
     /// in the document.
     binders: gid::Binders,
+    /// The f64 projection plugin, compiled from `plugins/f64.rs` at
+    /// launch; `None` (with a stderr note) when the toolchain or the
+    /// source is unavailable, and the raw record renders instead.
+    plugin: Option<plugins::F64Plugin>,
     /// Attached to the app once launched; commands arrive as user
     /// events.
     menu: Menu,
@@ -646,6 +652,9 @@ fn main() {
         },
         doc_path,
         binders,
+        plugin: plugins::F64Plugin::load()
+            .inspect_err(|error| eprintln!("f64 plugin: {error}"))
+            .ok(),
         menu,
         menu_ids,
         menu_items,
@@ -1176,6 +1185,7 @@ impl App {
         run_frame(
             &mut frame,
             &self.model,
+            self.plugin.as_ref(),
             view,
             &mut self.font_cx,
             &mut self.layout_cx,
@@ -1853,6 +1863,7 @@ impl App {
         run_frame(
             &mut frame,
             &self.model,
+            self.plugin.as_ref(),
             view,
             &mut self.font_cx,
             &mut self.layout_cx,
@@ -1952,6 +1963,7 @@ impl App {
 fn run_frame(
     frame: &mut Frame<'_>,
     model: &Model,
+    plugin: Option<&plugins::F64Plugin>,
     view: ViewFlags,
     font_cx: &mut FontContext,
     layout_cx: &mut LayoutContext<Brush>,
@@ -2002,6 +2014,7 @@ fn run_frame(
         viewport_width - 2.0 * margin
     };
     let hover_node = model.hover_node();
+    let plugin_text = |value: &Value| plugin.and_then(|plugin| plugin.text(value));
     let body = raw::project(
         &sources,
         model.tree_selection(),
@@ -2014,6 +2027,7 @@ fn run_frame(
         &mut tcx,
         &styles,
         body_width,
+        Some(&plugin_text),
         raw::Hooks {
             // The selection transition: re-selecting the same path
             // keeps its editor state, and a reported text click seeds

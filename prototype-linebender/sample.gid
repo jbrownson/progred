@@ -24,6 +24,9 @@
     roof: {"name": "roof", "value": {
       stroke: "hairline",
       "material": 66d97eac461f31df1c25e1f594f4e84e,
+      "pitch": {
+        "f64": 0x0000000000000440,
+      },
       "points": [
         origin,
         corner,

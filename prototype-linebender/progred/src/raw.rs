@@ -174,6 +174,16 @@ pub fn sample_document() -> Document {
             ),
             (Label::from("material"), Value::from(material)),
             (Label::from("style"), Value::from(style)),
+            // A number by the tagged-blob convention: eight
+            // little-endian bytes under the string label "f64" — the
+            // f64 plugin's standing demo.
+            (
+                Label::from("pitch"),
+                Value::record([(
+                    Label::from("f64"),
+                    Value::from(2.5_f64.to_le_bytes().to_vec()),
+                )]),
+            ),
         ]),
     );
 
@@ -224,7 +234,15 @@ struct Cx<'a> {
     /// The value the hover refers to; its projections carry the faint
     /// hover variant of the secondary mark.
     secondary_hover: Option<Value>,
+    /// The plugin dispatch: text standing in for a value's record
+    /// form, asked per record and declined with `None`. Stands down
+    /// in Raw, which shows structure as stored.
+    plugin: PluginText<'a>,
 }
+
+/// The plugin dispatch's shape: text standing in for a value, or a
+/// decline.
+pub type PluginText<'a> = Option<&'a dyn Fn(&Value) -> Option<String>>;
 
 /// A reported click on a string's text, in text-local coordinates.
 /// The shell's selection transition consumes it to seed or advance
@@ -1944,6 +1962,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     tcx: &mut TextCtx,
     styles: &RawStyles,
     width: f64,
+    plugin: PluginText,
     hooks: Hooks<C>,
 ) -> Node<P> {
     let cx = Cx {
@@ -1954,6 +1973,7 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         styles,
         selection,
         hover,
+        plugin,
         // The graph view's selected cell is a secondary here too:
         // its projections are the same value — and the graph view's
         // HOVERED cell is a hover secondary the same way.
@@ -2773,7 +2793,20 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         // user-defined projections.
         Value::Atom(Atom::Cell(cell)) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks),
         Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, avail, hooks),
-        Value::Record(fields) => record_view(cx, tcx, path, ancestors, fields, avail, hooks),
+        // A plugin may stand text in for a record's form — the value
+        // selects whole, its structure one Raw toggle away.
+        Value::Record(fields) => match (!cx.raw)
+            .then(|| cx.plugin.and_then(|plugin| plugin(value)))
+            .flatten()
+        {
+            Some(stand_in) => select_target(
+                path.to_vec(),
+                value.clone(),
+                hooks,
+                text(tcx, &stand_in, &cx.styles.string),
+            ),
+            None => record_view(cx, tcx, path, ancestors, fields, avail, hooks),
+        },
     };
     // Other projections of the selected value carry the secondary
     // mark; the selected one has the primary highlight.
@@ -4576,6 +4609,7 @@ mod svg_bench {
             &mut tcx,
             &styles,
             width - 48.0,
+            None,
             hooks,
         );
         let elapsed = start.elapsed();

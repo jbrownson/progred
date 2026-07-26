@@ -1,8 +1,10 @@
 # Development Notes
 
 Read `MOTIVATION.md` for why this prototype exists, `docs/puri.md` for
-the UI runtime decision and plan, and `docs/model.md` for the data and
-editor model decisions.
+the UI runtime decision and plan, `docs/model.md` for the data and
+editor model decisions, and `docs/projections.md` for the projection
+plugin architecture (wasm hosting, the compile service, the planned
+Rust domain).
 
 ## Cargo Build Cache
 
