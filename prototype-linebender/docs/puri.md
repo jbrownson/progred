@@ -123,19 +123,36 @@ records). Clay or Taffy could implement the same interface later as
 adapters if some subtree earns declarative flex; neither is a
 dependency now.
 
-Scrolling (2026-07-05): the Haskell spike's document scroll threaded a
-Placement of layout rect plus clip rect through every widget so hit
-testing could respect clipping — the same retained-region wrongness
-the handler redesign removed. Here nothing threads: scrolled content
-places at an offset origin, and because every event rebuilds the
-frame, dispatch geometry follows automatically; content shifted
-outside the window cannot be hit because clicks cannot happen there. A
-future sub-window scroll panel gates its children by composing their
-captured handler behind a viewport-rect check and a coordinate shift —
-`capture` exists so containers do this as local policy, not threaded
-protocol. The shell owns the offset as ordinary app state; a scroll
-channel on the Handler lets widgets claim wheel events before the
-shell interprets the leftovers as document scroll.
+Scrolling (2026-07-05, revised 2026-07-29): the document scroll needs
+nothing threaded. Scrolled content places at an offset origin, and
+because every event rebuilds the frame, dispatch geometry follows
+automatically; content shifted outside the window cannot be hit
+because clicks cannot happen there. The shell owns the offset as
+ordinary app state; a scroll channel on the Handler lets widgets
+claim wheel events before the shell interprets the leftovers as
+document scroll.
+
+Nested viewports are the case that does need it, and the settled
+answer (2026-07-29) is that a placement carries both the widget's
+full layout rectangle and the portion still visible through ancestor
+clips. Widgets hit-test against the effective clip, draw against it,
+and may skip rendering entirely when nothing survives it; drag motion
+and release stay unbounded so a gesture begun inside a viewport
+finishes outside it. Containers still gate children as local policy —
+`capture` and the `around` combinator are how — but the geometry a
+child needs to answer honestly is an input, not something it can
+reconstruct.
+
+The first revision rejected this, reading the Haskell spike's
+threaded Placement as "the same retained-region wrongness the handler
+redesign removed." That conflated two different things. A retained
+region registry stores geometry ACROSS frames and attaches identity
+and dispatch policy to it; an effective clip is ephemeral geometry
+for one placement, retained by nobody, naming nothing, and leaving
+every widget free to use another hit shape or ignore the pointer
+entirely. Rejecting the registry was right; rejecting the geometry
+was not. The Roc implementation carries the clip rectangle in its
+placement throughout and shows the two are independent.
 
 ## Stack
 

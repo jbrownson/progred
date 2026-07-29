@@ -65,6 +65,12 @@ Replace the claim that Puri simply "deletes the second stack" with this layered
 account. Preserve the Rust/Linebender-specific implementation discussion after
 it.
 
+First on the list deliberately, despite blocking no code. Communicating the
+state-management-independent thesis is one of the main deliverables of this
+work, and the current Rust prose overcommits to the one-state consumer — it
+reads as though Puri prescribes that arrangement rather than merely being
+usable with it.
+
 ## 2. Add continuation-shaped `around` placement
 
 Roclay's foundational combinator receives a settled placement and a
@@ -88,6 +94,11 @@ explicit fields of the placement context.
 
 Derive `before` and `after` from `around`. Reconsider the name `decorate` once
 both orders exist.
+
+Do not add a `map_handler` helper alongside it. Roc added exactly that
+(`map_handle`) and deleted it one commit later; capturing the child handler
+inside `around` and constructing the desired wrapper directly is more direct
+than a combinator that transforms a handler in place.
 
 ## 3. Make effective clipping part of placement
 
@@ -114,6 +125,17 @@ This becomes necessary with nested viewports:
 Design this with `around` and the scroll widget. The current
 `scroll::place_scrolled` clips ink but cannot generally communicate the
 ancestor clip to descendant interaction.
+
+This is also `Handler::on_scroll`'s first real consumer. The channel has no
+Puri registrations today and `dispatch_scroll` always falls through to the
+shell's graph and document scrolling, which makes it look unused. Preserve it.
+
+`docs/puri.md` currently records the opposite decision, calling a threaded
+clip rectangle "the same retained-region wrongness the handler redesign
+removed." That reasoning conflated a retained registry — geometry stored
+across frames with identity and policy attached — with ephemeral per-pass
+geometry. Reversing it is signed off; update `puri.md` alongside this work so
+the two documents do not contradict each other.
 
 ## 4. Replace synthetic hover dispatch with explicit pass data
 
@@ -161,6 +183,17 @@ Do not force focus and editor availability into one enum. A handler built while
 focused may correctly find that the editor state no longer exists and decline;
 the current `Option<EditCtx>` represents that stale-frame window intentionally.
 
+The line this split follows, which item 6 also depends on:
+
+- the per-frame DESCRIPTION carries immutable presentation inputs plus the
+  accessor that connects dispatch to application facilities; while
+- `EditCtx` carries what is borrowed mutably during dispatch — editor state,
+  the Parley contexts, and any capability the edit needs while running.
+
+So a capability is named by the description and materializes inside `EditCtx`
+when a dispatch actually runs. It is neither durable `LineEditState` nor
+something Puri reaches for on its own.
+
 ## 6. Make clipboard access a supplied capability
 
 `puri::edit` constructs `clipboard_rs::ClipboardContext` directly, while the
@@ -173,6 +206,11 @@ Put text clipboard access on `EditCtx` or a small injected trait:
 - editing tests can use an in-memory clipboard;
 - the application chooses platform policy; and
 - Progred can share one system pasteboard implementation.
+
+Follow item 5's boundary: the description names the clipboard accessor, and the
+capability materializes as part of `EditCtx` for the dispatch that uses it.
+That resolves the apparent choice between "description input" and "`EditCtx`
+member" — it is both, at different moments.
 
 Do not port Roc's explicit `state -> { state, text }` plumbing. That is a
 language workaround, not part of the design.
@@ -208,6 +246,14 @@ ordered collection of entries and transitions; Puri may handle:
 The helper draws nothing, stores nothing, and infers no order from the layout or
 handler tree. More complex applications remain free to use nested focus zones
 or another focus model entirely.
+
+The inference ban has a history worth keeping. Roc's `Handler` originally
+carried focus traversal inside the monoid — first, last, next, previous, and
+whether the subtree held focus, combining as handlers composed — which yields a
+Tab order derived from the placement tree for free. It was deleted. A derived
+order is the identity argument from `MOTIVATION.md` in another costume:
+presentation refactoring that changes nothing a user can see would silently
+change traversal behavior.
 
 ## 9. Make time an input
 
