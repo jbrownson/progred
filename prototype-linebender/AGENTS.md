@@ -38,9 +38,13 @@ EOF
 ## Puri Rules
 
 - Widgets are pure functions (persistent widget state, props) → (draw calls, handlers). Puri holds nothing between frames, mints no identity, retains no hierarchy.
+- Durable widget helper state contains only caller-owned content and cross-frame interaction data. Font, paint, affixes, focus, placeholder, and similar presentation inputs belong to the current description and are captured by its transient handlers.
+- Platform services are caller-supplied capabilities materialized in dispatch context; Puri must not construct global clipboard, clock, or window services itself.
 - Focus is an input: the app owns who has focus and tab order; helpers are pure and advisory. The focused text widget emits an IME caret rect as output.
 - No framework caches. If profiling demands one, it is a caller-threaded memo table for a pure function (text shaping first, most likely), never hidden state.
 - Layout is the baseline box algebra plus Wadler-style grouping; no general layout engine. Keep measurement and placement separate in the placement interface.
+- Every placement callback receives an explicit `Placement`: the node's full `rect` and the effective enclosing `clip_rect` (the intersection of ancestor axis-aligned layout clips, not pre-intersected with the node). Ordinary children inherit it unchanged; an actual clipping container intersects its bounds into it. Never thread clipping as mutable context. Hover and gesture starts must be inside both rects; motion and release for an active gesture stay unbounded. Canvas clips remain a separate, arbitrary-shape drawing concern.
+- Use `around` when a wrapper must control whether or when its subtree places; its owned `PlaceInner` continuation removes lifetime coupling to the placement context. Derive ordinary leading/trailing work with `before` and `after` rather than adding special wrapper combinators.
 - Masonry is a quarry, not a foundation: vendor high-value files (text input first) with attribution and purify in place; rewrite trivial widgets; never inherit its tree, pods, or ctx protocol.
 - Extend Puri only as Progred needs it.
 

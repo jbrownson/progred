@@ -157,11 +157,11 @@ fn layout_node<P: Canvas>(layout: Layout<Brush>, include_trailing_whitespace: bo
         ascent: baseline,
         descent: layout.height() as f64 - baseline,
     };
-    leaf(extent, move |canvas: &mut P, at: Point| {
+    leaf(extent, move |canvas: &mut P, placement| {
         draw_layout(
             canvas,
             &layout,
-            Affine::translate((at.x, at.y - baseline)),
+            Affine::translate((placement.rect.x0, placement.rect.y0)),
         );
     })
 }
@@ -254,7 +254,13 @@ mod tests {
         let r = row(4.0, vec![text(&mut ctx, "big", &big), text(&mut ctx, "small", &small)]);
 
         let mut recording = DrawList::new();
-        place(r, &mut recording, Point::new(0.0, 100.0));
+        let rect = kurbo::Rect::new(
+            0.0,
+            100.0 - r.extent.ascent,
+            r.extent.width,
+            100.0 + r.extent.descent,
+        );
+        place(r, &mut recording, crate::layout::Placement::root(rect));
 
         let baselines: Vec<f64> = recording
             .0

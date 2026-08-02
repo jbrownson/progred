@@ -7,6 +7,7 @@
 
 use crate::conventions::Names;
 use crate::filter;
+use crate::hover::HasHover;
 use crate::sources::Sources;
 use im::OrdMap;
 use progred_graph::{
@@ -14,9 +15,13 @@ use progred_graph::{
 };
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
-use puri::edit::{EditCtx, EditStyle, LineEditState, text_edit};
+use puri::edit::{
+    EditCtx, EditStyle, LineEditDescription, LineEditPointerDown, LineEditPresentation,
+    LineEditState, text_edit,
+};
 use puri::handler::HasHandler;
-use puri::layout::{Extent, HAlign, Node, col, decorate, leaf, min_width, pad, row};
+use puri::interact::on_primary_pointer_down;
+use puri::layout::{Extent, HAlign, Node, Placement, before, col, decorate, leaf, min_width, pad, row};
 use parley::layout::Layout;
 use puri::text::{TextCtx, TextStyle, caret_index, line_layout, text};
 use std::collections::{HashMap, HashSet};
@@ -28,8 +33,6 @@ use vello::peniko::{Brush, Color};
 
 /// Shared with the mounted editors so edited atoms keep their colors.
 const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
-const NAME_COLOR: [f32; 4] = [0.13, 0.14, 0.16, 1.0];
-const QUERY_COLOR: [f32; 4] = [0.46, 0.49, 0.55, 1.0];
 
 pub struct RawStyles {
     pub label: TextStyle,
@@ -253,6 +256,7 @@ pub struct TextClick {
     pub point: Point,
     pub shift: bool,
     pub count: u8,
+    pub presentation: LineEditPresentation,
 }
 
 /// Dispatch-time callbacks the shell injects: what selecting a path
@@ -275,19 +279,10 @@ pub struct Hooks<C> {
     /// label stage); false when nothing is pending, so the click
     /// falls through to selection.
     pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    /// The pointer's resting claim, reported by every claim the move
-    /// crosses in dispatch order — innermost first, so the shell
-    /// keeps the FIRST report per move and resolves it against the
-    /// current hover with [`resolve_hover`].
-    pub hover: HoverHook<C>,
     /// Open a pending sibling after the element at `path` — the flat
     /// list separator's click.
     pub insert: Rc<dyn Fn(&mut C, Path)>,
 }
-
-/// The hover hook's shape, shared by every claim site: the report,
-/// and the pointer position it was made at.
-pub type HoverHook<C> = Rc<dyn Fn(&mut C, HoverClaim, Point)>;
 
 /// The platform command modifier, for pointer gestures.
 pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
@@ -448,11 +443,9 @@ impl Selection {
                 Some((Step::Name, parent)) => sources
                     .resolve(parent)
                     .and_then(Value::as_cell)
-                    .map(|cell| line_edit(sources.name(cell).unwrap_or(""), NAME_COLOR)),
+                    .map(|cell| line_edit(sources.name(cell).unwrap_or(""))),
                 _ => sources.resolve(&path).and_then(|value| {
-                    value
-                        .as_str()
-                        .map(|s| line_edit(s, STRING_COLOR).with_affixes("\"", "\""))
+                    value.as_str().map(line_edit)
                 }),
             })
             .flatten();
@@ -494,8 +487,12 @@ impl Selection {
 // trial read as dangerous), and a mounting click's caret placement
 // overrides it (`select`, `rename`). The one exception is a LEFTWARD
 // keyboard landing, which seeds the start (`selected_by_arrow`).
-fn line_edit(text: &str, color: [f32; 4]) -> LineEditState {
-    LineEditState::new(text, 14.0, Brush::from(Color::new(color))).with_cursor_at_end()
+fn line_edit(text: &str) -> LineEditState {
+    LineEditState::new(text).with_cursor_at_end()
+}
+
+fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
+    LineEditPresentation::new(style.size, style.brush.clone())
 }
 
 /// The selection an arrow step lands on: the caret seeds the side the
@@ -621,7 +618,7 @@ pub fn selection_after_delete(descends: &[Descend], path: &[Step]) -> Path {
 pub fn pending_value(path: Path) -> Selection {
     Selection::Pending {
         path,
-        query: line_edit("", QUERY_COLOR),
+        query: line_edit(""),
         choice: 0,
     }
 }
@@ -649,7 +646,7 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
     writable_at(sources, &parent).then_some(())?;
     Some(Selection::PendingEdge {
         parent,
-        query: line_edit("", QUERY_COLOR),
+        query: line_edit(""),
         choice: 0,
         replacing: None,
     })
@@ -674,7 +671,7 @@ pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
     };
     Some(Selection::PendingEdge {
         parent: parent.to_vec(),
-        query: line_edit(&seed, QUERY_COLOR),
+        query: line_edit(&seed),
         choice: 0,
         replacing: Some(key.clone()),
     })
@@ -1495,9 +1492,9 @@ pub trait HasDescends {
 
 /// What the pointer rests on: the claim a plain click at that point
 /// would fire. Values preview their selection; labels, toggles, and
-/// popup entries light their own ink. State like the selection —
-/// written by move dispatch through [`Hooks::hover`], read by the
-/// next pass.
+/// popup entries light their own ink. Placement derives it from the
+/// current pointer input and settled geometry; only gap hysteresis
+/// needs the prior answer.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hover {
     /// A click here selects the value at this path.
@@ -1525,14 +1522,14 @@ pub struct Hovering {
     pub rect: Rect,
 }
 
-/// One pointer report from a move dispatch: what the claim under the
-/// pointer means for the hover state.
+/// One placement report for the current pointer input: what the
+/// claim under it means for the hover state.
 #[derive(Clone, Debug, PartialEq)]
 pub enum HoverClaim {
     /// The pointer names this claim outright; `None` is an occluder
     /// naming nothing.
     Direct(Option<Hovering>),
-    /// Unclaimed air, anywhere on the plane — the shell's backstop
+    /// Unclaimed air, anywhere on the plane — the resolver's backstop
     /// for every pixel no claim took. Within a little gap's reach of
     /// the current hover's footprint it HOLDS — crossing a separator
     /// or the leading between rows never flickers — and beyond that
@@ -1665,7 +1662,8 @@ fn delim_leaf<P: Canvas>(
             width: style.bow(delim) + 2.0 * bearing,
             ..extent
         },
-        move |p: &mut P, at| {
+        move |p: &mut P, placement| {
+            let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
             p.fill(
                 path.clone(),
                 brush.clone(),
@@ -1709,7 +1707,7 @@ fn tall_delim<P: Canvas>(styles: &RawStyles, delim: Delim, open: bool, content: 
 /// their ink selects it (command-picks it) — and they grow with the
 /// content, so a tall value gets tall delimiters instead of a
 /// floating closer.
-fn bracketed<C: 'static, P: Canvas + HasHandler<C>>(
+fn bracketed<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     delim: Delim,
     path: &[Step],
@@ -1773,13 +1771,8 @@ fn placeholder_box<P: Canvas>(tcx: &mut TextCtx, styles: &RawStyles) -> Node<P> 
     };
     let scale = styles.scale;
     let brush = styles.dim.brush.clone();
-    leaf(extent, move |p: &mut P, at| {
-        let rect = Rect::new(
-            at.x,
-            at.y - extent.ascent,
-            at.x + extent.width,
-            at.y + extent.descent,
-        );
+    leaf(extent, move |p: &mut P, placement| {
+        let rect = placement.rect;
         p.stroke(
             highlight_rect(scale, rect),
             Stroke::new(scale),
@@ -1801,48 +1794,37 @@ fn highlight_rect(scale: f64, rect: Rect) -> RoundedRect {
     RoundedRect::from_rect(rect.inset(2.0 * scale), 4.0 * scale)
 }
 
-/// Report `claim` for any move inside `rect`. Never consumes the
-/// move: every containing claim reports in dispatch order —
-/// innermost first — and the shell keeps the first, so the event
-/// still reaches drag handlers and outer claims.
-fn hover_report<C: 'static, P: Canvas + HasHandler<C>>(
-    p: &mut P,
-    rect: Rect,
-    hover: HoverHook<C>,
-    claim: HoverClaim,
-) {
-    p.handler().on_pointer_move(move |ctx, update| {
-        let point = Point::new(update.current.position.x, update.current.position.y);
-        if rect.contains(point) {
-            hover(ctx, claim.clone(), point);
-        }
-        false
-    });
+/// Emit `claim` when this settled rect contains the frame's pointer
+/// input. Placement order is precedence: descendants and overlays
+/// report later and replace earlier hits in the pass's hover resolver.
+fn hover_report<P: HasHover<HoverClaim>>(p: &mut P, placement: Placement, claim: HoverClaim) {
+    if p.pointer().is_some_and(|point| placement.contains(point)) {
+        p.claim_hover(match claim {
+            HoverClaim::Direct(Some(mut hovering)) => {
+                hovering.rect = placement.visible_rect();
+                HoverClaim::Direct(Some(hovering))
+            }
+            claim => claim,
+        });
+    }
 }
 
 /// The pointer names `key` outright, with this ink as its footprint.
-fn hover_claim<C: 'static, P: Canvas + HasHandler<C>>(
-    p: &mut P,
-    rect: Rect,
-    hover: HoverHook<C>,
-    key: Hover,
-) {
+fn hover_claim<P: HasHover<HoverClaim>>(p: &mut P, placement: Placement, key: Hover) {
     hover_report(
         p,
-        rect,
-        hover,
-        HoverClaim::Direct(Some(Hovering { hover: key, rect })),
+        placement,
+        HoverClaim::Direct(Some(Hovering {
+            hover: key,
+            rect: placement.rect,
+        })),
     );
 }
 
 /// An occluder: takes the pointer and names nothing, so targets
 /// beneath an overlay never light.
-fn hover_block<C: 'static, P: Canvas + HasHandler<C>>(
-    p: &mut P,
-    rect: Rect,
-    hover: HoverHook<C>,
-) {
-    hover_report(p, rect, hover, HoverClaim::Direct(None));
+fn hover_block<P: HasHover<HoverClaim>>(p: &mut P, placement: Placement) {
+    hover_report(p, placement, HoverClaim::Direct(None));
 }
 
 /// The pointer's preview of a click's meaning: the same box the
@@ -1879,7 +1861,7 @@ fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
 /// itself for keyboard navigation. Views whose boxes span structural
 /// whitespace use [`descend_landmark`] plus explicit content claims
 /// instead.
-fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends>(
     cx: &Cx,
     path: Path,
     value: Option<Value>,
@@ -1891,21 +1873,24 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     let hovered = cx.hovered_value(&path);
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
-    let hover = hooks.hover.clone();
-    decorate(child, move |p, rect| {
+    before(child, move |p, placement| {
+        let rect = placement.rect;
         if selected {
             primary_highlight(scale, p, rect);
         } else if hovered {
             hover_highlight(scale, p, rect);
         }
-        hover_claim(p, rect, hover.clone(), Hover::Value(path.clone()));
+        hover_claim(p, placement, Hover::Value(path.clone()));
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
         let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                ))
                 && {
                     let picked = command(&event.state.modifiers)
                         && value
@@ -1943,30 +1928,46 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
     }
 }
 
-// The explicit-state boundary: everything a pass reads arrives here.
-// `width` is the space the projection may fill: layout is a function
-// of it — containers render flat where their flat form fits the
-// width remaining at their position and break otherwise, decided
-// greedily from the root down (each choice is one local fit test;
-// nothing global, nothing that jumps).
-#[allow(clippy::too_many_arguments)]
-pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
-    sources: &Sources,
-    selection: Option<&Selection>,
-    graph_node: Option<&Value>,
-    hover: Option<&Hover>,
-    hover_node: Option<&Value>,
-    collapse: &Collapse,
-    names: &Names,
-    raw: bool,
+/// The explicit-state boundary: everything a projection pass reads.
+/// `width` is the space the projection may fill; containers choose
+/// flat or broken forms greedily from the root down.
+pub struct ProjectDescription<'a> {
+    pub sources: Sources<'a>,
+    pub selection: Option<&'a Selection>,
+    pub graph_node: Option<&'a Value>,
+    pub hover: Option<&'a Hover>,
+    pub hover_node: Option<&'a Value>,
+    pub collapse: &'a Collapse,
+    pub names: &'a Names,
+    pub raw: bool,
+    pub styles: &'a RawStyles,
+    pub width: f64,
+    pub plugin: PluginText<'a>,
+}
+
+pub fn project<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    description: ProjectDescription<'_>,
     tcx: &mut TextCtx,
-    styles: &RawStyles,
-    width: f64,
-    plugin: PluginText,
     hooks: Hooks<C>,
 ) -> Node<P> {
+    let ProjectDescription {
+        sources,
+        selection,
+        graph_node,
+        hover,
+        hover_node,
+        collapse,
+        names,
+        raw,
+        styles,
+        width,
+        plugin,
+    } = description;
     let cx = Cx {
-        sources: *sources,
+        sources,
         names,
         raw,
         collapse,
@@ -1977,9 +1978,9 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         // The graph view's selected cell is a secondary here too:
         // its projections are the same value — and the graph view's
         // HOVERED cell is a hover secondary the same way.
-        secondary: secondary_of(sources, selection).or_else(|| graph_node.cloned()),
+        secondary: secondary_of(&sources, selection).or_else(|| graph_node.cloned()),
         secondary_hover: hover
-            .and_then(|hover| hover_value(sources, names, raw, selection, hover))
+            .and_then(|hover| hover_value(&sources, names, raw, selection, hover))
             .or_else(|| hover_node.cloned()),
     };
     // The Raw view derives from the one bit: names answer None and
@@ -2014,7 +2015,10 @@ pub fn project<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// opens one more turn, as deep as you care to follow. The parens
 /// and the head claim cell-selection; gaps between claims fall
 /// through.
-fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn cell_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
@@ -2116,7 +2120,11 @@ fn cell_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// rows — so clicks on structural whitespace (gutters, inter-row
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
-fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>) -> Node<P> {
+fn descend_landmark<P: Canvas + HasDescends>(
+    cx: &Cx,
+    path: Path,
+    child: Node<P>,
+) -> Node<P> {
     let selected = cx.selected(&path);
     let hovered = cx.hovered_value(&path);
     let scale = cx.styles.scale;
@@ -2147,7 +2155,10 @@ fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>
 /// click always sees the engaged successor. Cold, the head stays
 /// keyboard-reachable (and markable, when named), just not a pointer
 /// target.
-fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn head_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
@@ -2166,12 +2177,14 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         Some(name) => text(tcx, name, &cx.styles.name),
         None => text(tcx, &short, &cx.styles.id),
     };
+    let presentation = edit_presentation(&cx.styles.name);
     // While the name buffer is empty, the short id ghosts in place —
     // the field keeps its width and shows what an empty name falls
     // back to.
     let content = atom_content(
         editing,
         fallback,
+        presentation.clone(),
         Some((&short, &cx.styles.id)),
         tcx,
         cx.styles,
@@ -2182,7 +2195,13 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let mark = name.as_ref().map(|name| Value::from(name.as_str()));
     let target = mark.clone().unwrap_or_else(|| Value::from(cell));
     if cx.selected(path) || cx.selected(&edge) {
-        let content = cursor_target(edge.clone(), target.clone(), hooks, content);
+        let content = cursor_target(
+            edge.clone(),
+            target.clone(),
+            presentation,
+            hooks,
+            content,
+        );
         let content = match &mark {
             Some(value) if !cx.selected(&edge) => secondary_mark(cx, value, content),
             _ => content,
@@ -2214,7 +2233,10 @@ fn head_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// room — which is where the lisp-flavored broken-beside form
 /// survives, and the overflow answer when nothing fits anywhere.
 #[allow(clippy::too_many_arguments)]
-fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn field_row<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     parent: &[Step],
@@ -2300,7 +2322,10 @@ fn field_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// The label-query row of a new field being authored on a record. The
 /// authoring locus carries the primary itself; its parent is
 /// deliberately unmarked.
-fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn pending_edge_row<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
@@ -2319,15 +2344,17 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
             placeholder(cx, tcx, None, false, hooks),
         ],
     );
-    let hover = hooks.hover.clone();
-    decorate(pending_row, move |p: &mut P, rect| {
+    before(pending_row, move |p: &mut P, placement| {
         // The row owns its clicks: nothing here means "select the
         // parent", so nothing may fall through to it. (The query's
         // caret target, registered after, still wins inside itself.)
-        hover_block(p, rect, hover.clone());
+        hover_block(p, placement);
         p.handler().on_pointer_down(move |_, event| {
             event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                ))
         });
     })
 }
@@ -2342,7 +2369,10 @@ fn pending_edge_row<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPop
 /// their own and no cycle through them — only linked cells can
 /// recurse; a cell holding one wraps this same view in its stretched
 /// parens.
-fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn list_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
@@ -2402,7 +2432,6 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let mut flat = (avail > 0.0 || bare).then(|| {
         let mut cells: Vec<Node<P>> = vec![hover_target(
             path.to_vec(),
-            hooks,
             flat_delim(cx.styles, Delim::Bracket, true),
         )];
         for (index, (position, value)) in items.iter().enumerate() {
@@ -2429,7 +2458,6 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         }
         cells.push(hover_target(
             path.to_vec(),
-            hooks,
             flat_delim(cx.styles, Delim::Bracket, false),
         ));
         row(0.0, cells)
@@ -2491,7 +2519,10 @@ fn list_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// one line reads as that literal; anything else takes the block
 /// form, the drawn braces spanning the field rows as a column. A
 /// cell holding one wraps this same view in its stretched parens.
-fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn record_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
@@ -2556,7 +2587,6 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
     let mut flat = (avail > 0.0 || bare).then(|| {
         let mut cells: Vec<Node<P>> = vec![hover_target(
             path.to_vec(),
-            hooks,
             flat_delim(cx.styles, Delim::Brace, true),
         )];
         for (index, (key, value)) in items.iter().enumerate() {
@@ -2587,7 +2617,6 @@ fn record_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
         }
         cells.push(hover_target(
             path.to_vec(),
-            hooks,
             flat_delim(cx.styles, Delim::Brace, false),
         ));
         row(0.0, cells)
@@ -2679,7 +2708,7 @@ fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Label) -> Node<P> {
 
 /// A cold field label; writable, its one click re-opens it as the
 /// seeded rename, the caret hit-tested against this very layout.
-fn field_label<C: 'static, P: Canvas + HasHandler<C>>(
+fn field_label<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     tcx: &mut TextCtx,
     parent: &[Step],
@@ -2707,7 +2736,12 @@ fn field_label<C: 'static, P: Canvas + HasHandler<C>>(
 /// cell at the path's last Follow, so a cell inside a list carries
 /// its list's owner as context. Wraps outside the descend so the
 /// cell's own selection highlight draws over its ground.
-fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) -> Node<P> {
+fn ground<P: Canvas>(
+    cx: &Cx,
+    path: &[Step],
+    value: &Value,
+    content: Node<P>,
+) -> Node<P> {
     let Some(cell) = value.as_cell() else {
         return content;
     };
@@ -2735,7 +2769,11 @@ fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) ->
 /// projection of the selected value — an expanded block, a collapsed
 /// handle, or a label. The primary selection's geometry at lower
 /// strength, so the two read as one family.
-fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P> {
+fn secondary_mark<P: Canvas>(
+    cx: &Cx,
+    value: &Value,
+    content: Node<P>,
+) -> Node<P> {
     let strong = cx.secondary.as_ref() == Some(value);
     let faint = !strong && cx.secondary_hover.as_ref() == Some(value);
     if !strong && !faint {
@@ -2757,7 +2795,10 @@ fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P
 }
 
 
-fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn value_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
@@ -2778,8 +2819,18 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
             // click on the literal reports a caret position — a quote
             // click lands it at the nearest end.
             let fallback = text(tcx, &format!("\"{s}\""), &cx.styles.string);
-            let content = atom_content(editing, fallback, None, tcx, cx.styles, hooks);
-            cursor_target(path.to_vec(), value.clone(), hooks, content)
+            let presentation =
+                edit_presentation(&cx.styles.string).with_affixes("\"", "\"");
+            let content = atom_content(
+                editing,
+                fallback,
+                presentation.clone(),
+                None,
+                tcx,
+                cx.styles,
+                hooks,
+            );
+            cursor_target(path.to_vec(), value.clone(), presentation, hooks, content)
         }
         Value::Atom(Atom::Blob(bytes)) => select_target(
             path.to_vec(),
@@ -2827,7 +2878,10 @@ fn value_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// ordinary descend so it highlights, clicks, and navigates like the
 /// value it may become. Engaged, its placement emits the completion
 /// popup for the shell to draw over the body.
-fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn pending_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: Path,
@@ -2856,7 +2910,10 @@ fn pending_view<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// widget in two states and the transition between them is pure
 /// chrome. The caller owns identity (descend, highlight, clicks);
 /// `labels` picks the slot's role.
-fn placeholder<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn placeholder<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     engaged: Option<(&LineEditState, usize)>,
@@ -2873,7 +2930,10 @@ fn placeholder<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// placement for the shell to draw over the body. Serves both pending
 /// stages — a value and a new field's label (`labels` narrows the
 /// offers there).
-fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn query_content<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
@@ -2883,7 +2943,16 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
 ) -> Node<P> {
     let entries = completion_entries(&cx.sources, cx.names, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
-    let content = atom_content(Some(query), fallback, None, tcx, cx.styles, hooks);
+    let presentation = edit_presentation(&cx.styles.label);
+    let content = atom_content(
+        Some(query),
+        fallback,
+        presentation.clone(),
+        None,
+        tcx,
+        cx.styles,
+        hooks,
+    );
     // The FRAME holds the slot's width as a minimum — the text field
     // stays content-sized (a blank query is a bare caret), and the
     // frame around it is what never shrinks to a sliver. Framed
@@ -2891,9 +2960,9 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
     // span it; the air around it is the caller's [`slot_insets`].
     let content = min_width(slot_width(cx.styles), content);
     let edit = hooks.edit.clone();
-    let hover = hooks.hover.clone();
     let scale = cx.styles.scale;
-    decorate(content, move |p: &mut P, rect| {
+    before(content, move |p: &mut P, placement| {
+        let rect = placement.rect;
         *p.popup() = Some(Popup {
             anchor: rect,
             entries,
@@ -2902,22 +2971,28 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
         // Clicks in the query place the caret, straight through the
         // edit hook — the selection transition is never involved, so
         // clicking what you are typing can't discard it.
-        hover_block(p, rect, hover.clone());
+        hover_block(p, placement);
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                ))
                 && edit(ctx).is_some_and(|edit| {
                     edit.state.pointer_down(
+                        &presentation,
                         edit.fonts,
                         edit.layouts,
                         scale as f32,
-                        Point::new(
-                            event.state.position.x - rect.x0,
-                            event.state.position.y - rect.y0,
-                        ),
-                        event.state.modifiers.shift(),
-                        event.state.count.max(1),
+                        LineEditPointerDown {
+                            point: Point::new(
+                                event.state.position.x - rect.x0,
+                                event.state.position.y - rect.y0,
+                            ),
+                            shift: event.state.modifiers.shift(),
+                            count: event.state.count.max(1),
+                        },
                     );
                     true
                 })
@@ -2930,12 +3005,11 @@ fn query_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>
 /// The shell places it after the body, so it overlays and its
 /// handlers win: clicking a row commits it, and the card swallows
 /// every other click so nothing lands on content underneath.
-pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
+pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     tcx: &mut TextCtx,
     styles: &RawStyles,
     popup: &Popup,
     hovered: Option<usize>,
-    hover: HoverHook<C>,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
 ) -> Node<P> {
     let scale = styles.scale;
@@ -2995,8 +3069,8 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
             let lit = hovered == Some(index) && !chosen;
             let action = popup.entries[index].action.clone();
             let commit = commit.clone();
-            let hover = hover.clone();
-            decorate(content, move |p: &mut P, rect| {
+            before(content, move |p: &mut P, placement| {
+                let rect = placement.rect;
                 if chosen {
                     p.fill(
                         RoundedRect::from_rect(rect, 4.0 * scale),
@@ -3010,10 +3084,10 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
                         Affine::IDENTITY,
                     );
                 }
-                hover_claim(p, rect, hover.clone(), Hover::Entry(index));
+                hover_claim(p, placement, Hover::Entry(index));
                 p.handler().on_pointer_down(move |ctx, event| {
                     event.button == Some(PointerButton::Primary)
-                        && rect.contains(Point::new(
+                        && placement.contains(Point::new(
                             event.state.position.x,
                             event.state.position.y,
                         ))
@@ -3029,7 +3103,8 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
         Insets::uniform(4.0 * scale),
         col(HAlign::Start, 0, 2.0 * scale, rows),
     );
-    decorate(card, move |p: &mut P, rect| {
+    before(card, move |p: &mut P, placement| {
+        let rect = placement.rect;
         let shape = RoundedRect::from_rect(rect, 6.0 * scale);
         p.fill(shape, Color::new([1.0, 1.0, 1.0, 1.0]), Affine::IDENTITY);
         p.stroke(
@@ -3038,9 +3113,12 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C>>(
             Color::new([0.75, 0.77, 0.81, 1.0]),
             Affine::IDENTITY,
         );
-        hover_block(p, rect, hover.clone());
+        hover_block(p, placement);
         p.handler().on_pointer_down(move |_, event| {
-            rect.contains(Point::new(event.state.position.x, event.state.position.y))
+            placement.contains(Point::new(
+                event.state.position.x,
+                event.state.position.y,
+            ))
         });
     })
 }
@@ -3078,9 +3156,13 @@ fn highlighted<P: Canvas>(
 /// An editable atom's content: the selection's focused editor when
 /// this atom is being edited — with `placeholder` as its ghost while
 /// empty — its static text otherwise.
-fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+fn atom_content<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends,
+>(
     editing: Option<&LineEditState>,
     fallback: Node<P>,
+    presentation: LineEditPresentation,
     placeholder: Option<(&str, &TextStyle)>,
     tcx: &mut TextCtx,
     styles: &RawStyles,
@@ -3089,7 +3171,17 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
     match editing {
         Some(line) => {
             let edit_ctx = hooks.edit.clone();
-            text_edit(line, true, &styles.edit, placeholder, tcx, move |c| edit_ctx(c))
+            text_edit(
+                LineEditDescription {
+                    state: line,
+                    focused: true,
+                    presentation,
+                    style: &styles.edit,
+                    placeholder,
+                },
+                tcx,
+                move |c| edit_ctx(c),
+            )
         }
         None => fallback,
     }
@@ -3098,7 +3190,7 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 /// A click that reports a collapse toggle for `path` without
 /// selecting — [`disclosure`]'s click on arbitrary content, the
 /// collapsed forms' way back open.
-fn toggle_target<C: 'static, P: Canvas + HasHandler<C>>(
+fn toggle_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     path: Path,
     hooks: &Hooks<C>,
@@ -3107,22 +3199,17 @@ fn toggle_target<C: 'static, P: Canvas + HasHandler<C>>(
     let scale = cx.styles.scale;
     let hovered = matches!(cx.hover, Some(Hover::Toggle(hovered)) if hovered.as_slice() == path.as_slice());
     let toggle = hooks.toggle.clone();
-    let hover = hooks.hover.clone();
-    decorate(content, move |p, rect| {
+    let target = path.clone();
+    let content = before(content, move |p, placement| {
+        let rect = placement.rect;
         if hovered {
             hover_highlight(scale, p, rect);
         }
-        hover_claim(p, rect, hover.clone(), Hover::Toggle(path.clone()));
-        let toggle = toggle.clone();
-        let target = path.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    toggle(ctx, target.clone());
-                    true
-                }
-        });
+        hover_claim(p, placement, Hover::Toggle(path.clone()));
+    });
+    on_primary_pointer_down(content, |_| true, move |ctx, _| {
+        toggle(ctx, target.clone());
+        true
     })
 }
 
@@ -3130,7 +3217,7 @@ fn toggle_target<C: 'static, P: Canvas + HasHandler<C>>(
 /// the elements it separates — after the element at `path`. Only
 /// offered where the insert could commit, [`pending_beside`]'s
 /// affordance-lie rule.
-fn insert_target<C: 'static, P: Canvas + HasHandler<C>>(
+fn insert_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     path: Path,
     hooks: &Hooks<C>,
@@ -3139,44 +3226,34 @@ fn insert_target<C: 'static, P: Canvas + HasHandler<C>>(
     let scale = cx.styles.scale;
     let hovered = matches!(cx.hover, Some(Hover::Insert(hovered)) if hovered.as_slice() == path.as_slice());
     let insert = hooks.insert.clone();
-    let hover = hooks.hover.clone();
-    decorate(content, move |p, rect| {
+    let target = path.clone();
+    let content = before(content, move |p, placement| {
+        let rect = placement.rect;
         if hovered {
             hover_highlight(scale, p, rect);
         }
-        hover_claim(p, rect, hover.clone(), Hover::Insert(path.clone()));
-        let insert = insert.clone();
-        let target = path.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    insert(ctx, target.clone());
-                    true
-                }
-        });
+        hover_claim(p, placement, Hover::Insert(path.clone()));
+    });
+    on_primary_pointer_down(content, |_| true, move |ctx, _| {
+        insert(ctx, target.clone());
+        true
     })
 }
 
 /// A command-click pick target with no plain-click behavior — for
 /// parts like a pending row's label, whose plain click deliberately
 /// falls through.
-fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
+fn pick_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     key: Label,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
     let pick = hooks.pick.clone();
-    decorate(content, move |p, rect| {
-        let pick = pick.clone();
-        let key = key.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
-                && command(&event.state.modifiers)
-                && pick(ctx, Value::Atom(Atom::from(key.clone())))
-        });
-    })
+    on_primary_pointer_down(
+        content,
+        |event| command(&event.state.modifiers),
+        move |ctx, _| pick(ctx, Value::Atom(Atom::from(key.clone()))),
+    )
 }
 
 /// The label stage engaged — a rename's re-opened label or a new
@@ -3185,7 +3262,10 @@ fn pick_target<C: 'static, P: Canvas + HasHandler<C>>(
 /// the ring spans the QUERY frame alone, the way a value pending's
 /// does. Clicks inside belong to the query's own caret target;
 /// clicks beside fall through like any pending's.
-fn label_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
+fn label_query<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
@@ -3207,7 +3287,7 @@ fn label_query<C: 'static, P: Canvas + HasHandler<C> + HasDescends + HasPopup>(
 /// value's own ink, which claims the same path. Command-clicks
 /// decline so the head's pick still wins; read-only labels never
 /// register and keep the head's select.
-fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
+fn rename_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     path: Path,
     layout: Layout<Brush>,
@@ -3217,18 +3297,21 @@ fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
     let scale = cx.styles.scale;
     let hovered = matches!(cx.hover, Some(Hover::Label(hovered)) if hovered.as_slice() == path.as_slice());
     let rename = hooks.rename.clone();
-    let hover = hooks.hover.clone();
-    decorate(content, move |p, rect| {
+    before(content, move |p, placement| {
+        let rect = placement.rect;
         if hovered {
             hover_highlight(scale, p, rect);
         }
-        hover_claim(p, rect, hover.clone(), Hover::Label(path.clone()));
+        hover_claim(p, placement, Hover::Label(path.clone()));
         let rename = rename.clone();
         let target = path.clone();
         let layout = layout.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                ))
                 && !command(&event.state.modifiers)
                 && {
                     let index = caret_index(
@@ -3249,27 +3332,22 @@ fn rename_target<C: 'static, P: Canvas + HasHandler<C>>(
 /// and the cell star that select without carrying an editor click.
 /// With the command modifier and a pending open, picks `value` — the
 /// identity the part displays — into it instead.
-fn select_target<C: 'static, P: Canvas + HasHandler<C>>(
+fn select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     path: Path,
     value: Value,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
-    let claimed = hover_target(path.clone(), hooks, content);
+    let claimed = hover_target(path.clone(), content);
     quiet_select_target(path, value, hooks, claimed)
 }
 
 /// Name the value at `path` for the pointer over this ink, adding no
 /// click of its own — the hover half of [`select_target`], and the
 /// flat literal's delimiter dress.
-fn hover_target<C: 'static, P: Canvas + HasHandler<C>>(
-    path: Path,
-    hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
-    let hover = hooks.hover.clone();
-    decorate(content, move |p, rect| {
-        hover_claim(p, rect, hover.clone(), Hover::Value(path.clone()));
+fn hover_target<P: Canvas + HasHover<HoverClaim>>(path: Path, content: Node<P>) -> Node<P> {
+    before(content, move |p, placement| {
+        hover_claim(p, placement, Hover::Value(path.clone()));
     })
 }
 
@@ -3277,7 +3355,7 @@ fn hover_target<C: 'static, P: Canvas + HasHandler<C>>(
 /// one-line literal, whose interior air belongs to the landmark's
 /// hold and whose delimiter ink names the container through
 /// [`hover_target`].
-fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C>>(
+fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     path: Path,
     value: Value,
     hooks: &Hooks<C>,
@@ -3285,14 +3363,17 @@ fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C>>(
 ) -> Node<P> {
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
-    decorate(content, move |p, rect| {
+    before(content, move |p, placement| {
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
         let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                ))
                 && {
                     let picked = command(&event.state.modifiers)
                         && pick(ctx, value.clone());
@@ -3310,22 +3391,29 @@ fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C>>(
 /// transition decides what it means. One report serves the first
 /// click and every one after. With the command modifier and a pending
 /// open, picks the atom's value into it instead.
-fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
+fn cursor_target<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends,
+>(
     path: Path,
     value: Value,
+    presentation: LineEditPresentation,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
-    let hover = hooks.hover.clone();
-    decorate(content, move |p, rect| {
-        hover_claim(p, rect, hover.clone(), Hover::Value(path.clone()));
+    before(content, move |p, placement| {
+        let rect = placement.rect;
+        hover_claim(p, placement, Hover::Value(path.clone()));
         let pick = pick.clone();
         let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                && placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                ))
                 && {
                     if command(&event.state.modifiers) && pick(ctx, value.clone()) {
                         return true;
@@ -3337,6 +3425,7 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
                         ),
                         shift: event.state.modifiers.shift(),
                         count: event.state.count.max(1),
+                        presentation: presentation.clone(),
                     };
                     select(ctx, path.clone(), Some(click));
                     true
@@ -3349,6 +3438,16 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasDescends>(
 mod tests {
     use super::*;
     use ui_events::keyboard::{KeyState, Modifiers};
+
+    struct EmptyClipboard;
+
+    impl puri::edit::TextClipboard for EmptyClipboard {
+        fn get_text(&mut self) -> Option<String> {
+            None
+        }
+
+        fn set_text(&mut self, _: &str) {}
+    }
 
     fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
         Sources { doc, library }
@@ -4098,7 +4197,7 @@ mod tests {
         let names = Names::table();
         let pending = |text: &str| Selection::Pending {
             path: Vec::new(),
-            query: line_edit(text, QUERY_COLOR),
+            query: line_edit(text),
             choice: 0,
         };
         // A quoted query leads with its atom, so entry zero IS the
@@ -4182,18 +4281,32 @@ mod tests {
             ..Default::default()
         };
         let tags = vec![key("shape"), Step::Follow, key("tags")];
+        let presentation = edit_presentation(&styles.label);
+        let mut clipboard = EmptyClipboard;
         // A click at the label's left edge prepends, where an
         // unclicked mount appends...
         let mut pending = pending_rename(&sources, &tags).unwrap();
         let edit = pending.edit_mut().unwrap();
         edit.cursor_to(caret_index(&layout, Point::ZERO));
-        edit.handle_key(&mut fonts, &mut layouts, &z);
+        edit.handle_key(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            &mut clipboard,
+            &z,
+        );
         assert_eq!(edit.text(), "z\"tags\"");
         // ...and one past the right edge still appends.
         let mut pending = pending_rename(&sources, &tags).unwrap();
         let edit = pending.edit_mut().unwrap();
         edit.cursor_to(caret_index(&layout, Point::new(10_000.0, 7.0)));
-        edit.handle_key(&mut fonts, &mut layouts, &z);
+        edit.handle_key(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            &mut clipboard,
+            &z,
+        );
         assert_eq!(edit.text(), "\"tags\"z");
     }
 
@@ -4383,9 +4496,6 @@ mod svg_bench {
     use std::fmt::Write as _;
     use vello::kurbo::{BezPath, Shape as KurboShape};
 
-    /// The dispatch context for bench frames: every hover report the
-    /// move crossed, in claim order — the first is the winner the
-    /// shell would resolve.
     type Claims = Vec<HoverClaim>;
 
     struct Bench {
@@ -4393,6 +4503,8 @@ mod svg_bench {
         handler: Handler<Claims>,
         descends: Vec<Descend>,
         popup: Option<Popup>,
+        pointer: Option<Point>,
+        hover_claims: Vec<HoverClaim>,
     }
 
     impl Canvas for Bench {
@@ -4437,6 +4549,16 @@ mod svg_bench {
     impl HasPopup for Bench {
         fn popup(&mut self) -> &mut Option<Popup> {
             &mut self.popup
+        }
+    }
+
+    impl HasHover<HoverClaim> for Bench {
+        fn pointer(&self) -> Option<Point> {
+            self.pointer
+        }
+
+        fn claim_hover(&mut self, claim: HoverClaim) {
+            self.hover_claims.push(claim);
         }
     }
 
@@ -4564,7 +4686,22 @@ mod svg_bench {
         }
     }
 
-    fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
+    fn place_with_pointer(
+        doc: &Document,
+        selection: Option<&Selection>,
+        width: f64,
+        pointer: Option<Point>,
+    ) -> (Bench, Extent) {
+        place_with_inputs(doc, selection, width, pointer, None)
+    }
+
+    fn place_with_inputs(
+        doc: &Document,
+        selection: Option<&Selection>,
+        width: f64,
+        pointer: Option<Point>,
+        viewport: Option<Rect>,
+    ) -> (Bench, Extent) {
         let library = crate::conventions::library();
         let sources = Sources {
             doc,
@@ -4588,7 +4725,6 @@ mod svg_bench {
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
-            hover: Rc::new(|claims: &mut Claims, claim, _| claims.push(claim)),
             insert: Rc::new(|_, _| {}),
         };
         // Timed as the layout perf canary: a projection is a
@@ -4598,18 +4734,20 @@ mod svg_bench {
         // bench runs; single-digit milliseconds is healthy.
         let start = std::time::Instant::now();
         let node = project::<Claims, Bench>(
-            &sources,
-            selection,
-            None,
-            None,
-            None,
-            &collapse,
-            &names,
-            false,
+            ProjectDescription {
+                sources,
+                selection,
+                graph_node: None,
+                hover: None,
+                hover_node: None,
+                collapse: &collapse,
+                names: &names,
+                raw: false,
+                styles: &styles,
+                width: width - 48.0,
+                plugin: None,
+            },
             &mut tcx,
-            &styles,
-            width - 48.0,
-            None,
             hooks,
         );
         let elapsed = start.elapsed();
@@ -4620,9 +4758,23 @@ mod svg_bench {
             handler: Handler::default(),
             descends: Vec::new(),
             popup: None,
+            pointer,
+            hover_claims: Vec::new(),
         };
-        puri::layout::place_top_left(node, &mut bench, Point::new(24.0, 24.0));
+        let rect = node.extent.rect_at(Point::new(24.0, 24.0));
+        puri::layout::place(
+            node,
+            &mut bench,
+            match viewport {
+                Some(clip_rect) => Placement::new(rect, clip_rect),
+                None => Placement::root(rect),
+            },
+        );
         (bench, extent)
+    }
+
+    fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
+        place_with_pointer(doc, selection, width, None)
     }
 
     fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &str) {
@@ -4792,24 +4944,8 @@ mod svg_bench {
         );
     }
 
-    fn move_at(point: Point) -> ui_events::pointer::PointerUpdate {
-        let mut state = ui_events::pointer::PointerState::default();
-        state.position.x = point.x;
-        state.position.y = point.y;
-        ui_events::pointer::PointerUpdate {
-            pointer: ui_events::pointer::PointerInfo {
-                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: ui_events::pointer::PointerType::Mouse,
-            },
-            current: state,
-            coalesced: Vec::new(),
-            predicted: Vec::new(),
-        }
-    }
-
     #[test]
-    fn moves_claim_the_hover_innermost_first() {
+    fn placement_claims_the_hover_innermost_last() {
         let doc = sample_document();
         let (bench, _) = place(&doc, None, 560.0);
         let library = crate::conventions::library();
@@ -4817,9 +4953,10 @@ mod svg_bench {
             doc: &doc,
             library: &library,
         };
-        // Over a string leaf every containing claim reports, but the
-        // innermost reports FIRST — the string itself, not its
-        // containers — and the first report is what the shell keeps.
+        // Over a string leaf every containing claim reports in
+        // placement order. The innermost reports last — the string
+        // itself, not its containers — and replaces the earlier
+        // candidates in the real pass resolver.
         let string = bench
             .descends
             .iter()
@@ -4829,23 +4966,35 @@ mod svg_bench {
                     .is_some_and(|value| value.as_str().is_some())
             })
             .expect("the sample has a string leaf");
-        let mut claims = Claims::new();
-        bench
-            .handler
-            .dispatch_pointer_move(&mut claims, &move_at(string.rect.center()));
+        let string_rect = string.rect;
+        let string_path = string.path.clone();
+        let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(string_rect.center()));
         assert!(matches!(
-            claims.first(),
+            bench.hover_claims.last(),
             Some(HoverClaim::Direct(Some(Hovering {
                 hover: Hover::Value(path),
                 ..
-            }))) if *path == string.path
+            }))) if *path == string_path
         ));
-        // Off every claim, nothing reports at all — the shell clears.
-        let mut claims = Claims::new();
-        bench
-            .handler
-            .dispatch_pointer_move(&mut claims, &move_at(Point::new(-10.0, -10.0)));
-        assert!(claims.is_empty());
+        let (bench, _) =
+            place_with_pointer(&doc, None, 560.0, Some(Point::new(-10.0, -10.0)));
+        assert!(bench.hover_claims.is_empty());
+
+        let center = string_rect.center();
+        let clipped = place_with_inputs(
+            &doc,
+            None,
+            560.0,
+            Some(center),
+            Some(Rect::new(
+                string_rect.x0,
+                string_rect.y0,
+                center.x - 1.0,
+                string_rect.y1,
+            )),
+        )
+        .0;
+        assert!(clipped.hover_claims.is_empty());
     }
 
     /// Two flat elements and two block rows, deterministically: the
@@ -4903,10 +5052,9 @@ mod svg_bench {
             (first.rect.x1 + second.rect.x0) / 2.0,
             first.rect.center().y,
         );
-        let mut claims = Claims::new();
-        bench.handler.dispatch_pointer_move(&mut claims, &move_at(mid));
+        let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(mid));
         assert!(matches!(
-            claims.first(),
+            bench.hover_claims.last(),
             Some(HoverClaim::Direct(Some(Hovering {
                 hover: Hover::Insert(path),
                 ..
@@ -4924,12 +5072,13 @@ mod svg_bench {
         // Between the rows nothing claims: the gap is air, and air is
         // the SHELL's backstop — hold-or-clear by reach, never the
         // container outright.
-        let mut claims = Claims::new();
-        bench.handler.dispatch_pointer_move(
-            &mut claims,
-            &move_at(Point::new(upper.rect.center().x, gap_y)),
+        let (air, _) = place_with_pointer(
+            &doc,
+            None,
+            560.0,
+            Some(Point::new(upper.rect.center().x, gap_y)),
         );
-        assert!(claims.is_empty());
+        assert!(air.hover_claims.is_empty());
         // Just inside the bracket's absorbed gap, the bracket claims
         // the container outright — the widened handle.
         let styles = RawStyles::new(1.0);
@@ -4938,16 +5087,17 @@ mod svg_bench {
             .iter()
             .find(|descend| descend.path == parent)
             .expect("the list has a landmark");
-        let mut claims = Claims::new();
-        bench.handler.dispatch_pointer_move(
-            &mut claims,
-            &move_at(Point::new(
+        let (claimed, _) = place_with_pointer(
+            &doc,
+            None,
+            560.0,
+            Some(Point::new(
                 list.rect.x0 + delim_advance(&styles, Delim::Bracket) + 1.0,
                 gap_y,
             )),
         );
         assert!(matches!(
-            claims.first(),
+            claimed.hover_claims.last(),
             Some(HoverClaim::Direct(Some(Hovering {
                 hover: Hover::Value(path),
                 ..
@@ -4957,16 +5107,6 @@ mod svg_bench {
 
     #[test]
     fn popup_rows_claim_their_entries_and_the_card_occludes() {
-        let mut fonts = parley::FontContext::new();
-        let mut layouts = parley::LayoutContext::new();
-        let mut cache = puri::text::TextCache::default();
-        let mut tcx = TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            scale: 1.0,
-            cache: &mut cache,
-        };
-        let styles = RawStyles::new(1.0);
         let popup = Popup {
             anchor: Rect::new(0.0, 0.0, 10.0, 10.0),
             entries: vec![
@@ -4987,39 +5127,46 @@ mod svg_bench {
             ],
             choice: 0,
         };
-        let card = popup_view::<Claims, Bench>(
-            &mut tcx,
-            &styles,
-            &popup,
-            None,
-            Rc::new(|claims: &mut Claims, claim, _| claims.push(claim)),
-            |_, _| {},
-        );
-        let (width, height) = (card.extent.width, card.extent.height());
-        let mut bench = Bench {
-            list: DrawList::new(),
-            handler: Handler::default(),
-            descends: Vec::new(),
-            popup: None,
+        let place_card = |pointer| {
+            let mut fonts = parley::FontContext::new();
+            let mut layouts = parley::LayoutContext::new();
+            let mut cache = puri::text::TextCache::default();
+            let mut tcx = TextCtx {
+                fonts: &mut fonts,
+                layouts: &mut layouts,
+                scale: 1.0,
+                cache: &mut cache,
+            };
+            let card = popup_view::<Claims, Bench>(
+                &mut tcx,
+                &RawStyles::new(1.0),
+                &popup,
+                None,
+                |_, _| {},
+            );
+            let extent = card.extent;
+            let mut bench = Bench {
+                list: DrawList::new(),
+                handler: Handler::default(),
+                descends: Vec::new(),
+                popup: None,
+                pointer: Some(pointer),
+                hover_claims: Vec::new(),
+            };
+            puri::layout::place_top_left(card, &mut bench, Point::ZERO);
+            (bench, extent)
         };
-        puri::layout::place_top_left(card, &mut bench, Point::ZERO);
         // The card's own padding claims-and-clears: an overlay's
         // pointer never falls through to what sits beneath it.
-        let mut claims = Claims::new();
-        bench
-            .handler
-            .dispatch_pointer_move(&mut claims, &move_at(Point::new(1.0, 1.0)));
-        assert_eq!(claims.first(), Some(&HoverClaim::Direct(None)));
+        let (padding, extent) = place_card(Point::new(1.0, 1.0));
+        assert_eq!(padding.hover_claims.last(), Some(&HoverClaim::Direct(None)));
         // Scanning down the card crosses both rows, each claiming its
         // index — an address into the live entries, never a snapshot.
-        let winners: Vec<Hover> = (0..height as usize)
+        let winners: Vec<Hover> = (0..extent.height() as usize)
             .filter_map(|y| {
-                let mut claims = Claims::new();
-                bench.handler.dispatch_pointer_move(
-                    &mut claims,
-                    &move_at(Point::new(width / 2.0, y as f64 + 0.5)),
-                );
-                match claims.into_iter().next() {
+                let (bench, _) =
+                    place_card(Point::new(extent.width / 2.0, y as f64 + 0.5));
+                match bench.hover_claims.into_iter().last() {
                     Some(HoverClaim::Direct(Some(hovering))) => Some(hovering.hover),
                     _ => None,
                 }
@@ -5061,7 +5208,7 @@ mod svg_bench {
             &empty,
             Some(&Selection::Pending {
                 path: Vec::new(),
-                query: line_edit("\"asdf\"", QUERY_COLOR),
+                query: line_edit("\"asdf\""),
                 choice: 0,
             }),
             320.0,
@@ -5144,7 +5291,7 @@ mod svg_bench {
         };
         let typing = Selection::PendingEdge {
             parent,
-            query: line_edit("na", QUERY_COLOR),
+            query: line_edit("na"),
             choice: 0,
             replacing,
         };

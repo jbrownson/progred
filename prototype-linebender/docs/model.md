@@ -675,6 +675,22 @@ shows as orders of magnitude): a projection is a per-keystroke
 cost and narrow widths are where accidental exponentials surfaced
 twice.
 
+SCROLLING FOLLOW-UP (2026-08-01, Roc back-port): the deferred
+viewport evaluation landed without scroll bars or a retained region
+registry. Every placement callback now receives the node's full `rect` plus
+the effective enclosing `clip_rect`. Ordinary children inherit that clip
+unchanged; the scroll entry intersects its viewport into the clip, clips ink,
+derives the shifted child's placement from its own, captures the child's
+transient handler, and bounds pointer-down and nested scroll
+starts while leaving motion and release free to finish outside. Its
+own document scroll action and the graph camera now register on
+`Handler::on_scroll`; visual placement order supplies precedence and
+the shell fallback is gone. `layout::around` carries an owned one-shot
+`PlaceInner` underneath `before` and `after`, available
+for later containers that need to capture or discard child outputs.
+Fully clipped descendants still place because hover resolution, navigation,
+and handler construction are not drawing and cannot be culled blindly.
+
 Post-audit settlements (2026-07-21, user): EMPTY CONTAINERS have
 one form — `{}` and `[]` take the literal whatever the width says;
 a block of zero rows is not a representation (an active label
@@ -795,6 +811,17 @@ COARSENESS: leading whitespace in content lets a word-delete's
 boundary reach through it into the prefix, and the bite declines
 WHOLE — a swallowed no-op where trimming was arguable (parley owns
 the range; the decline is the contract).
+
+LINE-EDIT FOLLOW-UP (2026-08-01, Roc back-port): the affix behavior
+above stays, but its custody changes. `LineEditState` now contains
+only text, selection, IME preedit, and active drag state. Font size,
+brush, prefix/suffix, focus, placeholder, and chrome arrive in the
+ephemeral `LineEditDescription`; transient handlers capture that
+presentation, so restyling does not remount the editor or reset its
+caret. Text clipboard access likewise arrives through `EditCtx` as a
+caller-supplied capability. Puri no longer depends on clipboard-rs;
+the shell owns the system adapter alongside its structural clipboard
+policy, and pure edit tests use memory.
 
 Popup rounds, same day (2026-07-21): AN EMPTY QUERY BOLDS NOTHING —
 the filter's empty needle accepted everything with full-span
@@ -1062,8 +1089,9 @@ is passed as `Dispatch.line` (14·scale) rather than derived;
 Alt+Down as skip-subtree skim if walking big open blocks ever
 feels slow.
 
-HOVER IS STATE WITH THE SELECTION'S LIFECYCLE (2026-07-22, same
-day; the design went through three shapes in one conversation).
+HOVER IS DERIVED FROM POINTER AND SETTLED GEOMETRY (2026-07-22, same
+day; the design went through three shapes in one conversation and
+a fourth after the Roc port).
 Bringing the UI alive: whatever a plain click would do, the
 pointer resting there previews it. First shape SHIPPED then
 REJECTED: a `HoverRegion` mirror of every claim, hit-tested at
@@ -1192,7 +1220,22 @@ the state honestly becomes unknown: pointer and hover clear until
 the next move. Residue, stated: while the pointer rests in AIR,
 the hold still tests the held footprint's stored rect — ink
 re-claims fresh at every refresh, air does not — a wrongness
-bounded by the 8px reach.
+bounded by the 8px reach. FOURTH SHAPE (2026-08-01, back-ported
+from the Roc review) supersedes the dispatch mutation and synthetic
+replay while preserving that policy. Pointer position is explicit
+frame input; placement folds the topmost hit through an internal resolver,
+with later placement winning for descendants and overlays; and a silent
+pass resolves hover before the visible pass. The result is not a frame output
+or application-model field. `App.hover` is only the ephemeral handoff to the
+visible pass plus the prior footprint required by air hysteresis and pressed
+gesture freezing. Unpressed pointer motion
+therefore remints even when no handler consumes it. A genuine
+decline leaves application context untouched and may keep its frame
+only when frame inputs are unchanged. Pressed gestures still freeze
+their starting hover. The only durable part of hover computation is
+the 8px air hysteresis, resolved against the prior footprint. The SVG
+tests now inspect placement claims directly rather than dispatching
+synthetic or real moves.
 
 THE GID NOTATION (2026-07-22, evening; docs/gid.md is the
 spec). The domains conversation ran the whole arc — language
@@ -2504,8 +2547,11 @@ zoom-dependent dead zone that read as drag latency. The graph's
 animation is also what exposed the shell's per-event pass rebuilding
 dispatch handlers from state newer than the pixels — quick grabs on
 a hot graph missed their node — settled by dispatching into the last
-rendered frame's handler (see puri.md), which also deleted the pass
-per pointer move. Selection storage (second pass, 2026-07-07): ONE
+rendered frame's handler (see puri.md), which also deleted the
+indiscriminate pass per event. Hover later made unpressed pointer
+position an explicit frame input, so those moves deliberately remint
+against the presented model. Selection storage (second pass,
+2026-07-07): ONE
 Model-level slot — `Selected::Tree | Selected::Graph` — replaced the
 two per-pane fields after a review caught undo/redo restoring a tree
 selection without clearing the graph's, breaking the exclusivity both

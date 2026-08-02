@@ -13,6 +13,7 @@
 //! state, draw it, register handlers over it.
 
 use crate::conventions::Names;
+use crate::hover::HasHover;
 use crate::raw::{Document, Selection, command, short_id};
 use crate::sources::Sources;
 use parley::style::GenericFamily;
@@ -465,13 +466,11 @@ pub struct Hooks<C> {
     /// (world point, window point, panel pixels per world unit).
     pub drag_to: Rc<dyn Fn(&mut C, Point, Point, f64) -> bool>,
     pub release: Rc<dyn Fn(&mut C) -> bool>,
+    /// (scroll delta, panel pixels from center, display scale).
+    pub scroll: Rc<dyn Fn(&mut C, &ui_events::ScrollDelta, Vec2, f64)>,
     /// Command-click: commit the pointed-at cell into the open
     /// pending; false when nothing is pending.
     pub pick: Rc<dyn Fn(&mut C, Value) -> bool>,
-    /// The pointer's resting claim inside the panel: the node under
-    /// it, or `None` for the pane's own ground — either way the pane
-    /// takes the pointer, so the tree beneath never lights.
-    pub hover: Rc<dyn Fn(&mut C, Option<GraphNode>)>,
 }
 
 const FONT_SIZE: f32 = 10.0;
@@ -620,12 +619,19 @@ fn arrowhead(tip: Point, direction: Vec2, px: f64) -> BezPath {
     path
 }
 
+fn hit_node(hits: &[(Rect, GraphNode)], point: Point) -> Option<(Rect, GraphNode)> {
+    hits.iter()
+        .rev()
+        .find(|(rect, _)| rect.contains(point))
+        .copied()
+}
+
 /// One pure pass: geometry from state, drawing, handlers. The pane
 /// reports presses/drags/releases through hooks; the shell owns every
 /// transition. `doc_selection` mirrors the document selection in as a
 /// secondary mark; `selection` is the graph's own.
 #[allow(clippy::too_many_arguments)]
-pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
+pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>(
     sources: &Sources,
     view: &GraphView,
     selection: Option<&GraphSelection>,
@@ -782,15 +788,15 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
     let press_background = hooks.press_background.clone();
     let drag_to = hooks.drag_to.clone();
     let release = hooks.release.clone();
+    let scroll = hooks.scroll.clone();
     let pick = hooks.pick.clone();
-    let hover_hook = hooks.hover.clone();
     let extent = Extent {
         width: panel.width(),
         ascent: 0.0,
         descent: panel.height(),
     };
-    leaf(extent, move |p: &mut P, at: Point| {
-        let panel = Rect::new(at.x, at.y, at.x + extent.width, at.y + extent.descent);
+    leaf(extent, move |p: &mut P, placement| {
+        let panel = placement.rect;
         // Everything the viewport shows stays inside the panel.
         p.clip(panel, Affine::IDENTITY, |p| {
             p.fill(panel, Color::new(PANEL_BG), Affine::IDENTITY);
@@ -855,48 +861,39 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         let from_panel = move |window: Point| {
             (((window - panel.center()) / px) - pan).to_point()
         };
-        // Moves inside the panel report the node under the pointer —
-        // or the pane's own ground — and never consume the event, so
-        // the drag handler registered after still sees every move.
-        let hover = hover_hook.clone();
-        let hover_hits = node_hits.clone();
-        p.handler().on_pointer_move(move |ctx, update| {
-            let point = Point::new(update.current.position.x, update.current.position.y);
-            if panel.contains(point) {
-                hover(
-                    ctx,
-                    hover_hits
-                        .iter()
-                        .find(|(rect, _)| rect.contains(point))
-                        .map(|(_, id)| *id),
-                );
-            }
-            false
-        });
+        // The panel is an occluding hover claim even over its ground,
+        // so the tree beneath never lights. The drag handlers remain
+        // ordinary event dispatch below.
+        if let Some(point) = p
+            .pointer()
+            .filter(|point| placement.contains(*point))
+        {
+            p.claim_hover(hit_node(&node_hits, point).map(|(_, id)| id));
+        }
         let press_node = press_node.clone();
         let press_background = press_background.clone();
         let pick = pick.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             let point = Point::new(event.state.position.x, event.state.position.y);
-            event.button == Some(PointerButton::Primary) && panel.contains(point) && {
-                if let Some((rect, id)) =
-                    node_hits.iter().find(|(rect, _)| rect.contains(point))
-                {
-                    let picked = command(&event.state.modifiers)
-                        && match id {
-                            GraphNode::Cell(cell) => pick(ctx, Value::from(*cell)),
-                            GraphNode::Root => false,
-                        };
-                    if !picked {
-                        let world = from_panel(point);
-                        let node_world = from_panel(rect.center());
-                        press_node(ctx, *id, world - node_world, point);
+            event.button == Some(PointerButton::Primary)
+                && placement.contains(point)
+                && {
+                    if let Some((rect, id)) = hit_node(&node_hits, point) {
+                        let picked = command(&event.state.modifiers)
+                            && match id {
+                                GraphNode::Cell(cell) => pick(ctx, Value::from(cell)),
+                                GraphNode::Root => false,
+                            };
+                        if !picked {
+                            let world = from_panel(point);
+                            let node_world = from_panel(rect.center());
+                            press_node(ctx, id, world - node_world, point);
+                        }
+                    } else {
+                        press_background(ctx, point);
                     }
-                } else {
-                    press_background(ctx, point);
+                    true
                 }
-                true
-            }
         });
         let drag_to = drag_to.clone();
         p.handler().on_pointer_move(move |ctx, update| {
@@ -906,6 +903,14 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C>>(
         });
         let release = release.clone();
         p.handler().on_pointer_up(move |ctx, _| release(ctx));
+        let scroll = scroll.clone();
+        p.handler().on_scroll(move |ctx, update| {
+            let point = Point::new(update.state.position.x, update.state.position.y);
+            placement.contains(point) && {
+                scroll(ctx, &update.delta, point - panel.center(), scale);
+                true
+            }
+        });
     })
 }
 
@@ -1071,5 +1076,18 @@ mod tests {
 
         view.press_background(Point::ZERO);
         assert!(matches!(view.release(), Some(Release::ClickBackground)));
+    }
+
+    #[test]
+    fn hit_testing_prefers_the_last_drawn_node() {
+        let first = GraphNode::Cell(new_cell_id());
+        let last = GraphNode::Cell(new_cell_id());
+        let hits = [
+            (Rect::new(0.0, 0.0, 20.0, 20.0), first),
+            (Rect::new(10.0, 10.0, 30.0, 30.0), last),
+        ];
+        assert_eq!(hit_node(&hits, Point::new(15.0, 15.0)), Some(hits[1]));
+        assert_eq!(hit_node(&hits, Point::new(5.0, 5.0)), Some(hits[0]));
+        assert_eq!(hit_node(&hits, Point::new(40.0, 40.0)), None);
     }
 }

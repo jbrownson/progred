@@ -24,27 +24,32 @@ produced the old focus bug class.
 
 ## What Puri Is
 
-A pure widget library: rendering and behavior, nothing else.
+A pure widget library: rendering and behavior, below the choice of state
+management.
 
-- A widget is a pure function from (persistent widget state, props) to
-  (draw calls, handlers).
+- A widget is an ephemeral description constructed from current inputs.
+  Placement consumes that description with settled geometry and produces
+  drawing, a transient handler, and any other outputs the application asks
+  its placement context to collect.
 - State a widget must keep across frames — cursor/selection, scroll
   offset, drag state, focus — is defined by Puri as types and passed in
   by the caller. Puri holds nothing between frames.
-- Each pass yields two outputs: the draw calls and a `Handler`. The
+- Each pass yields drawing and placement outputs including a `Handler`. The
   handler is a pure function of the state the pass read, so it is
   SINGLE-SHOT with respect to mutation: the shell retains it, events
   dispatch into it, and the first handled (mutating) event spends it —
   the shell mints the successor from the mutated state immediately, in
   the event path, so no later event (even in the same gesture) ever
-  dispatches into a spent handler; unhandled events leave it standing,
-  and the redraw derives the pixels from the same state. Settled
-  2026-07-07 after visiting both wrong corners the same day: fresh
+  dispatches into a spent handler. A changed frame input also mints a
+  successor; only a genuinely declined event whose inputs remain unchanged
+  leaves the frame standing. The redraw derives the pixels from the same
+  state. This was settled 2026-07-07 after visiting both wrong corners
+  the same day: fresh
   pass per event dispatched against state NEWER than the pixels
   (a stepping simulation made quick clicks miss what they aimed at)
-  and cost a pass per hover move; retain-until-vsync let same-gesture
-  events dispatch into a handler whose state was gone (a deselect
-  followed by a drag-move panicked the editor hook). Residual windows
+  even when the event changed no frame input; retain-until-vsync let
+  same-gesture events dispatch into a handler whose state was gone (a
+  deselect followed by a drag-move panicked the editor hook). Residual windows
   where mutation happens outside dispatch (menu commands, pinch)
   remint only at the next redraw, so handlers must still decline on
   absent state rather than assume it — the editor hook returns Option
@@ -52,6 +57,19 @@ A pure widget library: rendering and behavior, nothing else.
   mutation happens in dispatch, preserving one-event-one-transition
   and avoiding read-after-write order dependence within a pass.
   Handlers remain shell custody, never puri's.
+- Pointer position is ordinary frame input. Settled placement folds the
+  topmost hit into an internal hover resolver; the current hover is derived
+  from that geometry, the pointer, pressed state, and the prior air-hysteresis
+  footprint. It is not a frame output or part of the application model.
+  Unpressed motion therefore mints a silent resolve pass and a visible pass
+  when hover changes. That silent pass also mints
+  the next dispatch; hover is presentation-only, so changing it does not earn
+  another silent projection. Geometry-changing redraws (resize, zoom, and the
+  animating graph) resolve silently before drawing. Earlier hover callbacks
+  mutated the application while declining an event, then synthetic motion replay tried
+  to repair stale hover after other mints. Explicit pass data restores the
+  invariant that decline leaves dispatch context unchanged and makes the
+  first presented frame agree with current geometry.
 - A `Handler` holds one composed function per event kind (typed
   channels: pointer down, key — extended as widgets need). The monoid
   is function composition, mirroring how rendering works: `on_*` wraps
@@ -63,20 +81,33 @@ A pure widget library: rendering and behavior, nothing else.
   registrations into a value its parent composes — call, wrap with
   before/after, transform events, or drop. No action
   type or reducer is baked in; per-widget action vocabularies (the line
-  edit's) exist for testability without any global action enum.
-- Puri mints no identity and retains no hierarchy. The widget tree is a
-  function of the app model every frame; parent/child relationships are
-  never a parallel state that needs syncing.
+  edit's) exist for testability without any global action enum. Thin
+  `interact` wrappers factor the common placement-visible primary-down,
+  click-count, ordinary-click, and double-click policies while leaving
+  state transitions and decline with their callers.
+- Puri mints no identity and retains no hierarchy. A widget description
+  contains no provenance from prior evaluations; if its consumer needs
+  identity, that history belongs to the consumer.
 
 Deliberately out of scope: state management, reactivity, identity,
 layout engines, styling opinions, widget catalogs.
 
-The thesis: UI is hard because there are two stacks of state — the
-app's and the toolkit's — and React reconciliation, egui `Memory`, and
-focus-sync bugs are all costs of keeping them aligned. React makes the
-syncing cheaper; Puri deletes the second stack. Widget behavior then
-survives any state-management regime, so state management can be
-experimented with separately without rebuilding the text box each time.
+The thesis is layered rather than a prescription for one application state.
+Stable identity is history between evaluations, not a property of an output
+value. Reconciliation and retained identity stores are ways to supply that
+history; Puri neither requires nor forbids them. Its narrower contract is that
+widget rendering and behavior do not secretly custody another copy of the
+state. Progred chooses one explicit application/UI model because it is the
+simplest consumer. A retained tree, React-style reconciler, or incremental
+computation system can construct the same descriptions without rebuilding
+the text box.
+
+Placement continuations remove the smaller within-frame association problem:
+layout can settle a rectangle and immediately continue the description whose
+behavior belongs to it, without minting an ID and correlating detached output
+later. Puri is not optimized for making the smallest UI take the fewest lines;
+it makes the real state and composition surface explicit so synchronization
+complexity does not appear accidentally as the application grows.
 
 ## Contracts
 
@@ -123,25 +154,33 @@ records). Clay or Taffy could implement the same interface later as
 adapters if some subtree earns declarative flex; neither is a
 dependency now.
 
-Scrolling (2026-07-05, revised 2026-07-29): the document scroll needs
-nothing threaded. Scrolled content places at an offset origin, and
-because every event rebuilds the frame, dispatch geometry follows
-automatically; content shifted outside the window cannot be hit
-because clicks cannot happen there. The shell owns the offset as
-ordinary app state; a scroll channel on the Handler lets widgets
-claim wheel events before the shell interprets the leftovers as
-document scroll.
+Scrolling (2026-07-05, revised 2026-08-01): the shell owns the offset
+as ordinary app state. `place_scrolled` shifts the child inside a
+canvas clip, derives the shifted child's `clip_rect` from the explicit
+viewport placement, captures the child's transient handler, and installs it
+behind the viewport's own scroll action. Pointer-down and nested
+scroll starts are bounded by the viewport; pointer motion, release,
+keyboard, and IME remain available so a gesture or editor that began
+inside can finish outside. The graph camera registers on the same
+scroll channel after the document, so ordinary newest-first handler
+composition expresses their visual precedence without shell-level
+rectangle dispatch.
 
-Nested viewports are the case that does need it, and the settled
-answer (2026-07-29) is that a placement carries both the widget's
-full layout rectangle and the portion still visible through ancestor
-clips. Widgets hit-test against the effective clip, draw against it,
-and may skip rendering entirely when nothing survives it; drag motion
-and release stay unbounded so a gesture begun inside a viewport
-finishes outside it. Containers still gate children as local policy —
-`capture` and the `around` combinator are how — but the geometry a
-child needs to answer honestly is an input, not something it can
-reconstruct.
+Every leaf and wrapper receives a settled `Placement` carrying the widget's
+full `rect` and effective enclosing `clip_rect`: the intersection of ancestor
+axis-aligned layout clips, not pre-intersected with the widget. Ordinary child
+placements inherit it unchanged; only an actual clipping container intersects
+its bounds into the clip. Visibility is `rect.intersect(clip_rect)`, computed
+when needed, and hover and ordinary press policy require the point inside both.
+The clip is explicit placement data, not ambient mutable context.
+Canvas clipping remains the independent ink mechanism and may use
+arbitrary shapes; `Placement::clip_rect` neither describes nor replaces
+those shapes. A fully clipped subtree is still placed because it can
+still participate in hover resolution, navigation, and transient handler
+construction; culling is valid only for work known to be dispensable. `around` supplies the
+settled placement and an owned, one-shot `PlaceInner`; calling
+`place_inner.place(ctx)` realizes the wrapped subtree. `before`, `after`, and
+rectangle-only `decorate` are its common orderings.
 
 The first revision rejected this, reading the Haskell spike's
 threaded Placement as "the same retained-region wrongness the handler
@@ -185,8 +224,12 @@ placement throughout and shows the two are independent.
   tiny-skia has no text stack and recorded frames cover the regression
   need better.
 - Parley for text layout; its `PlainEditor` as the line-edit engine or
-  the reference for one. Editor state is a caller-owned value either
-  way: the contract is custody, not representation.
+  the reference for one. `LineEditState` retains only text and
+  interaction state; `LineEditDescription` supplies the current font,
+  paint, affixes, focus, placeholder, and chrome. Its handlers capture
+  that presentation while `EditCtx` supplies mutable state, Parley
+  contexts, and the application's `TextClipboard` capability at
+  dispatch. Puri therefore depends on no platform clipboard library.
 - AccessKit deferred. Identity is the caller's job, so accessibility
   IDs are too; Puri can emit accessibility content as placement output
   later.
@@ -309,9 +352,9 @@ the architecture's own oldest rule (the render pass is read-only; all
 mutation happens after), since mid-pass mutation reintroduces
 order-dependent behavior within a frame. The settled design: a
 transient Handler of composed dispatch functions, one per rendered
-frame, dispatched against until the next frame replaces it (2026-07-07;
-the interim rebuilt-per-event shape hit-tested against state the user
-had not seen and paid a pass per pointer move). Phase separation
+frame, dispatched against until a handled transition or changed frame
+input replaces it (2026-07-07; the interim rebuilt for every event and
+hit-tested against state the user had not seen). Phase separation
 unlike egui's fused model, and dispatch against the presented frame
 unlike egui's run-per-event freshness.
 Refined same day at the user's direction: the per-kind Vec channels

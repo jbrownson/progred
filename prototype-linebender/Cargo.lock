@@ -3160,7 +3160,6 @@ dependencies = [
 name = "puri"
 version = "0.1.0"
 dependencies = [
- "clipboard-rs",
  "kurbo",
  "parley",
  "peniko",

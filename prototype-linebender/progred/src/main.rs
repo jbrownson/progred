@@ -7,6 +7,7 @@ mod filter;
 mod sources;
 mod graph_view;
 mod history;
+mod hover;
 mod gid;
 mod plugins;
 mod raw;
@@ -21,15 +22,15 @@ use muda::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem,
 use parley::{FontContext, LayoutContext};
 use progred_graph::{Label, Step, Value};
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::edit::{EditCtx, LineEditState};
+use puri::edit::{EditCtx, LineEditPointerDown, LineEditState, TextClipboard};
 use puri::handler::{Handler, HasHandler, ImeEvent};
-use puri::layout::place_top_left;
+use puri::layout::{Placement, place};
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::{PointerButton, PointerEvent};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::kurbo::{Affine, Point, Size, Stroke, Vec2};
+use vello::kurbo::{Affine, Point, Rect, Size, Stroke, Vec2};
 use vello::peniko::{Brush, Color};
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
@@ -74,6 +75,22 @@ enum RenderState {
 /// text that merely spells Value JSON is never mistaken for a copy.
 const CLIPBOARD_FORMAT: &str = "com.progred.value";
 
+struct SystemTextClipboard;
+
+impl TextClipboard for SystemTextClipboard {
+    fn get_text(&mut self) -> Option<String> {
+        use clipboard_rs::{Clipboard, ClipboardContext};
+        ClipboardContext::new().ok().and_then(|cb| cb.get_text().ok())
+    }
+
+    fn set_text(&mut self, text: &str) {
+        use clipboard_rs::{Clipboard, ClipboardContext};
+        if let Ok(cb) = ClipboardContext::new() {
+            cb.set_text(text.to_string()).ok();
+        }
+    }
+}
+
 struct Dispatch {
     handler: Handler<App>,
     descends: Vec<raw::Descend>,
@@ -92,6 +109,7 @@ struct App {
     scene: Scene,
     font_cx: FontContext,
     layout_cx: LayoutContext<Brush>,
+    text_clipboard: SystemTextClipboard,
     text_cache: puri::text::TextCache,
     model: Model,
     /// Where the document lives; `None` is untitled until the first
@@ -114,18 +132,19 @@ struct App {
     menu_items: MenuItems,
     /// Last pointer position, for anchoring pinch zoom.
     cursor: Point,
-    /// Whether this move dispatch has its hover winner yet: claims
-    /// report innermost-first, and [`App::claim_hover`] keeps the
-    /// first. Reset before each move dispatch.
-    hover_claimed: bool,
-    /// The pointer position while it is inside the window — the
-    /// input [`App::refresh_hover`] replays at every mint, so the
-    /// hover re-answers against current layout instead of where
-    /// things were.
+    /// The pointer position while it is inside the window. It is an
+    /// input to placement's internal hover resolution.
     pointer: Option<Point>,
+    /// Derived from pointer input and settled geometry. Kept outside
+    /// the model for air hysteresis, pressed-gesture freezing, and the
+    /// event-to-redraw handoff.
+    hover: Option<Hovered>,
     /// A button is down: gestures keep the hover they began with, so
-    /// the refresh stands down until release.
+    /// hover resolution stands down until release.
     pressed: bool,
+    /// Whether settled geometry has resolved `hover` for the
+    /// next draw. Geometry-changing redraw sources clear it.
+    hover_is_current: bool,
     /// The selection identity last scrolled into view — path AND
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
@@ -316,6 +335,7 @@ impl ApplicationHandler<UserEvent> for App {
         } else if (*event.id() == self.menu_ids.graph || *event.id() == self.menu_ids.raw)
             && let RenderState::Active { window, .. } = &self.state
         {
+            self.hover_is_current = false;
             window.request_redraw();
         }
     }
@@ -394,6 +414,7 @@ impl ApplicationHandler<UserEvent> for App {
                 Vec2::ZERO
             };
             self.model.graph.zoom_at(1.0 + delta, anchor, scale);
+            self.hover_is_current = false;
             window.request_redraw();
             return;
         }
@@ -423,14 +444,16 @@ impl ApplicationHandler<UserEvent> for App {
             // Events dispatch into the retained frame's handler — a
             // pure function of the state it was built from, so it is
             // single-shot: a handled (mutating) event spends it and
-            // the successor is minted immediately below; unhandled
-            // events leave it standing. Until the first redraw there
-            // is nothing to dispatch into.
+            // the successor is minted immediately below. A genuinely
+            // declined event leaves it standing only when no frame
+            // input changed. Until the first redraw there is nothing
+            // to dispatch into.
             if (ime.is_some() || translation.is_some())
                 && let Some(dispatch) = self.dispatch.take()
             {
                 let size = window.inner_size();
                 let viewport = size.height as f64;
+                let mut frame_input_changed = false;
                 let handled = match (ime, translation) {
                     (Some(ime), _) => dispatch.handler.dispatch_ime(self, &ime),
                     // Keys nothing claims fall through to the rename
@@ -467,51 +490,40 @@ impl ApplicationHandler<UserEvent> for App {
                             }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
+                        self.pointer = Some(Point::new(
+                            button.state.position.x,
+                            button.state.position.y,
+                        ));
                         self.pressed = true;
                         dispatch.handler.dispatch_pointer_down(self, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
-                        // A drag claims the move outright and hover
-                        // claims never run — pressed gestures keep the
-                        // hover they began with. Otherwise the claims
-                        // report through `claim_hover` and a changed
-                        // winner repaints without spending the
-                        // handler: nothing dispatch reads depends on
-                        // hover.
+                        // Pointer position is frame input. Unpressed
+                        // motion remints even when no event handler
+                        // consumes it; pressed gestures freeze hover
+                        // while their ordinary drag handlers run.
                         self.pointer =
                             Some(Point::new(update.current.position.x, update.current.position.y));
-                        let before = self.model.hover.clone();
-                        self.hover_claimed = false;
-                        let dragged = dispatch.handler.dispatch_pointer_move(self, &update);
-                        if self.model.hover != before {
-                            window.request_redraw();
-                        }
-                        dragged
+                        frame_input_changed = !self.pressed;
+                        dispatch.handler.dispatch_pointer_move(self, &update)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
+                        self.pointer = Some(Point::new(
+                            button.state.position.x,
+                            button.state.position.y,
+                        ));
                         self.pressed = false;
+                        frame_input_changed = true;
                         dispatch.handler.dispatch_pointer_up(self, &button)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         self.pointer = None;
                         self.pressed = false;
-                        if self.model.hover.take().is_some() {
-                            window.request_redraw();
-                        }
+                        frame_input_changed = true;
                         false
                     }
-                    // Scrolls nothing claims pan or zoom the graph
-                    // under the cursor, else move the document.
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update)))) => {
                         dispatch.handler.dispatch_scroll(self, &update)
-                            || self.graph_scroll(&update, scale, size.width as f64, viewport)
-                            || self.scroll_document(
-                                &update,
-                                scale,
-                                viewport,
-                                dispatch.max_scroll,
-                                dispatch.max_scroll_x,
-                            )
                     }
                     _ => false,
                 };
@@ -527,15 +539,19 @@ impl ApplicationHandler<UserEvent> for App {
                             self.refresh_title();
                         }
                     }
-                    // Mint the successor handler from the mutated
-                    // state now, so the next event — even within the
-                    // same gesture — never sees the spent one. The
-                    // redraw derives the pixels from the same state.
-                    self.retain_dispatch(scale, Size::new(size.width as f64, viewport));
-                    self.reveal_selection(scale, Size::new(size.width as f64, viewport));
-                    window.request_redraw();
-                } else {
-                    self.dispatch = Some(dispatch);
+                }
+                match frame_disposition(handled, frame_input_changed) {
+                    FrameDisposition::Retain => self.dispatch = Some(dispatch),
+                    FrameDisposition::Remint { reveal_selection } => {
+                        let hover_changed = self.retain_dispatch(
+                            scale,
+                            Size::new(size.width as f64, viewport),
+                            reveal_selection,
+                        );
+                        if handled || hover_changed {
+                            window.request_redraw();
+                        }
+                    }
                 }
             }
         }
@@ -567,8 +583,14 @@ impl ApplicationHandler<UserEvent> for App {
                     *valid_surface = valid;
                 }
                 if valid {
+                    self.hover_is_current = false;
                     self.redraw();
                 }
+            }
+
+            WindowEvent::ScaleFactorChanged { .. } => {
+                self.hover_is_current = false;
+                window.request_redraw();
             }
 
             // The hover is the pointer RELATIVE TO CONTENT, and a
@@ -578,11 +600,22 @@ impl ApplicationHandler<UserEvent> for App {
             // say where the pointer now sits). The honest state is
             // unknown until the next move.
             WindowEvent::Moved(_) => {
-                self.pointer = None;
-                if self.model.hover.take().is_some()
-                    && let RenderState::Active { window, .. } = &self.state
+                let changed = self.pointer.take().is_some() || self.hover.is_some();
+                let window = match &self.state {
+                    RenderState::Active { window, .. } => Some(window.clone()),
+                    _ => None,
+                };
+                if changed && let Some(window) = window
                 {
-                    window.request_redraw();
+                    let size = window.inner_size();
+                    let hover_changed = self.retain_dispatch(
+                        window.scale_factor(),
+                        Size::new(size.width as f64, size.height as f64),
+                        false,
+                    );
+                    if hover_changed {
+                        window.request_redraw();
+                    }
                 }
             }
 
@@ -637,6 +670,7 @@ fn main() {
         scene: Scene::new(),
         font_cx: FontContext::new(),
         layout_cx: LayoutContext::new(),
+        text_clipboard: SystemTextClipboard,
         text_cache: puri::text::TextCache::default(),
         model: Model {
             doc,
@@ -646,7 +680,6 @@ fn main() {
             library: conventions::library(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
-            hover: None,
             scroll: 0.0,
             scroll_x: 0.0,
         },
@@ -659,9 +692,10 @@ fn main() {
         menu_ids,
         menu_items,
         cursor: Point::ZERO,
-        hover_claimed: false,
         pointer: None,
+        hover: None,
         pressed: false,
+        hover_is_current: false,
         revealed: None,
         dispatch: None,
         reducer: WindowEventReducer::default(),
@@ -686,7 +720,7 @@ enum Selected {
 
 /// The app's one hover, the selection's shape: what the resting
 /// pointer claims in whichever pane it rests over.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Hovered {
     Tree(raw::Hovering),
     Graph(graph_view::GraphNode),
@@ -704,12 +738,6 @@ struct Model {
     library: progred_graph::Cells,
     graph: graph_view::GraphView,
     history: history::History,
-    /// What the pointer rests on — the claim a click would fire —
-    /// previewed by the frame as the hover highlight. Written by move
-    /// dispatch like the selection is written by clicks; goes stale
-    /// under a still pointer until the next move, same as any
-    /// retained-frame dispatch.
-    hover: Option<Hovered>,
     /// Document scroll offsets in logical pixels, so the position
     /// survives moving between monitor scales. May exceed the
     /// current maximum after a resize: placement clamps effectively,
@@ -750,30 +778,6 @@ impl Model {
         }
     }
 
-    fn tree_hover(&self) -> Option<&raw::Hover> {
-        match &self.hover {
-            Some(Hovered::Tree(hovering)) => Some(&hovering.hover),
-            _ => None,
-        }
-    }
-
-    fn graph_hover(&self) -> Option<&graph_view::GraphNode> {
-        match &self.hover {
-            Some(Hovered::Graph(node)) => Some(node),
-            _ => None,
-        }
-    }
-
-    /// The graph-hovered node's value, for the tree's faint secondary
-    /// marks — [`Model::graph_node`]'s hover twin.
-    fn hover_node(&self) -> Option<Value> {
-        match self.graph_hover() {
-            Some(node) => graph_view::node_value(&self.doc, node)
-                .filter(|value| !matches!(value, Value::Record(_))),
-            None => None,
-        }
-    }
-
     /// The graph-selected node's value, for the tree's secondary
     /// marks. Inline records are structure, not identity, so a
     /// record root's node mirrors no mark.
@@ -788,14 +792,57 @@ impl Model {
     }
 }
 
-/// One pass over the UI: read-only in the model, producing draw calls
-/// (when a scene is attached), a transient `Handler`, and the list of
-/// `Descend`s placed this frame. Every event runs the pass fresh; the
-/// handler and descends drive dispatch and selection, then are
-/// discarded. The dispatch context is `App`, so dispatches reach the
-/// model and the measurement caches parley's driver needs.
+enum HoverHit {
+    Tree(raw::HoverClaim),
+    Graph(Option<graph_view::GraphNode>),
+}
+
+struct HoverResolver<'a> {
+    current: &'a mut Option<Hovered>,
+    pointer: Option<Point>,
+    pressed: bool,
+    reach: f64,
+    hit: Option<HoverHit>,
+}
+
+impl HoverResolver<'_> {
+    fn resolve(self) {
+        *self.current = resolved_hover(
+            self.current.as_ref(),
+            self.hit,
+            self.pointer,
+            self.pressed,
+            self.reach,
+        );
+    }
+}
+
+#[derive(Clone, Copy)]
+enum FrameVisibility {
+    Silent,
+    Visible,
+}
+
+struct FrameDescription<'a> {
+    model: &'a Model,
+    plugin: Option<&'a plugins::F64Plugin>,
+    view: ViewFlags,
+    hover: Option<Hovered>,
+    scale: f64,
+    viewport: Size,
+}
+
+struct FrameResources<'a> {
+    fonts: &'a mut FontContext,
+    layouts: &'a mut LayoutContext<Brush>,
+    text_cache: &'a mut puri::text::TextCache,
+}
+
+/// One read-only pass over the UI. Drawing is optional; every pass
+/// still produces transient dispatch data and resolves pointer hover.
 struct Frame<'a> {
     scene: Option<&'a mut Scene>,
+    hover: HoverResolver<'a>,
     handler: Handler<App>,
     descends: Vec<raw::Descend>,
     /// How far the document can scroll given this frame's content and
@@ -805,6 +852,52 @@ struct Frame<'a> {
     /// The pending row's completion popup, emitted during placement;
     /// drawn after the body and committed from at dispatch.
     popup: Option<raw::Popup>,
+}
+
+impl<'a> Frame<'a> {
+    fn new(scene: Option<&'a mut Scene>, hover: HoverResolver<'a>) -> Self {
+        Self {
+            scene,
+            hover,
+            handler: Handler::new(),
+            descends: Vec::new(),
+            max_scroll: 0.0,
+            max_scroll_x: 0.0,
+            popup: None,
+        }
+    }
+
+    fn finish(self, scale: f64) -> Dispatch {
+        self.hover.resolve();
+        Dispatch {
+            handler: self.handler,
+            descends: self.descends,
+            line: 14.0 * scale,
+            max_scroll: self.max_scroll,
+            max_scroll_x: self.max_scroll_x,
+            popup: self.popup,
+        }
+    }
+}
+
+impl hover::HasHover<raw::HoverClaim> for Frame<'_> {
+    fn pointer(&self) -> Option<Point> {
+        self.hover.pointer
+    }
+
+    fn claim_hover(&mut self, claim: raw::HoverClaim) {
+        self.hover.hit = Some(HoverHit::Tree(claim));
+    }
+}
+
+impl hover::HasHover<Option<graph_view::GraphNode>> for Frame<'_> {
+    fn pointer(&self) -> Option<Point> {
+        self.hover.pointer
+    }
+
+    fn claim_hover(&mut self, claim: Option<graph_view::GraphNode>) {
+        self.hover.hit = Some(HoverHit::Graph(claim));
+    }
 }
 
 impl raw::HasPopup for Frame<'_> {
@@ -859,6 +952,55 @@ impl Canvas for Frame<'_> {
         if let Some(scene) = self.scene.as_deref_mut() {
             VelloCanvas(scene).pop_clip();
         }
+    }
+}
+
+fn resolved_hover(
+    current: Option<&Hovered>,
+    hit: Option<HoverHit>,
+    pointer: Option<Point>,
+    pressed: bool,
+    reach: f64,
+) -> Option<Hovered> {
+    match (pressed, pointer) {
+        (true, _) => current.cloned(),
+        (false, None) => None,
+        (false, Some(point)) => match hit {
+            Some(HoverHit::Tree(raw::HoverClaim::Direct(hovering))) => {
+                hovering.map(Hovered::Tree)
+            }
+            Some(HoverHit::Graph(node)) => node.map(Hovered::Graph),
+            Some(HoverHit::Tree(raw::HoverClaim::Air)) | None => {
+                let tree = match current {
+                    Some(Hovered::Tree(hovering)) => Some(hovering),
+                    _ => None,
+                };
+                match raw::resolve_hover(raw::HoverClaim::Air, tree, point, reach) {
+                    Some(next) => next.map(Hovered::Tree),
+                    None => current.cloned(),
+                }
+            }
+        },
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FrameDisposition {
+    Retain,
+    Remint { reveal_selection: bool },
+}
+
+fn frame_disposition(handled: bool, frame_input_changed: bool) -> FrameDisposition {
+    if handled {
+        FrameDisposition::Remint {
+            reveal_selection: true,
+        }
+    } else if frame_input_changed {
+        FrameDisposition::Remint {
+            reveal_selection: false,
+        }
+    } else {
+        FrameDisposition::Retain
     }
 }
 
@@ -951,8 +1093,8 @@ impl App {
                 self.retain_dispatch(
                     scale,
                     Size::new(size.width as f64, size.height as f64),
+                    true,
                 );
-                self.reveal_selection(scale, Size::new(size.width as f64, size.height as f64));
                 window.request_redraw();
             }
         }
@@ -1074,10 +1216,10 @@ impl App {
             library: conventions::library(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
-            hover: None,
             scroll: 0.0,
             scroll_x: 0.0,
         };
+        self.hover = None;
         self.doc_path = path;
         self.revealed = None;
         if let RenderState::Active { window, .. } = &self.state {
@@ -1087,6 +1229,7 @@ impl App {
             self.retain_dispatch(
                 window.scale_factor(),
                 Size::new(size.width as f64, size.height as f64),
+                false,
             );
             window.request_redraw();
         }
@@ -1107,59 +1250,59 @@ impl App {
     /// path while opening a pending), so it never fights manual
     /// scrolling. The target is the popup anchor while pending — it
     /// marks the authoring row — else the selection's rect.
-    fn reveal_selection(&mut self, scale: f64, viewport: Size) {
+    fn reveal_selection(&mut self, dispatch: &Dispatch, scale: f64, viewport: Size) -> bool {
         let reveal = self
             .model
             .tree_selection()
             .map(|s| (s.path().to_vec(), std::mem::discriminant(s)));
         if reveal == self.revealed {
-            return;
-        }
-        self.revealed = reveal.clone();
-        let Some(dispatch) = &self.dispatch else {
-            return;
-        };
-        let target = dispatch.popup.as_ref().map(|popup| popup.anchor).or_else(|| {
-            reveal.as_ref().and_then(|(path, _)| {
-                dispatch
-                    .descends
-                    .iter()
-                    .find(|descend| &descend.path == path)
-                    .map(|descend| descend.rect)
+            false
+        } else {
+            self.revealed = reveal.clone();
+            let target = dispatch.popup.as_ref().map(|popup| popup.anchor).or_else(|| {
+                reveal.as_ref().and_then(|(path, _)| {
+                    dispatch
+                        .descends
+                        .iter()
+                        .find(|descend| &descend.path == path)
+                        .map(|descend| descend.rect)
+                })
+            });
+            target.is_some_and(|rect| {
+                let before = (self.model.scroll, self.model.scroll_x);
+                let pad = 12.0 * scale;
+                let mut scroll = self.model.scroll;
+                // The pad is the landing margin, not the trigger: fully
+                // visible rects are left alone, so a click near an edge
+                // doesn't nudge.
+                if rect.y1 > viewport.height {
+                    scroll += (rect.y1 + pad - viewport.height) / scale;
+                }
+                // Checked against the adjusted position, so when the rect
+                // is taller than the viewport the top wins.
+                let top = rect.y0 - (scroll - self.model.scroll) * scale;
+                if top < 0.0 {
+                    scroll += (top - pad) / scale;
+                }
+                self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
+                // The same chase horizontally, against the width the
+                // graph panel leaves visible.
+                let visible = if self.menu_items.graph.is_checked() {
+                    graph_view::panel(viewport.width, viewport.height).x0
+                } else {
+                    viewport.width
+                };
+                let mut scroll_x = self.model.scroll_x;
+                if rect.x1 > visible {
+                    scroll_x += (rect.x1 + pad - visible) / scale;
+                }
+                let left = rect.x0 - (scroll_x - self.model.scroll_x) * scale;
+                if left < 0.0 {
+                    scroll_x += (left - pad) / scale;
+                }
+                self.model.scroll_x = scroll_x.clamp(0.0, dispatch.max_scroll_x);
+                (self.model.scroll, self.model.scroll_x) != before
             })
-        });
-        if let Some(rect) = target {
-            let pad = 12.0 * scale;
-            let mut scroll = self.model.scroll;
-            // The pad is the landing margin, not the trigger: fully
-            // visible rects are left alone, so a click near an edge
-            // doesn't nudge.
-            if rect.y1 > viewport.height {
-                scroll += (rect.y1 + pad - viewport.height) / scale;
-            }
-            // Checked against the adjusted position, so when the rect
-            // is taller than the viewport the top wins.
-            let top = rect.y0 - (scroll - self.model.scroll) * scale;
-            if top < 0.0 {
-                scroll += (top - pad) / scale;
-            }
-            self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
-            // The same chase horizontally, against the width the
-            // graph panel leaves visible.
-            let visible = if self.menu_items.graph.is_checked() {
-                graph_view::panel(viewport.width, viewport.height).x0
-            } else {
-                viewport.width
-            };
-            let mut scroll_x = self.model.scroll_x;
-            if rect.x1 > visible {
-                scroll_x += (rect.x1 + pad - visible) / scale;
-            }
-            let left = rect.x0 - (scroll_x - self.model.scroll_x) * scale;
-            if left < 0.0 {
-                scroll_x += (left - pad) / scale;
-            }
-            self.model.scroll_x = scroll_x.clamp(0.0, dispatch.max_scroll_x);
         }
     }
 
@@ -1170,142 +1313,56 @@ impl App {
         }
     }
 
-    /// Runs the pure pass for the current state and retains its
-    /// dispatch outputs; no scene — pixels are the redraw's job.
-    fn retain_dispatch(&mut self, scale: f64, viewport: Size) {
-        let mut frame = Frame {
-            scene: None,
-            handler: Handler::new(),
-            descends: Vec::new(),
-            max_scroll: 0.0,
-            max_scroll_x: 0.0,
-            popup: None,
-        };
+    fn build_frame(
+        &mut self,
+        visibility: FrameVisibility,
+        scale: f64,
+        viewport: Size,
+    ) -> Dispatch {
         let view = self.view_flags();
-        run_frame(
-            &mut frame,
-            &self.model,
-            self.plugin.as_ref(),
+        let presented_hover = self.hover.clone();
+        let scene = match visibility {
+            FrameVisibility::Silent => None,
+            FrameVisibility::Visible => Some(&mut self.scene),
+        };
+        let description = FrameDescription {
+            model: &self.model,
+            plugin: self.plugin.as_ref(),
             view,
-            &mut self.font_cx,
-            &mut self.layout_cx,
-            &mut self.text_cache,
+            hover: presented_hover,
             scale,
             viewport,
-        );
-        let Frame {
-            handler,
-            descends,
-            max_scroll,
-            max_scroll_x,
-            popup,
-            ..
-        } = frame;
-        self.dispatch = Some(Dispatch {
-            handler,
-            descends,
-            line: 14.0 * scale,
-            max_scroll,
-            max_scroll_x,
-            popup,
-        });
-        // Every mint re-answers the hover; the caller's redraw paints
-        // the refreshed answer.
-        self.refresh_hover();
+        };
+        let resources = FrameResources {
+            fonts: &mut self.font_cx,
+            layouts: &mut self.layout_cx,
+            text_cache: &mut self.text_cache,
+        };
+        let hover = HoverResolver {
+            current: &mut self.hover,
+            pointer: self.pointer,
+            pressed: self.pressed,
+            reach: 8.0 * scale,
+            hit: None,
+        };
+        let mut frame = Frame::new(scene, hover);
+        run_frame(&mut frame, description, resources);
+        frame.finish(scale)
     }
 
-    /// Re-ask the freshly minted frame what the pointer rests on: the
-    /// stored position replayed as a synthetic move through the same
-    /// dispatch a real one takes, so every presented frame answers
-    /// from current layout — edits, scroll, and animation never leave
-    /// the hover pointing at where things were. Stands down while a
-    /// button is down (gestures keep the hover they began with).
-    /// True when the hover changed.
-    fn refresh_hover(&mut self) -> bool {
-        if self.pressed {
-            return false;
+    /// Mint dispatch data from the final state of a transition. A
+    /// silent pass supplies reveal geometry and resolves hover;
+    /// scrolling to reveal changes geometry and earns one rebuild.
+    fn retain_dispatch(&mut self, scale: f64, viewport: Size, reveal_selection: bool) -> bool {
+        let before = self.hover.clone();
+        let mut dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
+        if reveal_selection && self.reveal_selection(&dispatch, scale, viewport) {
+            dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
         }
-        let Some(point) = self.pointer else {
-            return false;
-        };
-        let Some(dispatch) = self.dispatch.take() else {
-            return false;
-        };
-        let mut state = ui_events::pointer::PointerState::default();
-        state.position.x = point.x;
-        state.position.y = point.y;
-        let replay = ui_events::pointer::PointerUpdate {
-            pointer: ui_events::pointer::PointerInfo {
-                pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: ui_events::pointer::PointerType::Mouse,
-            },
-            current: state,
-            coalesced: Vec::new(),
-            predicted: Vec::new(),
-        };
-        let before = self.model.hover.clone();
-        self.hover_claimed = false;
-        dispatch.handler.dispatch_pointer_move(self, &replay);
+        let hover_changed = self.hover != before;
         self.dispatch = Some(dispatch);
-        self.model.hover != before
-    }
-
-    /// A move dispatch's hover report: claims arrive innermost-first,
-    /// so the first per dispatch is the winner and the rest are the
-    /// containers behind it.
-    fn claim_hover(&mut self, hover: Option<Hovered>) {
-        if !self.hover_claimed {
-            self.hover_claimed = true;
-            self.model.hover = hover;
-        }
-    }
-
-    /// The tree's report, resolved against the current hover —
-    /// container air holds a hover the pointer is still within a
-    /// little gap's reach of, the hysteresis that keeps gap-crossing
-    /// from flickering without letting open space keep a distant
-    /// focus.
-    fn claim_tree_hover(&mut self, claim: raw::HoverClaim, point: Point) {
-        if self.hover_claimed {
-            return;
-        }
-        self.hover_claimed = true;
-        let reach = 8.0
-            * match &self.state {
-                RenderState::Active { window, .. } => window.scale_factor(),
-                _ => 1.0,
-            };
-        let current = match &self.model.hover {
-            Some(Hovered::Tree(hovering)) => Some(hovering),
-            _ => None,
-        };
-        if let Some(next) = raw::resolve_hover(claim, current, point, reach) {
-            self.model.hover = next.map(Hovered::Tree);
-        }
-    }
-
-    /// Scrolls over the graph panel drive its viewport — trackpad
-    /// pixels pan, wheel lines zoom toward the cursor — instead of
-    /// the document.
-    fn graph_scroll(
-        &mut self,
-        update: &ui_events::pointer::PointerScrollEvent,
-        scale: f64,
-        width: f64,
-        height: f64,
-    ) -> bool {
-        if !self.menu_items.graph.is_checked() {
-            return false;
-        }
-        let panel = graph_view::panel(width, height);
-        let position = Point::new(update.state.position.x, update.state.position.y);
-        panel.contains(position) && {
-            self.model
-                .graph
-                .scroll(&update.delta, position - panel.center(), scale);
-            true
-        }
+        self.hover_is_current = true;
+        hover_changed
     }
 
     /// Graph-view keys: Delete detaches the selected node — the
@@ -1850,50 +1907,19 @@ impl App {
         let view = self.view_flags();
         if view.graph {
             self.model.graph.step(&self.model.doc);
+            self.hover_is_current = false;
+        }
+        let viewport = Size::new(width as f64, height as f64);
+        if !self.pressed && !self.hover_is_current {
+            self.build_frame(FrameVisibility::Silent, scale, viewport);
         }
         self.scene.reset();
-        let mut frame = Frame {
-            scene: Some(&mut self.scene),
-            handler: Handler::new(),
-            descends: Vec::new(),
-            max_scroll: 0.0,
-            max_scroll_x: 0.0,
-            popup: None,
-        };
-        run_frame(
-            &mut frame,
-            &self.model,
-            self.plugin.as_ref(),
-            view,
-            &mut self.font_cx,
-            &mut self.layout_cx,
-            &mut self.text_cache,
-            scale,
-            Size::new(width as f64, height as f64),
-        );
-        let Frame {
-            handler,
-            descends,
-            max_scroll,
-            max_scroll_x,
-            popup,
-            ..
-        } = frame;
-        self.dispatch = Some(Dispatch {
-            handler,
-            descends,
-            line: 14.0 * scale,
-            max_scroll,
-            max_scroll_x,
-            popup,
-        });
-        // The scene above drew the hover it was given; if this
-        // frame's layout moved things under the still pointer —
-        // scroll, a reveal, the graph animating — re-answer and
-        // present one more frame with the truth.
-        if self.refresh_hover() {
-            window.request_redraw();
-        }
+        let before = self.hover.clone();
+        let dispatch = self.build_frame(FrameVisibility::Visible, scale, viewport);
+        // Recover from any geometry invalidation the shell failed to mark.
+        let hover_changed = self.hover != before;
+        self.dispatch = Some(dispatch);
+        self.hover_is_current = true;
 
         let RenderState::Active { surface, .. } = &mut self.state else {
             return;
@@ -1953,24 +1979,30 @@ impl App {
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
 
-        if view.graph && self.model.graph.hot() {
+        if hover_changed || (view.graph && self.model.graph.hot()) {
             window.request_redraw();
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_frame(
     frame: &mut Frame<'_>,
-    model: &Model,
-    plugin: Option<&plugins::F64Plugin>,
-    view: ViewFlags,
-    font_cx: &mut FontContext,
-    layout_cx: &mut LayoutContext<Brush>,
-    text_cache: &mut puri::text::TextCache,
-    scale: f64,
-    viewport: Size,
+    description: FrameDescription<'_>,
+    resources: FrameResources<'_>,
 ) {
+    let FrameDescription {
+        model,
+        plugin,
+        view,
+        hover,
+        scale,
+        viewport,
+    } = description;
+    let FrameResources {
+        fonts: font_cx,
+        layouts: layout_cx,
+        text_cache,
+    } = resources;
     let (viewport_width, viewport_height) = (viewport.width, viewport.height);
     // Empty space deselects — the one slot, whichever pane filled it.
     // Registered before the content places, so the descend handlers
@@ -1979,15 +2011,6 @@ fn run_frame(
     frame.handler().on_pointer_down(|app: &mut App, event| {
         event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
     });
-    // Every pixel no claim took is AIR — content gaps and the
-    // margins alike: the hover holds while the pointer stays within
-    // a little gap's reach of it, and clears beyond that.
-    frame.handler().on_pointer_move(|app: &mut App, update| {
-        let point = Point::new(update.current.position.x, update.current.position.y);
-        app.claim_tree_hover(raw::HoverClaim::Air, point);
-        false
-    });
-
     // Mark-and-sweep by pass: entries the previous pass never used
     // are dropped here, everything else carries over — the steady
     // state is the visible text, shaped once.
@@ -1999,6 +2022,11 @@ fn run_frame(
         cache: text_cache,
     };
     let styles = raw::RawStyles::new(scale);
+    let (tree_hover, graph_hover) = match hover.as_ref() {
+        Some(Hovered::Tree(hovering)) => (Some(&hovering.hover), None),
+        Some(Hovered::Graph(node)) => (None, Some(node)),
+        None => (None, None),
+    };
     // The Raw view is ONE bit, threaded as itself: name lookups
     // derive from it downstream, no policy swapped here, and the
     // model's configured policy rides along untouched.
@@ -2013,21 +2041,25 @@ fn run_frame(
     } else {
         viewport_width - 2.0 * margin
     };
-    let hover_node = model.hover_node();
+    let hover_node = graph_hover
+        .and_then(|node| graph_view::node_value(&model.doc, node))
+        .filter(|value| !matches!(value, Value::Record(_)));
     let plugin_text = |value: &Value| plugin.and_then(|plugin| plugin.text(value));
     let body = raw::project(
-        &sources,
-        model.tree_selection(),
-        graph_node.as_ref(),
-        model.tree_hover(),
-        hover_node.as_ref(),
-        &model.collapse,
-        &model.names,
-        view.raw,
+        raw::ProjectDescription {
+            sources,
+            selection: model.tree_selection(),
+            graph_node: graph_node.as_ref(),
+            hover: tree_hover,
+            hover_node: hover_node.as_ref(),
+            collapse: &model.collapse,
+            names: &model.names,
+            raw: view.raw,
+            styles: &styles,
+            width: body_width,
+            plugin: Some(&plugin_text),
+        },
         &mut tcx,
-        &styles,
-        body_width,
-        Some(&plugin_text),
         raw::Hooks {
             // The selection transition: re-selecting the same path
             // keeps its editor state, and a reported text click seeds
@@ -2065,12 +2097,15 @@ fn run_frame(
                     // double-click in this one.
                     let count = if fresh { 1 } else { click.count };
                     line.pointer_down(
+                        &click.presentation,
                         &mut app.font_cx,
                         &mut app.layout_cx,
                         scale as f32,
-                        click.point,
-                        click.shift,
-                        count,
+                        LineEditPointerDown {
+                            point: click.point,
+                            shift: click.shift,
+                            count,
+                        },
                     );
                 }
             }),
@@ -2098,7 +2133,6 @@ fn run_frame(
             }),
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-            hover: Rc::new(|app: &mut App, claim, point| app.claim_tree_hover(claim, point)),
             insert: Rc::new(|app: &mut App, path| {
                 if let Some(pending) = raw::pending_after(&app.model.sources(), &path) {
                     app.model.selection = Some(Selected::Tree(pending));
@@ -2120,12 +2154,27 @@ fn run_frame(
         model.scroll_x.clamp(0.0, frame.max_scroll_x) * scale,
         model.scroll.clamp(0.0, frame.max_scroll) * scale,
     );
+    let max_scroll = frame.max_scroll;
+    let max_scroll_x = frame.max_scroll_x;
+    let graph_panel = view
+        .graph
+        .then(|| graph_view::panel(viewport_width, viewport_height));
     puri::scroll::place_scrolled(
         content,
         frame,
-        Point::ZERO,
-        Size::new(viewport_width, viewport_height),
+        Placement::root(Rect::new(0.0, 0.0, viewport_width, viewport_height)),
         offset,
+        move |app, update| {
+            let point = Point::new(update.state.position.x, update.state.position.y);
+            !graph_panel.is_some_and(|panel| panel.contains(point))
+                && app.scroll_document(
+                    update,
+                    scale,
+                    viewport_height,
+                    max_scroll,
+                    max_scroll_x,
+                )
+        },
     );
     // The graph pane draws over the document's right side; placed
     // after the body so its handlers win inside the panel.
@@ -2136,8 +2185,8 @@ fn run_frame(
             &model.graph,
             model.graph_selection(),
             model.tree_selection(),
-            model.graph_hover(),
-            model.tree_hover(),
+            graph_hover,
+            tree_hover,
             &model.names,
             view.raw,
             &mut tcx,
@@ -2172,19 +2221,24 @@ fn run_frame(
                     Some(graph_view::Release::Drag) => true,
                     None => false,
                 }),
-                pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-                hover: Rc::new(|app: &mut App, node| {
-                    app.claim_hover(node.map(Hovered::Graph));
+                scroll: Rc::new(|app: &mut App, delta, cursor, scale| {
+                    app.model.graph.scroll(delta, cursor, scale);
                 }),
+                pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             },
         );
-        place_top_left(pane, frame, Point::new(panel.x0, panel.y0));
+        let rect = pane.extent.rect_at(Point::new(panel.x0, panel.y0));
+        place(
+            pane,
+            frame,
+            Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
+        );
     }
 
     // The pending row's popup draws after the body, so it overlays
     // and its click targets win.
     if let Some(popup) = frame.popup.take() {
-        let hovered_entry = match model.tree_hover() {
+        let hovered_entry = match tree_hover {
             Some(raw::Hover::Entry(index)) => Some(*index),
             _ => None,
         };
@@ -2206,7 +2260,6 @@ fn run_frame(
             &styles,
             &popup,
             hovered_entry,
-            Rc::new(|app: &mut App, claim, point| app.claim_tree_hover(claim, point)),
             commit,
         );
         // Below the anchor, unless it would run off the bottom and
@@ -2219,7 +2272,12 @@ fn run_frame(
         } else {
             below
         };
-        place_top_left(card, frame, Point::new(popup.anchor.x0, y));
+        let rect = card.extent.rect_at(Point::new(popup.anchor.x0, y));
+        place(
+            card,
+            frame,
+            Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
+        );
         frame.popup = Some(popup);
     }
 }
@@ -2228,13 +2286,88 @@ fn run_frame(
 /// dispatch can outlive the editor by a frame — deselect, then a move
 /// in the same gesture — so absence declines rather than panics.
 fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
-    let state = app
-        .model
+    let App {
+        model,
+        font_cx,
+        layout_cx,
+        text_clipboard,
+        ..
+    } = app;
+    let state = model
         .tree_selection_mut()
         .and_then(raw::Selection::edit_mut)?;
     Some(EditCtx {
         state,
-        fonts: &mut app.font_cx,
-        layouts: &mut app.layout_cx,
+        fonts: font_cx,
+        layouts: layout_cx,
+        clipboard: text_clipboard,
     })
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+
+    #[test]
+    fn only_transitions_and_changed_frame_inputs_remint() {
+        assert_eq!(frame_disposition(false, false), FrameDisposition::Retain);
+        assert_eq!(
+            frame_disposition(false, true),
+            FrameDisposition::Remint {
+                reveal_selection: false,
+            }
+        );
+        assert_eq!(
+            frame_disposition(true, false),
+            FrameDisposition::Remint {
+                reveal_selection: true,
+            }
+        );
+        assert_eq!(
+            frame_disposition(true, true),
+            FrameDisposition::Remint {
+                reveal_selection: true,
+            }
+        );
+    }
+
+    #[test]
+    fn hover_resolution_keeps_only_real_hysteresis_state() {
+        let hovering = raw::Hovering {
+            hover: raw::Hover::Value(Vec::new()),
+            rect: vello::kurbo::Rect::new(10.0, 10.0, 20.0, 20.0),
+        };
+        let current = Hovered::Tree(hovering.clone());
+        assert_eq!(
+            resolved_hover(
+                Some(&current),
+                None,
+                Some(Point::new(24.0, 15.0)),
+                false,
+                8.0,
+            ),
+            Some(current.clone())
+        );
+        assert_eq!(
+            resolved_hover(
+                Some(&current),
+                Some(HoverHit::Graph(Some(graph_view::GraphNode::Root))),
+                Some(Point::ZERO),
+                false,
+                8.0,
+            ),
+            Some(Hovered::Graph(graph_view::GraphNode::Root))
+        );
+        assert_eq!(
+            resolved_hover(
+                Some(&current),
+                Some(HoverHit::Tree(raw::HoverClaim::Direct(None))),
+                Some(Point::ZERO),
+                true,
+                8.0,
+            ),
+            Some(current)
+        );
+        assert_eq!(resolved_hover(None, None, None, false, 8.0), None);
+    }
 }

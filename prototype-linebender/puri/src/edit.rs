@@ -1,6 +1,7 @@
 //! Bare editable text over parley, custody split at true state: the
-//! caller-owned `LineEditState` holds only text, selection byte
-//! offsets, and any active IME preedit. A transient `PlainEditor` is
+//! caller-owned `LineEditState` holds text and interaction state;
+//! font, paint, affixes, focus, and chrome belong to the ephemeral
+//! `LineEditDescription`. A transient `PlainEditor` is
 //! constructed from that state for each pass (drawing) and each
 //! dispatch (editing semantics), then discarded — parley's
 //! retained-mode machinery (cached layout, dirty flag, driver-gated
@@ -58,21 +59,71 @@ pub struct LineEditState {
     /// `focus` may precede `anchor` for a backward selection.
     anchor: usize,
     focus: usize,
-    /// Display armor around `text`: shaped and measured as one run
-    /// with it — a string literal's quotes ride the field — but never
-    /// editable. An edit that would bite an affix declines whole, and
-    /// the selection lives strictly between them.
-    prefix: String,
-    suffix: String,
     preedit: Option<Preedit>,
     drag: Option<Drag>,
-    font_size: f32,
-    brush: Brush,
 }
 
 pub struct EditStyle {
     pub selection: Brush,
     pub cursor: Brush,
+}
+
+/// Presentation inputs used to construct a transient Parley editor.
+/// They belong to the current widget description, not durable cursor,
+/// selection, drag, or IME state.
+#[derive(Clone)]
+pub struct LineEditPresentation {
+    pub font_size: f32,
+    pub brush: Brush,
+    pub prefix: String,
+    pub suffix: String,
+}
+
+impl LineEditPresentation {
+    pub fn new(font_size: f32, brush: Brush) -> Self {
+        Self {
+            font_size,
+            brush,
+            prefix: String::new(),
+            suffix: String::new(),
+        }
+    }
+
+    pub fn with_affixes(mut self, prefix: &str, suffix: &str) -> Self {
+        self.prefix = prefix.to_string();
+        self.suffix = suffix.to_string();
+        self
+    }
+
+    fn dressed(&self) -> bool {
+        !self.prefix.is_empty() || !self.suffix.is_empty()
+    }
+}
+
+/// One frame's complete line-edit description. Only `state` survives
+/// into a later frame; the other inputs are captured by this frame's
+/// transient handlers.
+pub struct LineEditDescription<'a> {
+    pub state: &'a LineEditState,
+    pub focused: bool,
+    pub presentation: LineEditPresentation,
+    pub style: &'a EditStyle,
+    pub placeholder: Option<(&'a str, &'a TextStyle)>,
+}
+
+#[derive(Clone, Copy)]
+pub struct LineEditPointerDown {
+    pub point: Point,
+    pub shift: bool,
+    pub count: u8,
+}
+
+/// The text-only pasteboard capability line editing needs. The
+/// application chooses the platform implementation and can share it
+/// with richer structural clipboard policy.
+pub trait TextClipboard {
+    fn get_text(&mut self) -> Option<String>;
+    fn set_text(&mut self, text: &str);
 }
 
 /// What an editing dispatch needs from the caller's context: the state
@@ -81,35 +132,23 @@ pub struct EditCtx<'a> {
     pub state: &'a mut LineEditState,
     pub fonts: &'a mut FontContext,
     pub layouts: &'a mut LayoutContext<Brush>,
+    pub clipboard: &'a mut dyn TextClipboard,
 }
 
 impl LineEditState {
-    pub fn new(text: &str, font_size: f32, brush: Brush) -> Self {
+    pub fn new(text: &str) -> Self {
         Self {
             text: text.to_string(),
             anchor: 0,
             focus: 0,
-            prefix: String::new(),
-            suffix: String::new(),
             preedit: None,
             drag: None,
-            font_size,
-            brush,
         }
     }
 
     /// Start with the caret at the end, so typing appends.
     pub fn with_cursor_at_end(mut self) -> Self {
         self.cursor_to_end();
-        self
-    }
-
-    /// Dress the field in uneditable affixes — a string literal's
-    /// quotes, a blob's `0x` — laid out as one shaped run with the
-    /// text.
-    pub fn with_affixes(mut self, prefix: &str, suffix: &str) -> Self {
-        self.prefix = prefix.to_string();
-        self.suffix = suffix.to_string();
         self
     }
 
@@ -144,10 +183,6 @@ impl LineEditState {
         &self.text
     }
 
-    fn dressed(&self) -> bool {
-        !self.prefix.is_empty() || !self.suffix.is_empty()
-    }
-
     /// Replace the text wholesale — the caller's re-mint for external
     /// writes — keeping the selection clamped to char boundaries.
     pub fn set_text(&mut self, text: &str) {
@@ -172,20 +207,24 @@ impl LineEditState {
     /// with a clean layout.
     fn editor(
         &self,
+        presentation: &LineEditPresentation,
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
         scale: f32,
     ) -> PlainEditor<Brush> {
-        let mut editor = PlainEditor::new(self.font_size);
-        editor.set_text(&format!("{}{}{}", self.prefix, self.text, self.suffix));
+        let mut editor = PlainEditor::new(presentation.font_size);
+        editor.set_text(&format!(
+            "{}{}{}",
+            presentation.prefix, self.text, presentation.suffix
+        ));
         editor.set_width(None);
         editor.set_scale(scale);
         editor
             .edit_styles()
-            .insert(StyleProperty::Brush(self.brush.clone()));
+            .insert(StyleProperty::Brush(presentation.brush.clone()));
         editor.edit_styles().insert(GenericFamily::SystemUi.into());
         let mut driver = editor.driver(fonts, layouts);
-        let p = self.prefix.len();
+        let p = presentation.prefix.len();
         driver.select_byte_range(p + self.anchor, p + self.focus);
         if let Some(preedit) = &self.preedit {
             driver.set_compose(&preedit.text, preedit.cursor);
@@ -199,15 +238,15 @@ impl LineEditState {
     /// editor's to change: an edit that bit one declines WHOLE (the
     /// state simply doesn't absorb it), and the selection clamps to
     /// the span between them.
-    fn absorb(&mut self, editor: &PlainEditor<Brush>) {
+    fn absorb(&mut self, presentation: &LineEditPresentation, editor: &PlainEditor<Brush>) {
         let composed = editor.text().to_string();
         let Some(inner) = composed
-            .strip_prefix(self.prefix.as_str())
-            .and_then(|t| t.strip_suffix(self.suffix.as_str()))
+            .strip_prefix(presentation.prefix.as_str())
+            .and_then(|t| t.strip_suffix(presentation.suffix.as_str()))
         else {
             return;
         };
-        let p = self.prefix.len();
+        let p = presentation.prefix.len();
         let n = inner.len();
         self.text = inner.to_string();
         let selection = editor.raw_selection();
@@ -230,8 +269,10 @@ impl LineEditState {
     /// the caller composed behind this widget.
     pub fn handle_key(
         &mut self,
+        presentation: &LineEditPresentation,
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
+        clipboard: &mut dyn TextClipboard,
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down() || self.is_composing() {
@@ -247,9 +288,12 @@ impl LineEditState {
         // that only wanders into an affix is no motion — clamped, it
         // reads as the boundary it started at, so boundary arrows
         // still decline to the caller.
-        let (lo, hi) = (self.prefix.len(), self.prefix.len() + self.text.len());
+        let (lo, hi) = (
+            presentation.prefix.len(),
+            presentation.prefix.len() + self.text.len(),
+        );
         let clamp = move |(a, f): (usize, usize)| (a.clamp(lo, hi), f.clamp(lo, hi));
-        let mut editor = self.editor(fonts, layouts, 1.0);
+        let mut editor = self.editor(presentation, fonts, layouts, 1.0);
         let handled = {
             let mut drv = editor.driver(fonts, layouts);
             match &event.key {
@@ -261,25 +305,19 @@ impl LineEditState {
                 Key::Character(c)
                     if action_mod && matches!(c.to_lowercase().as_str(), "c" | "x" | "v") =>
                 {
-                    use clipboard_rs::{Clipboard, ClipboardContext};
                     let selected = drv.editor.selected_text().map(str::to_owned);
                     match (c.to_lowercase().as_str(), selected) {
                         ("c", Some(text)) => {
-                            if let Ok(cb) = ClipboardContext::new() {
-                                cb.set_text(text).ok();
-                            }
+                            clipboard.set_text(&text);
                             true
                         }
                         ("x", Some(text)) => {
-                            if let Ok(cb) = ClipboardContext::new() {
-                                cb.set_text(text).ok();
-                            }
+                            clipboard.set_text(&text);
                             drv.delete_selection();
                             true
                         }
                         ("v", _) => {
-                            if let Ok(cb) = ClipboardContext::new() {
-                                let text = cb.get_text().unwrap_or_default();
+                            if let Some(text) = clipboard.get_text() {
                                 drv.insert_or_replace_selection(&text);
                             }
                             true
@@ -365,7 +403,7 @@ impl LineEditState {
             }
         };
         if handled {
-            self.absorb(&editor);
+            self.absorb(presentation, &editor);
         }
         handled
     }
@@ -409,29 +447,28 @@ impl LineEditState {
     /// selects the word, a triple the line.
     pub fn pointer_down(
         &mut self,
+        presentation: &LineEditPresentation,
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
         scale: f32,
-        point: Point,
-        shift: bool,
-        count: u8,
+        event: LineEditPointerDown,
     ) {
         if self.is_composing() {
             return;
         }
         self.drag = Some(Drag {
-            origin: point,
-            count,
+            origin: event.point,
+            count: event.count,
         });
-        let (x, y) = (point.x as f32, point.y as f32);
-        let mut editor = self.editor(fonts, layouts, scale);
+        let (x, y) = (event.point.x as f32, event.point.y as f32);
+        let mut editor = self.editor(presentation, fonts, layouts, scale);
         {
             let mut drv = editor.driver(fonts, layouts);
-            match count {
+            match event.count {
                 2 => drv.select_word_at_point(x, y),
                 3 => drv.select_hard_line_at_point(x, y),
                 _ => {
-                    if shift {
+                    if event.shift {
                         drv.shift_click_extension(x, y);
                     } else {
                         drv.move_to_point(x, y);
@@ -439,7 +476,7 @@ impl LineEditState {
                 }
             }
         }
-        self.absorb(&editor);
+        self.absorb(presentation, &editor);
     }
 
     /// Drag-extend the selection; `point` in local coordinates. Only
@@ -448,6 +485,7 @@ impl LineEditState {
     /// since only byte offsets round-trip the transient editors.
     pub fn pointer_move(
         &mut self,
+        presentation: &LineEditPresentation,
         fonts: &mut FontContext,
         layouts: &mut LayoutContext<Brush>,
         scale: f32,
@@ -459,7 +497,7 @@ impl LineEditState {
         if self.is_composing() {
             return false;
         }
-        let mut editor = self.editor(fonts, layouts, scale);
+        let mut editor = self.editor(presentation, fonts, layouts, scale);
         {
             let mut drv = editor.driver(fonts, layouts);
             let (x, y) = (drag.origin.x as f32, drag.origin.y as f32);
@@ -470,7 +508,7 @@ impl LineEditState {
             }
             drv.extend_selection_to_point(point.x as f32, point.y as f32);
         }
-        self.absorb(&editor);
+        self.absorb(presentation, &editor);
         true
     }
 
@@ -492,18 +530,22 @@ impl LineEditState {
 /// (deselect, then a move in the same gesture), so `with` returns
 /// None when the editor is gone and the handlers decline.
 pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
-    state: &LineEditState,
-    focused: bool,
-    style: &EditStyle,
-    placeholder: Option<(&str, &TextStyle)>,
+    description: LineEditDescription<'_>,
     tcx: &mut TextCtx,
     with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
 ) -> Node<P> {
+    let LineEditDescription {
+        state,
+        focused,
+        presentation,
+        style,
+        placeholder,
+    } = description;
     let scale = tcx.scale;
     let ghost = placeholder
-        .filter(|_| state.text.is_empty() && !state.is_composing() && !state.dressed())
+        .filter(|_| state.text.is_empty() && !state.is_composing() && !presentation.dressed())
         .map(|(text, style)| build_layout(tcx, text, style, None, None));
-    let editor = state.editor(tcx.fonts, tcx.layouts, scale);
+    let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
     let layout = editor.try_layout().cloned();
     let metrics_of = |layout: &Layout<Brush>| {
         let metrics = *layout.lines().next()?.metrics();
@@ -530,14 +572,14 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
         .or_else(|| layout.as_ref().and_then(metrics_of))
         .unwrap_or((Extent::default(), 0.0));
 
-    let selection: Vec<Rect> = focused
-        .then(|| {
-            let mut rects = Vec::new();
-            editor
-                .selection_geometry_with(|bb, _| rects.push(Rect::new(bb.x0, bb.y0, bb.x1, bb.y1)));
-            rects
-        })
-        .unwrap_or_default();
+    let selection: Vec<Rect> = if focused {
+        let mut rects = Vec::new();
+        editor
+            .selection_geometry_with(|bb, _| rects.push(Rect::new(bb.x0, bb.y0, bb.x1, bb.y1)));
+        rects
+    } else {
+        Vec::new()
+    };
     // Parley's caret spans the leaded line box; a native-feeling
     // caret spans the ascent and a taste of the descent.
     let caret_span = layout.as_ref().and_then(|l| l.lines().next()).map(|line| {
@@ -559,7 +601,8 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
     let selection_brush = style.selection.clone();
     let cursor_brush = style.cursor.clone();
 
-    leaf(extent, move |p: &mut P, at: Point| {
+    leaf(extent, move |p: &mut P, placement| {
+        let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
         let transform = Affine::translate((at.x, at.y - layout_baseline));
         for rect in &selection {
             p.fill(*rect, selection_brush.clone(), transform);
@@ -580,16 +623,27 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
         if focused {
             let text_origin = Point::new(at.x, at.y - editor_baseline);
             let with_key = with.clone();
+            let key_presentation = presentation.clone();
             p.handler().on_key(move |ctx, event| {
                 with_key(ctx).is_some_and(
                     |EditCtx {
                          state,
                          fonts,
                          layouts,
-                     }| state.handle_key(fonts, layouts, event),
+                         clipboard,
+                     }| {
+                        state.handle_key(
+                            &key_presentation,
+                            fonts,
+                            layouts,
+                            clipboard,
+                            event,
+                        )
+                    },
                 )
             });
             let with_move = with.clone();
+            let move_presentation = presentation.clone();
             p.handler().on_pointer_move(move |ctx, update| {
                 update.current.buttons.contains(PointerButton::Primary)
                     && with_move(ctx).is_some_and(
@@ -597,8 +651,10 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
                              state,
                              fonts,
                              layouts,
+                             ..
                          }| {
                             state.pointer_move(
+                                &move_presentation,
                                 fonts,
                                 layouts,
                                 scale,
@@ -623,14 +679,87 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::draw::{DrawCmd, DrawList, GlyphRun, Shape};
+    use crate::handler::Handler;
+    use crate::layout::place_top_left;
+    use kurbo::Stroke;
     use ui_events::keyboard::{KeyState, Modifiers};
+
+    struct DrawFrame {
+        list: DrawList,
+        handler: Handler<()>,
+    }
+
+    impl Canvas for DrawFrame {
+        fn fill(
+            &mut self,
+            shape: impl Into<Shape>,
+            brush: impl Into<Brush>,
+            transform: Affine,
+        ) {
+            self.list.fill(shape, brush, transform);
+        }
+
+        fn stroke(
+            &mut self,
+            shape: impl Into<Shape>,
+            style: Stroke,
+            brush: impl Into<Brush>,
+            transform: Affine,
+        ) {
+            self.list.stroke(shape, style, brush, transform);
+        }
+
+        fn glyph_run(&mut self, run: GlyphRun) {
+            self.list.glyph_run(run);
+        }
+
+        fn clip(
+            &mut self,
+            shape: impl Into<Shape>,
+            transform: Affine,
+            content: impl FnOnce(&mut Self),
+        ) {
+            let outer = std::mem::take(&mut self.list.0);
+            content(self);
+            let children = std::mem::replace(&mut self.list.0, outer);
+            self.list.0.push(DrawCmd::Clip {
+                shape: shape.into(),
+                transform,
+                children,
+            });
+        }
+    }
+
+    impl HasHandler<()> for DrawFrame {
+        fn handler(&mut self) -> &mut Handler<()> {
+            &mut self.handler
+        }
+    }
 
     fn contexts() -> (FontContext, LayoutContext<Brush>) {
         (FontContext::new(), LayoutContext::new())
     }
 
     fn state(text: &str) -> LineEditState {
-        LineEditState::new(text, 16.0, Brush::default())
+        LineEditState::new(text)
+    }
+
+    fn presentation() -> LineEditPresentation {
+        LineEditPresentation::new(16.0, Brush::default())
+    }
+
+    #[derive(Default)]
+    struct MemoryClipboard(Option<String>);
+
+    impl TextClipboard for MemoryClipboard {
+        fn get_text(&mut self) -> Option<String> {
+            self.0.clone()
+        }
+
+        fn set_text(&mut self, text: &str) {
+            self.0 = Some(text.to_string());
+        }
     }
 
     fn key_event(key: Key, modifiers: Modifiers) -> KeyboardEvent {
@@ -649,7 +778,44 @@ mod tests {
         key: Key,
         modifiers: Modifiers,
     ) -> bool {
-        state.handle_key(fonts, layouts, &key_event(key, modifiers))
+        press_with(&presentation(), state, fonts, layouts, key, modifiers)
+    }
+
+    fn press_with(
+        presentation: &LineEditPresentation,
+        state: &mut LineEditState,
+        fonts: &mut FontContext,
+        layouts: &mut LayoutContext<Brush>,
+        key: Key,
+        modifiers: Modifiers,
+    ) -> bool {
+        press_with_clipboard(
+            presentation,
+            state,
+            fonts,
+            layouts,
+            &mut MemoryClipboard::default(),
+            key,
+            modifiers,
+        )
+    }
+
+    fn press_with_clipboard(
+        presentation: &LineEditPresentation,
+        state: &mut LineEditState,
+        fonts: &mut FontContext,
+        layouts: &mut LayoutContext<Brush>,
+        clipboard: &mut dyn TextClipboard,
+        key: Key,
+        modifiers: Modifiers,
+    ) -> bool {
+        state.handle_key(
+            presentation,
+            fonts,
+            layouts,
+            clipboard,
+            &key_event(key, modifiers),
+        )
     }
 
     #[test]
@@ -782,6 +948,33 @@ mod tests {
     }
 
     #[test]
+    fn presentation_can_change_without_resetting_interaction_state() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut state = state("abc");
+        state.cursor_to(1);
+        let first = presentation();
+        let second = LineEditPresentation::new(28.0, Brush::default());
+
+        assert!(press_with(
+            &first,
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Character("x".into()),
+            Modifiers::empty(),
+        ));
+        assert!(press_with(
+            &second,
+            &mut state,
+            &mut fonts,
+            &mut layouts,
+            Key::Character("y".into()),
+            Modifiers::empty(),
+        ));
+        assert_eq!(state.text(), "axybc");
+    }
+
+    #[test]
     fn affixes_are_armor_not_content() {
         let (mut fonts, mut layouts) = contexts();
         let action = if cfg!(target_os = "macos") {
@@ -789,10 +982,12 @@ mod tests {
         } else {
             Modifiers::CONTROL
         };
-        let mut state = state("hi").with_affixes("\"", "\"").with_cursor_at_end();
+        let presentation = presentation().with_affixes("\"", "\"");
+        let mut state = state("hi").with_cursor_at_end();
 
         // Typing lands between the affixes; the text stays bare.
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
@@ -803,14 +998,16 @@ mod tests {
 
         // Backspace at content start bites the prefix: swallowed
         // whole — handled, nothing changes.
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
             Key::Named(NamedKey::Home),
             Modifiers::empty(),
         ));
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
@@ -821,7 +1018,8 @@ mod tests {
 
         // Motion that only wanders into an affix is no motion: the
         // boundary arrow still declines to the caller.
-        assert!(!press(
+        assert!(!press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
@@ -831,14 +1029,16 @@ mod tests {
 
         // Select-all reaches the content alone; typing replaces it
         // and the affixes stand.
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
             Key::Character("a".into()),
             action,
         ));
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
@@ -849,7 +1049,8 @@ mod tests {
 
         // Delete at content end bites the suffix: swallowed too.
         state.cursor_to_end();
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
@@ -860,7 +1061,8 @@ mod tests {
 
         // Emptied, the delete keys decline — the caller's
         // delete-the-value idiom sees through the affixes.
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
@@ -868,7 +1070,8 @@ mod tests {
             Modifiers::empty(),
         ));
         assert_eq!(state.text(), "");
-        assert!(!press(
+        assert!(!press_with(
+            &presentation,
             &mut state,
             &mut fonts,
             &mut layouts,
@@ -886,10 +1089,12 @@ mod tests {
             Modifiers::CONTROL
         };
         // Word-delete whose boundary lands in the interior works.
-        let mut words = state("hi there").with_affixes("\"", "\"");
+        let presentation = presentation().with_affixes("\"", "\"");
+        let mut words = state("hi there");
         words.anchor = 2;
         words.focus = 2;
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut words,
             &mut fonts,
             &mut layouts,
@@ -902,10 +1107,11 @@ mod tests {
         // WHOLE — a swallowed no-op where trimming to the interior
         // was arguable. Parley owns the range; the decline is the
         // affix contract.
-        let mut leading = state(" hi").with_affixes("\"", "\"");
+        let mut leading = state(" hi");
         leading.anchor = 1;
         leading.focus = 1;
-        assert!(press(
+        assert!(press_with(
+            &presentation,
             &mut leading,
             &mut fonts,
             &mut layouts,
@@ -929,6 +1135,103 @@ mod tests {
             ));
         }
         assert!(state.text() == "x");
+    }
+
+    #[test]
+    fn clipboard_is_a_supplied_capability() {
+        let (mut fonts, mut layouts) = contexts();
+        let presentation = presentation();
+        let action = if cfg!(target_os = "macos") {
+            Modifiers::META
+        } else {
+            Modifiers::CONTROL
+        };
+        let mut clipboard = MemoryClipboard::default();
+        let mut source = state("hello").with_cursor_at_end();
+        assert!(press_with_clipboard(
+            &presentation,
+            &mut source,
+            &mut fonts,
+            &mut layouts,
+            &mut clipboard,
+            Key::Character("a".into()),
+            action,
+        ));
+        assert!(press_with_clipboard(
+            &presentation,
+            &mut source,
+            &mut fonts,
+            &mut layouts,
+            &mut clipboard,
+            Key::Character("c".into()),
+            action,
+        ));
+
+        let mut target = state("");
+        assert!(press_with_clipboard(
+            &presentation,
+            &mut target,
+            &mut fonts,
+            &mut layouts,
+            &mut clipboard,
+            Key::Character("v".into()),
+            action,
+        ));
+        assert_eq!(target.text(), "hello");
+    }
+
+    #[test]
+    fn recorder_exposes_selection_and_caret_geometry() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut cache = crate::text::TextCache::default();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let mut state = state("abc");
+        state.anchor = 0;
+        state.focus = 2;
+        let style = EditStyle {
+            selection: Brush::default(),
+            cursor: Brush::default(),
+        };
+        let node = text_edit::<(), DrawFrame>(
+            LineEditDescription {
+                state: &state,
+                focused: true,
+                presentation: presentation(),
+                style: &style,
+                placeholder: None,
+            },
+            &mut tcx,
+            |_| None,
+        );
+        let mut frame = DrawFrame {
+            list: DrawList::new(),
+            handler: Handler::new(),
+        };
+        place_top_left(node, &mut frame, Point::new(20.0, 30.0));
+        let fills: Vec<Rect> = frame
+            .list
+            .0
+            .iter()
+            .filter_map(|command| match command {
+                DrawCmd::Fill {
+                    shape: Shape::Rect(rect),
+                    ..
+                } => Some(*rect),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(fills.len(), 2);
+        let selection = fills[0];
+        let caret = fills[1];
+        assert!(selection.width() > caret.width());
+        assert_eq!(caret.width(), 1.5);
+        assert!(caret.height() > 0.0);
     }
 
     #[test]
@@ -1001,6 +1304,7 @@ mod tests {
     #[test]
     fn cursor_end_is_immediate_and_clicks_still_place() {
         let (mut fonts, mut layouts) = contexts();
+        let presentation = presentation();
         let mut seeded = state("abc").with_cursor_at_end();
         press(
             &mut seeded,
@@ -1012,7 +1316,17 @@ mod tests {
         assert!(seeded.text() == "abcz");
 
         let mut clicked = state("abc").with_cursor_at_end();
-        clicked.pointer_down(&mut fonts, &mut layouts, 1.0, Point::new(0.0, 5.0), false, 1);
+        clicked.pointer_down(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            1.0,
+            LineEditPointerDown {
+                point: Point::new(0.0, 5.0),
+                shift: false,
+                count: 1,
+            },
+        );
         press(
             &mut clicked,
             &mut fonts,
@@ -1037,6 +1351,7 @@ mod tests {
     #[test]
     fn double_click_drag_extends_by_words() {
         let (mut fonts, mut layouts) = contexts();
+        let presentation = presentation();
         let mut state = state("hello world");
         let selected = |state: &LineEditState| {
             let (start, end) = (
@@ -1046,30 +1361,75 @@ mod tests {
             state.text()[start..end].to_string()
         };
 
-        state.pointer_down(&mut fonts, &mut layouts, 1.0, Point::new(2.0, 5.0), false, 2);
+        state.pointer_down(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            1.0,
+            LineEditPointerDown {
+                point: Point::new(2.0, 5.0),
+                shift: false,
+                count: 2,
+            },
+        );
         assert_eq!(selected(&state), "hello");
 
         // Extending keeps the word anchor across transient editors...
-        assert!(state.pointer_move(&mut fonts, &mut layouts, 1.0, Point::new(10_000.0, 5.0)));
+        assert!(state.pointer_move(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            1.0,
+            Point::new(10_000.0, 5.0),
+        ));
         assert_eq!(selected(&state), "hello world");
 
         // ...and dragging back re-collapses to the anchor word.
-        assert!(state.pointer_move(&mut fonts, &mut layouts, 1.0, Point::new(2.0, 5.0)));
+        assert!(state.pointer_move(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            1.0,
+            Point::new(2.0, 5.0),
+        ));
         assert_eq!(selected(&state), "hello");
     }
 
     #[test]
     fn drag_extends_selection_until_released() {
         let (mut fonts, mut layouts) = contexts();
+        let presentation = presentation();
         let mut state = state("hello world");
 
-        state.pointer_down(&mut fonts, &mut layouts, 1.0, Point::new(0.0, 5.0), false, 1);
-        assert!(state.pointer_move(&mut fonts, &mut layouts, 1.0, Point::new(10_000.0, 5.0)));
+        state.pointer_down(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            1.0,
+            LineEditPointerDown {
+                point: Point::new(0.0, 5.0),
+                shift: false,
+                count: 1,
+            },
+        );
+        assert!(state.pointer_move(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            1.0,
+            Point::new(10_000.0, 5.0),
+        ));
         assert_eq!((state.anchor, state.focus), (0, 11));
 
         assert!(state.pointer_up());
         assert!(!state.pointer_up());
-        assert!(!state.pointer_move(&mut fonts, &mut layouts, 1.0, Point::new(0.0, 5.0)));
+        assert!(!state.pointer_move(
+            &presentation,
+            &mut fonts,
+            &mut layouts,
+            1.0,
+            Point::new(0.0, 5.0),
+        ));
     }
 
     #[test]
