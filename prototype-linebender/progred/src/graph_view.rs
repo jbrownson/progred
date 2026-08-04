@@ -14,6 +14,7 @@
 
 use crate::conventions::Names;
 use crate::hover::HasHover;
+use crate::layout::{Extent, Node, leaf};
 use crate::raw::{Document, Selection, command, short_id};
 use crate::sources::Sources;
 use parley::style::GenericFamily;
@@ -21,7 +22,6 @@ use parley::{Layout, StyleProperty};
 use progred_graph::{Atom, CellId, Value};
 use puri::draw::Canvas;
 use puri::handler::HasHandler;
-use puri::layout::{Extent, Node, leaf};
 use puri::text::{TextCtx, draw_layout};
 use std::collections::HashMap;
 use std::rc::Rc;

@@ -686,10 +686,18 @@ starts while leaving motion and release free to finish outside. Its
 own document scroll action and the graph camera now register on
 `Handler::on_scroll`; visual placement order supplies precedence and
 the shell fallback is gone. `layout::around` carries an owned one-shot
-`PlaceInner` underneath `before` and `after`, available
+`PlaceInner` underneath `before`, available
 for later containers that need to capture or discard child outputs.
 Fully clipped descendants still place because hover resolution, navigation,
 and handler construction are not drawing and cannot be culled blindly.
+
+LAYOUT BOUNDARY CORRECTION (2026-08-03, user: "the layout code shouldn't be
+in Puri"): `Placement` remains Puri's widget geometry contract, but the
+baseline box algebra, its `Node`, traversal, interaction adapters, and scroll
+container now belong to Progred. Puri text and line editing expose measured
+descriptions placed into caller-supplied geometry; Puri interaction helpers
+register directly against that geometry. The earlier `puri::scroll` wording
+above records the first extraction, not the current ownership.
 
 Post-audit settlements (2026-07-21, user): EMPTY CONTAINERS have
 one form — `{}` and `[]` take the literal whatever the width says;
@@ -700,9 +708,8 @@ POSTURE is explicit: layout is "enough to move forward", corner
 cases and a fuzzer are deliberately NOT being chased while the
 design is still moving — revisit when it settles. The
 field-row/cell hug-drop DUPLICATION stays inline on purpose
-(divergence likely while this area churns). `puri::scroll::
-max_offset` stays as the scroll-bar round's API surface despite
-progred keeping its own clamp formulas — the document pane's
+(divergence likely while this area churns). The unused `max_offset` helper is
+gone; Progred keeps its clamp formulas with its scroll container — the document pane's
 clamp answers to the LAYOUT width while its clip answers to the
 WINDOW width, a two-viewport subtlety the eventual widget must
 carry. REVEAL-ON-SELECTION now chases BOTH axes, horizontally
@@ -871,7 +878,7 @@ the same machinery with the default flipped: the repeated cell
 defaults collapsed at each depth's OWN path, so expansion follows
 the cycle turn by turn, as deep as wanted. Test-pinned:
 turn-by-turn expansion, sparse overrides restoring defaults,
-plain cells and containers toggling alike, valueless declining. The frame minimum became `puri::layout::min_width`
+plain cells and containers toggling alike, valueless declining. The frame minimum became `layout::min_width`
 — a real combinator (pad-to-minimum on the right), not inline
 arithmetic — the name editor's content-persists-chrome-marks-
 engagement pattern applied to absence itself. The pending
@@ -916,7 +923,7 @@ pays real height (290 -> 419) as head-only lines stair-step where
 chains used to hug — the accepted trade, and the open question if
 the dangling-colon lines grate is a HANGING form: the value's open
 delimiter hugging the head line, prettier's object style, which
-needs a first-line-offset layout Puri does not have. Bench
+needs a first-line-offset layout Progred's box algebra does not have. Bench
 timings held single-digit milliseconds at all three widths.
 
 THE DASH RETIRES (2026-07-22, user: "I'm not sure the - is

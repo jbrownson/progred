@@ -8,6 +8,10 @@
 use crate::conventions::Names;
 use crate::filter;
 use crate::hover::HasHover;
+use crate::layout::{
+    Extent, Node, before, col, decorate, leaf, min_width,
+    on_primary_pointer_down, pad, row, text, text_edit,
+};
 use crate::sources::Sources;
 use im::OrdMap;
 use progred_graph::{
@@ -17,13 +21,12 @@ use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{
     EditCtx, EditStyle, LineEditDescription, LineEditPointerDown, LineEditPresentation,
-    LineEditState, text_edit,
+    LineEditState,
 };
+use puri::geometry::Placement;
 use puri::handler::HasHandler;
-use puri::interact::on_primary_pointer_down;
-use puri::layout::{Extent, HAlign, Node, Placement, before, col, decorate, leaf, min_width, pad, row};
 use parley::layout::Layout;
-use puri::text::{TextCtx, TextStyle, caret_index, line_layout, text};
+use puri::text::{TextCtx, TextStyle, caret_index, line_layout};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -2102,7 +2105,6 @@ fn cell_view<
                 row(4.0 * scale, vec![head, value_node])
             } else {
                 col(
-                    HAlign::Start,
                     0,
                     2.0 * scale,
                     vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), value_node)],
@@ -2311,7 +2313,6 @@ fn field_row<
         row(6.0 * scale, vec![head, content])
     } else {
         col(
-            HAlign::Start,
             0,
             2.0 * scale,
             vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), content)],
@@ -2496,7 +2497,7 @@ fn list_view<
         path,
         &target,
         hooks,
-        col(HAlign::Start, 0, 4.0 * scale, rows),
+        col(0, 4.0 * scale, rows),
     );
     // The general rule: first alternative that FITS, in priority
     // order; when none fits, the NARROWEST attempted, priority
@@ -2649,7 +2650,7 @@ fn record_view<
         path,
         &target,
         hooks,
-        col(HAlign::Start, 0, 4.0 * scale, rows),
+        col(0, 4.0 * scale, rows),
     );
     // The general rule: first alternative that FITS, in priority
     // order; when none fits, the NARROWEST attempted, priority
@@ -3101,7 +3102,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         .collect();
     let card = pad(
         Insets::uniform(4.0 * scale),
-        col(HAlign::Start, 0, 2.0 * scale, rows),
+        col(0, 2.0 * scale, rows),
     );
     before(card, move |p: &mut P, placement| {
         let rect = placement.rect;
@@ -4762,7 +4763,7 @@ mod svg_bench {
             hover_claims: Vec::new(),
         };
         let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-        puri::layout::place(
+        crate::layout::place(
             node,
             &mut bench,
             match viewport {
@@ -5153,7 +5154,7 @@ mod svg_bench {
                 pointer: Some(pointer),
                 hover_claims: Vec::new(),
             };
-            puri::layout::place_top_left(card, &mut bench, Point::ZERO);
+            crate::layout::place_top_left(card, &mut bench, Point::ZERO);
             (bench, extent)
         };
         // The card's own padding claims-and-clears: an overlay's

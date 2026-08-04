@@ -1,4 +1,4 @@
-//! Boxes with baselines: the TeX/pict model. A box is (width, ascent,
+//! Progred's boxes with baselines: the TeX/pict model. A box is (width, ascent,
 //! descent) plus a way to place itself; rows compose on baselines,
 //! columns stack with a chosen child's baseline.
 //!
@@ -7,52 +7,13 @@
 //! effects so alternative layouts can be built and discarded, and
 //! placement is the single traversal that touches the context `P`.
 
-use kurbo::{Insets, Point, Rect, Size};
-
-/// A node's full settled rectangle and the effective enclosing
-/// axis-aligned clipping area.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Placement {
-    pub rect: Rect,
-    pub clip_rect: Rect,
-}
-
-impl Placement {
-    pub const fn new(rect: Rect, clip_rect: Rect) -> Self {
-        Self { rect, clip_rect }
-    }
-
-    pub const fn root(rect: Rect) -> Self {
-        Self::new(rect, rect)
-    }
-
-    pub fn child(self, rect: Rect) -> Self {
-        Self {
-            rect,
-            clip_rect: self.clip_rect,
-        }
-    }
-
-    pub fn clipped_by(self, bounds: Rect) -> Self {
-        Self {
-            clip_rect: self.clip_rect.intersect(bounds),
-            ..self
-        }
-    }
-
-    pub fn visible_rect(self) -> Rect {
-        self.rect.intersect(self.clip_rect)
-    }
-
-    pub fn clipped_out(self) -> bool {
-        let visible = self.visible_rect();
-        visible.width() <= 0.0 || visible.height() <= 0.0
-    }
-
-    pub fn contains(self, point: Point) -> bool {
-        !self.clipped_out() && self.rect.contains(point) && self.clip_rect.contains(point)
-    }
-}
+use puri::draw::Canvas;
+use puri::edit::{EditCtx, LineEditDescription};
+use puri::geometry::Placement;
+use puri::handler::{Handler, HasHandler, capture};
+use puri::text::{TextCtx, TextMetrics, TextStyle};
+use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
+use vello::kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Extent {
@@ -75,11 +36,14 @@ impl Extent {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HAlign {
-    Start,
-    Center,
-    End,
+impl From<TextMetrics> for Extent {
+    fn from(metrics: TextMetrics) -> Self {
+        Self {
+            width: metrics.width,
+            ascent: metrics.ascent,
+            descent: metrics.descent,
+        }
+    }
 }
 
 pub struct Node<P> {
@@ -90,6 +54,14 @@ pub struct Node<P> {
 pub struct PlaceInner<P> {
     child: Node<P>,
     placement: Placement,
+}
+
+fn child_placement(parent: Placement, rect: Rect) -> Placement {
+    Placement::new(rect, parent.clip_rect)
+}
+
+fn clipped_placement(placement: Placement, bounds: Rect) -> Placement {
+    Placement::new(placement.rect, placement.clip_rect.intersect(bounds))
 }
 
 impl<P> PlaceInner<P> {
@@ -109,7 +81,6 @@ enum Kind<P> {
     },
     Col {
         children: Vec<Node<P>>,
-        align: HAlign,
         gap: f64,
     },
     Pad {
@@ -152,7 +123,7 @@ pub fn row<P>(gap: f64, children: Vec<Node<P>>) -> Node<P> {
 }
 
 /// Children stacked; the column's baseline is child `baseline`'s.
-pub fn col<P>(align: HAlign, baseline: usize, gap: f64, children: Vec<Node<P>>) -> Node<P> {
+pub fn col<P>(baseline: usize, gap: f64, children: Vec<Node<P>>) -> Node<P> {
     let extent = if children.is_empty() {
         Extent::default()
     } else {
@@ -177,11 +148,7 @@ pub fn col<P>(align: HAlign, baseline: usize, gap: f64, children: Vec<Node<P>>) 
     };
     Node {
         extent,
-        kind: Kind::Col {
-            children,
-            align,
-            gap,
-        },
+        kind: Kind::Col { children, gap },
     }
 }
 
@@ -235,18 +202,6 @@ pub fn before<P>(
     })
 }
 
-/// Run `place_after` while leaving this node, after its content and
-/// descendants.
-pub fn after<P>(
-    child: Node<P>,
-    place_after: impl FnOnce(&mut P, Placement) + 'static,
-) -> Node<P> {
-    around(child, move |ctx, placement, place_inner| {
-        place_inner.place(ctx);
-        place_after(ctx, placement);
-    })
-}
-
 /// The historical leading decoration operation, retained as the
 /// rectangle-only spelling of [`before`].
 pub fn decorate<P>(
@@ -271,33 +226,22 @@ pub fn place<P>(node: Node<P>, ctx: &mut P, placement: Placement) {
                     x + child.extent.width,
                     at.y + child.extent.descent,
                 );
-                place(child, ctx, placement.child(rect));
+                place(child, ctx, child_placement(placement, rect));
                 x += advance;
             }
         }
-        Kind::Col {
-            children,
-            align,
-            gap,
-        } => {
+        Kind::Col { children, gap } => {
             let mut y = at.y - extent.ascent;
             for child in children {
-                let slack = extent.width - child.extent.width;
-                let x = at.x
-                    + match align {
-                        HAlign::Start => 0.0,
-                        HAlign::Center => slack / 2.0,
-                        HAlign::End => slack,
-                    };
                 let advance = child.extent.height() + gap;
                 let child_baseline = y + child.extent.ascent;
                 let rect = Rect::new(
-                    x,
+                    at.x,
                     child_baseline - child.extent.ascent,
-                    x + child.extent.width,
+                    at.x + child.extent.width,
                     child_baseline + child.extent.descent,
                 );
-                place(child, ctx, placement.child(rect));
+                place(child, ctx, child_placement(placement, rect));
                 y += advance;
             }
         }
@@ -309,7 +253,7 @@ pub fn place<P>(node: Node<P>, ctx: &mut P, placement: Placement) {
                 child_at.x + child.extent.width,
                 child_at.y + child.extent.descent,
             );
-            place(*child, ctx, placement.child(rect));
+            place(*child, ctx, child_placement(placement, rect));
         }
         Kind::Around { child, place: wrap } => {
             wrap(
@@ -325,14 +269,202 @@ pub fn place<P>(node: Node<P>, ctx: &mut P, placement: Placement) {
 }
 
 /// `at` is the top-left corner of the node.
+#[cfg(test)]
 pub fn place_top_left<P>(node: Node<P>, ctx: &mut P, at: Point) {
     let placement = Placement::root(node.extent.rect_at(at));
     place(node, ctx, placement);
 }
 
+pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Node<P> {
+    let text = puri::text::text(ctx, s, style);
+    leaf(
+        text.metrics().into(),
+        move |canvas, placement| text.place(canvas, placement),
+    )
+}
+
+pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
+    description: LineEditDescription<'_>,
+    tcx: &mut TextCtx,
+    with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
+) -> Node<P> {
+    let edit = puri::edit::text_edit(description, tcx);
+    leaf(
+        edit.metrics().into(),
+        move |p, placement| edit.place(p, placement, with),
+    )
+}
+
+pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
+    node: Node<P>,
+    accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
+    action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
+) -> Node<P> {
+    before(node, move |p, placement| {
+        puri::interact::on_primary_pointer_down(p, placement, accepts, action);
+    })
+}
+
+/// Place `child` shifted up-left by `offset` inside a clipped
+/// viewport. The caller owns and clamps the offset.
+pub fn place_scrolled<C: 'static, P: Canvas + HasHandler<C>>(
+    child: Node<P>,
+    ctx: &mut P,
+    placement: Placement,
+    offset: Vec2,
+    on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> bool + 'static,
+) {
+    let rect = placement.rect;
+    if !placement.clipped_out() {
+        ctx.handler().on_scroll(move |state, event| {
+            placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && on_scroll(state, event)
+        });
+    }
+    let child_rect = child
+        .extent
+        .rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
+    let child_placement = child_placement(clipped_placement(placement, rect), child_rect);
+    let child_handler = capture(ctx, |ctx| {
+        ctx.clip(rect, Affine::IDENTITY, |ctx| {
+            place(child, ctx, child_placement);
+        });
+    });
+    install_child(ctx.handler(), child_handler, placement);
+}
+
+fn install_child<C: 'static>(outer: &mut Handler<C>, child: Handler<C>, placement: Placement) {
+    let Handler {
+        pointer_down,
+        pointer_move,
+        pointer_up,
+        scroll,
+        key,
+        ime,
+    } = child;
+    if !placement.clipped_out() {
+        outer.on_pointer_down(move |ctx, event: &PointerButtonEvent| {
+            placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && pointer_down(ctx, event)
+        });
+        outer.on_scroll(move |ctx, event| {
+            placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && scroll(ctx, event)
+        });
+    }
+    outer.on_pointer_move(pointer_move);
+    outer.on_pointer_up(pointer_up);
+    outer.on_key(key);
+    outer.on_ime(ime);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
+    use ui_events::ScrollDelta;
+    use ui_events::pointer::{
+        PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+        PointerUpdate,
+    };
+    use vello::kurbo::Stroke;
+    use vello::peniko::Brush;
+
+    struct Frame<C> {
+        list: DrawList,
+        handler: Handler<C>,
+    }
+
+    impl<C> Canvas for Frame<C> {
+        fn fill(
+            &mut self,
+            shape: impl Into<Shape>,
+            brush: impl Into<Brush>,
+            transform: Affine,
+        ) {
+            self.list.fill(shape, brush, transform);
+        }
+
+        fn stroke(
+            &mut self,
+            shape: impl Into<Shape>,
+            style: Stroke,
+            brush: impl Into<Brush>,
+            transform: Affine,
+        ) {
+            self.list.stroke(shape, style, brush, transform);
+        }
+
+        fn glyph_run(&mut self, run: GlyphRun) {
+            self.list.glyph_run(run);
+        }
+
+        fn clip(
+            &mut self,
+            shape: impl Into<Shape>,
+            transform: Affine,
+            content: impl FnOnce(&mut Self),
+        ) {
+            let shape = shape.into();
+            let mut child = Frame {
+                list: DrawList::new(),
+                handler: std::mem::take(&mut self.handler),
+            };
+            content(&mut child);
+            self.handler = child.handler;
+            self.list.0.push(DrawCmd::Clip {
+                shape,
+                transform,
+                children: child.list.0,
+            });
+        }
+    }
+
+    impl<C> HasHandler<C> for Frame<C> {
+        fn handler(&mut self) -> &mut Handler<C> {
+            &mut self.handler
+        }
+    }
+
+    fn pointer() -> PointerInfo {
+        PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        }
+    }
+
+    fn state_at(x: f64, y: f64) -> PointerState {
+        let mut state = PointerState::default();
+        state.position.x = x;
+        state.position.y = y;
+        state
+    }
+
+    fn down_at(x: f64, y: f64) -> PointerButtonEvent {
+        PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: pointer(),
+            state: state_at(x, y),
+        }
+    }
+
+    fn move_at(x: f64, y: f64) -> PointerUpdate {
+        PointerUpdate {
+            pointer: pointer(),
+            current: state_at(x, y),
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        }
+    }
+
+    fn scroll_at(x: f64, y: f64) -> PointerScrollEvent {
+        PointerScrollEvent {
+            pointer: pointer(),
+            delta: ScrollDelta::LineDelta(0.0, 1.0),
+            state: state_at(x, y),
+        }
+    }
 
     fn probe(extent: Extent) -> Node<Vec<Placement>> {
         leaf(extent, move |placed: &mut Vec<Placement>, placement| {
@@ -346,6 +478,19 @@ mod tests {
             ascent,
             descent,
         }
+    }
+
+    #[test]
+    fn children_inherit_the_enclosing_clip_until_a_container_narrows_it() {
+        let root = Placement::new(
+            Rect::new(0.0, 0.0, 100.0, 100.0),
+            Rect::new(40.0, 20.0, 120.0, 80.0),
+        );
+        let child = child_placement(root, Rect::new(20.0, 50.0, 60.0, 90.0));
+        assert_eq!(child.clip_rect, root.clip_rect);
+        assert_eq!(child.visible_rect(), Rect::new(40.0, 50.0, 60.0, 80.0));
+        let clipped = clipped_placement(child, Rect::new(50.0, 0.0, 80.0, 100.0));
+        assert_eq!(clipped.clip_rect, Rect::new(50.0, 20.0, 80.0, 80.0));
     }
 
     #[test]
@@ -371,7 +516,6 @@ mod tests {
     #[test]
     fn col_takes_the_chosen_childs_baseline() {
         let c = col(
-            HAlign::Start,
             1,
             2.0,
             vec![
@@ -396,20 +540,6 @@ mod tests {
                 Rect::new(0.0, 102.0, 10.0, 112.0),
             ]
         );
-    }
-
-    #[test]
-    fn col_centers_narrow_children() {
-        let c = col(
-            HAlign::Center,
-            0,
-            0.0,
-            vec![probe(ext(10.0, 5.0, 0.0)), probe(ext(30.0, 5.0, 0.0))],
-        );
-        let mut placed = Vec::new();
-        place_top_left(c, &mut placed, Point::ZERO);
-        assert_eq!(placed[0].rect.x0, 10.0);
-        assert_eq!(placed[1].rect.x0, 0.0);
     }
 
     #[test]
@@ -506,20 +636,105 @@ mod tests {
     }
 
     #[test]
-    fn child_placements_inherit_the_enclosing_clip() {
-        let root = Placement::new(
-            Rect::new(0.0, 0.0, 100.0, 100.0),
-            Rect::new(40.0, 20.0, 120.0, 80.0),
+    fn scrolled_content_shifts_inside_the_viewport_clip() {
+        let probe = leaf(
+            Extent {
+                width: 100.0,
+                ascent: 0.0,
+                descent: 300.0,
+            },
+            |frame: &mut Frame<()>, placement| {
+                assert_eq!(placement.clip_rect, Rect::new(10.0, 20.0, 90.0, 70.0));
+                frame.fill(
+                    Rect::new(
+                        placement.rect.x0,
+                        placement.rect.y0,
+                        placement.rect.x0 + 1.0,
+                        placement.rect.y0 + 1.0,
+                    ),
+                    vello::peniko::Color::WHITE,
+                    Affine::IDENTITY,
+                );
+            },
         );
-        assert_eq!(root.clip_rect, Rect::new(40.0, 20.0, 120.0, 80.0));
-        let child = root.child(Rect::new(20.0, 50.0, 60.0, 90.0));
-        assert_eq!(child.clip_rect, root.clip_rect);
-        assert_eq!(child.visible_rect(), Rect::new(40.0, 50.0, 60.0, 80.0));
-        let hidden = child.child(Rect::new(70.0, 0.0, 90.0, 10.0));
-        assert_eq!(hidden.clip_rect, root.clip_rect);
-        assert!(hidden.clipped_out());
-
-        let clipped = child.clipped_by(Rect::new(50.0, 0.0, 80.0, 100.0));
-        assert_eq!(clipped.clip_rect, Rect::new(50.0, 20.0, 80.0, 80.0));
+        let mut frame: Frame<()> = Frame {
+            list: DrawList::new(),
+            handler: Handler::new(),
+        };
+        place_scrolled(
+            probe,
+            &mut frame,
+            Placement::new(
+                Rect::new(10.0, 20.0, 90.0, 70.0),
+                Rect::new(0.0, 0.0, 100.0, 100.0),
+            ),
+            Vec2::new(5.0, 40.0),
+            |_, _| false,
+        );
+        let [DrawCmd::Clip {
+            shape: Shape::Rect(clip),
+            children,
+            ..
+        }] = &frame.list.0[..]
+        else {
+            panic!("expected one clip");
+        };
+        assert_eq!(*clip, Rect::new(10.0, 20.0, 90.0, 70.0));
+        let [DrawCmd::Fill {
+            shape: Shape::Rect(dot),
+            ..
+        }] = &children[..]
+        else {
+            panic!("expected the probe inside the clip");
+        };
+        assert_eq!((dot.x0, dot.y0), (5.0, -20.0));
     }
+
+    #[test]
+    fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
+        let child = leaf(
+            Extent {
+                width: 30.0,
+                ascent: 0.0,
+                descent: 30.0,
+            },
+            |frame: &mut Frame<Vec<&'static str>>, _| {
+                frame.handler.on_pointer_down(|log, _| {
+                    log.push("down");
+                    true
+                });
+                frame.handler.on_pointer_move(|log, _| {
+                    log.push("move");
+                    true
+                });
+                frame.handler.on_pointer_up(|log, _| {
+                    log.push("up");
+                    true
+                });
+            },
+        );
+        let mut frame = Frame {
+            list: DrawList::new(),
+            handler: Handler::new(),
+        };
+        place_scrolled(
+            child,
+            &mut frame,
+            Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+            Vec2::ZERO,
+            |log, _| {
+                log.push("scroll");
+                true
+            },
+        );
+        let mut log = Vec::new();
+        assert!(!frame.handler.dispatch_pointer_down(&mut log, &down_at(20.0, 5.0)));
+        assert!(!frame.handler.dispatch_scroll(&mut log, &scroll_at(20.0, 5.0)));
+        assert!(frame.handler.dispatch_pointer_down(&mut log, &down_at(5.0, 5.0)));
+        assert!(frame.handler.dispatch_scroll(&mut log, &scroll_at(5.0, 5.0)));
+        assert!(frame.handler.dispatch_pointer_move(&mut log, &move_at(20.0, 5.0)));
+        assert!(frame.handler.dispatch_pointer_up(&mut log, &down_at(20.0, 5.0)));
+        assert_eq!(log, ["down", "scroll", "move", "up"]);
+    }
+
 }

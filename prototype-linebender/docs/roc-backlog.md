@@ -98,7 +98,7 @@ third click may be the new editor's logical double click; a raw single click
 starts a new run and clears the adjustment.
 
 Progred currently mounts editors on click one and has an ad-hoc fresh-count
-rule, so this is not an active bug. The general `around` wrapper is present;
+rule, so this is not an active bug. Progred's general `around` wrapper is present;
 use it for the translation only when the interaction needs it.
 
 ## Basic widget catalog
@@ -145,8 +145,8 @@ content. Port the bounded behavior when a fixed-width field appears.
   explicit at call sites.
 - Recorder/geometry coverage for line-edit selection and caret rectangles,
   nested clips, delimiters, and clipped handler precedence.
-- Continuation-shaped `around` placement, with `before`, `after`, and the old
-  rectangle-only `decorate` derived from it.
+- Continuation-shaped `around` placement in Progred's box algebra, with
+  `before` and the old rectangle-only `decorate` derived from it.
 - Explicit full `rect` and enclosing `clip_rect` values on every placement;
   nested scroll viewports intersect, gate gesture starts and hover, and leave an active
   gesture's motion and release unbounded.

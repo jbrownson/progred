@@ -12,15 +12,16 @@
 //! single-line-irrelevant: cursor affinity (bidi boundaries) and the
 //! vertical goal column.
 //!
-//! Chrome (frame, padding, focus ring, minimum width) is composition
-//! via `pad`/`decorate`. Pointer policy stays with the wrapping layer
-//! through the state's pointer methods; the widget registers keyboard
-//! and IME dispatch only while focused.
+//! Chrome (frame, padding, focus ring, minimum width) is caller
+//! composition; Progred uses its `pad`/`decorate` box operations.
+//! Pointer policy stays with the wrapping layer through the state's
+//! pointer methods; the widget registers keyboard and IME dispatch
+//! only while focused.
 
 use crate::draw::Canvas;
+use crate::geometry::Placement;
 use crate::handler::{HasHandler, ImeEvent};
-use crate::layout::{Extent, Node, leaf};
-use crate::text::{TextCtx, TextStyle, build_layout, draw_layout};
+use crate::text::{TextCtx, TextMetrics, TextStyle, build_layout, draw_layout};
 use kurbo::{Affine, Point, Rect};
 use parley::Layout;
 use parley::style::GenericFamily;
@@ -518,91 +519,53 @@ impl LineEditState {
     }
 }
 
-/// Bare editable text sized to its content, drawn from a transient
-/// editor built off the true state. While the text is empty, an
-/// optional `placeholder` shows as ghost content — sized and drawn in
-/// its own style, the field keeping the ghost's width instead of
-/// collapsing — and the first typed character replaces it, the field
-/// snapping to fit. Registers keyboard and IME dispatch (through
-/// `with`) only while focused; pointer wiring is the caller's, via
-/// the state's pointer methods and its own settled rect. Dispatch
-/// targets the last rendered frame, which can outlive the editor
-/// (deselect, then a move in the same gesture), so `with` returns
-/// None when the editor is gone and the handlers decline.
-pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
-    description: LineEditDescription<'_>,
-    tcx: &mut TextCtx,
-    with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
-) -> Node<P> {
-    let LineEditDescription {
-        state,
-        focused,
-        presentation,
-        style,
-        placeholder,
-    } = description;
-    let scale = tcx.scale;
-    let ghost = placeholder
-        .filter(|_| state.text.is_empty() && !state.is_composing() && !presentation.dressed())
-        .map(|(text, style)| build_layout(tcx, text, style, None, None));
-    let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
-    let layout = editor.try_layout().cloned();
-    let metrics_of = |layout: &Layout<Brush>| {
-        let metrics = *layout.lines().next()?.metrics();
-        let baseline = metrics.baseline as f64;
-        Some((
-            Extent {
-                width: metrics.advance as f64,
-                ascent: baseline,
-                descent: layout.height() as f64 - baseline,
-            },
-            baseline,
-        ))
-    };
-    let editor_baseline = layout
-        .as_ref()
-        .and_then(metrics_of)
-        .map(|(_, baseline)| baseline)
-        .unwrap_or(0.0);
-    // The ghost's metrics size the field while it shows; both it and
-    // the cursor hang from the shared visual baseline.
-    let (extent, layout_baseline) = ghost
-        .as_ref()
-        .and_then(metrics_of)
-        .or_else(|| layout.as_ref().and_then(metrics_of))
-        .unwrap_or((Extent::default(), 0.0));
+/// A measured, ephemeral line-edit description. Its caller chooses a
+/// placement and invokes [`LineEdit::place`]; no layout strategy is
+/// built into Puri.
+pub struct LineEdit {
+    metrics: TextMetrics,
+    scale: f32,
+    ghost: Option<Layout<Brush>>,
+    layout: Option<Layout<Brush>>,
+    layout_baseline: f64,
+    editor_baseline: f64,
+    selection: Vec<Rect>,
+    cursor: Option<Rect>,
+    selection_brush: Brush,
+    cursor_brush: Brush,
+    focused: bool,
+    presentation: LineEditPresentation,
+}
 
-    let selection: Vec<Rect> = if focused {
-        let mut rects = Vec::new();
-        editor
-            .selection_geometry_with(|bb, _| rects.push(Rect::new(bb.x0, bb.y0, bb.x1, bb.y1)));
-        rects
-    } else {
-        Vec::new()
-    };
-    // Parley's caret spans the leaded line box; a native-feeling
-    // caret spans the ascent and a taste of the descent.
-    let caret_span = layout.as_ref().and_then(|l| l.lines().next()).map(|line| {
-        let m = *line.metrics();
-        let baseline = m.baseline as f64;
-        (
-            baseline - m.ascent as f64,
-            baseline + 0.5 * m.descent as f64,
-        )
-    });
-    let cursor = focused
-        .then(|| {
-            editor.cursor_geometry(1.5 * scale).map(|bb| {
-                let (top, bottom) = caret_span.unwrap_or((bb.y0, bb.y1));
-                Rect::new(bb.x0, top, bb.x1, bottom)
-            })
-        })
-        .flatten();
-    let selection_brush = style.selection.clone();
-    let cursor_brush = style.cursor.clone();
+impl LineEdit {
+    pub fn metrics(&self) -> TextMetrics {
+        self.metrics
+    }
 
-    leaf(extent, move |p: &mut P, placement| {
-        let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
+    /// Draw and register this description at its caller-supplied
+    /// settled placement. Dispatch can outlive the editor represented
+    /// by the frame, so `with` returns `None` when it has gone away.
+    pub fn place<C: 'static, P: Canvas + HasHandler<C>>(
+        self,
+        p: &mut P,
+        placement: Placement,
+        with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
+    ) {
+        let Self {
+            metrics,
+            scale,
+            ghost,
+            layout,
+            layout_baseline,
+            editor_baseline,
+            selection,
+            cursor,
+            selection_brush,
+            cursor_brush,
+            focused,
+            presentation,
+        } = self;
+        let at = Point::new(placement.rect.x0, placement.rect.y0 + metrics.ascent);
         let transform = Affine::translate((at.x, at.y - layout_baseline));
         for rect in &selection {
             p.fill(*rect, selection_brush.clone(), transform);
@@ -616,7 +579,7 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
         if let Some(cursor) = cursor {
             p.fill(
                 cursor,
-                cursor_brush.clone(),
+                cursor_brush,
                 Affine::translate((at.x, at.y - editor_baseline)),
             );
         }
@@ -673,7 +636,91 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
             p.handler()
                 .on_ime(move |ctx, event| with(ctx).is_some_and(|edit| edit.state.handle_ime(event)));
         }
-    })
+    }
+}
+
+/// Build bare editable text from current state and presentation. While
+/// empty, an optional placeholder supplies the measured and drawn ghost
+/// content. Pointer-down policy remains with the caller.
+pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> LineEdit {
+    let LineEditDescription {
+        state,
+        focused,
+        presentation,
+        style,
+        placeholder,
+    } = description;
+    let scale = tcx.scale;
+    let ghost = placeholder
+        .filter(|_| state.text.is_empty() && !state.is_composing() && !presentation.dressed())
+        .map(|(text, style)| build_layout(tcx, text, style, None, None));
+    let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
+    let layout = editor.try_layout().cloned();
+    let metrics_of = |layout: &Layout<Brush>| {
+        let metrics = *layout.lines().next()?.metrics();
+        let baseline = metrics.baseline as f64;
+        Some((
+            TextMetrics {
+                width: metrics.advance as f64,
+                ascent: baseline,
+                descent: layout.height() as f64 - baseline,
+            },
+            baseline,
+        ))
+    };
+    let editor_baseline = layout
+        .as_ref()
+        .and_then(metrics_of)
+        .map(|(_, baseline)| baseline)
+        .unwrap_or(0.0);
+    // The ghost's metrics size the field while it shows; both it and
+    // the cursor hang from the shared visual baseline.
+    let (metrics, layout_baseline) = ghost
+        .as_ref()
+        .and_then(metrics_of)
+        .or_else(|| layout.as_ref().and_then(metrics_of))
+        .unwrap_or((TextMetrics::default(), 0.0));
+
+    let selection: Vec<Rect> = if focused {
+        let mut rects = Vec::new();
+        editor
+            .selection_geometry_with(|bb, _| rects.push(Rect::new(bb.x0, bb.y0, bb.x1, bb.y1)));
+        rects
+    } else {
+        Vec::new()
+    };
+    // Parley's caret spans the leaded line box; a native-feeling
+    // caret spans the ascent and a taste of the descent.
+    let caret_span = layout.as_ref().and_then(|l| l.lines().next()).map(|line| {
+        let m = *line.metrics();
+        let baseline = m.baseline as f64;
+        (
+            baseline - m.ascent as f64,
+            baseline + 0.5 * m.descent as f64,
+        )
+    });
+    let cursor = focused
+        .then(|| {
+            editor.cursor_geometry(1.5 * scale).map(|bb| {
+                let (top, bottom) = caret_span.unwrap_or((bb.y0, bb.y1));
+                Rect::new(bb.x0, top, bb.x1, bottom)
+            })
+        })
+        .flatten();
+    LineEdit {
+        metrics,
+        scale,
+        ghost,
+        layout,
+        layout_baseline,
+        editor_baseline,
+        selection,
+        cursor,
+        selection_brush: style.selection.clone(),
+        cursor_brush: style.cursor.clone(),
+        focused,
+        presentation,
+    }
 }
 
 #[cfg(test)]
@@ -681,7 +728,6 @@ mod tests {
     use super::*;
     use crate::draw::{DrawCmd, DrawList, GlyphRun, Shape};
     use crate::handler::Handler;
-    use crate::layout::place_top_left;
     use kurbo::Stroke;
     use ui_events::keyboard::{KeyState, Modifiers};
 
@@ -1197,7 +1243,7 @@ mod tests {
             selection: Brush::default(),
             cursor: Brush::default(),
         };
-        let node = text_edit::<(), DrawFrame>(
+        let edit = text_edit(
             LineEditDescription {
                 state: &state,
                 focused: true,
@@ -1206,13 +1252,22 @@ mod tests {
                 placeholder: None,
             },
             &mut tcx,
-            |_| None,
         );
+        let metrics = edit.metrics();
         let mut frame = DrawFrame {
             list: DrawList::new(),
             handler: Handler::new(),
         };
-        place_top_left(node, &mut frame, Point::new(20.0, 30.0));
+        edit.place::<(), DrawFrame>(
+            &mut frame,
+            Placement::root(Rect::new(
+                20.0,
+                30.0,
+                20.0 + metrics.width,
+                30.0 + metrics.ascent + metrics.descent,
+            )),
+            |_| None,
+        );
         let fills: Vec<Rect> = frame
             .list
             .0

@@ -9,13 +9,14 @@ This prototype builds Progred on Puri, a pure widget library over the
 Linebender stack (winit, Vello, Parley, kurbo, peniko). Puri is the
 rendering-and-behavior layer below the choice of retained, immediate,
 React-style, or incremental state management: any of them can construct
-the ephemeral widget descriptions that Puri places.
+ephemeral widget descriptions and place them through whatever layout policy
+they choose.
 
 Stable identity is history between evaluations, not a property an output
 value can mint for itself. Snapshot reconciliation reconstructs that
 provenance because it was absent from the snapshot. Puri instead asks its
-caller to own any cross-frame identity and state explicitly. Placement
-continuations solve the separate, smaller problem within one evaluation:
+caller to own any cross-frame identity and state explicitly. Consumer-owned
+placement continuations solve the separate, smaller problem within one evaluation:
 associating settled geometry with the behavior and other outputs of the
 description that produced it.
 

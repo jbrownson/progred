@@ -9,6 +9,7 @@ mod graph_view;
 mod history;
 mod hover;
 mod gid;
+mod layout;
 mod plugins;
 mod raw;
 mod store;
@@ -23,8 +24,8 @@ use parley::{FontContext, LayoutContext};
 use progred_graph::{Label, Step, Value};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditPointerDown, LineEditState, TextClipboard};
+use puri::geometry::Placement;
 use puri::handler::{Handler, HasHandler, ImeEvent};
-use puri::layout::{Placement, place};
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -2140,13 +2141,13 @@ fn run_frame(
             }),
         },
     );
-    // The body rides puri's scroll viewport: margins pad into the
+    // The body rides Progred's scroll container: margins pad into the
     // content, the window is the viewport, and the app's clamped
-    // offsets (its state, never puri's) shift it. The horizontal
+    // offsets (ordinary model state) shift it. The horizontal
     // maximum answers to the LAYOUT width — content should only
     // scroll where even the block forms overflowed it — not the
     // window edge the viewport clips at.
-    let content = puri::layout::pad(vello::kurbo::Insets::uniform(margin), body);
+    let content = layout::pad(vello::kurbo::Insets::uniform(margin), body);
     frame.max_scroll = ((content.extent.height() - viewport_height) / scale).max(0.0);
     frame.max_scroll_x =
         ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
@@ -2159,7 +2160,7 @@ fn run_frame(
     let graph_panel = view
         .graph
         .then(|| graph_view::panel(viewport_width, viewport_height));
-    puri::scroll::place_scrolled(
+    layout::place_scrolled(
         content,
         frame,
         Placement::root(Rect::new(0.0, 0.0, viewport_width, viewport_height)),
@@ -2228,7 +2229,7 @@ fn run_frame(
             },
         );
         let rect = pane.extent.rect_at(Point::new(panel.x0, panel.y0));
-        place(
+        layout::place(
             pane,
             frame,
             Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
@@ -2273,7 +2274,7 @@ fn run_frame(
             below
         };
         let rect = card.extent.rect_at(Point::new(popup.anchor.x0, y));
-        place(
+        layout::place(
             card,
             frame,
             Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),

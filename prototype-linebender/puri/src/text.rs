@@ -1,8 +1,9 @@
-//! Text leaves measured by parley. Styles are in logical units; extents
-//! come out in physical pixels via the context's display scale.
+//! Text descriptions measured by Parley and placed by their caller.
+//! Styles are in logical units; metrics come out in physical pixels
+//! via the context's display scale.
 
 use crate::draw::{Canvas, Glyph, GlyphRun};
-use crate::layout::{Extent, Node, leaf};
+use crate::geometry::Placement;
 use kurbo::{Affine, Line, Point, Stroke};
 use parley::layout::{Alignment, Layout, PositionedLayoutItem};
 use parley::style::{FontWeight, GenericFamily};
@@ -71,21 +72,47 @@ pub struct TextStyle {
     pub family: GenericFamily,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct TextMetrics {
+    pub width: f64,
+    pub ascent: f64,
+    pub descent: f64,
+}
+
+pub struct Text {
+    layout: Layout<Brush>,
+    metrics: TextMetrics,
+}
+
+impl Text {
+    pub fn metrics(&self) -> TextMetrics {
+        self.metrics
+    }
+
+    pub fn place(self, canvas: &mut impl Canvas, placement: Placement) {
+        draw_layout(
+            canvas,
+            &self.layout,
+            Affine::translate((placement.rect.x0, placement.rect.y0)),
+        );
+    }
+}
+
 /// Single line, no wrapping; width includes trailing whitespace so
 /// inline fragments compose without collapsing.
-pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Node<P> {
-    layout_node(build_layout(ctx, s, style, None, None), true)
+pub fn text(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Text {
+    measured_text(build_layout(ctx, s, style, None, None), true)
 }
 
 /// Wrapped to `max_width`; the baseline is the first line's.
-pub fn paragraph<P: Canvas>(
+pub fn paragraph(
     ctx: &mut TextCtx,
     s: &str,
     style: &TextStyle,
     line_height: f32,
     max_width: f32,
-) -> Node<P> {
-    layout_node(
+) -> Text {
+    measured_text(
         build_layout(ctx, s, style, Some(line_height), Some(max_width)),
         false,
     )
@@ -144,7 +171,7 @@ pub(crate) fn build_layout(
     layout
 }
 
-fn layout_node<P: Canvas>(layout: Layout<Brush>, include_trailing_whitespace: bool) -> Node<P> {
+fn measured_text(layout: Layout<Brush>, include_trailing_whitespace: bool) -> Text {
     let first = layout.lines().next().map(|line| *line.metrics());
     let baseline = first.map(|m| m.baseline as f64).unwrap_or(0.0);
     let width = if include_trailing_whitespace {
@@ -152,18 +179,12 @@ fn layout_node<P: Canvas>(layout: Layout<Brush>, include_trailing_whitespace: bo
     } else {
         layout.width() as f64
     };
-    let extent = Extent {
+    let metrics = TextMetrics {
         width,
         ascent: baseline,
         descent: layout.height() as f64 - baseline,
     };
-    leaf(extent, move |canvas: &mut P, placement| {
-        draw_layout(
-            canvas,
-            &layout,
-            Affine::translate((placement.rect.x0, placement.rect.y0)),
-        );
-    })
+    Text { layout, metrics }
 }
 
 pub fn draw_layout(canvas: &mut impl Canvas, layout: &Layout<Brush>, transform: Affine) {
@@ -225,11 +246,11 @@ pub fn draw_layout(canvas: &mut impl Canvas, layout: &Layout<Brush>, transform: 
 mod tests {
     use super::*;
     use crate::draw::{DrawCmd, DrawList};
-    use crate::layout::{place, row};
+    use kurbo::Rect;
     use peniko::Color;
 
     #[test]
-    fn text_of_different_sizes_shares_a_baseline_in_a_row() {
+    fn text_metrics_support_a_shared_baseline() {
         let mut fonts = FontContext::new();
         let mut layouts = LayoutContext::new();
         let mut cache = TextCache::default();
@@ -251,16 +272,24 @@ mod tests {
             weight: None,
             family: GenericFamily::SystemUi,
         };
-        let r = row(4.0, vec![text(&mut ctx, "big", &big), text(&mut ctx, "small", &small)]);
+        let big = text(&mut ctx, "big", &big);
+        let small = text(&mut ctx, "small", &small);
 
         let mut recording = DrawList::new();
-        let rect = kurbo::Rect::new(
+        let big_rect = Rect::new(
             0.0,
-            100.0 - r.extent.ascent,
-            r.extent.width,
-            100.0 + r.extent.descent,
+            100.0 - big.metrics().ascent,
+            big.metrics().width,
+            100.0 + big.metrics().descent,
         );
-        place(r, &mut recording, crate::layout::Placement::root(rect));
+        let small_rect = Rect::new(
+            big.metrics().width + 4.0,
+            100.0 - small.metrics().ascent,
+            big.metrics().width + 4.0 + small.metrics().width,
+            100.0 + small.metrics().descent,
+        );
+        big.place(&mut recording, Placement::root(big_rect));
+        small.place(&mut recording, Placement::root(small_rect));
 
         let baselines: Vec<f64> = recording
             .0

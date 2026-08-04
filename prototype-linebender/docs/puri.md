@@ -82,7 +82,7 @@ management.
   before/after, transform events, or drop. No action
   type or reducer is baked in; per-widget action vocabularies (the line
   edit's) exist for testability without any global action enum. Thin
-  `interact` wrappers factor the common placement-visible primary-down,
+  `interact` helpers factor the common placement-visible primary-down,
   click-count, ordinary-click, and double-click policies while leaving
   state transitions and decline with their callers.
 - Puri mints no identity and retains no hierarchy. A widget description
@@ -102,8 +102,8 @@ simplest consumer. A retained tree, React-style reconciler, or incremental
 computation system can construct the same descriptions without rebuilding
 the text box.
 
-Placement continuations remove the smaller within-frame association problem:
-layout can settle a rectangle and immediately continue the description whose
+Consumer-owned placement continuations remove the smaller within-frame
+association problem: layout can settle a rectangle and immediately continue the description whose
 behavior belongs to it, without minting an ID and correlating detached output
 later. Puri is not optimized for making the smallest UI take the fewest lines;
 it makes the real state and composition surface explicit so synchronization
@@ -132,9 +132,15 @@ Caching:
   future incremental-computation hook. Neither exists until profiling
   demands it.
 
-## Layout
+## Layout Boundary
 
-No general layout engine. Three layers, smallest sufficient model:
+Puri owns `Placement`, the settled geometry supplied to a widget, but no
+layout node, traversal, or container. Text and line-edit descriptions expose
+their measured metrics and accept an explicit placement; interaction helpers
+register against one. A consumer can use Clay, Taffy, a retained layout tree,
+or no general engine without changing those widgets.
+
+Progred currently uses three layers, smallest sufficient model:
 
 - Document content uses a small box algebra with baselines (the
   TeX/pict model): a box is (width, ascent, descent, draw); a line is
@@ -147,15 +153,15 @@ No general layout engine. Three layers, smallest sufficient model:
   only a fits-in-width oracle from the box layer.
 - App chrome (panels, toolbars) is a few hand-coded flex-ish containers.
 
-The placement interface keeps measurement and placement separate
+Progred's placement interface keeps measurement and placement separate
 (Halay's shape: measure/place split, opaque leaves, placement callbacks
 receiving settled rectangles that produce draw calls and interaction
 records). Clay or Taffy could implement the same interface later as
 adapters if some subtree earns declarative flex; neither is a
 dependency now.
 
-Scrolling (2026-07-05, revised 2026-08-01): the shell owns the offset
-as ordinary app state. `place_scrolled` shifts the child inside a
+Scrolling (2026-07-05, revised 2026-08-03): the shell owns the offset
+as ordinary app state. Progred's `layout::place_scrolled` shifts the child inside a
 canvas clip, derives the shifted child's `clip_rect` from the explicit
 viewport placement, captures the child's transient handler, and installs it
 behind the viewport's own scroll action. Pointer-down and nested
@@ -166,7 +172,7 @@ scroll channel after the document, so ordinary newest-first handler
 composition expresses their visual precedence without shell-level
 rectangle dispatch.
 
-Every leaf and wrapper receives a settled `Placement` carrying the widget's
+Every Progred layout leaf and wrapper receives Puri's settled `Placement`, carrying the widget's
 full `rect` and effective enclosing `clip_rect`: the intersection of ancestor
 axis-aligned layout clips, not pre-intersected with the widget. Ordinary child
 placements inherit it unchanged; only an actual clipping container intersects
@@ -177,10 +183,11 @@ Canvas clipping remains the independent ink mechanism and may use
 arbitrary shapes; `Placement::clip_rect` neither describes nor replaces
 those shapes. A fully clipped subtree is still placed because it can
 still participate in hover resolution, navigation, and transient handler
-construction; culling is valid only for work known to be dispensable. `around` supplies the
-settled placement and an owned, one-shot `PlaceInner`; calling
-`place_inner.place(ctx)` realizes the wrapped subtree. `before`, `after`, and
-rectangle-only `decorate` are its common orderings.
+construction; culling is valid only for work known to be dispensable.
+Progred's `around` supplies the settled placement and an owned, one-shot
+`PlaceInner`; calling `place_inner.place(ctx)` realizes the wrapped subtree.
+`before` and rectangle-only `decorate` are its common orderings. These are
+consumer layout tools, not part of Puri's widget API.
 
 The first revision rejected this, reading the Haskell spike's
 threaded Placement as "the same retained-region wrongness the handler
@@ -251,7 +258,7 @@ behavior without the plumbing. Keyboard semantics, IME handling,
 selection/cursor geometry, and clipboard (clipboard-rs) all transplanted
 from there. An earlier directive to mimic Masonry's controls was
 superseded by the compositional-widget directive (bare text edit;
-boxes are `pad`/`decorate` composition), which costs nothing: what
+Progred supplies `pad`/`decorate` composition), which costs nothing: what
 Masonry's boxed control bundles beyond vello_editor is exactly the
 chrome that lives in the wrapper layer here.
 
@@ -300,7 +307,7 @@ gpui.
 ## Sequence
 
 1. Workspace: puri (draw list, events, widget state types and
-   transitions, box algebra, placement interface), puri-vello, progred.
+   transitions, placement geometry), puri-vello, progred (its box algebra).
    Graph/core crates copied from `prototype-egui/` as needed.
 2. winit + Vello window drawing rects and Parley text.
 3. Draw-list enum in puri with snapshot/property tests on the commands;
@@ -329,8 +336,11 @@ IDs, with a Taffy shim later as proof the interface was not
 Clay-shaped. Superseded 2026-07-03: box constraints is a protocol that
 can host such engines as container implementations, but Progred's
 document body is pretty-printer-shaped, and the baseline box algebra is
-the smaller, sufficient model. The placement interface is unchanged, so
-the Clay/Taffy adapter option remains open without being a dependency.
+the smaller, sufficient model. Corrected 2026-08-03: that algebra initially
+lived in Puri and made `Node` the return type of text, editing, and interaction
+helpers. It now belongs to Progred; Puri exposes measurement and explicit
+placement, so the Clay/Taffy adapter option remains open without changing a
+widget API.
 
 Drawing was first specced as a mandatory draw-list value with backend
 interpreters. Revised 2026-07-03 to the final-tagless `Canvas` trait

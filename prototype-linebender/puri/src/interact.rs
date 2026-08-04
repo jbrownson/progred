@@ -1,43 +1,43 @@
-//! Interaction combinators: wrap a layout node so its settled rect
-//! registers a transient handler. Pure like the rest of Puri — the
-//! callback runs in dispatch, after placement, receiving the context
-//! by `&mut`; nothing is retained across frames.
+//! Placement-time interaction helpers. The caller supplies settled
+//! geometry; Puri registers transient behavior without depending on
+//! the layout strategy that produced it.
 
+use crate::geometry::Placement;
 use crate::handler::HasHandler;
-use crate::layout::{Node, Placement, before};
 use kurbo::Point;
 use ui_events::pointer::{PointerButton, PointerButtonEvent};
 
 /// Attach a primary-button press whose predicate and action both see
 /// the settled placement. A false action declines to the handler
-/// composed behind this node.
+/// composed behind this registration.
 pub fn on_primary_pointer_down_where<C: 'static, P: HasHandler<C>>(
-    node: Node<P>,
+    p: &mut P,
+    placement: Placement,
     accepts: impl Fn(Placement, &PointerButtonEvent) -> bool + 'static,
     action: impl Fn(&mut C, Placement, &PointerButtonEvent) -> bool + 'static,
-) -> Node<P> {
-    before(node, move |p, placement| {
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
-                && accepts(placement, event)
-                && action(ctx, placement, event)
-        });
-    })
+) {
+    p.handler().on_pointer_down(move |ctx, event| {
+        event.button == Some(PointerButton::Primary)
+            && placement.contains(Point::new(
+                event.state.position.x,
+                event.state.position.y,
+            ))
+            && accepts(placement, event)
+            && action(ctx, placement, event)
+    });
 }
 
 /// Attach a primary-button press whose policy needs the pointer event
 /// but not the settled placement.
 pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
-    node: Node<P>,
+    p: &mut P,
+    placement: Placement,
     accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
     action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-) -> Node<P> {
+) {
     on_primary_pointer_down_where(
-        node,
+        p,
+        placement,
         move |_, event| accepts(event),
         move |ctx, _, event| action(ctx, event),
     )
@@ -45,38 +45,39 @@ pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
 
 /// Attach a primary click selected by click count.
 pub fn on_primary_click<C: 'static, P: HasHandler<C>>(
-    node: Node<P>,
+    p: &mut P,
+    placement: Placement,
     accepts: impl Fn(u8) -> bool + 'static,
     action: impl Fn(&mut C) -> bool + 'static,
-) -> Node<P> {
+) {
     on_primary_pointer_down(
-        node,
+        p,
+        placement,
         move |event| accepts(event.state.count.max(1)),
         move |ctx, _| action(ctx),
     )
 }
 
-/// Wrap `node` so a primary-button press inside its settled rect runs
-/// `on_click`. The handler registers before the wrapped subtree places,
-/// so a child's own handler (registered later, tried first) takes
-/// precedence and a press it declines falls through to here.
+/// Register an ordinary primary click at `placement`.
 pub fn clickable<C: 'static, P: HasHandler<C>>(
-    node: Node<P>,
+    p: &mut P,
+    placement: Placement,
     on_click: impl Fn(&mut C) + 'static,
-) -> Node<P> {
-    on_primary_click(node, |_| true, move |ctx| {
+) {
+    on_primary_click(p, placement, |_| true, move |ctx| {
         on_click(ctx);
         true
     })
 }
 
-/// The double-click specialization. Compose it inside `clickable` so
-/// its later registration wins on the second press.
+/// The double-click specialization. Register it after [`clickable`] so
+/// newest-first composition gives it the second press.
 pub fn double_clickable<C: 'static, P: HasHandler<C>>(
-    node: Node<P>,
+    p: &mut P,
+    placement: Placement,
     on_double_click: impl Fn(&mut C) + 'static,
-) -> Node<P> {
-    on_primary_click(node, |count| count == 2, move |ctx| {
+) {
+    on_primary_click(p, placement, |count| count == 2, move |ctx| {
         on_double_click(ctx);
         true
     })
@@ -86,7 +87,7 @@ pub fn double_clickable<C: 'static, P: HasHandler<C>>(
 mod tests {
     use super::*;
     use crate::handler::Handler;
-    use crate::layout::{Extent, Placement, leaf, place, place_top_left};
+    use kurbo::Rect;
     use ui_events::pointer::{
         PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
     };
@@ -124,28 +125,18 @@ mod tests {
 
     /// A 10x10 clickable at the origin that sets the selected id to 7.
     fn placed(viewport: Option<kurbo::Rect>) -> Handler<u32> {
-        let node = clickable(
-            leaf(
-                Extent {
-                    width: 10.0,
-                    ascent: 8.0,
-                    descent: 2.0,
-                },
-                |_: &mut Frame, _| {},
-            ),
-            |sel: &mut u32| *sel = 7,
-        );
         let mut frame = Frame {
             handler: Handler::new(),
         };
-        let rect = node.extent.rect_at(Point::ZERO);
-        place(
-            node,
+        let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
+        let placement = match viewport {
+            Some(clip_rect) => Placement::new(rect, clip_rect),
+            None => Placement::root(rect),
+        };
+        clickable(
             &mut frame,
-            match viewport {
-                Some(clip_rect) => Placement::new(rect, clip_rect),
-                None => Placement::root(rect),
-            },
+            placement,
+            |sel: &mut u32| *sel = 7,
         );
         frame.handler
     }
@@ -178,24 +169,12 @@ mod tests {
 
     #[test]
     fn double_click_overrides_the_ordinary_click() {
-        let node = clickable(
-            double_clickable(
-                leaf(
-                    Extent {
-                        width: 10.0,
-                        ascent: 8.0,
-                        descent: 2.0,
-                    },
-                    |_: &mut Frame, _| {},
-                ),
-                |value| *value += 10,
-            ),
-            |value| *value += 1,
-        );
         let mut frame = Frame {
             handler: Handler::new(),
         };
-        place_top_left(node, &mut frame, Point::ZERO);
+        let placement = Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0));
+        clickable(&mut frame, placement, |value| *value += 1);
+        double_clickable(&mut frame, placement, |value| *value += 10);
 
         let mut value = 0;
         assert!(frame
@@ -206,25 +185,18 @@ mod tests {
 
     #[test]
     fn placed_predicate_can_subdivide_the_clip_rect() {
-        let node = on_primary_pointer_down_where(
-            leaf(
-                Extent {
-                    width: 10.0,
-                    ascent: 8.0,
-                    descent: 2.0,
-                },
-                |_: &mut Frame, _| {},
-            ),
+        let mut frame = Frame {
+            handler: Handler::new(),
+        };
+        on_primary_pointer_down_where(
+            &mut frame,
+            Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
             |placement, event| event.state.position.x >= placement.rect.center().x,
             |value, _, _| {
                 *value = 7;
                 true
             },
         );
-        let mut frame = Frame {
-            handler: Handler::new(),
-        };
-        place_top_left(node, &mut frame, Point::ZERO);
 
         let mut value = 0;
         assert!(!frame
