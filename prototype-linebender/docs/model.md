@@ -22,15 +22,15 @@ identity-bearing entities, lists are values. The smell it left
 paragraph's own indictment. The third design neither v1 nor v2
 considered: NO shape has identity — identity is its own construct.
 All shapes (records, lists, atoms) are pure structural values
-compared by content; identity is a CELL — a minted uuid holding one
-current value. The lineage is Clojure/Datomic (values immutable and
-structural; an identity is a succession of values; egal equality:
+compared by content; identity is a CELL — a minted opaque 128-bit id
+holding one current value. The lineage is Clojure/Datomic (values
+immutable and structural; an identity is a succession of values; egal equality:
 identity-compared mutables, content-compared immutables), and the
 frame is unapologetically "what if JSON were a graph": JSON with the
 atom set corrected and refs added.
 
 ```rust
-pub type CellId = Uuid;                          // was NodeId
+pub struct CellId([u8; 16]);                     // all 128 bits are identity
 pub enum Atom  { Cell(CellId), String(String), Blob(Vec<u8>) }
 pub enum Label { Cell(CellId), String(String) }  // narrowed from Atom
 pub enum Value {
@@ -192,7 +192,7 @@ the sketch, with these calls made in conversation:
   what a cell holds). The within chord on a bare cell pends its
   first value at `[…, Follow]`; delete at a trailing Follow removes
   the table entry — bare again, the mint's symmetric partner. In
-  data, bare-minted and dangling are one honest state: a uuid in
+  data, bare-minted and dangling are one honest state: a cell id in
   link position.
 - Blobs: `{"blob": "<lowercase hex>"}` in files (strict reads,
   parsable-means-canonical), `0x` hex as the query and clipboard
