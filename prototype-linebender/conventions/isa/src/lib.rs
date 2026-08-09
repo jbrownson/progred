@@ -7,7 +7,7 @@ use progred_graph::{CellId, Cells, Value};
 pub mod vocabulary {
     use progred_graph::CellId;
 
-    pub const ISA: CellId = CellId::from_u128(0x1414c6e28ba705fc08e89a5f74942fac);
+    pub const ISA: CellId = CellId::from_u128(0xdcedb3a466c3a3e2c6b2826153e82e78);
 }
 
 pub fn value(class: CellId) -> Value {

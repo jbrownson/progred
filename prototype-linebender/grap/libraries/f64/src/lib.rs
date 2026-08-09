@@ -8,13 +8,13 @@ use progred_graph::{Cells, Value};
 pub mod vocabulary {
     use progred_graph::CellId;
 
-    pub const F64: CellId = CellId::from_u128(0xd2bf4824cb297a418eeddb11d0d11b65);
-    pub const ADD: CellId = CellId::from_u128(0xa3edf1f344eb4776bc327df750149be1);
-    pub const MULTIPLY: CellId = CellId::from_u128(0x818c27a54bbdd4a70606dfd681151e4d);
-    pub const LEFT: CellId = CellId::from_u128(0x41810d0ee173fc6fa2e4c2e7be5bb862);
-    pub const RIGHT: CellId = CellId::from_u128(0x042b0a534c159e02d347acdbda0a7306);
-    pub const LEFT_NOT_F64: CellId = CellId::from_u128(0xa6aaa8d1cb676f023933a3d725ab2e39);
-    pub const RIGHT_NOT_F64: CellId = CellId::from_u128(0x6641fff3312158347005bde305f5c53b);
+    pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
+    pub const ADD: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
+    pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
+    pub const LEFT: CellId = CellId::from_u128(0x764f6afe17ba14e81f5ab61204be0bec);
+    pub const RIGHT: CellId = CellId::from_u128(0x4f53ff25390f58472d31a6142644dec2);
+    pub const LEFT_NOT_F64: CellId = CellId::from_u128(0x50c0d2fd8fe0325a8e0e41f79ce86eff);
+    pub const RIGHT_NOT_F64: CellId = CellId::from_u128(0xcab77cffe8c38745dd8e748ece331409);
 }
 
 pub fn value(value: f64) -> Value {

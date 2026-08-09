@@ -7,9 +7,9 @@ use progred_graph::{Cells, Value};
 pub mod vocabulary {
     use progred_graph::CellId;
 
-    pub const CIRCLE: CellId = CellId::from_u128(0xf546a977c8531e0edffa7e524b393b9f);
-    pub const RADIUS: CellId = CellId::from_u128(0x21025a64620233d9b9c28abe95f06224);
-    pub const INVALID_RADIUS: CellId = CellId::from_u128(0xe0c00fc5967ea1cc78f45988486793a7);
+    pub const CIRCLE: CellId = CellId::from_u128(0xeba2ca3d6a0fba957bd96bfb138c7a5b);
+    pub const RADIUS: CellId = CellId::from_u128(0xe2321b78d65f87918c64b7875408051a);
+    pub const INVALID_RADIUS: CellId = CellId::from_u128(0x415a1c171b38ed09254c7ce7a11bcaf8);
 }
 
 pub fn value(radius: f64) -> Value {

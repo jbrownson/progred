@@ -7,7 +7,7 @@ use progred_graph::{Cells, Value};
 pub mod vocabulary {
     use progred_graph::CellId;
 
-    pub const ERROR: CellId = CellId::from_u128(0x4a8006a54b0500e2ede24cea0d5ca4ab);
+    pub const ERROR: CellId = CellId::from_u128(0x06a183f34bdb188a226cd26bf2b4471b);
 }
 
 pub fn value() -> Value {

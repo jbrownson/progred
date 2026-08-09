@@ -6,7 +6,7 @@ use progred_graph::Value;
 pub mod vocabulary {
     use progred_graph::CellId;
 
-    pub const UTF8: CellId = CellId::from_u128(0x82a7c1824bc441ec8bfcdc50a2d06a6a);
+    pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
 }
 
 pub fn value(text: impl Into<String>) -> Value {

@@ -11,9 +11,9 @@ use std::rc::Rc;
 pub mod vocabulary {
     use progred_graph::CellId;
 
-    pub const FUNCTION: CellId = CellId::from_u128(0x652a661e44ea44bd48bce4306e6e5995);
-    pub const PARAMS: CellId = CellId::from_u128(0xa4e2f4e064fe700d4dd5e55404839382);
-    pub const BODY: CellId = CellId::from_u128(0xfcf003c00ec4144cb748e8bbc7bb568e);
+    pub const FUNCTION: CellId = CellId::from_u128(0x751fca4373debdd0b7e6eb73e08d684b);
+    pub const PARAMS: CellId = CellId::from_u128(0x195b378d0d31d90ab0d7366c15346b70);
+    pub const BODY: CellId = CellId::from_u128(0x986143866eda2e2fbf9ab8484357a0c9);
 }
 
 pub const DEFAULT_FUEL: usize = 1_024;

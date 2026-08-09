@@ -79,7 +79,7 @@ keys are file syntax, not ordinary value labels:
 {
   "binders": {
     "color": 4c945c6c52b304eb0c2d1503de6d8f77,
-    "name": f8acc21e36354e5a97021ee48d29fed8,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
     "payload": e8160795427c912458edc7e28d75a8cc,
     "shape": 777d80d6e03e9ae0f9c143678ab68a75,
     "stroke": 34e8ba540a0297748f92540743779d3f,

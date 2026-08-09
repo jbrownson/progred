@@ -8,9 +8,7 @@ use progred_graph::{CellId, Cells, Value};
 pub mod vocabulary {
     use progred_graph::CellId;
 
-    /// The original randomly minted `name` identity, now restored as
-    /// an ordinary relation rather than a graph-core feature.
-    pub const NAME: CellId = CellId::from_u128(0xf8acc21e36354e5a97021ee48d29fed8);
+    pub const NAME: CellId = CellId::from_u128(0x02e562654d6d0828d3a7559e6f75fffe);
 }
 
 pub fn field(name: impl Into<String>) -> (CellId, Value) {

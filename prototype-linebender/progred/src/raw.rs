@@ -96,21 +96,21 @@ pub struct Document {
 pub mod sample_vocabulary {
     use progred_graph::CellId;
 
-    pub const AT: CellId = CellId::from_u128(0x796bd0cb8c526401ef9e66e0fcee7297);
-    pub const ROW: CellId = CellId::from_u128(0x2d5252ab4127388835607499a4e9fbf9);
-    pub const COL: CellId = CellId::from_u128(0x8169555b56c9645b4d716490f7ac0461);
-    pub const OF: CellId = CellId::from_u128(0x182fe86d61710150cfb5ec9a3eeb538a);
-    pub const COLOR: CellId = CellId::from_u128(0x6fd8e3301682d707f6d764d4da1992ec);
-    pub const SWATCH: CellId = CellId::from_u128(0x31dea76979345cf5c02c1049ab9742cb);
-    pub const POINTS: CellId = CellId::from_u128(0xbd1dee69049bada400e87ff1fc8945cb);
-    pub const TAGS: CellId = CellId::from_u128(0xa61e94fb9fe80a2c819b2c85942f2b2c);
-    pub const MATERIAL: CellId = CellId::from_u128(0x5e64226f8adb6d1127ea9c211374d6a3);
-    pub const STYLE: CellId = CellId::from_u128(0x823eabd35733efeebef1ff992e56d65e);
-    pub const PITCH: CellId = CellId::from_u128(0x9fce25c72abe04863d2c13630cfe7a18);
-    pub const DOUBLE_PITCH: CellId = CellId::from_u128(0x351af6582a156fee69ffa3d74691567d);
-    pub const PROFILE: CellId = CellId::from_u128(0x23dd123638416f5e68174995953078ff);
-    pub const SHAPE: CellId = CellId::from_u128(0x59c8a911aac219d73effad2b3796e1f9);
-    pub const FAVORITE: CellId = CellId::from_u128(0x9caf843a44dc9c285cb579030720c79c);
+    pub const AT: CellId = CellId::from_u128(0x4c2cb3268f1911bd26a0eb74622ba097);
+    pub const ROW: CellId = CellId::from_u128(0xa791e4873aa95e21bc925dacbbbf6ea5);
+    pub const COL: CellId = CellId::from_u128(0x64bad273f94f32f9957b99a6e4d14d39);
+    pub const OF: CellId = CellId::from_u128(0x4544b0db160b6330f20a69dd3ce34e2d);
+    pub const COLOR: CellId = CellId::from_u128(0x897fc1c794c08a0506590276aa72a3d7);
+    pub const SWATCH: CellId = CellId::from_u128(0xf2aadbb9e548ea30aceb7fed5773ea8a);
+    pub const POINTS: CellId = CellId::from_u128(0xe92356b75104edae387062fcf8a859e0);
+    pub const TAGS: CellId = CellId::from_u128(0x41f5587d6560bfbebc9fb72fb0728e27);
+    pub const MATERIAL: CellId = CellId::from_u128(0xc7c1197574183c44d7e038cb52d78760);
+    pub const STYLE: CellId = CellId::from_u128(0x2b9652d2cb8cb5c9d633b34d827048b1);
+    pub const PITCH: CellId = CellId::from_u128(0x563079b77defe2a26abcdccfa47655ed);
+    pub const DOUBLE_PITCH: CellId = CellId::from_u128(0xe69c085ed00f5270f24a895cca9cd7d6);
+    pub const PROFILE: CellId = CellId::from_u128(0x3624cc3724556440847e7da953d398fc);
+    pub const SHAPE: CellId = CellId::from_u128(0xb5db29c46198e28df0c26ac4aa5a411a);
+    pub const FAVORITE: CellId = CellId::from_u128(0xa83b16a0d85afeb98d46c3459f2e7e16);
 }
 
 /// A small document shaped like a real one. The root is an inline

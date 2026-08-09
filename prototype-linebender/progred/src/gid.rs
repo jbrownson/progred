@@ -537,7 +537,7 @@ mod tests {
         let text = r#"{
   "binders": {
     "color": 267770b27d00e45a18f730652ff90dcf,
-    "name": f8acc21e36354e5a97021ee48d29fed8,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
     "payload": 6675eed11743101e3af8ec08c468da50,
     "shape": f7c17a58b92f3f1b6090142612b16595,
     "stroke": 0a6fba22bfd658dedb62920b6ea06699,
@@ -604,7 +604,7 @@ mod tests {
         // Duplicate simple-name facts are ordinary graph data.
         let (doc, _) = parse_ok(
             r#"{"binders": {
-                "name": f8acc21e36354e5a97021ee48d29fed8,
+                "name": 02e562654d6d0828d3a7559e6f75fffe,
                 "payload": 0a6fba22bfd658dedb62920b6ea06699
             }, "cells": {
                 a: {name: "twin", payload: "a"},
