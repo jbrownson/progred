@@ -87,11 +87,10 @@ atom set corrected and refs added.
 ```rust
 pub struct CellId([u8; 16]);                     // all 128 bits are identity
 pub enum Atom  { Cell(CellId), Blob(Vec<u8>) }
-pub struct Label(CellId);                        // every relation is identity
 pub enum Value {
     Atom(Atom),
     List(im::OrdMap<Position, Value>),           // unchanged from v2
-    Record(im::OrdMap<Label, Value>),            // v2's entity map, moved inside
+    Record(im::OrdMap<CellId, Value>),           // relations are cell identities
 }
 pub struct Cells { data: im::HashMap<CellId, Value> }  // one value per identity
 ```
@@ -197,7 +196,7 @@ What re-roots in the editor, the expected cost ledger:
   (snapshots of persistent Cells).
 - Completion: "fresh node" offers become "fresh cell"; a new inline
   record offer joins (the anonymous `{}`); the label stage narrows
-  to Label. Pending machinery otherwise transfers.
+  to CellId. Pending machinery otherwise transfers.
 - Secondary selection: identity marks are cells and atom
   occurrences; inline records are structure, not identity — no
   marks. (Strings/blobs remain identities like any atom.)
@@ -209,7 +208,7 @@ What re-roots in the editor, the expected cost ledger:
   unchanged in spirit; read-only gating keeps the cell as the
   authority unit.
 - Floating definitions/orphan pool: unchanged — cells float; the
-  keys-as-references note extends to Label::Cell at any depth.
+  keys-as-references note extends to record keys at any depth.
 
 Open questions for the implementing session: root stays
 Option<Value> (records may now be the root inline); Record has no
@@ -222,7 +221,7 @@ graph view's colloquial word for whatever it draws.
 Shipped 2026-07-20, the session after the brief. What landed matches
 the sketch, with these calls made in conversation:
 
-- Records are `im::OrdMap<Label, Value>`, not the sketch's HashMap
+- Records are `im::OrdMap<CellId, Value>`, not the sketch's HashMap
   (user, after a first HashMap instinct, on the consistent-ordering
   point): content-compared values want deterministic iteration —
   Eq/Hash/serialization all read it — and label order is the raw
@@ -1006,7 +1005,7 @@ address — a key in the record's OrdMap — so write-through would
 re-sort the row on every keystroke and a spelling that crossed a
 sibling's key would clobber its value. So the label re-opens as
 the pending-edge machinery itself: PendingEdge grew `replacing:
-Option<Label>`, the query seeded with the current SPELLING — a
+Option<CellId>`, the query seeded with the current SPELLING — a
 string label with its quotes, a cell label by its name (a
 same-named other cell may rank first; the seed is a spelling, not
 the identity — user-accepted) or short id. An untouched seed's

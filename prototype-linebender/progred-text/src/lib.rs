@@ -1,7 +1,7 @@
 //! A UTF-8 text convention over ordinary graph data. Text is a
 //! positively recognized record facet, not a graph-core atom.
 
-use progred_graph::{Label, Value};
+use progred_graph::Value;
 
 pub mod vocabulary {
     use progred_graph::CellId;
@@ -11,7 +11,7 @@ pub mod vocabulary {
 
 pub fn value(text: impl AsRef<str>) -> Value {
     Value::record([(
-        Label::from(vocabulary::UTF8),
+        vocabulary::UTF8,
         Value::from(text.as_ref().as_bytes().to_vec()),
     )])
 }
@@ -19,7 +19,7 @@ pub fn value(text: impl AsRef<str>) -> Value {
 pub fn read(value: &Value) -> Option<&str> {
     value
         .as_record()?
-        .get(&Label::from(vocabulary::UTF8))?
+        .get(&vocabulary::UTF8)?
         .as_blob()
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
 }
@@ -27,7 +27,7 @@ pub fn read(value: &Value) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Label, new_cell_id};
+    use progred_graph::new_cell_id;
 
     #[test]
     fn utf8_is_an_open_convention_over_bytes() {
@@ -39,7 +39,7 @@ mod tests {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from(new_cell_id()), Value::from(vec![1])),
+                .update(new_cell_id(), Value::from(vec![1])),
         );
         assert_eq!(read(&enriched), Some("hello"));
     }

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use progred_graph::{Label, Value};
+use progred_graph::Value;
 use wasmtime::{Config, Engine, Instance, Module, Store};
 
 const ABI_VERSION: u32 = 1;
@@ -188,7 +188,7 @@ fn f64_bits(value: &Value) -> Option<[u8; 8]> {
         return None;
     }
     fields
-        .get(&Label::from(grap_f64::vocabulary::F64))
+        .get(&grap_f64::vocabulary::F64)
         .and_then(Value::as_blob)
         .and_then(|bytes| bytes.try_into().ok())
 }
@@ -222,7 +222,7 @@ fn load_file(host: &Host, source: &Path, cache: &Path) -> Result<Plugin, String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Label, new_cell_id};
+    use progred_graph::new_cell_id;
 
     const ECHO: &str = r#"(module
   (memory (export "memory") 1)
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn legacy_dispatch_wants_exactly_its_f64_adapter_shape() {
         let f64_value = |bytes: Vec<u8>| {
-            Value::record([(Label::from(grap_f64::vocabulary::F64), Value::from(bytes))])
+            Value::record([(grap_f64::vocabulary::F64, Value::from(bytes))])
         };
         assert_eq!(
             f64_bits(&f64_value(2.5_f64.to_le_bytes().to_vec())),
@@ -287,7 +287,7 @@ mod tests {
         assert_eq!(f64_bits(&f64_value(vec![0, 0])), None);
         assert_eq!(
             f64_bits(&Value::record([(
-                Label::from(new_cell_id()),
+                new_cell_id(),
                 Value::from(vec![0; 8]),
             )])),
             None
@@ -295,16 +295,16 @@ mod tests {
         assert_eq!(
             f64_bits(&Value::record([
                 (
-                    Label::from(grap_f64::vocabulary::F64),
+                    grap_f64::vocabulary::F64,
                     Value::from(vec![0; 8]),
                 ),
-                (Label::from(new_cell_id()), progred_text::value("x")),
+                (new_cell_id(), progred_text::value("x")),
             ])),
             None
         );
         assert_eq!(
             f64_bits(&Value::record([(
-                Label::from(grap_f64::vocabulary::F64),
+                grap_f64::vocabulary::F64,
                 progred_text::value("5"),
             )])),
             None

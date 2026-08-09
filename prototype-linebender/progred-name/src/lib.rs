@@ -3,7 +3,7 @@
 //! data: languages and domain projections may use other naming
 //! structures or compute displays.
 
-use progred_graph::{Cells, Label, Value};
+use progred_graph::{CellId, Cells, Value};
 
 pub mod vocabulary {
     use progred_graph::CellId;
@@ -13,25 +13,22 @@ pub mod vocabulary {
     pub const NAME: CellId = CellId::from_u128(0xf8acc21e36354e5a97021ee48d29fed8);
 }
 
-pub fn field(name: impl Into<String>) -> (Label, Value) {
-    (
-        Label::from(vocabulary::NAME),
-        progred_text::value(name.into()),
-    )
+pub fn field(name: impl Into<String>) -> (CellId, Value) {
+    (vocabulary::NAME, progred_text::value(name.into()))
 }
 
 pub fn value(name: impl Into<String>) -> Value {
     Value::record([field(name)])
 }
 
-pub fn record(name: impl Into<String>, fields: impl IntoIterator<Item = (Label, Value)>) -> Value {
+pub fn record(name: impl Into<String>, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     Value::record(std::iter::once(field(name)).chain(fields))
 }
 
 pub fn read(value: &Value) -> Option<&str> {
     value
         .as_record()?
-        .get(&Label::from(vocabulary::NAME))
+        .get(&vocabulary::NAME)
         .and_then(progred_text::read)
         .filter(|name| !name.is_empty())
 }
@@ -51,7 +48,7 @@ mod tests {
     #[test]
     fn names_are_extensible_ordinary_record_data() {
         let mut fields = value("roof").as_record().unwrap().clone();
-        fields.insert(Label::from(new_cell_id()), progred_text::value("anything"));
+        fields.insert(new_cell_id(), progred_text::value("anything"));
         assert_eq!(read(&Value::Record(fields)), Some("roof"));
         assert_eq!(read(&progred_text::value("roof")), None);
 
@@ -61,7 +58,7 @@ mod tests {
             unnamed
                 .as_record()
                 .unwrap()
-                .get(&Label::from(vocabulary::NAME))
+                .get(&vocabulary::NAME)
                 .and_then(progred_text::read),
             Some("")
         );

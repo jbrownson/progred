@@ -1,4 +1,4 @@
-use progred_graph::{CellId, Label, Value, new_cell_id};
+use progred_graph::{CellId, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 
@@ -36,8 +36,8 @@ pub fn relation(name: &str) -> CellId {
     })
 }
 
-pub fn label(name: &str) -> Label {
-    Label::from(relation(name))
+pub fn label(name: &str) -> CellId {
+    relation(name)
 }
 
 pub fn text(text: impl AsRef<str>) -> Value {

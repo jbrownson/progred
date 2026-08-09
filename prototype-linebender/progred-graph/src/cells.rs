@@ -83,7 +83,7 @@ impl<'de> Deserialize<'de> for Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Label, new_cell_id};
+    use crate::new_cell_id;
 
     fn blob(text: &str) -> Value {
         Value::from(text.as_bytes().to_vec())
@@ -96,7 +96,7 @@ mod tests {
         let x = new_cell_id();
         assert!(cells.value(cell).is_none());
 
-        cells.set_value(cell, Value::record([(Label::from(x), blob("1"))]));
+        cells.set_value(cell, Value::record([(x, blob("1"))]));
         assert!(matches!(cells.value(cell), Some(Value::Record(_))));
         cells.set_value(cell, Value::list([blob("a")]));
         assert_eq!(cells.value(cell), Some(&Value::list([blob("a")])));
@@ -137,7 +137,7 @@ mod tests {
         cells.set_value(first, Value::from(vec![0x66, 0x33, 0x99]));
         cells.set_value(
             second,
-            Value::record([(Label::from(key), Value::from(first))]),
+            Value::record([(key, Value::from(first))]),
         );
 
         let json = serde_json::to_string(&cells).unwrap();

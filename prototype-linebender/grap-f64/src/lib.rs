@@ -3,7 +3,7 @@
 //! functions.
 
 use grap::{ForeignFunctions, RegistrationError};
-use progred_graph::{Cells, Label, Value};
+use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
     use progred_graph::CellId;
@@ -19,7 +19,7 @@ pub mod vocabulary {
 
 pub fn value(value: f64) -> Value {
     Value::record([(
-        Label::from(vocabulary::F64),
+        vocabulary::F64,
         Value::from(value.to_le_bytes().to_vec()),
     )])
 }
@@ -27,7 +27,7 @@ pub fn value(value: f64) -> Value {
 pub fn read(value: &Value) -> Option<f64> {
     let fields = value.as_record()?;
     fields
-        .get(&Label::from(vocabulary::F64))
+        .get(&vocabulary::F64)
         .and_then(Value::as_blob)
         .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
         .map(f64::from_le_bytes)
@@ -85,11 +85,11 @@ mod tests {
     fn call(function: CellId, left: Value, right: Value) -> Value {
         Value::record([
             (
-                Label::from(grap::vocabulary::FUNCTION),
+                grap::vocabulary::FUNCTION,
                 Value::from(function),
             ),
-            (Label::from(vocabulary::LEFT), left),
-            (Label::from(vocabulary::RIGHT), right),
+            (vocabulary::LEFT, left),
+            (vocabulary::RIGHT, right),
         ])
     }
 
@@ -109,7 +109,7 @@ mod tests {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from(new_cell_id()), Value::from(b"degrees".to_vec())),
+                .update(new_cell_id(), Value::from(b"degrees".to_vec())),
         );
         assert_eq!(read(&with_extra), Some(2.5));
     }

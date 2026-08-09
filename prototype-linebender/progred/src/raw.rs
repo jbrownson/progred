@@ -16,7 +16,7 @@ use crate::sources::Sources;
 use im::OrdMap;
 use parley::layout::Layout;
 use progred_graph::{
-    Atom, CellId, Cells, Label, Position, Step, Value, hex_string, new_cell_id, position, spine,
+    Atom, CellId, Cells, Position, Step, Value, hex_string, new_cell_id, position, spine,
 };
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
@@ -159,14 +159,14 @@ pub fn sample_document() -> Document {
         progred_name::record(
             "origin",
             [(
-                Label::from(sample_vocabulary::AT),
+                sample_vocabulary::AT,
                 Value::record([
                     (
-                        Label::from(sample_vocabulary::ROW),
+                        sample_vocabulary::ROW,
                         progred_text::value("top"),
                     ),
                     (
-                        Label::from(sample_vocabulary::COL),
+                        sample_vocabulary::COL,
                         progred_text::value("left"),
                     ),
                 ]),
@@ -181,14 +181,14 @@ pub fn sample_document() -> Document {
             "corner",
             [
                 (
-                    Label::from(sample_vocabulary::AT),
+                    sample_vocabulary::AT,
                     Value::record([
                         (
-                            Label::from(sample_vocabulary::ROW),
+                            sample_vocabulary::ROW,
                             progred_text::value("bottom"),
                         ),
                         (
-                            Label::from(sample_vocabulary::COL),
+                            sample_vocabulary::COL,
                             progred_text::value("right"),
                         ),
                     ]),
@@ -196,7 +196,7 @@ pub fn sample_document() -> Document {
                 // A part that knows its whole: the cycle a real document
                 // has, rendered as a collapsed head rather than recursing
                 // forever.
-                (Label::from(sample_vocabulary::OF), Value::from(roof)),
+                (sample_vocabulary::OF, Value::from(roof)),
             ],
         ),
     );
@@ -209,12 +209,12 @@ pub fn sample_document() -> Document {
         style,
         Value::record([
             (
-                Label::from(sample_vocabulary::COLOR),
+                sample_vocabulary::COLOR,
                 progred_text::value("rebeccapurple"),
             ),
             // #663399, as bytes.
             (
-                Label::from(sample_vocabulary::SWATCH),
+                sample_vocabulary::SWATCH,
                 Value::from(vec![0x66, 0x33, 0x99]),
             ),
         ]),
@@ -235,19 +235,19 @@ pub fn sample_document() -> Document {
             "double",
             [
                 (
-                    Label::from(grap::vocabulary::PARAMS),
+                    grap::vocabulary::PARAMS,
                     Value::list([Value::from(amount)]),
                 ),
                 (
-                    Label::from(grap::vocabulary::BODY),
+                    grap::vocabulary::BODY,
                     Value::record([
                         (
-                            Label::from(grap::vocabulary::FUNCTION),
+                            grap::vocabulary::FUNCTION,
                             Value::from(grap_f64::vocabulary::MULTIPLY),
                         ),
-                        (Label::from(grap_f64::vocabulary::LEFT), Value::from(amount)),
+                        (grap_f64::vocabulary::LEFT, Value::from(amount)),
                         (
-                            Label::from(grap_f64::vocabulary::RIGHT),
+                            grap_f64::vocabulary::RIGHT,
                             grap_f64::value(2.0),
                         ),
                     ]),
@@ -261,8 +261,8 @@ pub fn sample_document() -> Document {
 
     let double_pitch = || {
         Value::record([
-            (Label::from(grap::vocabulary::FUNCTION), Value::from(double)),
-            (Label::from(amount), Value::from(pitch)),
+            (grap::vocabulary::FUNCTION, Value::from(double)),
+            (amount, Value::from(pitch)),
         ])
     };
 
@@ -272,38 +272,38 @@ pub fn sample_document() -> Document {
             "roof",
             [
                 (
-                    Label::from(sample_vocabulary::POINTS),
+                    sample_vocabulary::POINTS,
                     Value::list([Value::from(origin), Value::from(corner)]),
                 ),
-                (Label::from(stroke), progred_text::value("hairline")),
+                (stroke, progred_text::value("hairline")),
                 (
-                    Label::from(sample_vocabulary::TAGS),
+                    sample_vocabulary::TAGS,
                     Value::list([progred_text::value("draft"), progred_text::value("gabled")]),
                 ),
                 (
-                    Label::from(sample_vocabulary::MATERIAL),
+                    sample_vocabulary::MATERIAL,
                     Value::from(material),
                 ),
-                (Label::from(sample_vocabulary::STYLE), Value::from(style)),
-                (Label::from(sample_vocabulary::PITCH), Value::from(pitch)),
-                (Label::from(sample_vocabulary::DOUBLE_PITCH), double_pitch()),
+                (sample_vocabulary::STYLE, Value::from(style)),
+                (sample_vocabulary::PITCH, Value::from(pitch)),
+                (sample_vocabulary::DOUBLE_PITCH, double_pitch()),
                 (
-                    Label::from(sample_vocabulary::PROFILE),
+                    sample_vocabulary::PROFILE,
                     Value::record([
                         (
-                            Label::from(grap::vocabulary::FUNCTION),
+                            grap::vocabulary::FUNCTION,
                             Value::from(grap_geometry::vocabulary::CIRCLE),
                         ),
                         (
-                            Label::from(grap_geometry::vocabulary::RADIUS),
+                            grap_geometry::vocabulary::RADIUS,
                             Value::record([
                                 (
-                                    Label::from(grap::vocabulary::FUNCTION),
+                                    grap::vocabulary::FUNCTION,
                                     Value::from(grap_f64::vocabulary::MULTIPLY),
                                 ),
-                                (Label::from(grap_f64::vocabulary::LEFT), double_pitch()),
+                                (grap_f64::vocabulary::LEFT, double_pitch()),
                                 (
-                                    Label::from(grap_f64::vocabulary::RIGHT),
+                                    grap_f64::vocabulary::RIGHT,
                                     grap_f64::value(8.0),
                                 ),
                             ]),
@@ -316,10 +316,10 @@ pub fn sample_document() -> Document {
 
     Document {
         root: Some(Value::record([
-            (Label::from(sample_vocabulary::SHAPE), Value::from(roof)),
-            (Label::from(sample_vocabulary::STYLE), Value::from(style)),
+            (sample_vocabulary::SHAPE, Value::from(roof)),
+            (sample_vocabulary::STYLE, Value::from(style)),
             (
-                Label::from(sample_vocabulary::FAVORITE),
+                sample_vocabulary::FAVORITE,
                 Value::from(favorite),
             ),
         ])),
@@ -380,7 +380,7 @@ pub(crate) fn whole_text(value: &Value) -> Option<&str> {
     value
         .as_record()?
         .keys()
-        .all(|label| label.cell() == progred_text::vocabulary::UTF8)
+        .all(|label| *label == progred_text::vocabulary::UTF8)
         .then_some(text)
 }
 
@@ -389,7 +389,7 @@ fn whole_f64(value: &Value) -> Option<f64> {
     value
         .as_record()?
         .keys()
-        .all(|label| *label == Label::from(grap_f64::vocabulary::F64))
+        .all(|label| *label == grap_f64::vocabulary::F64)
         .then_some(number)
 }
 
@@ -397,19 +397,19 @@ fn whole_circle(value: &Value) -> Option<f64> {
     let radius = grap_geometry::read(value)?;
     let fields = value.as_record()?;
     let circle = fields
-        .get(&Label::from(grap_geometry::vocabulary::CIRCLE))?
+        .get(&grap_geometry::vocabulary::CIRCLE)?
         .as_record()?;
-    let radius_value = circle.get(&Label::from(grap_geometry::vocabulary::RADIUS))?;
+    let radius_value = circle.get(&grap_geometry::vocabulary::RADIUS)?;
     (fields
         .keys()
-        .all(|label| *label == Label::from(grap_geometry::vocabulary::CIRCLE))
+        .all(|label| *label == grap_geometry::vocabulary::CIRCLE)
         && circle
             .keys()
-            .all(|label| *label == Label::from(grap_geometry::vocabulary::RADIUS))
+            .all(|label| *label == grap_geometry::vocabulary::RADIUS)
         && radius_value
             .as_record()?
             .keys()
-            .all(|label| *label == Label::from(grap_f64::vocabulary::F64)))
+            .all(|label| *label == grap_f64::vocabulary::F64))
     .then_some(radius)
 }
 
@@ -535,7 +535,7 @@ impl Cx<'_> {
 
     /// The re-opened label of an existing field on the record at
     /// `path`, with the key it replaces.
-    fn pending_rename_under(&self, path: &[Step]) -> Option<(&Label, &LineEditState, usize)> {
+    fn pending_rename_under(&self, path: &[Step]) -> Option<(&CellId, &LineEditState, usize)> {
         match self.selection {
             Some(Selection::PendingEdge {
                 parent,
@@ -595,7 +595,7 @@ pub enum Selection {
         parent: Path,
         query: LineEditState,
         choice: usize,
-        replacing: Option<Label>,
+        replacing: Option<CellId>,
     },
 }
 
@@ -833,10 +833,10 @@ pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
     sources.resolve(path)?;
     writable_at(sources, parent).then_some(())?;
     let seed = sources
-        .value(key.cell())
+        .value(*key)
         .and_then(progred_name::read)
         .map(str::to_owned)
-        .unwrap_or_else(|| short_id(key.cell()));
+        .unwrap_or_else(|| short_id(*key));
     Some(Selection::PendingEdge {
         parent: parent.to_vec(),
         query: line_edit(&seed),
@@ -1224,7 +1224,7 @@ fn value_cells(value: &Value, cells: &mut Vec<CellId>) {
         }
         Value::Record(fields) => {
             for (label, field) in fields {
-                cells.push(label.cell());
+                cells.push(*label);
                 value_cells(field, cells);
             }
         }
@@ -1270,14 +1270,14 @@ pub fn resolve_entry(action: &EntryAction) -> Option<Value> {
 /// Resolves a label-stage entry. Free text becomes a newly minted
 /// named cell; an existing cell value reuses its identity. The
 /// optional cell value is what the caller must add to the document.
-pub fn resolve_label(action: &EntryAction) -> Option<(Label, Option<(CellId, Value)>)> {
+pub fn resolve_label(action: &EntryAction) -> Option<(CellId, Option<(CellId, Value)>)> {
     match action {
-        EntryAction::Value(value) => value.as_cell().map(|cell| (Label::from(cell), None)),
+        EntryAction::Value(value) => value.as_cell().map(|cell| (cell, None)),
         EntryAction::NewLabel(name) => {
             let cell = new_cell_id();
-            Some((Label::from(cell), Some((cell, progred_name::value(name)))))
+            Some((cell, Some((cell, progred_name::value(name)))))
         }
-        EntryAction::NewCell => Some((Label::from(new_cell_id()), None)),
+        EntryAction::NewCell => Some((new_cell_id(), None)),
         EntryAction::NewList | EntryAction::NewRecord => None,
     }
 }
@@ -1337,8 +1337,8 @@ pub fn rename_field(
     doc: &mut Document,
     library: &Cells,
     parent: &[Step],
-    old: &Label,
-    label: Label,
+    old: &CellId,
+    label: CellId,
 ) -> bool {
     let rekeyed = {
         let sources = Sources {
@@ -1559,7 +1559,7 @@ struct Stop {
 fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
     match path {
         [owner @ .., Step::Follow, Step::Key(label)]
-            if label.cell() == progred_name::vocabulary::NAME =>
+            if *label == progred_name::vocabulary::NAME =>
         {
             Some(owner)
         }
@@ -2333,7 +2333,7 @@ fn head_view<
     };
     let mut edge = path.to_vec();
     edge.push(Step::Follow);
-    edge.push(Step::Key(Label::from(progred_name::vocabulary::NAME)));
+    edge.push(Step::Key(progred_name::vocabulary::NAME));
     let editing = cx
         .selection
         .filter(|selection| selection.path() == edge.as_slice())
@@ -2390,7 +2390,7 @@ fn field_row<
     tcx: &mut TextCtx,
     parent: &[Step],
     ancestors: &HashSet<CellId>,
-    key: Label,
+    key: CellId,
     value: Option<Value>,
     avail: f64,
     hooks: &Hooks<C>,
@@ -2664,7 +2664,7 @@ fn record_view<
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
-    fields: &OrdMap<Label, Value>,
+    fields: &OrdMap<CellId, Value>,
     avail: f64,
     hooks: &Hooks<C>,
 ) -> Node<P> {
@@ -2678,13 +2678,13 @@ fn record_view<
             .and_then(|cell| cx.name(cell))
             .is_some()
         && fields
-            .get(&Label::from(progred_name::vocabulary::NAME))
+            .get(&progred_name::vocabulary::NAME)
             .and_then(whole_text)
             .is_some_and(|name| !name.is_empty());
-    let mut items: Vec<(Label, Option<Value>)> = fields
+    let mut items: Vec<(CellId, Option<Value>)> = fields
         .iter()
         .filter(|(key, _)| {
-            !consumes_simple_name || **key != Label::from(progred_name::vocabulary::NAME)
+            !consumes_simple_name || **key != progred_name::vocabulary::NAME
         })
         .map(|(key, value)| (*key, Some(value.clone())))
         .collect();
@@ -2837,14 +2837,14 @@ fn blob_text(bytes: &[u8]) -> String {
 
 /// The spelling and face a label draws with — one truth for the view
 /// and for hit-testing a click against what was actually drawn.
-fn label_spelling<'a>(cx: &'a Cx, key: &Label) -> (String, &'a TextStyle) {
-    match cx.name(key.cell()) {
+fn label_spelling<'a>(cx: &'a Cx, key: &CellId) -> (String, &'a TextStyle) {
+    match cx.name(*key) {
         Some(name) => (name, &cx.styles.label),
-        None => (short_id(key.cell()), &cx.styles.id),
+        None => (short_id(*key), &cx.styles.id),
     }
 }
 
-fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Label) -> Node<P> {
+fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &CellId) -> Node<P> {
     let (spelling, style) = label_spelling(cx, key);
     let inner = text(tcx, &spelling, style);
     secondary_mark(cx, &Value::Atom(Atom::from(*key)), inner)
@@ -2857,7 +2857,7 @@ fn field_label<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     tcx: &mut TextCtx,
     parent: &[Step],
     child: Path,
-    key: &Label,
+    key: &CellId,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let cold = label_view(cx, tcx, key);
@@ -3407,7 +3407,7 @@ fn insert_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
 /// parts like a pending row's label, whose plain click deliberately
 /// falls through.
 fn pick_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
-    key: Label,
+    key: CellId,
     hooks: &Hooks<C>,
     content: Node<P>,
 ) -> Node<P> {
@@ -3606,15 +3606,15 @@ mod tests {
 
         let call = Value::record([
             (
-                Label::from(grap::vocabulary::FUNCTION),
+                grap::vocabulary::FUNCTION,
                 Value::from(grap_f64::vocabulary::ADD),
             ),
             (
-                Label::from(grap_f64::vocabulary::LEFT),
+                grap_f64::vocabulary::LEFT,
                 grap_f64::value(2.0),
             ),
             (
-                Label::from(grap_f64::vocabulary::RIGHT),
+                grap_f64::vocabulary::RIGHT,
                 grap_f64::value(3.0),
             ),
             (
@@ -3646,9 +3646,9 @@ mod tests {
                 crate::test_values::text("millimetres"),
             ));
         let circle_with_enriched_radius = Value::record([(
-            Label::from(grap_geometry::vocabulary::CIRCLE),
+            grap_geometry::vocabulary::CIRCLE,
             Value::record([(
-                Label::from(grap_geometry::vocabulary::RADIUS),
+                grap_geometry::vocabulary::RADIUS,
                 enriched_radius,
             )]),
         )]);
@@ -3678,7 +3678,7 @@ mod tests {
     }
 
     /// A one-cell document: the root links a cell holding `fields`.
-    fn doc_of(fields: Vec<(Label, Value)>) -> (Document, CellId) {
+    fn doc_of(fields: Vec<(CellId, Value)>) -> (Document, CellId) {
         let mut cells = Cells::new();
         let cell = new_cell_id();
         cells.set_value(cell, Value::record(fields));
@@ -3786,7 +3786,7 @@ mod tests {
         let name = || {
             vec![
                 Step::Follow,
-                Step::Key(Label::from(progred_name::vocabulary::NAME)),
+                Step::Key(progred_name::vocabulary::NAME),
             ]
         };
         // Dropped: the projected name shares the cell's head line while the
@@ -3913,7 +3913,7 @@ mod tests {
                 &doc,
                 vec![
                     Step::Follow,
-                    Step::Key(Label::from(progred_name::vocabulary::NAME)),
+                    Step::Key(progred_name::vocabulary::NAME),
                 ],
             )
             .edit()
@@ -4124,7 +4124,7 @@ mod tests {
             &lib,
             &[
                 Step::Follow,
-                Step::Key(Label::from(progred_name::vocabulary::NAME)),
+                Step::Key(progred_name::vocabulary::NAME),
             ],
             crate::test_values::text("mine")
         ));
@@ -4331,7 +4331,7 @@ mod tests {
                 crate::test_values::label("x"),
                 crate::test_values::text("1"),
             )]),
-            Value::record([(Label::from(cell), Value::from(vec![0x00_u8]))]),
+            Value::record([(cell, Value::from(vec![0x00_u8]))]),
         ];
         for value in structures {
             let (text, structural) = to_clipboard(&value);
@@ -4510,7 +4510,7 @@ mod tests {
 
         let (label, created) = resolve_label(&EntryAction::NewLabel("asdf".to_string())).unwrap();
         let (cell, value) = created.unwrap();
-        assert_eq!(label.cell(), cell);
+        assert_eq!(label, cell);
         assert_eq!(progred_name::read(&value), Some("asdf"));
         assert!(resolve_label(&EntryAction::Value(crate::test_values::text("no"))).is_none());
     }
@@ -4543,10 +4543,10 @@ mod tests {
             .as_record()
             .unwrap()
             .keys()
-            .map(Label::cell)
+            .copied()
             .find(|cell| sources.value(*cell).and_then(progred_name::read) == Some("stroke"))
             .unwrap();
-        let path = vec![key("shape"), Step::Follow, Step::Key(Label::from(stroke))];
+        let path = vec![key("shape"), Step::Follow, Step::Key(stroke)];
         assert_eq!(
             pending_rename(&sources, &path)
                 .unwrap()
@@ -4750,7 +4750,7 @@ mod tests {
             .as_record()
             .unwrap()
             .keys()
-            .map(Label::cell)
+            .copied()
             .find(|cell| sources.value(*cell).and_then(progred_name::read) == Some("stroke"))
             .unwrap();
         assert_eq!(
@@ -4851,7 +4851,7 @@ mod tests {
         ]);
         let path = vec![
             Step::Follow,
-            Step::Key(Label::from(progred_name::vocabulary::NAME)),
+            Step::Key(progred_name::vocabulary::NAME),
         ];
 
         let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
@@ -4872,7 +4872,7 @@ mod tests {
             doc.cells
                 .value(cell)
                 .and_then(Value::as_record)
-                .and_then(|fields| { fields.get(&Label::from(progred_name::vocabulary::NAME)) })
+                .and_then(|fields| { fields.get(&progred_name::vocabulary::NAME) })
                 .and_then(progred_text::read),
             Some("")
         );
@@ -5313,7 +5313,7 @@ mod svg_bench {
                 matches!(
                     path.last(),
                     Some(Step::Key(label))
-                        if label.cell() == progred_name::vocabulary::NAME
+                        if *label == progred_name::vocabulary::NAME
                 )
             })
             .expect("the sample has a cell head");

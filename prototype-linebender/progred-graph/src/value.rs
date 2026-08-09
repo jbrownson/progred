@@ -35,32 +35,6 @@ impl Atom {
             _ => None,
         }
     }
-
-    /// The label this atom can serve as: every record relation has
-    /// cell identity, while blobs decline.
-    pub fn as_label(&self) -> Option<Label> {
-        match self {
-            Atom::Cell(cell) => Some(Label::from(*cell)),
-            Atom::Blob(_) => None,
-        }
-    }
-}
-
-/// A record field's relation identity. Its display name, if any, is
-/// an ordinary graph fact about this cell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Label(CellId);
-
-impl Label {
-    pub const fn cell(&self) -> CellId {
-        self.0
-    }
-}
-
-impl From<Label> for Atom {
-    fn from(label: Label) -> Self {
-        Atom::Cell(label.0)
-    }
 }
 
 /// A value: anything sayable — pure structure, no identity of its
@@ -73,7 +47,7 @@ impl From<Label> for Atom {
 pub enum Value {
     Atom(Atom),
     List(OrdMap<Position, Value>),
-    Record(OrdMap<Label, Value>),
+    Record(OrdMap<CellId, Value>),
 }
 
 impl Value {
@@ -88,7 +62,7 @@ impl Value {
         )
     }
 
-    pub fn record(fields: impl IntoIterator<Item = (Label, Value)>) -> Value {
+    pub fn record(fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
         Value::Record(fields.into_iter().collect())
     }
 
@@ -114,7 +88,7 @@ impl Value {
         }
     }
 
-    pub fn as_record(&self) -> Option<&OrdMap<Label, Value>> {
+    pub fn as_record(&self) -> Option<&OrdMap<CellId, Value>> {
         match self {
             Value::Record(fields) => Some(fields),
             _ => None,
@@ -190,12 +164,6 @@ impl From<Vec<u8>> for Value {
     }
 }
 
-impl From<CellId> for Label {
-    fn from(cell: CellId) -> Self {
-        Label(cell)
-    }
-}
-
 pub fn hex_string(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
@@ -226,12 +194,6 @@ impl fmt::Display for Atom {
             Atom::Cell(cell) => write!(f, "{cell}"),
             Atom::Blob(bytes) => write!(f, "0x{}", hex_string(bytes)),
         }
-    }
-}
-
-impl fmt::Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 
@@ -269,15 +231,9 @@ impl fmt::Display for Value {
 /// tolerates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Step {
-    Key(Label),
+    Key(CellId),
     Element(Position),
     Follow,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum LabelRepr {
-    Cell(CellId),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -286,24 +242,7 @@ enum ValueRepr {
     Cell(CellId),
     Blob(String),
     List(Vec<Value>),
-    Record(Vec<(Label, Value)>),
-}
-
-impl Serialize for Label {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let repr = match self {
-            Label(cell) => LabelRepr::Cell(*cell),
-        };
-        repr.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Label {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        match LabelRepr::deserialize(deserializer)? {
-            LabelRepr::Cell(cell) => Ok(Label(cell)),
-        }
-    }
+    Record(Vec<(CellId, Value)>),
 }
 
 impl Serialize for Value {
@@ -356,8 +295,8 @@ mod tests {
         })
     }
 
-    fn label(name: &str) -> Label {
-        Label::from(relation(name))
+    fn label(name: &str) -> CellId {
+        relation(name)
     }
 
     fn blob(text: &str) -> Value {
@@ -424,13 +363,6 @@ mod tests {
     }
 
     #[test]
-    fn only_cells_can_be_labels() {
-        let cell = new_cell_id();
-        assert_eq!(Atom::from(cell).as_label(), Some(Label::from(cell)));
-        assert_eq!(Atom::from(vec![1_u8]).as_label(), None);
-    }
-
-    #[test]
     fn values_round_trip_through_json() {
         let cell = new_cell_id();
         let cases = [
@@ -442,7 +374,7 @@ mod tests {
             Value::record([]),
             Value::record([
                 (label("name"), blob("roof")),
-                (Label::from(cell), Value::list([blob("a")])),
+                (cell, Value::list([blob("a")])),
                 (label("at"), Value::record([(label("row"), blob("top"))])),
             ]),
         ];
@@ -466,7 +398,7 @@ mod tests {
             r#"{"cell":"00112233-4455-6677-8899-aabbccddeeff"}"#
         );
         let record_json = serde_json::to_string(&Value::record([(label("k"), blob("v"))])).unwrap();
-        assert!(record_json.contains("\"cell\""));
+        assert!(record_json.contains(&label("k").to_string()));
         assert!(!record_json.contains("\"string\""));
     }
 
@@ -476,7 +408,7 @@ mod tests {
         let value = Value::record([
             (label("b"), blob("2")),
             (label("a"), blob("1")),
-            (Label::from(cell), blob("0")),
+            (cell, blob("0")),
         ]);
         let json = serde_json::to_value(&value).unwrap();
         let labels: Vec<String> = json["record"]
@@ -496,8 +428,8 @@ mod tests {
         assert!(serde_json::from_str::<Value>(r#"{"blob":"DEAD"}"#).is_err());
         assert!(serde_json::from_str::<Value>(r#"{"blob":"abc"}"#).is_err());
         assert!(serde_json::from_str::<Value>(r#"{"blob":"zz"}"#).is_err());
-        // Only cells label; the removed string representation is
-        // rejected for both labels and values.
+        // The removed string representation is rejected for values,
+        // and record keys must deserialize as cell ids.
         assert!(serde_json::from_str::<Value>(r#"{"string":"v"}"#).is_err());
         assert!(
             serde_json::from_str::<Value>(r#"{"record":[[{"blob":"00"},{"string":"v"}]]}"#)
@@ -508,7 +440,7 @@ mod tests {
         );
         // Numbers left the data model.
         assert!(serde_json::from_str::<Value>(r#"{"number":1.0}"#).is_err());
-        assert!(serde_json::from_str::<Label>(r#"{"number":1.0}"#).is_err());
+        assert!(serde_json::from_str::<CellId>(r#"{"number":1.0}"#).is_err());
     }
 
     #[test]

@@ -126,7 +126,7 @@ fn links(value: &Value, out: &mut Vec<CellId>) {
         }
         Value::Record(fields) => {
             for (label, field) in fields {
-                out.push(label.cell());
+                out.push(*label);
                 links(field, out);
             }
         }

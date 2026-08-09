@@ -2,7 +2,7 @@
 //! constructor consuming the f64 library's representation.
 
 use grap::{ForeignFunctions, RegistrationError};
-use progred_graph::{Cells, Label, Value};
+use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
     use progred_graph::CellId;
@@ -14,17 +14,17 @@ pub mod vocabulary {
 
 pub fn value(radius: f64) -> Value {
     Value::record([(
-        Label::from(vocabulary::CIRCLE),
-        Value::record([(Label::from(vocabulary::RADIUS), grap_f64::value(radius))]),
+        vocabulary::CIRCLE,
+        Value::record([(vocabulary::RADIUS, grap_f64::value(radius))]),
     )])
 }
 
 pub fn read(value: &Value) -> Option<f64> {
     let fields = value.as_record()?;
     let radius = fields
-        .get(&Label::from(vocabulary::CIRCLE))
+        .get(&vocabulary::CIRCLE)
         .and_then(Value::as_record)
-        .and_then(|circle| circle.get(&Label::from(vocabulary::RADIUS)))
+        .and_then(|circle| circle.get(&vocabulary::RADIUS))
         .and_then(grap_f64::read)?;
     (radius.is_finite() && radius >= 0.0).then_some(radius)
 }
@@ -65,10 +65,10 @@ mod tests {
         install(&mut foreign).unwrap();
         let expression = Value::record([
             (
-                Label::from(grap::vocabulary::FUNCTION),
+                grap::vocabulary::FUNCTION,
                 Value::from(vocabulary::CIRCLE),
             ),
-            (Label::from(vocabulary::RADIUS), grap_f64::value(20.0)),
+            (vocabulary::RADIUS, grap_f64::value(20.0)),
         ]);
         assert_eq!(
             grap::evaluate(&expression, |_| None, &foreign, 10).result,
@@ -81,14 +81,14 @@ mod tests {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from(new_cell_id()), Value::from(b"now".to_vec())),
+                .update(new_cell_id(), Value::from(b"now".to_vec())),
         );
         assert_eq!(read(&enriched), Some(20.0));
         let with_extra = Value::record(enriched.as_record().unwrap().clone().update(
-            Label::from(vocabulary::CIRCLE),
+            vocabulary::CIRCLE,
             Value::record([
-                (Label::from(vocabulary::RADIUS), grap_f64::value(20.0)),
-                (Label::from(new_cell_id()), Value::from(b"survey".to_vec())),
+                (vocabulary::RADIUS, grap_f64::value(20.0)),
+                (new_cell_id(), Value::from(b"survey".to_vec())),
             ]),
         ));
         assert_eq!(read(&with_extra), Some(20.0));
@@ -100,10 +100,10 @@ mod tests {
         install(&mut foreign).unwrap();
         let expression = Value::record([
             (
-                Label::from(grap::vocabulary::FUNCTION),
+                grap::vocabulary::FUNCTION,
                 Value::from(vocabulary::CIRCLE),
             ),
-            (Label::from(vocabulary::RADIUS), grap_f64::value(-1.0)),
+            (vocabulary::RADIUS, grap_f64::value(-1.0)),
         ]);
         let evaluation = grap::evaluate(&expression, |_| None, &foreign, 10);
         assert_eq!(

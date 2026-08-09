@@ -2,7 +2,7 @@
 //! their error identities; their values classify those identities as
 //! errors through the independent `isa` convention.
 
-use progred_graph::{Cells, Label, Value};
+use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
     use progred_graph::CellId;
@@ -18,7 +18,7 @@ pub fn named(name: impl Into<String>) -> Value {
     progred_name::record(
         name,
         [(
-            Label::from(progred_isa::vocabulary::ISA),
+            progred_isa::vocabulary::ISA,
             Value::from(vocabulary::ERROR),
         )],
     )
@@ -42,7 +42,7 @@ mod tests {
     #[test]
     fn error_is_an_extensible_structural_classification() {
         let mut fields = value().as_record().unwrap().clone();
-        fields.insert(Label::from(new_cell_id()), Value::from(vec![1]));
+        fields.insert(new_cell_id(), Value::from(vec![1]));
         assert!(is_error(&Value::Record(fields)));
         assert!(is_error(&named("specific failure")));
         assert_eq!(

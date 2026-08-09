@@ -54,7 +54,7 @@ impl<'a> Sources<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Label, new_cell_id};
+    use progred_graph::new_cell_id;
 
     fn doc_of(cells: Cells) -> Document {
         Document { root: None, cells }
@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(
             sources.resolve(&[
                 Step::Follow,
-                Step::Key(Label::from(progred_name::vocabulary::NAME)),
+                Step::Key(progred_name::vocabulary::NAME),
             ]),
             Some(&crate::test_values::text("scene"))
         );

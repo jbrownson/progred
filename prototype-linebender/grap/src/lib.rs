@@ -3,7 +3,7 @@
 //! cells describe functions and calls, while all data and operations
 //! beyond those primitives arrive through ordinary Grap libraries.
 
-use progred_graph::{Atom, CellId, Cells, Label, Value};
+use progred_graph::{Atom, CellId, Cells, Value};
 use std::collections::{BTreeSet, HashMap, hash_map::Entry};
 use std::fmt;
 use std::rc::Rc;
@@ -133,7 +133,7 @@ pub struct Evaluation {
     /// Top-level record fields the matched Grap call did not consume.
     /// They remain valid graph data even though evaluation ignored
     /// them.
-    pub unconsumed: BTreeSet<Label>,
+    pub unconsumed: BTreeSet<CellId>,
     pub steps: usize,
 }
 
@@ -158,7 +158,7 @@ struct Evaluator<'a, R> {
     dependencies: BTreeSet<CellId>,
     resolving: Vec<CellId>,
     depth: usize,
-    unconsumed: BTreeSet<Label>,
+    unconsumed: BTreeSet<CellId>,
 }
 
 impl<'a, R> Evaluator<'a, R>
@@ -192,12 +192,12 @@ where
         self.depth += 1;
         let result = match expression {
             Value::Atom(Atom::Cell(cell)) => self.eval_cell(*cell, environment),
-            Value::Record(fields) if fields.contains_key(&Label::from(vocabulary::FUNCTION)) => {
+            Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
                 self.eval_call(expression, environment, root)
             }
             Value::Record(fields)
-                if fields.contains_key(&Label::from(vocabulary::PARAMS))
-                    || fields.contains_key(&Label::from(vocabulary::BODY)) =>
+                if fields.contains_key(&vocabulary::PARAMS)
+                    || fields.contains_key(&vocabulary::BODY) =>
             {
                 self.eval_function(expression, environment)
             }
@@ -261,9 +261,9 @@ where
         let fields = expression.as_record().expect("matched record");
         match (
             fields
-                .get(&Label::from(vocabulary::PARAMS))
+                .get(&vocabulary::PARAMS)
                 .and_then(Value::as_list),
-            fields.get(&Label::from(vocabulary::BODY)),
+            fields.get(&vocabulary::BODY),
         ) {
             (Some(parameters), Some(body)) => {
                 let params = parameters
@@ -297,7 +297,7 @@ where
         let fields = expression.as_record().expect("matched record");
         let callable = self.eval(
             fields
-                .get(&Label::from(vocabulary::FUNCTION))
+                .get(&vocabulary::FUNCTION)
                 .expect("matched function field"),
             environment,
         )?;
@@ -316,15 +316,14 @@ where
                 fields
                     .keys()
                     .filter(|label| {
-                        **label != Label::from(vocabulary::FUNCTION)
-                            && !params.contains(&label.cell())
+                        **label != vocabulary::FUNCTION && !params.contains(label)
                     })
                     .cloned(),
             );
         }
         if let Some(missing) = params
             .iter()
-            .find(|parameter| !fields.contains_key(&Label::from(**parameter)))
+            .find(|parameter| !fields.contains_key(*parameter))
         {
             Err(Error::MissingArgument(*missing))
         } else {
@@ -334,7 +333,7 @@ where
                     .try_fold(Environment::new(), |mut arguments, parameter| {
                         self.eval(
                             fields
-                                .get(&Label::from(*parameter))
+                                .get(parameter)
                                 .expect("checked argument"),
                             environment,
                         )
@@ -424,29 +423,25 @@ mod tests {
 
     fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
         Value::record(
-            [(Label::from(vocabulary::FUNCTION), function)]
+            [(vocabulary::FUNCTION, function)]
                 .into_iter()
-                .chain(
-                    arguments
-                        .into_iter()
-                        .map(|(parameter, value)| (Label::from(parameter), value)),
-                ),
+                .chain(arguments),
         )
     }
 
     fn function(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
         Value::record([
             (
-                Label::from(vocabulary::PARAMS),
+                vocabulary::PARAMS,
                 Value::list(params.into_iter().map(Value::from)),
             ),
-            (Label::from(vocabulary::BODY), body),
+            (vocabulary::BODY, body),
         ])
     }
 
     #[test]
     fn ordinary_values_are_data() {
-        let value = Value::record([(Label::from(new_cell_id()), Value::list([blob("y")]))]);
+        let value = Value::record([(new_cell_id(), Value::list([blob("y")]))]);
         let evaluation = evaluate(&value, |_| None, &ForeignFunctions::new(), 10);
         assert_eq!(evaluation.result, Ok(value));
         assert!(evaluation.dependencies.is_empty());
@@ -515,7 +510,7 @@ mod tests {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from(documentation), blob("identity")),
+                .update(documentation, blob("identity")),
         );
         let expression = call(definition, [(parameter, blob("argument"))]);
         let expression = Value::record(
@@ -523,17 +518,17 @@ mod tests {
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from(created_at), blob("now")),
+                .update(created_at, blob("now")),
         );
         let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::new(), 20);
         assert_eq!(evaluation.result, Ok(blob("argument")));
         assert_eq!(
             evaluation.unconsumed,
-            BTreeSet::from([Label::from(created_at)])
+            BTreeSet::from([created_at])
         );
 
         let malformed = Value::record([(
-            Label::from(vocabulary::PARAMS),
+            vocabulary::PARAMS,
             Value::list(Vec::<Value>::new()),
         )]);
         assert_eq!(

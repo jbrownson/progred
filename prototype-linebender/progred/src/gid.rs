@@ -3,7 +3,7 @@
 //! only; the printer is the canon, and saving canonicalizes.
 
 use crate::raw::Document;
-use progred_graph::{Atom, CellId, Cells, Label, Value, new_cell_id};
+use progred_graph::{Atom, CellId, Cells, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -217,9 +217,9 @@ impl Parser<'_> {
         }
     }
 
-    fn label(&mut self) -> Result<Label, String> {
+    fn label(&mut self) -> Result<CellId, String> {
         let token = self.token()?;
-        Ok(Label::from(self.resolve(token)))
+        Ok(self.resolve(token))
     }
 
     /// Fields apply as they parse: `binders` must precede any use of
@@ -399,7 +399,7 @@ fn mentioned_gids(doc: &Document) -> HashSet<CellId> {
                 }
                 Value::Record(fields) => {
                     for (label, field) in fields {
-                        gids.insert(label.cell());
+                        gids.insert(*label);
                         walk(field, gids);
                     }
                 }
@@ -500,7 +500,7 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
                 out.push_str("{\n");
                 for (label, field) in fields {
                     out.push_str(&indent);
-                    out.push_str(&identity(spell, label.cell()));
+                    out.push_str(&identity(spell, *label));
                     out.push_str(": ");
                     print_value(out, field, spell, level + 1);
                     out.push_str(",\n");
@@ -517,7 +517,7 @@ fn plain_text(value: &Value) -> Option<&str> {
     value
         .as_record()?
         .keys()
-        .all(|label| label.cell() == progred_text::vocabulary::UTF8)
+        .all(|label| *label == progred_text::vocabulary::UTF8)
         .then_some(text)
 }
 

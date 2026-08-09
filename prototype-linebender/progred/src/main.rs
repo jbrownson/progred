@@ -26,7 +26,7 @@ use std::sync::Arc;
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
-use progred_graph::{Label, Step, Value};
+use progred_graph::{CellId, Step, Value};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditPointerDown, LineEditState, TextClipboard};
 use puri::geometry::Placement;
@@ -1485,7 +1485,7 @@ impl App {
         if matches!(
             self.model.selection,
             Some(Selected::Tree(raw::Selection::PendingEdge { .. }))
-        ) && id.as_atom().and_then(|atom| atom.as_label()).is_none()
+        ) && id.as_cell().is_none()
         {
             return false;
         }
@@ -1532,7 +1532,7 @@ impl App {
     fn commit_label(
         &mut self,
         parent: raw::Path,
-        replacing: Option<Label>,
+        replacing: Option<CellId>,
         action: &raw::EntryAction,
     ) {
         let Some((label, created)) = raw::resolve_label(action) else {

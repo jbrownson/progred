@@ -80,7 +80,7 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
 mod tests {
     use super::*;
     use crate::position;
-    use crate::{CellId, Label};
+    use crate::CellId;
 
     fn relation(name: &str) -> CellId {
         CellId::from_u128(match name {
@@ -96,8 +96,8 @@ mod tests {
         })
     }
 
-    fn label(name: &str) -> Label {
-        Label::from(relation(name))
+    fn label(name: &str) -> CellId {
+        relation(name)
     }
 
     fn blob(text: &str) -> Value {
