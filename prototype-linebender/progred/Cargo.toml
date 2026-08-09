@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+grap = { path = "../grap" }
+grap-error = { path = "../grap-error" }
+grap-f64 = { path = "../grap-f64" }
+grap-geometry = { path = "../grap-geometry" }
 progred_graph = { path = "../progred_graph" }
+progred-isa = { path = "../progred-isa" }
 im = "15"
 puri = { path = "../puri" }
 puri-vello = { path = "../puri-vello" }

@@ -1557,6 +1557,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "grap"
+version = "0.1.0"
+dependencies = [
+ "progred_graph",
+]
+
+[[package]]
+name = "grap-error"
+version = "0.1.0"
+dependencies = [
+ "progred-isa",
+ "progred_graph",
+]
+
+[[package]]
+name = "grap-f64"
+version = "0.1.0"
+dependencies = [
+ "grap",
+ "grap-error",
+ "progred_graph",
+]
+
+[[package]]
+name = "grap-geometry"
+version = "0.1.0"
+dependencies = [
+ "grap",
+ "grap-error",
+ "grap-f64",
+ "progred_graph",
+]
+
+[[package]]
 name = "gtk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3104,10 +3138,15 @@ name = "progred"
 version = "0.1.0"
 dependencies = [
  "clipboard-rs",
+ "grap",
+ "grap-error",
+ "grap-f64",
+ "grap-geometry",
  "im",
  "muda",
  "parley",
  "pollster",
+ "progred-isa",
  "progred_graph",
  "puri",
  "puri-vello",
@@ -3120,6 +3159,13 @@ dependencies = [
  "vello",
  "wasmtime",
  "winit",
+]
+
+[[package]]
+name = "progred-isa"
+version = "0.1.0"
+dependencies = [
+ "progred_graph",
 ]
 
 [[package]]

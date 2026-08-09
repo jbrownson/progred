@@ -1,17 +1,20 @@
 //! Window shell: winit + Vello plumbing around pure frame drawing.
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
+#[cfg(test)]
 mod compile;
 mod conventions;
 mod filter;
-mod sources;
+mod gid;
 mod graph_view;
 mod history;
 mod hover;
-mod gid;
 mod layout;
+#[cfg(test)]
+#[allow(dead_code)]
 mod plugins;
 mod raw;
+mod sources;
 mod store;
 
 use std::path::PathBuf;
@@ -81,7 +84,9 @@ struct SystemTextClipboard;
 impl TextClipboard for SystemTextClipboard {
     fn get_text(&mut self) -> Option<String> {
         use clipboard_rs::{Clipboard, ClipboardContext};
-        ClipboardContext::new().ok().and_then(|cb| cb.get_text().ok())
+        ClipboardContext::new()
+            .ok()
+            .and_then(|cb| cb.get_text().ok())
     }
 
     fn set_text(&mut self, text: &str) {
@@ -120,10 +125,6 @@ struct App {
     /// so spellings round-trip; never part of the model, invisible
     /// in the document.
     binders: gid::Binders,
-    /// The f64 projection plugin, compiled from `plugins/f64.rs` at
-    /// launch; `None` (with a stderr note) when the toolchain or the
-    /// source is unavailable, and the raw record renders instead.
-    plugin: Option<plugins::F64Plugin>,
     /// Attached to the app once launched; commands arrive as user
     /// events.
     menu: Menu,
@@ -198,15 +199,31 @@ fn build_menu() -> (Menu, MenuIds, MenuItems) {
         Modifiers::CONTROL
     };
     let new = MenuItem::new("New", true, Some(Accelerator::new(Some(accel), Code::KeyN)));
-    let open = MenuItem::new("Open…", true, Some(Accelerator::new(Some(accel), Code::KeyO)));
-    let save = MenuItem::new("Save", true, Some(Accelerator::new(Some(accel), Code::KeyS)));
+    let open = MenuItem::new(
+        "Open…",
+        true,
+        Some(Accelerator::new(Some(accel), Code::KeyO)),
+    );
+    let save = MenuItem::new(
+        "Save",
+        true,
+        Some(Accelerator::new(Some(accel), Code::KeyS)),
+    );
     let save_as = MenuItem::new(
         "Save As…",
         true,
         Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyS)),
     );
-    let quit = MenuItem::new("Quit Progred", true, Some(Accelerator::new(Some(accel), Code::KeyQ)));
-    let undo = MenuItem::new("Undo", true, Some(Accelerator::new(Some(accel), Code::KeyZ)));
+    let quit = MenuItem::new(
+        "Quit Progred",
+        true,
+        Some(Accelerator::new(Some(accel), Code::KeyQ)),
+    );
+    let undo = MenuItem::new(
+        "Undo",
+        true,
+        Some(Accelerator::new(Some(accel), Code::KeyZ)),
+    );
     let redo = MenuItem::new(
         "Redo",
         true,
@@ -491,10 +508,8 @@ impl ApplicationHandler<UserEvent> for App {
                             }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
-                        self.pointer = Some(Point::new(
-                            button.state.position.x,
-                            button.state.position.y,
-                        ));
+                        self.pointer =
+                            Some(Point::new(button.state.position.x, button.state.position.y));
                         self.pressed = true;
                         dispatch.handler.dispatch_pointer_down(self, &button)
                     }
@@ -503,16 +518,16 @@ impl ApplicationHandler<UserEvent> for App {
                         // motion remints even when no event handler
                         // consumes it; pressed gestures freeze hover
                         // while their ordinary drag handlers run.
-                        self.pointer =
-                            Some(Point::new(update.current.position.x, update.current.position.y));
+                        self.pointer = Some(Point::new(
+                            update.current.position.x,
+                            update.current.position.y,
+                        ));
                         frame_input_changed = !self.pressed;
                         dispatch.handler.dispatch_pointer_move(self, &update)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
-                        self.pointer = Some(Point::new(
-                            button.state.position.x,
-                            button.state.position.y,
-                        ));
+                        self.pointer =
+                            Some(Point::new(button.state.position.x, button.state.position.y));
                         self.pressed = false;
                         frame_input_changed = true;
                         dispatch.handler.dispatch_pointer_up(self, &button)
@@ -606,8 +621,7 @@ impl ApplicationHandler<UserEvent> for App {
                     RenderState::Active { window, .. } => Some(window.clone()),
                     _ => None,
                 };
-                if changed && let Some(window) = window
-                {
+                if changed && let Some(window) = window {
                     let size = window.inner_size();
                     let hover_changed = self.retain_dispatch(
                         window.scale_factor(),
@@ -679,6 +693,7 @@ fn main() {
             collapse: raw::Collapse::default(),
             names: conventions::Names::default(),
             library: conventions::library(),
+            foreign: conventions::foreign_functions(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
@@ -686,9 +701,6 @@ fn main() {
         },
         doc_path,
         binders,
-        plugin: plugins::F64Plugin::load()
-            .inspect_err(|error| eprintln!("f64 plugin: {error}"))
-            .ok(),
         menu,
         menu_ids,
         menu_items,
@@ -737,6 +749,9 @@ struct Model {
     /// The built-in library, read under every document; never
     /// written, never saved.
     library: progred_graph::Cells,
+    /// Rust implementations registered by Grap libraries; editor
+    /// configuration rather than document state.
+    foreign: grap::ForeignFunctions,
     graph: graph_view::GraphView,
     history: history::History,
     /// Document scroll offsets in logical pixels, so the position
@@ -784,10 +799,8 @@ impl Model {
     /// record root's node mirrors no mark.
     fn graph_node(&self) -> Option<Value> {
         match self.graph_selection() {
-            Some(graph_view::GraphSelection::Node(node)) => {
-                graph_view::node_value(&self.doc, node)
-                    .filter(|value| !matches!(value, Value::Record(_)))
-            }
+            Some(graph_view::GraphSelection::Node(node)) => graph_view::node_value(&self.doc, node)
+                .filter(|value| !matches!(value, Value::Record(_))),
             _ => None,
         }
     }
@@ -826,7 +839,6 @@ enum FrameVisibility {
 
 struct FrameDescription<'a> {
     model: &'a Model,
-    plugin: Option<&'a plugins::F64Plugin>,
     view: ViewFlags,
     hover: Option<Hovered>,
     scale: f64,
@@ -944,7 +956,12 @@ impl Canvas for Frame<'_> {
         }
     }
 
-    fn clip(&mut self, shape: impl Into<Shape>, transform: Affine, content: impl FnOnce(&mut Self)) {
+    fn clip(
+        &mut self,
+        shape: impl Into<Shape>,
+        transform: Affine,
+        content: impl FnOnce(&mut Self),
+    ) {
         let shape = shape.into();
         if let Some(scene) = self.scene.as_deref_mut() {
             VelloCanvas(scene).push_clip(&shape, transform);
@@ -967,9 +984,7 @@ fn resolved_hover(
         (true, _) => current.cloned(),
         (false, None) => None,
         (false, Some(point)) => match hit {
-            Some(HoverHit::Tree(raw::HoverClaim::Direct(hovering))) => {
-                hovering.map(Hovered::Tree)
-            }
+            Some(HoverHit::Tree(raw::HoverClaim::Direct(hovering))) => hovering.map(Hovered::Tree),
             Some(HoverHit::Graph(node)) => node.map(Hovered::Graph),
             Some(HoverHit::Tree(raw::HoverClaim::Air)) | None => {
                 let tree = match current {
@@ -1041,7 +1056,11 @@ impl App {
     }
 
     fn title(&self) -> String {
-        let dirty = if self.model.history.dirty() { " •" } else { "" };
+        let dirty = if self.model.history.dirty() {
+            " •"
+        } else {
+            ""
+        };
         match &self.doc_path {
             Some(path) => format!("Progred — {}{dirty}", path.display()),
             None => format!("Progred — untitled{dirty}"),
@@ -1202,12 +1221,7 @@ impl App {
     /// immediately, as every mutation site does: the retained handler
     /// was built from the old document, and its dispatches must not
     /// run against the new model.
-    fn adopt_model(
-        &mut self,
-        doc: raw::Document,
-        path: Option<PathBuf>,
-        binders: gid::Binders,
-    ) {
+    fn adopt_model(&mut self, doc: raw::Document, path: Option<PathBuf>, binders: gid::Binders) {
         self.binders = binders;
         self.model = Model {
             doc,
@@ -1215,6 +1229,7 @@ impl App {
             collapse: raw::Collapse::default(),
             names: self.model.names.clone(),
             library: conventions::library(),
+            foreign: conventions::foreign_functions(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             scroll: 0.0,
@@ -1260,15 +1275,19 @@ impl App {
             false
         } else {
             self.revealed = reveal.clone();
-            let target = dispatch.popup.as_ref().map(|popup| popup.anchor).or_else(|| {
-                reveal.as_ref().and_then(|(path, _)| {
-                    dispatch
-                        .descends
-                        .iter()
-                        .find(|descend| &descend.path == path)
-                        .map(|descend| descend.rect)
-                })
-            });
+            let target = dispatch
+                .popup
+                .as_ref()
+                .map(|popup| popup.anchor)
+                .or_else(|| {
+                    reveal.as_ref().and_then(|(path, _)| {
+                        dispatch
+                            .descends
+                            .iter()
+                            .find(|descend| &descend.path == path)
+                            .map(|descend| descend.rect)
+                    })
+                });
             target.is_some_and(|rect| {
                 let before = (self.model.scroll, self.model.scroll_x);
                 let pad = 12.0 * scale;
@@ -1314,12 +1333,7 @@ impl App {
         }
     }
 
-    fn build_frame(
-        &mut self,
-        visibility: FrameVisibility,
-        scale: f64,
-        viewport: Size,
-    ) -> Dispatch {
+    fn build_frame(&mut self, visibility: FrameVisibility, scale: f64, viewport: Size) -> Dispatch {
         let view = self.view_flags();
         let presented_hover = self.hover.clone();
         let scene = match visibility {
@@ -1328,7 +1342,6 @@ impl App {
         };
         let description = FrameDescription {
             model: &self.model,
-            plugin: self.plugin.as_ref(),
             view,
             hover: presented_hover,
             scale,
@@ -1450,9 +1463,7 @@ impl App {
             .as_ref()
             .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
             .map(|entry| entry.action.clone())
-            .unwrap_or_else(|| {
-                raw::EntryAction::Value(raw::resolve_query(query.text()))
-            })
+            .unwrap_or_else(|| raw::EntryAction::Value(raw::resolve_query(query.text())))
     }
 
     /// Commits a pointed-at value into the open pending — the
@@ -1495,7 +1506,10 @@ impl App {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(Selected::Tree(raw::Selection::edge(&self.model.sources(), path)));
+        self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+            &self.model.sources(),
+            path,
+        )));
     }
 
     /// A resolved label advances the pending edge to its value stage —
@@ -1673,8 +1687,9 @@ impl App {
         let value = match self.clipboard_structure() {
             Some(value) => value,
             None => {
-                let Some(text) =
-                    ClipboardContext::new().ok().and_then(|cb| cb.get_text().ok())
+                let Some(text) = ClipboardContext::new()
+                    .ok()
+                    .and_then(|cb| cb.get_text().ok())
                 else {
                     return false;
                 };
@@ -1687,8 +1702,7 @@ impl App {
         if self.pick_identity(value.clone()) {
             return true;
         }
-        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection
-        else {
+        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection else {
             return false;
         };
         let path = path.clone();
@@ -1786,9 +1800,7 @@ impl App {
                             Some(current) if raw::command(&event.modifiers) => {
                                 raw::pending_insert(&sources, current.path(), shift)
                             }
-                            Some(current) => {
-                                raw::pending_enter(&sources, current.path(), shift)
-                            }
+                            Some(current) => raw::pending_enter(&sources, current.path(), shift),
                             None => raw::pending_root(&sources),
                         };
                         let began = started.is_some();
@@ -1796,9 +1808,7 @@ impl App {
                         began
                     }
                 },
-                Key::Named(NamedKey::Escape) => {
-                    self.model.selection.take().is_some()
-                }
+                Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
                         Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
@@ -1814,7 +1824,9 @@ impl App {
                             true
                         }
                         Some(Selected::Tree(raw::Selection::PendingEdge {
-                            parent, replacing, ..
+                            parent,
+                            replacing,
+                            ..
                         })) => {
                             // A cancelled rename returns to its field;
                             // a cancelled new field to the record.
@@ -1872,8 +1884,7 @@ impl App {
             Key::Named(NamedKey::ArrowDown) if raw::command(&event.modifiers) => Some(false),
             _ => return false,
         };
-        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection
-        else {
+        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection else {
             return false;
         };
         let path = path.clone();
@@ -1993,7 +2004,6 @@ fn run_frame(
 ) {
     let FrameDescription {
         model,
-        plugin,
         view,
         hover,
         scale,
@@ -2045,7 +2055,9 @@ fn run_frame(
     let hover_node = graph_hover
         .and_then(|node| graph_view::node_value(&model.doc, node))
         .filter(|value| !matches!(value, Value::Record(_)));
-    let plugin_text = |value: &Value| plugin.and_then(|plugin| plugin.text(value));
+    let grap_projection = |value: &Value| {
+        raw::grap_stand_in(value, |cell| sources.value(cell).cloned(), &model.foreign)
+    };
     let body = raw::project(
         raw::ProjectDescription {
             sources,
@@ -2058,7 +2070,7 @@ fn run_frame(
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            plugin: Some(&plugin_text),
+            projection: Some(&grap_projection),
         },
         &mut tcx,
         raw::Hooks {
@@ -2076,19 +2088,25 @@ fn run_frame(
                     Some(current) => current.path() != path,
                 };
                 if fresh {
-                    app.model.selection =
-                        Some(Selected::Tree(raw::Selection::edge(&app.model.sources(), path)));
+                    app.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                        &app.model.sources(),
+                        path,
+                    )));
                 } else if click.is_none()
-                    && let Some(line) =
-                        app.model.tree_selection_mut().and_then(raw::Selection::edit_mut)
+                    && let Some(line) = app
+                        .model
+                        .tree_selection_mut()
+                        .and_then(raw::Selection::edit_mut)
                 {
                     // Re-selecting without a text click lands the
                     // caret at the end, same as a fresh mount.
                     line.cursor_to_end();
                 }
                 if let Some(click) = click
-                    && let Some(line) =
-                        app.model.tree_selection_mut().and_then(raw::Selection::edit_mut)
+                    && let Some(line) = app
+                        .model
+                        .tree_selection_mut()
+                        .and_then(raw::Selection::edit_mut)
                 {
                     // A tap sequence never spans targets: the click
                     // that mounts an editor is its first, whatever
@@ -2149,8 +2167,7 @@ fn run_frame(
     // window edge the viewport clips at.
     let content = layout::pad(vello::kurbo::Insets::uniform(margin), body);
     frame.max_scroll = ((content.extent.height() - viewport_height) / scale).max(0.0);
-    frame.max_scroll_x =
-        ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
+    frame.max_scroll_x = ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
     let offset = Vec2::new(
         model.scroll_x.clamp(0.0, frame.max_scroll_x) * scale,
         model.scroll.clamp(0.0, frame.max_scroll) * scale,
@@ -2168,13 +2185,7 @@ fn run_frame(
         move |app, update| {
             let point = Point::new(update.state.position.x, update.state.position.y);
             !graph_panel.is_some_and(|panel| panel.contains(point))
-                && app.scroll_document(
-                    update,
-                    scale,
-                    viewport_height,
-                    max_scroll,
-                    max_scroll_x,
-                )
+                && app.scroll_document(update, scale, viewport_height, max_scroll, max_scroll_x)
         },
     );
     // The graph pane draws over the document's right side; placed
@@ -2243,26 +2254,18 @@ fn run_frame(
             Some(raw::Hover::Entry(index)) => Some(*index),
             _ => None,
         };
-        let commit = |app: &mut App, action: &raw::EntryAction| {
-            match app.model.selection.take() {
-                Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
-                    app.commit_value(path, action);
-                }
-                Some(Selected::Tree(raw::Selection::PendingEdge {
-                    parent, replacing, ..
-                })) => {
-                    app.commit_label(parent, replacing, action);
-                }
-                selection => app.model.selection = selection,
+        let commit = |app: &mut App, action: &raw::EntryAction| match app.model.selection.take() {
+            Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
+                app.commit_value(path, action);
             }
+            Some(Selected::Tree(raw::Selection::PendingEdge {
+                parent, replacing, ..
+            })) => {
+                app.commit_label(parent, replacing, action);
+            }
+            selection => app.model.selection = selection,
         };
-        let card = raw::popup_view(
-            &mut tcx,
-            &styles,
-            &popup,
-            hovered_entry,
-            commit,
-        );
+        let card = raw::popup_view(&mut tcx, &styles, &popup, hovered_entry, commit);
         // Below the anchor, unless it would run off the bottom and
         // fits above — then flip on top, as the TypeScript prototype
         // did. The card's extent is known before placement.

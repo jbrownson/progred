@@ -1,155 +1,200 @@
-# Projections As Plugins
+# Grap and Projections
 
-Decision record, 2026-07-25. How custom projections are defined, what
-language they are written in, and how the host runs them.
+Decision record, 2026-08-08. This supersedes the 2026-07-25 decision
+to make Rust-to-wasm plugins the first projection language. The wasm
+spike remains in the tree as proven infrastructure, but it is no
+longer on the application's live f64 projection path.
 
 ## The Decision
 
-Custom projections are **plugins**: programs in existing languages,
-compiled to wasm, called by the editor as pure functions. The first
-language is Rust. The split of ownership is the design's spine:
+Bootstrap Progred with Grap, a small strict language embedded directly
+in the existing graph data. Grap is not another syntax tree and adds
+nothing to `Value`: records, lists, blobs, strings, and cells remain the
+whole data model. A fixed library gives a few cell identities meaning,
+and the evaluator interprets records using those identities. Numeric,
+geometry, and future CAD meanings are separate Grap libraries, not
+language primitives.
 
-- **Structure is ours** — programs and documents live in the graph;
-  text is a build artifact, like object code.
-- **Semantics are external** — rustc owns what a program means. The
-  editor never interprets, typechecks, or evaluates the language.
-- **Execution is sandboxed** — wasmtime owns running it, with the
-  capability surface chosen by the host.
+This changes the near-term aim. We are building an Inventing on
+Principle CAD/CAM system, not trying to host arbitrary existing
+languages first. A small language whose program is already the
+semantics graph lets projections and evaluation evolve together,
+without a text/compiler round trip in the interaction loop. Existing
+languages may still become projections over resolved semantics graphs
+later.
 
-Any language that compiles to wasm and can parse the gid notation can
-write projections; the ABI is three exports and a byte protocol.
+The earlier Grap design was rejected for good reasons, but they were
+properties of that design rather than of an embedded language:
 
-## Rejected: Grap, An Own Language
+- Parameters were inferred from free cells. They are now an explicit,
+  ordered list.
+- Cell resolution changed meaning based on whether the cell happened
+  to have a stored value. It is now ordinary lexical lookup followed
+  by document/library lookup.
+- Templates, macros, hygiene, and mint-on-instantiation were being
+  designed before a useful evaluator existed. None is in the bootstrap
+  language.
+- Grap was being weighed as a general replacement for existing
+  languages. Its current job is smaller: make the system immediately
+  live, then provide the substrate from which richer projections can
+  be built.
 
-The path here went through designing Grap — a lisp whose
-s-expressions are gid values: one `{is: head, …}` form, application
-binding parameter *cells* by identity, records as templates, symbols
-as cells, strict and fueled, projections as Grap functions. The
-design was coherent and parts of it were genuinely better than the
-textual equivalents (capture is unrepresentable when references are
-edges; renaming is metadata).
+## Representation
 
-It was abandoned at the design stage, before any evaluator code, when
-each design session surfaced another hole that was ours to own
-forever: resolution keyed on cell valuelessness (fragile — storage
-state flipping reference semantics), derived signatures (conflated
-symbols with parameters), `apply` arity, the macro/hygiene boundary
-(fixed identities in templates reproduce the classic capture bug;
-minting at instantiation is the eventual answer). Each was fixable;
-the sum was a language project, and the tripwire — "Grap must stay
-small; if it becomes a language project, that's the signal" — fired
-during design. The editor is a big enough thing to explain without a
-language to explain beside it.
+Semantic labels are library cell IDs, not strings. The IDs are
+once-minted random 128-bit cell identities, checked in as library
+facts; they are not derived from, or hashes of, their names. Names are
+presentation metadata supplied by each library.
 
-What survives Grap's design work, language-independently: completions
-as data carried on descend points (the projection is a grammar run in
-the generative direction), doc reads as explicit tracked acts, the
-string-tag dispatch convention, and the mint-on-instantiation note
-for whenever code generation arrives.
+Core Grap defines only three identities: `function`, `params`, and
+`body`. They distinguish function definitions and calls from ordinary
+records. Core Grap has no number or geometry type and no arithmetic or
+geometry operation.
 
-## The Wasm Interface (ABI 1)
+A function is a record with exactly two fields:
 
-A plugin exports `abi_version() -> u32`, `alloc(len: u32) -> u32`,
-`project(ptr: u32, len: u32) -> u64`, plus its linear `memory`. All
-input crosses as bytes written into guest memory at a guest-allocated
-offset; the reply is a packed pointer/length in the returned u64, and
-**zero is the plugin declining the value** — the host falls through
-to the ordinary rendering. Failure has one shape: the trap (panic,
-out-of-bounds, deadline), caught at the call and rendered as an
-error, never a crash.
+```text
+{
+  params: [x, y],
+  body: ...,
+}
+```
 
-- **A fresh Store per call.** No guest state survives an invocation,
-  which makes `project` provably pure in its input bytes — and purity
-  is what makes host-side memoization sound. Plugins run per novel
-  value, not per frame.
-- **Zero imports.** Purity by construction: nothing impure exists for
-  the guest to call. The one planned future import is
-  `resolve(cell) -> value` for following references — and because
-  every call goes through the host, the resolve log is exactly the
-  projection's dependency set: invalidation granularity falls out of
-  the capability boundary.
-- **Epochs, not fuel.** A watchdog thread ticks the engine's epoch;
-  calls get a two-tick deadline and trap out if wedged. Fuel's
-  deterministic accounting costs real instrumentation and answers a
-  question nobody is asking yet.
-- **Wire format**: v0 is task-specific bytes (the f64 plugin takes
-  the eight blob bytes, returns UTF-8). v1 is **gid notation both
-  directions** — the text format is the cross-language interface, no
-  serde, no second Rust-only encoding. A binary sibling happens when
-  profiling says text matters, specified like the text form.
+The parameter values are cells. Their list establishes arity and
+order. The function record may be inline and anonymous or be the value
+of a cell; naming and recursive reference need no additional language
+identity. The fixed `function` cell cannot itself be a parameter,
+because that label is the call record's one reserved slot.
 
-## The Compile Service
+A call is a record with a `function` field and one field per argument.
+Argument labels are the function's parameter cells:
 
-Plugin Rust becomes wasm through a pinned toolchain over pipes:
-source on stdin, module on stdout (`-o -`), diagnostics on stderr as
-rustc's JSON with byte spans into the submitted source. No cargo in
-the loop; no files on our side.
+```text
+{
+  function: sum,
+  x: ...,
+  y: ...,
+}
+```
 
-- **The toolchain is resolved through rustup by name, never bare
-  `rustc`** — the PATH winner may lack the wasm target (Homebrew's
-  does, which cost an afternoon's confusion).
-- **Every call gets its own scratch directory under the system temp,
-  serving as the child's cwd and its TMPDIR**: rustc stages stdout
-  output as `stdout.<crate>` in its working directory (concurrent
-  compiles sharing one clobber each other), and its intermediates
-  follow TMPDIR — pointing both at one per-call directory contains
-  the compiler's whole footprint, removed after the call. The system
-  temp because **paths are environment policy, and dev must run the
-  production shape**: an installed app is a read-only signed bundle
-  whose writable roots are $TMPDIR and ~/Library — a checkout-
-  relative scratch would work only in the environment that
-  eventually goes away. (`temp_dir` honors $TMPDIR, the knob
-  sandboxes redirect.) The spike's checkout-relative plugin source
-  and wasm cache paths are dev-mode stand-ins awaiting plugin
-  discovery, not precedent.
-- The toolchain is a **runtime component of the editor**, not a dev
-  assumption: rlib formats are compiler-version-specific, so the
-  precompiled-dependency design requires one exact compiler the app
-  owns. Tier 1 (now): pin and resolve explicitly, fail with the
-  install one-liner. Tier 2 (when anyone else runs this):
-  app-managed toolchain download. Keep the shared model crate free of
-  proc-macro dependencies — derives execute host-side and drag host
-  std into the minimal toolchain.
-- rustc-as-a-library (`rustc_private`) was examined and declined: it
-  pins the *app* to nightly, and isolating it in a helper binary
-  reinvents the pipe architecture with a maintenance tax. The CLI is
-  the stable API.
+The apparent names above are binder sugar in gid notation. Matching is
+by cell identity. Renaming a parameter changes no program reference,
+and there is no parallel symbol-ID system.
 
-## The Rust Domain (Ahead)
+Numbers remain a library convention rather than a data-model variant.
+The separate f64 library represents an f64 as eight little-endian bytes
+under its `f64` label. It defines strict binary `add` and `multiply`
+calls using its `left` and `right` parameter cells, and registers their
+implementations as Rust foreign functions. The geometry library owns
+`circle` and `radius`; its Rust-backed circle constructor consumes the
+f64 library's representation. Neither library changes Grap or
+`Value`.
 
-Editing Rust as graph structure, emitted as text for the compiler:
+## Evaluation
 
-- **Identifiers are gid-encoded** in emission (`g<hex>`), so renames
-  never touch emitted text, duplicate names coexist, and shadowing is
-  unrepresentable — the hygiene discussion's conclusion applied at
-  the one boundary where no human reads. External references keep
-  their textual paths (one string per item, structure only for
-  applying arguments); boundary items that the outside world names
-  (exports, external-trait impls) keep their required names.
-  Diagnostics get un-mangled for display through the same span map
-  that routes squiggles.
-- **Schema by tiers**, with syn (~205 node kinds, `Expr` alone 40
-  variants) as the measured ceiling: ~28 kinds writes the first
-  plugin end to end, ~50 is comfortable authoring, and a **verbatim
-  node** (syn ships the same escape hatch) holds anything not yet
-  modeled — the schema's floor is one verbatim node holding a whole
-  file, and every modeled kind is a strict improvement over it.
-  Generic *application* is tier 0 (unwritable Rust without it);
-  generic *definitions* with simple bounds are a later tier; `use`
-  is not authored structure at all — emission synthesizes imports.
-- **No importer required**: we author, we don't ingest. The editor's
-  own support machinery stays ordinary text Rust — hosting raw.rs in
-  the editor would prove a point, not serve one.
+Evaluating a cell is transparent:
 
-## The Spike (2026-07-25)
+1. A lexical binding with that cell identity wins.
+2. A cell registered by a library as a foreign function produces its
+   host implementation.
+3. Otherwise the cell is resolved through the caller's document-over-
+   library source and its value is evaluated.
 
-Landed: `compile.rs` (the pipe pipeline, with structured
-diagnostics), `plugins.rs` (wasmtime host, watchdog, the call
-protocol, and the f64 dispatch rule: a record whose single field is
-the string label `"f64"` holding an eight-byte little-endian blob),
-and `plugins/f64.rs` — the first plugin, checked in as ordinary text
-Rust, compiled at launch if stale and cached under `target/plugins/`.
-The raw projection substitutes the plugin's text for the record's
-form outside the Raw view; the Raw toggle always shows structure as
-stored. The sample document's roof gained a `"pitch"` so the
-substitution is visible on open.
+This is one dependency made honest, not a special reference/value
+mode stored on cells. A parameter may have a name or even a document
+value; within its function body the lexical binding wins because that
+identity is the parameter.
+
+Ordinary values evaluate to themselves. Only a record containing the
+fixed `function` label is a call, and only a record containing the
+fixed function-definition labels is a definition. Calls are
+call-by-value. Closures capture the lexical environment in which their
+definition is evaluated.
+
+Every external cell read is collected as a dependency. The set is
+reported even when evaluation fails, ready for future precise
+invalidation. Every evaluation also has explicit fuel, and direct cell
+alias cycles receive a specific error. Invalid Grap never hides or
+damages the underlying document: a failed projection simply declines,
+and the raw record remains editable.
+
+The evaluator lives in its own `grap` crate and depends only on
+`progred_graph`. It knows the function representation and a generic
+foreign-function registry, but no f64, geometry, UI, file, or
+Linebender concepts. `grap-f64` and `grap-geometry` are separate
+libraries composed by the application. Their graph-side identities
+and metadata live in the built-in library cells; their host-side
+implementations live in the foreign-function registry.
+
+A registered foreign function consumes evaluated values and returns
+one `Value`. The Grap evaluator does not impose a host-language
+`Result` distinction on that value.
+
+The bootstrap f64 and geometry libraries define stable library cells
+for their failure modes and return those identities as values: several
+semantically distinct custom nulls, not freshly allocated error
+occurrences. Each sentinel's library value is a record containing
+`isa: error`. The general `isa` relation lives in the independent
+`progred-isa` library: it is a convention over graph data, not part of
+Grap or `progred_graph`. The error library owns only the `error`
+classification and uses that relation. Additional static metadata can
+be added as fields on each sentinel's record. Error meaning remains
+library data rather than an evaluator feature.
+
+## First Vertical Slice
+
+The raw projection asks Grap to evaluate candidate records, then
+projects a successful f64 result as text or a circle result as native
+vector drawing. The checked-in sample is the small end-to-end
+construction:
+
+- `pitch` is a cell containing f64 `2.5`.
+- `double` is a Grap function with an explicit `amount` parameter. Its
+  body calls the f64 library's Rust-backed `multiply` with `amount`
+  and f64 `2`.
+- the roof contains a call to `double`, passing `pitch`; its projected
+  result is `5`.
+- a nested expression multiplies that result by `8`, passes the result
+  as the radius of `circle`, and projects the resulting radius-40
+  profile through Puri's drawing interface.
+
+Raw mode shows the complete function, call, and number records. This
+is intentionally not yet the CAD interaction: it proves the shorter
+loop — graph edit, evaluation, vector projection — before direct
+manipulation and a real construction vocabulary are layered on it.
+
+## Near-Term Direction
+
+The next useful growth is driven by one interactive geometric
+construction, not by filling out a language checklist:
+
+- introduce the smallest geometry values and foreign operations the
+  construction needs;
+- project evaluated geometry through Puri rather than only text;
+- make a direct manipulation write its controlling graph values;
+- use the dependency set to reevaluate only affected results if full
+  frame evaluation becomes material;
+- add errors and evaluation traces as projections over the same graph,
+  while keeping Raw as the escape hatch.
+
+Conditionals, local bindings, recursion policy, richer errors, and
+collections should arrive only when the construction demands them.
+Macros and general code generation remain explicitly out of scope for
+the bootstrap.
+
+## The Superseded Wasm Spike
+
+The 2026-07-25 spike proved that Progred can compile Rust to wasm over
+pipes and safely host pure projection plugins in Wasmtime. ABI 1 uses
+three exports (`abi_version`, `alloc`, and `project`) plus linear
+memory. Calls receive no imports, use a fresh Store, and are bounded by
+epoch interruption. The compiler service invokes an explicitly chosen
+rustup toolchain in a per-call temporary directory and returns
+structured rustc diagnostics.
+
+That code, the f64 guest, and their tests are retained. They are useful
+evidence for a future foreign-language boundary and are not interfering
+with Grap. The app no longer compiles or loads the f64 guest at startup,
+and the active projection no longer depends on Wasmtime. Removing the
+dormant dependency and spike is a separate cleanup decision, not part
+of establishing Grap.

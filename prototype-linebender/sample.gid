@@ -1,18 +1,43 @@
 {
   "binders": {
+    "amount": d64791086d78f3af9b14c9246feb647e,
+    "body": fcf003c00ec4144cb748e8bbc7bb568e,
+    "circle": f546a977c8531e0edffa7e524b393b9f,
     "corner": a49597a96cf95d964ef74b53a595d0fa,
+    "double": 9a3e6697436ec8750734879738e868e0,
+    "f64": d2bf4824cb297a418eeddb11d0d11b65,
     "favorite": 8c233b116206e0de95217827108a3046,
+    "function": 652a661e44ea44bd48bce4306e6e5995,
+    "left": 41810d0ee173fc6fa2e4c2e7be5bb862,
+    "multiply": 818c27a54bbdd4a70606dfd681151e4d,
     "origin": 14e404030754e167fedb1355c099ceeb,
+    "params": a4e2f4e064fe700d4dd5e55404839382,
+    "pitch": 9f89aa70d4ec0ca6bbe5f7a8160470e4,
+    "radius": 21025a64620233d9b9c28abe95f06224,
+    "right": 042b0a534c159e02d347acdbda0a7306,
     "roof": 1c1d05806d62128e74118e73a7568812,
     "stroke": 85e5ce37a0f8f98fe7a4b907e4744623,
   },
   "cells": {
+    amount: {"name": "amount"},
     corner: {"name": "corner", "value": {
       "at": {
         "col": "right",
         "row": "bottom",
       },
       "of": roof,
+    }},
+    double: {"name": "double", "value": {
+      params: [
+        amount,
+      ],
+      body: {
+        right: {
+          f64: 0x0000000000000040,
+        },
+        left: amount,
+        function: multiply,
+      },
     }},
     favorite: {"name": "favorite", "value": corner},
     origin: {"name": "origin", "value": {
@@ -21,16 +46,34 @@
         "row": "top",
       },
     }},
+    pitch: {"name": "pitch", "value": {
+      f64: 0x0000000000000440,
+    }},
     roof: {"name": "roof", "value": {
       stroke: "hairline",
-      "material": 66d97eac461f31df1c25e1f594f4e84e,
-      "pitch": {
-        "f64": 0x0000000000000440,
+      "double pitch": {
+        function: double,
+        amount: pitch,
       },
+      "material": 66d97eac461f31df1c25e1f594f4e84e,
+      "pitch": pitch,
       "points": [
         origin,
         corner,
       ],
+      "profile": {
+        radius: {
+          right: {
+            f64: 0x0000000000002040,
+          },
+          left: {
+            function: double,
+            amount: pitch,
+          },
+          function: multiply,
+        },
+        function: circle,
+      },
       "style": 1175560c307dc5a5f07952b9c14bd70e,
       "tags": [
         "draft",

@@ -158,10 +158,7 @@ impl Parser<'_> {
     fn resolve(&mut self, token: Token) -> CellId {
         match token {
             Token::Gid(gid) => gid,
-            Token::Binder(binder) => *self
-                .binders
-                .entry(binder)
-                .or_insert_with(new_cell_id),
+            Token::Binder(binder) => *self.binders.entry(binder).or_insert_with(new_cell_id),
         }
     }
 
@@ -618,10 +615,7 @@ mod tests {
     fn a_cell_stated_twice_fails_and_duplicate_names_coexist() {
         // The same cell twice, by the same spelling or different
         // ones, refuses rather than clobbering.
-        assert!(
-            parse(r#"{"cells": {x: {"value": "a"}, x: {"value": "b"}}}"#)
-                .is_err()
-        );
+        assert!(parse(r#"{"cells": {x: {"value": "a"}, x: {"value": "b"}}}"#).is_err());
         let aliased = r#"{
             "binders": {"x": 9d2c1e10ab3440de963d02d5f4b1a5a5},
             "cells": {
@@ -716,5 +710,45 @@ mod sample_file {
         let (doc, binders) = parse(text).expect("the sample parses");
         assert!(doc.root.is_some());
         assert_eq!(print(&doc, &binders), text);
+    }
+
+    #[test]
+    fn the_sample_contains_a_projectable_grap_computation() {
+        let (doc, binders) = parse(include_str!("../../sample.gid")).expect("the sample parses");
+        let roof = doc
+            .root
+            .as_ref()
+            .and_then(Value::as_record)
+            .and_then(|root| root.get(&Label::from("shape")))
+            .and_then(Value::as_cell)
+            .and_then(|roof| doc.cells.value(roof))
+            .and_then(Value::as_record)
+            .expect("roof record");
+        let expression = roof
+            .get(&Label::from("double pitch"))
+            .expect("Grap expression");
+        let foreign = crate::conventions::foreign_functions();
+        assert_eq!(
+            grap::evaluate(
+                expression,
+                |cell| doc.cells.value(cell).cloned(),
+                &foreign,
+                grap::DEFAULT_FUEL,
+            )
+            .result,
+            Ok(grap_f64::value(5.0))
+        );
+        let profile = roof.get(&Label::from("profile")).expect("profile call");
+        let evaluation = grap::evaluate(
+            profile,
+            |cell| doc.cells.value(cell).cloned(),
+            &foreign,
+            grap::DEFAULT_FUEL,
+        );
+        assert_eq!(evaluation.result, Ok(grap_geometry::value(40.0)));
+        assert_eq!(
+            evaluation.dependencies,
+            [binders["double"], binders["pitch"]].into_iter().collect()
+        );
     }
 }

@@ -1,3 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["progred", "progred_graph", "puri", "puri-vello"]
+members = [
+    "grap",
+    "grap-error",
+    "grap-f64",
+    "grap-geometry",
+    "progred",
+    "progred-isa",
+    "progred_graph",
+    "puri",
+    "puri-vello",
+]

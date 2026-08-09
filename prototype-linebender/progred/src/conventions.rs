@@ -8,12 +8,27 @@ use crate::sources::Sources;
 use progred_graph::{CellId, Cells};
 use std::rc::Rc;
 
-/// The built-in library: read under every document through
-/// [`Sources`] — never written, never saved. Empty since names moved
-/// into the table; real loadable libraries will compose here (they
-/// are read-only, so composition is `Cells::merge`).
+/// The built-in libraries: read under every document through
+/// [`Sources`] — never written, never saved. Core Grap contributes
+/// only its function vocabulary; isa, error, f64, and geometry are
+/// ordinary Grap libraries composed beside it.
 pub fn library() -> Cells {
-    Cells::new()
+    let mut cells = grap::library();
+    cells.merge(progred_isa::library());
+    cells.merge(grap_error::library());
+    cells.merge(grap_f64::library());
+    cells.merge(grap_geometry::library());
+    cells
+}
+
+/// Host implementations available to Grap evaluation. This is kept
+/// separate from the library's graph data: a cell names each foreign
+/// function in both worlds, but only Rust holds the implementation.
+pub fn foreign_functions() -> grap::ForeignFunctions {
+    let mut foreign = grap::ForeignFunctions::new();
+    grap_f64::install(&mut foreign).expect("f64 foreign functions are distinct");
+    grap_geometry::install(&mut foreign).expect("geometry foreign functions are distinct");
+    foreign
 }
 
 /// The editor's name policy: every display-name lookup goes through
@@ -49,12 +64,7 @@ impl Default for Names {
 /// down in Raw is the POLICY, which future convention layers
 /// (computed names, per-library conventions) will vary; today the
 /// policy reads the same table, so the two sides agree.
-pub fn display_name(
-    sources: &Sources,
-    names: &Names,
-    raw: bool,
-    cell: CellId,
-) -> Option<String> {
+pub fn display_name(sources: &Sources, names: &Names, raw: bool, cell: CellId) -> Option<String> {
     if raw {
         sources.name(cell).map(str::to_owned)
     } else {

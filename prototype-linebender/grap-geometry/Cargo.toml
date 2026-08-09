@@ -1,0 +1,10 @@
+[package]
+name = "grap-geometry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+grap = { path = "../grap" }
+grap-error = { path = "../grap-error" }
+grap-f64 = { path = "../grap-f64" }
+progred_graph = { path = "../progred_graph" }

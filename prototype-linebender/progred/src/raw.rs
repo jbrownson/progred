@@ -9,11 +9,12 @@ use crate::conventions::Names;
 use crate::filter;
 use crate::hover::HasHover;
 use crate::layout::{
-    Extent, Node, before, col, decorate, leaf, min_width,
-    on_primary_pointer_down, pad, row, text, text_edit,
+    Extent, Node, before, col, decorate, leaf, min_width, on_primary_pointer_down, pad, row, text,
+    text_edit,
 };
 use crate::sources::Sources;
 use im::OrdMap;
+use parley::layout::Layout;
 use progred_graph::{
     Atom, CellId, Cells, Label, Position, Step, Value, hex_string, new_cell_id, position, spine,
 };
@@ -25,13 +26,12 @@ use puri::edit::{
 };
 use puri::geometry::Placement;
 use puri::handler::HasHandler;
-use parley::layout::Layout;
 use puri::text::{TextCtx, TextStyle, caret_index, line_layout};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButton;
-use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
+use vello::kurbo::{Affine, Circle, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
 
 /// Shared with the mounted editors so edited atoms keep their colors.
@@ -103,10 +103,10 @@ pub struct Document {
 /// nothing else, referenced as a label, never enumerated; the
 /// material cell is fully bare — referenced before anything at all
 /// is said about it; the swatch is a blob; each point's position is
-/// an inline record, point-shaped data that wants to be a value; and
-/// the favorite cell holds a bare LINK to the corner — the alias
-/// pattern, and the standing repro for the block-in-row rendering
-/// seam (a cell whose value blocks inside another cell's parens).
+/// an inline record, point-shaped data that wants to be a value; the
+/// favorite cell holds a bare LINK to the corner — the alias pattern;
+/// and pitch flows through a small Grap function to a projected
+/// computed result.
 /// The app starts EMPTY now; this is the test fixture, and its
 /// printed form is checked in as sample.gid.
 #[cfg_attr(not(test), allow(dead_code))]
@@ -165,6 +165,46 @@ pub fn sample_document() -> Document {
     cells.set_name(favorite, "favorite");
     cells.set_value(favorite, Value::from(corner));
 
+    let amount = new_cell_id();
+    cells.set_name(amount, "amount");
+
+    let double = new_cell_id();
+    cells.set_name(double, "double");
+    cells.set_value(
+        double,
+        Value::record([
+            (
+                Label::Cell(grap::vocabulary::PARAMS),
+                Value::list([Value::from(amount)]),
+            ),
+            (
+                Label::Cell(grap::vocabulary::BODY),
+                Value::record([
+                    (
+                        Label::Cell(grap::vocabulary::FUNCTION),
+                        Value::from(grap_f64::vocabulary::MULTIPLY),
+                    ),
+                    (Label::Cell(grap_f64::vocabulary::LEFT), Value::from(amount)),
+                    (
+                        Label::Cell(grap_f64::vocabulary::RIGHT),
+                        grap_f64::value(2.0),
+                    ),
+                ]),
+            ),
+        ]),
+    );
+
+    let pitch = new_cell_id();
+    cells.set_name(pitch, "pitch");
+    cells.set_value(pitch, grap_f64::value(2.5));
+
+    let double_pitch = || {
+        Value::record([
+            (Label::Cell(grap::vocabulary::FUNCTION), Value::from(double)),
+            (Label::Cell(amount), Value::from(pitch)),
+        ])
+    };
+
     cells.set_name(roof, "roof");
     cells.set_value(
         roof,
@@ -180,15 +220,30 @@ pub fn sample_document() -> Document {
             ),
             (Label::from("material"), Value::from(material)),
             (Label::from("style"), Value::from(style)),
-            // A number by the tagged-blob convention: eight
-            // little-endian bytes under the string label "f64" — the
-            // f64 plugin's standing demo.
+            (Label::from("pitch"), Value::from(pitch)),
+            (Label::from("double pitch"), double_pitch()),
             (
-                Label::from("pitch"),
-                Value::record([(
-                    Label::from("f64"),
-                    Value::from(2.5_f64.to_le_bytes().to_vec()),
-                )]),
+                Label::from("profile"),
+                Value::record([
+                    (
+                        Label::Cell(grap::vocabulary::FUNCTION),
+                        Value::from(grap_geometry::vocabulary::CIRCLE),
+                    ),
+                    (
+                        Label::Cell(grap_geometry::vocabulary::RADIUS),
+                        Value::record([
+                            (
+                                Label::Cell(grap::vocabulary::FUNCTION),
+                                Value::from(grap_f64::vocabulary::MULTIPLY),
+                            ),
+                            (Label::Cell(grap_f64::vocabulary::LEFT), double_pitch()),
+                            (
+                                Label::Cell(grap_f64::vocabulary::RIGHT),
+                                grap_f64::value(8.0),
+                            ),
+                        ]),
+                    ),
+                ]),
             ),
         ]),
     );
@@ -240,15 +295,35 @@ struct Cx<'a> {
     /// The value the hover refers to; its projections carry the faint
     /// hover variant of the secondary mark.
     secondary_hover: Option<Value>,
-    /// The plugin dispatch: text standing in for a value's record
-    /// form, asked per record and declined with `None`. Stands down
-    /// in Raw, which shows structure as stored.
-    plugin: PluginText<'a>,
+    /// A domain projection may stand another view in for a value's
+    /// record form. It stands down in Raw, which shows structure as
+    /// stored.
+    projection: DomainProjection<'a>,
 }
 
-/// The plugin dispatch's shape: text standing in for a value, or a
-/// decline.
-pub type PluginText<'a> = Option<&'a dyn Fn(&Value) -> Option<String>>;
+pub enum StandIn {
+    Text(String),
+    Circle { radius: f64 },
+}
+
+/// The prototype's current presentation policy over evaluated Grap
+/// data. The evaluator itself knows neither numbers nor geometry.
+pub(crate) fn grap_stand_in(
+    expression: &Value,
+    resolve: impl Fn(CellId) -> Option<Value>,
+    foreign: &grap::ForeignFunctions,
+) -> Option<StandIn> {
+    grap::evaluate(expression, resolve, foreign, grap::DEFAULT_FUEL)
+        .result
+        .ok()
+        .and_then(|value| {
+            grap_f64::read(&value)
+                .map(|number| StandIn::Text(number.to_string()))
+                .or_else(|| grap_geometry::read(&value).map(|radius| StandIn::Circle { radius }))
+        })
+}
+
+pub type DomainProjection<'a> = Option<&'a dyn Fn(&Value) -> Option<StandIn>>;
 
 /// A reported click on a string's text, in text-local coordinates.
 /// The shell's selection transition consumes it to seed or advance
@@ -311,9 +386,7 @@ impl Cx<'_> {
     fn selected(&self, path: &[Step]) -> bool {
         match self.selection {
             Some(Selection::Edge { path: selected, .. })
-            | Some(Selection::Pending {
-                path: selected, ..
-            }) => selected.as_slice() == path,
+            | Some(Selection::Pending { path: selected, .. }) => selected.as_slice() == path,
             _ => false,
         }
     }
@@ -327,7 +400,9 @@ impl Cx<'_> {
     fn pending_child_of(&self, path: &[Step]) -> Option<Step> {
         match self.selection {
             Some(Selection::Pending { path: pending, .. })
-                if pending.split_last().is_some_and(|(_, parent)| parent == path) =>
+                if pending
+                    .split_last()
+                    .is_some_and(|(_, parent)| parent == path) =>
             {
                 pending.last().cloned()
             }
@@ -429,9 +504,7 @@ impl Selection {
             Some((Step::Follow, parent)) => sources
                 .resolve(parent)
                 .and_then(Value::as_cell)
-                .is_some_and(|cell| {
-                    sources.value(cell).is_none() && sources.writable(cell)
-                }),
+                .is_some_and(|cell| sources.value(cell).is_none() && sources.writable(cell)),
             _ => false,
         };
         if empty_slot {
@@ -447,9 +520,9 @@ impl Selection {
                     .resolve(parent)
                     .and_then(Value::as_cell)
                     .map(|cell| line_edit(sources.name(cell).unwrap_or(""))),
-                _ => sources.resolve(&path).and_then(|value| {
-                    value.as_str().map(line_edit)
-                }),
+                _ => sources
+                    .resolve(&path)
+                    .and_then(|value| value.as_str().map(line_edit)),
             })
             .flatten();
         Selection::Edge {
@@ -469,18 +542,14 @@ impl Selection {
     pub fn edit(&self) -> Option<&LineEditState> {
         match self {
             Selection::Edge { edit, .. } => edit.as_ref(),
-            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => {
-                Some(query)
-            }
+            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => Some(query),
         }
     }
 
     pub fn edit_mut(&mut self) -> Option<&mut LineEditState> {
         match self {
             Selection::Edge { edit, .. } => edit.as_mut(),
-            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => {
-                Some(query)
-            }
+            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => Some(query),
         }
     }
 }
@@ -551,7 +620,10 @@ pub fn delete_edge(doc: &mut Document, library: &Cells, path: &[Step]) -> bool {
         None => doc.root.take().is_some(),
         Some((Step::Follow, parent)) => {
             let cell = {
-                let sources = Sources { doc: &*doc, library };
+                let sources = Sources {
+                    doc: &*doc,
+                    library,
+                };
                 sources
                     .resolve(parent)
                     .and_then(Value::as_cell)
@@ -572,7 +644,10 @@ pub fn delete_edge(doc: &mut Document, library: &Cells, path: &[Step]) -> bool {
         Some((Step::Name, _)) => false,
         Some((Step::Key(_) | Step::Element(_), _)) => {
             let write = {
-                let sources = Sources { doc: &*doc, library };
+                let sources = Sources {
+                    doc: &*doc,
+                    library,
+                };
                 match last_follow(path) {
                     Some(index) => sources
                         .resolve(&path[..index])
@@ -970,24 +1045,36 @@ fn completion_entries(
     // query. "new list" and "new record" rank among them under their
     // own display text: type toward one and it surfaces, type away
     // and it leaves.
-    let mut references_pool: Vec<(String, bool, EntryAction)> = document_cells(sources)
+    let (local, external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
         .map(
             |cell| match crate::conventions::display_name(sources, names, raw, cell) {
-                Some(name) => (name, true, EntryAction::Value(Value::from(cell))),
-                None => (short_id(cell), false, EntryAction::Value(Value::from(cell))),
+                Some(name) => (
+                    (name, true, EntryAction::Value(Value::from(cell))),
+                    sources.external(cell),
+                ),
+                None => (
+                    (short_id(cell), false, EntryAction::Value(Value::from(cell))),
+                    sources.external(cell),
+                ),
             },
         )
-        .collect();
-    references_pool.sort_by(|a, b| a.0.cmp(&b.0));
-    // "new cell" is one of them — a plain constructor like list and
-    // record (the mint is bare; naming happens on the head after).
-    // Cells can label, so it alone survives the label stage.
+        .partition(|(_, external)| !*external);
+    let strip_origin = |((display, named, action), _)| (display, named, action);
+    let mut local: Vec<_> = local.into_iter().map(strip_origin).collect();
+    let mut external: Vec<_> = external.into_iter().map(strip_origin).collect();
+    local.sort_by(|a, b| a.0.cmp(&b.0));
+    external.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut references_pool = local;
+    // Constructors follow the current document on an empty query;
+    // library vocabulary follows them. A non-empty query still ranks
+    // all three groups by the ordinary matching tiers.
     references_pool.push(("new cell".to_string(), true, EntryAction::NewCell));
     if !labels {
         references_pool.push(("new list".to_string(), true, EntryAction::NewList));
         references_pool.push(("new record".to_string(), true, EntryAction::NewRecord));
     }
+    references_pool.extend(external);
     let references: Vec<(Entry, bool)> = filter::rank(references_pool, |(key, _, _)| key, query)
         .into_iter()
         .take(8)
@@ -1105,7 +1192,10 @@ pub fn commit_pending(
 /// A bare cell takes its first value through the empty spine.
 pub fn set_value(doc: &mut Document, library: &Cells, path: &[Step], value: Value) -> bool {
     let write = {
-        let sources = Sources { doc: &*doc, library };
+        let sources = Sources {
+            doc: &*doc,
+            library,
+        };
         match last_follow(path) {
             Some(index) => sources
                 .resolve(&path[..index])
@@ -1143,7 +1233,10 @@ pub fn rename_field(
     label: Label,
 ) -> bool {
     let rekeyed = {
-        let sources = Sources { doc: &*doc, library };
+        let sources = Sources {
+            doc: &*doc,
+            library,
+        };
         sources
             .resolve(parent)
             .and_then(Value::as_record)
@@ -1166,7 +1259,10 @@ pub fn rename_field(
 /// there declines, keeping no-ops distinguishable.
 pub fn set_name(doc: &mut Document, library: &Cells, path: &[Step], name: &str) -> bool {
     let cell = {
-        let sources = Sources { doc: &*doc, library };
+        let sources = Sources {
+            doc: &*doc,
+            library,
+        };
         match path.split_last() {
             Some((Step::Name, parent)) => sources
                 .resolve(parent)
@@ -1278,7 +1374,10 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
         // live.
         Some((Step::Name, parent)) => {
             let current = {
-                let sources = Sources { doc: &*doc, library };
+                let sources = Sources {
+                    doc: &*doc,
+                    library,
+                };
                 sources
                     .resolve(parent)
                     .and_then(Value::as_cell)
@@ -1290,7 +1389,10 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
         }
         _ => {
             let (current, next) = {
-                let sources = Sources { doc: &*doc, library };
+                let sources = Sources {
+                    doc: &*doc,
+                    library,
+                };
                 let current = sources.resolve(path);
                 let next = match current {
                     Some(Value::Atom(Atom::String(_))) => Some(Value::from(text)),
@@ -1552,8 +1654,8 @@ pub fn resolve_hover(
     match claim {
         HoverClaim::Direct(hovering) => Some(hovering),
         HoverClaim::Air => {
-            let held = current
-                .is_some_and(|current| current.rect.inflate(reach, reach).contains(point));
+            let held =
+                current.is_some_and(|current| current.rect.inflate(reach, reach).contains(point));
             if held { None } else { Some(None) }
         }
     }
@@ -1890,15 +1992,10 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
         let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
                     let picked = command(&event.state.modifiers)
-                        && value
-                            .as_ref()
-                            .is_some_and(|value| pick(ctx, value.clone()));
+                        && value.as_ref().is_some_and(|value| pick(ctx, value.clone()));
                     if !picked {
                         select(ctx, target.clone(), None);
                     }
@@ -1945,7 +2042,7 @@ pub struct ProjectDescription<'a> {
     pub raw: bool,
     pub styles: &'a RawStyles,
     pub width: f64,
-    pub plugin: PluginText<'a>,
+    pub projection: DomainProjection<'a>,
 }
 
 pub fn project<
@@ -1967,7 +2064,7 @@ pub fn project<
         raw,
         styles,
         width,
-        plugin,
+        projection,
     } = description;
     let cx = Cx {
         sources,
@@ -1977,7 +2074,7 @@ pub fn project<
         styles,
         selection,
         hover,
-        plugin,
+        projection,
         // The graph view's selected cell is a secondary here too:
         // its projections are the same value — and the graph view's
         // HOVERED cell is a hover secondary the same way.
@@ -2122,11 +2219,7 @@ fn cell_view<
 /// rows — so clicks on structural whitespace (gutters, inter-row
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
-fn descend_landmark<P: Canvas + HasDescends>(
-    cx: &Cx,
-    path: Path,
-    child: Node<P>,
-) -> Node<P> {
+fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>) -> Node<P> {
     let selected = cx.selected(&path);
     let hovered = cx.hovered_value(&path);
     let scale = cx.styles.scale;
@@ -2197,13 +2290,7 @@ fn head_view<
     let mark = name.as_ref().map(|name| Value::from(name.as_str()));
     let target = mark.clone().unwrap_or_else(|| Value::from(cell));
     if cx.selected(path) || cx.selected(&edge) {
-        let content = cursor_target(
-            edge.clone(),
-            target.clone(),
-            presentation,
-            hooks,
-            content,
-        );
+        let content = cursor_target(edge.clone(), target.clone(), presentation, hooks, content);
         let content = match &mark {
             Some(value) if !cx.selected(&edge) => secondary_mark(cx, value, content),
             _ => content,
@@ -2272,10 +2359,7 @@ fn field_row<
         None => pick_target(key.clone(), hooks, head),
     };
     let Some(value) = value else {
-        return row(
-            6.0 * scale,
-            vec![head, pending_view(cx, tcx, child, hooks)],
-        );
+        return row(6.0 * scale, vec![head, pending_view(cx, tcx, child, hooks)]);
     };
     // The hug decision probes the value's FLAT form: hug only where
     // the value stays WHOLE beside the label, so the first break
@@ -2352,10 +2436,7 @@ fn pending_edge_row<
         hover_block(p, placement);
         p.handler().on_pointer_down(move |_, event| {
             event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
         });
     })
 }
@@ -2430,40 +2511,41 @@ fn list_view<
     // literal whatever the width says.
     let bare = items.is_empty();
     let writable = writable_at(&cx.sources, path);
-    let mut flat = (avail > 0.0 || bare).then(|| {
-        let mut cells: Vec<Node<P>> = vec![hover_target(
-            path.to_vec(),
-            flat_delim(cx.styles, Delim::Bracket, true),
-        )];
-        for (index, (position, value)) in items.iter().enumerate() {
-            if index > 0 {
-                // The separator is the between: writable, its click
-                // opens a pending right here.
-                let separator = text(tcx, ", ", &cx.styles.dim);
-                cells.push(if writable {
-                    let mut previous = path.to_vec();
-                    previous.push(Step::Element(items[index - 1].0.clone()));
-                    insert_target(cx, previous, hooks, separator)
-                } else {
-                    separator
+    let mut flat = (avail > 0.0 || bare)
+        .then(|| {
+            let mut cells: Vec<Node<P>> = vec![hover_target(
+                path.to_vec(),
+                flat_delim(cx.styles, Delim::Bracket, true),
+            )];
+            for (index, (position, value)) in items.iter().enumerate() {
+                if index > 0 {
+                    // The separator is the between: writable, its click
+                    // opens a pending right here.
+                    let separator = text(tcx, ", ", &cx.styles.dim);
+                    cells.push(if writable {
+                        let mut previous = path.to_vec();
+                        previous.push(Step::Element(items[index - 1].0.clone()));
+                        insert_target(cx, previous, hooks, separator)
+                    } else {
+                        separator
+                    });
+                }
+                let mut child = path.to_vec();
+                child.push(Step::Element(position.clone()));
+                cells.push(match value {
+                    Some(value) => {
+                        value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
+                    }
+                    None => pending_view(cx, tcx, child, hooks),
                 });
             }
-            let mut child = path.to_vec();
-            child.push(Step::Element(position.clone()));
-            cells.push(match value {
-                Some(value) => {
-                    value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
-                }
-                None => pending_view(cx, tcx, child, hooks),
-            });
-        }
-        cells.push(hover_target(
-            path.to_vec(),
-            flat_delim(cx.styles, Delim::Bracket, false),
-        ));
-        row(0.0, cells)
-    })
-    .filter(|candidate| one_line(candidate.extent, scale));
+            cells.push(hover_target(
+                path.to_vec(),
+                flat_delim(cx.styles, Delim::Bracket, false),
+            ));
+            row(0.0, cells)
+        })
+        .filter(|candidate| one_line(candidate.extent, scale));
     if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
         // The one-line literal is all content: it selects the list
         // whole, elements winning their own spans — and stays QUIET
@@ -2471,8 +2553,7 @@ fn list_view<
         return quiet_select_target(path.to_vec(), target, hooks, candidate);
     }
 
-    let inside =
-        (avail - 2.0 * (delim_advance(cx.styles, Delim::Bracket) + 2.0 * scale)).max(0.0);
+    let inside = (avail - 2.0 * (delim_advance(cx.styles, Delim::Bracket) + 2.0 * scale)).max(0.0);
     // Element rows are bare values: the spanning brackets already
     // say "list", every multi-line element carries its own
     // delimiter, and each value's ink selects its element — a
@@ -2585,44 +2666,45 @@ fn record_view<
     // literal whatever the width says. An active label query counts
     // as content and layouts normally.
     let bare = items.is_empty() && !pending_edge;
-    let mut flat = (avail > 0.0 || bare).then(|| {
-        let mut cells: Vec<Node<P>> = vec![hover_target(
-            path.to_vec(),
-            flat_delim(cx.styles, Delim::Brace, true),
-        )];
-        for (index, (key, value)) in items.iter().enumerate() {
-            if index > 0 {
-                cells.push(text(tcx, ", ", &cx.styles.dim));
-            }
-            let mut child = path.to_vec();
-            child.push(Step::Key(key.clone()));
-            cells.push(match renaming {
-                Some((replacing, query, choice)) if replacing == key => {
-                    label_query(cx, tcx, query, choice, hooks)
+    let mut flat = (avail > 0.0 || bare)
+        .then(|| {
+            let mut cells: Vec<Node<P>> = vec![hover_target(
+                path.to_vec(),
+                flat_delim(cx.styles, Delim::Brace, true),
+            )];
+            for (index, (key, value)) in items.iter().enumerate() {
+                if index > 0 {
+                    cells.push(text(tcx, ", ", &cx.styles.dim));
                 }
-                _ => field_label(cx, tcx, path, child.clone(), key, hooks),
-            });
-            cells.push(text(tcx, ": ", &cx.styles.dim));
-            cells.push(match value {
-                Some(value) => {
-                    value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
-                }
-                None => pending_view(cx, tcx, child, hooks),
-            });
-        }
-        if let Some((query, choice)) = cx.pending_edge_under(path) {
-            if !items.is_empty() {
-                cells.push(text(tcx, ", ", &cx.styles.dim));
+                let mut child = path.to_vec();
+                child.push(Step::Key(key.clone()));
+                cells.push(match renaming {
+                    Some((replacing, query, choice)) if replacing == key => {
+                        label_query(cx, tcx, query, choice, hooks)
+                    }
+                    _ => field_label(cx, tcx, path, child.clone(), key, hooks),
+                });
+                cells.push(text(tcx, ": ", &cx.styles.dim));
+                cells.push(match value {
+                    Some(value) => {
+                        value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
+                    }
+                    None => pending_view(cx, tcx, child, hooks),
+                });
             }
-            cells.push(pending_edge_row(cx, tcx, query, choice, hooks));
-        }
-        cells.push(hover_target(
-            path.to_vec(),
-            flat_delim(cx.styles, Delim::Brace, false),
-        ));
-        row(0.0, cells)
-    })
-    .filter(|candidate| one_line(candidate.extent, scale));
+            if let Some((query, choice)) = cx.pending_edge_under(path) {
+                if !items.is_empty() {
+                    cells.push(text(tcx, ", ", &cx.styles.dim));
+                }
+                cells.push(pending_edge_row(cx, tcx, query, choice, hooks));
+            }
+            cells.push(hover_target(
+                path.to_vec(),
+                flat_delim(cx.styles, Delim::Brace, false),
+            ));
+            row(0.0, cells)
+        })
+        .filter(|candidate| one_line(candidate.extent, scale));
     if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
         // The one-line literal is all content: it selects the record
         // whole, fields winning their own spans — and stays QUIET
@@ -2630,8 +2712,7 @@ fn record_view<
         return quiet_select_target(path.to_vec(), target, hooks, candidate);
     }
 
-    let inside =
-        (avail - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)).max(0.0);
+    let inside = (avail - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)).max(0.0);
     let mut rows: Vec<Node<P>> = items
         .into_iter()
         .map(|(key, value)| field_row(cx, tcx, path, ancestors, key, value, inside, hooks))
@@ -2737,12 +2818,7 @@ fn field_label<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
 /// cell at the path's last Follow, so a cell inside a list carries
 /// its list's owner as context. Wraps outside the descend so the
 /// cell's own selection highlight draws over its ground.
-fn ground<P: Canvas>(
-    cx: &Cx,
-    path: &[Step],
-    value: &Value,
-    content: Node<P>,
-) -> Node<P> {
+fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) -> Node<P> {
     let Some(cell) = value.as_cell() else {
         return content;
     };
@@ -2770,11 +2846,7 @@ fn ground<P: Canvas>(
 /// projection of the selected value — an expanded block, a collapsed
 /// handle, or a label. The primary selection's geometry at lower
 /// strength, so the two read as one family.
-fn secondary_mark<P: Canvas>(
-    cx: &Cx,
-    value: &Value,
-    content: Node<P>,
-) -> Node<P> {
+fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P> {
     let strong = cx.secondary.as_ref() == Some(value);
     let faint = !strong && cx.secondary_hover.as_ref() == Some(value);
     if !strong && !faint {
@@ -2795,6 +2867,32 @@ fn secondary_mark<P: Canvas>(
     })
 }
 
+fn circle_stand_in<P: Canvas>(radius: f64, scale: f64) -> Node<P> {
+    let radius = radius * scale;
+    let padding = 4.0 * scale;
+    let half = radius + padding;
+    leaf(
+        Extent {
+            width: 2.0 * half,
+            ascent: half,
+            descent: half,
+        },
+        move |p: &mut P, placement| {
+            let rect = placement.rect;
+            let circle = Circle::new(
+                Point::new((rect.x0 + rect.x1) / 2.0, (rect.y0 + rect.y1) / 2.0),
+                radius,
+            );
+            p.fill(circle, Color::new([0.0, 0.48, 1.0, 0.10]), Affine::IDENTITY);
+            p.stroke(
+                circle,
+                Stroke::new(1.5 * scale),
+                Color::new([0.0, 0.36, 0.78, 0.9]),
+                Affine::IDENTITY,
+            );
+        },
+    )
+}
 
 fn value_view<
     C: 'static,
@@ -2820,8 +2918,7 @@ fn value_view<
             // click on the literal reports a caret position — a quote
             // click lands it at the nearest end.
             let fallback = text(tcx, &format!("\"{s}\""), &cx.styles.string);
-            let presentation =
-                edit_presentation(&cx.styles.string).with_affixes("\"", "\"");
+            let presentation = edit_presentation(&cx.styles.string).with_affixes("\"", "\"");
             let content = atom_content(
                 editing,
                 fallback,
@@ -2839,23 +2936,28 @@ fn value_view<
             hooks,
             text(tcx, &blob_text(bytes), &cx.styles.id),
         ),
-        // The hardcoded projection chain, decided per value: links
-        // render as their cells, lists and records as themselves —
-        // in the Raw view too, kind being data. A registry waits for
-        // user-defined projections.
+        // The projection chain, decided per value: links render as
+        // their cells, lists as themselves, and records may be
+        // interpreted by a domain projection outside Raw.
         Value::Atom(Atom::Cell(cell)) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks),
         Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, avail, hooks),
-        // A plugin may stand text in for a record's form — the value
-        // selects whole, its structure one Raw toggle away.
+        // A domain projection may stand another view in for a record —
+        // the value selects whole, its structure one Raw toggle away.
         Value::Record(fields) => match (!cx.raw)
-            .then(|| cx.plugin.and_then(|plugin| plugin(value)))
+            .then(|| cx.projection.and_then(|projection| projection(value)))
             .flatten()
         {
-            Some(stand_in) => select_target(
+            Some(StandIn::Text(text_value)) => select_target(
                 path.to_vec(),
                 value.clone(),
                 hooks,
-                text(tcx, &stand_in, &cx.styles.string),
+                text(tcx, &text_value, &cx.styles.string),
+            ),
+            Some(StandIn::Circle { radius }) => select_target(
+                path.to_vec(),
+                value.clone(),
+                hooks,
+                circle_stand_in(radius, cx.styles.scale),
             ),
             None => record_view(cx, tcx, path, ancestors, fields, avail, hooks),
         },
@@ -2976,10 +3078,7 @@ fn query_content<
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && edit(ctx).is_some_and(|edit| {
                     edit.state.pointer_down(
                         &presentation,
@@ -3026,9 +3125,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
                 EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
                 EntryAction::Value(_) if entry.id => &styles.id,
                 EntryAction::Value(_) => &styles.label,
-                EntryAction::NewCell | EntryAction::NewList | EntryAction::NewRecord => {
-                    &styles.dim
-                }
+                EntryAction::NewCell | EntryAction::NewList | EntryAction::NewRecord => &styles.dim,
             };
             let display = highlighted(tcx, &entry.display, &entry.matches, style);
             let detail = entry
@@ -3088,10 +3185,8 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
                 hover_claim(p, placement, Hover::Entry(index));
                 p.handler().on_pointer_down(move |ctx, event| {
                     event.button == Some(PointerButton::Primary)
-                        && placement.contains(Point::new(
-                            event.state.position.x,
-                            event.state.position.y,
-                        ))
+                        && placement
+                            .contains(Point::new(event.state.position.x, event.state.position.y))
                         && {
                             commit(ctx, &action);
                             true
@@ -3100,10 +3195,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
             })
         })
         .collect();
-    let card = pad(
-        Insets::uniform(4.0 * scale),
-        col(0, 2.0 * scale, rows),
-    );
+    let card = pad(Insets::uniform(4.0 * scale), col(0, 2.0 * scale, rows));
     before(card, move |p: &mut P, placement| {
         let rect = placement.rect;
         let shape = RoundedRect::from_rect(rect, 6.0 * scale);
@@ -3116,10 +3208,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         );
         hover_block(p, placement);
         p.handler().on_pointer_down(move |_, event| {
-            placement.contains(Point::new(
-                event.state.position.x,
-                event.state.position.y,
-            ))
+            placement.contains(Point::new(event.state.position.x, event.state.position.y))
         });
     })
 }
@@ -3157,10 +3246,7 @@ fn highlighted<P: Canvas>(
 /// An editable atom's content: the selection's focused editor when
 /// this atom is being edited — with `placeholder` as its ghost while
 /// empty — its static text otherwise.
-fn atom_content<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends,
->(
+fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends>(
     editing: Option<&LineEditState>,
     fallback: Node<P>,
     presentation: LineEditPresentation,
@@ -3198,7 +3284,8 @@ fn toggle_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     content: Node<P>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
-    let hovered = matches!(cx.hover, Some(Hover::Toggle(hovered)) if hovered.as_slice() == path.as_slice());
+    let hovered =
+        matches!(cx.hover, Some(Hover::Toggle(hovered)) if hovered.as_slice() == path.as_slice());
     let toggle = hooks.toggle.clone();
     let target = path.clone();
     let content = before(content, move |p, placement| {
@@ -3208,10 +3295,14 @@ fn toggle_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         }
         hover_claim(p, placement, Hover::Toggle(path.clone()));
     });
-    on_primary_pointer_down(content, |_| true, move |ctx, _| {
-        toggle(ctx, target.clone());
-        true
-    })
+    on_primary_pointer_down(
+        content,
+        |_| true,
+        move |ctx, _| {
+            toggle(ctx, target.clone());
+            true
+        },
+    )
 }
 
 /// A flat list separator: its click opens a pending sibling between
@@ -3225,7 +3316,8 @@ fn insert_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     content: Node<P>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
-    let hovered = matches!(cx.hover, Some(Hover::Insert(hovered)) if hovered.as_slice() == path.as_slice());
+    let hovered =
+        matches!(cx.hover, Some(Hover::Insert(hovered)) if hovered.as_slice() == path.as_slice());
     let insert = hooks.insert.clone();
     let target = path.clone();
     let content = before(content, move |p, placement| {
@@ -3235,10 +3327,14 @@ fn insert_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         }
         hover_claim(p, placement, Hover::Insert(path.clone()));
     });
-    on_primary_pointer_down(content, |_| true, move |ctx, _| {
-        insert(ctx, target.clone());
-        true
-    })
+    on_primary_pointer_down(
+        content,
+        |_| true,
+        move |ctx, _| {
+            insert(ctx, target.clone());
+            true
+        },
+    )
 }
 
 /// A command-click pick target with no plain-click behavior — for
@@ -3296,7 +3392,8 @@ fn rename_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     content: Node<P>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
-    let hovered = matches!(cx.hover, Some(Hover::Label(hovered)) if hovered.as_slice() == path.as_slice());
+    let hovered =
+        matches!(cx.hover, Some(Hover::Label(hovered)) if hovered.as_slice() == path.as_slice());
     let rename = hooks.rename.clone();
     before(content, move |p, placement| {
         let rect = placement.rect;
@@ -3309,10 +3406,7 @@ fn rename_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         let layout = layout.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && !command(&event.state.modifiers)
                 && {
                     let index = caret_index(
@@ -3371,13 +3465,9 @@ fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverCla
         let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
-                    let picked = command(&event.state.modifiers)
-                        && pick(ctx, value.clone());
+                    let picked = command(&event.state.modifiers) && pick(ctx, value.clone());
                     if !picked {
                         select(ctx, target.clone(), None);
                     }
@@ -3392,10 +3482,7 @@ fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverCla
 /// transition decides what it means. One report serves the first
 /// click and every one after. With the command modifier and a pending
 /// open, picks the atom's value into it instead.
-fn cursor_target<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends,
->(
+fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends>(
     path: Path,
     value: Value,
     presentation: LineEditPresentation,
@@ -3411,10 +3498,7 @@ fn cursor_target<
         let value = value.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(
-                    event.state.position.x,
-                    event.state.position.y,
-                ))
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
                     if command(&event.state.modifiers) && pick(ctx, value.clone()) {
                         return true;
@@ -3658,10 +3742,16 @@ mod tests {
         assert!(at(&doc, vec![Step::Follow, key("name")]).edit().is_some());
         assert!(at(&doc, vec![Step::Follow, key("x")]).edit().is_some());
         // Missing fields, links, and blobs carry no editor.
-        assert!(at(&doc, vec![Step::Follow, key("missing")]).edit().is_none());
+        assert!(
+            at(&doc, vec![Step::Follow, key("missing")])
+                .edit()
+                .is_none()
+        );
         assert!(at(&doc, vec![]).edit().is_none());
-        doc.cells
-            .set_value(cell, Value::record([(Label::from("b"), Value::from(vec![0xff_u8]))]));
+        doc.cells.set_value(
+            cell,
+            Value::record([(Label::from("b"), Value::from(vec![0xff_u8]))]),
+        );
         assert!(at(&doc, vec![Step::Follow, key("b")]).edit().is_none());
         // A cell holding a string edits at its Follow path.
         doc.cells.set_value(cell, Value::from("held"));
@@ -3803,7 +3893,10 @@ mod tests {
         let mut lib = Cells::new();
         let lib_cell = new_cell_id();
         lib.set_name(lib_cell, "convention");
-        lib.set_value(lib_cell, Value::record([(Label::from("a"), Value::from("1"))]));
+        lib.set_value(
+            lib_cell,
+            Value::record([(Label::from("a"), Value::from("1"))]),
+        );
         let mut doc = Document {
             root: Some(Value::from(lib_cell)),
             cells: Cells::new(),
@@ -3820,8 +3913,10 @@ mod tests {
         assert!(!delete_edge(&mut doc, &lib, &[Step::Follow, key("a")]));
         assert!(!delete_edge(&mut doc, &lib, &[Step::Follow]));
         // Forking — the document taking the cell over — writes.
-        doc.cells
-            .set_value(lib_cell, Value::record([(Label::from("a"), Value::from("1"))]));
+        doc.cells.set_value(
+            lib_cell,
+            Value::record([(Label::from("a"), Value::from("1"))]),
+        );
         assert!(set_value(
             &mut doc,
             &lib,
@@ -3851,8 +3946,7 @@ mod tests {
         assert!(write_through(&mut doc, &lib, &mut selection));
 
         // A re-minted editor is a new run by construction.
-        let mut fresh =
-            Selection::edge(&src(&doc, &lib), vec![Step::Follow, key("name")]);
+        let mut fresh = Selection::edge(&src(&doc, &lib), vec![Step::Follow, key("name")]);
         fresh.edit_mut().unwrap().set_text("x");
         assert!(write_through(&mut doc, &lib, &mut fresh));
     }
@@ -3870,7 +3964,11 @@ mod tests {
         ]);
         doc.cells.set_name(child, "c");
 
-        assert!(!delete_edge(&mut doc, &lib, &[Step::Follow, key("missing")]));
+        assert!(!delete_edge(
+            &mut doc,
+            &lib,
+            &[Step::Follow, key("missing")]
+        ));
 
         // Unlinking a field drops the link; the linked cell floats in
         // the table for the orphan pool.
@@ -3908,7 +4006,10 @@ mod tests {
     fn pendings_normalize_through_links_and_gate_on_authority() {
         let mut lib = Cells::new();
         let lib_cell = new_cell_id();
-        lib.set_value(lib_cell, Value::record([(Label::from("a"), Value::from("1"))]));
+        lib.set_value(
+            lib_cell,
+            Value::record([(Label::from("a"), Value::from("1"))]),
+        );
         let bare = new_cell_id();
         let (mut doc, _) = doc_of(vec![
             (Label::from("at"), Value::record([])),
@@ -3946,10 +4047,7 @@ mod tests {
 
         // Into a list through its link, appended at the end.
         let into = pending_into(&sources, &[Step::Follow, key("tags")]).unwrap();
-        assert!(matches!(
-            into.path().last(),
-            Some(Step::Element(_))
-        ));
+        assert!(matches!(into.path().last(), Some(Step::Element(_))));
         assert_eq!(into.path().len(), 3);
 
         // The within chord: fields on records, elements into lists,
@@ -4054,6 +4152,12 @@ mod tests {
         assert!(matches!(
             &roof[0].action,
             EntryAction::Value(value) if value.as_cell() == Some(cell)
+        ));
+        let circle = completion_entries(&sources, &names, false, false, "circle");
+        assert!(matches!(
+            &circle[0].action,
+            EntryAction::Value(value)
+                if value.as_cell() == Some(grap_geometry::vocabulary::CIRCLE)
         ));
 
         // A bare id never outranks the typed text: the string the
@@ -4289,28 +4393,15 @@ mod tests {
         let mut pending = pending_rename(&sources, &tags).unwrap();
         let edit = pending.edit_mut().unwrap();
         edit.cursor_to(caret_index(&layout, Point::ZERO));
-        edit.handle_key(
-            &presentation,
-            &mut fonts,
-            &mut layouts,
-            &mut clipboard,
-            &z,
-        );
+        edit.handle_key(&presentation, &mut fonts, &mut layouts, &mut clipboard, &z);
         assert_eq!(edit.text(), "z\"tags\"");
         // ...and one past the right edge still appends.
         let mut pending = pending_rename(&sources, &tags).unwrap();
         let edit = pending.edit_mut().unwrap();
         edit.cursor_to(caret_index(&layout, Point::new(10_000.0, 7.0)));
-        edit.handle_key(
-            &presentation,
-            &mut fonts,
-            &mut layouts,
-            &mut clipboard,
-            &z,
-        );
+        edit.handle_key(&presentation, &mut fonts, &mut layouts, &mut clipboard, &z);
         assert_eq!(edit.text(), "\"tags\"z");
     }
-
 
     #[test]
     fn rename_carries_the_value_and_never_a_sibling() {
@@ -4321,9 +4412,21 @@ mod tests {
         ]);
         let parent = vec![Step::Follow];
         // A taken label declines whole: the sibling keeps its value.
-        assert!(!rename_field(&mut doc, &lib, &parent, &Label::from("a"), Label::from("b")));
+        assert!(!rename_field(
+            &mut doc,
+            &lib,
+            &parent,
+            &Label::from("a"),
+            Label::from("b")
+        ));
         // A fresh label re-keys in one write, the value carried.
-        assert!(rename_field(&mut doc, &lib, &parent, &Label::from("a"), Label::from("c")));
+        assert!(rename_field(
+            &mut doc,
+            &lib,
+            &parent,
+            &Label::from("a"),
+            Label::from("c")
+        ));
         {
             let sources = src(&doc, &lib);
             assert_eq!(
@@ -4337,7 +4440,13 @@ mod tests {
             );
         }
         // A missing field has nothing to carry.
-        assert!(!rename_field(&mut doc, &lib, &parent, &Label::from("gone"), Label::from("d")));
+        assert!(!rename_field(
+            &mut doc,
+            &lib,
+            &parent,
+            &Label::from("gone"),
+            Label::from("d")
+        ));
     }
 
     #[test]
@@ -4377,7 +4486,14 @@ mod tests {
         let points = sources
             .resolve(&[key("shape"), Step::Follow, key("points")])
             .unwrap();
-        let origin = points.as_list().unwrap().values().next().unwrap().as_cell().unwrap();
+        let origin = points
+            .as_list()
+            .unwrap()
+            .values()
+            .next()
+            .unwrap()
+            .as_cell()
+            .unwrap();
         assert!(matches!(
             sources
                 .value(origin)
@@ -4385,11 +4501,13 @@ mod tests {
                 .and_then(|fields| fields.get(&Label::from("at"))),
             Some(Value::Record(_))
         ));
-        assert!(sources
-            .resolve(&[key("style"), Step::Follow, key("swatch")])
-            .unwrap()
-            .as_blob()
-            .is_some());
+        assert!(
+            sources
+                .resolve(&[key("style"), Step::Follow, key("swatch")])
+                .unwrap()
+                .as_blob()
+                .is_some()
+        );
         // Documents round trip, names included.
         let json = serde_json::to_string(&doc).unwrap();
         let loaded: Document = serde_json::from_str(&json).unwrap();
@@ -4734,6 +4852,9 @@ mod svg_bench {
         // Numbers only, no assert (user call) — read them when the
         // bench runs; single-digit milliseconds is healthy.
         let start = std::time::Instant::now();
+        let foreign = crate::conventions::foreign_functions();
+        let projection =
+            |value: &Value| grap_stand_in(value, |cell| sources.value(cell).cloned(), &foreign);
         let node = project::<Claims, Bench>(
             ProjectDescription {
                 sources,
@@ -4746,7 +4867,7 @@ mod svg_bench {
                 raw: false,
                 styles: &styles,
                 width: width - 48.0,
-                plugin: None,
+                projection: Some(&projection),
             },
             &mut tcx,
             hooks,
@@ -4787,10 +4908,30 @@ mod svg_bench {
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0}" height="{height:.0}" viewBox="0 0 {width:.0} {height:.0}">"#
         )
         .unwrap();
-        writeln!(out, r##"<rect width="{width:.0}" height="{height:.0}" fill="#FFFFFF"/>"##).unwrap();
+        writeln!(
+            out,
+            r##"<rect width="{width:.0}" height="{height:.0}" fill="#FFFFFF"/>"##
+        )
+        .unwrap();
         write_cmds(&mut out, &bench.list.0);
         writeln!(out, "</svg>").unwrap();
         std::fs::write(out_path, out).unwrap();
+    }
+
+    fn contains_circle(commands: &[DrawCmd]) -> bool {
+        commands.iter().any(|command| match command {
+            DrawCmd::Fill { shape, .. } | DrawCmd::Stroke { shape, .. } => {
+                matches!(shape, Shape::Circle(_))
+            }
+            DrawCmd::Clip { children, .. } => contains_circle(children),
+            DrawCmd::GlyphRun(_) => false,
+        })
+    }
+
+    #[test]
+    fn grap_geometry_reaches_the_canvas() {
+        let (bench, _) = place(&sample_document(), None, 900.0);
+        assert!(contains_circle(&bench.list.0));
     }
 
     #[test]
@@ -4849,7 +4990,10 @@ mod svg_bench {
             }
         }
         assert!(walk.len() >= 5 && walk.len() < 200, "walked {}", walk.len());
-        assert!(walk.iter().any(|path| path.len() >= 2), "walk enters open blocks");
+        assert!(
+            walk.iter().any(|path| path.len() >= 2),
+            "walk enters open blocks"
+        );
         for pair in walk.windows(2) {
             assert!(
                 rect_of(&pair[1]).y0 >= rect_of(&pair[0]).y0,
@@ -4912,30 +5056,15 @@ mod svg_bench {
         // Air just past the footprint holds; air beyond the reach
         // clears — open space keeps no distant focus.
         assert_eq!(
-            resolve_hover(
-                HoverClaim::Air,
-                Some(&current),
-                Point::new(36.0, 15.0),
-                8.0
-            ),
+            resolve_hover(HoverClaim::Air, Some(&current), Point::new(36.0, 15.0), 8.0),
             None
         );
         assert_eq!(
-            resolve_hover(
-                HoverClaim::Air,
-                Some(&current),
-                Point::new(25.0, 26.0),
-                8.0
-            ),
+            resolve_hover(HoverClaim::Air, Some(&current), Point::new(25.0, 26.0), 8.0),
             None
         );
         assert_eq!(
-            resolve_hover(
-                HoverClaim::Air,
-                Some(&current),
-                Point::new(60.0, 15.0),
-                8.0
-            ),
+            resolve_hover(HoverClaim::Air, Some(&current), Point::new(60.0, 15.0), 8.0),
             Some(None)
         );
         // With nothing held, air is just air.
@@ -4977,8 +5106,7 @@ mod svg_bench {
                 ..
             }))) if *path == string_path
         ));
-        let (bench, _) =
-            place_with_pointer(&doc, None, 560.0, Some(Point::new(-10.0, -10.0)));
+        let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(Point::new(-10.0, -10.0)));
         assert!(bench.hover_claims.is_empty());
 
         let center = string_rect.center();
@@ -5024,9 +5152,7 @@ mod svg_bench {
         let mut found: Vec<&Descend> = bench
             .descends
             .iter()
-            .filter(|descend| {
-                descend.path.len() == 2 && descend.path.first() == Some(&key(field))
-            })
+            .filter(|descend| descend.path.len() == 2 && descend.path.first() == Some(&key(field)))
             .collect();
         found.sort_by(|a, b| {
             let (a, b) = if by_y {
@@ -5165,8 +5291,7 @@ mod svg_bench {
         // index — an address into the live entries, never a snapshot.
         let winners: Vec<Hover> = (0..extent.height() as usize)
             .filter_map(|y| {
-                let (bench, _) =
-                    place_card(Point::new(extent.width / 2.0, y as f64 + 0.5));
+                let (bench, _) = place_card(Point::new(extent.width / 2.0, y as f64 + 0.5));
                 match bench.hover_claims.into_iter().last() {
                     Some(HoverClaim::Direct(Some(hovering))) => Some(hovering.hover),
                     _ => None,
