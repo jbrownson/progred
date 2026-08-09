@@ -4,17 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-grap = { path = "../grap" }
-grap-error = { path = "../grap-error" }
-grap-f64 = { path = "../grap-f64" }
-grap-geometry = { path = "../grap-geometry" }
-progred-graph = { path = "../progred-graph" }
-progred-isa = { path = "../progred-isa" }
-progred-name = { path = "../progred-name" }
-progred-text = { path = "../progred-text" }
+grap = { path = "../language/grap" }
+grap-error = { path = "../language/grap-error" }
+grap-f64 = { path = "../language/grap-f64" }
+grap-geometry = { path = "../language/grap-geometry" }
+progred-graph = { path = "../graph/progred-graph" }
+progred-isa = { path = "../graph/progred-isa" }
+progred-name = { path = "../graph/progred-name" }
+progred-text = { path = "../graph/progred-text" }
 im = "15"
-puri = { path = "../puri" }
-puri-vello = { path = "../puri-vello" }
+puri = { path = "../ui/puri" }
+puri-vello = { path = "../ui/puri-vello" }
 vello = "0.9.0"
 parley = "0.9.0"
 winit = "0.30.13"

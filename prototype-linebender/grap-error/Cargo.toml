@@ -1,9 +1,0 @@
-[package]
-name = "grap-error"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-progred-isa = { path = "../progred-isa" }
-progred-name = { path = "../progred-name" }
-progred-graph = { path = "../progred-graph" }
