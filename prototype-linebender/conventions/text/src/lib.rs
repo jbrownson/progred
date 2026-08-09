@@ -9,10 +9,10 @@ pub mod vocabulary {
     pub const UTF8: CellId = CellId::from_u128(0x82a7c1824bc441ec8bfcdc50a2d06a6a);
 }
 
-pub fn value(text: impl AsRef<str>) -> Value {
+pub fn value(text: impl Into<String>) -> Value {
     Value::record([(
         vocabulary::UTF8,
-        Value::from(text.as_ref().as_bytes().to_vec()),
+        Value::from(text.into().into_bytes()),
     )])
 }
 

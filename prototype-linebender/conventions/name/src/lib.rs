@@ -14,7 +14,7 @@ pub mod vocabulary {
 }
 
 pub fn field(name: impl Into<String>) -> (CellId, Value) {
-    (vocabulary::NAME, progred_text::value(name.into()))
+    (vocabulary::NAME, progred_text::value(name))
 }
 
 pub fn value(name: impl Into<String>) -> Value {

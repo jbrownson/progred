@@ -40,6 +40,6 @@ pub fn label(name: &str) -> CellId {
     relation(name)
 }
 
-pub fn text(text: impl AsRef<str>) -> Value {
+pub fn text(text: impl Into<String>) -> Value {
     progred_text::value(text)
 }
