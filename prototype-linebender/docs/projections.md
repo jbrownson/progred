@@ -9,8 +9,8 @@ longer on the application's live f64 projection path.
 
 Bootstrap Progred with Grap, a small strict language embedded directly
 in the existing graph data. Grap is not another syntax tree and adds
-nothing to `Value`: records, lists, blobs, strings, and cells remain the
-whole data model. A fixed library gives a few cell identities meaning,
+nothing to `Value`: records, lists, blobs, and cell references remain
+the whole data model. A fixed library gives a few cell identities meaning,
 and the evaluator interprets records using those identities. Numeric,
 geometry, and future CAD meanings are separate Grap libraries, not
 language primitives.

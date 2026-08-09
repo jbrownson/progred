@@ -19,7 +19,7 @@ pub mod vocabulary {
 
 pub fn value(value: f64) -> Value {
     Value::record([(
-        Label::Cell(vocabulary::F64),
+        Label::from(vocabulary::F64),
         Value::from(value.to_le_bytes().to_vec()),
     )])
 }
@@ -27,7 +27,7 @@ pub fn value(value: f64) -> Value {
 pub fn read(value: &Value) -> Option<f64> {
     let fields = value.as_record()?;
     fields
-        .get(&Label::Cell(vocabulary::F64))
+        .get(&Label::from(vocabulary::F64))
         .and_then(Value::as_blob)
         .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
         .map(f64::from_le_bytes)
@@ -80,16 +80,16 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::CellId;
+    use progred_graph::{CellId, new_cell_id};
 
     fn call(function: CellId, left: Value, right: Value) -> Value {
         Value::record([
             (
-                Label::Cell(grap::vocabulary::FUNCTION),
+                Label::from(grap::vocabulary::FUNCTION),
                 Value::from(function),
             ),
-            (Label::Cell(vocabulary::LEFT), left),
-            (Label::Cell(vocabulary::RIGHT), right),
+            (Label::from(vocabulary::LEFT), left),
+            (Label::from(vocabulary::RIGHT), right),
         ])
     }
 
@@ -102,14 +102,14 @@ mod tests {
     #[test]
     fn representation_is_library_data() {
         assert_eq!(read(&value(2.5)), Some(2.5));
-        assert_eq!(read(&Value::from("2.5")), None);
+        assert_eq!(read(&Value::from(b"2.5".to_vec())), None);
 
         let with_extra = Value::record(
             value(2.5)
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from("unit"), Value::from("degrees")),
+                .update(Label::from(new_cell_id()), Value::from(b"degrees".to_vec())),
         );
         assert_eq!(read(&with_extra), Some(2.5));
     }
@@ -126,8 +126,8 @@ mod tests {
 
     #[test]
     fn type_failures_are_library_values() {
-        let left = call(vocabulary::ADD, Value::from("two"), value(3.0));
-        let right = call(vocabulary::ADD, value(2.0), Value::from("three"));
+        let left = call(vocabulary::ADD, Value::from(b"two".to_vec()), value(3.0));
+        let right = call(vocabulary::ADD, value(2.0), Value::from(b"three".to_vec()));
         assert_eq!(
             grap::evaluate(&left, |_| None, &foreign(), 10).result,
             Ok(Value::from(vocabulary::LEFT_NOT_F64))

@@ -85,16 +85,22 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Cells, Label, Step, Value, new_cell_id};
+    use progred_graph::{Cells, Step, Value, new_cell_id};
 
     fn x() -> Step {
-        Step::Key(Label::from("x"))
+        Step::Key(crate::test_values::label("x"))
     }
 
     fn doc(value: &str) -> Document {
         let mut cells = Cells::new();
         let cell = new_cell_id();
-        cells.set_value(cell, Value::record([(Label::from("x"), Value::from(value))]));
+        cells.set_value(
+            cell,
+            Value::record([(
+                crate::test_values::label("x"),
+                crate::test_values::text(value),
+            )]),
+        );
         Document {
             root: Some(Value::from(cell)),
             cells,
@@ -116,11 +122,11 @@ mod tests {
         history.record(doc("1"), Some(path.clone()));
 
         let (back, selection) = history.undo(doc("2"), None).unwrap();
-        assert_eq!(x_of(&back), Value::from("1"));
+        assert_eq!(x_of(&back), crate::test_values::text("1"));
         assert_eq!(selection, Some(path));
 
         let (forward, _) = history.redo(back, selection).unwrap();
-        assert_eq!(x_of(&forward), Value::from("2"));
+        assert_eq!(x_of(&forward), crate::test_values::text("2"));
         assert!(history.redo(doc("9"), None).is_none());
     }
 

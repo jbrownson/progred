@@ -192,12 +192,12 @@ where
         self.depth += 1;
         let result = match expression {
             Value::Atom(Atom::Cell(cell)) => self.eval_cell(*cell, environment),
-            Value::Record(fields) if fields.contains_key(&Label::Cell(vocabulary::FUNCTION)) => {
+            Value::Record(fields) if fields.contains_key(&Label::from(vocabulary::FUNCTION)) => {
                 self.eval_call(expression, environment, root)
             }
             Value::Record(fields)
-                if fields.contains_key(&Label::Cell(vocabulary::PARAMS))
-                    || fields.contains_key(&Label::Cell(vocabulary::BODY)) =>
+                if fields.contains_key(&Label::from(vocabulary::PARAMS))
+                    || fields.contains_key(&Label::from(vocabulary::BODY)) =>
             {
                 self.eval_function(expression, environment)
             }
@@ -261,9 +261,9 @@ where
         let fields = expression.as_record().expect("matched record");
         match (
             fields
-                .get(&Label::Cell(vocabulary::PARAMS))
+                .get(&Label::from(vocabulary::PARAMS))
                 .and_then(Value::as_list),
-            fields.get(&Label::Cell(vocabulary::BODY)),
+            fields.get(&Label::from(vocabulary::BODY)),
         ) {
             (Some(parameters), Some(body)) => {
                 let params = parameters
@@ -297,7 +297,7 @@ where
         let fields = expression.as_record().expect("matched record");
         let callable = self.eval(
             fields
-                .get(&Label::Cell(vocabulary::FUNCTION))
+                .get(&Label::from(vocabulary::FUNCTION))
                 .expect("matched function field"),
             environment,
         )?;
@@ -316,15 +316,15 @@ where
                 fields
                     .keys()
                     .filter(|label| {
-                        **label != Label::Cell(vocabulary::FUNCTION)
-                            && !label.as_cell().is_some_and(|cell| params.contains(&cell))
+                        **label != Label::from(vocabulary::FUNCTION)
+                            && !params.contains(&label.cell())
                     })
                     .cloned(),
             );
         }
         if let Some(missing) = params
             .iter()
-            .find(|parameter| !fields.contains_key(&Label::Cell(**parameter)))
+            .find(|parameter| !fields.contains_key(&Label::from(**parameter)))
         {
             Err(Error::MissingArgument(*missing))
         } else {
@@ -334,7 +334,7 @@ where
                     .try_fold(Environment::new(), |mut arguments, parameter| {
                         self.eval(
                             fields
-                                .get(&Label::Cell(*parameter))
+                                .get(&Label::from(*parameter))
                                 .expect("checked argument"),
                             environment,
                         )
@@ -418,14 +418,18 @@ mod tests {
     use super::*;
     use progred_graph::new_cell_id;
 
+    fn blob(text: &str) -> Value {
+        Value::from(text.as_bytes().to_vec())
+    }
+
     fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
         Value::record(
-            [(Label::Cell(vocabulary::FUNCTION), function)]
+            [(Label::from(vocabulary::FUNCTION), function)]
                 .into_iter()
                 .chain(
                     arguments
                         .into_iter()
-                        .map(|(parameter, value)| (Label::Cell(parameter), value)),
+                        .map(|(parameter, value)| (Label::from(parameter), value)),
                 ),
         )
     }
@@ -433,16 +437,16 @@ mod tests {
     fn function(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
         Value::record([
             (
-                Label::Cell(vocabulary::PARAMS),
+                Label::from(vocabulary::PARAMS),
                 Value::list(params.into_iter().map(Value::from)),
             ),
-            (Label::Cell(vocabulary::BODY), body),
+            (Label::from(vocabulary::BODY), body),
         ])
     }
 
     #[test]
     fn ordinary_values_are_data() {
-        let value = Value::record([(Label::from("x"), Value::list([Value::from("y")]))]);
+        let value = Value::record([(Label::from(new_cell_id()), Value::list([blob("y")]))]);
         let evaluation = evaluate(&value, |_| None, &ForeignFunctions::new(), 10);
         assert_eq!(evaluation.result, Ok(value));
         assert!(evaluation.dependencies.is_empty());
@@ -457,13 +461,13 @@ mod tests {
             &Value::from(first),
             |cell| match cell {
                 cell if cell == first => Some(Value::from(second)),
-                cell if cell == second => Some(Value::from("done")),
+                cell if cell == second => Some(blob("done")),
                 _ => None,
             },
             &ForeignFunctions::new(),
             10,
         );
-        assert_eq!(evaluation.result, Ok(Value::from("done")));
+        assert_eq!(evaluation.result, Ok(blob("done")));
         assert_eq!(evaluation.dependencies, BTreeSet::from([first, second]));
         assert_eq!(evaluation.steps, 3);
     }
@@ -476,10 +480,10 @@ mod tests {
         foreign
             .register(echo, [input], |args| args[0].clone())
             .unwrap();
-        let expression = call(Value::from(echo), [(input, Value::from("hello"))]);
+        let expression = call(Value::from(echo), [(input, blob("hello"))]);
         assert_eq!(
             evaluate(&expression, |_| None, &foreign, 10).result,
-            Ok(Value::from("hello"))
+            Ok(blob("hello"))
         );
     }
 
@@ -489,48 +493,47 @@ mod tests {
         let x = new_cell_id();
         let y = new_cell_id();
         let definition = function([x, y], Value::from(x));
-        let expression = call(
-            Value::from(first),
-            [(x, Value::from("x")), (y, Value::from("y"))],
-        );
+        let expression = call(Value::from(first), [(x, blob("x")), (y, blob("y"))]);
         let evaluation = evaluate(
             &expression,
             |cell| (cell == first).then(|| definition.clone()),
             &ForeignFunctions::new(),
             50,
         );
-        assert_eq!(evaluation.result, Ok(Value::from("x")));
+        assert_eq!(evaluation.result, Ok(blob("x")));
         assert_eq!(evaluation.dependencies, BTreeSet::from([first]));
     }
 
     #[test]
     fn function_and_call_patterns_are_open_to_unrelated_fields() {
         let parameter = new_cell_id();
+        let documentation = new_cell_id();
+        let created_at = new_cell_id();
         let definition = function([parameter], Value::from(parameter));
         let definition = Value::record(
             definition
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from("documentation"), Value::from("identity")),
+                .update(Label::from(documentation), blob("identity")),
         );
-        let expression = call(definition, [(parameter, Value::from("argument"))]);
+        let expression = call(definition, [(parameter, blob("argument"))]);
         let expression = Value::record(
             expression
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(Label::from("created-at"), Value::from("now")),
+                .update(Label::from(created_at), blob("now")),
         );
         let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::new(), 20);
-        assert_eq!(evaluation.result, Ok(Value::from("argument")));
+        assert_eq!(evaluation.result, Ok(blob("argument")));
         assert_eq!(
             evaluation.unconsumed,
-            BTreeSet::from([Label::from("created-at")])
+            BTreeSet::from([Label::from(created_at)])
         );
 
         let malformed = Value::record([(
-            Label::Cell(vocabulary::PARAMS),
+            Label::from(vocabulary::PARAMS),
             Value::list(Vec::<Value>::new()),
         )]);
         assert_eq!(
@@ -541,7 +544,7 @@ mod tests {
 
     #[test]
     fn the_call_marker_cannot_also_be_a_parameter() {
-        let definition = function([vocabulary::FUNCTION], Value::from("body"));
+        let definition = function([vocabulary::FUNCTION], blob("body"));
         assert_eq!(
             evaluate(&definition, |_| None, &ForeignFunctions::new(), 10).result,
             Err(Error::ReservedParameter(vocabulary::FUNCTION))
@@ -553,15 +556,15 @@ mod tests {
         let parameter = new_cell_id();
         let expression = call(
             function([parameter], Value::from(parameter)),
-            [(parameter, Value::from("local"))],
+            [(parameter, blob("local"))],
         );
         let evaluation = evaluate(
             &expression,
-            |cell| (cell == parameter).then(|| Value::from("document")),
+            |cell| (cell == parameter).then(|| blob("document")),
             &ForeignFunctions::new(),
             20,
         );
-        assert_eq!(evaluation.result, Ok(Value::from("local")));
+        assert_eq!(evaluation.result, Ok(blob("local")));
         assert!(evaluation.dependencies.is_empty());
     }
 
@@ -570,11 +573,11 @@ mod tests {
         let x = new_cell_id();
         let y = new_cell_id();
         let inner = function([y], Value::from(x));
-        let outer = function([x], call(inner, [(y, Value::from("ignored"))]));
-        let expression = call(outer, [(x, Value::from("captured"))]);
+        let outer = function([x], call(inner, [(y, blob("ignored"))]));
+        let expression = call(outer, [(x, blob("captured"))]);
         assert_eq!(
             evaluate(&expression, |_| None, &ForeignFunctions::new(), 50).result,
-            Ok(Value::from("captured"))
+            Ok(blob("captured"))
         );
     }
 
@@ -583,7 +586,7 @@ mod tests {
         let recurse = new_cell_id();
         let x = new_cell_id();
         let definition = function([x], call(Value::from(recurse), [(x, Value::from(x))]));
-        let expression = call(Value::from(recurse), [(x, Value::from("again"))]);
+        let expression = call(Value::from(recurse), [(x, blob("again"))]);
         let evaluation = evaluate(
             &expression,
             |cell| (cell == recurse).then(|| definition.clone()),
@@ -631,7 +634,7 @@ mod tests {
         let cell = new_cell_id();
         let evaluation = evaluate(
             &Value::from(cell),
-            |candidate| (candidate == cell).then(|| Value::from("done")),
+            |candidate| (candidate == cell).then(|| blob("done")),
             &ForeignFunctions::new(),
             1,
         );
@@ -645,18 +648,18 @@ mod tests {
         let parameter = new_cell_id();
         let mut foreign = ForeignFunctions::new();
         assert_eq!(
-            foreign.register(function, [vocabulary::FUNCTION], |_| Value::from("x")),
+            foreign.register(function, [vocabulary::FUNCTION], |_| blob("x")),
             Err(RegistrationError::ReservedParameter(vocabulary::FUNCTION))
         );
         assert_eq!(
-            foreign.register(function, [parameter, parameter], |_| Value::from("x")),
+            foreign.register(function, [parameter, parameter], |_| blob("x")),
             Err(RegistrationError::DuplicateParameter(parameter))
         );
         foreign
-            .register(function, [parameter], |_| Value::from("x"))
+            .register(function, [parameter], |_| blob("x"))
             .unwrap();
         assert_eq!(
-            foreign.register(function, [parameter], |_| Value::from("x")),
+            foreign.register(function, [parameter], |_| blob("x")),
             Err(RegistrationError::AlreadyRegistered(function))
         );
     }

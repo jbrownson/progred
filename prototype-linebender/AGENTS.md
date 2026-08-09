@@ -50,6 +50,7 @@ EOF
 ## Key Design Rules
 
 - Documents are structural values plus a direct `CellId -> Value` table; an absent entry is a bare cell. `name`, `isa`, and similar meanings are optional ordinary graph conventions, never data-layer features.
+- The graph core has only two atoms: cell references and blobs. Record labels are always cell identities. UTF-8 text is the open `progred-text` record convention over a blob, not a primitive; a compact projection may hide that record only when it has no extra fields.
 - Resilient to invalid graph states — projections specify the happy path but must fall through gracefully to default/raw rendering; never crash or hide data on unexpected values
 - Compile-time code generation must fail loudly — if the semantics-driven codegen returns, malformed graph data must produce a clear compile error, never be silently skipped
 - Grap syntax is ordinary `Value` structure interpreted through library cell IDs. Core Grap owns only the function-definition/call vocabulary and a generic foreign-function registry. F64, geometry, and CAD concepts belong to separate Grap libraries with host implementations registered as needed; never grow them into the evaluator.
@@ -59,6 +60,7 @@ EOF
 - `isa` is a general Progred graph convention, independent of Grap and of any particular classification such as `error`; keep it outside `progred_graph` so the data model stays primitive, while consumers own their class identities and use the shared relation.
 - Well-known library cell IDs are once-minted random identities, never names or hashes of names; readable names are ordinary `progred-name` graph facts.
 - `CellId` is an opaque 128-bit identity, not an RFC UUID: all bits are random, with no version or variant fields. Preserve its canonical 32-hex gid spelling and existing hyphenated Serde spelling.
+- Until document files exist outside this repository, change GID and its checked-in files in lockstep. Do not add file-format versions, migration branches, or compatibility readers.
 - Evaluation is fueled and dependency-reporting. A failed domain projection declines to Raw rendering; invalid programs never hide their underlying graph structure.
 
 ## Testing

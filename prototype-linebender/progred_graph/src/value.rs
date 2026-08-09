@@ -148,12 +148,12 @@ pub fn new_cell_id() -> CellId {
     CellId::from_bytes(bytes)
 }
 
-/// The leaves. A link is followed to its cell's current value;
-/// strings and blobs are their own spelling.
+/// The leaves. A link is followed to its cell's current value; a
+/// blob is uninterpreted bytes. Text, numbers, and every other
+/// semantic scalar are library conventions over these primitives.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Atom {
     Cell(CellId),
-    String(String),
     Blob(Vec<u8>),
 }
 
@@ -165,13 +165,6 @@ impl Atom {
         }
     }
 
-    pub fn as_str(&self) -> Option<&str> {
-        match self {
-            Atom::String(s) => Some(s),
-            _ => None,
-        }
-    }
-
     pub fn as_blob(&self) -> Option<&[u8]> {
         match self {
             Atom::Blob(bytes) => Some(bytes),
@@ -179,49 +172,30 @@ impl Atom {
         }
     }
 
-    /// The label this atom can serve as: a label names, so cells and
-    /// strings qualify and blobs decline.
+    /// The label this atom can serve as: every record relation has
+    /// cell identity, while blobs decline.
     pub fn as_label(&self) -> Option<Label> {
         match self {
-            Atom::Cell(cell) => Some(Label::Cell(*cell)),
-            Atom::String(s) => Some(Label::String(s.clone())),
+            Atom::Cell(cell) => Some(Label::from(*cell)),
             Atom::Blob(_) => None,
         }
     }
 }
 
-/// What can name a record field: strings label casually, while cells
-/// identify graph-defined relations and let projections decide how
-/// to present them. Blobs, lists, and records cannot label.
-/// The derived order is the records' consistent field order.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Label {
-    Cell(CellId),
-    String(String),
-}
+/// A record field's relation identity. Its display name, if any, is
+/// an ordinary graph fact about this cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Label(CellId);
 
 impl Label {
-    pub fn as_cell(&self) -> Option<CellId> {
-        match self {
-            Label::Cell(cell) => Some(*cell),
-            _ => None,
-        }
-    }
-
-    pub fn as_str(&self) -> Option<&str> {
-        match self {
-            Label::String(s) => Some(s),
-            _ => None,
-        }
+    pub const fn cell(&self) -> CellId {
+        self.0
     }
 }
 
 impl From<Label> for Atom {
     fn from(label: Label) -> Self {
-        match label {
-            Label::Cell(cell) => Atom::Cell(cell),
-            Label::String(s) => Atom::String(s),
-        }
+        Atom::Cell(label.0)
     }
 }
 
@@ -263,10 +237,6 @@ impl Value {
 
     pub fn as_cell(&self) -> Option<CellId> {
         self.as_atom()?.as_cell()
-    }
-
-    pub fn as_str(&self) -> Option<&str> {
-        self.as_atom()?.as_str()
     }
 
     pub fn as_blob(&self) -> Option<&[u8]> {
@@ -339,16 +309,6 @@ impl From<CellId> for Atom {
         Atom::Cell(cell)
     }
 }
-impl From<&str> for Atom {
-    fn from(s: &str) -> Self {
-        Atom::String(s.to_owned())
-    }
-}
-impl From<String> for Atom {
-    fn from(s: String) -> Self {
-        Atom::String(s)
-    }
-}
 impl From<Vec<u8>> for Atom {
     fn from(bytes: Vec<u8>) -> Self {
         Atom::Blob(bytes)
@@ -360,30 +320,15 @@ impl From<CellId> for Value {
         Value::Atom(Atom::Cell(cell))
     }
 }
-impl From<&str> for Value {
-    fn from(s: &str) -> Self {
-        Value::Atom(Atom::from(s))
-    }
-}
-impl From<String> for Value {
-    fn from(s: String) -> Self {
-        Value::Atom(Atom::from(s))
-    }
-}
 impl From<Vec<u8>> for Value {
     fn from(bytes: Vec<u8>) -> Self {
         Value::Atom(Atom::from(bytes))
     }
 }
 
-impl From<&str> for Label {
-    fn from(s: &str) -> Self {
-        Label::String(s.to_owned())
-    }
-}
 impl From<CellId> for Label {
     fn from(cell: CellId) -> Self {
-        Label::Cell(cell)
+        Label(cell)
     }
 }
 
@@ -397,7 +342,10 @@ fn hex_bytes(s: &str) -> Result<Vec<u8>, String> {
     let digit = |c: u8| match c {
         b'0'..=b'9' => Ok(c - b'0'),
         b'a'..=b'f' => Ok(c - b'a' + 10),
-        _ => Err(format!("blob hex must be lowercase hex, got {:?}", c as char)),
+        _ => Err(format!(
+            "blob hex must be lowercase hex, got {:?}",
+            c as char
+        )),
     };
     if !s.len().is_multiple_of(2) {
         return Err("blob hex must have even length".to_string());
@@ -412,7 +360,6 @@ impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Atom::Cell(cell) => write!(f, "{cell}"),
-            Atom::String(s) => write!(f, "\"{s}\""),
             Atom::Blob(bytes) => write!(f, "0x{}", hex_string(bytes)),
         }
     }
@@ -420,10 +367,7 @@ impl fmt::Display for Atom {
 
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Label::Cell(cell) => write!(f, "{cell}"),
-            Label::String(s) => write!(f, "{s}"),
-        }
+        write!(f, "{}", self.0)
     }
 }
 
@@ -470,14 +414,12 @@ pub enum Step {
 #[serde(rename_all = "lowercase")]
 enum LabelRepr {
     Cell(CellId),
-    String(String),
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum ValueRepr {
     Cell(CellId),
-    String(String),
     Blob(String),
     List(Vec<Value>),
     Record(Vec<(Label, Value)>),
@@ -486,8 +428,7 @@ enum ValueRepr {
 impl Serialize for Label {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let repr = match self {
-            Label::Cell(cell) => LabelRepr::Cell(*cell),
-            Label::String(s) => LabelRepr::String(s.clone()),
+            Label(cell) => LabelRepr::Cell(*cell),
         };
         repr.serialize(serializer)
     }
@@ -496,8 +437,7 @@ impl Serialize for Label {
 impl<'de> Deserialize<'de> for Label {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         match LabelRepr::deserialize(deserializer)? {
-            LabelRepr::Cell(cell) => Ok(Label::Cell(cell)),
-            LabelRepr::String(s) => Ok(Label::String(s)),
+            LabelRepr::Cell(cell) => Ok(Label(cell)),
         }
     }
 }
@@ -506,14 +446,13 @@ impl Serialize for Value {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let repr = match self {
             Value::Atom(Atom::Cell(cell)) => ValueRepr::Cell(*cell),
-            Value::Atom(Atom::String(s)) => ValueRepr::String(s.clone()),
             Value::Atom(Atom::Blob(bytes)) => ValueRepr::Blob(hex_string(bytes)),
             Value::List(elements) => ValueRepr::List(elements.values().cloned().collect()),
             // OrdMap iterates in label order, so the file's pair
             // order is canonical without an explicit sort.
-            Value::Record(fields) => ValueRepr::Record(
-                fields.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            ),
+            Value::Record(fields) => {
+                ValueRepr::Record(fields.iter().map(|(k, v)| (*k, v.clone())).collect())
+            }
         };
         repr.serialize(serializer)
     }
@@ -523,7 +462,6 @@ impl<'de> Deserialize<'de> for Value {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         match ValueRepr::deserialize(deserializer)? {
             ValueRepr::Cell(cell) => Ok(Value::from(cell)),
-            ValueRepr::String(s) => Ok(Value::from(s)),
             ValueRepr::Blob(hex) => hex_bytes(&hex)
                 .map(Value::from)
                 .map_err(serde::de::Error::custom),
@@ -538,6 +476,28 @@ mod tests {
     use super::*;
     use crate::position::{between, spread};
     use std::collections::hash_map::DefaultHasher;
+
+    fn relation(name: &str) -> CellId {
+        CellId::from_u128(match name {
+            "x" => 0xebbb03b25e12960d230b25badc553723,
+            "y" => 0x7824623804db8467097bdddbf3518394,
+            "name" => 0xc19a573c2534703d0797bb163528547c,
+            "at" => 0xd6448992e5df9057033a15ff4396f43e,
+            "row" => 0x811d61c56fb3341c9247363be492d680,
+            "k" => 0x2be2251626ad23562583b8af8649e746,
+            "a" => 0x1ca0184130075343f0d121acc948215f,
+            "b" => 0xc882fd0d8c251a0b6f0d97306bd87886,
+            _ => unreachable!("fixture relation"),
+        })
+    }
+
+    fn label(name: &str) -> Label {
+        Label::from(relation(name))
+    }
+
+    fn blob(text: &str) -> Value {
+        Value::from(text.as_bytes().to_vec())
+    }
 
     fn hash_of(value: &Value) -> u64 {
         let mut hasher = DefaultHasher::new();
@@ -583,22 +543,22 @@ mod tests {
 
     #[test]
     fn list_equality_ignores_positions() {
-        let a = Value::list([Value::from("x"), Value::from("y")]);
+        let a = Value::list([blob("x"), blob("y")]);
         // The same sequence under entirely different positions: an
         // appended-then-prepended construction.
         let first = between(None, None).unwrap();
         let second = between(Some(&first), None).unwrap();
         let b = Value::List(
-            [(first, Value::from("x")), (second, Value::from("y"))]
+            [(first, blob("x")), (second, blob("y"))]
                 .into_iter()
                 .collect(),
         );
         assert_eq!(a, b);
         assert_eq!(hash_of(&a), hash_of(&b));
 
-        assert_ne!(a, Value::list([Value::from("y"), Value::from("x")]));
-        assert_ne!(a, Value::list([Value::from("x")]));
-        assert_ne!(a, Value::from("x"));
+        assert_ne!(a, Value::list([blob("y"), blob("x")]));
+        assert_ne!(a, Value::list([blob("x")]));
+        assert_ne!(a, blob("x"));
         // Nested lists compare structurally too.
         assert_eq!(Value::list([a.clone()]), Value::list([b.clone()]));
         // Comparison stops at links: equal links, not equal linked
@@ -616,17 +576,11 @@ mod tests {
 
     #[test]
     fn records_are_content_compared_values() {
-        let a = Value::record([
-            (Label::from("x"), Value::from("1")),
-            (Label::from("y"), Value::from("2")),
-        ]);
-        let b = Value::record([
-            (Label::from("y"), Value::from("2")),
-            (Label::from("x"), Value::from("1")),
-        ]);
+        let a = Value::record([(label("x"), blob("1")), (label("y"), blob("2"))]);
+        let b = Value::record([(label("y"), blob("2")), (label("x"), blob("1"))]);
         assert_eq!(a, b);
         assert_eq!(hash_of(&a), hash_of(&b));
-        assert_ne!(a, Value::record([(Label::from("x"), Value::from("1"))]));
+        assert_ne!(a, Value::record([(label("x"), blob("1"))]));
         assert_ne!(a, Value::record([]));
         assert_ne!(Value::record([]), Value::list([]));
         // Equal inline records nest equally.
@@ -637,15 +591,13 @@ mod tests {
     fn blobs_are_their_bytes() {
         assert_eq!(Value::from(vec![0xde, 0xad]), Value::from(vec![0xde, 0xad]));
         assert_ne!(Value::from(vec![0xde, 0xad]), Value::from(vec![0xad, 0xde]));
-        assert_ne!(Value::from(vec![]), Value::from("".to_string()));
         assert_eq!(Value::from(vec![0xde]).as_blob(), Some(&[0xde_u8][..]));
     }
 
     #[test]
-    fn labels_are_cells_and_strings_only() {
+    fn only_cells_can_be_labels() {
         let cell = new_cell_id();
-        assert_eq!(Atom::from(cell).as_label(), Some(Label::Cell(cell)));
-        assert_eq!(Atom::from("k").as_label(), Some(Label::from("k")));
+        assert_eq!(Atom::from(cell).as_label(), Some(Label::from(cell)));
         assert_eq!(Atom::from(vec![1_u8]).as_label(), None);
     }
 
@@ -654,18 +606,15 @@ mod tests {
         let cell = new_cell_id();
         let cases = [
             Value::from(cell),
-            Value::from("hello"),
+            blob("hello"),
             Value::from(vec![0x89, 0x50, 0x4e, 0x47]),
             Value::from(Vec::<u8>::new()),
             Value::list([]),
             Value::record([]),
             Value::record([
-                (Label::from("name"), Value::from("roof")),
-                (Label::from(cell), Value::list([Value::from("a")])),
-                (
-                    Label::from("at"),
-                    Value::record([(Label::from("row"), Value::from("top"))]),
-                ),
+                (label("name"), blob("roof")),
+                (Label::from(cell), Value::list([blob("a")])),
+                (label("at"), Value::record([(label("row"), blob("top"))])),
             ]),
         ];
         for value in cases {
@@ -680,23 +629,18 @@ mod tests {
             serde_json::to_string(&Value::from(vec![0xde, 0xad])).unwrap(),
             r#"{"blob":"dead"}"#
         );
-        assert_eq!(
-            serde_json::to_string(&Value::record([(
-                Label::from("k"),
-                Value::from("v")
-            )]))
-            .unwrap(),
-            r#"{"record":[[{"string":"k"},{"string":"v"}]]}"#
-        );
+        let record_json = serde_json::to_string(&Value::record([(label("k"), blob("v"))])).unwrap();
+        assert!(record_json.contains("\"cell\""));
+        assert!(!record_json.contains("\"string\""));
     }
 
     #[test]
     fn record_pairs_serialize_in_label_order() {
         let cell = new_cell_id();
         let value = Value::record([
-            (Label::from("b"), Value::from("2")),
-            (Label::from("a"), Value::from("1")),
-            (Label::from(cell), Value::from("0")),
+            (label("b"), blob("2")),
+            (label("a"), blob("1")),
+            (Label::from(cell), blob("0")),
         ]);
         let json = serde_json::to_value(&value).unwrap();
         let labels: Vec<String> = json["record"]
@@ -706,8 +650,7 @@ mod tests {
             .map(|pair| serde_json::to_string(&pair[0]).unwrap())
             .collect();
         let mut sorted = labels.clone();
-        sorted.sort_by_key(|label| label.contains("string"));
-        // Cells sort before strings, mirroring Label's derived order.
+        sorted.sort();
         assert_eq!(labels, sorted);
     }
 
@@ -717,7 +660,9 @@ mod tests {
         assert!(serde_json::from_str::<Value>(r#"{"blob":"DEAD"}"#).is_err());
         assert!(serde_json::from_str::<Value>(r#"{"blob":"abc"}"#).is_err());
         assert!(serde_json::from_str::<Value>(r#"{"blob":"zz"}"#).is_err());
-        // Only cells and strings label.
+        // Only cells label; the removed string representation is
+        // rejected for both labels and values.
+        assert!(serde_json::from_str::<Value>(r#"{"string":"v"}"#).is_err());
         assert!(
             serde_json::from_str::<Value>(r#"{"record":[[{"blob":"00"},{"string":"v"}]]}"#)
                 .is_err()
@@ -732,12 +677,12 @@ mod tests {
 
     #[test]
     fn spread_positions_carry_list_construction() {
-        let list = Value::list((0..100).map(|i| Value::from(i.to_string())));
+        let list = Value::list((0..100).map(|i| blob(&i.to_string())));
         let elements = list.as_list().unwrap();
         assert_eq!(elements.len(), 100);
         let positions: Vec<_> = elements.keys().cloned().collect();
         assert_eq!(positions, spread(100));
         let values: Vec<_> = elements.values().cloned().collect();
-        assert_eq!(values[3], Value::from("3"));
+        assert_eq!(values[3], blob("3"));
     }
 }

@@ -16,6 +16,8 @@ mod plugins;
 mod raw;
 mod sources;
 mod store;
+#[cfg(test)]
+mod test_values;
 
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -1458,12 +1460,19 @@ impl App {
         popup: &Option<raw::Popup>,
         query: &LineEditState,
         choice: usize,
+        labels: bool,
     ) -> raw::EntryAction {
         popup
             .as_ref()
             .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
             .map(|entry| entry.action.clone())
-            .unwrap_or_else(|| raw::EntryAction::Value(raw::resolve_query(query.text())))
+            .unwrap_or_else(|| {
+                if labels {
+                    raw::EntryAction::NewLabel(query.text().to_string())
+                } else {
+                    raw::EntryAction::Value(raw::resolve_query(query.text()))
+                }
+            })
     }
 
     /// Commits a pointed-at value into the open pending — the
@@ -1516,26 +1525,21 @@ impl App {
     /// or selects the existing field when the label is taken (rename
     /// included: a taken label never clobbers its field, selection
     /// communicates it, and replacing it means deleting it first).
-    /// New fields resolve without mutating (a new cell's mint is a
-    /// bare id; the value stage's write is the one undo step); a
-    /// rename re-keys the field in one write, the value carried.
+    /// A free-text label persists its newly named cell before the
+    /// value stage; a bare-cell choice has nothing to persist. A
+    /// rename re-keys the field and creates its label cell in one
+    /// history step, the value carried.
     fn commit_label(
         &mut self,
         parent: raw::Path,
         replacing: Option<Label>,
         action: &raw::EntryAction,
     ) {
-        // The label stage offers only what can label; a Value action
-        // resolving otherwise (alien paste text reading as a blob)
-        // declines before any mutation.
-        let Some(label) = (match raw::resolve_entry(action) {
-            Value::Atom(atom) => atom.as_label(),
-            _ => None,
-        }) else {
+        let Some((label, created)) = raw::resolve_label(action) else {
             return;
         };
         let mut path = parent.clone();
-        path.push(Step::Key(label.clone()));
+        path.push(Step::Key(label));
         if self.model.sources().resolve(&path).is_some() {
             self.model.selection = Some(Selected::Tree(raw::Selection::edge(
                 &self.model.sources(),
@@ -1546,6 +1550,9 @@ impl App {
         match replacing {
             Some(old) => {
                 let before = self.model.doc.clone();
+                if let Some((cell, value)) = &created {
+                    self.model.doc.cells.set_value(*cell, value.clone());
+                }
                 let renamed = raw::rename_field(
                     &mut self.model.doc,
                     &self.model.library,
@@ -1557,6 +1564,9 @@ impl App {
                     self.model.history.record(before, None);
                     self.refresh_title();
                 } else {
+                    if let Some((cell, _)) = created {
+                        self.model.doc.cells.clear_value(cell);
+                    }
                     // The rename could not land; back to the field.
                     path = parent;
                     path.push(Step::Key(old));
@@ -1567,6 +1577,12 @@ impl App {
                 )));
             }
             None => {
+                if let Some((cell, value)) = created {
+                    let before = self.model.doc.clone();
+                    self.model.doc.cells.set_value(cell, value);
+                    self.model.history.record(before, None);
+                    self.refresh_title();
+                }
                 self.model.selection = Some(Selected::Tree(raw::pending_value(path)));
             }
         }
@@ -1762,7 +1778,7 @@ impl App {
                         query,
                         choice,
                     })) => {
-                        let action = Self::chosen_action(popup, &query, choice);
+                        let action = Self::chosen_action(popup, &query, choice, false);
                         self.commit_value(path, &action);
                         true
                     }
@@ -1772,7 +1788,7 @@ impl App {
                         choice,
                         replacing,
                     })) => {
-                        let action = Self::chosen_action(popup, &query, choice);
+                        let action = Self::chosen_action(popup, &query, choice, true);
                         self.commit_label(parent, replacing, &action);
                         true
                     }
@@ -1821,7 +1837,7 @@ impl App {
                             // a cancelled new field to the record.
                             let mut back = parent.clone();
                             if let Some(old) = replacing {
-                                back.push(Step::Key(old.clone()));
+                                back.push(Step::Key(*old));
                             }
                             self.model.selection = Some(Selected::Tree(raw::Selection::edge(
                                 &self.model.sources(),

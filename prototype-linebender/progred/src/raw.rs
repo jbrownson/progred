@@ -92,6 +92,27 @@ pub struct Document {
     pub cells: Cells,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+pub mod sample_vocabulary {
+    use progred_graph::CellId;
+
+    pub const AT: CellId = CellId::from_u128(0x796bd0cb8c526401ef9e66e0fcee7297);
+    pub const ROW: CellId = CellId::from_u128(0x2d5252ab4127388835607499a4e9fbf9);
+    pub const COL: CellId = CellId::from_u128(0x8169555b56c9645b4d716490f7ac0461);
+    pub const OF: CellId = CellId::from_u128(0x182fe86d61710150cfb5ec9a3eeb538a);
+    pub const COLOR: CellId = CellId::from_u128(0x6fd8e3301682d707f6d764d4da1992ec);
+    pub const SWATCH: CellId = CellId::from_u128(0x31dea76979345cf5c02c1049ab9742cb);
+    pub const POINTS: CellId = CellId::from_u128(0xbd1dee69049bada400e87ff1fc8945cb);
+    pub const TAGS: CellId = CellId::from_u128(0xa61e94fb9fe80a2c819b2c85942f2b2c);
+    pub const MATERIAL: CellId = CellId::from_u128(0x5e64226f8adb6d1127ea9c211374d6a3);
+    pub const STYLE: CellId = CellId::from_u128(0x823eabd35733efeebef1ff992e56d65e);
+    pub const PITCH: CellId = CellId::from_u128(0x9fce25c72abe04863d2c13630cfe7a18);
+    pub const DOUBLE_PITCH: CellId = CellId::from_u128(0x351af6582a156fee69ffa3d74691567d);
+    pub const PROFILE: CellId = CellId::from_u128(0x23dd123638416f5e68174995953078ff);
+    pub const SHAPE: CellId = CellId::from_u128(0x59c8a911aac219d73effad2b3796e1f9);
+    pub const FAVORITE: CellId = CellId::from_u128(0x9caf843a44dc9c285cb579030720c79c);
+}
+
 /// A small document shaped like a real one. The root is an inline
 /// RECORD of roles — a document keys its parts by what they are to
 /// it, and needs no identity of its own to do so. Simple names are
@@ -111,6 +132,25 @@ pub struct Document {
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn sample_document() -> Document {
     let mut cells = Cells::new();
+    for (cell, name) in [
+        (sample_vocabulary::AT, "at"),
+        (sample_vocabulary::ROW, "row"),
+        (sample_vocabulary::COL, "col"),
+        (sample_vocabulary::OF, "of"),
+        (sample_vocabulary::COLOR, "color"),
+        (sample_vocabulary::SWATCH, "swatch"),
+        (sample_vocabulary::POINTS, "points"),
+        (sample_vocabulary::TAGS, "tags"),
+        (sample_vocabulary::MATERIAL, "material"),
+        (sample_vocabulary::STYLE, "style"),
+        (sample_vocabulary::PITCH, "pitch"),
+        (sample_vocabulary::DOUBLE_PITCH, "double pitch"),
+        (sample_vocabulary::PROFILE, "profile"),
+        (sample_vocabulary::SHAPE, "shape"),
+        (sample_vocabulary::FAVORITE, "favorite"),
+    ] {
+        cells.set_value(cell, progred_name::value(name));
+    }
     let roof = new_cell_id();
 
     let origin = new_cell_id();
@@ -119,10 +159,16 @@ pub fn sample_document() -> Document {
         progred_name::record(
             "origin",
             [(
-                Label::from("at"),
+                Label::from(sample_vocabulary::AT),
                 Value::record([
-                    (Label::from("row"), Value::from("top")),
-                    (Label::from("col"), Value::from("left")),
+                    (
+                        Label::from(sample_vocabulary::ROW),
+                        progred_text::value("top"),
+                    ),
+                    (
+                        Label::from(sample_vocabulary::COL),
+                        progred_text::value("left"),
+                    ),
                 ]),
             )],
         ),
@@ -135,16 +181,22 @@ pub fn sample_document() -> Document {
             "corner",
             [
                 (
-                    Label::from("at"),
+                    Label::from(sample_vocabulary::AT),
                     Value::record([
-                        (Label::from("row"), Value::from("bottom")),
-                        (Label::from("col"), Value::from("right")),
+                        (
+                            Label::from(sample_vocabulary::ROW),
+                            progred_text::value("bottom"),
+                        ),
+                        (
+                            Label::from(sample_vocabulary::COL),
+                            progred_text::value("right"),
+                        ),
                     ]),
                 ),
                 // A part that knows its whole: the cycle a real document
                 // has, rendered as a collapsed head rather than recursing
                 // forever.
-                (Label::from("of"), Value::from(roof)),
+                (Label::from(sample_vocabulary::OF), Value::from(roof)),
             ],
         ),
     );
@@ -156,9 +208,15 @@ pub fn sample_document() -> Document {
     cells.set_value(
         style,
         Value::record([
-            (Label::from("color"), Value::from("rebeccapurple")),
+            (
+                Label::from(sample_vocabulary::COLOR),
+                progred_text::value("rebeccapurple"),
+            ),
             // #663399, as bytes.
-            (Label::from("swatch"), Value::from(vec![0x66, 0x33, 0x99])),
+            (
+                Label::from(sample_vocabulary::SWATCH),
+                Value::from(vec![0x66, 0x33, 0x99]),
+            ),
         ]),
     );
 
@@ -173,26 +231,29 @@ pub fn sample_document() -> Document {
     let double = new_cell_id();
     cells.set_value(
         double,
-        progred_name::record("double", [
-            (
-                Label::Cell(grap::vocabulary::PARAMS),
-                Value::list([Value::from(amount)]),
-            ),
-            (
-                Label::Cell(grap::vocabulary::BODY),
-                Value::record([
-                    (
-                        Label::Cell(grap::vocabulary::FUNCTION),
-                        Value::from(grap_f64::vocabulary::MULTIPLY),
-                    ),
-                    (Label::Cell(grap_f64::vocabulary::LEFT), Value::from(amount)),
-                    (
-                        Label::Cell(grap_f64::vocabulary::RIGHT),
-                        grap_f64::value(2.0),
-                    ),
-                ]),
-            ),
-        ]),
+        progred_name::record(
+            "double",
+            [
+                (
+                    Label::from(grap::vocabulary::PARAMS),
+                    Value::list([Value::from(amount)]),
+                ),
+                (
+                    Label::from(grap::vocabulary::BODY),
+                    Value::record([
+                        (
+                            Label::from(grap::vocabulary::FUNCTION),
+                            Value::from(grap_f64::vocabulary::MULTIPLY),
+                        ),
+                        (Label::from(grap_f64::vocabulary::LEFT), Value::from(amount)),
+                        (
+                            Label::from(grap_f64::vocabulary::RIGHT),
+                            grap_f64::value(2.0),
+                        ),
+                    ]),
+                ),
+            ],
+        ),
     );
 
     let pitch = new_cell_id();
@@ -200,58 +261,67 @@ pub fn sample_document() -> Document {
 
     let double_pitch = || {
         Value::record([
-            (Label::Cell(grap::vocabulary::FUNCTION), Value::from(double)),
-            (Label::Cell(amount), Value::from(pitch)),
+            (Label::from(grap::vocabulary::FUNCTION), Value::from(double)),
+            (Label::from(amount), Value::from(pitch)),
         ])
     };
 
     cells.set_value(
         roof,
-        progred_name::record("roof", [
-            (
-                Label::from("points"),
-                Value::list([Value::from(origin), Value::from(corner)]),
-            ),
-            (Label::Cell(stroke), Value::from("hairline")),
-            (
-                Label::from("tags"),
-                Value::list([Value::from("draft"), Value::from("gabled")]),
-            ),
-            (Label::from("material"), Value::from(material)),
-            (Label::from("style"), Value::from(style)),
-            (Label::from("pitch"), Value::from(pitch)),
-            (Label::from("double pitch"), double_pitch()),
-            (
-                Label::from("profile"),
-                Value::record([
-                    (
-                        Label::Cell(grap::vocabulary::FUNCTION),
-                        Value::from(grap_geometry::vocabulary::CIRCLE),
-                    ),
-                    (
-                        Label::Cell(grap_geometry::vocabulary::RADIUS),
-                        Value::record([
-                            (
-                                Label::Cell(grap::vocabulary::FUNCTION),
-                                Value::from(grap_f64::vocabulary::MULTIPLY),
-                            ),
-                            (Label::Cell(grap_f64::vocabulary::LEFT), double_pitch()),
-                            (
-                                Label::Cell(grap_f64::vocabulary::RIGHT),
-                                grap_f64::value(8.0),
-                            ),
-                        ]),
-                    ),
-                ]),
-            ),
-        ]),
+        progred_name::record(
+            "roof",
+            [
+                (
+                    Label::from(sample_vocabulary::POINTS),
+                    Value::list([Value::from(origin), Value::from(corner)]),
+                ),
+                (Label::from(stroke), progred_text::value("hairline")),
+                (
+                    Label::from(sample_vocabulary::TAGS),
+                    Value::list([progred_text::value("draft"), progred_text::value("gabled")]),
+                ),
+                (
+                    Label::from(sample_vocabulary::MATERIAL),
+                    Value::from(material),
+                ),
+                (Label::from(sample_vocabulary::STYLE), Value::from(style)),
+                (Label::from(sample_vocabulary::PITCH), Value::from(pitch)),
+                (Label::from(sample_vocabulary::DOUBLE_PITCH), double_pitch()),
+                (
+                    Label::from(sample_vocabulary::PROFILE),
+                    Value::record([
+                        (
+                            Label::from(grap::vocabulary::FUNCTION),
+                            Value::from(grap_geometry::vocabulary::CIRCLE),
+                        ),
+                        (
+                            Label::from(grap_geometry::vocabulary::RADIUS),
+                            Value::record([
+                                (
+                                    Label::from(grap::vocabulary::FUNCTION),
+                                    Value::from(grap_f64::vocabulary::MULTIPLY),
+                                ),
+                                (Label::from(grap_f64::vocabulary::LEFT), double_pitch()),
+                                (
+                                    Label::from(grap_f64::vocabulary::RIGHT),
+                                    grap_f64::value(8.0),
+                                ),
+                            ]),
+                        ),
+                    ]),
+                ),
+            ],
+        ),
     );
 
     Document {
         root: Some(Value::record([
-            (Label::from("shape"), Value::from(roof)),
-            (Label::from("style"), Value::from(style)),
-            (Label::from("favorite"), Value::from(favorite)),
+            (Label::from(sample_vocabulary::SHAPE), Value::from(roof)),
+            (Label::from(sample_vocabulary::STYLE), Value::from(style)),
+            (
+                Label::from(sample_vocabulary::FAVORITE),
+                Value::from(favorite),
+            ),
         ])),
         cells,
     }
@@ -305,12 +375,21 @@ pub enum StandIn {
     Circle { radius: f64 },
 }
 
+pub(crate) fn whole_text(value: &Value) -> Option<&str> {
+    let text = progred_text::read(value)?;
+    value
+        .as_record()?
+        .keys()
+        .all(|label| label.cell() == progred_text::vocabulary::UTF8)
+        .then_some(text)
+}
+
 fn whole_f64(value: &Value) -> Option<f64> {
     let number = grap_f64::read(value)?;
     value
         .as_record()?
         .keys()
-        .all(|label| *label == Label::Cell(grap_f64::vocabulary::F64))
+        .all(|label| *label == Label::from(grap_f64::vocabulary::F64))
         .then_some(number)
 }
 
@@ -318,19 +397,19 @@ fn whole_circle(value: &Value) -> Option<f64> {
     let radius = grap_geometry::read(value)?;
     let fields = value.as_record()?;
     let circle = fields
-        .get(&Label::Cell(grap_geometry::vocabulary::CIRCLE))?
+        .get(&Label::from(grap_geometry::vocabulary::CIRCLE))?
         .as_record()?;
-    let radius_value = circle.get(&Label::Cell(grap_geometry::vocabulary::RADIUS))?;
+    let radius_value = circle.get(&Label::from(grap_geometry::vocabulary::RADIUS))?;
     (fields
         .keys()
-        .all(|label| *label == Label::Cell(grap_geometry::vocabulary::CIRCLE))
+        .all(|label| *label == Label::from(grap_geometry::vocabulary::CIRCLE))
         && circle
             .keys()
-            .all(|label| *label == Label::Cell(grap_geometry::vocabulary::RADIUS))
+            .all(|label| *label == Label::from(grap_geometry::vocabulary::RADIUS))
         && radius_value
             .as_record()?
             .keys()
-            .all(|label| *label == Label::Cell(grap_f64::vocabulary::F64)))
+            .all(|label| *label == Label::from(grap_f64::vocabulary::F64)))
     .then_some(radius)
 }
 
@@ -356,7 +435,7 @@ pub(crate) fn grap_stand_in(
 
 pub type DomainProjection<'a> = Option<&'a dyn Fn(&Value) -> Option<StandIn>>;
 
-/// A reported click on a string's text, in text-local coordinates.
+/// A reported click on projected text, in text-local coordinates.
 /// The shell's selection transition consumes it to seed or advance
 /// the editor state — focus and caret placement are one event, as in
 /// the Haskell LineEdit's focus-with-initial-selection callback. The
@@ -481,8 +560,8 @@ impl Cx<'_> {
 pub type Path = Vec<Step>;
 
 /// What is selected: the value at a path, or a nonexistent field
-/// being authored. A selected string carries its live editor state —
-/// every string is a text editor, focused by selection, and the graph
+/// being authored. A selected plain text value carries its live editor state —
+/// every projected text value is a text editor, focused by selection, and the graph
 /// is written through as it edits. A pending selection carries the
 /// completion query instead; the query resolves to the value that
 /// commits, and until then the graph is untouched — deselecting
@@ -521,7 +600,7 @@ pub enum Selection {
 }
 
 impl Selection {
-    /// Select the value at `path`; a string value brings a focused editor (the root included —
+    /// Select the value at `path`; a compact text value brings a focused editor (the root included —
     /// its commits target the document's root field). Selecting an
     /// EMPTY VALUE SLOT is already authoring it — there is nothing
     /// there to select, only something to begin, so it pends
@@ -545,7 +624,7 @@ impl Selection {
             .then(|| {
                 sources
                     .resolve(&path)
-                    .and_then(|value| value.as_str().map(line_edit))
+                    .and_then(|value| whole_text(value).map(line_edit))
             })
             .flatten();
         Selection::Edge {
@@ -592,7 +671,7 @@ fn edit_presentation(style: &TextStyle) -> LineEditPresentation {
 
 /// The selection an arrow step lands on: the caret seeds the side the
 /// travel direction exits from, so the next same-direction press
-/// crosses a string in one press. The end-seeded default already IS
+/// crosses projected text in one press. The end-seeded default already IS
 /// the rightward case; a leftward landing seeds the START instead of
 /// grinding back through every character.
 pub fn selected_by_arrow(sources: &Sources, path: Path, event: &KeyboardEvent) -> Selection {
@@ -744,28 +823,25 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
 }
 
 /// An existing field's label re-opened as a pending edge, the query
-/// seeded with the current SPELLING — a string label with its quotes,
-/// a cell label by its name (another cell may share the name; the
-/// seed is a spelling, not the identity) or short id. Committing a
-/// taken label navigates to its field, the new-field rule.
+/// seeded with the cell label's current display name or short id.
+/// Another cell may share the name; the seed is presentation, not
+/// identity. Committing a taken label navigates to its field, the
+/// new-field rule.
 pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
     let (step, parent) = path.split_last()?;
     let Step::Key(key) = step else { return None };
     sources.resolve(path)?;
     writable_at(sources, parent).then_some(())?;
-    let seed = match key {
-        Label::String(s) => format!("\"{s}\""),
-        Label::Cell(cell) => sources
-            .value(*cell)
-            .and_then(progred_name::read)
-            .map(str::to_owned)
-            .unwrap_or_else(|| short_id(*cell)),
-    };
+    let seed = sources
+        .value(key.cell())
+        .and_then(progred_name::read)
+        .map(str::to_owned)
+        .unwrap_or_else(|| short_id(key.cell()));
     Some(Selection::PendingEdge {
         parent: parent.to_vec(),
         query: line_edit(&seed),
         choice: 0,
-        replacing: Some(key.clone()),
+        replacing: Some(*key),
     })
 }
 
@@ -909,33 +985,33 @@ fn parse_blob(text: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-/// The value a pending query resolves to: a leading quote forces a
-/// string (the closing quote optional, so string mode holds while
-/// typing), `0x` hex reads as a blob, anything else is the string as
-/// typed.
+/// The value a pending query resolves to: a leading quote forces
+/// text (the closing quote optional, so text mode holds while
+/// typing), `0x` hex reads as a blob, anything else is text as typed.
 pub fn resolve_query(text: &str) -> Value {
     let trimmed = text.trim();
     match trimmed.strip_prefix('"') {
-        Some(inner) => Value::from(inner.strip_suffix('"').unwrap_or(inner)),
+        Some(inner) => progred_text::value(inner.strip_suffix('"').unwrap_or(inner)),
         None => parse_blob(trimmed)
             .map(Value::from)
-            .unwrap_or_else(|| Value::from(text)),
+            .unwrap_or_else(|| progred_text::value(text)),
     }
 }
 
 /// The clipboard spelling of a value, and whether it is STRUCTURE.
 /// Values carry their own inline structure, and cell copies are
 /// ALWAYS SHALLOW — a link is its identity alone, no cell values
-/// travel: the value/cell boundary IS the copy boundary. Strings and
-/// blobs spell as the query language — "quoted" strings, `0x` hex —
+/// travel: the value/cell boundary IS the copy boundary. Compact text
+/// and blobs spell as the query language — quoted text and `0x` hex —
 /// and are not structure: their text is their faithful form. Links,
 /// lists, and records spell as Value JSON and ARE: the shell writes
 /// that spelling under the private clipboard format too, whose
 /// presence is what says "structure" — never the text's shape, so
 /// text that happens to spell Value JSON stays text.
 pub fn to_clipboard(value: &Value) -> (String, bool) {
-    match value {
-        Value::Atom(Atom::String(_) | Atom::Blob(_)) => (value.to_string(), false),
+    match (whole_text(value), value.as_blob()) {
+        (Some(text), _) => (format!("\"{text}\""), false),
+        (_, Some(_)) => (value.to_string(), false),
         _ => (
             serde_json::to_string(value).expect("values serialize"),
             true,
@@ -944,7 +1020,7 @@ pub fn to_clipboard(value: &Value) -> (String, bool) {
 }
 
 /// The value clipboard TEXT denotes — always the query reading:
-/// quoted strings, `0x` blobs, bare text. Text is never structure;
+/// quoted text, `0x` blobs, and bare text. Text is never structure;
 /// structure rides the private format, read by [`from_structure`].
 pub fn from_clipboard(text: &str) -> Value {
     resolve_query(text)
@@ -973,6 +1049,8 @@ pub struct Entry {
 pub enum EntryAction {
     /// Commit this value: an inferred atom or a reference.
     Value(Value),
+    /// Mint a cell named by this text and use its identity as a label.
+    NewLabel(String),
     /// Mint a bare cell and commit a link to it.
     NewCell,
     /// Commit an empty list value.
@@ -996,12 +1074,12 @@ pub trait HasPopup {
     fn popup(&mut self) -> &mut Option<Popup>;
 }
 
-/// The universal completion layer for `query`: the inferred atom,
+/// The universal completion layer for `query`: the inferred value,
 /// references to everything named (document and orphans alike, ranked
 /// by the fuzzy tiers), and a fresh bare cell. The label stage
-/// (`labels`) offers only what can label:
-/// strings and cell references — no blobs, and "new list"/"new
-/// record" stay value offers.
+/// (`labels`) offers cell references plus a freshly minted cell named
+/// by the query — no blobs, and "new list"/"new record" stay value
+/// offers.
 fn completion_entries(
     sources: &Sources,
     names: &Names,
@@ -1012,41 +1090,46 @@ fn completion_entries(
     let trimmed = query.trim();
     let quoted = trimmed.trim_start().starts_with('"');
     let blob = (!labels).then(|| parse_blob(trimmed)).flatten();
-    let atom = match (&blob, labels) {
-        (Some(bytes), _) => Value::from(bytes.clone()),
-        (None, false) => resolve_query(query),
-        // A label is a name: quotes strip, everything else is the
-        // text as typed — never a blob.
-        (None, true) => match trimmed.strip_prefix('"') {
-            Some(inner) => Value::from(inner.strip_suffix('"').unwrap_or(inner)),
-            None => Value::from(query),
-        },
-    };
+    let text = trimmed
+        .strip_prefix('"')
+        .map(|inner| inner.strip_suffix('"').unwrap_or(inner))
+        .unwrap_or(query);
+    let atom = blob
+        .as_ref()
+        .map(|bytes| Value::from(bytes.clone()))
+        .unwrap_or_else(|| progred_text::value(text));
     // Quotes and `0x` state atom intent, so the atom leads; otherwise
     // a confident (non-fuzzy) NAMED match is likelier the intent than
     // a new literal — typing a visible name should default to the
-    // reference, quoting always forces the string, and bare ids never
+    // reference, quoting always forces text, and bare ids never
     // outrank the typed text.
     let atom_leads = quoted || blob.is_some();
     // The typed text is always insertable as itself: a blob query
-    // offers its string form right below the blob (a quote already
-    // states string intent, so quoted queries stay string-only).
-    let string_entry = blob.is_some().then(|| Entry {
+    // offers its text form right below the blob (a quote already
+    // states text intent, so quoted queries stay text-only).
+    let text_entry = blob.is_some().then(|| Entry {
         display: format!("\"{query}\""),
         detail: None,
         matches: Vec::new(),
         id: false,
-        action: EntryAction::Value(Value::from(query)),
+        action: EntryAction::Value(progred_text::value(query)),
     });
     let atom_entry = Entry {
-        display: match &atom {
-            Value::Atom(Atom::String(s)) => format!("\"{s}\""),
-            other => other.to_string(),
+        display: if labels {
+            text.to_string()
+        } else {
+            progred_text::read(&atom)
+                .map(|text| format!("\"{text}\""))
+                .unwrap_or_else(|| atom.to_string())
         },
-        detail: None,
+        detail: labels.then(|| "new label".to_string()),
         matches: Vec::new(),
         id: false,
-        action: EntryAction::Value(atom),
+        action: if labels {
+            EntryAction::NewLabel(text.to_string())
+        } else {
+            EntryAction::Value(atom)
+        },
     };
     // Every cell the document contains is referenceable: named ones
     // by name, unnamed ones by the short id they render as — what
@@ -1116,7 +1199,7 @@ fn completion_entries(
     let mut entries = Vec::new();
     if atom_leads {
         entries.push(atom_entry);
-        entries.extend(string_entry);
+        entries.extend(text_entry);
         entries.extend(references.into_iter().map(|(entry, _)| entry));
     } else {
         let (weak, strong): (Vec<_>, Vec<_>) =
@@ -1141,7 +1224,7 @@ fn value_cells(value: &Value, cells: &mut Vec<CellId>) {
         }
         Value::Record(fields) => {
             for (label, field) in fields {
-                cells.extend(label.as_cell());
+                cells.push(label.cell());
                 value_cells(field, cells);
             }
         }
@@ -1170,16 +1253,32 @@ fn document_cells(sources: &Sources) -> Vec<CellId> {
     cells
 }
 
-/// Resolves a chosen entry to the value it denotes. Pure: a new
+/// Resolves a value-stage entry to the value it denotes. Pure: a new
 /// cell's mint is a bare id — nothing said until a value is written.
 /// Labels and values resolve alike — the label stage never
 /// offers a non-label action.
-pub fn resolve_entry(action: &EntryAction) -> Value {
+pub fn resolve_entry(action: &EntryAction) -> Option<Value> {
     match action {
-        EntryAction::Value(value) => value.clone(),
-        EntryAction::NewCell => Value::from(new_cell_id()),
-        EntryAction::NewList => Value::list([]),
-        EntryAction::NewRecord => Value::record([]),
+        EntryAction::Value(value) => Some(value.clone()),
+        EntryAction::NewLabel(_) => None,
+        EntryAction::NewCell => Some(Value::from(new_cell_id())),
+        EntryAction::NewList => Some(Value::list([])),
+        EntryAction::NewRecord => Some(Value::record([])),
+    }
+}
+
+/// Resolves a label-stage entry. Free text becomes a newly minted
+/// named cell; an existing cell value reuses its identity. The
+/// optional cell value is what the caller must add to the document.
+pub fn resolve_label(action: &EntryAction) -> Option<(Label, Option<(CellId, Value)>)> {
+    match action {
+        EntryAction::Value(value) => value.as_cell().map(|cell| (Label::from(cell), None)),
+        EntryAction::NewLabel(name) => {
+            let cell = new_cell_id();
+            Some((Label::from(cell), Some((cell, progred_name::value(name)))))
+        }
+        EntryAction::NewCell => Some((Label::from(new_cell_id()), None)),
+        EntryAction::NewList | EntryAction::NewRecord => None,
     }
 }
 
@@ -1191,8 +1290,7 @@ pub fn commit_pending(
     path: &[Step],
     action: &EntryAction,
 ) -> bool {
-    let value = resolve_entry(action);
-    set_value(doc, library, path, value)
+    resolve_entry(action).is_some_and(|value| set_value(doc, library, path, value))
 }
 
 /// Writes `value` at `path` — the empty path writes the document
@@ -1299,6 +1397,9 @@ pub fn set_collapse(
 fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
     sources
         .resolve(path)
+        // The compact text projection is one leaf. Once another
+        // field enriches it, the visible record is collapsible.
+        .filter(|value| whole_text(value).is_none())
         .filter(|value| match value {
             Value::Atom(atom) => atom
                 .as_cell()
@@ -1326,7 +1427,7 @@ fn store_collapse(collapse: &mut Collapse, path: &[Step], default: bool, next: b
 
 /// Writes the selection's editor text through to its location after
 /// every handled event — the graph is the source of truth. The
-/// edited kind follows the current value: only strings mount
+/// edited kind follows the current value: only compact text values mount
 /// editors, and they write every keystroke. Everything funnels
 /// through [`set_value`], so an element edit rebuilds its list at
 /// the owning cell and a location that no longer takes the write
@@ -1354,10 +1455,9 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
                 library,
             };
             let current = sources.resolve(path);
-            let next = match current {
-                Some(Value::Atom(Atom::String(_))) => Some(Value::from(text)),
-                _ => None,
-            };
+            let next = current
+                .and_then(whole_text)
+                .map(|_| progred_text::value(text));
             (current.cloned(), next)
         };
         match next {
@@ -1458,8 +1558,8 @@ struct Stop {
 
 fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
     match path {
-        [owner @ .., Step::Follow, Step::Key(Label::Cell(cell))]
-            if *cell == progred_name::vocabulary::NAME =>
+        [owner @ .., Step::Follow, Step::Key(label)]
+            if label.cell() == progred_name::vocabulary::NAME =>
         {
             Some(owner)
         }
@@ -1636,7 +1736,8 @@ pub fn resolve_hover(
 
 /// The value a hover refers to — the hover's `secondary_of`, for
 /// marking its other projections. Inline records are structure, not
-/// identity: no marks. An `Entry` hover re-derives from the LIVE
+/// identity: no marks, except for a whole text convention because it
+/// projects as one leaf. An `Entry` hover re-derives from the LIVE
 /// completion offers of the open pending (recomputed here — the
 /// price of never marking a snapshot), so the marks follow the
 /// entries as the query is typed.
@@ -1650,7 +1751,7 @@ pub fn hover_value(
     match hover {
         Hover::Value(path) => sources
             .resolve(path)
-            .filter(|value| !matches!(value, Value::Record(_)))
+            .filter(|value| !matches!(value, Value::Record(_)) || whole_text(value).is_some())
             .cloned(),
         // A dead address answers nothing: the label must still be in
         // the document, or a rename under a parked pointer would keep
@@ -1658,7 +1759,7 @@ pub fn hover_value(
         Hover::Label(path) => {
             sources.resolve(path)?;
             match path.last()? {
-                Step::Key(key) => Some(Value::Atom(Atom::from(key.clone()))),
+                Step::Key(key) => Some(Value::Atom(Atom::from(*key))),
                 _ => None,
             }
         }
@@ -1981,14 +2082,14 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
 
 /// The value marked as the secondary selection: the one at the
 /// selected path. A value can project in many places — links, but
-/// equally strings, blobs, and equal lists — and the marks make that
+/// equally text values, blobs, and equal lists — and the marks make that
 /// sameness visible. Inline records are structure, not identity: no
 /// marks.
 fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Value> {
     match selection? {
         Selection::Edge { path, .. } => sources
             .resolve(path)
-            .filter(|value| !matches!(value, Value::Record(_)))
+            .filter(|value| !matches!(value, Value::Record(_)) || whole_text(value).is_some())
             .cloned(),
         _ => None,
     }
@@ -2205,7 +2306,7 @@ fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>
 
 /// A cell's head: an ordinary simple-name field projected as header
 /// text, or the short id when no naming convention answers. A shown
-/// name remains the same selectable and editable string field; the
+/// name remains the same selectable and editable text field; the
 /// header is a projection of data rather than another storage path.
 ///
 /// The head text stands for the CELL until the cell is selected: a
@@ -2232,7 +2333,7 @@ fn head_view<
     };
     let mut edge = path.to_vec();
     edge.push(Step::Follow);
-    edge.push(Step::Key(Label::Cell(progred_name::vocabulary::NAME)));
+    edge.push(Step::Key(Label::from(progred_name::vocabulary::NAME)));
     let editing = cx
         .selection
         .filter(|selection| selection.path() == edge.as_slice())
@@ -2248,7 +2349,7 @@ fn head_view<
         cx.styles,
         hooks,
     );
-    let mark = Value::from(name.as_str());
+    let mark = progred_text::value(name);
     let target = mark.clone();
     if cx.selected(path) || cx.selected(&edge) {
         let content = cursor_target(edge.clone(), target.clone(), presentation, hooks, content);
@@ -2296,7 +2397,7 @@ fn field_row<
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
-    child.push(Step::Key(key.clone()));
+    child.push(Step::Key(key));
     // A re-opened label renders as its seeded query; cold, a
     // writable label's one click is its own edit — selecting the
     // field belongs to the value's ink (and the head's colon), which
@@ -2309,13 +2410,8 @@ fn field_row<
     };
     let head = row(0.0, vec![label, text(tcx, ":", &cx.styles.dim)]);
     let head = match &value {
-        Some(_) => select_target(
-            child.clone(),
-            Value::Atom(Atom::from(key.clone())),
-            hooks,
-            head,
-        ),
-        None => pick_target(key.clone(), hooks, head),
+        Some(_) => select_target(child.clone(), Value::Atom(Atom::from(key)), hooks, head),
+        None => pick_target(key, hooks, head),
     };
     let Some(value) = value else {
         return row(6.0 * scale, vec![head, pending_view(cx, tcx, child, hooks)]);
@@ -2582,19 +2678,19 @@ fn record_view<
             .and_then(|cell| cx.name(cell))
             .is_some()
         && fields
-            .get(&Label::Cell(progred_name::vocabulary::NAME))
-            .and_then(Value::as_str)
+            .get(&Label::from(progred_name::vocabulary::NAME))
+            .and_then(whole_text)
             .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(Label, Option<Value>)> = fields
         .iter()
         .filter(|(key, _)| {
-            !consumes_simple_name || **key != Label::Cell(progred_name::vocabulary::NAME)
+            !consumes_simple_name || **key != Label::from(progred_name::vocabulary::NAME)
         })
-        .map(|(key, value)| (key.clone(), Some(value.clone())))
+        .map(|(key, value)| (*key, Some(value.clone())))
         .collect();
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {
         items.push((key, None));
-        items.sort_by(|a, b| a.0.cmp(&b.0));
+        items.sort_by_key(|item| item.0);
     }
     let pending_edge = cx.pending_edge_under(path).is_some();
     let renaming = cx.pending_rename_under(path);
@@ -2651,7 +2747,7 @@ fn record_view<
                     cells.push(text(tcx, ", ", &cx.styles.dim));
                 }
                 let mut child = path.to_vec();
-                child.push(Step::Key(key.clone()));
+                child.push(Step::Key(*key));
                 cells.push(match renaming {
                     Some((replacing, query, choice)) if replacing == key => {
                         label_query(cx, tcx, query, choice, hooks)
@@ -2742,24 +2838,16 @@ fn blob_text(bytes: &[u8]) -> String {
 /// The spelling and face a label draws with — one truth for the view
 /// and for hit-testing a click against what was actually drawn.
 fn label_spelling<'a>(cx: &'a Cx, key: &Label) -> (String, &'a TextStyle) {
-    match key {
-        // A string label wears its quotes: it IS a string, and the
-        // quotes are what distinguish it from a cell label read by
-        // name (the open styling question, answered 2026-07-20).
-        Label::String(s) => (format!("\"{s}\""), &cx.styles.label),
-        // A named cell used as a label reads by its name, through the
-        // editor's one name policy.
-        Label::Cell(cell) => match cx.name(*cell) {
-            Some(name) => (name, &cx.styles.label),
-            None => (short_id(*cell), &cx.styles.id),
-        },
+    match cx.name(key.cell()) {
+        Some(name) => (name, &cx.styles.label),
+        None => (short_id(key.cell()), &cx.styles.id),
     }
 }
 
 fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &Label) -> Node<P> {
     let (spelling, style) = label_spelling(cx, key);
     let inner = text(tcx, &spelling, style);
-    secondary_mark(cx, &Value::Atom(Atom::from(key.clone())), inner)
+    secondary_mark(cx, &Value::Atom(Atom::from(*key)), inner)
 }
 
 /// A cold field label; writable, its one click re-opens it as the
@@ -2885,7 +2973,8 @@ fn value_view<
         .filter(|selection| selection.path() == path)
         .and_then(Selection::edit);
     let inner = match value {
-        Value::Atom(Atom::String(s)) => {
+        Value::Record(_) if !cx.raw && whole_text(value).is_some() => {
+            let s = whole_text(value).expect("matched plain text");
             // ONE shaped run, static and editing alike: the quotes are
             // the editor's affixes, so entering an edit reshapes
             // nothing and the caret lives strictly between them. Every
@@ -3095,11 +3184,14 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         .iter()
         .map(|entry| {
             let style = match &entry.action {
-                EntryAction::Value(value) if value.as_str().is_some() => &styles.string,
+                EntryAction::Value(value) if progred_text::read(value).is_some() => &styles.string,
                 EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
                 EntryAction::Value(_) if entry.id => &styles.id,
                 EntryAction::Value(_) => &styles.label,
-                EntryAction::NewCell | EntryAction::NewList | EntryAction::NewRecord => &styles.dim,
+                EntryAction::NewLabel(_)
+                | EntryAction::NewCell
+                | EntryAction::NewList
+                | EntryAction::NewRecord => &styles.dim,
             };
             let display = highlighted(tcx, &entry.display, &entry.matches, style);
             let detail = entry
@@ -3323,7 +3415,7 @@ fn pick_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     on_primary_pointer_down(
         content,
         |event| command(&event.state.modifiers),
-        move |ctx, _| pick(ctx, Value::Atom(Atom::from(key.clone()))),
+        move |ctx, _| pick(ctx, Value::Atom(Atom::from(key))),
     )
 }
 
@@ -3451,7 +3543,7 @@ fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverCla
     })
 }
 
-/// A click on a string's text reports what happened — this path, this
+/// A click on projected text reports what happened — this path, this
 /// text-local position — and nothing more; the shell's selection
 /// transition decides what it means. One report serves the first
 /// click and every one after. With the command modifier and a pending
@@ -3506,26 +3598,29 @@ mod tests {
         let number = grap_f64::value(2.5);
         assert!(matches!(project(&number), Some(StandIn::Text(_))));
         let enriched_number = Value::record(number.as_record().unwrap().clone().update(
-            Label::from("created-at"),
-            Value::from("now"),
+            crate::test_values::label("created-at"),
+            crate::test_values::text("now"),
         ));
         assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
         assert!(project(&enriched_number).is_none());
 
         let call = Value::record([
             (
-                Label::Cell(grap::vocabulary::FUNCTION),
+                Label::from(grap::vocabulary::FUNCTION),
                 Value::from(grap_f64::vocabulary::ADD),
             ),
             (
-                Label::Cell(grap_f64::vocabulary::LEFT),
+                Label::from(grap_f64::vocabulary::LEFT),
                 grap_f64::value(2.0),
             ),
             (
-                Label::Cell(grap_f64::vocabulary::RIGHT),
+                Label::from(grap_f64::vocabulary::RIGHT),
                 grap_f64::value(3.0),
             ),
-            (Label::from("created-at"), Value::from("now")),
+            (
+                crate::test_values::label("created-at"),
+                crate::test_values::text("now"),
+            ),
         ]);
         assert_eq!(
             grap::evaluate(&call, |_| None, &foreign, grap::DEFAULT_FUEL).result,
@@ -3539,23 +3634,21 @@ mod tests {
             Some(StandIn::Circle { radius: 20.0 })
         ));
         let enriched_circle = Value::record(circle.as_record().unwrap().clone().update(
-            Label::from("source"),
-            Value::from("survey"),
+            crate::test_values::label("source"),
+            crate::test_values::text("survey"),
         ));
         assert_eq!(grap_geometry::read(&enriched_circle), Some(20.0));
         assert!(project(&enriched_circle).is_none());
 
-        let enriched_radius = Value::record(
-            grap_f64::value(20.0)
-                .as_record()
-                .unwrap()
-                .clone()
-                .update(Label::from("unit"), Value::from("millimetres")),
-        );
+        let enriched_radius =
+            Value::record(grap_f64::value(20.0).as_record().unwrap().clone().update(
+                crate::test_values::label("unit"),
+                crate::test_values::text("millimetres"),
+            ));
         let circle_with_enriched_radius = Value::record([(
-            Label::Cell(grap_geometry::vocabulary::CIRCLE),
+            Label::from(grap_geometry::vocabulary::CIRCLE),
             Value::record([(
-                Label::Cell(grap_geometry::vocabulary::RADIUS),
+                Label::from(grap_geometry::vocabulary::RADIUS),
                 enriched_radius,
             )]),
         )]);
@@ -3581,7 +3674,7 @@ mod tests {
     }
 
     fn key(s: &str) -> Step {
-        Step::Key(Label::from(s))
+        Step::Key(crate::test_values::label(s))
     }
 
     /// A one-cell document: the root links a cell holding `fields`.
@@ -3693,7 +3786,7 @@ mod tests {
         let name = || {
             vec![
                 Step::Follow,
-                Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+                Step::Key(Label::from(progred_name::vocabulary::NAME)),
             ]
         };
         // Dropped: the projected name shares the cell's head line while the
@@ -3765,7 +3858,10 @@ mod tests {
     #[test]
     fn set_collapse_is_directional_and_stays_sparse() {
         let lib = Cells::new();
-        let (doc, _) = doc_of(vec![(Label::from("a"), Value::from("1"))]);
+        let (doc, _) = doc_of(vec![(
+            crate::test_values::label("a"),
+            crate::test_values::text("1"),
+        )]);
         let sources = src(&doc, &lib);
         let mut collapse = Collapse::default();
         assert!(set_collapse(&sources, &mut collapse, &[], true));
@@ -3780,11 +3876,17 @@ mod tests {
     }
 
     #[test]
-    fn selecting_a_string_brings_an_editor() {
+    fn selecting_text_brings_an_editor() {
         let lib = Cells::new();
         let (mut doc, cell) = doc_of(vec![
-            (Label::from("name"), Value::from("old")),
-            (Label::from("x"), Value::from("1.5")),
+            (
+                crate::test_values::label("name"),
+                crate::test_values::text("old"),
+            ),
+            (
+                crate::test_values::label("x"),
+                crate::test_values::text("1.5"),
+            ),
         ]);
         let at = |doc: &Document, path: Vec<Step>| Selection::edge(&src(doc, &lib), path);
         assert!(at(&doc, vec![Step::Follow, key("name")]).edit().is_some());
@@ -3798,20 +3900,20 @@ mod tests {
         assert!(at(&doc, vec![]).edit().is_none());
         doc.cells.set_value(
             cell,
-            Value::record([(Label::from("b"), Value::from(vec![0xff_u8]))]),
+            Value::record([(crate::test_values::label("b"), Value::from(vec![0xff_u8]))]),
         );
         assert!(at(&doc, vec![Step::Follow, key("b")]).edit().is_none());
-        // A cell holding a string edits at its Follow path.
-        doc.cells.set_value(cell, Value::from("held"));
+        // A cell holding text edits at its Follow path.
+        doc.cells.set_value(cell, crate::test_values::text("held"));
         assert!(at(&doc, vec![Step::Follow]).edit().is_some());
-        // A simple name convention is just another string field.
+        // A simple name convention is just another text field.
         doc.cells.set_value(cell, progred_name::value("roof"));
         assert!(
             at(
                 &doc,
                 vec![
                     Step::Follow,
-                    Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+                    Step::Key(Label::from(progred_name::vocabulary::NAME)),
                 ],
             )
             .edit()
@@ -3822,24 +3924,33 @@ mod tests {
     #[test]
     fn edits_write_through_to_the_field() {
         let lib = Cells::new();
-        let (mut doc, _) = doc_of(vec![(Label::from("name"), Value::from("old"))]);
+        let (mut doc, _) = doc_of(vec![(
+            crate::test_values::label("name"),
+            crate::test_values::text("old"),
+        )]);
         let path = vec![Step::Follow, key("name")];
         let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
         selection.edit_mut().unwrap().set_text("new");
         write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from("new")));
+        assert_eq!(
+            src(&doc, &lib).resolve(&path),
+            Some(&crate::test_values::text("new"))
+        );
         // A selection without an editor writes nothing.
         let mut plain = Selection::edge(&src(&doc, &lib), vec![Step::Follow, key("missing")]);
         assert!(!write_through(&mut doc, &lib, &mut plain));
-        assert_eq!(src(&doc, &lib).resolve(&path), Some(&Value::from("new")));
+        assert_eq!(
+            src(&doc, &lib).resolve(&path),
+            Some(&crate::test_values::text("new"))
+        );
     }
 
     #[test]
     fn element_edits_rebuild_the_list_at_the_owning_cell() {
         let lib = Cells::new();
         let (mut doc, _) = doc_of(vec![(
-            Label::from("dash"),
-            Value::list([Value::from("2"), Value::from("3")]),
+            crate::test_values::label("dash"),
+            Value::list([crate::test_values::text("2"), crate::test_values::text("3")]),
         )]);
         let list_path = vec![Step::Follow, key("dash")];
         let ps = positions(src(&doc, &lib).resolve(&list_path).unwrap());
@@ -3850,10 +3961,16 @@ mod tests {
         let mut selection = Selection::edge(&src(&doc, &lib), element.clone());
         selection.edit_mut().unwrap().set_text("9");
         assert!(write_through(&mut doc, &lib, &mut selection));
-        assert_eq!(src(&doc, &lib).resolve(&element), Some(&Value::from("9")));
+        assert_eq!(
+            src(&doc, &lib).resolve(&element),
+            Some(&crate::test_values::text("9"))
+        );
         assert_eq!(
             src(&doc, &lib).resolve(&list_path),
-            Some(&Value::list([Value::from("2"), Value::from("9")]))
+            Some(&Value::list([
+                crate::test_values::text("2"),
+                crate::test_values::text("9")
+            ]))
         );
         assert_eq!(positions(src(&doc, &lib).resolve(&list_path).unwrap()), ps);
     }
@@ -3861,16 +3978,19 @@ mod tests {
     #[test]
     fn set_value_writes_fields_elements_roots_and_bare_cells() {
         let lib = Cells::new();
-        let (mut doc, cell) = doc_of(vec![(Label::from("x"), Value::from("1"))]);
+        let (mut doc, cell) = doc_of(vec![(
+            crate::test_values::label("x"),
+            crate::test_values::text("1"),
+        )]);
         assert!(set_value(
             &mut doc,
             &lib,
             &[Step::Follow, key("x")],
-            Value::from("2")
+            crate::test_values::text("2")
         ));
         assert_eq!(
             src(&doc, &lib).resolve(&[Step::Follow, key("x")]),
-            Some(&Value::from("2"))
+            Some(&crate::test_values::text("2"))
         );
 
         // A fresh Key step INSERTS a field; a deep spine rebuilds
@@ -3879,17 +3999,20 @@ mod tests {
             &mut doc,
             &lib,
             &[Step::Follow, key("at")],
-            Value::record([(Label::from("row"), Value::from("top"))]),
+            Value::record([(
+                crate::test_values::label("row"),
+                crate::test_values::text("top")
+            )]),
         ));
         assert!(set_value(
             &mut doc,
             &lib,
             &[Step::Follow, key("at"), key("row")],
-            Value::from("bottom")
+            crate::test_values::text("bottom")
         ));
         assert_eq!(
             src(&doc, &lib).resolve(&[Step::Follow, key("at"), key("row")]),
-            Some(&Value::from("bottom"))
+            Some(&crate::test_values::text("bottom"))
         );
 
         // The whole cell value is addressable at Follow: conversion
@@ -3898,11 +4021,11 @@ mod tests {
             &mut doc,
             &lib,
             &[Step::Follow],
-            Value::list([Value::from("a")])
+            Value::list([crate::test_values::text("a")])
         ));
         assert_eq!(
             src(&doc, &lib).resolve(&[Step::Follow]),
-            Some(&Value::list([Value::from("a")]))
+            Some(&Value::list([crate::test_values::text("a")]))
         );
 
         // A bare cell takes its first value through the empty spine;
@@ -3913,36 +4036,62 @@ mod tests {
             &mut doc,
             &lib,
             &[Step::Follow, key("x")],
-            Value::from("v")
+            crate::test_values::text("v")
         ));
         assert!(set_value(
             &mut doc,
             &lib,
             &[Step::Follow],
-            Value::record([(Label::from("x"), Value::from("v"))])
+            Value::record([(
+                crate::test_values::label("x"),
+                crate::test_values::text("v")
+            )])
         ));
         assert_eq!(
             src(&doc, &lib).resolve(&[Step::Follow, key("x")]),
-            Some(&Value::from("v"))
+            Some(&crate::test_values::text("v"))
         );
 
         // An inline record at the root writes on the root spine — no
         // cell involved.
-        doc.root = Some(Value::record([(Label::from("shape"), Value::from(cell))]));
+        doc.root = Some(Value::record([(
+            crate::test_values::label("shape"),
+            Value::from(cell),
+        )]));
         assert!(set_value(
             &mut doc,
             &lib,
             &[key("title")],
-            Value::from("scene")
+            crate::test_values::text("scene")
         ));
         assert_eq!(
             src(&doc, &lib).resolve(&[key("title")]),
-            Some(&Value::from("scene"))
+            Some(&crate::test_values::text("scene"))
         );
-        assert!(set_value(&mut doc, &lib, &[], Value::from("root")));
-        assert_eq!(doc.root, Some(Value::from("root")));
-        // A parent that is not a record declines.
-        assert!(!set_value(&mut doc, &lib, &[key("x")], Value::from("0")));
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[],
+            crate::test_values::text("root")
+        ));
+        assert_eq!(doc.root, Some(crate::test_values::text("root")));
+        // Text is a record convention, so a structural write can
+        // enrich it. The extra field then keeps the compact text
+        // projection from hiding structure.
+        assert!(set_value(
+            &mut doc,
+            &lib,
+            &[key("x")],
+            crate::test_values::text("0")
+        ));
+        assert_eq!(
+            doc.root
+                .as_ref()
+                .and_then(Value::as_record)
+                .and_then(|fields| fields.get(&crate::test_values::label("x"))),
+            Some(&crate::test_values::text("0"))
+        );
+        assert!(whole_text(doc.root.as_ref().unwrap()).is_none());
     }
 
     #[test]
@@ -3953,7 +4102,10 @@ mod tests {
             lib_cell,
             progred_name::record(
                 "convention",
-                [(Label::from("a"), Value::from("1"))],
+                [(
+                    crate::test_values::label("a"),
+                    crate::test_values::text("1"),
+                )],
             ),
         );
         let mut doc = Document {
@@ -3965,36 +4117,42 @@ mod tests {
             &mut doc,
             &lib,
             &[Step::Follow, key("a")],
-            Value::from("2")
+            crate::test_values::text("2")
         ));
         assert!(!set_value(
             &mut doc,
             &lib,
             &[
                 Step::Follow,
-                Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+                Step::Key(Label::from(progred_name::vocabulary::NAME)),
             ],
-            Value::from("mine")
+            crate::test_values::text("mine")
         ));
         assert!(!delete_edge(&mut doc, &lib, &[Step::Follow, key("a")]));
         assert!(!delete_edge(&mut doc, &lib, &[Step::Follow]));
         // Forking — the document taking the cell over — writes.
         doc.cells.set_value(
             lib_cell,
-            Value::record([(Label::from("a"), Value::from("1"))]),
+            Value::record([(
+                crate::test_values::label("a"),
+                crate::test_values::text("1"),
+            )]),
         );
         assert!(set_value(
             &mut doc,
             &lib,
             &[Step::Follow, key("a")],
-            Value::from("2")
+            crate::test_values::text("2")
         ));
     }
 
     #[test]
     fn write_through_opens_one_step_per_editor_life() {
         let lib = Cells::new();
-        let (mut doc, _) = doc_of(vec![(Label::from("name"), Value::from("a"))]);
+        let (mut doc, _) = doc_of(vec![(
+            crate::test_values::label("name"),
+            crate::test_values::text("a"),
+        )]);
         let path = vec![Step::Follow, key("name")];
         let mut selection = Selection::edge(&src(&doc, &lib), path);
 
@@ -4022,10 +4180,10 @@ mod tests {
         let lib = Cells::new();
         let child = new_cell_id();
         let (mut doc, cell) = doc_of(vec![
-            (Label::from("child"), Value::from(child)),
+            (crate::test_values::label("child"), Value::from(child)),
             (
-                Label::from("dash"),
-                Value::list([Value::from("2"), Value::from("3")]),
+                crate::test_values::label("dash"),
+                Value::list([crate::test_values::text("2"), crate::test_values::text("3")]),
             ),
         ]);
         doc.cells.set_value(child, progred_name::value("c"));
@@ -4052,7 +4210,7 @@ mod tests {
         ));
         assert_eq!(
             src(&doc, &lib).resolve(&dash),
-            Some(&Value::list([Value::from("3")]))
+            Some(&Value::list([crate::test_values::text("3")]))
         );
 
         // A trailing Follow removes the cell's value: valueless
@@ -4074,15 +4232,24 @@ mod tests {
         let lib_cell = new_cell_id();
         lib.set_value(
             lib_cell,
-            Value::record([(Label::from("a"), Value::from("1"))]),
+            Value::record([(
+                crate::test_values::label("a"),
+                crate::test_values::text("1"),
+            )]),
         );
         let bare = new_cell_id();
         let (mut doc, _) = doc_of(vec![
-            (Label::from("at"), Value::record([])),
-            (Label::from("tags"), Value::list([Value::from("x")])),
-            (Label::from("lib"), Value::from(lib_cell)),
-            (Label::from("material"), Value::from(bare)),
-            (Label::from("s"), Value::from("leaf")),
+            (crate::test_values::label("at"), Value::record([])),
+            (
+                crate::test_values::label("tags"),
+                Value::list([crate::test_values::text("x")]),
+            ),
+            (crate::test_values::label("lib"), Value::from(lib_cell)),
+            (crate::test_values::label("material"), Value::from(bare)),
+            (
+                crate::test_values::label("s"),
+                crate::test_values::text("leaf"),
+            ),
         ]);
         doc.root = doc.root.clone();
         let sources = src(&doc, &lib);
@@ -4094,10 +4261,11 @@ mod tests {
         let inline = pending_edge(&sources, vec![Step::Follow, key("at")]).unwrap();
         assert_eq!(inline.path(), &[Step::Follow, key("at")]);
 
-        // Lists, leaf atoms, external cells, and bare cells decline
-        // fields.
+        // Lists, external cells, and bare cells decline fields. Text
+        // is a record convention, so adding a field enriches it and
+        // makes its structure visible.
         assert!(pending_edge(&sources, vec![Step::Follow, key("tags")]).is_none());
-        assert!(pending_edge(&sources, vec![Step::Follow, key("s")]).is_none());
+        assert!(pending_edge(&sources, vec![Step::Follow, key("s")]).is_some());
         assert!(pending_edge(&sources, vec![Step::Follow, key("lib")]).is_none());
         assert!(pending_edge(&sources, vec![Step::Follow, key("material")]).is_none());
 
@@ -4121,20 +4289,23 @@ mod tests {
         assert!(pending_insert(&sources, &[], false).is_some());
         assert!(pending_insert(&sources, &[Step::Follow, key("tags")], false).is_some());
         assert!(pending_insert(&sources, &[Step::Follow, key("material")], false).is_some());
-        assert!(pending_insert(&sources, &[Step::Follow, key("s")], false).is_none());
+        assert!(pending_insert(&sources, &[Step::Follow, key("s")], false).is_some());
     }
 
     #[test]
-    fn queries_resolve_strings_and_blobs() {
-        assert_eq!(resolve_query("hello"), Value::from("hello"));
-        assert_eq!(resolve_query("\"quoted\""), Value::from("quoted"));
-        assert_eq!(resolve_query("\"open"), Value::from("open"));
-        assert_eq!(resolve_query("\"0xff\""), Value::from("0xff"));
+    fn queries_resolve_text_and_blobs() {
+        assert_eq!(resolve_query("hello"), crate::test_values::text("hello"));
+        assert_eq!(
+            resolve_query("\"quoted\""),
+            crate::test_values::text("quoted")
+        );
+        assert_eq!(resolve_query("\"open"), crate::test_values::text("open"));
+        assert_eq!(resolve_query("\"0xff\""), crate::test_values::text("0xff"));
         assert_eq!(resolve_query("0xff00"), Value::from(vec![0xff, 0x00]));
         // Input is case-tolerant — the value is the bytes, lowercase
         // just the canonical spelling — and whole bytes only.
         assert_eq!(resolve_query("0xDEad"), Value::from(vec![0xde, 0xad]));
-        assert_eq!(resolve_query("0xf"), Value::from("0xf"));
+        assert_eq!(resolve_query("0xf"), crate::test_values::text("0xf"));
         assert_eq!(resolve_query("0x"), Value::from(vec![]));
     }
 
@@ -4144,8 +4315,8 @@ mod tests {
         // Atoms are text and round-trip through it; structure rides
         // the private format and round-trips through its bytes.
         let atoms = [
-            Value::from("plain"),
-            Value::from("\"tricky\""),
+            crate::test_values::text("plain"),
+            crate::test_values::text("\"tricky\""),
             Value::from(vec![0xde, 0xad]),
         ];
         for value in atoms {
@@ -4155,9 +4326,12 @@ mod tests {
         }
         let structures = [
             Value::from(cell),
-            Value::list([Value::from("a"), Value::from(cell)]),
-            Value::record([(Label::from("x"), Value::from("1"))]),
-            Value::record([(Label::Cell(cell), Value::from(vec![0x00_u8]))]),
+            Value::list([crate::test_values::text("a"), Value::from(cell)]),
+            Value::record([(
+                crate::test_values::label("x"),
+                crate::test_values::text("1"),
+            )]),
+            Value::record([(Label::from(cell), Value::from(vec![0x00_u8]))]),
         ];
         for value in structures {
             let (text, structural) = to_clipboard(&value);
@@ -4167,11 +4341,14 @@ mod tests {
         // Atoms read in other apps; alien text pastes sensibly — and
         // TEXT IS NEVER STRUCTURE: characters that happen to spell
         // Value JSON read as the string they are.
-        assert_eq!(to_clipboard(&Value::from("hi")).0, "\"hi\"");
+        assert_eq!(to_clipboard(&crate::test_values::text("hi")).0, "\"hi\"");
         assert_eq!(to_clipboard(&Value::from(vec![0xff_u8])).0, "0xff");
-        assert_eq!(from_clipboard("loose text"), Value::from("loose text"));
+        assert_eq!(
+            from_clipboard("loose text"),
+            crate::test_values::text("loose text")
+        );
         let spelled = to_clipboard(&Value::record([])).0;
-        assert_eq!(from_clipboard(&spelled), Value::from(spelled.as_str()));
+        assert_eq!(from_clipboard(&spelled), crate::test_values::text(&spelled));
     }
 
     #[test]
@@ -4179,7 +4356,10 @@ mod tests {
         let lib = crate::conventions::library();
         let (mut doc, cell) = doc_of(vec![
             progred_name::field("roof"),
-            (Label::from("kind"), Value::from("building")),
+            (
+                crate::test_values::label("kind"),
+                crate::test_values::text("building"),
+            ),
         ]);
         let sources = src(&doc, &lib);
         let names = Names::convention();
@@ -4205,9 +4385,11 @@ mod tests {
         assert!(label_stage.iter().all(|d| d != "new record"));
         assert!(label_stage.iter().any(|d| d == "new cell"));
         let label_blob = completion_entries(&sources, &names, false, true, "0xff");
+        assert_eq!(label_blob[0].display, "0xff");
+        assert_eq!(label_blob[0].detail.as_deref(), Some("new label"));
         assert!(matches!(
             &label_blob[0].action,
-            EntryAction::Value(value) if value.as_str() == Some("0xff")
+            EntryAction::NewLabel(name) if name == "0xff"
         ));
 
         // A blob query leads with the blob, its string form below.
@@ -4233,12 +4415,14 @@ mod tests {
         // exactly the id matches — ids are for reading; want it
         // reachable, name it.
         let unnamed = new_cell_id();
-        doc.cells.set_value(unnamed, Value::from("x"));
+        doc.cells.set_value(unnamed, crate::test_values::text("x"));
         let sources = src(&doc, &lib);
         let entries = completion_entries(&sources, &names, false, false, &short_id(unnamed));
         let atom = entries
             .iter()
-            .position(|e| matches!(&e.action, EntryAction::Value(v) if v.as_str().is_some()))
+            .position(
+                |e| matches!(&e.action, EntryAction::Value(v) if progred_text::read(v).is_some()),
+            )
             .unwrap();
         let reference = entries
             .iter()
@@ -4255,7 +4439,10 @@ mod tests {
         // root value.
         let a = new_cell_id();
         let mut cells = Cells::new();
-        cells.set_value(a, Value::record([(Label::from("next"), Value::from(a))]));
+        cells.set_value(
+            a,
+            Value::record([(crate::test_values::label("next"), Value::from(a))]),
+        );
         let doc = Document {
             root: Some(Value::from(a)),
             cells,
@@ -4282,7 +4469,10 @@ mod tests {
     #[test]
     fn any_valued_cell_and_any_container_collapse() {
         let lib = Cells::new();
-        let (doc, _) = doc_of(vec![(Label::from("kind"), Value::from("building"))]);
+        let (doc, _) = doc_of(vec![(
+            crate::test_values::label("kind"),
+            crate::test_values::text("building"),
+        )]);
         let sources = src(&doc, &lib);
         let mut collapse = Collapse::default();
         // A plain (non-cycle) cell collapses to ( … ) via the same
@@ -4306,14 +4496,23 @@ mod tests {
     }
 
     #[test]
-    fn minting_seeds_bare_cells() {
+    fn minting_seeds_bare_and_named_cells() {
         // A mint is fully bare: a link with nothing said at all —
         // naming happens on the head afterward.
         let bare = resolve_entry(&EntryAction::NewCell);
-        assert!(bare.as_cell().is_some());
+        assert!(bare.unwrap().as_cell().is_some());
         // The value constructors commit pure values — nothing minted.
-        assert_eq!(resolve_entry(&EntryAction::NewList), Value::list([]));
-        assert_eq!(resolve_entry(&EntryAction::NewRecord), Value::record([]));
+        assert_eq!(resolve_entry(&EntryAction::NewList), Some(Value::list([])));
+        assert_eq!(
+            resolve_entry(&EntryAction::NewRecord),
+            Some(Value::record([]))
+        );
+
+        let (label, created) = resolve_label(&EntryAction::NewLabel("asdf".to_string())).unwrap();
+        let (cell, value) = created.unwrap();
+        assert_eq!(label.cell(), cell);
+        assert_eq!(progred_name::read(&value), Some("asdf"));
+        assert!(resolve_label(&EntryAction::Value(crate::test_values::text("no"))).is_none());
     }
 
     #[test]
@@ -4321,12 +4520,12 @@ mod tests {
         let doc = sample_document();
         let lib = crate::conventions::library();
         let sources = src(&doc, &lib);
-        // A string label seeds QUOTED — the spelling whose choice
-        // zero resolves back to the same string, so committing
+        // A cell label seeds its ordinary name — the spelling whose
+        // first choice resolves back to the same identity, so committing
         // untouched is a no-op rename.
         let tags = vec![key("shape"), Step::Follow, key("tags")];
         let pending = pending_rename(&sources, &tags).unwrap();
-        assert_eq!(pending.edit().unwrap().text(), "\"tags\"");
+        assert_eq!(pending.edit().unwrap().text(), "tags");
         let Selection::PendingEdge {
             parent, replacing, ..
         } = &pending
@@ -4334,7 +4533,7 @@ mod tests {
             panic!("a rename pends the edge");
         };
         assert_eq!(parent.as_slice(), &tags[..2]);
-        assert_eq!(replacing.as_ref(), Some(&Label::from("tags")));
+        assert_eq!(replacing.as_ref(), Some(&crate::test_values::label("tags")));
         // A cell label seeds by NAME — a spelling, not the identity;
         // another cell sharing the name may rank first, accepted.
         let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
@@ -4344,10 +4543,10 @@ mod tests {
             .as_record()
             .unwrap()
             .keys()
-            .filter_map(Label::as_cell)
+            .map(Label::cell)
             .find(|cell| sources.value(*cell).and_then(progred_name::read) == Some("stroke"))
             .unwrap();
-        let path = vec![key("shape"), Step::Follow, Step::Key(Label::Cell(stroke))];
+        let path = vec![key("shape"), Step::Follow, Step::Key(Label::from(stroke))];
         assert_eq!(
             pending_rename(&sources, &path)
                 .unwrap()
@@ -4384,7 +4583,7 @@ mod tests {
                 Some(&pending("\"a\"")),
                 &Hover::Entry(0)
             ),
-            Some(Value::from("a"))
+            Some(crate::test_values::text("a"))
         );
         assert_eq!(
             hover_value(
@@ -4394,7 +4593,7 @@ mod tests {
                 Some(&pending("\"ab\"")),
                 &Hover::Entry(0)
             ),
-            Some(Value::from("ab"))
+            Some(crate::test_values::text("ab"))
         );
         // Dead addresses answer nothing: a closed pending, a label
         // no longer in the document.
@@ -4420,7 +4619,7 @@ mod tests {
                 None,
                 &Hover::Label(vec![key("shape"), Step::Follow, key("tags")])
             ),
-            Some(Value::from("tags"))
+            Some(Value::from(sample_vocabulary::TAGS))
         );
     }
 
@@ -4445,7 +4644,7 @@ mod tests {
                 scale: 1.0,
                 cache: &mut cache,
             },
-            "\"tags\"",
+            "tags",
             &styles.label,
         );
         let z = KeyboardEvent {
@@ -4463,21 +4662,27 @@ mod tests {
         let edit = pending.edit_mut().unwrap();
         edit.cursor_to(caret_index(&layout, Point::ZERO));
         edit.handle_key(&presentation, &mut fonts, &mut layouts, &mut clipboard, &z);
-        assert_eq!(edit.text(), "z\"tags\"");
+        assert_eq!(edit.text(), "ztags");
         // ...and one past the right edge still appends.
         let mut pending = pending_rename(&sources, &tags).unwrap();
         let edit = pending.edit_mut().unwrap();
         edit.cursor_to(caret_index(&layout, Point::new(10_000.0, 7.0)));
         edit.handle_key(&presentation, &mut fonts, &mut layouts, &mut clipboard, &z);
-        assert_eq!(edit.text(), "\"tags\"z");
+        assert_eq!(edit.text(), "tagsz");
     }
 
     #[test]
     fn rename_carries_the_value_and_never_a_sibling() {
         let lib = Cells::new();
         let (mut doc, _cell) = doc_of(vec![
-            (Label::from("a"), Value::from("1")),
-            (Label::from("b"), Value::from("2")),
+            (
+                crate::test_values::label("a"),
+                crate::test_values::text("1"),
+            ),
+            (
+                crate::test_values::label("b"),
+                crate::test_values::text("2"),
+            ),
         ]);
         let parent = vec![Step::Follow];
         // A taken label declines whole: the sibling keeps its value.
@@ -4485,27 +4690,27 @@ mod tests {
             &mut doc,
             &lib,
             &parent,
-            &Label::from("a"),
-            Label::from("b")
+            &crate::test_values::label("a"),
+            crate::test_values::label("b")
         ));
         // A fresh label re-keys in one write, the value carried.
         assert!(rename_field(
             &mut doc,
             &lib,
             &parent,
-            &Label::from("a"),
-            Label::from("c")
+            &crate::test_values::label("a"),
+            crate::test_values::label("c")
         ));
         {
             let sources = src(&doc, &lib);
             assert_eq!(
                 sources.resolve(&[Step::Follow, key("c")]).cloned(),
-                Some(Value::from("1"))
+                Some(crate::test_values::text("1"))
             );
             assert!(sources.resolve(&[Step::Follow, key("a")]).is_none());
             assert_eq!(
                 sources.resolve(&[Step::Follow, key("b")]).cloned(),
-                Some(Value::from("2"))
+                Some(crate::test_values::text("2"))
             );
         }
         // A missing field has nothing to carry.
@@ -4513,8 +4718,8 @@ mod tests {
             &mut doc,
             &lib,
             &parent,
-            &Label::from("gone"),
-            Label::from("d")
+            &crate::test_values::label("gone"),
+            crate::test_values::label("d")
         ));
     }
 
@@ -4526,7 +4731,10 @@ mod tests {
         // The root is an inline record of roles.
         assert!(doc.root.as_ref().unwrap().as_record().is_some());
         let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
-        assert_eq!(sources.value(roof).and_then(progred_name::read), Some("roof"));
+        assert_eq!(
+            sources.value(roof).and_then(progred_name::read),
+            Some("roof")
+        );
         // The material cell is referenced and fully bare.
         let material = sources
             .resolve(&[key("shape"), Step::Follow, key("material")])
@@ -4542,9 +4750,13 @@ mod tests {
             .as_record()
             .unwrap()
             .keys()
-            .find_map(Label::as_cell)
+            .map(Label::cell)
+            .find(|cell| sources.value(*cell).and_then(progred_name::read) == Some("stroke"))
             .unwrap();
-        assert_eq!(sources.value(stroke).and_then(progred_name::read), Some("stroke"));
+        assert_eq!(
+            sources.value(stroke).and_then(progred_name::read),
+            Some("stroke")
+        );
         // The style cell is shared by the root and the roof.
         assert_eq!(
             sources.resolve(&[key("style")]),
@@ -4566,7 +4778,7 @@ mod tests {
             sources
                 .value(origin)
                 .and_then(|value| value.as_record())
-                .and_then(|fields| fields.get(&Label::from("at"))),
+                .and_then(|fields| fields.get(&crate::test_values::label("at"))),
             Some(Value::Record(_))
         ));
         assert!(
@@ -4602,7 +4814,7 @@ mod tests {
             Selection::Pending { .. }
         ));
         // Valued, it selects normally.
-        doc.cells.set_value(bare, Value::from("v"));
+        doc.cells.set_value(bare, crate::test_values::text("v"));
         assert!(matches!(
             Selection::edge(&src(&doc, &lib), vec![Step::Follow]),
             Selection::Edge { .. }
@@ -4632,20 +4844,26 @@ mod tests {
         let lib = Cells::new();
         let (mut doc, cell) = doc_of(vec![
             progred_name::field("old"),
-            (Label::from("x"), Value::from("1")),
+            (
+                crate::test_values::label("x"),
+                crate::test_values::text("1"),
+            ),
         ]);
         let path = vec![
             Step::Follow,
-            Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+            Step::Key(Label::from(progred_name::vocabulary::NAME)),
         ];
 
         let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
         selection.edit_mut().unwrap().set_text("new");
         assert!(write_through(&mut doc, &lib, &mut selection));
-        assert_eq!(doc.cells.value(cell).and_then(progred_name::read), Some("new"));
+        assert_eq!(
+            doc.cells.value(cell).and_then(progred_name::read),
+            Some("new")
+        );
         assert!(!write_through(&mut doc, &lib, &mut selection));
 
-        // Empty is an ordinary string, not a hidden spelling of
+        // Empty is an ordinary text value, not a hidden spelling of
         // field absence.
         selection.edit_mut().unwrap().set_text("");
         write_through(&mut doc, &lib, &mut selection);
@@ -4654,10 +4872,8 @@ mod tests {
             doc.cells
                 .value(cell)
                 .and_then(Value::as_record)
-                .and_then(|fields| {
-                    fields.get(&Label::Cell(progred_name::vocabulary::NAME))
-                })
-                .and_then(Value::as_str),
+                .and_then(|fields| { fields.get(&Label::from(progred_name::vocabulary::NAME)) })
+                .and_then(progred_text::read),
             Some("")
         );
 
@@ -4665,11 +4881,12 @@ mod tests {
         // other record field; the rest of the value remains.
         assert!(delete_edge(&mut doc, &lib, &path));
         assert_eq!(doc.cells.value(cell).and_then(progred_name::read), None);
-        assert!(doc
-            .cells
-            .value(cell)
-            .and_then(Value::as_record)
-            .is_some_and(|fields| fields.contains_key(&Label::from("x"))));
+        assert!(
+            doc.cells
+                .value(cell)
+                .and_then(Value::as_record)
+                .is_some_and(|fields| fields.contains_key(&crate::test_values::label("x")))
+        );
         assert!(Selection::edge(&src(&doc, &lib), path).edit().is_none());
     }
 }
@@ -5095,8 +5312,8 @@ mod svg_bench {
             .find(|path| {
                 matches!(
                     path.last(),
-                    Some(Step::Key(Label::Cell(cell)))
-                        if *cell == progred_name::vocabulary::NAME
+                    Some(Step::Key(label))
+                        if label.cell() == progred_name::vocabulary::NAME
                 )
             })
             .expect("the sample has a cell head");
@@ -5113,7 +5330,7 @@ mod svg_bench {
     }
 
     fn key(s: &str) -> Step {
-        Step::Key(Label::from(s))
+        Step::Key(crate::test_values::label(s))
     }
 
     #[test]
@@ -5172,7 +5389,7 @@ mod svg_bench {
             .find(|descend| {
                 sources
                     .resolve(&descend.path)
-                    .is_some_and(|value| value.as_str().is_some())
+                    .is_some_and(|value| whole_text(value).is_some())
                     && projected_name_owner(&descend.path).is_none()
             })
             .expect("the sample has a string leaf");
@@ -5212,14 +5429,18 @@ mod svg_bench {
         Document {
             root: Some(Value::record([
                 (
-                    Label::from("tags"),
-                    Value::list([Value::from("a"), Value::from("b")]),
+                    crate::test_values::label("tags"),
+                    Value::list([crate::test_values::text("a"), crate::test_values::text("b")]),
                 ),
                 (
-                    Label::from("body"),
+                    crate::test_values::label("body"),
                     Value::list([
-                        Value::from("a long enough string that the flat literal cannot fit"),
-                        Value::from("and another beside it overflowing any width we render"),
+                        crate::test_values::text(
+                            "a long enough string that the flat literal cannot fit",
+                        ),
+                        crate::test_values::text(
+                            "and another beside it overflowing any width we render",
+                        ),
                     ]),
                 ),
             ])),
@@ -5322,7 +5543,7 @@ mod svg_bench {
                     detail: None,
                     matches: Vec::new(),
                     id: false,
-                    action: EntryAction::Value(Value::from("x")),
+                    action: EntryAction::Value(crate::test_values::text("x")),
                 },
                 Entry {
                     display: "new list".to_string(),
@@ -5421,7 +5642,7 @@ mod svg_bench {
         );
         render(
             &Document {
-                root: Some(Value::from("asdf")),
+                root: Some(crate::test_values::text("asdf")),
                 cells: Cells::new(),
             },
             Some(&Selection::Edge {
@@ -5435,7 +5656,7 @@ mod svg_bench {
         // The empty string under its write-through editor: quotes
         // stay snug, no slot minimum applies to string literals.
         let empty_string = Document {
-            root: Some(Value::from("")),
+            root: Some(crate::test_values::text("")),
             cells: Cells::new(),
         };
         let library = crate::conventions::library();
@@ -5461,9 +5682,9 @@ mod svg_bench {
         let doc = sample_document();
         let library = crate::conventions::library();
         let path = vec![
-            Step::Key(Label::from("shape")),
+            Step::Key(crate::test_values::label("shape")),
             Step::Follow,
-            Step::Key(Label::from("tags")),
+            Step::Key(crate::test_values::label("tags")),
         ];
         let rename = pending_rename(
             &Sources {
@@ -5485,7 +5706,7 @@ mod svg_bench {
                 doc: &doc,
                 library: &library,
             },
-            vec![Step::Key(Label::from("shape"))],
+            vec![Step::Key(crate::test_values::label("shape"))],
         )
         .unwrap();
         let Selection::PendingEdge {

@@ -68,7 +68,10 @@ mod tests {
             cell,
             Value::record([
                 progred_name::field("lib-name"),
-                (Label::from("a"), Value::from("1")),
+                (
+                    crate::test_values::label("a"),
+                    crate::test_values::text("1"),
+                ),
             ]),
         );
 
@@ -97,7 +100,7 @@ mod tests {
             sources
                 .value(cell)
                 .and_then(Value::as_record)
-                .and_then(|fields| fields.get(&Label::from("a"))),
+                .and_then(|fields| fields.get(&crate::test_values::label("a"))),
             None
         );
     }
@@ -108,9 +111,9 @@ mod tests {
         let doc_cell = new_cell_id();
         let bare = new_cell_id();
         let mut library = Cells::new();
-        library.set_value(lib_cell, Value::from("lib"));
+        library.set_value(lib_cell, crate::test_values::text("lib"));
         let mut cells = Cells::new();
-        cells.set_value(doc_cell, Value::from("doc"));
+        cells.set_value(doc_cell, crate::test_values::text("doc"));
 
         let doc = doc_of(cells.clone());
         let sources = Sources {
@@ -123,7 +126,7 @@ mod tests {
         assert!(!sources.external(bare));
         assert!(sources.writable(bare));
 
-        cells.set_value(lib_cell, Value::from("mine"));
+        cells.set_value(lib_cell, crate::test_values::text("mine"));
         let doc = doc_of(cells);
         let sources = Sources {
             doc: &doc,
@@ -142,10 +145,13 @@ mod tests {
             Value::record([
                 progred_name::field("scene"),
                 (
-                    Label::from("items"),
+                    crate::test_values::label("items"),
                     Value::list([
-                        Value::from("one"),
-                        Value::record([(Label::from("x"), Value::from("deep"))]),
+                        crate::test_values::text("one"),
+                        Value::record([(
+                            crate::test_values::label("x"),
+                            crate::test_values::text("deep"),
+                        )]),
                     ]),
                 ),
             ]),
@@ -164,11 +170,11 @@ mod tests {
         assert_eq!(
             sources.resolve(&[
                 Step::Follow,
-                Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+                Step::Key(Label::from(progred_name::vocabulary::NAME)),
             ]),
-            Some(&Value::from("scene"))
+            Some(&crate::test_values::text("scene"))
         );
-        let items = [Step::Follow, Step::Key(Label::from("items"))];
+        let items = [Step::Follow, Step::Key(crate::test_values::label("items"))];
         let positions: Vec<_> = sources
             .resolve(&items)
             .unwrap()
@@ -179,11 +185,14 @@ mod tests {
             .collect();
         let deep = [
             Step::Follow,
-            Step::Key(Label::from("items")),
+            Step::Key(crate::test_values::label("items")),
             Step::Element(positions[1].clone()),
-            Step::Key(Label::from("x")),
+            Step::Key(crate::test_values::label("x")),
         ];
-        assert_eq!(sources.resolve(&deep), Some(&Value::from("deep")));
+        assert_eq!(
+            sources.resolve(&deep),
+            Some(&crate::test_values::text("deep"))
+        );
 
         let bare_doc = Document {
             root: Some(Value::from(new_cell_id())),
@@ -199,7 +208,7 @@ mod tests {
         assert_eq!(
             sources.resolve(&[
                 Step::Follow,
-                Step::Key(Label::from("items")),
+                Step::Key(crate::test_values::label("items")),
                 Step::Element(gone),
             ]),
             None

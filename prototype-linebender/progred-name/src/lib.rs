@@ -14,7 +14,10 @@ pub mod vocabulary {
 }
 
 pub fn field(name: impl Into<String>) -> (Label, Value) {
-    (Label::Cell(vocabulary::NAME), Value::from(name.into()))
+    (
+        Label::from(vocabulary::NAME),
+        progred_text::value(name.into()),
+    )
 }
 
 pub fn value(name: impl Into<String>) -> Value {
@@ -28,27 +31,29 @@ pub fn record(name: impl Into<String>, fields: impl IntoIterator<Item = (Label, 
 pub fn read(value: &Value) -> Option<&str> {
     value
         .as_record()?
-        .get(&Label::Cell(vocabulary::NAME))?
-        .as_str()
+        .get(&Label::from(vocabulary::NAME))
+        .and_then(progred_text::read)
         .filter(|name| !name.is_empty())
 }
 
 pub fn library() -> Cells {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, value("name"));
+    cells.set_value(progred_text::vocabulary::UTF8, value("utf8"));
     cells
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_graph::new_cell_id;
 
     #[test]
     fn names_are_extensible_ordinary_record_data() {
         let mut fields = value("roof").as_record().unwrap().clone();
-        fields.insert(Label::from("detail"), Value::from("anything"));
+        fields.insert(Label::from(new_cell_id()), progred_text::value("anything"));
         assert_eq!(read(&Value::Record(fields)), Some("roof"));
-        assert_eq!(read(&Value::from("roof")), None);
+        assert_eq!(read(&progred_text::value("roof")), None);
 
         let unnamed = value("");
         assert_eq!(read(&unnamed), None);
@@ -56,8 +61,8 @@ mod tests {
             unnamed
                 .as_record()
                 .unwrap()
-                .get(&Label::Cell(vocabulary::NAME))
-                .and_then(Value::as_str),
+                .get(&Label::from(vocabulary::NAME))
+                .and_then(progred_text::read),
             Some("")
         );
     }
@@ -66,5 +71,9 @@ mod tests {
     fn the_name_relation_describes_itself_without_core_support() {
         let library = library();
         assert_eq!(library.value(vocabulary::NAME).and_then(read), Some("name"));
+        assert_eq!(
+            library.value(progred_text::vocabulary::UTF8).and_then(read),
+            Some("utf8")
+        );
     }
 }

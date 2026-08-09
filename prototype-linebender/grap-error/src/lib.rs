@@ -18,7 +18,7 @@ pub fn named(name: impl Into<String>) -> Value {
     progred_name::record(
         name,
         [(
-            Label::Cell(progred_isa::vocabulary::ISA),
+            Label::from(progred_isa::vocabulary::ISA),
             Value::from(vocabulary::ERROR),
         )],
     )
@@ -37,11 +37,12 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use progred_graph::new_cell_id;
 
     #[test]
     fn error_is_an_extensible_structural_classification() {
         let mut fields = value().as_record().unwrap().clone();
-        fields.insert(Label::from("detail"), Value::from("anything"));
+        fields.insert(Label::from(new_cell_id()), Value::from(vec![1]));
         assert!(is_error(&Value::Record(fields)));
         assert!(is_error(&named("specific failure")));
         assert_eq!(

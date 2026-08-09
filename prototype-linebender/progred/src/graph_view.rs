@@ -126,7 +126,7 @@ fn links(value: &Value, out: &mut Vec<CellId>) {
         }
         Value::Record(fields) => {
             for (label, field) in fields {
-                out.extend(label.as_cell());
+                out.push(label.cell());
                 links(field, out);
             }
         }
@@ -254,8 +254,7 @@ impl GraphView {
             for j in (i + 1)..snapshot.nodes.len() {
                 let (a, b) = (&snapshot.nodes[i], &snapshot.nodes[j]);
                 let delta = self.positions[a] - self.positions[b];
-                let force =
-                    unit(delta) * (REPULSION_K / delta.hypot2().max(1.0)).min(MAX_FORCE);
+                let force = unit(delta) * (REPULSION_K / delta.hypot2().max(1.0)).min(MAX_FORCE);
                 *forces.get_mut(a).unwrap() += force;
                 *forces.get_mut(b).unwrap() -= force;
             }
@@ -264,8 +263,7 @@ impl GraphView {
             let target = &GraphNode::Cell(*to);
             let delta = self.positions[target] - self.positions[source];
             let distance = delta.hypot().max(0.1);
-            let magnitude =
-                (ATTRACTION_K * (distance - REST_LENGTH)).clamp(-MAX_FORCE, MAX_FORCE);
+            let magnitude = (ATTRACTION_K * (distance - REST_LENGTH)).clamp(-MAX_FORCE, MAX_FORCE);
             let force = unit(delta) * magnitude;
             *forces.get_mut(source).unwrap() += force;
             *forces.get_mut(target).unwrap() -= force;
@@ -371,18 +369,12 @@ impl GraphView {
     /// Interprets a scroll over the panel: trackpad pixels pan, wheel
     /// lines and pages zoom toward the cursor. `cursor` in panel
     /// pixels from the panel center.
-    pub fn scroll(
-        &mut self,
-        delta: &ui_events::ScrollDelta,
-        cursor: Vec2,
-        scale: f64,
-    ) {
+    pub fn scroll(&mut self, delta: &ui_events::ScrollDelta, cursor: Vec2, scale: f64) {
         match delta {
             ui_events::ScrollDelta::PixelDelta(pixels) => {
                 self.pan += Vec2::new(pixels.x, pixels.y) / (scale * self.zoom);
             }
-            ui_events::ScrollDelta::LineDelta(_, y)
-            | ui_events::ScrollDelta::PageDelta(_, y) => {
+            ui_events::ScrollDelta::LineDelta(_, y) | ui_events::ScrollDelta::PageDelta(_, y) => {
                 self.zoom_at(1.1_f64.powf(f64::from(*y)), cursor, scale);
             }
         }
@@ -408,9 +400,7 @@ fn strip(value: &Value, cell: CellId) -> Option<Value> {
         Value::Record(fields) => Some(Value::Record(
             fields
                 .iter()
-                .filter_map(|(label, field)| {
-                    strip(field, cell).map(|field| (label.clone(), field))
-                })
+                .filter_map(|(label, field)| strip(field, cell).map(|field| (*label, field)))
                 .collect(),
         )),
     }
@@ -556,24 +546,29 @@ fn node_content(
         GraphNode::Cell(cell) => {
             match crate::conventions::display_name(sources, names, raw, *cell) {
                 Some(name) => layout_text(tcx, &format!("({name})"), size, TEXT, ui),
-                None => {
-                    layout_text(tcx, &format!("({})", short_id(*cell)), size, DIM_TEXT, mono)
-                }
+                None => layout_text(tcx, &format!("({})", short_id(*cell)), size, DIM_TEXT, mono),
             }
         }
         GraphNode::Root => {
-            let mark = match &doc.root {
-                Some(Value::Record(_)) => "{…}".to_string(),
-                Some(Value::List(elements)) if elements.is_empty() => "[ ]".to_string(),
-                Some(Value::List(_)) => "[…]".to_string(),
-                Some(Value::Atom(Atom::String(s))) => format!("\"{s}\""),
-                Some(other) => other.to_string(),
-                None => String::new(),
-            };
-            match &doc.root {
-                Some(Value::Atom(Atom::String(_))) => {
-                    layout_text(tcx, &mark, size, STRING_TEXT, ui)
-                }
+            let mark =
+                match doc.root.as_ref().and_then(|value| {
+                    crate::raw::whole_text(value).map(|text| format!("\"{text}\""))
+                }) {
+                    Some(text) => text,
+                    None => match &doc.root {
+                        Some(Value::Record(_)) => "{…}".to_string(),
+                        Some(Value::List(elements)) if elements.is_empty() => "[ ]".to_string(),
+                        Some(Value::List(_)) => "[…]".to_string(),
+                        Some(other) => other.to_string(),
+                        None => String::new(),
+                    },
+                };
+            match doc
+                .root
+                .as_ref()
+                .and_then(|value| crate::raw::whole_text(value))
+            {
+                Some(_) => layout_text(tcx, &mark, size, STRING_TEXT, ui),
                 _ => layout_text(tcx, &mark, size, DIM_TEXT, ui),
             }
         }
@@ -694,10 +689,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
                 Strength::None
             };
             let (external, bare) = match id {
-                GraphNode::Cell(cell) => (
-                    sources.external(*cell),
-                    sources.value(*cell).is_none(),
-                ),
+                GraphNode::Cell(cell) => (sources.external(*cell), sources.value(*cell).is_none()),
                 GraphNode::Root => (false, false),
             };
             Some(NodeView {
@@ -725,7 +717,9 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         if a <= b { (*a, *b) } else { (*b, *a) }
     };
     for (from, to) in &snapshot.edges {
-        *pair_counts.entry(pair(from, &GraphNode::Cell(*to))).or_default() += 1;
+        *pair_counts
+            .entry(pair(from, &GraphNode::Cell(*to)))
+            .or_default() += 1;
     }
     let mut pair_seen: HashMap<(GraphNode, GraphNode), usize> = HashMap::new();
 
@@ -853,20 +847,13 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         // Hit-testing mirrors draw order back-to-front: nodes over
         // background; the pane swallows everything inside the panel
         // so nothing lands on the document beneath.
-        let node_hits: Vec<(Rect, GraphNode)> = node_views
-            .iter()
-            .map(|node| (node.rect, node.id))
-            .collect();
-        let from_panel = move |window: Point| {
-            (((window - panel.center()) / px) - pan).to_point()
-        };
+        let node_hits: Vec<(Rect, GraphNode)> =
+            node_views.iter().map(|node| (node.rect, node.id)).collect();
+        let from_panel = move |window: Point| (((window - panel.center()) / px) - pan).to_point();
         // The panel is an occluding hover claim even over its ground,
         // so the tree beneath never lights. The drag handlers remain
         // ordinary event dispatch below.
-        if let Some(point) = p
-            .pointer()
-            .filter(|point| placement.contains(*point))
-        {
+        if let Some(point) = p.pointer().filter(|point| placement.contains(*point)) {
             p.claim_hover(hit_node(&node_hits, point).map(|(_, id)| id));
         }
         let press_node = press_node.clone();
@@ -874,25 +861,23 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         let pick = pick.clone();
         p.handler().on_pointer_down(move |ctx, event| {
             let point = Point::new(event.state.position.x, event.state.position.y);
-            event.button == Some(PointerButton::Primary)
-                && placement.contains(point)
-                && {
-                    if let Some((rect, id)) = hit_node(&node_hits, point) {
-                        let picked = command(&event.state.modifiers)
-                            && match id {
-                                GraphNode::Cell(cell) => pick(ctx, Value::from(cell)),
-                                GraphNode::Root => false,
-                            };
-                        if !picked {
-                            let world = from_panel(point);
-                            let node_world = from_panel(rect.center());
-                            press_node(ctx, id, world - node_world, point);
-                        }
-                    } else {
-                        press_background(ctx, point);
+            event.button == Some(PointerButton::Primary) && placement.contains(point) && {
+                if let Some((rect, id)) = hit_node(&node_hits, point) {
+                    let picked = command(&event.state.modifiers)
+                        && match id {
+                            GraphNode::Cell(cell) => pick(ctx, Value::from(cell)),
+                            GraphNode::Root => false,
+                        };
+                    if !picked {
+                        let world = from_panel(point);
+                        let node_world = from_panel(rect.center());
+                        press_node(ctx, id, world - node_world, point);
                     }
-                    true
+                } else {
+                    press_background(ctx, point);
                 }
+                true
+            }
         });
         let drag_to = drag_to.clone();
         p.handler().on_pointer_move(move |ctx, update| {
@@ -916,7 +901,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Cells, Label, new_cell_id};
+    use progred_graph::{Cells, new_cell_id};
 
     fn doc() -> (Document, CellId, CellId) {
         let mut cells = Cells::new();
@@ -925,11 +910,20 @@ mod tests {
         cells.set_value(
             a,
             Value::record([
-                (Label::from("to"), Value::from(b)),
-                (Label::from("x"), Value::from("2")),
+                (crate::test_values::label("to"), Value::from(b)),
+                (
+                    crate::test_values::label("x"),
+                    crate::test_values::text("2"),
+                ),
             ]),
         );
-        cells.set_value(b, Value::record([(Label::from("x"), Value::from("2"))]));
+        cells.set_value(
+            b,
+            Value::record([(
+                crate::test_values::label("x"),
+                crate::test_values::text("2"),
+            )]),
+        );
         (
             Document {
                 root: Some(Value::from(a)),
@@ -944,11 +938,22 @@ mod tests {
     fn snapshot_draws_cells_and_deduped_mentions() {
         let (mut doc, a, b) = doc();
         let snapshot = super::snapshot(&doc);
-        // Cells only: a and b, one mention, atoms as content.
-        assert_eq!(snapshot.nodes.len(), 2);
+        // Cell labels and the text convention's UTF8 field are real
+        // references too, so they participate in the topology.
+        assert_eq!(snapshot.nodes.len(), 5);
         assert!(snapshot.nodes.contains(&GraphNode::Cell(a)));
         assert!(snapshot.nodes.contains(&GraphNode::Cell(b)));
-        assert_eq!(snapshot.edges, vec![(GraphNode::Cell(a), b)]);
+        assert!(snapshot.edges.contains(&(GraphNode::Cell(a), b)));
+        assert!(
+            snapshot
+                .edges
+                .contains(&(GraphNode::Cell(a), crate::test_values::relation("to")))
+        );
+        assert!(
+            snapshot
+                .edges
+                .contains(&(GraphNode::Cell(a), progred_text::vocabulary::UTF8))
+        );
         // A link root adds no synthetic node.
         assert!(!snapshot.nodes.contains(&GraphNode::Root));
 
@@ -959,22 +964,29 @@ mod tests {
         doc.cells.set_value(
             a,
             Value::record([
-                (Label::from("to"), Value::from(b)),
+                (crate::test_values::label("to"), Value::from(b)),
                 (
-                    Label::from("points"),
+                    crate::test_values::label("points"),
                     Value::list([Value::from(b), Value::from(bare)]),
                 ),
                 (
-                    Label::from("at"),
-                    Value::record([(Label::from("of"), Value::from(b))]),
+                    crate::test_values::label("at"),
+                    Value::record([(crate::test_values::label("of"), Value::from(b))]),
                 ),
             ]),
         );
-        doc.root = Some(Value::record([(Label::from("shape"), Value::from(a))]));
+        doc.root = Some(Value::record([(
+            crate::test_values::label("shape"),
+            Value::from(a),
+        )]));
         let snapshot = super::snapshot(&doc);
         assert!(snapshot.nodes.contains(&GraphNode::Root));
         assert!(snapshot.nodes.contains(&GraphNode::Cell(bare)));
-        assert_eq!(snapshot.nodes.len(), 4);
+        assert!(
+            snapshot
+                .nodes
+                .contains(&GraphNode::Cell(crate::test_values::relation("shape")))
+        );
         assert_eq!(
             snapshot
                 .edges
@@ -994,9 +1006,8 @@ mod tests {
         for _ in 0..600 {
             view.step(&doc);
         }
-        let distance = (view.positions[&GraphNode::Cell(a)]
-            - view.positions[&GraphNode::Cell(b)])
-            .hypot();
+        let distance =
+            (view.positions[&GraphNode::Cell(a)] - view.positions[&GraphNode::Cell(b)]).hypot();
         assert!(
             distance > REST_LENGTH * 0.3 && distance < REST_LENGTH * 3.0,
             "settled at {distance}"
@@ -1010,10 +1021,10 @@ mod tests {
         doc.cells.set_value(
             a,
             Value::record([
-                (Label::from("to"), Value::from(b)),
+                (crate::test_values::label("to"), Value::from(b)),
                 (
-                    Label::from("refs"),
-                    Value::list([Value::from(b), Value::from("1")]),
+                    crate::test_values::label("refs"),
+                    Value::list([Value::from(b), crate::test_values::text("1")]),
                 ),
             ]),
         );
@@ -1028,8 +1039,8 @@ mod tests {
         assert_eq!(
             doc.cells.value(a),
             Some(&Value::record([(
-                Label::from("refs"),
-                Value::list([Value::from("1")])
+                crate::test_values::label("refs"),
+                Value::list([crate::test_values::text("1")])
             )]))
         );
         assert_eq!(doc.root, Some(Value::list([Value::from(a)])));

@@ -2,11 +2,34 @@
 
 Date: 2026-07-03
 
+## Cell-Only Labels And Library Text (2026-08-09)
+
+This tightens the current model further. The graph core now has exactly
+two atoms, `Cell(CellId)` and `Blob(Vec<u8>)`, and a record label is
+always a `CellId`. Strings are not a privileged scalar and there is no
+second, textual label namespace.
+
+UTF-8 text is the first library convention: `{utf8: <blob>}`. Its
+reader is open to unrelated fields, like the f64 reader, so text may
+carry provenance, history, or other facets. The normal projection uses
+the compact quoted editor only for the exact one-field representation;
+an enriched text record stays structural so no metadata is hidden.
+Quoted values in GID are surface sugar for this convention, not a core
+value variant.
+
+Free-form label authoring still feels direct. Choosing arbitrary text
+at a label pending mints a fresh random cell, stores the ordinary
+`{name: {utf8: <bytes>}}` fact on it, and uses that cell as the label.
+Choosing an existing named cell reuses its identity. Thus two labels
+may have the same displayed name while remaining distinct relations,
+and naming, scoping, multilingual display, and domain-specific label
+policies remain above the substrate.
+
 ## Cell Names Are Ordinary Graph Data (2026-08-08)
 
 This reverses the 2026-07-20 decision, preserved in the historical
 record below, to give every cell a special optional name alongside its
-value. The core model is again exactly the sketch in the next section:
+value. The core retains the identity/value split from the next section:
 `Cells` is `CellId -> Value`, and an identity absent from that table is
 bare. There is no `Cell` sum, metadata half, `set_name`, or `Step::Name`.
 
@@ -18,7 +41,7 @@ honest for multiple languages and naming systems: names may later be
 scoped relations, multilingual structures, or computed projections
 without changing the data model.
 
-The normal projection may consume a direct string-valued `name` field
+The normal projection may consume a direct text-convention `name` field
 and project that same field as the editable cell head; Raw shows the
 field in place and uses the short id as the head. The GID printer may
 peek at this convention to derive readable file-local binders, but the
@@ -63,12 +86,12 @@ atom set corrected and refs added.
 
 ```rust
 pub struct CellId([u8; 16]);                     // all 128 bits are identity
-pub enum Atom  { Cell(CellId), String(String), Blob(Vec<u8>) }
-pub enum Label { Cell(CellId), String(String) }  // narrowed from Atom
+pub enum Atom  { Cell(CellId), Blob(Vec<u8>) }
+pub struct Label(CellId);                        // every relation is identity
 pub enum Value {
     Atom(Atom),
     List(im::OrdMap<Position, Value>),           // unchanged from v2
-    Record(im::HashMap<Label, Value>),           // v2's entity map, moved inside
+    Record(im::OrdMap<Label, Value>),            // v2's entity map, moved inside
 }
 pub struct Cells { data: im::HashMap<CellId, Value> }  // one value per identity
 ```
@@ -102,7 +125,9 @@ and each thing it buys was previously a wart:
   recomputed. Paths are primitive; identity is a durability upgrade;
   a diagnostic never edits the document to point at line 3.
 
-Atom roster. The admission criteria, sharpened: an atom is admitted
+Atom roster. The bullets below preserve the July decision as history;
+the 2026-08-09 section above later removed `String` and narrowed labels
+to cells. The admission criteria, sharpened: an atom is admitted
 when it (a) maps onto the machine world, (b) matters to users, (c)
 canNOT be efficiently encoded by the other constructs, and (d) for
 the bootstrap set, is required for a human-usable editor that knows

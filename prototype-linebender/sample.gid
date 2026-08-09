@@ -1,35 +1,61 @@
 {
   "binders": {
+    "_4e84e": 66d97eac461f31df1c25e1f594f4e84e,
+    "_bd70e": 1175560c307dc5a5f07952b9c14bd70e,
     "amount": d64791086d78f3af9b14c9246feb647e,
+    "at": 796bd0cb8c526401ef9e66e0fcee7297,
     "body": fcf003c00ec4144cb748e8bbc7bb568e,
     "circle": f546a977c8531e0edffa7e524b393b9f,
+    "col": 8169555b56c9645b4d716490f7ac0461,
+    "color": 6fd8e3301682d707f6d764d4da1992ec,
     "corner": a49597a96cf95d964ef74b53a595d0fa,
     "double": 9a3e6697436ec8750734879738e868e0,
+    "double_pitch": 351af6582a156fee69ffa3d74691567d,
     "f64": d2bf4824cb297a418eeddb11d0d11b65,
-    "favorite": 8c233b116206e0de95217827108a3046,
+    "favorite": 9caf843a44dc9c285cb579030720c79c,
+    "favorite_value": 8c233b116206e0de95217827108a3046,
     "function": 652a661e44ea44bd48bce4306e6e5995,
     "left": 41810d0ee173fc6fa2e4c2e7be5bb862,
+    "material": 5e64226f8adb6d1127ea9c211374d6a3,
     "multiply": 818c27a54bbdd4a70606dfd681151e4d,
     "name": f8acc21e36354e5a97021ee48d29fed8,
+    "of": 182fe86d61710150cfb5ec9a3eeb538a,
     "origin": 14e404030754e167fedb1355c099ceeb,
     "params": a4e2f4e064fe700d4dd5e55404839382,
-    "pitch": 9f89aa70d4ec0ca6bbe5f7a8160470e4,
+    "pitch": 9fce25c72abe04863d2c13630cfe7a18,
+    "pitch_value": 9f89aa70d4ec0ca6bbe5f7a8160470e4,
+    "points": bd1dee69049bada400e87ff1fc8945cb,
+    "profile": 23dd123638416f5e68174995953078ff,
     "radius": 21025a64620233d9b9c28abe95f06224,
     "right": 042b0a534c159e02d347acdbda0a7306,
     "roof": 1c1d05806d62128e74118e73a7568812,
+    "row": 2d5252ab4127388835607499a4e9fbf9,
+    "shape": 59c8a911aac219d73effad2b3796e1f9,
     "stroke": 85e5ce37a0f8f98fe7a4b907e4744623,
+    "style": 823eabd35733efeebef1ff992e56d65e,
+    "swatch": 31dea76979345cf5c02c1049ab9742cb,
+    "tags": a61e94fb9fe80a2c819b2c85942f2b2c,
   },
   "cells": {
     amount: {
       name: "amount",
     },
+    at: {
+      name: "at",
+    },
+    col: {
+      name: "col",
+    },
+    color: {
+      name: "color",
+    },
     corner: {
-      name: "corner",
-      "at": {
-        "col": "right",
-        "row": "bottom",
+      of: roof,
+      at: {
+        row: "bottom",
+        col: "right",
       },
-      "of": roof,
+      name: "corner",
     },
     double: {
       params: [
@@ -44,60 +70,96 @@
         function: multiply,
       },
     },
+    double_pitch: {
+      name: "double pitch",
+    },
+    favorite: {
+      name: "favorite",
+    },
+    material: {
+      name: "material",
+    },
+    of: {
+      name: "of",
+    },
     origin: {
-      name: "origin",
-      "at": {
-        "col": "left",
-        "row": "top",
+      at: {
+        row: "top",
+        col: "left",
       },
+      name: "origin",
+    },
+    pitch: {
+      name: "pitch",
+    },
+    points: {
+      name: "points",
+    },
+    profile: {
+      name: "profile",
     },
     roof: {
-      stroke: "hairline",
-      name: "roof",
-      "double pitch": {
-        function: double,
-        amount: pitch,
-      },
-      "material": 66d97eac461f31df1c25e1f594f4e84e,
-      "pitch": pitch,
-      "points": [
-        origin,
-        corner,
-      ],
-      "profile": {
+      profile: {
         radius: {
           right: {
             f64: 0x0000000000002040,
           },
           left: {
             function: double,
-            amount: pitch,
+            amount: pitch_value,
           },
           function: multiply,
         },
         function: circle,
       },
-      "style": 1175560c307dc5a5f07952b9c14bd70e,
-      "tags": [
+      double_pitch: {
+        function: double,
+        amount: pitch_value,
+      },
+      material: _4e84e,
+      style: _bd70e,
+      stroke: "hairline",
+      pitch: pitch_value,
+      tags: [
         "draft",
         "gabled",
       ],
+      points: [
+        origin,
+        corner,
+      ],
+      name: "roof",
+    },
+    row: {
+      name: "row",
+    },
+    shape: {
+      name: "shape",
     },
     stroke: {
       name: "stroke",
     },
-    1175560c307dc5a5f07952b9c14bd70e: {
-      "color": "rebeccapurple",
-      "swatch": 0x663399,
+    style: {
+      name: "style",
     },
-    favorite: corner,
-    pitch: {
+    swatch: {
+      name: "swatch",
+    },
+    tags: {
+      name: "tags",
+    },
+    _bd70e: {
+      swatch: 0x663399,
+      color: "rebeccapurple",
+    },
+    favorite_value: corner,
+    pitch_value: {
       f64: 0x0000000000000440,
     },
   },
   "root": {
-    "favorite": favorite,
-    "shape": roof,
-    "style": 1175560c307dc5a5f07952b9c14bd70e,
+    shape: roof,
+    style: _bd70e,
+    favorite: favorite_value,
   },
 }

@@ -3152,6 +3152,7 @@ dependencies = [
  "pollster",
  "progred-isa",
  "progred-name",
+ "progred-text",
  "progred_graph",
  "puri",
  "puri-vello",
@@ -3176,6 +3177,14 @@ dependencies = [
 
 [[package]]
 name = "progred-name"
+version = "0.1.0"
+dependencies = [
+ "progred-text",
+ "progred_graph",
+]
+
+[[package]]
+name = "progred-text"
 version = "0.1.0"
 dependencies = [
  "progred_graph",

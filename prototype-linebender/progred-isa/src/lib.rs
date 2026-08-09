@@ -11,13 +11,13 @@ pub mod vocabulary {
 }
 
 pub fn value(class: CellId) -> Value {
-    Value::record([(Label::Cell(vocabulary::ISA), Value::from(class))])
+    Value::record([(Label::from(vocabulary::ISA), Value::from(class))])
 }
 
 pub fn is(value: &Value, class: CellId) -> bool {
     value
         .as_record()
-        .and_then(|fields| fields.get(&Label::Cell(vocabulary::ISA)))
+        .and_then(|fields| fields.get(&Label::from(vocabulary::ISA)))
         .and_then(Value::as_cell)
         == Some(class)
 }
@@ -37,7 +37,7 @@ mod tests {
     fn classification_is_structural_and_extensible() {
         let class = new_cell_id();
         let mut fields = value(class).as_record().unwrap().clone();
-        fields.insert(Label::from("detail"), Value::from("anything"));
+        fields.insert(Label::from(new_cell_id()), Value::from(vec![1]));
         assert!(is(&Value::Record(fields), class));
         assert!(!is(&Value::from(class), class));
     }

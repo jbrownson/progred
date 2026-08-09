@@ -8,8 +8,9 @@ projection's grammar, made writable. It exists to bootstrap — hand- and
 LLM-authoring of documents and libraries while the editor's own
 authoring matures — and a binary sibling will join it when authoring
 moves inside the editor (same entries, no binders; a sibling, not a
-successor). No version field or header until the format matters
-beyond this repository.
+successor). No version field, migration branch, or compatibility reader
+until files exist beyond this repository; model changes update the
+parser and checked-in files together.
 
 ## Doctrine: saving canonicalizes
 
@@ -49,7 +50,9 @@ rule.
   the document.
 - **The two-namespace rule** — a bare token anywhere an identity can
   stand is a gid if it parses as one, else a binder.
-- **string** — double-quoted, escapes `\"` `\\` `\n` `\t`.
+- **quoted text** — double-quoted, escapes `\"` `\\` `\n` `\t`.
+  In value position this is surface sugar for the `progred-text`
+  `{utf8: <blob>}` convention, not a core atom.
 - **blob** — `0x` followed by an even number of hex digits;
   lowercase on write.
 - Punctuation: `{ } [ ] : ,`.
@@ -58,37 +61,42 @@ rule.
 
 The value grammar is the raw projection's:
 
-- `{label: value, …}` — a record. A QUOTED label is a string label;
-  a BARE token label is a cell label (a gid or binder — the label IS
-  a link). Duplicate labels in one record are an error.
+- `{label: value, …}` — a record. A label is always a cell identity,
+  written as a bare gid or binder (the label IS a link). Quoted labels
+  are invalid. Duplicate cell identities in one record are an error.
 - `[value, …]` — a list. Element positions are session identity,
   minted at load, stripped at save, never written.
-- Strings, blobs as above.
+- Quoted text convention values and blobs as above.
 - A bare token in value position is a reference — a link to that
   gid's cell.
 
 ## The file
 
-A file is one record — itself a well-formed gid value, so the format
-can describe itself — with up to three fields:
+A file is one reserved envelope with up to three fields. Its quoted
+keys are file syntax, not ordinary value labels:
 
 ```
 {
   "binders": {
+    "color": 4c945c6c52b304eb0c2d1503de6d8f77,
     "name": f8acc21e36354e5a97021ee48d29fed8,
+    "payload": e8160795427c912458edc7e28d75a8cc,
+    "shape": 777d80d6e03e9ae0f9c143678ab68a75,
+    "stroke": 34e8ba540a0297748f92540743779d3f,
+    "style": e64688dc84e4b835d86d6c1f4ad5726f,
     "swatch": 0f3ae682742540de963d02d5f4b1a5a5,
   },
   "cells": {
     name: {name: "name"},
-    roof1: {name: "roof", "stroke": "hairline"},
+    roof1: {name: "roof", stroke: "hairline"},
     21b4fa5c9d2c40de963d02d5f4b1a5a5: {name: "roof"},
-    9d2c1e10ab3440de963d02d5f4b1a5a5: {"payload": 0x663399},
+    9d2c1e10ab3440de963d02d5f4b1a5a5: {payload: 0x663399},
   },
-  "root": {"shape": roof1, "style": 9d2c1e10ab3440de963d02d5f4b1a5a5, "color": swatch},
+  "root": {shape: roof1, style: 9d2c1e10ab3440de963d02d5f4b1a5a5, color: swatch},
 }
 ```
 
-- **`binders`** — binder → gid. Keys are quoted labels but must fit
+- **`binders`** — binder → gid. Keys are quoted strings but must fit
   the binder token grammar (or the file errors), since binders stand
   bare at use sites. `binders` must PRECEDE any use of them
   (resolution mints as it parses, so a late table would collide with
@@ -108,7 +116,7 @@ can describe itself — with up to three fields:
 
 The `name` in the example is not GID syntax. It is a binder for the
 well-known `progred-name` cell, used as an ordinary record label. The
-bootstrap printer recognizes a string at that label as one optional
+bootstrap printer recognizes a text-convention value there as one optional
 hint for readable binders and ordering. The fact remains graph data:
 it need not exist or be unique, and other languages may use richer or
 entirely different naming conventions. Binders are file-local
@@ -133,14 +141,13 @@ serialization sugar and must be unique.
 The printer is deterministic from (document, binder table):
 
 - Binders: loaded and minted binders persist while their gids remain
-  mentioned; entries for vanished gids drop. A cell with a direct
-  simple-name fact may earn a fresh binder derived from its string
-  (sanitized to the token grammar and accepted only when it does not
-  collide); everything else spells as a gid literal. This is a
-  bootstrap presentation heuristic, not GID semantics.
+  mentioned; entries for vanished gids drop. Every remaining identity
+  gets a binder. A direct simple-name fact supplies the sanitized base;
+  otherwise the base is `_` plus the final five gid digits. Collisions
+  receive `_2`, `_3`, and so on. This is a bootstrap presentation
+  heuristic, not GID semantics.
 - `binders` sorted by binder; omitted when empty.
-- `cells` entries: identity labels spelled as their binder when one
-  exists, else the gid literal; cells with direct simple-name facts
+- `cells` entries: identity labels spelled by binder; cells with direct simple-name facts
   first sorted by (name, gid), then the rest by gid. Their values use
   the ordinary value printer; there is no special name-before-value
   layer.

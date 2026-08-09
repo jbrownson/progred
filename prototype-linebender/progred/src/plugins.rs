@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use progred_graph::Value;
+use progred_graph::{Label, Value};
 use wasmtime::{Config, Engine, Instance, Module, Store};
 
 const ABI_VERSION: u32 = 1;
@@ -136,7 +136,7 @@ impl Plugin {
 }
 
 /// The f64 plugin with its dispatch rule and memo: a record whose one
-/// field is the string label "f64" holding an eight-byte blob routes
+/// field is the f64 library cell holding an eight-byte blob routes
 /// to the plugin; everything else declines. Purity — fresh instance,
 /// zero imports — is what makes the memo sound.
 pub struct F64Plugin {
@@ -178,27 +178,29 @@ impl F64Plugin {
 }
 
 fn f64_bits(value: &Value) -> Option<[u8; 8]> {
-    // This is the frozen, string-labelled wire shape from the retained
-    // wasm spike, not the live Grap f64 recognizer. It stays closed
-    // because the plugin would otherwise replace a record while
-    // silently hiding fields it never received.
+    // The retained wasm spike receives only the numeric payload. This
+    // adapter stays closed because the plugin cannot preserve fields
+    // it never receives.
     let Value::Record(fields) = value else {
         return None;
     };
     if fields.len() != 1 {
         return None;
     }
-    let (label, field) = fields.iter().next()?;
-    (label.as_str() == Some("f64"))
-        .then(|| field.as_blob())
-        .flatten()
+    fields
+        .get(&Label::from(grap_f64::vocabulary::F64))
+        .and_then(Value::as_blob)
         .and_then(|bytes| bytes.try_into().ok())
 }
 
 /// Compile-if-stale keyed on mtime, the wasm cached with the build
 /// products.
 fn load_file(host: &Host, source: &Path, cache: &Path) -> Result<Plugin, String> {
-    let modified = |path: &Path| std::fs::metadata(path).and_then(|meta| meta.modified()).ok();
+    let modified = |path: &Path| {
+        std::fs::metadata(path)
+            .and_then(|meta| meta.modified())
+            .ok()
+    };
     let stale = match (modified(source), modified(cache)) {
         (Some(source), Some(cache)) => cache < source,
         _ => true,
@@ -220,7 +222,7 @@ fn load_file(host: &Host, source: &Path, cache: &Path) -> Result<Plugin, String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Atom, Label};
+    use progred_graph::{Label, new_cell_id};
 
     const ECHO: &str = r#"(module
   (memory (export "memory") 1)
@@ -264,18 +266,18 @@ mod tests {
         let plugin = host.load(&wasm).unwrap();
         let reply = plugin.project(&5.0_f64.to_le_bytes()).unwrap().unwrap();
         assert_eq!(String::from_utf8(reply).unwrap(), "5");
-        assert_eq!(plugin.project(&2.5_f64.to_le_bytes()).unwrap().unwrap(), b"2.5");
+        assert_eq!(
+            plugin.project(&2.5_f64.to_le_bytes()).unwrap().unwrap(),
+            b"2.5"
+        );
         // A wrong-width input is declined, not answered.
         assert_eq!(plugin.project(&[1, 2, 3]).unwrap(), None);
     }
 
     #[test]
-    fn legacy_dispatch_wants_exactly_its_f64_wire_shape() {
+    fn legacy_dispatch_wants_exactly_its_f64_adapter_shape() {
         let f64_value = |bytes: Vec<u8>| {
-            Value::record([(
-                Label::String("f64".into()),
-                Value::Atom(Atom::Blob(bytes)),
-            )])
+            Value::record([(Label::from(grap_f64::vocabulary::F64), Value::from(bytes))])
         };
         assert_eq!(
             f64_bits(&f64_value(2.5_f64.to_le_bytes().to_vec())),
@@ -285,25 +287,25 @@ mod tests {
         assert_eq!(f64_bits(&f64_value(vec![0, 0])), None);
         assert_eq!(
             f64_bits(&Value::record([(
-                Label::String("f32".into()),
-                Value::Atom(Atom::Blob(vec![0; 8])),
+                Label::from(new_cell_id()),
+                Value::from(vec![0; 8]),
             )])),
             None
         );
         assert_eq!(
             f64_bits(&Value::record([
                 (
-                    Label::String("f64".into()),
-                    Value::Atom(Atom::Blob(vec![0; 8])),
+                    Label::from(grap_f64::vocabulary::F64),
+                    Value::from(vec![0; 8]),
                 ),
-                (Label::String("note".into()), Value::Atom(Atom::String("x".into()))),
+                (Label::from(new_cell_id()), progred_text::value("x")),
             ])),
             None
         );
         assert_eq!(
             f64_bits(&Value::record([(
-                Label::String("f64".into()),
-                Value::Atom(Atom::String("5".into())),
+                Label::from(grap_f64::vocabulary::F64),
+                progred_text::value("5"),
             )])),
             None
         );

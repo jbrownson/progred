@@ -85,16 +85,21 @@ mod tests {
     use super::*;
     use crate::value::{Label, new_cell_id};
 
+    fn blob(text: &str) -> Value {
+        Value::from(text.as_bytes().to_vec())
+    }
+
     #[test]
     fn values_are_the_whole_cell_statement() {
         let mut cells = Cells::new();
         let cell = new_cell_id();
+        let x = new_cell_id();
         assert!(cells.value(cell).is_none());
 
-        cells.set_value(cell, Value::record([(Label::from("x"), Value::from("1"))]));
+        cells.set_value(cell, Value::record([(Label::from(x), blob("1"))]));
         assert!(matches!(cells.value(cell), Some(Value::Record(_))));
-        cells.set_value(cell, Value::list([Value::from("a")]));
-        assert_eq!(cells.value(cell), Some(&Value::list([Value::from("a")])));
+        cells.set_value(cell, Value::list([blob("a")]));
+        assert_eq!(cells.value(cell), Some(&Value::list([blob("a")])));
         cells.clear_value(cell);
         assert!(cells.value(cell).is_none());
     }
@@ -102,7 +107,7 @@ mod tests {
     #[test]
     fn noop_removal_keeps_ptr_eq_honest() {
         let mut cells = Cells::new();
-        cells.set_value(new_cell_id(), Value::from("x"));
+        cells.set_value(new_cell_id(), blob("x"));
         let before = cells.clone();
         cells.remove(new_cell_id());
         assert!(cells.ptr_eq(&before));
@@ -113,14 +118,14 @@ mod tests {
         let shared = new_cell_id();
         let fresh = new_cell_id();
         let mut mine = Cells::new();
-        mine.set_value(shared, Value::from("mine"));
+        mine.set_value(shared, blob("mine"));
         let mut other = Cells::new();
-        other.set_value(shared, Value::from("theirs"));
-        other.set_value(fresh, Value::from("new"));
+        other.set_value(shared, blob("theirs"));
+        other.set_value(fresh, blob("new"));
 
         mine.merge(other);
-        assert_eq!(mine.value(shared), Some(&Value::from("mine")));
-        assert_eq!(mine.value(fresh), Some(&Value::from("new")));
+        assert_eq!(mine.value(shared), Some(&blob("mine")));
+        assert_eq!(mine.value(fresh), Some(&blob("new")));
     }
 
     #[test]
@@ -128,10 +133,11 @@ mod tests {
         let mut cells = Cells::new();
         let first = new_cell_id();
         let second = new_cell_id();
+        let key = new_cell_id();
         cells.set_value(first, Value::from(vec![0x66, 0x33, 0x99]));
         cells.set_value(
             second,
-            Value::record([(Label::from("k"), Value::from(first))]),
+            Value::record([(Label::from(key), Value::from(first))]),
         );
 
         let json = serde_json::to_string(&cells).unwrap();

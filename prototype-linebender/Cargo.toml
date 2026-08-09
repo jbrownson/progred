@@ -8,6 +8,7 @@ members = [
     "progred",
     "progred-isa",
     "progred-name",
+    "progred-text",
     "progred_graph",
     "puri",
     "puri-vello",

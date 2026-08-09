@@ -11,6 +11,7 @@ grap-geometry = { path = "../grap-geometry" }
 progred_graph = { path = "../progred_graph" }
 progred-isa = { path = "../progred-isa" }
 progred-name = { path = "../progred-name" }
+progred-text = { path = "../progred-text" }
 im = "15"
 puri = { path = "../puri" }
 puri-vello = { path = "../puri-vello" }
