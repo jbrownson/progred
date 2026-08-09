@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-progred-name = { path = "../progred-name" }
-progred-graph = { path = "../.." }
+progred-name = { path = "../name" }
+progred-graph = { path = "../../graph" }
