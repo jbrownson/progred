@@ -1,7 +1,7 @@
 //! The f64 projection: eight little-endian bytes in, decimal text
 //! out. Compiled to wasm by the editor's compile service and called
 //! per novel value; the ABI is three exports and a shared linear
-//! memory (docs/projections.md).
+//! memory (`../../docs/projections.md`).
 
 #[unsafe(no_mangle)]
 pub extern "C" fn abi_version() -> u32 {

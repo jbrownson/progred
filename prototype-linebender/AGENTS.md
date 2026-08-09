@@ -3,7 +3,8 @@
 Read `MOTIVATION.md` for why this prototype exists, `docs/puri.md` for
 the UI runtime decision and plan, `docs/model.md` for the data and
 editor model decisions, and `docs/projections.md` for Grap's graph-
-embedded evaluator and the retained, superseded wasm spike.
+embedded evaluator and the retained, superseded wasm spike isolated in
+`experiments/rust-wasm-projection`.
 
 ## Cargo Build Cache
 

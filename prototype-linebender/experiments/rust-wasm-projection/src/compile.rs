@@ -1,7 +1,7 @@
 //! The compile service: plugin Rust in, wasm out, over pipes — source
 //! rides stdin, the module rides stdout, diagnostics ride stderr as
 //! rustc's JSON. No files on our side, no cargo in the loop
-//! (docs/projections.md).
+//! (`../../docs/projections.md`).
 
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};

@@ -1,8 +1,6 @@
 //! Window shell: winit + Vello plumbing around pure frame drawing.
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
-#[cfg(test)]
-mod compile;
 mod conventions;
 mod filter;
 mod gid;
@@ -10,9 +8,6 @@ mod graph_view;
 mod history;
 mod hover;
 mod layout;
-#[cfg(test)]
-#[allow(dead_code)]
-mod plugins;
 mod raw;
 mod sources;
 mod store;

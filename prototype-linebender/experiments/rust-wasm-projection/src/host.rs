@@ -1,8 +1,9 @@
-//! Plugins: wasm modules called as pure functions. One compiled
+//! Wasm projection modules called as pure functions. One compiled
 //! Module per plugin; a fresh Store per call, so no state survives a
 //! call; zero imports, so nothing impure exists for the guest to
 //! reach. A watchdog ticks the engine's epoch so a wedged plugin
-//! traps out instead of wedging the editor (docs/projections.md).
+//! traps out instead of wedging the editor
+//! (`../../docs/projections.md`).
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -148,10 +149,10 @@ pub struct F64Plugin {
 impl F64Plugin {
     pub fn load() -> Result<F64Plugin, String> {
         let host = Host::new()?;
-        let source = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../plugins/f64.rs"));
+        let source = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/guest/f64.rs"));
         let cache = Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../target/plugins/f64.wasm"
+            "/../../target/experiments/rust-wasm-projection/f64.wasm"
         ));
         let plugin = load_file(&host, source, cache)?;
         Ok(F64Plugin {
@@ -261,7 +262,7 @@ mod tests {
 
     #[test]
     fn the_checked_in_plugin_compiles_and_decodes() {
-        let wasm = crate::compile::compile(include_str!("../../plugins/f64.rs")).unwrap();
+        let wasm = crate::compile::compile(include_str!("../guest/f64.rs")).unwrap();
         let host = Host::new().unwrap();
         let plugin = host.load(&wasm).unwrap();
         let reply = plugin.project(&5.0_f64.to_le_bytes()).unwrap().unwrap();

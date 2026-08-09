@@ -1,0 +1,10 @@
+[package]
+name = "grap-f64"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+grap = { path = "../.." }
+grap-error = { path = "../grap-error" }
+progred-name = { path = "../../../graph/conventions/progred-name" }
+progred-graph = { path = "../../../graph/progred-graph" }
