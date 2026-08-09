@@ -10,6 +10,7 @@
     "function": 652a661e44ea44bd48bce4306e6e5995,
     "left": 41810d0ee173fc6fa2e4c2e7be5bb862,
     "multiply": 818c27a54bbdd4a70606dfd681151e4d,
+    "name": f8acc21e36354e5a97021ee48d29fed8,
     "origin": 14e404030754e167fedb1355c099ceeb,
     "params": a4e2f4e064fe700d4dd5e55404839382,
     "pitch": 9f89aa70d4ec0ca6bbe5f7a8160470e4,
@@ -19,18 +20,22 @@
     "stroke": 85e5ce37a0f8f98fe7a4b907e4744623,
   },
   "cells": {
-    amount: {"name": "amount"},
-    corner: {"name": "corner", "value": {
+    amount: {
+      name: "amount",
+    },
+    corner: {
+      name: "corner",
       "at": {
         "col": "right",
         "row": "bottom",
       },
       "of": roof,
-    }},
-    double: {"name": "double", "value": {
+    },
+    double: {
       params: [
         amount,
       ],
+      name: "double",
       body: {
         right: {
           f64: 0x0000000000000040,
@@ -38,19 +43,17 @@
         left: amount,
         function: multiply,
       },
-    }},
-    favorite: {"name": "favorite", "value": corner},
-    origin: {"name": "origin", "value": {
+    },
+    origin: {
+      name: "origin",
       "at": {
         "col": "left",
         "row": "top",
       },
-    }},
-    pitch: {"name": "pitch", "value": {
-      f64: 0x0000000000000440,
-    }},
-    roof: {"name": "roof", "value": {
+    },
+    roof: {
       stroke: "hairline",
+      name: "roof",
       "double pitch": {
         function: double,
         amount: pitch,
@@ -79,12 +82,18 @@
         "draft",
         "gabled",
       ],
-    }},
-    stroke: {"name": "stroke"},
-    1175560c307dc5a5f07952b9c14bd70e: {"value": {
+    },
+    stroke: {
+      name: "stroke",
+    },
+    1175560c307dc5a5f07952b9c14bd70e: {
       "color": "rebeccapurple",
       "swatch": 0x663399,
-    }},
+    },
+    favorite: corner,
+    pitch: {
+      f64: 0x0000000000000440,
+    },
   },
   "root": {
     "favorite": favorite,

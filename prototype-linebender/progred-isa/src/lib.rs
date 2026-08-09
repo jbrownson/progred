@@ -24,7 +24,7 @@ pub fn is(value: &Value, class: CellId) -> bool {
 
 pub fn library() -> Cells {
     let mut cells = Cells::new();
-    cells.set_name(vocabulary::ISA, "isa");
+    cells.set_value(vocabulary::ISA, progred_name::value("isa"));
     cells
 }
 

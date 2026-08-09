@@ -425,11 +425,10 @@ pub fn node_value(doc: &Document, node: &GraphNode) -> Option<Value> {
 }
 
 /// Deletes the selected node from the graph: a cell is fully
-/// detached — its table entry (name and value) removed, the root
-/// cleared if it is the root link, and every link to it anywhere
-/// unlinked; a cell whose whole value was such a link keeps its name
-/// and goes valueless. The root node empties the root. Unreferenced
-/// cells simply stop appearing.
+/// detached — its table entry removed, the root cleared if it is the
+/// root link, and every link to it anywhere unlinked; a cell whose
+/// whole value was such a link becomes bare. The root node empties
+/// the root. Unreferenced cells simply stop appearing.
 pub fn delete_selection(doc: &mut Document, selection: &GraphSelection) -> bool {
     let before = doc.cells.clone();
     let before_root = doc.root.clone();
@@ -1025,7 +1024,7 @@ mod tests {
         ));
         // b's table entry is gone, a no longer links it, the list
         // occurrences dropped out with order preserved.
-        assert!(doc.cells.entry(b).is_none());
+        assert!(doc.cells.value(b).is_none());
         assert_eq!(
             doc.cells.value(a),
             Some(&Value::record([(
@@ -1035,10 +1034,9 @@ mod tests {
         );
         assert_eq!(doc.root, Some(Value::list([Value::from(a)])));
 
-        // A cell whose whole value was the link keeps its name and
-        // goes valueless.
+        // A cell whose whole value was the link becomes bare: there
+        // is no separate metadata half to preserve.
         let c = new_cell_id();
-        doc.cells.set_name(c, "keeper");
         doc.cells.set_value(c, Value::from(a));
         doc.root = Some(Value::from(a));
         assert!(delete_selection(
@@ -1046,7 +1044,6 @@ mod tests {
             &GraphSelection::Node(GraphNode::Cell(a))
         ));
         assert!(doc.root.is_none());
-        assert_eq!(doc.cells.name(c), Some("keeper"));
         assert!(doc.cells.value(c).is_none());
 
         // The root node empties the root.

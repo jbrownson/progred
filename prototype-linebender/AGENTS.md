@@ -49,14 +49,15 @@ EOF
 
 ## Key Design Rules
 
-- Documents are structural values plus the cell table; a cell's NAME is identity metadata in the data layer (2026-07-20) — everything else semantic (isa and friends) stays editor conventions, never data-layer features
+- Documents are structural values plus a direct `CellId -> Value` table; an absent entry is a bare cell. `name`, `isa`, and similar meanings are optional ordinary graph conventions, never data-layer features.
 - Resilient to invalid graph states — projections specify the happy path but must fall through gracefully to default/raw rendering; never crash or hide data on unexpected values
 - Compile-time code generation must fail loudly — if the semantics-driven codegen returns, malformed graph data must produce a clear compile error, never be silently skipped
 - Grap syntax is ordinary `Value` structure interpreted through library cell IDs. Core Grap owns only the function-definition/call vocabulary and a generic foreign-function registry. F64, geometry, and CAD concepts belong to separate Grap libraries with host implementations registered as needed; never grow them into the evaluator.
+- Graph conventions identify records by required positive evidence and are open to unrelated fields unless a domain explicitly defines a closed shape. Keep semantic recognition separate from whole-record presentation: a compact stand-in may replace a record only when it accounts for every field it would hide.
 - Cells resolve lexical binding first, then registered foreign functions, then document/library; never key reference semantics on whether a cell currently has a stored value.
 - Foreign functions map evaluated `Value` arguments to one `Value`; do not impose Rust's `Result` distinction at the boundary. Each library failure mode is a stable library cell returned as a custom-null value, not a freshly minted occurrence; its library value structurally classifies it with the shared `isa: error` convention and may carry more static metadata.
 - `isa` is a general Progred graph convention, independent of Grap and of any particular classification such as `error`; keep it outside `progred_graph` so the data model stays primitive, while consumers own their class identities and use the shared relation.
-- Well-known library cell IDs are once-minted random identities, never names or hashes of names; their readable names remain ordinary library metadata.
+- Well-known library cell IDs are once-minted random identities, never names or hashes of names; readable names are ordinary `progred-name` graph facts.
 - `CellId` is an opaque 128-bit identity, not an RFC UUID: all bits are random, with no version or variant fields. Preserve its canonical 32-hex gid spelling and existing hyphenated Serde spelling.
 - Evaluation is fueled and dependency-reporting. A failed domain projection declines to Raw rendering; invalid programs never hide their underlying graph structure.
 

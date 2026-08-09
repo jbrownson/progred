@@ -20,7 +20,7 @@ lenient file and saving rewrites it canonically. Strictness moves
 from the reader to the writer, because being writable by hand is the
 format's purpose. Structural damage is still an error: an unbalanced
 brace or quote, a duplicated label within one record, a blob of odd
-length, an unknown escape, an entry with neither name nor value.
+length, an unknown escape, or a cell label with no following value.
 
 Defined leniencies, exhaustively:
 
@@ -75,12 +75,14 @@ can describe itself — with up to three fields:
 ```
 {
   "binders": {
+    "name": f8acc21e36354e5a97021ee48d29fed8,
     "swatch": 0f3ae682742540de963d02d5f4b1a5a5,
   },
   "cells": {
-    roof1: {"name": "roof", "value": {"stroke": "hairline"}},
-    21b4fa5c9d2c40de963d02d5f4b1a5a5: {"name": "roof", "value": []},
-    9d2c1e10ab3440de963d02d5f4b1a5a5: {"value": {"payload": 0x663399}},
+    name: {name: "name"},
+    roof1: {name: "roof", "stroke": "hairline"},
+    21b4fa5c9d2c40de963d02d5f4b1a5a5: {name: "roof"},
+    9d2c1e10ab3440de963d02d5f4b1a5a5: {"payload": 0x663399},
   },
   "root": {"shape": roof1, "style": 9d2c1e10ab3440de963d02d5f4b1a5a5, "color": swatch},
 }
@@ -94,27 +96,31 @@ can describe itself — with up to three fields:
   earns its keep for gids DEFINED elsewhere — a library cell a value
   references — and for spelling this file's own cells readably. In a
   binary format it would have no reason to exist.
-- **`cells`** — a RECORD from identity labels to entries: the gid is
-  the unique key, so the structure says so, and the labels are
+- **`cells`** — a RECORD directly from identity labels to values: the
+  gid is the unique key, so the structure says so, and the labels are
   literally cell labels (the file is a value). An identity label is
   a bare token under the two-namespace rule — a gid literal, or a
-  binder (bound in `binders` or minted on first use). An entry is a
-  record with `"name"` and/or `"value"` — at least one present.
-  Duplicate NAMES across entries are the model's normal state;
-  stating the same CELL twice is the error above.
+  binder (bound in `binders` or minted on first use). There is no
+  entry wrapper and no metadata half: `{name: "roof"}` above is the
+  cell's actual record value. Stating the same CELL twice is the error
+  above; equal values and duplicate name facts are ordinary data.
 - **`root`** — the document's root value.
 
-Cell NAMES are for human consumption and carry no file semantics: no
-uniqueness, no binding. Binders are for files and must be unique.
-The two never mix.
+The `name` in the example is not GID syntax. It is a binder for the
+well-known `progred-name` cell, used as an ordinary record label. The
+bootstrap printer recognizes a string at that label as one optional
+hint for readable binders and ordering. The fact remains graph data:
+it need not exist or be unique, and other languages may use richer or
+entirely different naming conventions. Binders are file-local
+serialization sugar and must be unique.
 
 ## Load
 
 1. Read `binders` into the binder table.
 2. Walk `cells`: resolve each identity label (gid literal | binder,
    minting unbound binders); the same cell stated twice, by any
-   spelling, is an error. Entries populate the cell table: name and
-   value halves as given.
+   spelling, is an error. Store the following value directly in the
+   cell table.
 3. Read `root`, resolving references through the same binder table,
    minting unbound binders (a reference to a never-defined binder
    yields a bare cell — create-on-reference at the file layer).
@@ -126,15 +132,18 @@ The two never mix.
 
 The printer is deterministic from (document, binder table):
 
-- Binders: loaded and minted binders persist; entries for vanished
-  gids drop; cells that gained a unique name since load may earn a
-  fresh binder derived from the name (sanitized to the token
-  grammar, deduped against existing binders); everything else spells
-  as gid literals.
+- Binders: loaded and minted binders persist while their gids remain
+  mentioned; entries for vanished gids drop. A cell with a direct
+  simple-name fact may earn a fresh binder derived from its string
+  (sanitized to the token grammar and accepted only when it does not
+  collide); everything else spells as a gid literal. This is a
+  bootstrap presentation heuristic, not GID semantics.
 - `binders` sorted by binder; omitted when empty.
 - `cells` entries: identity labels spelled as their binder when one
-  exists, else the gid literal; named entries first sorted by
-  (name, gid), then nameless by gid; name before value.
+  exists, else the gid literal; cells with direct simple-name facts
+  first sorted by (name, gid), then the rest by gid. Their values use
+  the ordinary value printer; there is no special name-before-value
+  layer.
 - Records print their labels in the model's canonical label order.
 - Block layout with trailing commas and two-space indentation;
   short leaf-only forms may print flat. Layout is structural only —
@@ -148,3 +157,5 @@ The printer is deterministic from (document, binder table):
 - A gid atom in the data model itself.
 - Numeric convenience literals (an extension over tagged blobs).
 - The binary sibling format.
+- Domain-specific binder-hint dispatch beyond the bootstrap simple-name
+  convention.

@@ -178,6 +178,10 @@ impl F64Plugin {
 }
 
 fn f64_bits(value: &Value) -> Option<[u8; 8]> {
+    // This is the frozen, string-labelled wire shape from the retained
+    // wasm spike, not the live Grap f64 recognizer. It stays closed
+    // because the plugin would otherwise replace a record while
+    // silently hiding fields it never received.
     let Value::Record(fields) = value else {
         return None;
     };
@@ -266,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_wants_exactly_the_f64_shape() {
+    fn legacy_dispatch_wants_exactly_its_f64_wire_shape() {
         let f64_value = |bytes: Vec<u8>| {
             Value::record([(
                 Label::String("f64".into()),

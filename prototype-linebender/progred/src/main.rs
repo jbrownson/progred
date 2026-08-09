@@ -1594,23 +1594,12 @@ impl App {
 
     /// Copies the selected value — SHALLOW: a link is its identity
     /// alone, no cell values travel; the value carries its own inline
-    /// structure. A selected NAME copies its string; graph selections
-    /// copy their node's value.
+    /// structure. Graph selections copy their node's value.
     fn copy_selection(&self) -> bool {
         use clipboard_rs::{Clipboard, ClipboardContext};
         let sources = self.model.sources();
         let value = match &self.model.selection {
-            Some(Selected::Tree(selection)) => {
-                let path = selection.path();
-                match path.split_last() {
-                    Some((Step::Name, parent)) => sources
-                        .resolve(parent)
-                        .and_then(Value::as_cell)
-                        .and_then(|cell| sources.name(cell))
-                        .map(Value::from),
-                    _ => sources.resolve(path).cloned(),
-                }
-            }
+            Some(Selected::Tree(selection)) => sources.resolve(selection.path()).cloned(),
             Some(Selected::Graph(graph_view::GraphSelection::Node(node))) => {
                 graph_view::node_value(&self.model.doc, node)
             }

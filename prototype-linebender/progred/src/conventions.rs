@@ -1,29 +1,21 @@
-//! Editor policy over the data model's identity metadata. The old
-//! NAME well-known cell and its name-names-itself bootstrap died
-//! 2026-07-20 when names joined the cell table — a name now lives
-//! beside the value, naming the identity rather than hiding in its
-//! current record.
+//! Projection policy over ordinary graph conventions. The data model
+//! knows no names or classifications; libraries contribute values and
+//! projections decide how to interpret them.
 
 use crate::sources::Sources;
 use progred_graph::{CellId, Cells};
 use std::rc::Rc;
 
-/// The built-in libraries: read under every document through
-/// [`Sources`] — never written, never saved. Core Grap contributes
-/// only its function vocabulary; isa, error, f64, and geometry are
-/// ordinary Grap libraries composed beside it.
 pub fn library() -> Cells {
-    let mut cells = grap::library();
+    let mut cells = progred_name::library();
     cells.merge(progred_isa::library());
+    cells.merge(grap::library());
     cells.merge(grap_error::library());
     cells.merge(grap_f64::library());
     cells.merge(grap_geometry::library());
     cells
 }
 
-/// Host implementations available to Grap evaluation. This is kept
-/// separate from the library's graph data: a cell names each foreign
-/// function in both worlds, but only Rust holds the implementation.
 pub fn foreign_functions() -> grap::ForeignFunctions {
     let mut foreign = grap::ForeignFunctions::new();
     grap_f64::install(&mut foreign).expect("f64 foreign functions are distinct");
@@ -31,20 +23,19 @@ pub fn foreign_functions() -> grap::ForeignFunctions {
     foreign
 }
 
-/// The editor's name policy: every display-name lookup goes through
-/// this one function, making "what counts as a name" editor state —
-/// expandable (computed names, richer naming conventions layered
-/// over the table). The Raw view is not a policy of its own: lookups
-/// derive from the editor's one raw bit and skip the policy
-/// entirely, so nothing is ever swapped.
+/// A swappable display policy. The bootstrap policy recognizes the
+/// ordinary simple-name relation; languages and domains can layer
+/// scope-sensitive, multilingual, or computed descriptions later.
 #[derive(Clone)]
 pub struct Names(Rc<dyn Fn(&Sources, CellId) -> Option<String>>);
 
 impl Names {
-    /// The default: the identity table's own name.
-    pub fn table() -> Self {
+    pub fn convention() -> Self {
         Self(Rc::new(|sources, cell| {
-            sources.name(cell).map(str::to_owned)
+            sources
+                .value(cell)
+                .and_then(progred_name::read)
+                .map(str::to_owned)
         }))
     }
 
@@ -55,19 +46,12 @@ impl Names {
 
 impl Default for Names {
     fn default() -> Self {
-        Self::table()
+        Self::convention()
     }
 }
 
-/// The editor's one display-name read. Names are identity DATA, so
-/// the Raw view shows the table's own name directly — what stands
-/// down in Raw is the POLICY, which future convention layers
-/// (computed names, per-library conventions) will vary; today the
-/// policy reads the same table, so the two sides agree.
+/// Raw shows the uninterpreted value and therefore uses the short id.
+/// Other views ask their configured display policy.
 pub fn display_name(sources: &Sources, names: &Names, raw: bool, cell: CellId) -> Option<String> {
-    if raw {
-        sources.name(cell).map(str::to_owned)
-    } else {
-        names.of(sources, cell)
-    }
+    (!raw).then(|| names.of(sources, cell)).flatten()
 }

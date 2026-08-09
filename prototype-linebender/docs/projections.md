@@ -43,15 +43,16 @@ properties of that design rather than of an embedded language:
 
 Semantic labels are library cell IDs, not strings. The IDs are
 once-minted random 128-bit cell identities, checked in as library
-facts; they are not derived from, or hashes of, their names. Names are
-presentation metadata supplied by each library.
+facts; they are not derived from, or hashes of, their names. Their
+simple names are ordinary graph facts supplied by the `progred-name`
+library convention, not metadata in the cell table.
 
 Core Grap defines only three identities: `function`, `params`, and
 `body`. They distinguish function definitions and calls from ordinary
 records. Core Grap has no number or geometry type and no arithmetic or
 geometry operation.
 
-A function is a record with exactly two fields:
+A function is a record requiring two semantic fields:
 
 ```text
 {
@@ -61,10 +62,12 @@ A function is a record with exactly two fields:
 ```
 
 The parameter values are cells. Their list establishes arity and
-order. The function record may be inline and anonymous or be the value
-of a cell; naming and recursive reference need no additional language
-identity. The fixed `function` cell cannot itself be a parameter,
-because that label is the call record's one reserved slot.
+order. This is an open record pattern: unrelated fields do not stop the
+record from being a function. A function may be inline and anonymous
+or be the value of a cell; naming and recursive reference need no
+additional language identity. The fixed `function` cell cannot itself
+be a parameter, because that label is the call record's one reserved
+slot.
 
 A call is a record with a `function` field and one field per argument.
 Argument labels are the function's parameter cells:
@@ -79,16 +82,22 @@ Argument labels are the function's parameter cells:
 
 The apparent names above are binder sugar in gid notation. Matching is
 by cell identity. Renaming a parameter changes no program reference,
-and there is no parallel symbol-ID system.
+and there is no parallel symbol-ID system. The required parameter
+fields must be present, but additional fields are valid graph data and
+are not evaluated as arguments. Evaluation reports those unconsumed
+fields so a projection cannot silently replace them with only the
+computed result.
 
 Numbers remain a library convention rather than a data-model variant.
 The separate f64 library represents an f64 as eight little-endian bytes
-under its `f64` label. It defines strict binary `add` and `multiply`
-calls using its `left` and `right` parameter cells, and registers their
-implementations as Rust foreign functions. The geometry library owns
-`circle` and `radius`; its Rust-backed circle constructor consumes the
-f64 library's representation. Neither library changes Grap or
-`Value`.
+under its `f64` label. Recognition is positive and open: the presence
+of a valid `f64` field establishes the numeric facet even if the record
+also carries provenance, history, or some other facet. It defines
+strict binary `add` and `multiply` calls using its `left` and `right`
+parameter cells, and registers their implementations as Rust foreign
+functions. The geometry library applies the same rule to `circle` and
+`radius`; its Rust-backed circle constructor consumes the f64 library's
+representation. Neither library changes Grap or `Value`.
 
 ## Evaluation
 
@@ -111,6 +120,14 @@ fixed function-definition labels is a definition. Calls are
 call-by-value. Closures capture the lexical environment in which their
 definition is evaluated.
 
+These conventions match what is present, not what is absent. Record
+patterns are open unless a particular domain explicitly says
+otherwise. The current compact f64 and circle views are deliberately
+stricter than semantic recognition: they replace a whole record only
+when every field in that record belongs to the displayed facet.
+Otherwise the structural view remains visible, even though Grap and
+the relevant library can still use the recognized facet.
+
 Every external cell read is collected as a dependency. The set is
 reported even when evaluation fails, ready for future precise
 invalidation. Every evaluation also has explicit fuel, and direct cell
@@ -118,12 +135,14 @@ alias cycles receive a specific error. Invalid Grap never hides or
 damages the underlying document: a failed projection simply declines,
 and the raw record remains editable.
 
-The evaluator lives in its own `grap` crate and depends only on
-`progred_graph`. It knows the function representation and a generic
-foreign-function registry, but no f64, geometry, UI, file, or
+The evaluator lives in its own `grap` crate. Its evaluation machinery
+uses only `progred_graph`; the crate's vocabulary library additionally
+uses the optional `progred-name` convention for readable graph facts.
+It knows the function representation and a generic foreign-function
+registry, but no f64, geometry, UI, file, or
 Linebender concepts. `grap-f64` and `grap-geometry` are separate
-libraries composed by the application. Their graph-side identities
-and metadata live in the built-in library cells; their host-side
+libraries composed by the application. Their identities and ordinary
+graph-side values live in the built-in library cells; their host-side
 implementations live in the foreign-function registry.
 
 A registered foreign function consumes evaluated values and returns
@@ -137,8 +156,8 @@ occurrences. Each sentinel's library value is a record containing
 `isa: error`. The general `isa` relation lives in the independent
 `progred-isa` library: it is a convention over graph data, not part of
 Grap or `progred_graph`. The error library owns only the `error`
-classification and uses that relation. Additional static metadata can
-be added as fields on each sentinel's record. Error meaning remains
+classification and uses that relation. Additional static facts can be
+added as fields on each sentinel's record. Error meaning remains
 library data rather than an evaluator feature.
 
 ## First Vertical Slice

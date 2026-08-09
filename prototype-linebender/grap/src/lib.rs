@@ -84,7 +84,6 @@ pub enum Error {
     ReservedParameter(CellId),
     NotCallable(Value),
     MissingArgument(CellId),
-    UnexpectedArgument(Label),
     ForeignArgumentIsFunction(CellId),
     FunctionIsNotData,
 }
@@ -104,7 +103,7 @@ impl fmt::Display for Error {
                     .join(" -> ")
             ),
             Error::MalformedFunction => {
-                write!(f, "a function needs exactly params and body fields")
+                write!(f, "a function needs params and body fields")
             }
             Error::InvalidParameter(value) => {
                 write!(f, "function parameter is not a cell: {value:?}")
@@ -117,7 +116,6 @@ impl fmt::Display for Error {
             }
             Error::NotCallable(value) => write!(f, "value is not callable: {value:?}"),
             Error::MissingArgument(cell) => write!(f, "missing argument {cell}"),
-            Error::UnexpectedArgument(label) => write!(f, "unexpected argument {label}"),
             Error::ForeignArgumentIsFunction(cell) => {
                 write!(f, "foreign argument {cell} evaluated to a function")
             }
@@ -132,6 +130,10 @@ impl std::error::Error for Error {}
 pub struct Evaluation {
     pub result: Result<Value, Error>,
     pub dependencies: BTreeSet<CellId>,
+    /// Top-level record fields the matched Grap call did not consume.
+    /// They remain valid graph data even though evaluation ignored
+    /// them.
+    pub unconsumed: BTreeSet<Label>,
     pub steps: usize,
 }
 
@@ -155,6 +157,8 @@ struct Evaluator<'a, R> {
     initial_fuel: usize,
     dependencies: BTreeSet<CellId>,
     resolving: Vec<CellId>,
+    depth: usize,
+    unconsumed: BTreeSet<Label>,
 }
 
 impl<'a, R> Evaluator<'a, R>
@@ -173,6 +177,7 @@ where
         Evaluation {
             result,
             dependencies: self.dependencies,
+            unconsumed: self.unconsumed,
             steps: self.initial_fuel - self.remaining,
         }
     }
@@ -183,10 +188,12 @@ where
         environment: &Environment,
     ) -> Result<RuntimeValue, Error> {
         self.burn()?;
-        match expression {
+        let root = self.depth == 0;
+        self.depth += 1;
+        let result = match expression {
             Value::Atom(Atom::Cell(cell)) => self.eval_cell(*cell, environment),
             Value::Record(fields) if fields.contains_key(&Label::Cell(vocabulary::FUNCTION)) => {
-                self.eval_call(expression, environment)
+                self.eval_call(expression, environment, root)
             }
             Value::Record(fields)
                 if fields.contains_key(&Label::Cell(vocabulary::PARAMS))
@@ -197,7 +204,9 @@ where
             Value::Atom(_) | Value::List(_) | Value::Record(_) => {
                 Ok(RuntimeValue::Data(expression.clone()))
             }
-        }
+        };
+        self.depth -= 1;
+        result
     }
 
     fn burn(&mut self) -> Result<(), Error> {
@@ -250,36 +259,32 @@ where
         environment: &Environment,
     ) -> Result<RuntimeValue, Error> {
         let fields = expression.as_record().expect("matched record");
-        if fields.len() != 2 {
-            Err(Error::MalformedFunction)
-        } else {
-            match (
-                fields
-                    .get(&Label::Cell(vocabulary::PARAMS))
-                    .and_then(Value::as_list),
-                fields.get(&Label::Cell(vocabulary::BODY)),
-            ) {
-                (Some(parameters), Some(body)) => {
-                    let params = parameters
-                        .values()
-                        .map(|parameter| {
-                            parameter
-                                .as_cell()
-                                .ok_or_else(|| Error::InvalidParameter(parameter.clone()))
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    match (params.contains(&vocabulary::FUNCTION), duplicate(&params)) {
-                        (true, _) => Err(Error::ReservedParameter(vocabulary::FUNCTION)),
-                        (false, Some(duplicate)) => Err(Error::DuplicateParameter(duplicate)),
-                        (false, None) => Ok(RuntimeValue::Closure {
-                            params,
-                            body: body.clone(),
-                            environment: environment.clone(),
-                        }),
-                    }
+        match (
+            fields
+                .get(&Label::Cell(vocabulary::PARAMS))
+                .and_then(Value::as_list),
+            fields.get(&Label::Cell(vocabulary::BODY)),
+        ) {
+            (Some(parameters), Some(body)) => {
+                let params = parameters
+                    .values()
+                    .map(|parameter| {
+                        parameter
+                            .as_cell()
+                            .ok_or_else(|| Error::InvalidParameter(parameter.clone()))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                match (params.contains(&vocabulary::FUNCTION), duplicate(&params)) {
+                    (true, _) => Err(Error::ReservedParameter(vocabulary::FUNCTION)),
+                    (false, Some(duplicate)) => Err(Error::DuplicateParameter(duplicate)),
+                    (false, None) => Ok(RuntimeValue::Closure {
+                        params,
+                        body: body.clone(),
+                        environment: environment.clone(),
+                    }),
                 }
-                _ => Err(Error::MalformedFunction),
             }
+            _ => Err(Error::MalformedFunction),
         }
     }
 
@@ -287,6 +292,7 @@ where
         &mut self,
         expression: &Value,
         environment: &Environment,
+        root: bool,
     ) -> Result<RuntimeValue, Error> {
         let fields = expression.as_record().expect("matched record");
         let callable = self.eval(
@@ -305,13 +311,18 @@ where
                 .clone()),
             RuntimeValue::Data(value) => Err(Error::NotCallable(value.clone())),
         }?;
-        if let Some(unexpected) = fields
-            .keys()
-            .filter(|label| **label != Label::Cell(vocabulary::FUNCTION))
-            .find(|label| !label.as_cell().is_some_and(|cell| params.contains(&cell)))
-        {
-            Err(Error::UnexpectedArgument(unexpected.clone()))
-        } else if let Some(missing) = params
+        if root {
+            self.unconsumed.extend(
+                fields
+                    .keys()
+                    .filter(|label| {
+                        **label != Label::Cell(vocabulary::FUNCTION)
+                            && !label.as_cell().is_some_and(|cell| params.contains(&cell))
+                    })
+                    .cloned(),
+            );
+        }
+        if let Some(missing) = params
             .iter()
             .find(|parameter| !fields.contains_key(&Label::Cell(**parameter)))
         {
@@ -384,6 +395,8 @@ pub fn evaluate(
         initial_fuel: fuel,
         dependencies: BTreeSet::new(),
         resolving: Vec::new(),
+        depth: 0,
+        unconsumed: BTreeSet::new(),
     }
     .evaluate(expression)
 }
@@ -395,7 +408,7 @@ pub fn library() -> Cells {
         (vocabulary::PARAMS, "params"),
         (vocabulary::BODY, "body"),
     ] {
-        cells.set_name(cell, name);
+        cells.set_value(cell, progred_name::value(name));
     }
     cells
 }
@@ -488,6 +501,42 @@ mod tests {
         );
         assert_eq!(evaluation.result, Ok(Value::from("x")));
         assert_eq!(evaluation.dependencies, BTreeSet::from([first]));
+    }
+
+    #[test]
+    fn function_and_call_patterns_are_open_to_unrelated_fields() {
+        let parameter = new_cell_id();
+        let definition = function([parameter], Value::from(parameter));
+        let definition = Value::record(
+            definition
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(Label::from("documentation"), Value::from("identity")),
+        );
+        let expression = call(definition, [(parameter, Value::from("argument"))]);
+        let expression = Value::record(
+            expression
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(Label::from("created-at"), Value::from("now")),
+        );
+        let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::new(), 20);
+        assert_eq!(evaluation.result, Ok(Value::from("argument")));
+        assert_eq!(
+            evaluation.unconsumed,
+            BTreeSet::from([Label::from("created-at")])
+        );
+
+        let malformed = Value::record([(
+            Label::Cell(vocabulary::PARAMS),
+            Value::list(Vec::<Value>::new()),
+        )]);
+        assert_eq!(
+            evaluate(&malformed, |_| None, &ForeignFunctions::new(), 10).result,
+            Err(Error::MalformedFunction)
+        );
     }
 
     #[test]
@@ -615,9 +664,22 @@ mod tests {
     #[test]
     fn vocabulary_is_only_graps_function_protocol() {
         let library = library();
-        assert_eq!(library.name(vocabulary::FUNCTION), Some("function"));
-        assert_eq!(library.name(vocabulary::PARAMS), Some("params"));
-        assert_eq!(library.name(vocabulary::BODY), Some("body"));
+        assert_eq!(
+            library
+                .value(vocabulary::FUNCTION)
+                .and_then(progred_name::read),
+            Some("function")
+        );
+        assert_eq!(
+            library
+                .value(vocabulary::PARAMS)
+                .and_then(progred_name::read),
+            Some("params")
+        );
+        assert_eq!(
+            library.value(vocabulary::BODY).and_then(progred_name::read),
+            Some("body")
+        );
         assert_eq!(library.cells().count(), 3);
     }
 }

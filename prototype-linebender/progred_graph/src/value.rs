@@ -190,8 +190,9 @@ impl Atom {
     }
 }
 
-/// What can name a record field: a label MEANS — strings casually,
-/// cells by metadata lookup. Blobs, lists, and records cannot label.
+/// What can name a record field: strings label casually, while cells
+/// identify graph-defined relations and let projections decide how
+/// to present them. Blobs, lists, and records cannot label.
 /// The derived order is the records' consistent field order.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Label {
@@ -455,9 +456,7 @@ impl fmt::Display for Value {
 }
 
 /// A projection path step: into a record field, into a list element,
-/// through a link to the cell's current value, or to the cell's
-/// NAME — which is identity metadata, not a value, so a Name step
-/// never resolves; the editor's name arms handle it. A step that no
+/// or through a link to the cell's current value. A step that no
 /// longer resolves is the stale-path class the editor already
 /// tolerates.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -465,7 +464,6 @@ pub enum Step {
     Key(Label),
     Element(Position),
     Follow,
-    Name,
 }
 
 #[derive(Serialize, Deserialize)]

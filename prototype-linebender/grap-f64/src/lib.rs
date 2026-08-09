@@ -26,9 +26,8 @@ pub fn value(value: f64) -> Value {
 
 pub fn read(value: &Value) -> Option<f64> {
     let fields = value.as_record()?;
-    (fields.len() == 1)
-        .then(|| fields.get(&Label::Cell(vocabulary::F64)))
-        .flatten()
+    fields
+        .get(&Label::Cell(vocabulary::F64))
         .and_then(Value::as_blob)
         .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
         .map(f64::from_le_bytes)
@@ -66,13 +65,15 @@ pub fn library() -> Cells {
         (vocabulary::MULTIPLY, "multiply"),
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
+    ] {
+        cells.set_value(cell, progred_name::value(name));
+    }
+    for (cell, name) in [
         (vocabulary::LEFT_NOT_F64, "left is not f64"),
         (vocabulary::RIGHT_NOT_F64, "right is not f64"),
     ] {
-        cells.set_name(cell, name);
+        cells.set_value(cell, grap_error::named(name));
     }
-    cells.set_value(vocabulary::LEFT_NOT_F64, grap_error::value());
-    cells.set_value(vocabulary::RIGHT_NOT_F64, grap_error::value());
     cells
 }
 
@@ -102,6 +103,15 @@ mod tests {
     fn representation_is_library_data() {
         assert_eq!(read(&value(2.5)), Some(2.5));
         assert_eq!(read(&Value::from("2.5")), None);
+
+        let with_extra = Value::record(
+            value(2.5)
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(Label::from("unit"), Value::from("degrees")),
+        );
+        assert_eq!(read(&with_extra), Some(2.5));
     }
 
     #[test]
@@ -129,16 +139,26 @@ mod tests {
     }
 
     #[test]
-    fn library_names_are_metadata_for_random_identities() {
+    fn library_names_are_ordinary_facts_for_random_identities() {
         let library = library();
-        assert_eq!(library.name(vocabulary::F64), Some("f64"));
-        assert_eq!(library.name(vocabulary::ADD), Some("add"));
         assert_eq!(
-            library.name(vocabulary::LEFT_NOT_F64),
+            library.value(vocabulary::F64).and_then(progred_name::read),
+            Some("f64")
+        );
+        assert_eq!(
+            library.value(vocabulary::ADD).and_then(progred_name::read),
+            Some("add")
+        );
+        assert_eq!(
+            library
+                .value(vocabulary::LEFT_NOT_F64)
+                .and_then(progred_name::read),
             Some("left is not f64")
         );
         assert_eq!(
-            library.name(vocabulary::RIGHT_NOT_F64),
+            library
+                .value(vocabulary::RIGHT_NOT_F64)
+                .and_then(progred_name::read),
             Some("right is not f64")
         );
         assert!(grap_error::is_error(
@@ -147,6 +167,6 @@ mod tests {
         assert!(grap_error::is_error(
             library.value(vocabulary::RIGHT_NOT_F64).unwrap()
         ));
-        assert!(library.value(vocabulary::ADD).is_none());
+        assert!(library.value(vocabulary::ADD).is_some());
     }
 }

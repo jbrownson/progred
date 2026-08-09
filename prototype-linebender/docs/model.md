@@ -2,6 +2,38 @@
 
 Date: 2026-07-03
 
+## Cell Names Are Ordinary Graph Data (2026-08-08)
+
+This reverses the 2026-07-20 decision, preserved in the historical
+record below, to give every cell a special optional name alongside its
+value. The core model is again exactly the sketch in the next section:
+`Cells` is `CellId -> Value`, and an identity absent from that table is
+bare. There is no `Cell` sum, metadata half, `set_name`, or `Step::Name`.
+
+The bootstrap simple-name convention is an ordinary record field whose
+label is the randomly minted `progred-name` library cell. A record such
+as `{name: "roof", ...}` therefore contains one value, not a special
+name plus a wrapped value. `isa` works the same way. This keeps the core
+honest for multiple languages and naming systems: names may later be
+scoped relations, multilingual structures, or computed projections
+without changing the data model.
+
+The normal projection may consume a direct string-valued `name` field
+and project that same field as the editable cell head; Raw shows the
+field in place and uses the short id as the head. The GID printer may
+peek at this convention to derive readable file-local binders, but the
+hint has no model or file semantics and need not be unique. A bare cell
+has no place to keep a name, and an alias whose whole value is another
+cell is simply an alias.
+
+Conventions recognize the positive facts they require rather than
+rejecting records for having additional fields. Thus `{f64: bits,
+created-at: time}` still has an f64 facet, and `{isa: error, name:
+"missing cell"}` still has both classifications. A projection that
+replaces the whole record has a stricter obligation: it may do so only
+when it accounts for every field it would hide; enriched values remain
+structurally visible.
+
 ## Data Layer v3: Values and Cells (2026-07-20)
 
 Decided across the lambda-foundations exploration (the

@@ -11,7 +11,7 @@ pub fn get<'a>(value: &'a Value, spine: &[Step]) -> Option<&'a Value> {
     spine.iter().try_fold(value, |value, step| match step {
         Step::Key(label) => value.as_record()?.get(label),
         Step::Element(position) => value.as_list()?.get(position),
-        Step::Follow | Step::Name => None,
+        Step::Follow => None,
     })
 }
 
@@ -40,7 +40,7 @@ pub fn set(current: Option<&Value>, spine: &[Step], leaf: Value) -> Option<Value
             let rebuilt = set(child, rest, leaf)?;
             Some(Value::List(elements.update(position.clone(), rebuilt)))
         }
-        Some((Step::Follow | Step::Name, _)) => None,
+        Some((Step::Follow, _)) => None,
     }
 }
 
@@ -72,7 +72,7 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
             let rebuilt = without(elements.get(position)?, rest)?;
             Some(Value::List(elements.update(position.clone(), rebuilt)))
         }
-        Some((Step::Follow | Step::Name, _)) => None,
+        Some((Step::Follow, _)) => None,
     }
 }
 

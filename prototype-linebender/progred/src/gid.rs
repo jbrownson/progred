@@ -284,13 +284,7 @@ impl Parser<'_> {
                             return Err("a cell stated twice".to_string());
                         }
                         p.eat(':')?;
-                        let entry = p.entry()?;
-                        if let Some(name) = &entry.name {
-                            cells.set_name(gid, name);
-                        }
-                        if let Some(value) = entry.value {
-                            cells.set_value(gid, value);
-                        }
+                        cells.set_value(gid, p.value()?);
                         Ok(())
                     })?;
                     Ok(())
@@ -307,54 +301,13 @@ impl Parser<'_> {
         Ok(Document { root, cells })
     }
 
-    fn entry(&mut self) -> Result<Entry, String> {
-        self.eat('{')?;
-        let mut entry = Entry {
-            name: None,
-            value: None,
-        };
-        let fields = self.separated('}', |p| {
-            let key = p.string()?;
-            p.eat(':')?;
-            Ok(match key.as_str() {
-                "name" => EntryField::Name(p.string()?),
-                "value" => EntryField::Value(p.value()?),
-                other => return Err(format!("unknown entry field `{other}`")),
-            })
-        })?;
-        for field in fields {
-            match field {
-                EntryField::Name(name) => {
-                    if name.is_empty() {
-                        return Err("an empty name is spelled by omission".to_string());
-                    }
-                    entry.name = Some(name);
-                }
-                EntryField::Value(value) => entry.value = Some(value),
-            }
-        }
-        if entry.name.is_none() && entry.value.is_none() {
-            return Err("an entry needs a name or a value".to_string());
-        }
-        Ok(entry)
-    }
-}
-
-struct Entry {
-    name: Option<String>,
-    value: Option<Value>,
-}
-
-enum EntryField {
-    Name(String),
-    Value(Value),
 }
 
 /// The canonical printer — deterministic from (document, binders).
 pub fn print(doc: &Document, binders: &Binders) -> String {
-    // Binders survive for gids the document still mentions; cells
-    // that gained a unique name earn a derived binder; the rest
-    // spell as gid literals.
+    // Binders survive for gids the document still mentions. As a
+    // bootstrap presentation heuristic, a direct simple-name field
+    // may suggest a new binder; the rest spell as gid literals.
     let mentioned = mentioned_gids(doc);
     let mut spell: BTreeMap<CellId, String> = BTreeMap::new();
     for (binder, gid) in binders {
@@ -367,7 +320,7 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     let mut named: Vec<(&str, CellId)> = doc
         .cells
         .iter()
-        .filter_map(|(gid, entry)| entry.name().map(|name| (name, *gid)))
+        .filter_map(|(gid, value)| progred_name::read(value).map(|name| (name, *gid)))
         .collect();
     named.sort();
     for (name, gid) in &named {
@@ -395,12 +348,12 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
         }
         out.push_str("  },\n");
     }
-    let mut entries: Vec<(CellId, Option<&str>)> = doc
+    let mut entries: Vec<(CellId, &Value)> = doc
         .cells
         .iter()
-        .map(|(gid, entry)| (*gid, entry.name()))
+        .map(|(gid, value)| (*gid, value))
         .collect();
-    entries.sort_by(|a, b| match (a.1, b.1) {
+    entries.sort_by(|a, b| match (progred_name::read(a.1), progred_name::read(b.1)) {
         (Some(x), Some(y)) => x.cmp(y).then(a.0.cmp(&b.0)),
         (Some(_), None) => std::cmp::Ordering::Less,
         (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -408,21 +361,12 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     });
     if !entries.is_empty() {
         out.push_str("  \"cells\": {\n");
-        for (gid, name) in entries {
+        for (gid, value) in entries {
             out.push_str("    ");
             out.push_str(&identity(&spell, gid));
-            out.push_str(": {");
-            if let Some(name) = name {
-                let _ = write!(out, "\"name\": {}", quoted(name));
-            }
-            if let Some(value) = doc.cells.value(gid) {
-                if name.is_some() {
-                    out.push_str(", ");
-                }
-                out.push_str("\"value\": ");
-                print_value(&mut out, value, &spell, 2);
-            }
-            out.push_str("},\n");
+            out.push_str(": ");
+            print_value(&mut out, value, &spell, 2);
+            out.push_str(",\n");
         }
         out.push_str("  },\n");
     }
@@ -569,19 +513,20 @@ mod tests {
     fn a_file_round_trips_canonically() {
         let text = r#"{
   "binders": {
+    "name": f8acc21e36354e5a97021ee48d29fed8,
     "swatch": 0f3ae682742540de963d02d5f4b1a5a5,
   },
   "cells": {
-    roof1: {"name": "roof", "value": {"stroke": "hairline", "tags": ["draft", "gabled"]}},
-    9d2c1e10ab3440de963d02d5f4b1a5a5: {"value": {"payload": 0x663399}},
+    roof1: {name: "roof", "stroke": "hairline", "tags": ["draft", "gabled"]},
+    9d2c1e10ab3440de963d02d5f4b1a5a5: {"payload": 0x663399},
   },
   "root": {"shape": roof1, "style": 9d2c1e10ab3440de963d02d5f4b1a5a5, "color": swatch},
 }
 "#;
         let (doc, binders) = parse_ok(text);
-        assert_eq!(binders.len(), 2);
+        assert_eq!(binders.len(), 3);
         let roof = binders["roof1"];
-        assert_eq!(doc.cells.name(roof), Some("roof"));
+        assert_eq!(doc.cells.value(roof).and_then(progred_name::read), Some("roof"));
         // The canonical print is a fixed point.
         let printed = print(&doc, &binders);
         let (again, binders_again) = parse_ok(&printed);
@@ -595,7 +540,7 @@ mod tests {
     fn leniencies_normalize_and_minting_persists() {
         // Uppercase gid, no trailing commas, a binder never declared:
         // all defined leniencies; saving canonicalizes.
-        let text = r#"{"cells": {florp: {"value": "x"}},
+        let text = r#"{"cells": {florp: "x"},
                        "root": {"a": florp, "b": 9D2C1E10AB3440DE963D02D5F4B1A5A5}}"#;
         let (doc, binders) = parse_ok(text);
         let florp = binders["florp"];
@@ -607,7 +552,7 @@ mod tests {
         // create-on-reference at the file layer.
         let (doc, binders) = parse_ok(r#"{"root": [ghost]}"#);
         let ghost = binders["ghost"];
-        assert!(doc.cells.entry(ghost).is_none());
+        assert!(doc.cells.value(ghost).is_none());
         assert_eq!(doc.root, Some(Value::list([Value::from(ghost)])));
     }
 
@@ -615,46 +560,54 @@ mod tests {
     fn a_cell_stated_twice_fails_and_duplicate_names_coexist() {
         // The same cell twice, by the same spelling or different
         // ones, refuses rather than clobbering.
-        assert!(parse(r#"{"cells": {x: {"value": "a"}, x: {"value": "b"}}}"#).is_err());
+        assert!(parse(r#"{"cells": {x: "a", x: "b"}}"#).is_err());
         let aliased = r#"{
             "binders": {"x": 9d2c1e10ab3440de963d02d5f4b1a5a5},
             "cells": {
-                x: {"value": "a"},
-                9d2c1e10ab3440de963d02d5f4b1a5a5: {"value": "b"},
+                x: "a",
+                9d2c1e10ab3440de963d02d5f4b1a5a5: "b",
             },
         }"#;
         assert!(parse(aliased).is_err());
-        // Duplicate NAMES are the model's normal state.
+        // Duplicate simple-name facts are ordinary graph data.
         let (doc, _) = parse_ok(
-            r#"{"cells": {
-                a: {"name": "twin", "value": "a"},
-                b: {"name": "twin", "value": "b"},
+            r#"{"binders": {"name": f8acc21e36354e5a97021ee48d29fed8}, "cells": {
+                a: {name: "twin", "payload": "a"},
+                b: {name: "twin", "payload": "b"},
             }}"#,
         );
         let twins = doc
             .cells
             .iter()
-            .filter(|(_, entry)| entry.name() == Some("twin"))
+            .filter(|(_, value)| progred_name::read(value) == Some("twin"))
             .count();
         assert_eq!(twins, 2);
     }
 
     #[test]
-    fn derived_binders_come_from_unique_names() {
+    fn derived_binders_come_from_simple_name_facts() {
         let mut cells = Cells::new();
         let gid = new_cell_id();
-        cells.set_name(gid, "grap program");
-        cells.set_value(gid, Value::from("body"));
+        cells.set_value(
+            gid,
+            progred_name::record(
+                "grap program",
+                [(Label::from("body"), Value::from("body"))],
+            ),
+        );
         let doc = Document {
             root: Some(Value::from(gid)),
             cells,
         };
         let printed = print(&doc, &Binders::new());
         assert!(printed.contains("\"grap_program\": "));
-        assert!(printed.contains("    grap_program: {\"name\": \"grap program\""));
+        assert!(printed.contains("    grap_program: {"));
         let (again, binders) = parse_ok(&printed);
         assert_eq!(
-            again.cells.name(binders["grap_program"]),
+            again
+                .cells
+                .value(binders["grap_program"])
+                .and_then(progred_name::read),
             Some("grap program")
         );
         assert_eq!(print(&again, &binders), printed);
@@ -666,9 +619,7 @@ mod tests {
         assert!(parse(r#"{"root": "unterminated}"#).is_err());
         assert!(parse(r#"{"root": {"a": "x", "a": "y"}}"#).is_err());
         assert!(parse(r#"{"root": 0x123}"#).is_err());
-        assert!(parse(r#"{"cells": {x: {}}}"#).is_err());
-        assert!(parse(r#"{"cells": {x: {"gid": y, "value": "v"}}}"#).is_err());
-        assert!(parse(r#"{"cells": {x: {"name": "", "value": "v"}}}"#).is_err());
+        assert!(parse(r#"{"cells": {x: }}"#).is_err());
         assert!(parse(r#"{"bogus": {}}"#).is_err());
         assert!(parse(r#"{"binders": {"x": notagid}}"#).is_err());
         assert!(parse(r#"{"root": 9-not-a-binder}"#).is_err());

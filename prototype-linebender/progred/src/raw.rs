@@ -1,9 +1,9 @@
 //! The raw projection: any document rendered with no schema, in the
 //! delimiter family — `(` cell `)`, `[` list `]`, `{` record `}`.
-//! A cell heads with its name (identity metadata, editable in
-//! place) or its short id; records are field rows, lists inline
-//! literals or bare element rows; atoms render as their values;
-//! positions are session bookkeeping and never render at all.
+//! A cell heads with its conventional simple name (the ordinary name
+//! field projected in place) or its short id; records are field rows,
+//! lists inline literals or bare element rows; atoms render as their
+//! values; positions are session bookkeeping and never render at all.
 
 use crate::conventions::Names;
 use crate::filter;
@@ -39,8 +39,8 @@ const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
 
 pub struct RawStyles {
     pub label: TextStyle,
-    /// A cell's own name, projected as its handle: the strongest text
-    /// in a block.
+    /// The conventional simple-name field, projected as a cell's
+    /// handle: the strongest text in a block.
     pub name: TextStyle,
     pub string: TextStyle,
     pub dim: TextStyle,
@@ -94,13 +94,12 @@ pub struct Document {
 
 /// A small document shaped like a real one. The root is an inline
 /// RECORD of roles — a document keys its parts by what they are to
-/// it, and needs no identity of its own to do so. Names live in the
-/// cell table and name individuals ("roof", not its kind — kinds are
-/// a future isa convention's job). The corner knows its roof (cycle
+/// it, and needs no identity of its own to do so. Simple names are
+/// ordinary record fields ("roof", not its kind). The corner knows its roof (cycle
 /// collapse on a real pattern); the style cell is unnamed and
 /// referenced twice (short-id heads, secondary marks); the stroke
-/// cell is a NAMED BARE floating field definition — a name and
-/// nothing else, referenced as a label, never enumerated; the
+/// cell holds only an ordinary name record and is referenced as a
+/// label; the
 /// material cell is fully bare — referenced before anything at all
 /// is said about it; the swatch is a blob; each point's position is
 /// an inline record, point-shaped data that wants to be a value; the
@@ -115,39 +114,43 @@ pub fn sample_document() -> Document {
     let roof = new_cell_id();
 
     let origin = new_cell_id();
-    cells.set_name(origin, "origin");
     cells.set_value(
         origin,
-        Value::record([(
-            Label::from("at"),
-            Value::record([
-                (Label::from("row"), Value::from("top")),
-                (Label::from("col"), Value::from("left")),
-            ]),
-        )]),
+        progred_name::record(
+            "origin",
+            [(
+                Label::from("at"),
+                Value::record([
+                    (Label::from("row"), Value::from("top")),
+                    (Label::from("col"), Value::from("left")),
+                ]),
+            )],
+        ),
     );
 
     let corner = new_cell_id();
-    cells.set_name(corner, "corner");
     cells.set_value(
         corner,
-        Value::record([
-            (
-                Label::from("at"),
-                Value::record([
-                    (Label::from("row"), Value::from("bottom")),
-                    (Label::from("col"), Value::from("right")),
-                ]),
-            ),
-            // A part that knows its whole: the cycle a real document
-            // has, rendered as a collapsed head rather than recursing
-            // forever.
-            (Label::from("of"), Value::from(roof)),
-        ]),
+        progred_name::record(
+            "corner",
+            [
+                (
+                    Label::from("at"),
+                    Value::record([
+                        (Label::from("row"), Value::from("bottom")),
+                        (Label::from("col"), Value::from("right")),
+                    ]),
+                ),
+                // A part that knows its whole: the cycle a real document
+                // has, rendered as a collapsed head rather than recursing
+                // forever.
+                (Label::from("of"), Value::from(roof)),
+            ],
+        ),
     );
 
     let stroke = new_cell_id();
-    cells.set_name(stroke, "stroke");
+    cells.set_value(stroke, progred_name::value("stroke"));
 
     let style = new_cell_id();
     cells.set_value(
@@ -162,17 +165,15 @@ pub fn sample_document() -> Document {
     let material = new_cell_id();
 
     let favorite = new_cell_id();
-    cells.set_name(favorite, "favorite");
     cells.set_value(favorite, Value::from(corner));
 
     let amount = new_cell_id();
-    cells.set_name(amount, "amount");
+    cells.set_value(amount, progred_name::value("amount"));
 
     let double = new_cell_id();
-    cells.set_name(double, "double");
     cells.set_value(
         double,
-        Value::record([
+        progred_name::record("double", [
             (
                 Label::Cell(grap::vocabulary::PARAMS),
                 Value::list([Value::from(amount)]),
@@ -195,7 +196,6 @@ pub fn sample_document() -> Document {
     );
 
     let pitch = new_cell_id();
-    cells.set_name(pitch, "pitch");
     cells.set_value(pitch, grap_f64::value(2.5));
 
     let double_pitch = || {
@@ -205,10 +205,9 @@ pub fn sample_document() -> Document {
         ])
     };
 
-    cells.set_name(roof, "roof");
     cells.set_value(
         roof,
-        Value::record([
+        progred_name::record("roof", [
             (
                 Label::from("points"),
                 Value::list([Value::from(origin), Value::from(corner)]),
@@ -306,6 +305,35 @@ pub enum StandIn {
     Circle { radius: f64 },
 }
 
+fn whole_f64(value: &Value) -> Option<f64> {
+    let number = grap_f64::read(value)?;
+    value
+        .as_record()?
+        .keys()
+        .all(|label| *label == Label::Cell(grap_f64::vocabulary::F64))
+        .then_some(number)
+}
+
+fn whole_circle(value: &Value) -> Option<f64> {
+    let radius = grap_geometry::read(value)?;
+    let fields = value.as_record()?;
+    let circle = fields
+        .get(&Label::Cell(grap_geometry::vocabulary::CIRCLE))?
+        .as_record()?;
+    let radius_value = circle.get(&Label::Cell(grap_geometry::vocabulary::RADIUS))?;
+    (fields
+        .keys()
+        .all(|label| *label == Label::Cell(grap_geometry::vocabulary::CIRCLE))
+        && circle
+            .keys()
+            .all(|label| *label == Label::Cell(grap_geometry::vocabulary::RADIUS))
+        && radius_value
+            .as_record()?
+            .keys()
+            .all(|label| *label == Label::Cell(grap_f64::vocabulary::F64)))
+    .then_some(radius)
+}
+
 /// The prototype's current presentation policy over evaluated Grap
 /// data. The evaluator itself knows neither numbers nor geometry.
 pub(crate) fn grap_stand_in(
@@ -313,13 +341,16 @@ pub(crate) fn grap_stand_in(
     resolve: impl Fn(CellId) -> Option<Value>,
     foreign: &grap::ForeignFunctions,
 ) -> Option<StandIn> {
-    grap::evaluate(expression, resolve, foreign, grap::DEFAULT_FUEL)
-        .result
-        .ok()
+    let evaluation = grap::evaluate(expression, resolve, foreign, grap::DEFAULT_FUEL);
+    evaluation
+        .unconsumed
+        .is_empty()
+        .then(|| evaluation.result.ok())
+        .flatten()
         .and_then(|value| {
-            grap_f64::read(&value)
+            whole_f64(&value)
                 .map(|number| StandIn::Text(number.to_string()))
-                .or_else(|| grap_geometry::read(&value).map(|radius| StandIn::Circle { radius }))
+                .or_else(|| whole_circle(&value).map(|radius| StandIn::Circle { radius }))
         })
 }
 
@@ -372,9 +403,8 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
 }
 
 impl Cx<'_> {
-    /// The display name at this projection, through the editor's one
-    /// read: names are identity data, so Raw shows the table's own —
-    /// only the policy stands down there.
+    /// The display name at this projection. Raw interprets no naming
+    /// convention and therefore falls back to the short id.
     fn name(&self, cell: CellId) -> Option<String> {
         crate::conventions::display_name(&self.sources, self.names, self.raw, cell)
     }
@@ -491,8 +521,7 @@ pub enum Selection {
 }
 
 impl Selection {
-    /// Select the value at `path`; a string value — or a cell's name
-    /// at a Name step — brings a focused editor (the root included —
+    /// Select the value at `path`; a string value brings a focused editor (the root included —
     /// its commits target the document's root field). Selecting an
     /// EMPTY VALUE SLOT is already authoring it — there is nothing
     /// there to select, only something to begin, so it pends
@@ -513,16 +542,10 @@ impl Selection {
         // An editor mounts only where write-through can land: the
         // owning cell must not be external.
         let edit = writable_at(sources, &path)
-            .then(|| match path.split_last() {
-                // An unnamed cell mounts an EMPTY name editor: typing
-                // names it.
-                Some((Step::Name, parent)) => sources
-                    .resolve(parent)
-                    .and_then(Value::as_cell)
-                    .map(|cell| line_edit(sources.name(cell).unwrap_or(""))),
-                _ => sources
+            .then(|| {
+                sources
                     .resolve(&path)
-                    .and_then(|value| value.as_str().map(line_edit)),
+                    .and_then(|value| value.as_str().map(line_edit))
             })
             .flatten();
         Selection::Edge {
@@ -590,22 +613,16 @@ fn last_follow(path: &[Step]) -> Option<usize> {
 }
 
 /// Whether a write at `path` can land: the owning cell — the one the
-/// path's last Follow crosses into, or for a Name step the named
-/// cell itself — must not be external. A path with no Follow is the
-/// document's own root spine and always writable.
+/// path's last Follow crosses into — must not be external. A path
+/// with no Follow is the document's own root spine and always
+/// writable.
 fn writable_at(sources: &Sources, path: &[Step]) -> bool {
-    match path.split_last() {
-        Some((Step::Name, parent)) => sources
-            .resolve(parent)
+    match last_follow(path) {
+        Some(index) => sources
+            .resolve(&path[..index])
             .and_then(Value::as_cell)
             .is_some_and(|cell| sources.writable(cell)),
-        _ => match last_follow(path) {
-            Some(index) => sources
-                .resolve(&path[..index])
-                .and_then(Value::as_cell)
-                .is_some_and(|cell| sources.writable(cell)),
-            None => true,
-        },
+        None => true,
     }
 }
 
@@ -638,10 +655,6 @@ pub fn delete_edge(doc: &mut Document, library: &Cells, path: &[Step]) -> bool {
                 None => false,
             }
         }
-        // Names are not edges: nothing to detach. Un-naming is
-        // emptying the name editor — the empty string being
-        // no-name's one spelling.
-        Some((Step::Name, _)) => false,
         Some((Step::Key(_) | Step::Element(_), _)) => {
             let write = {
                 let sources = Sources {
@@ -743,8 +756,9 @@ pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
     let seed = match key {
         Label::String(s) => format!("\"{s}\""),
         Label::Cell(cell) => sources
-            .name(*cell)
-            .map(str::to_string)
+            .value(*cell)
+            .and_then(progred_name::read)
+            .map(str::to_owned)
             .unwrap_or_else(|| short_id(*cell)),
     };
     Some(Selection::PendingEdge {
@@ -755,9 +769,8 @@ pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
     })
 }
 
-/// A valueless cell's value being authored: the within-gesture's
-/// meaning on a cell with nothing held yet (bare, or named bare —
-/// the red link being filled in).
+/// A bare cell's value being authored: the within-gesture's meaning
+/// on a referenced identity with no value yet.
 pub fn pending_follow(sources: &Sources, path: &[Step]) -> Option<Selection> {
     let cell = sources.resolve(path)?.as_cell()?;
     sources.value(cell).is_none().then_some(())?;
@@ -960,9 +973,7 @@ pub struct Entry {
 pub enum EntryAction {
     /// Commit this value: an inferred atom or a reference.
     Value(Value),
-    /// Mint a cell and commit a link to it. Named, the cell's table
-    /// entry starts as the name alone — the red link; unnamed, it
-    /// starts fully bare, nothing said at all.
+    /// Mint a bare cell and commit a link to it.
     NewCell,
     /// Commit an empty list value.
     NewList,
@@ -987,9 +998,8 @@ pub trait HasPopup {
 
 /// The universal completion layer for `query`: the inferred atom,
 /// references to everything named (document and orphans alike, ranked
-/// by the fuzzy tiers), and a fresh cell — named after the query when
-/// there is one, the create-on-reference of the floating-definitions
-/// design. The label stage (`labels`) offers only what can label:
+/// by the fuzzy tiers), and a fresh bare cell. The label stage
+/// (`labels`) offers only what can label:
 /// strings and cell references — no blobs, and "new list"/"new
 /// record" stay value offers.
 fn completion_entries(
@@ -1161,8 +1171,8 @@ fn document_cells(sources: &Sources) -> Vec<CellId> {
 }
 
 /// Resolves a chosen entry to the value it denotes. Pure: a new
-/// cell's mint is a bare id — nothing said until a value or name is
-/// written. Labels and values resolve alike — the label stage never
+/// cell's mint is a bare id — nothing said until a value is written.
+/// Labels and values resolve alike — the label stage never
 /// offers a non-label action.
 pub fn resolve_entry(action: &EntryAction) -> Value {
     match action {
@@ -1252,35 +1262,6 @@ pub fn rename_field(
     }
 }
 
-/// Writes the name of the cell the path's trailing Name step
-/// addresses — the empty string un-names, its canonical spelling.
-/// Names are identity metadata, so the write targets the named cell
-/// directly, gated on its own authority; clearing a name that isn't
-/// there declines, keeping no-ops distinguishable.
-pub fn set_name(doc: &mut Document, library: &Cells, path: &[Step], name: &str) -> bool {
-    let cell = {
-        let sources = Sources {
-            doc: &*doc,
-            library,
-        };
-        match path.split_last() {
-            Some((Step::Name, parent)) => sources
-                .resolve(parent)
-                .and_then(Value::as_cell)
-                .filter(|cell| sources.writable(*cell))
-                .filter(|cell| !name.is_empty() || sources.name(*cell).is_some()),
-            _ => None,
-        }
-    };
-    match cell {
-        Some(cell) => {
-            doc.cells.set_name(cell, name);
-            true
-        }
-        None => false,
-    }
-}
-
 /// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
@@ -1366,46 +1347,22 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
         return false;
     };
     let text = edit.text().to_string();
-    let wrote = match path.split_last() {
-        // A Name step edits the cell's name — the same run shape,
-        // through the name write instead of the value write. The
-        // empty string spells no name: an empty editor over an
-        // unnamed cell writes nothing, and emptying a name un-names
-        // live.
-        Some((Step::Name, parent)) => {
-            let current = {
-                let sources = Sources {
-                    doc: &*doc,
-                    library,
-                };
-                sources
-                    .resolve(parent)
-                    .and_then(Value::as_cell)
-                    .and_then(|cell| sources.name(cell))
-                    .map(str::to_owned)
-                    .unwrap_or_default()
+    let wrote = {
+        let (current, next) = {
+            let sources = Sources {
+                doc: &*doc,
+                library,
             };
-            current != text && set_name(doc, library, path, &text)
-        }
-        _ => {
-            let (current, next) = {
-                let sources = Sources {
-                    doc: &*doc,
-                    library,
-                };
-                let current = sources.resolve(path);
-                let next = match current {
-                    Some(Value::Atom(Atom::String(_))) => Some(Value::from(text)),
-                    _ => None,
-                };
-                (current.cloned(), next)
+            let current = sources.resolve(path);
+            let next = match current {
+                Some(Value::Atom(Atom::String(_))) => Some(Value::from(text)),
+                _ => None,
             };
-            match next {
-                Some(next) => {
-                    current.as_ref() != Some(&next) && set_value(doc, library, path, next)
-                }
-                None => false,
-            }
+            (current.cloned(), next)
+        };
+        match next {
+            Some(next) => current.as_ref() != Some(&next) && set_value(doc, library, path, next),
+            None => false,
         }
     };
     if wrote {
@@ -1499,13 +1456,25 @@ struct Stop {
     row: bool,
 }
 
+fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
+    match path {
+        [owner @ .., Step::Follow, Step::Key(Label::Cell(cell))]
+            if *cell == progred_name::vocabulary::NAME =>
+        {
+            Some(owner)
+        }
+        _ => None,
+    }
+}
+
 /// The frame's stops in pre-order, each classified as row or beside
 /// from the geometry the layout settled: a stop is a row when its
 /// container stacked it — no shared line band with the sibling before
 /// it, or first into a multi-line container — and beside when it
-/// rides the same line. A cell's name is its owner's own first line,
-/// never a row. Order is rebuilt from per-parent registration order,
-/// which is document order; the raw list settles children first.
+/// rides the same line. A projected simple-name field is its owner's
+/// own first line, never a row. Order is rebuilt from per-parent
+/// registration order, which is document order; the raw list settles
+/// children first.
 fn reading_order(descends: &[Descend], line: f64) -> Vec<Stop> {
     let by_path: HashMap<&[Step], usize> = descends
         .iter()
@@ -1515,9 +1484,13 @@ fn reading_order(descends: &[Descend], line: f64) -> Vec<Stop> {
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); descends.len()];
     let mut roots = Vec::new();
     for (index, descend) in descends.iter().enumerate() {
-        let parent = (0..descend.path.len())
-            .rev()
-            .find_map(|end| by_path.get(&descend.path[..end]).copied());
+        let parent = projected_name_owner(&descend.path)
+            .and_then(|owner| by_path.get(owner).copied())
+            .or_else(|| {
+                (0..descend.path.len())
+                    .rev()
+                    .find_map(|end| by_path.get(&descend.path[..end]).copied())
+            });
         match parent {
             Some(parent) => children[parent].push(index),
             None => roots.push(index),
@@ -1533,7 +1506,7 @@ fn reading_order(descends: &[Descend], line: f64) -> Vec<Stop> {
         let descend = &descends[index];
         let row = match (parent, before) {
             (None, _) => true,
-            _ if matches!(descend.path.last(), Some(Step::Name)) => false,
+            _ if projected_name_owner(&descend.path).is_some() => false,
             (Some(_), Some(before)) => !same_line(descend.rect, descends[before].rect, line),
             (Some(parent), None) => descends[parent].rect.height() > line * 1.5,
         };
@@ -2010,20 +1983,13 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
 /// selected path. A value can project in many places — links, but
 /// equally strings, blobs, and equal lists — and the marks make that
 /// sameness visible. Inline records are structure, not identity: no
-/// marks. A selected name marks as its string.
+/// marks.
 fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Value> {
     match selection? {
-        Selection::Edge { path, .. } => match path.split_last() {
-            Some((Step::Name, parent)) => sources
-                .resolve(parent)
-                .and_then(Value::as_cell)
-                .and_then(|cell| sources.name(cell))
-                .map(Value::from),
-            _ => sources
-                .resolve(path)
-                .filter(|value| !matches!(value, Value::Record(_)))
-                .cloned(),
-        },
+        Selection::Edge { path, .. } => sources
+            .resolve(path)
+            .filter(|value| !matches!(value, Value::Record(_)))
+            .cloned(),
         _ => None,
     }
 }
@@ -2095,15 +2061,16 @@ pub fn project<
 
 /// A link rendered as its cell: PARENS are the cell's syntax — `(`
 /// name-or-short-id value `)` — completing the delimiter family
-/// (brackets say list, braces say record). The name, when there is
-/// one, is the identity's own metadata projected at the Name step —
-/// selectable, editable, two-stage. The value after the head is an
+/// (brackets say list, braces say record). A conventional simple-name
+/// field, when present, is projected as the head while retaining its
+/// ordinary `Follow, Key(name)` path — selectable, editable,
+/// two-stage. The value after the head is an
 /// ordinary [`value_view`] at the Follow step, whatever its kind:
 /// the drawn parens stretch over whatever height it takes, and when
 /// head-beside-value overflows the width remaining here the cell
 /// BREAKS like a field row — head on its own line, value dropped
 /// below at the tab, parens spanning both. A WRITABLE valueless cell
-/// — bare, or the named red link — renders the [`placeholder`] box in
+/// — a bare cell — renders the [`placeholder`] box in
 /// the value's place (the empty-slot rule in [`Selection::edge`]
 /// makes selecting it begin the first value); an external valueless
 /// cell renders head-only, complete. Cells COLLAPSE like containers
@@ -2236,12 +2203,10 @@ fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>
     })
 }
 
-/// A cell's head: the name — identity metadata at the Name step —
-/// projected as the header text, or the short id when unnamed. It
-/// selects, edits, marks, and deletes at the Name step; deleting it
-/// un-names the cell, and an unnamed cell's id engages as an EMPTY
-/// name editor, so typing names it — click to select, click again
-/// to (re)name, the Finder pattern either way.
+/// A cell's head: an ordinary simple-name field projected as header
+/// text, or the short id when no naming convention answers. A shown
+/// name remains the same selectable and editable string field; the
+/// header is a projection of data rather than another storage path.
 ///
 /// The head text stands for the CELL until the cell is selected: a
 /// cold click falls through to the block's own target and selects the
@@ -2261,46 +2226,40 @@ fn head_view<
     name: &Option<String>,
     hooks: &Hooks<C>,
 ) -> Node<P> {
+    let short = short_id(cell);
+    let Some(name) = name else {
+        return text(tcx, &short, &cx.styles.id);
+    };
     let mut edge = path.to_vec();
-    edge.push(Step::Name);
+    edge.push(Step::Follow);
+    edge.push(Step::Key(Label::Cell(progred_name::vocabulary::NAME)));
     let editing = cx
         .selection
         .filter(|selection| selection.path() == edge.as_slice())
         .and_then(Selection::edit);
-    let short = short_id(cell);
-    let fallback = match name {
-        Some(name) => text(tcx, name, &cx.styles.name),
-        None => text(tcx, &short, &cx.styles.id),
-    };
+    let fallback = text(tcx, name, &cx.styles.name);
     let presentation = edit_presentation(&cx.styles.name);
-    // While the name buffer is empty, the short id ghosts in place —
-    // the field keeps its width and shows what an empty name falls
-    // back to.
     let content = atom_content(
         editing,
         fallback,
         presentation.clone(),
-        Some((&short, &cx.styles.id)),
+        None,
         tcx,
         cx.styles,
         hooks,
     );
-    // The name string is the identity the head marks and picks; an
-    // unnamed head stands in for the cell itself and marks nothing.
-    let mark = name.as_ref().map(|name| Value::from(name.as_str()));
-    let target = mark.clone().unwrap_or_else(|| Value::from(cell));
+    let mark = Value::from(name.as_str());
+    let target = mark.clone();
     if cx.selected(path) || cx.selected(&edge) {
         let content = cursor_target(edge.clone(), target.clone(), presentation, hooks, content);
-        let content = match &mark {
-            Some(value) if !cx.selected(&edge) => secondary_mark(cx, value, content),
-            _ => content,
+        let content = if cx.selected(&edge) {
+            content
+        } else {
+            secondary_mark(cx, &mark, content)
         };
         descend(cx, edge, Some(target), hooks, content)
     } else {
-        let content = match &mark {
-            Some(value) => secondary_mark(cx, value, content),
-            None => content,
-        };
+        let content = secondary_mark(cx, &mark, content);
         decorate(content, move |p: &mut P, rect| {
             p.descends().push(Descend { path: edge, rect });
         })
@@ -2614,8 +2573,23 @@ fn record_view<
     hooks: &Hooks<C>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
+    let consumes_simple_name = !cx.raw
+        && path
+            .split_last()
+            .filter(|(step, _)| matches!(step, Step::Follow))
+            .and_then(|(_, parent)| cx.sources.resolve(parent))
+            .and_then(Value::as_cell)
+            .and_then(|cell| cx.name(cell))
+            .is_some()
+        && fields
+            .get(&Label::Cell(progred_name::vocabulary::NAME))
+            .and_then(Value::as_str)
+            .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(Label, Option<Value>)> = fields
         .iter()
+        .filter(|(key, _)| {
+            !consumes_simple_name || **key != Label::Cell(progred_name::vocabulary::NAME)
+        })
         .map(|(key, value)| (key.clone(), Some(value.clone())))
         .collect();
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {
@@ -3524,6 +3498,74 @@ mod tests {
     use super::*;
     use ui_events::keyboard::{KeyState, Modifiers};
 
+    #[test]
+    fn compact_grap_stand_ins_do_not_hide_extra_fields() {
+        let foreign = crate::conventions::foreign_functions();
+        let project = |value: &Value| grap_stand_in(value, |_| None, &foreign);
+
+        let number = grap_f64::value(2.5);
+        assert!(matches!(project(&number), Some(StandIn::Text(_))));
+        let enriched_number = Value::record(number.as_record().unwrap().clone().update(
+            Label::from("created-at"),
+            Value::from("now"),
+        ));
+        assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
+        assert!(project(&enriched_number).is_none());
+
+        let call = Value::record([
+            (
+                Label::Cell(grap::vocabulary::FUNCTION),
+                Value::from(grap_f64::vocabulary::ADD),
+            ),
+            (
+                Label::Cell(grap_f64::vocabulary::LEFT),
+                grap_f64::value(2.0),
+            ),
+            (
+                Label::Cell(grap_f64::vocabulary::RIGHT),
+                grap_f64::value(3.0),
+            ),
+            (Label::from("created-at"), Value::from("now")),
+        ]);
+        assert_eq!(
+            grap::evaluate(&call, |_| None, &foreign, grap::DEFAULT_FUEL).result,
+            Ok(grap_f64::value(5.0))
+        );
+        assert!(project(&call).is_none());
+
+        let circle = grap_geometry::value(20.0);
+        assert!(matches!(
+            project(&circle),
+            Some(StandIn::Circle { radius: 20.0 })
+        ));
+        let enriched_circle = Value::record(circle.as_record().unwrap().clone().update(
+            Label::from("source"),
+            Value::from("survey"),
+        ));
+        assert_eq!(grap_geometry::read(&enriched_circle), Some(20.0));
+        assert!(project(&enriched_circle).is_none());
+
+        let enriched_radius = Value::record(
+            grap_f64::value(20.0)
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(Label::from("unit"), Value::from("millimetres")),
+        );
+        let circle_with_enriched_radius = Value::record([(
+            Label::Cell(grap_geometry::vocabulary::CIRCLE),
+            Value::record([(
+                Label::Cell(grap_geometry::vocabulary::RADIUS),
+                enriched_radius,
+            )]),
+        )]);
+        assert_eq!(
+            grap_geometry::read(&circle_with_enriched_radius),
+            Some(20.0)
+        );
+        assert!(project(&circle_with_enriched_radius).is_none());
+    }
+
     struct EmptyClipboard;
 
     impl puri::edit::TextClipboard for EmptyClipboard {
@@ -3648,18 +3690,24 @@ mod tests {
 
     #[test]
     fn the_cell_head_rides_its_first_line() {
-        // Dropped: the name shares the cell's head line while the
+        let name = || {
+            vec![
+                Step::Follow,
+                Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+            ]
+        };
+        // Dropped: the projected name shares the cell's head line while the
         // value opens a row below it.
         let f = || vec![Step::Follow, key("f")];
         let ds = vec![
-            stop(vec![Step::Name], 0.0, 2.0, 60.0, 18.0),
+            stop(name(), 0.0, 2.0, 60.0, 18.0),
             stop(f(), 30.0, 24.0, 100.0, 40.0),
             stop(vec![Step::Follow], 20.0, 22.0, 180.0, 48.0),
             stop(vec![], 0.0, 0.0, 200.0, 50.0),
         ];
         assert_eq!(
             stepped(&ds, Some(vec![]), NamedKey::ArrowRight),
-            Some(vec![Step::Name])
+            Some(name())
         );
         assert_eq!(
             stepped(&ds, Some(vec![]), NamedKey::ArrowDown),
@@ -3670,23 +3718,23 @@ mod tests {
             Some(f())
         );
         assert_eq!(
-            stepped(&ds, Some(vec![Step::Name]), NamedKey::ArrowLeft),
+            stepped(&ds, Some(name()), NamedKey::ArrowLeft),
             Some(vec![])
         );
         // Hugged: head and value share the one line; there is no row
         // below, only the line to walk.
         let ds = vec![
-            stop(vec![Step::Name], 0.0, 2.0, 60.0, 18.0),
+            stop(name(), 0.0, 2.0, 60.0, 18.0),
             stop(vec![Step::Follow], 70.0, 2.0, 150.0, 18.0),
             stop(vec![], 0.0, 0.0, 160.0, 20.0),
         ];
         assert_eq!(stepped(&ds, Some(vec![]), NamedKey::ArrowDown), None);
         assert_eq!(
             stepped(&ds, Some(vec![]), NamedKey::ArrowRight),
-            Some(vec![Step::Name])
+            Some(name())
         );
         assert_eq!(
-            stepped(&ds, Some(vec![Step::Name]), NamedKey::ArrowRight),
+            stepped(&ds, Some(name()), NamedKey::ArrowRight),
             Some(vec![Step::Follow])
         );
         assert_eq!(
@@ -3756,10 +3804,19 @@ mod tests {
         // A cell holding a string edits at its Follow path.
         doc.cells.set_value(cell, Value::from("held"));
         assert!(at(&doc, vec![Step::Follow]).edit().is_some());
-        // A named cell's name edits at its Name path.
-        doc.cells.set_name(cell, "roof");
-        assert!(at(&doc, vec![Step::Name]).edit().is_some());
-        assert!(at(&doc, vec![Step::Follow, Step::Name]).edit().is_none());
+        // A simple name convention is just another string field.
+        doc.cells.set_value(cell, progred_name::value("roof"));
+        assert!(
+            at(
+                &doc,
+                vec![
+                    Step::Follow,
+                    Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+                ],
+            )
+            .edit()
+            .is_some()
+        );
     }
 
     #[test]
@@ -3892,24 +3949,33 @@ mod tests {
     fn external_cells_decline_writes_and_bare_cells_accept() {
         let mut lib = Cells::new();
         let lib_cell = new_cell_id();
-        lib.set_name(lib_cell, "convention");
         lib.set_value(
             lib_cell,
-            Value::record([(Label::from("a"), Value::from("1"))]),
+            progred_name::record(
+                "convention",
+                [(Label::from("a"), Value::from("1"))],
+            ),
         );
         let mut doc = Document {
             root: Some(Value::from(lib_cell)),
             cells: Cells::new(),
         };
-        // The library's cell declines writes wholesale — fields,
-        // value, and name alike.
+        // The library's cell declines writes wholesale.
         assert!(!set_value(
             &mut doc,
             &lib,
             &[Step::Follow, key("a")],
             Value::from("2")
         ));
-        assert!(!set_name(&mut doc, &lib, &[Step::Name], "mine"));
+        assert!(!set_value(
+            &mut doc,
+            &lib,
+            &[
+                Step::Follow,
+                Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+            ],
+            Value::from("mine")
+        ));
         assert!(!delete_edge(&mut doc, &lib, &[Step::Follow, key("a")]));
         assert!(!delete_edge(&mut doc, &lib, &[Step::Follow]));
         // Forking — the document taking the cell over — writes.
@@ -3962,7 +4028,7 @@ mod tests {
                 Value::list([Value::from("2"), Value::from("3")]),
             ),
         ]);
-        doc.cells.set_name(child, "c");
+        doc.cells.set_value(child, progred_name::value("c"));
 
         assert!(!delete_edge(
             &mut doc,
@@ -3974,7 +4040,7 @@ mod tests {
         // the table for the orphan pool.
         assert!(delete_edge(&mut doc, &lib, &[Step::Follow, key("child")]));
         assert_eq!(src(&doc, &lib).resolve(&[Step::Follow, key("child")]), None);
-        assert!(doc.cells.entry(child).is_some());
+        assert!(doc.cells.value(child).is_some());
 
         // An element step rebuilds the list without it.
         let dash = vec![Step::Follow, key("dash")];
@@ -4111,10 +4177,12 @@ mod tests {
     #[test]
     fn completion_offers_follow_the_stage() {
         let lib = crate::conventions::library();
-        let (mut doc, cell) = doc_of(vec![(Label::from("kind"), Value::from("building"))]);
-        doc.cells.set_name(cell, "roof");
+        let (mut doc, cell) = doc_of(vec![
+            progred_name::field("roof"),
+            (Label::from("kind"), Value::from("building")),
+        ]);
         let sources = src(&doc, &lib);
-        let names = Names::table();
+        let names = Names::convention();
         let displays = |labels: bool, query: &str| -> Vec<String> {
             completion_entries(&sources, &names, false, labels, query)
                 .into_iter()
@@ -4276,7 +4344,8 @@ mod tests {
             .as_record()
             .unwrap()
             .keys()
-            .find_map(Label::as_cell)
+            .filter_map(Label::as_cell)
+            .find(|cell| sources.value(*cell).and_then(progred_name::read) == Some("stroke"))
             .unwrap();
         let path = vec![key("shape"), Step::Follow, Step::Key(Label::Cell(stroke))];
         assert_eq!(
@@ -4299,7 +4368,7 @@ mod tests {
         let doc = sample_document();
         let lib = crate::conventions::library();
         let sources = src(&doc, &lib);
-        let names = Names::table();
+        let names = Names::convention();
         let pending = |text: &str| Selection::Pending {
             path: Vec::new(),
             query: line_edit(text),
@@ -4457,15 +4526,15 @@ mod tests {
         // The root is an inline record of roles.
         assert!(doc.root.as_ref().unwrap().as_record().is_some());
         let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
-        assert_eq!(sources.name(roof), Some("roof"));
+        assert_eq!(sources.value(roof).and_then(progred_name::read), Some("roof"));
         // The material cell is referenced and fully bare.
         let material = sources
             .resolve(&[key("shape"), Step::Follow, key("material")])
             .unwrap()
             .as_cell()
             .unwrap();
-        assert!(sources.entry(material).is_none());
-        // The stroke cell is the named bare floater, referenced only
+        assert!(sources.value(material).is_none());
+        // The stroke cell is a name-only ordinary record, referenced
         // as a label.
         let stroke = sources
             .value(roof)
@@ -4475,8 +4544,7 @@ mod tests {
             .keys()
             .find_map(Label::as_cell)
             .unwrap();
-        assert_eq!(sources.name(stroke), Some("stroke"));
-        assert!(sources.value(stroke).is_none());
+        assert_eq!(sources.value(stroke).and_then(progred_name::read), Some("stroke"));
         // The style cell is shared by the root and the roof.
         assert_eq!(
             sources.resolve(&[key("style")]),
@@ -4508,11 +4576,14 @@ mod tests {
                 .as_blob()
                 .is_some()
         );
-        // Documents round trip, names included.
+        // Documents round trip with convention data unchanged.
         let json = serde_json::to_string(&doc).unwrap();
         let loaded: Document = serde_json::from_str(&json).unwrap();
         assert_eq!(loaded.root, doc.root);
-        assert_eq!(loaded.cells.name(roof), Some("roof"));
+        assert_eq!(
+            loaded.cells.value(roof).and_then(progred_name::read),
+            Some("roof")
+        );
         assert_eq!(serde_json::to_string(&loaded).unwrap(), json);
     }
 
@@ -4536,11 +4607,11 @@ mod tests {
             Selection::edge(&src(&doc, &lib), vec![Step::Follow]),
             Selection::Edge { .. }
         ));
-        // An EXTERNAL valueless cell declines the pend — a pending
-        // that cannot commit is an affordance lie.
-        let lib_bare = new_cell_id();
-        lib.set_name(lib_bare, "convention");
-        doc.root = Some(Value::from(lib_bare));
+        // An EXTERNAL cell has an ordinary value, so its Follow slot
+        // selects normally and remains unwritable.
+        let lib_cell = new_cell_id();
+        lib.set_value(lib_cell, progred_name::value("convention"));
+        doc.root = Some(Value::from(lib_cell));
         assert!(matches!(
             Selection::edge(&src(&doc, &lib), vec![Step::Follow]),
             Selection::Edge { edit: None, .. }
@@ -4557,46 +4628,49 @@ mod tests {
     }
 
     #[test]
-    fn renaming_writes_and_deleting_unnames_at_the_name_step() {
+    fn a_simple_name_is_an_ordinary_editable_field() {
         let lib = Cells::new();
-        let (mut doc, cell) = doc_of(vec![(Label::from("x"), Value::from("1"))]);
-        doc.cells.set_name(cell, "old");
-        let path = vec![Step::Name];
+        let (mut doc, cell) = doc_of(vec![
+            progred_name::field("old"),
+            (Label::from("x"), Value::from("1")),
+        ]);
+        let path = vec![
+            Step::Follow,
+            Step::Key(Label::Cell(progred_name::vocabulary::NAME)),
+        ];
 
-        // The name edits like any string, through the same run shape.
         let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
         selection.edit_mut().unwrap().set_text("new");
         assert!(write_through(&mut doc, &lib, &mut selection));
-        assert_eq!(doc.cells.name(cell), Some("new"));
+        assert_eq!(doc.cells.value(cell).and_then(progred_name::read), Some("new"));
         assert!(!write_through(&mut doc, &lib, &mut selection));
 
-        // Emptying the buffer un-names live — the empty string is
-        // the canonical spelling of no name — and typing again
-        // re-names.
+        // Empty is an ordinary string, not a hidden spelling of
+        // field absence.
         selection.edit_mut().unwrap().set_text("");
         write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(doc.cells.name(cell), None);
-        selection.edit_mut().unwrap().set_text("back");
-        write_through(&mut doc, &lib, &mut selection);
-        assert_eq!(doc.cells.name(cell), Some("back"));
+        assert_eq!(doc.cells.value(cell).and_then(progred_name::read), None);
+        assert_eq!(
+            doc.cells
+                .value(cell)
+                .and_then(Value::as_record)
+                .and_then(|fields| {
+                    fields.get(&Label::Cell(progred_name::vocabulary::NAME))
+                })
+                .and_then(Value::as_str),
+            Some("")
+        );
 
-        // Names are not edges: delete declines — un-naming is the
-        // empty write above; the value is untouched throughout.
-        assert!(!delete_edge(&mut doc, &lib, &path));
-        assert_eq!(doc.cells.name(cell), Some("back"));
-        selection.edit_mut().unwrap().set_text("");
-        write_through(&mut doc, &lib, &mut selection);
-        assert!(doc.cells.value(cell).is_some());
-
-        // An unnamed cell mounts an EMPTY name editor: idle it
-        // writes nothing, typing names the cell.
-        let mut naming = Selection::edge(&src(&doc, &lib), path.clone());
-        assert_eq!(naming.edit().unwrap().text(), "");
-        assert!(!write_through(&mut doc, &lib, &mut naming));
-        assert_eq!(doc.cells.name(cell), None);
-        naming.edit_mut().unwrap().set_text("fresh");
-        assert!(write_through(&mut doc, &lib, &mut naming));
-        assert_eq!(doc.cells.name(cell), Some("fresh"));
+        // Removing the field uses the same structural deletion as any
+        // other record field; the rest of the value remains.
+        assert!(delete_edge(&mut doc, &lib, &path));
+        assert_eq!(doc.cells.value(cell).and_then(progred_name::read), None);
+        assert!(doc
+            .cells
+            .value(cell)
+            .and_then(Value::as_record)
+            .is_some_and(|fields| fields.contains_key(&Label::from("x"))));
+        assert!(Selection::edge(&src(&doc, &lib), path).edit().is_none());
     }
 }
 
@@ -4826,7 +4900,7 @@ mod svg_bench {
             doc,
             library: &library,
         };
-        let names = Names::table();
+        let names = Names::convention();
         let styles = RawStyles::new(1.0);
         let collapse = Collapse::default();
         let mut fonts = parley::FontContext::new();
@@ -5013,15 +5087,20 @@ mod svg_bench {
             assert_eq!(&up, expect);
             selection = Some(select(&up));
         }
-        // Any cell's first rightward step is its own head: the name
-        // rides the cell's line, never a row of its own.
+        // A projected simple-name field is the cell's editable head.
         let head = bench
             .descends
             .iter()
             .map(|descend| descend.path.clone())
-            .find(|path| matches!(path.last(), Some(Step::Name)))
+            .find(|path| {
+                matches!(
+                    path.last(),
+                    Some(Step::Key(Label::Cell(cell)))
+                        if *cell == progred_name::vocabulary::NAME
+                )
+            })
             .expect("the sample has a cell head");
-        let cell = head[..head.len() - 1].to_vec();
+        let cell = head[..head.len() - 2].to_vec();
         assert_eq!(
             step_selection(
                 &bench.descends,
@@ -5094,6 +5173,7 @@ mod svg_bench {
                 sources
                     .resolve(&descend.path)
                     .is_some_and(|value| value.as_str().is_some())
+                    && projected_name_owner(&descend.path).is_none()
             })
             .expect("the sample has a string leaf");
         let string_rect = string.rect;
@@ -5316,9 +5396,8 @@ mod svg_bench {
             320.0,
             "../target/raw_placeholder_engaged.svg",
         );
-        let mut cells = Cells::new();
+        let cells = Cells::new();
         let bare = new_cell_id();
-        cells.set_name(bare, "greenhouse");
         render(
             &Document {
                 root: Some(Value::from(bare)),

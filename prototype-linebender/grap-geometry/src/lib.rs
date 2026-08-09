@@ -21,11 +21,9 @@ pub fn value(radius: f64) -> Value {
 
 pub fn read(value: &Value) -> Option<f64> {
     let fields = value.as_record()?;
-    let radius = (fields.len() == 1)
-        .then(|| fields.get(&Label::Cell(vocabulary::CIRCLE)))
-        .flatten()
+    let radius = fields
+        .get(&Label::Cell(vocabulary::CIRCLE))
         .and_then(Value::as_record)
-        .filter(|circle| circle.len() == 1)
         .and_then(|circle| circle.get(&Label::Cell(vocabulary::RADIUS)))
         .and_then(grap_f64::read)?;
     (radius.is_finite() && radius >= 0.0).then_some(radius)
@@ -47,10 +45,12 @@ pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> 
 
 pub fn library() -> Cells {
     let mut cells = Cells::new();
-    cells.set_name(vocabulary::CIRCLE, "circle");
-    cells.set_name(vocabulary::RADIUS, "radius");
-    cells.set_name(vocabulary::INVALID_RADIUS, "invalid radius");
-    cells.set_value(vocabulary::INVALID_RADIUS, grap_error::value());
+    cells.set_value(vocabulary::CIRCLE, progred_name::value("circle"));
+    cells.set_value(vocabulary::RADIUS, progred_name::value("radius"));
+    cells.set_value(
+        vocabulary::INVALID_RADIUS,
+        grap_error::named("invalid radius"),
+    );
     cells
 }
 
@@ -74,6 +74,23 @@ mod tests {
             Ok(value(20.0))
         );
         assert_eq!(read(&value(20.0)), Some(20.0));
+
+        let enriched = Value::record(
+            value(20.0)
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(Label::from("created-at"), Value::from("now")),
+        );
+        assert_eq!(read(&enriched), Some(20.0));
+        let with_extra = Value::record(enriched.as_record().unwrap().clone().update(
+            Label::Cell(vocabulary::CIRCLE),
+            Value::record([
+                (Label::Cell(vocabulary::RADIUS), grap_f64::value(20.0)),
+                (Label::from("source"), Value::from("survey")),
+            ]),
+        ));
+        assert_eq!(read(&with_extra), Some(20.0));
     }
 
     #[test]
