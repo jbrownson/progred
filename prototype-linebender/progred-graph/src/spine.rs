@@ -80,7 +80,7 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
 mod tests {
     use super::*;
     use crate::position;
-    use crate::value::{CellId, Label};
+    use crate::{CellId, Label};
 
     fn relation(name: &str) -> CellId {
         CellId::from_u128(match name {

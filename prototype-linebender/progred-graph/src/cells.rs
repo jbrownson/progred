@@ -3,7 +3,7 @@
 //! cell. Cells are the only mutable state; values are persistent, so
 //! clones retain structural sharing.
 
-use crate::value::{CellId, Value};
+use crate::{CellId, Value};
 use im::HashMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -83,7 +83,7 @@ impl<'de> Deserialize<'de> for Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value::{Label, new_cell_id};
+    use crate::{Label, new_cell_id};
 
     fn blob(text: &str) -> Value {
         Value::from(text.as_bytes().to_vec())
