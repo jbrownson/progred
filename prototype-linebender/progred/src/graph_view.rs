@@ -19,7 +19,7 @@ use crate::raw::{Document, Selection, command, short_id};
 use crate::sources::Sources;
 use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};
-use progred_graph::{Atom, CellId, Value};
+use progred_graph::{CellId, Value};
 use puri::draw::Canvas;
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, draw_layout};
@@ -118,7 +118,8 @@ struct Snapshot {
 /// too.
 fn links(value: &Value, out: &mut Vec<CellId>) {
     match value {
-        Value::Atom(atom) => out.extend(atom.as_cell()),
+        Value::Cell(cell) => out.push(*cell),
+        Value::Blob(_) => {}
         Value::List(elements) => {
             for element in elements.values() {
                 links(element, out);
@@ -387,8 +388,8 @@ impl GraphView {
 /// dangling label is the tolerated class, like any stale mention.
 fn strip(value: &Value, cell: CellId) -> Option<Value> {
     match value {
-        Value::Atom(Atom::Cell(linked)) if *linked == cell => None,
-        Value::Atom(_) => Some(value.clone()),
+        Value::Cell(linked) if *linked == cell => None,
+        Value::Cell(_) | Value::Blob(_) => Some(value.clone()),
         Value::List(elements) => Some(Value::List(
             elements
                 .iter()

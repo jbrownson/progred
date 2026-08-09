@@ -3,7 +3,7 @@
 //! only; the printer is the canon, and saving canonicalizes.
 
 use crate::raw::Document;
-use progred_graph::{Atom, CellId, Cells, Value, new_cell_id};
+use progred_graph::{CellId, Cells, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -391,7 +391,10 @@ fn mentioned_gids(doc: &Document) -> HashSet<CellId> {
     fn walk(value: &Value, gids: &mut HashSet<CellId>) {
         if plain_text(value).is_none() {
             match value {
-                Value::Atom(atom) => gids.extend(atom.as_cell()),
+                Value::Cell(cell) => {
+                    gids.insert(*cell);
+                }
+                Value::Blob(_) => {}
                 Value::List(elements) => {
                     for element in elements.values() {
                         walk(element, gids);
@@ -477,13 +480,13 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
             let _ = write!(out, "{}", quoted(text));
         }
         None => match value {
-            Value::Atom(Atom::Blob(bytes)) => {
+            Value::Blob(bytes) => {
                 out.push_str("0x");
                 for byte in bytes {
                     let _ = write!(out, "{byte:02x}");
                 }
             }
-            Value::Atom(Atom::Cell(gid)) => out.push_str(&identity(spell, *gid)),
+            Value::Cell(gid) => out.push_str(&identity(spell, *gid)),
             Value::List(elements) if elements.is_empty() => out.push_str("[]"),
             Value::List(elements) => {
                 out.push_str("[\n");

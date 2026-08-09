@@ -12,40 +12,16 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-/// The leaves. A link is followed to its cell's current value; a
-/// blob is uninterpreted bytes. Text, numbers, and every other
-/// semantic scalar are library conventions over these primitives.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Atom {
-    Cell(CellId),
-    Blob(Vec<u8>),
-}
-
-impl Atom {
-    pub fn as_cell(&self) -> Option<CellId> {
-        match self {
-            Atom::Cell(cell) => Some(*cell),
-            _ => None,
-        }
-    }
-
-    pub fn as_blob(&self) -> Option<&[u8]> {
-        match self {
-            Atom::Blob(bytes) => Some(bytes),
-            _ => None,
-        }
-    }
-}
-
 /// A value: anything sayable — pure structure, no identity of its
 /// own. Cycles are unrepresentable here; they exist only by a cell's
-/// value linking back through `Atom::Cell`. Positions are session-only
+/// value linking back through `Value::Cell`. Positions are session-only
 /// element identity — minted at load and insert, stripped at save —
 /// and the hand-written Eq/Hash below IGNORE them: two occurrences of
 /// `[2, 3]` are the same value.
 #[derive(Debug, Clone)]
 pub enum Value {
-    Atom(Atom),
+    Cell(CellId),
+    Blob(Vec<u8>),
     List(OrdMap<Position, Value>),
     Record(OrdMap<CellId, Value>),
 }
@@ -66,19 +42,18 @@ impl Value {
         Value::Record(fields.into_iter().collect())
     }
 
-    pub fn as_atom(&self) -> Option<&Atom> {
+    pub fn as_cell(&self) -> Option<CellId> {
         match self {
-            Value::Atom(atom) => Some(atom),
+            Value::Cell(cell) => Some(*cell),
             _ => None,
         }
     }
 
-    pub fn as_cell(&self) -> Option<CellId> {
-        self.as_atom()?.as_cell()
-    }
-
     pub fn as_blob(&self) -> Option<&[u8]> {
-        self.as_atom()?.as_blob()
+        match self {
+            Value::Blob(bytes) => Some(bytes),
+            _ => None,
+        }
     }
 
     pub fn as_list(&self) -> Option<&OrdMap<Position, Value>> {
@@ -99,7 +74,8 @@ impl Value {
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Value::Atom(a), Value::Atom(b)) => a == b,
+            (Value::Cell(a), Value::Cell(b)) => a == b,
+            (Value::Blob(a), Value::Blob(b)) => a == b,
             (Value::List(a), Value::List(b)) => {
                 a.len() == b.len() && a.values().zip(b.values()).all(|(x, y)| x == y)
             }
@@ -113,19 +89,23 @@ impl Eq for Value {}
 impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Value::Atom(atom) => {
+            Value::Cell(cell) => {
                 0_u8.hash(state);
-                atom.hash(state);
+                cell.hash(state);
+            }
+            Value::Blob(bytes) => {
+                1_u8.hash(state);
+                bytes.hash(state);
             }
             Value::List(elements) => {
-                1_u8.hash(state);
+                2_u8.hash(state);
                 elements.len().hash(state);
                 for element in elements.values() {
                     element.hash(state);
                 }
             }
             Value::Record(fields) => {
-                2_u8.hash(state);
+                3_u8.hash(state);
                 fields.len().hash(state);
                 for (label, value) in fields {
                     label.hash(state);
@@ -136,31 +116,14 @@ impl Hash for Value {
     }
 }
 
-impl From<Atom> for Value {
-    fn from(atom: Atom) -> Self {
-        Value::Atom(atom)
-    }
-}
-
-impl From<CellId> for Atom {
-    fn from(cell: CellId) -> Self {
-        Atom::Cell(cell)
-    }
-}
-impl From<Vec<u8>> for Atom {
-    fn from(bytes: Vec<u8>) -> Self {
-        Atom::Blob(bytes)
-    }
-}
-
 impl From<CellId> for Value {
     fn from(cell: CellId) -> Self {
-        Value::Atom(Atom::Cell(cell))
+        Value::Cell(cell)
     }
 }
 impl From<Vec<u8>> for Value {
     fn from(bytes: Vec<u8>) -> Self {
-        Value::Atom(Atom::from(bytes))
+        Value::Blob(bytes)
     }
 }
 
@@ -188,19 +151,11 @@ fn hex_bytes(s: &str) -> Result<Vec<u8>, String> {
         .collect()
 }
 
-impl fmt::Display for Atom {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Atom::Cell(cell) => write!(f, "{cell}"),
-            Atom::Blob(bytes) => write!(f, "0x{}", hex_string(bytes)),
-        }
-    }
-}
-
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Atom(atom) => atom.fmt(f),
+            Value::Cell(cell) => write!(f, "{cell}"),
+            Value::Blob(bytes) => write!(f, "0x{}", hex_string(bytes)),
             Value::List(elements) => {
                 write!(f, "[")?;
                 for (index, element) in elements.values().enumerate() {
@@ -248,8 +203,8 @@ enum ValueRepr {
 impl Serialize for Value {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let repr = match self {
-            Value::Atom(Atom::Cell(cell)) => ValueRepr::Cell(*cell),
-            Value::Atom(Atom::Blob(bytes)) => ValueRepr::Blob(hex_string(bytes)),
+            Value::Cell(cell) => ValueRepr::Cell(*cell),
+            Value::Blob(bytes) => ValueRepr::Blob(hex_string(bytes)),
             Value::List(elements) => ValueRepr::List(elements.values().cloned().collect()),
             // OrdMap iterates in label order, so the file's pair
             // order is canonical without an explicit sort.

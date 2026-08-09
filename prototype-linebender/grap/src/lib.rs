@@ -3,7 +3,7 @@
 //! cells describe functions and calls, while all data and operations
 //! beyond those primitives arrive through ordinary Grap libraries.
 
-use progred_graph::{Atom, CellId, Cells, Value};
+use progred_graph::{CellId, Cells, Value};
 use std::collections::{BTreeSet, HashMap, hash_map::Entry};
 use std::fmt;
 use std::rc::Rc;
@@ -191,7 +191,7 @@ where
         let root = self.depth == 0;
         self.depth += 1;
         let result = match expression {
-            Value::Atom(Atom::Cell(cell)) => self.eval_cell(*cell, environment),
+            Value::Cell(cell) => self.eval_cell(*cell, environment),
             Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
                 self.eval_call(expression, environment, root)
             }
@@ -201,7 +201,7 @@ where
             {
                 self.eval_function(expression, environment)
             }
-            Value::Atom(_) | Value::List(_) | Value::Record(_) => {
+            Value::Blob(_) | Value::List(_) | Value::Record(_) => {
                 Ok(RuntimeValue::Data(expression.clone()))
             }
         };

@@ -16,7 +16,7 @@ use crate::sources::Sources;
 use im::OrdMap;
 use parley::layout::Layout;
 use progred_graph::{
-    Atom, CellId, Cells, Position, Step, Value, hex_string, new_cell_id, position, spine,
+    CellId, Cells, Position, Step, Value, hex_string, new_cell_id, position, spine,
 };
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
@@ -804,14 +804,13 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
     let value = sources.resolve(&parent)?;
     let parent = match value {
         Value::Record(_) => parent,
-        Value::Atom(atom) => {
-            let cell = atom.as_cell()?;
-            sources.value(cell)?.as_record()?;
+        Value::Cell(cell) => {
+            sources.value(*cell)?.as_record()?;
             let mut followed = parent;
             followed.push(Step::Follow);
             followed
         }
-        Value::List(_) => return None,
+        Value::Blob(_) | Value::List(_) => return None,
     };
     writable_at(sources, &parent).then_some(())?;
     Some(Selection::PendingEdge {
@@ -897,14 +896,13 @@ fn pending_into_at(sources: &Sources, path: &[Step], end: bool) -> Option<Select
     let value = sources.resolve(path)?;
     let (list_path, elements) = match value {
         Value::List(elements) => (path.to_vec(), elements),
-        Value::Atom(atom) => {
-            let cell = atom.as_cell()?;
-            let elements = sources.value(cell)?.as_list()?;
+        Value::Cell(cell) => {
+            let elements = sources.value(*cell)?.as_list()?;
             let mut followed = path.to_vec();
             followed.push(Step::Follow);
             (followed, elements)
         }
-        Value::Record(_) => return None,
+        Value::Blob(_) | Value::Record(_) => return None,
     };
     writable_at(sources, &list_path).then_some(())?;
     let positions: Vec<&Position> = elements.keys().collect();
@@ -1216,7 +1214,8 @@ fn completion_entries(
 /// reference too.
 fn value_cells(value: &Value, cells: &mut Vec<CellId>) {
     match value {
-        Value::Atom(atom) => cells.extend(atom.as_cell()),
+        Value::Cell(cell) => cells.push(*cell),
+        Value::Blob(_) => {}
         Value::List(elements) => {
             for element in elements.values() {
                 value_cells(element, cells);
@@ -1401,10 +1400,8 @@ fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
         // field enriches it, the visible record is collapsible.
         .filter(|value| whole_text(value).is_none())
         .filter(|value| match value {
-            Value::Atom(atom) => atom
-                .as_cell()
-                .and_then(|cell| sources.value(cell))
-                .is_some(),
+            Value::Cell(cell) => sources.value(*cell).is_some(),
+            Value::Blob(_) => false,
             Value::List(elements) => !elements.is_empty(),
             Value::Record(fields) => !fields.is_empty(),
         })
@@ -1759,7 +1756,7 @@ pub fn hover_value(
         Hover::Label(path) => {
             sources.resolve(path)?;
             match path.last()? {
-                Step::Key(key) => Some(Value::Atom(Atom::from(*key))),
+                Step::Key(key) => Some(Value::Cell(*key)),
                 _ => None,
             }
         }
@@ -2410,7 +2407,7 @@ fn field_row<
     };
     let head = row(0.0, vec![label, text(tcx, ":", &cx.styles.dim)]);
     let head = match &value {
-        Some(_) => select_target(child.clone(), Value::Atom(Atom::from(key)), hooks, head),
+        Some(_) => select_target(child.clone(), Value::Cell(key), hooks, head),
         None => pick_target(key, hooks, head),
     };
     let Some(value) = value else {
@@ -2847,7 +2844,7 @@ fn label_spelling<'a>(cx: &'a Cx, key: &CellId) -> (String, &'a TextStyle) {
 fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &CellId) -> Node<P> {
     let (spelling, style) = label_spelling(cx, key);
     let inner = text(tcx, &spelling, style);
-    secondary_mark(cx, &Value::Atom(Atom::from(*key)), inner)
+    secondary_mark(cx, &Value::Cell(*key), inner)
 }
 
 /// A cold field label; writable, its one click re-opens it as the
@@ -2993,7 +2990,7 @@ fn value_view<
             );
             cursor_target(path.to_vec(), value.clone(), presentation, hooks, content)
         }
-        Value::Atom(Atom::Blob(bytes)) => select_target(
+        Value::Blob(bytes) => select_target(
             path.to_vec(),
             value.clone(),
             hooks,
@@ -3002,7 +2999,7 @@ fn value_view<
         // The projection chain, decided per value: links render as
         // their cells, lists as themselves, and records may be
         // interpreted by a domain projection outside Raw.
-        Value::Atom(Atom::Cell(cell)) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks),
+        Value::Cell(cell) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks),
         Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, avail, hooks),
         // A domain projection may stand another view in for a record —
         // the value selects whole, its structure one Raw toggle away.
@@ -3415,7 +3412,7 @@ fn pick_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     on_primary_pointer_down(
         content,
         |event| command(&event.state.modifiers),
-        move |ctx, _| pick(ctx, Value::Atom(Atom::from(key))),
+        move |ctx, _| pick(ctx, Value::Cell(key)),
     )
 }
 

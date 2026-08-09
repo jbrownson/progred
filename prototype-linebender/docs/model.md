@@ -7,7 +7,9 @@ Date: 2026-07-03
 This tightens the current model further. The graph core now has exactly
 two atoms, `Cell(CellId)` and `Blob(Vec<u8>)`, and a record label is
 always a `CellId`. Strings are not a privileged scalar and there is no
-second, textual label namespace.
+second, textual label namespace. The two leaf cases are direct `Value`
+variants; there is no separate `Atom` type because no API consumes that
+subset independently.
 
 UTF-8 text is the first library convention: `{utf8: <blob>}`. Its
 reader is open to unrelated fields, like the f64 reader, so text may
@@ -86,9 +88,9 @@ atom set corrected and refs added.
 
 ```rust
 pub struct CellId([u8; 16]);                     // all 128 bits are identity
-pub enum Atom  { Cell(CellId), Blob(Vec<u8>) }
 pub enum Value {
-    Atom(Atom),
+    Cell(CellId),
+    Blob(Vec<u8>),
     List(im::OrdMap<Position, Value>),           // unchanged from v2
     Record(im::OrdMap<CellId, Value>),           // relations are cell identities
 }

@@ -5,9 +5,9 @@
 //! nonempty, final byte nonzero; construction owns it. `between`
 //! always exists, so relabeling is never required; identifiers grow
 //! roughly a bit per adversarial same-gap insert, the immutable-label
-//! side of the order-maintenance trade. Deliberately neither a
-//! `Value` nor an `Atom`: positions are minted at load and insert,
-//! stripped at save, and cannot occur in data.
+//! side of the order-maintenance trade. Deliberately not a `Value`:
+//! positions are minted at load and insert, stripped at save, and
+//! cannot occur in data.
 
 /// A canonical binary fraction. Ordering is the sequence.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
