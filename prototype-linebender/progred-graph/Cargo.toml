@@ -1,5 +1,5 @@
 [package]
-name = "progred_graph"
+name = "progred-graph"
 version = "0.1.0"
 edition = "2024"
 

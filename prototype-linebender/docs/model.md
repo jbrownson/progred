@@ -237,7 +237,7 @@ the sketch, with these calls made in conversation:
   Every write now splits at its LAST Follow: the link before it
   names the owning, authority-gated cell; the Key/Element suffix is
   a pure value spine rebuilt through the new `spine` lens
-  (get/set/without in progred_graph) — the brief's "(cell, path)"
+  (get/set/without in progred-graph) — the brief's "(cell, path)"
   write unit made literal. Each reference site unfolds through its
   own Follow: paths stay per-site, and no site is the value's home
   (the table entry is).
@@ -1467,7 +1467,7 @@ systems, if ever, is an export projection (the Wikidata pattern),
 never the native model.
 
 Shipped 2026-07-09, same session. What landed matches the layout;
-notes from the build: `progred_graph` is four small modules (value,
+notes from the build: `progred-graph` is four small modules (value,
 position, mutgid, gid) and the old `id.rs` is gone whole — spaces,
 payload disciplines, strict reads, the general form. The editor's
 write path became TWO functions: `set_value` (split at the last Key
@@ -1605,7 +1605,7 @@ Considered and settled 2026-07-05:
   an Id, which is what terminates the regress — and node ids themselves
   are just the payload discipline of one well-known space. Strings and
   numbers are two more. This is the spec AND the representation: the
-  new prototype's `progred_graph` stores `Id { space: Uuid, payload:
+  new prototype's `progred-graph` stores `Id { space: Uuid, payload:
   Vec<u8> }` directly (fields private so constructors own canonical
   payloads), with the well-known spaces keeping their privileged
   serialized spellings and a general `value` form for the rest.
@@ -2316,7 +2316,7 @@ the conventions are typeable from keystroke one and picking "name"
 yields the NAME node rather than a lookalike string label (the fresh-
 document trap). The graph pane's SNAPSHOT stays document-only —
 library facts enrich display, they don't populate the picture.
-StackedGid retired from progred_graph. One hole surfaced by use the
+StackedGid retired from progred-graph. One hole surfaced by use the
 same day (user: can't edit the name node's name, but CAN add it an
 arbitrary edge — intentional?): resolution-gating protected library
 EDGES but not library ENTITIES — the entity's id resolves through any

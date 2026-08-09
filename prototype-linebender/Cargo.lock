@@ -1560,17 +1560,17 @@ dependencies = [
 name = "grap"
 version = "0.1.0"
 dependencies = [
+ "progred-graph",
  "progred-name",
- "progred_graph",
 ]
 
 [[package]]
 name = "grap-error"
 version = "0.1.0"
 dependencies = [
+ "progred-graph",
  "progred-isa",
  "progred-name",
- "progred_graph",
 ]
 
 [[package]]
@@ -1579,8 +1579,8 @@ version = "0.1.0"
 dependencies = [
  "grap",
  "grap-error",
+ "progred-graph",
  "progred-name",
- "progred_graph",
 ]
 
 [[package]]
@@ -1590,8 +1590,8 @@ dependencies = [
  "grap",
  "grap-error",
  "grap-f64",
+ "progred-graph",
  "progred-name",
- "progred_graph",
 ]
 
 [[package]]
@@ -3150,10 +3150,10 @@ dependencies = [
  "muda",
  "parley",
  "pollster",
+ "progred-graph",
  "progred-isa",
  "progred-name",
  "progred-text",
- "progred_graph",
  "puri",
  "puri-vello",
  "rfd",
@@ -3168,36 +3168,36 @@ dependencies = [
 ]
 
 [[package]]
-name = "progred-isa"
-version = "0.1.0"
-dependencies = [
- "progred-name",
- "progred_graph",
-]
-
-[[package]]
-name = "progred-name"
-version = "0.1.0"
-dependencies = [
- "progred-text",
- "progred_graph",
-]
-
-[[package]]
-name = "progred-text"
-version = "0.1.0"
-dependencies = [
- "progred_graph",
-]
-
-[[package]]
-name = "progred_graph"
+name = "progred-graph"
 version = "0.1.0"
 dependencies = [
  "getrandom",
  "im",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "progred-isa"
+version = "0.1.0"
+dependencies = [
+ "progred-graph",
+ "progred-name",
+]
+
+[[package]]
+name = "progred-name"
+version = "0.1.0"
+dependencies = [
+ "progred-graph",
+ "progred-text",
+]
+
+[[package]]
+name = "progred-text"
+version = "0.1.0"
+dependencies = [
+ "progred-graph",
 ]
 
 [[package]]

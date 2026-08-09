@@ -136,7 +136,7 @@ damages the underlying document: a failed projection simply declines,
 and the raw record remains editable.
 
 The evaluator lives in its own `grap` crate. Its evaluation machinery
-uses only `progred_graph`; the crate's vocabulary library additionally
+uses only `progred-graph`; the crate's vocabulary library additionally
 uses the optional `progred-name` convention for readable graph facts.
 It knows the function representation and a generic foreign-function
 registry, but no f64, geometry, UI, file, or
@@ -155,7 +155,7 @@ semantically distinct custom nulls, not freshly allocated error
 occurrences. Each sentinel's library value is a record containing
 `isa: error`. The general `isa` relation lives in the independent
 `progred-isa` library: it is a convention over graph data, not part of
-Grap or `progred_graph`. The error library owns only the `error`
+Grap or `progred-graph`. The error library owns only the `error`
 classification and uses that relation. Additional static facts can be
 added as fields on each sentinel's record. Error meaning remains
 library data rather than an evaluator feature.

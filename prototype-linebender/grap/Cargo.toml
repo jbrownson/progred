@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 progred-name = { path = "../progred-name" }
-progred_graph = { path = "../progred_graph" }
+progred-graph = { path = "../progred-graph" }
