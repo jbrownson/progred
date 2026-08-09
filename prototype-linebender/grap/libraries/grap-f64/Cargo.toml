@@ -7,4 +7,4 @@ edition = "2024"
 grap = { path = "../.." }
 grap-error = { path = "../grap-error" }
 progred-name = { path = "../../../graph/conventions/progred-name" }
-progred-graph = { path = "../../../graph/progred-graph" }
+progred-graph = { path = "../../../graph" }

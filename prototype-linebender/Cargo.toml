@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "graph/progred-graph",
+    "graph",
     "graph/conventions/progred-isa",
     "graph/conventions/progred-name",
     "graph/conventions/progred-text",

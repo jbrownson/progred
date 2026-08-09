@@ -8,7 +8,7 @@ grap = { path = "../grap" }
 grap-error = { path = "../grap/libraries/grap-error" }
 grap-f64 = { path = "../grap/libraries/grap-f64" }
 grap-geometry = { path = "../grap/libraries/grap-geometry" }
-progred-graph = { path = "../graph/progred-graph" }
+progred-graph = { path = "../graph" }
 progred-isa = { path = "../graph/conventions/progred-isa" }
 progred-name = { path = "../graph/conventions/progred-name" }
 progred-text = { path = "../graph/conventions/progred-text" }
