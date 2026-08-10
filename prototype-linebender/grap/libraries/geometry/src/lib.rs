@@ -30,23 +30,20 @@ pub fn read(value: &Value) -> Option<f64> {
 }
 
 pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> {
-    foreign.register(
-        vocabulary::CIRCLE,
-        [vocabulary::RADIUS],
-        |args| match args {
-            [radius] => match grap_f64::read(radius) {
-                Some(radius) if radius.is_finite() && radius >= 0.0 => value(radius),
-                _ => Value::from(vocabulary::INVALID_RADIUS),
-            },
-            _ => unreachable!("Grap checks foreign arity before calling"),
-        },
-    )
+    foreign.register(vocabulary::CIRCLE, [vocabulary::RADIUS], |arguments| {
+        arguments
+            .first()
+            .and_then(grap_f64::read)
+            .filter(|radius| radius.is_finite() && *radius >= 0.0)
+            .map(value)
+            .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS))
+    })
 }
 
 pub fn library() -> Cells {
     let mut cells = Cells::new();
-    cells.set_value(vocabulary::CIRCLE, progred_name::value("circle"));
-    cells.set_value(vocabulary::RADIUS, progred_name::value("radius"));
+    cells.set_value(vocabulary::CIRCLE, progred_name::record("circle", []));
+    cells.set_value(vocabulary::RADIUS, progred_name::record("radius", []));
     cells.set_value(
         vocabulary::INVALID_RADIUS,
         grap_error::named("invalid radius"),
@@ -63,16 +60,13 @@ mod tests {
     fn circle_is_a_library_call_over_an_f64() {
         let mut foreign = ForeignFunctions::new();
         install(&mut foreign).unwrap();
-        let expression = Value::record([
-            (
-                grap::vocabulary::FUNCTION,
-                Value::from(vocabulary::CIRCLE),
-            ),
-            (vocabulary::RADIUS, grap_f64::value(20.0)),
-        ]);
+        let expression = grap::call(
+            Value::from(vocabulary::CIRCLE),
+            [(vocabulary::RADIUS, grap_f64::value(20.0))],
+        );
         assert_eq!(
             grap::evaluate(&expression, |_| None, &foreign, 10).result,
-            Ok(value(20.0))
+            value(20.0)
         );
         assert_eq!(read(&value(20.0)), Some(20.0));
 
@@ -98,17 +92,14 @@ mod tests {
     fn invalid_radius_is_a_library_sentinel() {
         let mut foreign = ForeignFunctions::new();
         install(&mut foreign).unwrap();
-        let expression = Value::record([
-            (
-                grap::vocabulary::FUNCTION,
-                Value::from(vocabulary::CIRCLE),
-            ),
-            (vocabulary::RADIUS, grap_f64::value(-1.0)),
-        ]);
+        let expression = grap::call(
+            Value::from(vocabulary::CIRCLE),
+            [(vocabulary::RADIUS, grap_f64::value(-1.0))],
+        );
         let evaluation = grap::evaluate(&expression, |_| None, &foreign, 10);
         assert_eq!(
             evaluation.result,
-            Ok(Value::from(vocabulary::INVALID_RADIUS))
+            Value::from(vocabulary::INVALID_RADIUS)
         );
         assert!(grap_error::is_error(
             library().value(vocabulary::INVALID_RADIUS).unwrap()

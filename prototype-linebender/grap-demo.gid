@@ -1,0 +1,264 @@
+{
+  "binders": {
+    "a_value": 2f18db9829ab562571641b9b6e25b9b2,
+    "add": 201af445eb7e2c270bb5ead10b781fc1,
+    "add_result": 1b49f9da65e4093654db337e6e0c477a,
+    "b_value": 9194b2ed0a54573b7cb33495cc930043,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "circle": eba2ca3d6a0fba957bd96bfb138c7a5b,
+    "circle_result": d3c65193be0a6f2a79d7d159252bab8d,
+    "contains_call": 32994f52e9af60be47619b6f15366ac7,
+    "demo": 91af60b2a8d1d93fe4de7551004fe50c,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "function_definition": 2ef86729dbd93e2bf8e39dd7b07546bb,
+    "grap": ac807d20d964e141d44c1b2eb98e5ca9,
+    "graph_expression": abbe2ebb6e77fd640835e864eacc2456,
+    "graph_function_result": 856c0b3c6eb8e393abcb2ef030ce5977,
+    "inert_data": 8a852d6431ce568a4ed5ae8c896e9902,
+    "input_a": 06057d0aebe175f07bfb9a9a357afa87,
+    "input_b": f0599427844678cc902efa15f63f9af8,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "metadata_call": 593532224a22c20bbac82ab13f97175b,
+    "missing_argument": c33ce0dfb1fd77c4a7ae99c754d89cc4,
+    "multiply": d6f384c439d9d69996d545df422efd79,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "nested_result": bce2fe206445192cfec01702b59fd9fb,
+    "not_callable": 81e144d4655ea57a02ce5389c0c9d811,
+    "note": 96264bd943a7259dbbad378b9293f607,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "quote": 6eb975b6080ba8f9463b8045906a9c3d,
+    "quote_result": f14a7c0d58bd3ca624d610a42415baff,
+    "radius": e2321b78d65f87918c64b7875408051a,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "scale": ccba1404490345dcf33d8a19ddaa5bd1,
+    "scale_and_add": b952167aa1bbf114a8586a966591b373,
+    "scale_and_add_expression": 3e54f01b50f5abbfc3895327881a404d,
+    "scale_parameter": a205c013d36ef3f8fa047295793e61b4,
+    "scale_value": 222efe84b66ed6181846198960a9f317,
+    "type_error": add1c43228ee478194bd066b83608685,
+    "unquote": 3b10378451b9eddf51cd0bc0601eb74e,
+    "x_parameter": 6044a6b79a55f0fd8bc522787f213b50,
+    "y_parameter": d678763cbd961acd0c4808b30e9be10b,
+  },
+  "cells": {
+    metadata_call: {
+      name: "call with metadata",
+    },
+    circle_result: {
+      name: "circle result",
+    },
+    contains_call: {
+      name: "contains a call",
+    },
+    demo: {
+      name: "demo",
+    },
+    scale_parameter: {
+      name: "factor",
+    },
+    function_definition: {
+      name: "function definition",
+    },
+    graph_expression: {
+      name: "graph expression",
+    },
+    graph_function_result: {
+      name: "graph function result",
+    },
+    inert_data: {
+      name: "inert data",
+    },
+    input_a: {
+      name: "input a",
+    },
+    input_b: {
+      name: "input b",
+    },
+    missing_argument: {
+      name: "missing argument",
+    },
+    nested_result: {
+      name: "nested result",
+    },
+    not_callable: {
+      name: "not callable",
+    },
+    note: {
+      name: "note",
+    },
+    quote_result: {
+      name: "quote and unquote",
+    },
+    scale: {
+      name: "scale",
+    },
+    scale_and_add: {
+      name: "scale and add",
+      params: [
+        x_parameter,
+        y_parameter,
+        scale_parameter,
+      ],
+      body: {
+        right: y_parameter,
+        function: add,
+        left: {
+          right: scale_parameter,
+          function: multiply,
+          left: x_parameter,
+        },
+      },
+    },
+    scale_and_add_expression: {
+      name: "scale and add expression",
+      x_parameter: a_value,
+      function: scale_and_add,
+      scale_parameter: scale_value,
+      y_parameter: b_value,
+    },
+    add_result: {
+      name: "sum",
+    },
+    type_error: {
+      name: "type error",
+    },
+    x_parameter: {
+      name: "x",
+    },
+    y_parameter: {
+      name: "y",
+    },
+    scale_value: {
+      f64: 0x0000000000002440,
+    },
+    a_value: {
+      f64: 0x0000000000000840,
+    },
+    b_value: {
+      f64: 0x0000000000001040,
+    },
+  },
+  "root": [
+    {
+      demo: "Edit the inputs; normal view shows {grap: expression → result}, while Raw shows the stored expression.",
+    },
+    {
+      input_a: a_value,
+    },
+    {
+      input_b: b_value,
+    },
+    {
+      scale: scale_value,
+    },
+    {
+      add_result: {
+        grap: {
+          right: b_value,
+          function: add,
+          left: a_value,
+        },
+      },
+    },
+    {
+      nested_result: {
+        grap: {
+          right: scale_value,
+          function: multiply,
+          left: {
+            right: b_value,
+            function: add,
+            left: a_value,
+          },
+        },
+      },
+    },
+    {
+      function_definition: scale_and_add,
+    },
+    {
+      graph_expression: scale_and_add_expression,
+    },
+    {
+      graph_function_result: {
+        grap: scale_and_add_expression,
+      },
+    },
+    {
+      circle_result: {
+        grap: {
+          function: circle,
+          radius: {
+            x_parameter: a_value,
+            function: scale_and_add,
+            scale_parameter: scale_value,
+            y_parameter: b_value,
+          },
+        },
+      },
+    },
+    {
+      metadata_call: {
+        grap: {
+          right: b_value,
+          function: add,
+          left: a_value,
+          note: "extra fields remain visible and do not prevent evaluation",
+        },
+      },
+    },
+    {
+      quote_result: {
+        grap: {
+          quote: {
+            add_result: {
+              unquote: {
+                right: b_value,
+                function: add,
+                left: a_value,
+              },
+            },
+            note: "quote constructed this record and interpolated the sum",
+          },
+        },
+      },
+    },
+    {
+      inert_data: {
+        grap: {
+          contains_call: {
+            right: b_value,
+            function: add,
+            left: a_value,
+          },
+          note: "this record is data, so its call-shaped child remains data",
+        },
+      },
+    },
+    {
+      type_error: {
+        grap: {
+          right: b_value,
+          function: add,
+          left: "three",
+        },
+      },
+    },
+    {
+      missing_argument: {
+        grap: {
+          function: add,
+          left: a_value,
+        },
+      },
+    },
+    {
+      not_callable: {
+        grap: {
+          function: a_value,
+        },
+      },
+    },
+  ],
+}

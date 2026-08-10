@@ -2055,8 +2055,14 @@ fn run_frame(
     let hover_node = graph_hover
         .and_then(|node| graph_view::node_value(&model.doc, node))
         .filter(|value| !matches!(value, Value::Record(_)));
-    let grap_projection = |value: &Value| {
-        raw::grap_stand_in(value, |cell| sources.value(cell).cloned(), &model.foreign)
+    let value_projection = raw::value_stand_in;
+    let grap_field_projection = |field, value: &Value| {
+        raw::grap_field_stand_in(
+            field,
+            value,
+            |cell| sources.value(cell).cloned(),
+            &model.foreign,
+        )
     };
     let body = raw::project(
         raw::ProjectDescription {
@@ -2070,7 +2076,8 @@ fn run_frame(
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            projection: Some(&grap_projection),
+            projection: Some(&value_projection),
+            field_projection: Some(&grap_field_projection),
         },
         &mut tcx,
         raw::Hooks {

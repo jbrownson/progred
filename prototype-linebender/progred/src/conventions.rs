@@ -6,6 +6,15 @@ use crate::sources::Sources;
 use progred_graph::{CellId, Cells};
 use std::rc::Rc;
 
+pub mod vocabulary {
+    use progred_graph::CellId;
+
+    /// Field projection: its value is evaluated by Grap and the result
+    /// is projected in normal-form mode. This is not a Grap evaluator
+    /// form.
+    pub const GRAP: CellId = CellId::from_u128(0xac807d20d964e141d44c1b2eb98e5ca9);
+}
+
 pub fn library() -> Cells {
     let mut cells = progred_name::library();
     cells.merge(progred_isa::library());
@@ -13,6 +22,7 @@ pub fn library() -> Cells {
     cells.merge(grap_error::library());
     cells.merge(grap_f64::library());
     cells.merge(grap_geometry::library());
+    cells.set_value(vocabulary::GRAP, progred_name::record("grap", []));
     cells
 }
 

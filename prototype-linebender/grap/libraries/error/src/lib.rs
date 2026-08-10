@@ -3,6 +3,7 @@
 //! errors through the independent `isa` convention.
 
 use progred_graph::{Cells, Value};
+use progred_isa::Isa as _;
 
 pub mod vocabulary {
     use progred_graph::CellId;
@@ -11,26 +12,20 @@ pub mod vocabulary {
 }
 
 pub fn value() -> Value {
-    progred_isa::value(vocabulary::ERROR)
+    Value::record([progred_isa::field(vocabulary::ERROR)])
 }
 
 pub fn named(name: impl Into<String>) -> Value {
-    progred_name::record(
-        name,
-        [(
-            progred_isa::vocabulary::ISA,
-            Value::from(vocabulary::ERROR),
-        )],
-    )
+    progred_name::record(name, [progred_isa::field(vocabulary::ERROR)])
 }
 
 pub fn is_error(value: &Value) -> bool {
-    progred_isa::is(value, vocabulary::ERROR)
+    value.isa(vocabulary::ERROR)
 }
 
 pub fn library() -> Cells {
     let mut cells = Cells::new();
-    cells.set_value(vocabulary::ERROR, progred_name::value("error"));
+    cells.set_value(vocabulary::ERROR, progred_name::record("error", []));
     cells
 }
 

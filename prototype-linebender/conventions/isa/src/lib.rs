@@ -10,21 +10,30 @@ pub mod vocabulary {
     pub const ISA: CellId = CellId::from_u128(0xdcedb3a466c3a3e2c6b2826153e82e78);
 }
 
-pub fn value(class: CellId) -> Value {
-    Value::record([(vocabulary::ISA, Value::from(class))])
+pub fn field(class: CellId) -> (CellId, Value) {
+    (vocabulary::ISA, Value::from(class))
 }
 
-pub fn is(value: &Value, class: CellId) -> bool {
+pub fn read(value: &Value) -> Option<CellId> {
     value
         .as_record()
         .and_then(|fields| fields.get(&vocabulary::ISA))
         .and_then(Value::as_cell)
-        == Some(class)
+}
+
+pub trait Isa {
+    fn isa(&self, class: CellId) -> bool;
+}
+
+impl Isa for Value {
+    fn isa(&self, class: CellId) -> bool {
+        read(self) == Some(class)
+    }
 }
 
 pub fn library() -> Cells {
     let mut cells = Cells::new();
-    cells.set_value(vocabulary::ISA, progred_name::value("isa"));
+    cells.set_value(vocabulary::ISA, progred_name::record("isa", []));
     cells
 }
 
@@ -36,9 +45,14 @@ mod tests {
     #[test]
     fn classification_is_structural_and_extensible() {
         let class = new_cell_id();
-        let mut fields = value(class).as_record().unwrap().clone();
+        let mut fields = Value::record([field(class)])
+            .as_record()
+            .unwrap()
+            .clone();
         fields.insert(new_cell_id(), Value::from(vec![1]));
-        assert!(is(&Value::Record(fields), class));
-        assert!(!is(&Value::from(class), class));
+        let classified = Value::Record(fields);
+        assert_eq!(read(&classified), Some(class));
+        assert!(classified.isa(class));
+        assert!(!Value::from(class).isa(class));
     }
 }

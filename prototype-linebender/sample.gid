@@ -15,6 +15,7 @@
     "favorite": a83b16a0d85afeb98d46c3459f2e7e16,
     "favorite_value": 7acfbb51cd4b3c60645d0c2955775c1a,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "grap": ac807d20d964e141d44c1b2eb98e5ca9,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "material": c7c1197574183c44d7e038cb52d78760,
     "multiply": d6f384c439d9d69996d545df422efd79,
@@ -103,15 +104,17 @@
       stroke: "hairline",
       style: _321ee,
       profile: {
-        function: circle,
-        radius: {
-          right: {
-            f64: 0x0000000000002040,
-          },
-          function: multiply,
-          left: {
-            amount: pitch_value,
-            function: double,
+        grap: {
+          function: circle,
+          radius: {
+            right: {
+              f64: 0x0000000000002040,
+            },
+            function: multiply,
+            left: {
+              amount: pitch_value,
+              function: double,
+            },
           },
         },
       },
@@ -122,8 +125,10 @@
       pitch: pitch_value,
       material: _8c710,
       double_pitch: {
-        amount: pitch_value,
-        function: double,
+        grap: {
+          amount: pitch_value,
+          function: double,
+        },
       },
       points: [
         origin,

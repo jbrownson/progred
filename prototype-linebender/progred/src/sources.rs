@@ -86,7 +86,7 @@ mod tests {
         );
 
         let mut cells = Cells::new();
-        cells.set_value(cell, progred_name::value("mine"));
+        cells.set_value(cell, progred_name::record("mine", []));
         let doc = doc_of(cells);
         let sources = Sources {
             doc: &doc,

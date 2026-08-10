@@ -37,17 +37,17 @@ pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> 
     foreign.register(
         vocabulary::ADD,
         [vocabulary::LEFT, vocabulary::RIGHT],
-        |args| binary(args, |left, right| left + right),
+        |arguments| binary(arguments, |left, right| left + right),
     )?;
     foreign.register(
         vocabulary::MULTIPLY,
         [vocabulary::LEFT, vocabulary::RIGHT],
-        |args| binary(args, |left, right| left * right),
+        |arguments| binary(arguments, |left, right| left * right),
     )
 }
 
-fn binary(args: &[Value], operation: impl FnOnce(f64, f64) -> f64) -> Value {
-    match args {
+fn binary(arguments: &[Value], operation: impl FnOnce(f64, f64) -> f64) -> Value {
+    match arguments {
         [left, right] => match (read(left), read(right)) {
             (Some(left), Some(right)) => value(operation(left, right)),
             (None, _) => Value::from(vocabulary::LEFT_NOT_F64),
@@ -66,7 +66,7 @@ pub fn library() -> Cells {
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
     ] {
-        cells.set_value(cell, progred_name::value(name));
+        cells.set_value(cell, progred_name::record(name, []));
     }
     for (cell, name) in [
         (vocabulary::LEFT_NOT_F64, "left is not f64"),
@@ -83,14 +83,13 @@ mod tests {
     use progred_graph::{CellId, new_cell_id};
 
     fn call(function: CellId, left: Value, right: Value) -> Value {
-        Value::record([
-            (
-                grap::vocabulary::FUNCTION,
-                Value::from(function),
-            ),
-            (vocabulary::LEFT, left),
-            (vocabulary::RIGHT, right),
-        ])
+        grap::call(
+            Value::from(function),
+            [
+                (vocabulary::LEFT, left),
+                (vocabulary::RIGHT, right),
+            ],
+        )
     }
 
     fn foreign() -> ForeignFunctions {
@@ -120,7 +119,7 @@ mod tests {
         let multiply = call(vocabulary::MULTIPLY, add, value(4.0));
         assert_eq!(
             grap::evaluate(&multiply, |_| None, &foreign(), 20).result,
-            Ok(value(20.0))
+            value(20.0)
         );
     }
 
@@ -130,11 +129,11 @@ mod tests {
         let right = call(vocabulary::ADD, value(2.0), Value::from(b"three".to_vec()));
         assert_eq!(
             grap::evaluate(&left, |_| None, &foreign(), 10).result,
-            Ok(Value::from(vocabulary::LEFT_NOT_F64))
+            Value::from(vocabulary::LEFT_NOT_F64)
         );
         assert_eq!(
             grap::evaluate(&right, |_| None, &foreign(), 10).result,
-            Ok(Value::from(vocabulary::RIGHT_NOT_F64))
+            Value::from(vocabulary::RIGHT_NOT_F64)
         );
     }
 

@@ -660,8 +660,8 @@ mod tests {
         let unnamed_b = CellId::from_u128(0x222222222222222222222222222abcde);
         let mut cells = Cells::new();
         cells.set_value(loaded, Value::from(vec![0]));
-        cells.set_value(named_a, progred_name::value("same"));
-        cells.set_value(named_b, progred_name::value("same"));
+        cells.set_value(named_a, progred_name::record("same", []));
+        cells.set_value(named_b, progred_name::record("same", []));
         cells.set_value(unnamed_a, Value::from(vec![1]));
         cells.set_value(unnamed_b, Value::from(vec![2]));
         let doc = Document { root: None, cells };
@@ -724,6 +724,13 @@ mod tests {
 mod sample_file {
     use super::*;
 
+    fn grap_expression(value: &Value) -> &Value {
+        value
+            .as_record()
+            .and_then(|fields| fields.get(&crate::conventions::vocabulary::GRAP))
+            .expect("Grap projection boundary")
+    }
+
     /// The checked-in sample is canonical: it parses, and printing
     /// it back is the identity — the printer's golden fixture.
     #[test]
@@ -746,9 +753,11 @@ mod sample_file {
             .and_then(|roof| doc.cells.value(roof))
             .and_then(Value::as_record)
             .expect("roof record");
-        let expression = roof
+        let expression = grap_expression(
+            roof
             .get(&crate::test_values::label("double pitch"))
-            .expect("Grap expression");
+            .expect("Grap expression"),
+        );
         let foreign = crate::conventions::foreign_functions();
         assert_eq!(
             grap::evaluate(
@@ -758,23 +767,159 @@ mod sample_file {
                 grap::DEFAULT_FUEL,
             )
             .result,
-            Ok(grap_f64::value(5.0))
+            grap_f64::value(5.0)
         );
-        let profile = roof
-            .get(&crate::test_values::label("profile"))
-            .expect("profile call");
+        let profile = grap_expression(
+            roof
+                .get(&crate::test_values::label("profile"))
+                .expect("profile call"),
+        );
         let evaluation = grap::evaluate(
             profile,
             |cell| doc.cells.value(cell).cloned(),
             &foreign,
             grap::DEFAULT_FUEL,
         );
-        assert_eq!(evaluation.result, Ok(grap_geometry::value(40.0)));
+        assert_eq!(evaluation.result, grap_geometry::value(40.0));
         assert_eq!(
             evaluation.dependencies,
             [binders["double"], binders["pitch_value"]]
                 .into_iter()
                 .collect()
+        );
+    }
+}
+
+#[cfg(test)]
+mod grap_demo_file {
+    use super::*;
+
+    fn fixture() -> (Document, Binders) {
+        parse(include_str!("../../grap-demo.gid")).expect("the Grap demo parses")
+    }
+
+    fn entry<'a>(doc: &'a Document, binders: &Binders, label: &str) -> &'a Value {
+        doc.root
+            .as_ref()
+            .and_then(Value::as_list)
+            .and_then(|entries| {
+                entries
+                    .values()
+                    .filter_map(Value::as_record)
+                    .find_map(|entry| entry.get(&binders[label]))
+            })
+            .unwrap_or_else(|| panic!("demo entry `{label}`"))
+    }
+
+    fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
+        grap::evaluate(
+            expression,
+            |cell| doc.cells.value(cell).cloned(),
+            &crate::conventions::foreign_functions(),
+            grap::DEFAULT_FUEL,
+        )
+    }
+
+    fn grap_expression(value: &Value) -> &Value {
+        value
+            .as_record()
+            .and_then(|fields| fields.get(&crate::conventions::vocabulary::GRAP))
+            .expect("Grap projection boundary")
+    }
+
+    #[test]
+    fn the_grap_demo_is_a_fixed_point() {
+        let text = include_str!("../../grap-demo.gid");
+        let (doc, binders) = fixture();
+        assert_eq!(print(&doc, &binders), text);
+    }
+
+    #[test]
+    fn the_grap_demo_exercises_live_functions_data_and_errors() {
+        let (mut doc, binders) = fixture();
+        for (label, expected) in [
+            ("add_result", grap_f64::value(7.0)),
+            ("nested_result", grap_f64::value(70.0)),
+            ("graph_function_result", grap_f64::value(34.0)),
+            ("circle_result", grap_geometry::value(34.0)),
+            ("metadata_call", grap_f64::value(7.0)),
+            (
+                "quote_result",
+                Value::record([
+                    (binders["add_result"], grap_f64::value(7.0)),
+                    (
+                        binders["note"],
+                        progred_text::value(
+                            "quote constructed this record and interpolated the sum",
+                        ),
+                    ),
+                ]),
+            ),
+        ] {
+            assert_eq!(
+                evaluate(&doc, grap_expression(entry(&doc, &binders, label))).result,
+                expected
+            );
+        }
+
+        let inert = grap_expression(entry(&doc, &binders, "inert_data"));
+        assert_eq!(evaluate(&doc, inert).result, *inert);
+        assert_eq!(
+            evaluate(
+                &doc,
+                grap_expression(entry(&doc, &binders, "type_error")),
+            )
+            .result,
+            Value::from(grap_f64::vocabulary::LEFT_NOT_F64)
+        );
+        assert_eq!(
+            evaluate(
+                &doc,
+                grap_expression(entry(&doc, &binders, "missing_argument")),
+            )
+            .result,
+            Value::from(grap::error::MISSING_ARGUMENT)
+        );
+        assert_eq!(
+            evaluate(
+                &doc,
+                grap_expression(entry(&doc, &binders, "not_callable")),
+            )
+            .result,
+            Value::from(grap::error::NOT_CALLABLE)
+        );
+
+        let metadata = evaluate(
+            &doc,
+            grap_expression(entry(&doc, &binders, "metadata_call")),
+        );
+        assert_eq!(metadata.unconsumed, [binders["note"]].into_iter().collect());
+
+        doc.cells
+            .set_value(binders["a_value"], grap_f64::value(5.0));
+        assert_eq!(
+            evaluate(
+                &doc,
+                grap_expression(entry(&doc, &binders, "add_result")),
+            )
+            .result,
+            grap_f64::value(9.0)
+        );
+        assert_eq!(
+            evaluate(
+                &doc,
+                grap_expression(entry(&doc, &binders, "graph_function_result")),
+            )
+            .result,
+            grap_f64::value(54.0)
+        );
+        assert_eq!(
+            evaluate(
+                &doc,
+                grap_expression(entry(&doc, &binders, "circle_result")),
+            )
+            .result,
+            grap_geometry::value(54.0)
         );
     }
 }

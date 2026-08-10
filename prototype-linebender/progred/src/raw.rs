@@ -9,8 +9,8 @@ use crate::conventions::Names;
 use crate::filter;
 use crate::hover::HasHover;
 use crate::layout::{
-    Extent, Node, before, col, decorate, leaf, min_width, on_primary_pointer_down, pad, row, text,
-    text_edit,
+    Extent, Node, around, before, col, decorate, leaf, min_width, on_primary_pointer_down, pad,
+    row, text, text_edit,
 };
 use crate::sources::Sources;
 use im::OrdMap;
@@ -149,7 +149,7 @@ pub fn sample_document() -> Document {
         (sample_vocabulary::SHAPE, "shape"),
         (sample_vocabulary::FAVORITE, "favorite"),
     ] {
-        cells.set_value(cell, progred_name::value(name));
+        cells.set_value(cell, progred_name::record(name, []));
     }
     let roof = new_cell_id();
 
@@ -202,7 +202,7 @@ pub fn sample_document() -> Document {
     );
 
     let stroke = new_cell_id();
-    cells.set_value(stroke, progred_name::value("stroke"));
+    cells.set_value(stroke, progred_name::record("stroke", []));
 
     let style = new_cell_id();
     cells.set_value(
@@ -226,7 +226,7 @@ pub fn sample_document() -> Document {
     cells.set_value(favorite, Value::from(corner));
 
     let amount = new_cell_id();
-    cells.set_value(amount, progred_name::value("amount"));
+    cells.set_value(amount, progred_name::record("amount", []));
 
     let double = new_cell_id();
     cells.set_value(
@@ -240,17 +240,16 @@ pub fn sample_document() -> Document {
                 ),
                 (
                     grap::vocabulary::BODY,
-                    Value::record([
-                        (
-                            grap::vocabulary::FUNCTION,
-                            Value::from(grap_f64::vocabulary::MULTIPLY),
-                        ),
-                        (grap_f64::vocabulary::LEFT, Value::from(amount)),
-                        (
-                            grap_f64::vocabulary::RIGHT,
-                            grap_f64::value(2.0),
-                        ),
-                    ]),
+                    grap::call(
+                        Value::from(grap_f64::vocabulary::MULTIPLY),
+                        [
+                            (grap_f64::vocabulary::LEFT, Value::from(amount)),
+                            (
+                                grap_f64::vocabulary::RIGHT,
+                                grap_f64::value(2.0),
+                            ),
+                        ],
+                    ),
                 ),
             ],
         ),
@@ -259,11 +258,9 @@ pub fn sample_document() -> Document {
     let pitch = new_cell_id();
     cells.set_value(pitch, grap_f64::value(2.5));
 
-    let double_pitch = || {
-        Value::record([
-            (grap::vocabulary::FUNCTION, Value::from(double)),
-            (amount, Value::from(pitch)),
-        ])
+    let double_pitch = || grap::call(Value::from(double), [(amount, Value::from(pitch))]);
+    let grap_projection = |expression| {
+        Value::record([(crate::conventions::vocabulary::GRAP, expression)])
     };
 
     cells.set_value(
@@ -286,29 +283,28 @@ pub fn sample_document() -> Document {
                 ),
                 (sample_vocabulary::STYLE, Value::from(style)),
                 (sample_vocabulary::PITCH, Value::from(pitch)),
-                (sample_vocabulary::DOUBLE_PITCH, double_pitch()),
+                (
+                    sample_vocabulary::DOUBLE_PITCH,
+                    grap_projection(double_pitch()),
+                ),
                 (
                     sample_vocabulary::PROFILE,
-                    Value::record([
-                        (
-                            grap::vocabulary::FUNCTION,
-                            Value::from(grap_geometry::vocabulary::CIRCLE),
-                        ),
-                        (
+                    grap_projection(grap::call(
+                        Value::from(grap_geometry::vocabulary::CIRCLE),
+                        [(
                             grap_geometry::vocabulary::RADIUS,
-                            Value::record([
-                                (
-                                    grap::vocabulary::FUNCTION,
-                                    Value::from(grap_f64::vocabulary::MULTIPLY),
-                                ),
-                                (grap_f64::vocabulary::LEFT, double_pitch()),
-                                (
-                                    grap_f64::vocabulary::RIGHT,
-                                    grap_f64::value(8.0),
-                                ),
-                            ]),
-                        ),
-                    ]),
+                            grap::call(
+                                Value::from(grap_f64::vocabulary::MULTIPLY),
+                                [
+                                    (grap_f64::vocabulary::LEFT, double_pitch()),
+                                    (
+                                        grap_f64::vocabulary::RIGHT,
+                                        grap_f64::value(8.0),
+                                    ),
+                                ],
+                            ),
+                        )],
+                    )),
                 ),
             ],
         ),
@@ -368,11 +364,23 @@ struct Cx<'a> {
     /// record form. It stands down in Raw, which shows structure as
     /// stored.
     projection: DomainProjection<'a>,
+    /// A field projection may reinterpret the value under a specific
+    /// label while leaving the enclosing record and its other fields
+    /// intact.
+    field_projection: FieldProjection<'a>,
+    /// An evaluator has already produced this subtree. Domain
+    /// projections still render its values, but a `grap` field in the
+    /// returned data is inert rather than requesting a second evaluation.
+    normal_form: bool,
+    /// A derived normal form has no stored child paths. Its root maps
+    /// back to the stored field value; descendants are display-only.
+    derived_root: Option<&'a [Step]>,
 }
 
 pub enum StandIn {
     Text(String),
     Circle { radius: f64 },
+    NormalForm(Value),
 }
 
 pub(crate) fn whole_text(value: &Value) -> Option<&str> {
@@ -413,27 +421,33 @@ fn whole_circle(value: &Value) -> Option<f64> {
     .then_some(radius)
 }
 
-/// The prototype's current presentation policy over evaluated Grap
-/// data. The evaluator itself knows neither numbers nor geometry.
-pub(crate) fn grap_stand_in(
+/// Compact whole-value projections supplied by the current numeric
+/// and geometry libraries. Semantic recognition remains open, while
+/// these stand-ins require the whole record so no fields disappear.
+pub(crate) fn value_stand_in(expression: &Value) -> Option<StandIn> {
+    whole_f64(expression)
+        .map(|number| StandIn::Text(number.to_string()))
+        .or_else(|| whole_circle(expression).map(|radius| StandIn::Circle { radius }))
+}
+
+pub type DomainProjection<'a> = Option<&'a dyn Fn(&Value) -> Option<StandIn>>;
+pub type FieldProjection<'a> = Option<&'a dyn Fn(CellId, &Value) -> Option<StandIn>>;
+
+/// Projection of the value under Progred's `grap` field. The field
+/// and enclosing record remain ordinary visible structure; only this
+/// child is evaluated. Core Grap does not know the field exists.
+pub(crate) fn grap_field_stand_in(
+    field: CellId,
     expression: &Value,
     resolve: impl Fn(CellId) -> Option<Value>,
     foreign: &grap::ForeignFunctions,
 ) -> Option<StandIn> {
-    let evaluation = grap::evaluate(expression, resolve, foreign, grap::DEFAULT_FUEL);
-    evaluation
-        .unconsumed
-        .is_empty()
-        .then(|| evaluation.result.ok())
-        .flatten()
-        .and_then(|value| {
-            whole_f64(&value)
-                .map(|number| StandIn::Text(number.to_string()))
-                .or_else(|| whole_circle(&value).map(|radius| StandIn::Circle { radius }))
-        })
+    (field == crate::conventions::vocabulary::GRAP).then(|| {
+        StandIn::NormalForm(
+            grap::evaluate(expression, resolve, foreign, grap::DEFAULT_FUEL).result,
+        )
+    })
 }
-
-pub type DomainProjection<'a> = Option<&'a dyn Fn(&Value) -> Option<StandIn>>;
 
 /// A reported click on projected text, in text-local coordinates.
 /// The shell's selection transition consumes it to seed or advance
@@ -560,9 +574,9 @@ impl Cx<'_> {
 pub type Path = Vec<Step>;
 
 /// What is selected: the value at a path, or a nonexistent field
-/// being authored. A selected plain text value carries its live editor state —
-/// every projected text value is a text editor, focused by selection, and the graph
-/// is written through as it edits. A pending selection carries the
+    /// being authored. A selected editable atom carries its live editor state —
+    /// projected text and f64 values are text editors focused by selection, and the
+    /// graph is written through as they edit. A pending selection carries the
 /// completion query instead; the query resolves to the value that
 /// commits, and until then the graph is untouched — deselecting
 /// discards the pending entirely.
@@ -624,7 +638,14 @@ impl Selection {
             .then(|| {
                 sources
                     .resolve(&path)
-                    .and_then(|value| whole_text(value).map(line_edit))
+                    .and_then(|value| {
+                        whole_text(value)
+                            .map(line_edit)
+                            .or_else(|| {
+                                whole_f64(value)
+                                    .map(|number| line_edit(&number.to_string()))
+                            })
+                    })
             })
             .flatten();
         Selection::Edge {
@@ -1274,7 +1295,7 @@ pub fn resolve_label(action: &EntryAction) -> Option<(CellId, Option<(CellId, Va
         EntryAction::Value(value) => value.as_cell().map(|cell| (cell, None)),
         EntryAction::NewLabel(name) => {
             let cell = new_cell_id();
-            Some((cell, Some((cell, progred_name::value(name)))))
+            Some((cell, Some((cell, progred_name::record(name, [])))))
         }
         EntryAction::NewCell => Some((new_cell_id(), None)),
         EntryAction::NewList | EntryAction::NewRecord => None,
@@ -1396,9 +1417,9 @@ pub fn set_collapse(
 fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
     sources
         .resolve(path)
-        // The compact text projection is one leaf. Once another
-        // field enriches it, the visible record is collapsible.
-        .filter(|value| whole_text(value).is_none())
+        // Compact atom projections are leaves. Once another field
+        // enriches either convention, the visible record is collapsible.
+        .filter(|value| whole_text(value).is_none() && whole_f64(value).is_none())
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
             Value::Blob(_) => false,
@@ -1424,8 +1445,8 @@ fn store_collapse(collapse: &mut Collapse, path: &[Step], default: bool, next: b
 
 /// Writes the selection's editor text through to its location after
 /// every handled event — the graph is the source of truth. The
-/// edited kind follows the current value: only compact text values mount
-/// editors, and they write every keystroke. Everything funnels
+/// edited kind follows the current value: compact text and f64 values mount
+/// editors, and valid intermediate values write every keystroke. Everything funnels
 /// through [`set_value`], so an element edit rebuilds its list at
 /// the owning cell and a location that no longer takes the write
 /// drops it silently — the malformed-graph rule at the mutation
@@ -1452,9 +1473,15 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
                 library,
             };
             let current = sources.resolve(path);
-            let next = current
-                .and_then(whole_text)
-                .map(|_| progred_text::value(text));
+            let next = current.and_then(|value| {
+                whole_text(value)
+                    .map(|_| progred_text::value(text.clone()))
+                    .or_else(|| {
+                        whole_f64(value)
+                            .and_then(|_| text.parse::<f64>().ok())
+                            .map(grap_f64::value)
+                    })
+            });
             (current.cloned(), next)
         };
         match next {
@@ -2044,6 +2071,11 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
     hooks: &Hooks<C>,
     child: Node<P>,
 ) -> Node<P> {
+    let (path, derived) = match cx.derived_root {
+        Some(root) if root != path.as_slice() => return child,
+        Some(root) => (root.to_vec(), true),
+        None => (path, false),
+    };
     let scale = cx.styles.scale;
     let selected = cx.selected(&path);
     let hovered = cx.hovered_value(&path);
@@ -2056,7 +2088,9 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
         } else if hovered {
             hover_highlight(scale, p, rect);
         }
-        hover_claim(p, placement, Hover::Value(path.clone()));
+        if !derived {
+            hover_claim(p, placement, Hover::Value(path.clone()));
+        }
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
@@ -2073,7 +2107,9 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
                     true
                 }
         });
-        p.descends().push(Descend { path, rect });
+        if !derived {
+            p.descends().push(Descend { path, rect });
+        }
     })
 }
 
@@ -2107,6 +2143,7 @@ pub struct ProjectDescription<'a> {
     pub styles: &'a RawStyles,
     pub width: f64,
     pub projection: DomainProjection<'a>,
+    pub field_projection: FieldProjection<'a>,
 }
 
 pub fn project<
@@ -2129,6 +2166,7 @@ pub fn project<
         styles,
         width,
         projection,
+        field_projection,
     } = description;
     let cx = Cx {
         sources,
@@ -2139,6 +2177,9 @@ pub fn project<
         selection,
         hover,
         projection,
+        field_projection,
+        normal_form: false,
+        derived_root: None,
         // The graph view's selected cell is a secondary here too:
         // its projections are the same value — and the graph view's
         // HOVERED cell is a hover secondary the same way.
@@ -2285,6 +2326,9 @@ fn cell_view<
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
 fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>) -> Node<P> {
+    if cx.derived_root.is_some() {
+        return child;
+    }
     let selected = cx.selected(&path);
     let hovered = cx.hovered_value(&path);
     let scale = cx.styles.scale;
@@ -2358,10 +2402,111 @@ fn head_view<
         descend(cx, edge, Some(target), hooks, content)
     } else {
         let content = secondary_mark(cx, &mark, content);
-        decorate(content, move |p: &mut P, rect| {
-            p.descends().push(Descend { path: edge, rect });
-        })
+        if cx.derived_root.is_some() {
+            content
+        } else {
+            decorate(content, move |p: &mut P, rect| {
+                p.descends().push(Descend { path: edge, rect });
+            })
+        }
     }
+}
+
+/// Project a record field's value in the context supplied by its
+/// label. Unlike a whole-value stand-in, this leaves the record and
+/// field head visible. Grap uses it to show the ordinary expression
+/// and its evaluated normal form; normal-form children deliberately
+/// skip field projection.
+fn field_value_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    key: CellId,
+    value: &Value,
+    avail: f64,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    match (!cx.raw && !cx.normal_form)
+        .then(|| {
+            cx.field_projection
+                .and_then(|projection| projection(key, value))
+        })
+        .flatten()
+    {
+        Some(StandIn::NormalForm(result)) => evaluation_view(
+            cx, tcx, path, ancestors, value, result, avail, hooks,
+        ),
+        Some(stand_in) => stand_in_view(cx, tcx, path, value, hooks, stand_in),
+        None => value_view(cx, tcx, path, ancestors, value, avail, hooks),
+    }
+}
+
+/// The projection-level account of evaluation: the stored expression
+/// remains an ordinary editable projection, followed by projection
+/// chrome and the read-only derived normal form. Keeping the expression
+/// arm ordinary also preserves hover/secondary links to its other cell
+/// projections. Prefer one line; when it cannot fit, keep the arrow
+/// attached to the result on the following row.
+#[allow(clippy::too_many_arguments)]
+fn evaluation_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    expression: &Value,
+    result: Value,
+    avail: f64,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let scale = cx.styles.scale;
+    let gap = 6.0 * scale;
+    let flat = (avail > 0.0)
+        .then(|| {
+            row(
+                gap,
+                vec![
+                    value_view(
+                        cx,
+                        tcx,
+                        path,
+                        ancestors,
+                        expression,
+                        f64::INFINITY,
+                        hooks,
+                    ),
+                    text(tcx, "→", &cx.styles.dim),
+                    normal_form_view(
+                        cx,
+                        tcx,
+                        path,
+                        result.clone(),
+                        f64::INFINITY,
+                        hooks,
+                    ),
+                ],
+            )
+        })
+        .filter(|candidate| one_line(candidate.extent, scale));
+    if let Some(candidate) = flat.filter(|candidate| candidate.extent.width <= avail) {
+        return candidate;
+    }
+
+    let arrow = text(tcx, "→", &cx.styles.dim);
+    let result_avail = (avail - arrow.extent.width - gap).max(0.0);
+    let expression = value_view(cx, tcx, path, ancestors, expression, avail, hooks);
+    let result = normal_form_view(cx, tcx, path, result, result_avail, hooks);
+    col(
+        0,
+        2.0 * scale,
+        vec![expression, row(gap, vec![arrow, result])],
+    )
 }
 
 /// One record field row: the label-and-colon head, then the value (or
@@ -2432,15 +2577,25 @@ fn field_row<
     // probe that probed would recurse the exponential right back.
     let hug = beside >= avail - tab
         || (beside > 0.0
-            && value_view::<C, P>(cx, tcx, &child, ancestors, &value, f64::INFINITY, hooks)
-                .extent
-                .width
+            && field_value_view::<C, P>(
+                cx,
+                tcx,
+                &child,
+                ancestors,
+                key,
+                &value,
+                f64::INFINITY,
+                hooks,
+            )
+            .extent
+            .width
                 <= beside);
-    let content = value_view(
+    let content = field_value_view(
         cx,
         tcx,
         &child,
         ancestors,
+        key,
         &value,
         if hug { beside } else { avail - tab }.max(0.0),
         hooks,
@@ -2687,8 +2842,15 @@ fn record_view<
         .collect();
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {
         items.push((key, None));
-        items.sort_by_key(|item| item.0);
     }
+    items.sort_by(|(left, _), (right, _)| match (cx.name(*left), cx.name(*right)) {
+        (Some(left_name), Some(right_name)) => {
+            left_name.cmp(&right_name).then(left.cmp(right))
+        }
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => left.cmp(right),
+    });
     let pending_edge = cx.pending_edge_under(path).is_some();
     let renaming = cx.pending_rename_under(path);
     let target = Value::Record(fields.clone());
@@ -2753,9 +2915,16 @@ fn record_view<
                 });
                 cells.push(text(tcx, ": ", &cx.styles.dim));
                 cells.push(match value {
-                    Some(value) => {
-                        value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
-                    }
+                    Some(value) => field_value_view(
+                        cx,
+                        tcx,
+                        &child,
+                        ancestors,
+                        *key,
+                        value,
+                        f64::INFINITY,
+                        hooks,
+                    ),
                     None => pending_view(cx, tcx, child, hooks),
                 });
             }
@@ -2953,6 +3122,112 @@ fn circle_stand_in<P: Canvas>(radius: f64, scale: f64) -> Node<P> {
     )
 }
 
+fn stand_in_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    value: &Value,
+    hooks: &Hooks<C>,
+    stand_in: StandIn,
+) -> Node<P> {
+    match stand_in {
+        StandIn::Text(text_value) if whole_f64(value).is_some() => {
+            let editing = cx
+                .selection
+                .filter(|selection| selection.path() == path)
+                .and_then(Selection::edit);
+            let fallback = text(tcx, &text_value, &cx.styles.string);
+            let presentation = edit_presentation(&cx.styles.string);
+            let content = atom_content(
+                editing,
+                fallback,
+                presentation.clone(),
+                None,
+                tcx,
+                cx.styles,
+                hooks,
+            );
+            cursor_target(path.to_vec(), value.clone(), presentation, hooks, content)
+        }
+        StandIn::Text(text_value) => select_target(
+            path.to_vec(),
+            value.clone(),
+            hooks,
+            text(tcx, &text_value, &cx.styles.string),
+        ),
+        StandIn::Circle { radius } => select_target(
+            path.to_vec(),
+            value.clone(),
+            hooks,
+            circle_stand_in(radius, cx.styles.scale),
+        ),
+        StandIn::NormalForm(_) => unreachable!("normal forms use the generic value projection"),
+    }
+}
+
+/// Project an evaluator result through the same value renderer as
+/// stored graph data, but as a read-only derived subtree. The result
+/// root maps back to the stored field value's path; derived child
+/// paths do not pretend to exist in the document. `normal_form`
+/// prevents a returned `grap` field from evaluating again.
+fn normal_form_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    result: Value,
+    avail: f64,
+    hooks: &Hooks<C>,
+) -> Node<P> {
+    let origin = path.to_vec();
+    let select = hooks.select.clone();
+    let select_origin = origin.clone();
+    let result_hooks = Hooks {
+        select: Rc::new(move |ctx, _, _| select(ctx, select_origin.clone(), None)),
+        toggle: Rc::new(|_, _| {}),
+        rename: Rc::new(|_, _, _| {}),
+        edit: Rc::new(|_| None),
+        pick: hooks.pick.clone(),
+        insert: Rc::new(|_, _| {}),
+    };
+    let result_cx = Cx {
+        sources: cx.sources,
+        names: cx.names,
+        raw: false,
+        collapse: cx.collapse,
+        styles: cx.styles,
+        selection: None,
+        hover: None,
+        secondary: None,
+        secondary_hover: None,
+        projection: cx.projection,
+        field_projection: cx.field_projection,
+        normal_form: true,
+        derived_root: Some(path),
+    };
+    let projected = value_view(
+        &result_cx,
+        tcx,
+        path,
+        &HashSet::new(),
+        &result,
+        avail,
+        &result_hooks,
+    );
+    // The normal form is not another projection of the stored source
+    // value. Its inner views may install ordinary hover claims while
+    // rendering, so clear them after placement across this whole arm.
+    around(projected, |p, placement, place_inner| {
+        place_inner.place(p);
+        hover_block(p, placement);
+    })
+}
+
 fn value_view<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
@@ -3007,18 +3282,13 @@ fn value_view<
             .then(|| cx.projection.and_then(|projection| projection(value)))
             .flatten()
         {
-            Some(StandIn::Text(text_value)) => select_target(
-                path.to_vec(),
-                value.clone(),
-                hooks,
-                text(tcx, &text_value, &cx.styles.string),
-            ),
-            Some(StandIn::Circle { radius }) => select_target(
-                path.to_vec(),
-                value.clone(),
-                hooks,
-                circle_stand_in(radius, cx.styles.scale),
-            ),
+            Some(StandIn::NormalForm(result)) if !cx.normal_form => {
+                normal_form_view(cx, tcx, path, result, avail, hooks)
+            }
+            Some(StandIn::NormalForm(_)) => {
+                record_view(cx, tcx, path, ancestors, fields, avail, hooks)
+            }
+            Some(stand_in) => stand_in_view(cx, tcx, path, value, hooks, stand_in),
             None => record_view(cx, tcx, path, ancestors, fields, avail, hooks),
         },
     };
@@ -3588,9 +3858,20 @@ mod tests {
     use ui_events::keyboard::{KeyState, Modifiers};
 
     #[test]
-    fn compact_grap_stand_ins_do_not_hide_extra_fields() {
+    fn grap_fields_produce_normal_forms_without_changing_data_projection() {
         let foreign = crate::conventions::foreign_functions();
-        let project = |value: &Value| grap_stand_in(value, |_| None, &foreign);
+        let project = value_stand_in;
+        let project_grap_field = |value: &Value| {
+            grap_field_stand_in(
+                crate::conventions::vocabulary::GRAP,
+                value,
+                |_| None,
+                &foreign,
+            )
+        };
+        let grap_record = |expression| {
+            Value::record([(crate::conventions::vocabulary::GRAP, expression)])
+        };
 
         let number = grap_f64::value(2.5);
         assert!(matches!(project(&number), Some(StandIn::Text(_))));
@@ -3601,19 +3882,49 @@ mod tests {
         assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
         assert!(project(&enriched_number).is_none());
 
+        let plain_call = grap::call(
+            Value::from(grap_f64::vocabulary::ADD),
+            [
+                (grap_f64::vocabulary::LEFT, grap_f64::value(2.0)),
+                (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
+            ],
+        );
+        assert!(project(&plain_call).is_none());
+        assert!(matches!(
+            project_grap_field(&plain_call),
+            Some(StandIn::NormalForm(result)) if result == grap_f64::value(5.0)
+        ));
+        let enriched_grap_record = Value::record([
+            (
+                crate::conventions::vocabulary::GRAP,
+                plain_call.clone(),
+            ),
+            (
+                crate::test_values::label("created-at"),
+                crate::test_values::text("now"),
+            ),
+        ]);
+        assert!(project(&enriched_grap_record).is_none());
+        assert!(project(&grap_record(plain_call.clone())).is_none());
+
+        let parameter = progred_graph::new_cell_id();
+        let definition = grap::function([parameter], Value::from(parameter));
+        assert!(project(&definition).is_none());
+
+        let quoted_call = grap::quote(grap::unquote(plain_call.clone()));
+        assert!(project(&quoted_call).is_none());
+        assert!(matches!(
+            project_grap_field(&quoted_call),
+            Some(StandIn::NormalForm(result)) if result == grap_f64::value(5.0)
+        ));
+
         let call = Value::record([
             (
                 grap::vocabulary::FUNCTION,
                 Value::from(grap_f64::vocabulary::ADD),
             ),
-            (
-                grap_f64::vocabulary::LEFT,
-                grap_f64::value(2.0),
-            ),
-            (
-                grap_f64::vocabulary::RIGHT,
-                grap_f64::value(3.0),
-            ),
+            (grap_f64::vocabulary::LEFT, grap_f64::value(2.0)),
+            (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
             (
                 crate::test_values::label("created-at"),
                 crate::test_values::text("now"),
@@ -3621,9 +3932,44 @@ mod tests {
         ]);
         assert_eq!(
             grap::evaluate(&call, |_| None, &foreign, grap::DEFAULT_FUEL).result,
-            Ok(grap_f64::value(5.0))
+            grap_f64::value(5.0)
         );
-        assert!(project(&call).is_none());
+        assert!(matches!(
+            project_grap_field(&call),
+            Some(StandIn::NormalForm(result)) if result == grap_f64::value(5.0)
+        ));
+
+        let invalid = grap::call(
+            Value::from(grap_f64::vocabulary::ADD),
+            [
+                (
+                    grap_f64::vocabulary::LEFT,
+                    Value::from(b"not a number".to_vec()),
+                ),
+                (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
+            ],
+        );
+        assert!(matches!(
+            project_grap_field(&invalid),
+            Some(StandIn::NormalForm(result))
+                if result == Value::from(grap_f64::vocabulary::LEFT_NOT_F64)
+        ));
+
+        let ordinary_record = Value::record([(
+            crate::test_values::label("ordinary data"),
+            grap::call(
+                Value::from(grap_f64::vocabulary::ADD),
+                [
+                    (grap_f64::vocabulary::LEFT, grap_f64::value(2.0)),
+                    (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
+                ],
+            ),
+        )]);
+        assert_eq!(
+            grap::evaluate(&ordinary_record, |_| None, &foreign, grap::DEFAULT_FUEL).result,
+            ordinary_record
+        );
+        assert!(project(&ordinary_record).is_none());
 
         let circle = grap_geometry::value(20.0);
         assert!(matches!(
@@ -3904,7 +4250,8 @@ mod tests {
         doc.cells.set_value(cell, crate::test_values::text("held"));
         assert!(at(&doc, vec![Step::Follow]).edit().is_some());
         // A simple name convention is just another text field.
-        doc.cells.set_value(cell, progred_name::value("roof"));
+        doc.cells
+            .set_value(cell, progred_name::record("roof", []));
         assert!(
             at(
                 &doc,
@@ -3939,6 +4286,34 @@ mod tests {
         assert_eq!(
             src(&doc, &lib).resolve(&path),
             Some(&crate::test_values::text("new"))
+        );
+    }
+
+    #[test]
+    fn compact_f64_values_edit_as_decimal_text() {
+        let lib = Cells::new();
+        let cell = new_cell_id();
+        let mut cells = Cells::new();
+        cells.set_value(cell, grap_f64::value(2.5));
+        let mut doc = Document {
+            root: Some(Value::from(cell)),
+            cells,
+        };
+        let path = vec![Step::Follow];
+        let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
+        assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
+        selection.edit_mut().unwrap().set_text("7.25");
+        assert!(write_through(&mut doc, &lib, &mut selection));
+        assert_eq!(
+            src(&doc, &lib).resolve(&path).and_then(grap_f64::read),
+            Some(7.25)
+        );
+
+        selection.edit_mut().unwrap().set_text("not a number");
+        assert!(!write_through(&mut doc, &lib, &mut selection));
+        assert_eq!(
+            src(&doc, &lib).resolve(&path).and_then(grap_f64::read),
+            Some(7.25)
         );
     }
 
@@ -4183,7 +4558,8 @@ mod tests {
                 Value::list([crate::test_values::text("2"), crate::test_values::text("3")]),
             ),
         ]);
-        doc.cells.set_value(child, progred_name::value("c"));
+        doc.cells
+            .set_value(child, progred_name::record("c", []));
 
         assert!(!delete_edge(
             &mut doc,
@@ -4819,7 +5195,7 @@ mod tests {
         // An EXTERNAL cell has an ordinary value, so its Follow slot
         // selects normally and remains unwritable.
         let lib_cell = new_cell_id();
-        lib.set_value(lib_cell, progred_name::value("convention"));
+        lib.set_value(lib_cell, progred_name::record("convention", []));
         doc.root = Some(Value::from(lib_cell));
         assert!(matches!(
             Selection::edge(&src(&doc, &lib), vec![Step::Follow]),
@@ -5141,8 +5517,15 @@ mod svg_bench {
         // bench runs; single-digit milliseconds is healthy.
         let start = std::time::Instant::now();
         let foreign = crate::conventions::foreign_functions();
-        let projection =
-            |value: &Value| grap_stand_in(value, |cell| sources.value(cell).cloned(), &foreign);
+        let projection = value_stand_in;
+        let field_projection = |field, value: &Value| {
+            grap_field_stand_in(
+                field,
+                value,
+                |cell| sources.value(cell).cloned(),
+                &foreign,
+            )
+        };
         let node = project::<Claims, Bench>(
             ProjectDescription {
                 sources,
@@ -5156,6 +5539,7 @@ mod svg_bench {
                 styles: &styles,
                 width: width - 48.0,
                 projection: Some(&projection),
+                field_projection: Some(&field_projection),
             },
             &mut tcx,
             hooks,
@@ -5231,6 +5615,92 @@ mod svg_bench {
         // this render is also the canary against layout cost blowing
         // up when width is scarce.
         render(&doc, None, 320.0, "../target/raw_projection_tight.svg");
+    }
+
+    #[test]
+    fn svg_bench_renders_the_grap_demo() {
+        let (doc, _) = crate::gid::parse(include_str!("../../grap-demo.gid"))
+            .expect("the Grap demo parses");
+        render(&doc, None, 900.0, "../target/grap_demo.svg");
+        render(&doc, None, 560.0, "../target/grap_demo_narrow.svg");
+    }
+
+    #[test]
+    fn named_fields_display_alphabetically_before_unnamed_fields() {
+        let alpha = CellId::from_u128(0xf1);
+        let beta = CellId::from_u128(0x01);
+        let unnamed_low = CellId::from_u128(0x02);
+        let unnamed_high = CellId::from_u128(0xe1);
+        let mut cells = Cells::new();
+        cells.set_value(alpha, progred_name::record("alpha", []));
+        cells.set_value(beta, progred_name::record("beta", []));
+        let doc = Document {
+            root: Some(Value::record([
+                (alpha, Value::from(vec![1])),
+                (beta, Value::from(vec![2])),
+                (unnamed_low, Value::from(vec![3])),
+                (unnamed_high, Value::from(vec![4])),
+            ])),
+            cells,
+        };
+        let (bench, _) = place(&doc, None, 320.0);
+        let y = |field| {
+            bench
+                .descends
+                .iter()
+                .filter(|descend| descend.path == [Step::Key(field)])
+                .map(|descend| descend.rect.y0)
+                .reduce(f64::min)
+                .expect("field descend")
+        };
+        assert!(y(alpha) < y(beta));
+        assert!(y(beta) < y(unnamed_low));
+        assert!(y(unnamed_low) < y(unnamed_high));
+    }
+
+    #[test]
+    fn expression_children_are_real_and_normal_form_children_are_derived() {
+        let (doc, binders) = crate::gid::parse(include_str!("../../grap-demo.gid"))
+            .expect("the Grap demo parses");
+        let label = binders["quote_result"];
+        let position = doc
+            .root
+            .as_ref()
+            .and_then(Value::as_list)
+            .and_then(|entries| {
+                entries.iter().find_map(|(position, value)| {
+                    value
+                        .as_record()
+                        .is_some_and(|entry| entry.contains_key(&label))
+                        .then(|| position.clone())
+                })
+            })
+            .expect("quote demo entry");
+        let record = vec![Step::Element(position), Step::Key(label)];
+        let mut result = record.clone();
+        result.push(Step::Key(crate::conventions::vocabulary::GRAP));
+        let mut source_note = result.clone();
+        source_note.push(Step::Key(grap::vocabulary::QUOTE));
+        source_note.push(Step::Key(binders["note"]));
+        let mut derived_note = result.clone();
+        derived_note.push(Step::Key(binders["note"]));
+        let (bench, _) = place(&doc, None, 560.0);
+        assert!(bench
+            .descends
+            .iter()
+            .any(|descend| descend.path == record));
+        assert!(bench
+            .descends
+            .iter()
+            .any(|descend| descend.path == result));
+        assert!(bench
+            .descends
+            .iter()
+            .any(|descend| descend.path == source_note));
+        assert!(!bench
+            .descends
+            .iter()
+            .any(|descend| descend.path == derived_note));
     }
 
     /// The keyboard walk against real settled geometry: down visits

@@ -26,14 +26,17 @@ later.
 The earlier Grap design was rejected for good reasons, but they were
 properties of that design rather than of an embedded language:
 
-- Parameters were inferred from free cells. They are now an explicit,
-  ordered list.
+- Parameters were inferred from free cells. The concrete bootstrap uses
+  an explicit ordered list of parameter cells and call fields labelled
+  by those cells. This representation is deliberately provisional while
+  pattern matching is worked out through editable examples.
 - Cell resolution changed meaning based on whether the cell happened
   to have a stored value. It is now ordinary lexical lookup followed
   by document/library lookup.
-- Templates, macros, hygiene, and mint-on-instantiation were being
-  designed before a useful evaluator existed. None is in the bootstrap
-  language.
+- Templates, general macros, hygiene, and mint-on-instantiation were
+  being designed before a useful evaluator existed. The bootstrap has
+  only one-pass `quote`/`unquote`, enough for functions and foreign
+  functions to construct graph data without accidentally evaluating it.
 - Grap was being weighed as a general replacement for existing
   languages. Its current job is smaller: make the system immediately
   live, then provide the substrate from which richer projections can
@@ -47,10 +50,20 @@ facts; they are not derived from, or hashes of, their names. Their
 simple names are ordinary graph facts supplied by the `progred-name`
 library convention, not metadata in the cell table.
 
-Core Grap defines only three identities: `function`, `params`, and
-`body`. They distinguish function definitions and calls from ordinary
-records. Core Grap has no number or geometry type and no arithmetic or
-geometry operation.
+Core Grap defines five syntax identities: `function`, `params`, `body`,
+`quote`, and `unquote`. They distinguish function definitions, calls,
+and quotation from ordinary records. Core Grap has no number or
+geometry type and no arithmetic or geometry operation.
+
+Progred's projection layer separately defines the `grap` field. The
+ordinary record and its `grap` label remain visible, but the projection
+for the value under that label shows the stored expression through its
+ordinary editable projection, followed by `→` and the returned `Value`
+projected as a read-only normal form. Normal view therefore shows
+`{grap: expression → result}`, while Raw shows
+`{grap: stored-expression}`. The arrow is projection chrome, not graph
+data. `grap` is not a Grap evaluator form, so the evaluator can be used
+without Progred and cannot observe the field.
 
 A function is a record requiring two semantic fields:
 
@@ -61,16 +74,15 @@ A function is a record requiring two semantic fields:
 }
 ```
 
-The parameter values are cells. Their list establishes arity and
-order. This is an open record pattern: unrelated fields do not stop the
-record from being a function. A function may be inline and anonymous
-or be the value of a cell; naming and recursive reference need no
-additional language identity. The fixed `function` cell cannot itself
-be a parameter, because that label is the call record's one reserved
-slot.
+The parameter values are cells. The list establishes order, and each
+cell is lexically bound to the value under the matching call field while
+evaluating the body. The definition is an open record pattern:
+unrelated fields do not stop the record from being a function. A
+function may be inline and anonymous or be the value of a cell; naming
+and recursive reference need no additional language identity.
 
-A call is a record with a `function` field and one field per argument.
-Argument labels are the function's parameter cells:
+A call is a record with a `function` field and fields labelled by the
+function's parameter cells:
 
 ```text
 {
@@ -82,24 +94,39 @@ Argument labels are the function's parameter cells:
 
 The apparent names above are binder sugar in gid notation. Matching is
 by cell identity. Renaming a parameter changes no program reference,
-and there is no parallel symbol-ID system. The required parameter
-fields must be present, but additional fields are valid graph data and
-are not evaluated as arguments. Evaluation reports those unconsumed
-fields so a projection cannot silently replace them with only the
-computed result.
+and there is no parallel symbol-ID system. Additional top-level call
+fields are valid graph data. Evaluation reports fields the selected
+function did not consume for tooling and future pattern composition.
+The result arm under `grap` is derived and read-only; the expression
+arm, `grap` field, and rest of its enclosing record remain ordinary
+visible projections. Raw exposes only the stored expression and any
+such metadata.
 
 Numbers remain a library convention rather than a data-model variant.
 The separate f64 library represents an f64 as eight little-endian bytes
 under its `f64` label. Recognition is positive and open: the presence
 of a valid `f64` field establishes the numeric facet even if the record
 also carries provenance, history, or some other facet. It defines
-strict binary `add` and `multiply` calls using its `left` and `right`
-parameter cells, and registers their implementations as Rust foreign
-functions. The geometry library applies the same rule to `circle` and
-`radius`; its Rust-backed circle constructor consumes the f64 library's
+strict binary `add` and `multiply` clauses with `left` and `right`
+parameter fields, and registers their implementations in Rust. The
+geometry library applies the same rule to `circle` and `radius`; its
+Rust-backed circle constructor consumes the f64 library's
 representation. Neither library changes Grap or `Value`.
 
 ## Evaluation
+
+Ordinary projection does not implicitly run call-shaped records. It
+can therefore show a function definition or expression as editable
+structure in one part of a document while a `grap` field elsewhere
+references that same cell and shows both that ordinary cell projection
+and its result. Because the expression arm is ordinary, hovering it can
+highlight the cell's other projections. The returned value goes through
+the same text, number, geometry, cell, list, and record projections as
+stored data. That subtree is marked as Grap normal form, so a returned
+value which itself contains a `grap` field is data rather than another
+request to evaluate. Derived children are currently read-only and map
+selection back to the stored `grap` field value rather than pretending
+to have document paths.
 
 Evaluating a cell is transparent:
 
@@ -114,11 +141,32 @@ mode stored on cells. A parameter may have a name or even a document
 value; within its function body the lexical binding wins because that
 identity is the parameter.
 
-Ordinary values evaluate to themselves. Only a record containing the
-fixed `function` label is a call, and only a record containing the
-fixed function-definition labels is a definition. Calls are
-call-by-value. Closures capture the lexical environment in which their
-definition is evaluated.
+Blobs, lists, and unrecognized records are inert data. The evaluator
+does not search them recursively for expressions. A record containing
+the fixed `function` label is a call, and a record containing `params`
+or `body` is treated as a function definition. The selected function
+drives recursion: Grap application evaluates each declared argument
+field before evaluating the body; the f64 multiply implementation
+evaluates its left and right fields; an unrelated record evaluates to
+itself without inspecting its children. Closures capture the lexical
+environment in which their definition is evaluated.
+
+This is strict call-by-value, not eager traversal of all graph data.
+Programs that need deferred work can return inert data such as
+`{isa: thunk, body: ...}`. Grap need not know that convention. A
+projection can show the thunk as an ellipsis and evaluate its body only
+when the user expands it. Repeated forcing initially repeats the work;
+sharing and memoization are optimizations rather than bootstrap
+semantics.
+
+Quotation is the way to produce data that resembles Grap syntax. A
+`quote` walks its body once. Each `unquote` it encounters is replaced by
+the evaluation of that unquote's body, and the inserted result is not
+walked again. An unquote outside a quote has no special status; it is an
+ordinary inert record. Quotation does not follow cell links: a cell in
+the template remains a link. An explicit unquote around that cell
+evaluates it and copies the resulting value into the constructed data.
+This is copy into the result, never mutation of the referenced cell.
 
 These conventions match what is present, not what is absent. Record
 patterns are open unless a particular domain explicitly says
@@ -129,25 +177,44 @@ Otherwise the structural view remains visible, even though Grap and
 the relevant library can still use the recognized facet.
 
 Every external cell read is collected as a dependency. The set is
-reported even when evaluation fails, ready for future precise
-invalidation. Every evaluation also has explicit fuel, and direct cell
-alias cycles receive a specific error. Invalid Grap never hides or
-damages the underlying document: a failed projection simply declines,
-and the raw record remains editable.
+reported even when evaluation produces an error value, ready for future
+precise invalidation. Every evaluation also has explicit fuel, and cell
+cycles receive a stable error value. Invalid Grap never damages the
+underlying document: its error value is projected like any other normal
+form, and the stored expression remains editable in Raw or wherever
+the same expression cell is projected outside a `grap` field.
 
-The evaluator lives in its own `grap` crate. Its evaluation machinery
-uses only `progred-graph`; the crate's vocabulary library additionally
-uses the optional `progred-name` convention for readable graph facts.
-It knows the function representation and a generic foreign-function
-registry, but no f64, geometry, UI, file, or
-Linebender concepts. `grap-f64` and `grap-geometry` are separate
-libraries composed by the application. Their identities and ordinary
-graph-side values live in the built-in library cells; their host-side
-implementations live in the foreign-function registry.
+The evaluator lives in its own `grap` crate. It depends on the graph
+core and the shared Grap error and name conventions, but knows no f64,
+geometry, UI, file, or Linebender concepts. `grap-f64` and
+`grap-geometry` are separate libraries composed by the application.
+Their identities and ordinary graph-side values live in the built-in
+library cells; their host-side implementations live in the generic
+foreign-function registry.
 
-A registered foreign function consumes evaluated values and returns
-one `Value`. The Grap evaluator does not impose a host-language
-`Result` distinction on that value.
+A registered Rust implementation declares the call fields it consumes,
+receives their evaluated values, and returns a `Value`, just as
+evaluation of a graph function body ultimately does. The evaluator does
+not impose a host-language `Result` distinction at that boundary. The
+current registry is bootstrap machinery, not the intended final model:
+the emerging model is one `Value -> Value` evaluator composed from
+ordered pattern-matching clauses, some written in Rust and some in the
+graph. A dispatch index may later optimize that composition without
+becoming part of its semantics. Merely closing over the current lookup
+would be cosmetic. A genuine clause protocol must give a matched clause
+recursive evaluation and say whether a returned error means “decline;
+try another clause” or “this clause handled the value and failed.” The
+current table can then be wrapped as the first Rust-authored clause;
+graph-side bootstrapping is not required.
+
+Every evaluation returns a `Value`, including malformed programs,
+missing cells, cycles, and exhausted fuel. Core evaluator failures and
+library-specific failures are stable error-cell values. Host-facing
+diagnostics accompany core failures with occurrence-specific detail,
+such as which cell was missing, without introducing a separate failure
+channel into Grap or changing Grap control flow. When an evaluated call
+returns one of those cells, the projection shows its ordinary name as
+the result.
 
 The bootstrap f64 and geometry libraries define stable library cells
 for their failure modes and return those identities as values: several
@@ -162,25 +229,41 @@ library data rather than an evaluator feature.
 
 ## First Vertical Slice
 
-The raw projection asks Grap to evaluate candidate records, then
-projects a successful f64 result as text or a circle result as native
-vector drawing. The checked-in sample is the small end-to-end
-construction:
+For a `grap` field, normal projection shows the stored expression, an
+arrow, and its normal form—an f64 as text, a circle as native vector
+drawing, and arbitrary graph data structurally. The enclosing record
+remains ordinary visible data. `grap-demo.gid` is
+the focused interactive playground: three editable f64 cells feed
+direct foreign calls, nested calls, a graph-defined function, and a
+circle; it also keeps extra call metadata in Raw, demonstrates
+quote/unquote and inert returned data, and shows stable type,
+missing-argument, and not-callable error cells as ordinary projected
+results. The demo projects one graph expression cell both directly and
+by reference under `grap`, making their shared identity visible through
+hover while the latter also carries its derived result.
+
+The broader checked-in `sample.gid` carries the same evaluation path
+inside the raw editor's structural examples:
 
 - `pitch` is a cell containing f64 `2.5`.
 - `double` is a Grap function with an explicit `amount` parameter. Its
-  body calls the f64 library's Rust-backed `multiply` with `amount`
-  and f64 `2`.
+  body calls the f64 library's Rust-backed `multiply` with `amount` and
+  f64 `2` under the `left` and `right` fields.
 - the roof contains a call to `double`, passing `pitch`; its projected
   result is `5`.
 - a nested expression multiplies that result by `8`, passes the result
   as the radius of `circle`, and projects the resulting radius-40
   profile through Puri's drawing interface.
 
-Raw mode shows the complete function, call, and number records. This
-is intentionally not yet the CAD interaction: it proves the shorter
-loop — graph edit, evaluation, vector projection — before direct
-manipulation and a real construction vocabulary are layered on it.
+The `grap` field belongs to projection rather than evaluation. Normal
+view keeps the field visible and projects its value as
+`expression → normal-form`; Raw projects only the stored expression.
+Compact f64 source values edit as decimal text while continuing to store
+the f64 library's byte representation, so changing `pitch` immediately
+changes both the `double_pitch` result and the projected circle. This is
+intentionally not yet the CAD interaction: it provides a tangible graph
+edit, evaluation, and projection loop from which the evaluator can be
+redesigned.
 
 ## Near-Term Direction
 
@@ -196,10 +279,12 @@ construction, not by filling out a language checklist:
 - add errors and evaluation traces as projections over the same graph,
   while keeping Raw as the escape hatch.
 
-Conditionals, local bindings, recursion policy, richer errors, and
-collections should arrive only when the construction demands them.
-Macros and general code generation remain explicitly out of scope for
-the bootstrap.
+The next language work should be forced by manipulating this example:
+replace the special Rust registry with ordered pattern-function
+composition, decide how graph patterns bind values, and make a thunk or
+cell evaluation projection only when the interactive construction needs
+one. Quotation is not a commitment to a general macro system; general
+code generation remains out of scope for the bootstrap.
 
 ## The Superseded Wasm Spike
 
