@@ -126,7 +126,7 @@ impl fmt::Display for Diagnostic {
                     .join(" -> ")
             ),
             Diagnostic::MalformedFunction => {
-                write!(f, "a function needs params and body fields")
+                write!(f, "function params must be a list")
             }
             Diagnostic::InvalidParameter(value) => {
                 write!(f, "function parameter is not a cell: {value:?}")
@@ -200,19 +200,24 @@ where
         self.burn()?;
         match expression {
             Value::Cell(cell) => self.eval_cell(*cell, environment),
-            Value::Record(fields) if fields.contains_key(&vocabulary::QUOTE) => {
-                self.eval_quote(expression, environment)
+            Value::Record(fields) => {
+                if let Some(template) = fields.get(&vocabulary::QUOTE) {
+                    self.eval_quote(template, environment)
+                } else if let Some(function) = fields.get(&vocabulary::FUNCTION) {
+                    self.eval_call(function, |field| fields.get(&field), environment)
+                } else {
+                    match (
+                        fields.get(&vocabulary::PARAMS),
+                        fields.get(&vocabulary::BODY),
+                    ) {
+                        (Some(parameters), Some(body)) => {
+                            Some(self.eval_function(parameters, body, environment))
+                        }
+                        _ => Some(RuntimeValue::Data(expression.clone())),
+                    }
+                }
             }
-            Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
-                self.eval_call(expression, environment)
-            }
-            Value::Record(fields)
-                if fields.contains_key(&vocabulary::PARAMS)
-                    || fields.contains_key(&vocabulary::BODY) =>
-            {
-                self.eval_function(expression, environment)
-            }
-            Value::Blob(_) | Value::List(_) | Value::Record(_) => {
+            Value::Blob(_) | Value::List(_) => {
                 Some(RuntimeValue::Data(expression.clone()))
             }
         }
@@ -278,15 +283,12 @@ where
 
     fn eval_function(
         &mut self,
-        expression: &Value,
+        parameters: &Value,
+        body: &Value,
         environment: &Environment,
-    ) -> Option<RuntimeValue> {
-        let fields = expression.as_record().expect("matched record");
-        Some(match (
-            fields.get(&vocabulary::PARAMS).and_then(Value::as_list),
-            fields.get(&vocabulary::BODY),
-        ) {
-            (Some(parameters), Some(body)) => {
+    ) -> RuntimeValue {
+        match parameters.as_list() {
+            Some(parameters) => {
                 let params = parameters
                     .values()
                     .map(|parameter| parameter.as_cell().ok_or_else(|| parameter.clone()))
@@ -315,21 +317,16 @@ where
                 }
             }
             _ => self.absent(Diagnostic::MalformedFunction, absent::MALFORMED_FUNCTION),
-        })
+        }
     }
 
-    fn eval_call(
+    fn eval_call<'v>(
         &mut self,
-        expression: &Value,
+        function: &Value,
+        argument: impl Fn(CellId) -> Option<&'v Value>,
         environment: &Environment,
     ) -> Option<RuntimeValue> {
-        let fields = expression.as_record().expect("matched record");
-        let callable = self.eval(
-            fields
-                .get(&vocabulary::FUNCTION)
-                .expect("matched function field"),
-            environment,
-        )?;
+        let callable = self.eval(function, environment)?;
         let (params, foreign) = match &callable {
             RuntimeValue::Closure { params, .. } => (params.clone(), None),
             RuntimeValue::Data(value) => match value.as_cell().and_then(|cell| {
@@ -346,22 +343,20 @@ where
                 }
             },
         };
-        if let Some(missing) = params
-            .iter()
-            .find(|parameter| !fields.contains_key(*parameter))
-        {
-            return Some(self.absent(
-                Diagnostic::MissingArgument(*missing),
-                absent::MISSING_ARGUMENT,
-            ));
+        let mut expressions = Vec::with_capacity(params.len());
+        for parameter in &params {
+            let Some(expression) = argument(*parameter) else {
+                return Some(self.absent(
+                    Diagnostic::MissingArgument(*parameter),
+                    absent::MISSING_ARGUMENT,
+                ));
+            };
+            expressions.push((*parameter, expression));
         }
         let mut arguments = Environment::new();
-        for parameter in &params {
-            let argument = self.eval(
-                fields.get(parameter).expect("checked argument"),
-                environment,
-            )?;
-            arguments.insert(*parameter, argument);
+        for (parameter, expression) in expressions {
+            let value = self.eval(expression, environment)?;
+            arguments.insert(parameter, value);
         }
         match (callable, foreign) {
             (
@@ -406,14 +401,9 @@ where
 
     fn eval_quote(
         &mut self,
-        expression: &Value,
+        template: &Value,
         environment: &Environment,
     ) -> Option<RuntimeValue> {
-        let template = expression
-            .as_record()
-            .expect("matched record")
-            .get(&vocabulary::QUOTE)
-            .expect("matched quote field");
         Some(RuntimeValue::Data(self.expand_quote(template, environment)?))
     }
 
@@ -428,22 +418,19 @@ where
                 })
                 .collect::<Option<_>>()
                 .map(Value::List),
-            Value::Record(fields) if fields.contains_key(&vocabulary::UNQUOTE) => {
-                let evaluated = self.eval(
-                    fields
-                        .get(&vocabulary::UNQUOTE)
-                        .expect("matched unquote field"),
-                    environment,
-                );
-                Some(self.into_data(evaluated?))
-            }
-            Value::Record(fields) => fields
-                .iter()
-                .map(|(field, value)| {
-                    Some((*field, self.expand_quote(value, environment)?))
-                })
-                .collect::<Option<_>>()
-                .map(Value::Record),
+            Value::Record(fields) => match fields.get(&vocabulary::UNQUOTE) {
+                Some(expression) => {
+                    let evaluated = self.eval(expression, environment);
+                    Some(self.into_data(evaluated?))
+                }
+                None => fields
+                    .iter()
+                    .map(|(field, value)| {
+                        Some((*field, self.expand_quote(value, environment)?))
+                    })
+                    .collect::<Option<_>>()
+                    .map(Value::Record),
+            },
         }
     }
 }
@@ -766,12 +753,32 @@ mod tests {
         assert_eq!(evaluation.result, Value::from(absent::MISSING_CELL));
         assert_eq!(evaluation.diagnostics, [Diagnostic::MissingCell(missing)]);
 
-        let malformed = Value::record([(
-            vocabulary::PARAMS,
-            Value::list(Vec::<Value>::new()),
-        )]);
+        let malformed = Value::record([
+            (vocabulary::PARAMS, blob("not a list")),
+            (vocabulary::BODY, blob("body")),
+        ]);
         let evaluation = evaluate(&malformed, |_| None, &ForeignFunctions::new(), 10);
         assert_eq!(evaluation.result, Value::from(absent::MALFORMED_FUNCTION));
+    }
+
+    #[test]
+    fn incomplete_function_shapes_are_inert_data() {
+        for incomplete in [
+            Value::record([(
+                vocabulary::PARAMS,
+                Value::list(Vec::<Value>::new()),
+            )]),
+            Value::record([(vocabulary::BODY, blob("body"))]),
+        ] {
+            let evaluation = evaluate(
+                &incomplete,
+                |_| None,
+                &ForeignFunctions::new(),
+                10,
+            );
+            assert_eq!(evaluation.result, incomplete);
+            assert!(evaluation.diagnostics.is_empty());
+        }
     }
 
     #[test]
