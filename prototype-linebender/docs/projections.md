@@ -7,8 +7,10 @@ longer on the application's live f64 projection path.
 
 ## The Decision
 
-Bootstrap Progred with Grap, a small strict language embedded directly
-in the existing graph data. Grap is not another syntax tree and adds
+Bootstrap Progred with Grap, a small language embedded directly in the
+existing graph data. Grap-defined functions are strict and pure, while
+registered Rust functions receive raw operands and control recursive
+evaluation. Grap is not another syntax tree and adds
 nothing to `Value`: records, lists, blobs, and cell references remain
 the whole data model. A fixed library gives a few cell identities meaning,
 and the evaluator interprets records using those identities. Numeric,
@@ -34,9 +36,10 @@ properties of that design rather than of an embedded language:
   to have a stored value. It is now ordinary lexical lookup followed
   by document/library lookup.
 - Templates, general macros, hygiene, and mint-on-instantiation were
-  being designed before a useful evaluator existed. The bootstrap has
-  only one-pass `quote`/`unquote`, enough for functions and foreign
-  functions to construct graph data without accidentally evaluating it.
+  being designed before a useful evaluator existed. The bootstrap
+  instead gives Rust implementations raw operands and the evaluator's
+  calling environment. Returning a raw operand produces data; recursive
+  evaluation is explicit.
 - Grap was being weighed as a general replacement for existing
   languages. Its current job is smaller: make the system immediately
   live, then provide the substrate from which richer projections can
@@ -50,9 +53,12 @@ facts; they are not derived from, or hashes of, their names. Their
 simple names are ordinary graph facts supplied by the `progred-name`
 library convention, not metadata in the cell table.
 
-Core Grap defines five syntax identities: `function`, `params`, `body`,
-`quote`, and `unquote`. They distinguish function definitions, calls,
-and quotation from ordinary records. Core Grap has no number or
+Core Grap source forms use `function`, `params`, and `body` to
+distinguish applications and lambdas from ordinary records. Evaluation
+uses three more identities in explicit callable values: `closure`,
+`environment`, and `ffi`. The core library also names the Rust-implemented
+`evaluate` function and its `expression` argument; `evaluate` is a normal
+registered call rather than evaluator syntax. Core Grap has no number or
 geometry type and no arithmetic or geometry operation.
 
 Progred's projection layer separately defines the `grap` field. The
@@ -65,7 +71,7 @@ projected as a read-only normal form. Normal view therefore shows
 data. `grap` is not a Grap evaluator form, so the evaluator can be used
 without Progred and cannot observe the field.
 
-A function is a record requiring two semantic fields:
+A lambda is a record requiring two semantic fields:
 
 ```text
 {
@@ -76,10 +82,31 @@ A function is a record requiring two semantic fields:
 
 The parameter values are cells. The list establishes order, and each
 cell is lexically bound to the value under the matching call field while
-evaluating the body. The definition is an open record pattern:
-unrelated fields do not stop the record from being a function. A
-function may be inline and anonymous or be the value of a cell; naming
-and recursive reference need no additional language identity.
+evaluating the body. Parameter identities need not be unique, and
+`function` itself may be a parameter: both simply reuse that application
+field under the ordinary call rules. The lambda is an open record pattern:
+unrelated fields do not stop the record from being a lambda. A lambda may
+be inline and anonymous or be the value of a cell; naming and recursive
+reference need no additional language identity.
+
+Evaluating a lambda produces an explicit closure value:
+
+```text
+{
+  closure: {
+    params: [x, y],
+    body: ...,
+    environment: ...,
+  },
+}
+```
+
+The environment is an ordinary record containing the current lexical
+bindings. A returned closure is therefore already a projectable Grap
+value rather than an opaque host object. Calling it extends that captured
+record with its evaluated arguments before evaluating the body. The
+wrapper positively identifies the evaluated form, so an untagged
+`{params, body}` value always remains a lambda.
 
 A call is a record with a `function` field and fields labelled by the
 function's parameter cells:
@@ -116,7 +143,7 @@ representation. Neither library changes Grap or `Value`.
 ## Evaluation
 
 Ordinary projection does not implicitly run call-shaped records. It
-can therefore show a function definition or expression as editable
+can therefore show a lambda or expression as editable
 structure in one part of a document while a `grap` field elsewhere
 references that same cell and shows both that ordinary cell projection
 and its result. Because the expression arm is ordinary, hovering it can
@@ -131,9 +158,10 @@ to have document paths.
 Evaluating a cell is transparent:
 
 1. A lexical binding with that cell identity wins.
-2. A cell registered by a library as a foreign function remains that
-   cell value. When it reaches function position, the registry supplies
-   its parameter shape and host implementation.
+2. A cell registered by a library as a foreign function evaluates to
+   `{ffi: cell}` without document resolution. When that value reaches
+   function position, the registry supplies its parameter shape and host
+   implementation; the graph value does not duplicate either.
 3. Otherwise the cell is resolved through the caller's document-over-
    library source and its value is evaluated.
 
@@ -144,30 +172,31 @@ identity is the parameter.
 
 Blobs, lists, and unrecognized records are inert data. The evaluator
 does not search them recursively for expressions. A record containing
-the fixed `function` label is a call, and a record containing `params`
-or `body` is treated as a function definition. The selected function
-drives recursion: Grap application evaluates each declared argument
-field before evaluating the body; the f64 multiply implementation
-evaluates its left and right fields; an unrelated record evaluates to
-itself without inspecting its children. Closures capture the lexical
-environment in which their definition is evaluated.
+the fixed `function` label is a call, and a record containing both
+`params` and `body` is treated as a lambda. The selected
+implementation drives recursion. Grap-defined functions evaluate each
+declared argument before evaluating their body. Rust implementations
+instead receive raw argument expressions plus one Rust calling
+environment; f64 multiply chooses to evaluate both of its operands in
+that environment. An unrelated record evaluates to itself without
+inspecting its children.
 
-This is strict call-by-value, not eager traversal of all graph data.
-Programs that need deferred work can return inert data such as
-`{isa: thunk, body: ...}`. Grap need not know that convention. A
-projection can show the thunk as an ellipsis and evaluate its body only
-when the user expands it. Repeated forcing initially repeats the work;
-sharing and memoization are optimizations rather than bootstrap
-semantics.
+Grap-defined functions are strict call-by-value, not eager traversal of
+all graph data. Rust implementations are evaluator-aware: an `if`
+implementation can evaluate its condition and exactly one raw branch,
+while a matcher can evaluate a selected branch in an extended copy of
+the calling environment. Rust arithmetic uses the same interface but
+immediately evaluates every operand. This keeps one surface call shape
+without adding strict/raw modes to Grap parameters.
 
-Quotation is the way to produce data that resembles Grap syntax. A
-`quote` walks its body once. Each `unquote` it encounters is replaced by
-the evaluation of that unquote's body, and the inserted result is not
-walked again. An unquote outside a quote has no special status; it is an
-ordinary inert record. Quotation does not follow cell links: a cell in
-the template remains a link. An explicit unquote around that cell
-evaluates it and copies the resulting value into the constructed data.
-This is copy into the result, never mutation of the referenced cell.
+There is no evaluator-level quote or literal form. At the Rust boundary
+an operand is already an inert expression; returning its expression
+returns data because call results are not evaluated again. A future
+template operation can be an ordinary registered Rust function that
+walks its raw input and recursively evaluates only explicit
+interpolations. First-class suspended work can pair an expression with
+its environment as ordinary graph data when a program genuinely needs
+to store or forward that pair.
 
 These conventions match what is present, not what is absent. Record
 patterns are open unless a particular domain explicitly says
@@ -194,19 +223,23 @@ library cells; their host-side implementations live in the generic
 foreign-function registry.
 
 A registered Rust implementation declares the call fields it consumes,
-receives their evaluated values, and returns a `Value`, just as
-evaluation of a graph function body ultimately does. The evaluator does
-not impose a host-language `Result` distinction at that boundary. The
-current registry is bootstrap machinery, not the intended final model:
-the emerging model is one `Value -> Value` evaluator composed from
-ordered pattern-matching clauses, some written in Rust and some in the
-graph. A dispatch index may later optimize that composition without
-becoming part of its semantics. Merely closing over the current lookup
-would be cosmetic. A genuine clause protocol must give a matched clause
-recursive evaluation and say whether a returned absent means “decline;
-try another clause” or “this clause handled the value as absent.” The
-current table can then be wrapped as the first Rust-authored clause;
-graph-side bootstrapping is not required.
+receives them as raw argument expressions plus the calling environment, and
+may recursively evaluate any of them. Its semantic result is still an
+ordinary `Value`; the host `Result` only propagates evaluator halting
+such as exhausted fuel. Rust environments remain validated evaluator
+values and become graph records only through an explicit conversion.
+The registered `evaluate` implementation evaluates its environment
+argument, converts the resulting record to an environment, then asks the
+same evaluator to interpret its raw expression argument there. It is an
+ordinary foreign call, not another form recognized by `eval`.
+
+Grap-defined functions deliberately have less authority: their
+arguments are evaluated before binding and their bodies are pure over
+those values and the captured lexical environment. Rust currently owns
+evaluation-control operations such as conditionals and matching. A
+separate graph-defined macro representation can be added later if a
+concrete need justifies it; every Grap function does not need to become
+an operative in advance.
 
 Every evaluation returns a `Value`, including malformed programs,
 missing cells, cycles, and exhausted fuel. Core evaluator and library
@@ -235,9 +268,10 @@ arrow, and its normal form—an f64 as text, a circle as native vector
 drawing, and arbitrary graph data structurally. The enclosing record
 remains ordinary visible data. `grap-demo.gid` is
 the focused interactive playground: three editable f64 cells feed
-direct foreign calls, nested calls, a graph-defined function, and a
-circle; it also keeps extra call metadata in Raw, demonstrates
-quote/unquote and inert returned data, and shows stable type,
+direct foreign calls, nested calls, the registered `evaluate` function
+with an explicit empty environment, a graph-defined function, and a
+circle; it also keeps extra call metadata in Raw, demonstrates inert
+returned data, and shows stable type,
 missing-argument, and not-callable absents as ordinary projected
 results. The demo projects one graph expression cell both directly and
 by reference under `grap`, making their shared identity visible through
@@ -281,11 +315,11 @@ construction, not by filling out a language checklist:
   while keeping Raw as the escape hatch.
 
 The next language work should be forced by manipulating this example:
-replace the special Rust registry with ordered pattern-function
-composition, decide how graph patterns bind values, and make a thunk or
-cell evaluation projection only when the interactive construction needs
-one. Quotation is not a commitment to a general macro system; general
-code generation remains out of scope for the bootstrap.
+add Rust-backed conditional or matching control when the construction
+needs it, decide how graph patterns bind values, and make a thunk or
+cell evaluation projection only when the interaction needs one.
+Graph-defined macros and general code generation remain out of scope
+until a concrete transformation requires them.
 
 ## The Superseded Wasm Spike
 

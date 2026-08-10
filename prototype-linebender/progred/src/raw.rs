@@ -3908,15 +3908,8 @@ mod tests {
         assert!(project(&grap_record(plain_call.clone())).is_none());
 
         let parameter = progred_graph::new_cell_id();
-        let definition = grap::function([parameter], Value::from(parameter));
+        let definition = grap::lambda([parameter], Value::from(parameter));
         assert!(project(&definition).is_none());
-
-        let quoted_call = grap::quote(grap::unquote(plain_call.clone()));
-        assert!(project(&quoted_call).is_none());
-        assert!(matches!(
-            project_grap_field(&quoted_call),
-            Some(StandIn::NormalForm(result)) if result == grap_f64::value(5.0)
-        ));
 
         let call = Value::record([
             (
@@ -5659,10 +5652,10 @@ mod svg_bench {
     }
 
     #[test]
-    fn expression_children_are_real_and_normal_form_children_are_derived() {
+    fn expression_children_are_real() {
         let (doc, binders) = crate::gid::parse(include_str!("../../grap-demo.gid"))
             .expect("the Grap demo parses");
-        let label = binders["quote_result"];
+        let label = binders["inert_data"];
         let position = doc
             .root
             .as_ref()
@@ -5675,15 +5668,12 @@ mod svg_bench {
                         .then(|| position.clone())
                 })
             })
-            .expect("quote demo entry");
+            .expect("inert-data demo entry");
         let record = vec![Step::Element(position), Step::Key(label)];
         let mut result = record.clone();
         result.push(Step::Key(crate::conventions::vocabulary::GRAP));
         let mut source_note = result.clone();
-        source_note.push(Step::Key(grap::vocabulary::QUOTE));
         source_note.push(Step::Key(binders["note"]));
-        let mut derived_note = result.clone();
-        derived_note.push(Step::Key(binders["note"]));
         let (bench, _) = place(&doc, None, 560.0);
         assert!(bench
             .descends
@@ -5697,10 +5687,6 @@ mod svg_bench {
             .descends
             .iter()
             .any(|descend| descend.path == source_note));
-        assert!(!bench
-            .descends
-            .iter()
-            .any(|descend| descend.path == derived_note));
     }
 
     /// The keyboard walk against real settled geometry: down visits

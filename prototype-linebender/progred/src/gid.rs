@@ -840,21 +840,10 @@ mod grap_demo_file {
         for (label, expected) in [
             ("add_result", grap_f64::value(7.0)),
             ("nested_result", grap_f64::value(70.0)),
+            ("evaluate_result", grap_f64::value(7.0)),
             ("graph_function_result", grap_f64::value(34.0)),
             ("circle_result", grap_geometry::value(34.0)),
             ("metadata_call", grap_f64::value(7.0)),
-            (
-                "quote_result",
-                Value::record([
-                    (binders["add_result"], grap_f64::value(7.0)),
-                    (
-                        binders["note"],
-                        progred_text::value(
-                            "quote constructed this record and interpolated the sum",
-                        ),
-                    ),
-                ]),
-            ),
         ] {
             assert_eq!(
                 evaluate(&doc, grap_expression(entry(&doc, &binders, label))).result,

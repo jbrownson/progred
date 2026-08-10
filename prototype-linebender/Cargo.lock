@@ -1561,6 +1561,7 @@ name = "grap"
 version = "0.1.0"
 dependencies = [
  "grap-absent",
+ "im",
  "progred-graph",
  "progred-name",
 ]

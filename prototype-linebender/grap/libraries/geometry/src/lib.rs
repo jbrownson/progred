@@ -30,14 +30,22 @@ pub fn read(value: &Value) -> Option<f64> {
 }
 
 pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> {
-    foreign.register(vocabulary::CIRCLE, [vocabulary::RADIUS], |arguments| {
-        arguments
-            .first()
-            .and_then(grap_f64::read)
-            .filter(|radius| radius.is_finite() && *radius >= 0.0)
-            .map(value)
-            .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS))
-    })
+    foreign.register(
+        vocabulary::CIRCLE,
+        [vocabulary::RADIUS],
+        |evaluate, arguments, environment| {
+            let radius = match arguments {
+                [radius] => evaluate(radius, environment)?,
+                _ => unreachable!("Grap checks foreign arity before calling"),
+            };
+            Ok(
+                grap_f64::read(&radius)
+                    .filter(|radius| radius.is_finite() && *radius >= 0.0)
+                    .map(value)
+                    .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS)),
+            )
+        },
+    )
 }
 
 pub fn library() -> Cells {

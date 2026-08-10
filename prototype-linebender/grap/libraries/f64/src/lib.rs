@@ -2,7 +2,7 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use grap::{ForeignFunctions, RegistrationError};
+use grap::{Environment, Evaluate, ForeignFunctions, Halt, RegistrationError};
 use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
@@ -37,24 +37,37 @@ pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> 
     foreign.register(
         vocabulary::ADD,
         [vocabulary::LEFT, vocabulary::RIGHT],
-        |arguments| binary(arguments, |left, right| left + right),
+        |evaluate, arguments, environment| {
+            binary(evaluate, arguments, environment, |left, right| left + right)
+        },
     )?;
     foreign.register(
         vocabulary::MULTIPLY,
         [vocabulary::LEFT, vocabulary::RIGHT],
-        |arguments| binary(arguments, |left, right| left * right),
+        |evaluate, arguments, environment| {
+            binary(evaluate, arguments, environment, |left, right| left * right)
+        },
     )
 }
 
-fn binary(arguments: &[Value], operation: impl FnOnce(f64, f64) -> f64) -> Value {
-    match arguments {
+fn binary(
+    evaluate: &mut Evaluate<'_>,
+    arguments: &[Value],
+    environment: &Environment,
+    operation: impl FnOnce(f64, f64) -> f64,
+) -> Result<Value, Halt> {
+    let arguments = arguments
+        .iter()
+        .map(|argument| evaluate(argument, environment))
+        .collect::<Result<Vec<_>, Halt>>()?;
+    Ok(match arguments.as_slice() {
         [left, right] => match (read(left), read(right)) {
             (Some(left), Some(right)) => value(operation(left, right)),
             (None, _) => Value::from(vocabulary::LEFT_NOT_F64),
             (_, None) => Value::from(vocabulary::RIGHT_NOT_F64),
         },
         _ => unreachable!("Grap checks foreign arity before calling"),
-    }
+    })
 }
 
 pub fn library() -> Cells {
