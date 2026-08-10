@@ -72,7 +72,7 @@ pub fn library() -> Cells {
         (vocabulary::LEFT_NOT_F64, "left is not f64"),
         (vocabulary::RIGHT_NOT_F64, "right is not f64"),
     ] {
-        cells.set_value(cell, grap_error::named(name));
+        cells.set_value(cell, grap_absent::named(name));
     }
     cells
 }
@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn type_failures_are_library_values() {
+    fn type_absences_are_library_values() {
         let left = call(vocabulary::ADD, Value::from(b"two".to_vec()), value(3.0));
         let right = call(vocabulary::ADD, value(2.0), Value::from(b"three".to_vec()));
         assert_eq!(
@@ -160,10 +160,10 @@ mod tests {
                 .and_then(progred_name::read),
             Some("right is not f64")
         );
-        assert!(grap_error::is_error(
+        assert!(grap_absent::is_absent(
             library.value(vocabulary::LEFT_NOT_F64).unwrap()
         ));
-        assert!(grap_error::is_error(
+        assert!(grap_absent::is_absent(
             library.value(vocabulary::RIGHT_NOT_F64).unwrap()
         ));
         assert!(library.value(vocabulary::ADD).is_some());

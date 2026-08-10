@@ -36,7 +36,7 @@
     "scale_and_add_expression": 3e54f01b50f5abbfc3895327881a404d,
     "scale_parameter": a205c013d36ef3f8fa047295793e61b4,
     "scale_value": 222efe84b66ed6181846198960a9f317,
-    "type_error": add1c43228ee478194bd066b83608685,
+    "type_absent": add1c43228ee478194bd066b83608685,
     "unquote": 3b10378451b9eddf51cd0bc0601eb74e,
     "x_parameter": 6044a6b79a55f0fd8bc522787f213b50,
     "y_parameter": d678763cbd961acd0c4808b30e9be10b,
@@ -120,8 +120,8 @@
     add_result: {
       name: "sum",
     },
-    type_error: {
-      name: "type error",
+    type_absent: {
+      name: "type absent",
     },
     x_parameter: {
       name: "x",
@@ -237,7 +237,7 @@
       },
     },
     {
-      type_error: {
+      type_absent: {
         grap: {
           right: b_value,
           function: add,

@@ -1560,13 +1560,13 @@ dependencies = [
 name = "grap"
 version = "0.1.0"
 dependencies = [
- "grap-error",
+ "grap-absent",
  "progred-graph",
  "progred-name",
 ]
 
 [[package]]
-name = "grap-error"
+name = "grap-absent"
 version = "0.1.0"
 dependencies = [
  "progred-graph",
@@ -1579,7 +1579,7 @@ name = "grap-f64"
 version = "0.1.0"
 dependencies = [
  "grap",
- "grap-error",
+ "grap-absent",
  "progred-graph",
  "progred-name",
 ]
@@ -1589,7 +1589,7 @@ name = "grap-geometry"
 version = "0.1.0"
 dependencies = [
  "grap",
- "grap-error",
+ "grap-absent",
  "grap-f64",
  "progred-graph",
  "progred-name",
@@ -3144,7 +3144,7 @@ version = "0.1.0"
 dependencies = [
  "clipboard-rs",
  "grap",
- "grap-error",
+ "grap-absent",
  "grap-f64",
  "grap-geometry",
  "im",

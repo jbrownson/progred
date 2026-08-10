@@ -19,7 +19,7 @@ pub fn library() -> Cells {
     let mut cells = progred_name::library();
     cells.merge(progred_isa::library());
     cells.merge(grap::library());
-    cells.merge(grap_error::library());
+    cells.merge(grap_absent::library());
     cells.merge(grap_f64::library());
     cells.merge(grap_geometry::library());
     cells.set_value(vocabulary::GRAP, progred_name::record("grap", []));

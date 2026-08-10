@@ -46,7 +46,7 @@ pub fn library() -> Cells {
     cells.set_value(vocabulary::RADIUS, progred_name::record("radius", []));
     cells.set_value(
         vocabulary::INVALID_RADIUS,
-        grap_error::named("invalid radius"),
+        grap_absent::named("invalid radius"),
     );
     cells
 }
@@ -101,7 +101,7 @@ mod tests {
             evaluation.result,
             Value::from(vocabulary::INVALID_RADIUS)
         );
-        assert!(grap_error::is_error(
+        assert!(grap_absent::is_absent(
             library().value(vocabulary::INVALID_RADIUS).unwrap()
         ));
     }

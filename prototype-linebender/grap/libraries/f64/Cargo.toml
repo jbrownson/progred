@@ -5,6 +5,6 @@ edition = "2024"
 
 [dependencies]
 grap = { path = "../.." }
-grap-error = { path = "../error" }
+grap-absent = { path = "../absent" }
 progred-name = { path = "../../../conventions/name" }
 progred-graph = { path = "../../../graph" }

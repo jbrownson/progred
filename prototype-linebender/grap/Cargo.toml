@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-grap-error = { path = "libraries/error" }
+grap-absent = { path = "libraries/absent" }
 progred-name = { path = "../conventions/name" }
 progred-graph = { path = "../graph" }

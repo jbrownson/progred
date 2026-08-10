@@ -18,7 +18,7 @@ pub mod vocabulary {
     pub const UNQUOTE: CellId = CellId::from_u128(0x3b10378451b9eddf51cd0bc0601eb74e);
 }
 
-pub mod error {
+pub mod absent {
     use progred_graph::CellId;
 
     pub const FUEL_EXHAUSTED: CellId =
@@ -43,12 +43,10 @@ pub mod error {
 
 pub const DEFAULT_FUEL: usize = 1_024;
 
-type ForeignCall = Rc<dyn Fn(&[Value]) -> Value>;
-
 #[derive(Clone)]
 struct ForeignFunction {
     params: Vec<CellId>,
-    call: ForeignCall,
+    call: Rc<dyn Fn(&[Value]) -> Value>,
 }
 
 #[derive(Clone, Default)]
@@ -154,10 +152,7 @@ pub struct Evaluation {
     pub result: Value,
     pub diagnostics: Vec<Diagnostic>,
     pub dependencies: BTreeSet<CellId>,
-    /// Top-level call fields that the chosen function did not consume.
-    /// Projections use this to avoid hiding unrelated graph data.
-    pub unconsumed: BTreeSet<CellId>,
-    pub steps: usize,
+    pub remaining_fuel: usize,
 }
 
 #[derive(Clone)]
@@ -168,7 +163,6 @@ enum RuntimeValue {
         body: Value,
         environment: Environment,
     },
-    Foreign(CellId),
 }
 
 type Environment = HashMap<CellId, RuntimeValue>;
@@ -176,49 +170,41 @@ type Environment = HashMap<CellId, RuntimeValue>;
 struct Evaluator<'a, R> {
     resolve: &'a R,
     foreign: &'a ForeignFunctions,
-    remaining: usize,
-    initial_fuel: usize,
+    remaining_fuel: usize,
     diagnostics: Vec<Diagnostic>,
     dependencies: BTreeSet<CellId>,
     resolving: Vec<CellId>,
-    depth: usize,
-    unconsumed: BTreeSet<CellId>,
-    halted: bool,
 }
 
 impl<'a, R> Evaluator<'a, R>
 where
     R: Fn(CellId) -> Option<Value>,
 {
-    fn evaluate(mut self, expression: &Value) -> Evaluation {
-        let evaluated = self.eval(expression, &Environment::new());
-        let result = if self.halted {
-            Value::from(error::FUEL_EXHAUSTED)
-        } else {
-            self.into_data(evaluated)
+    fn run(mut self, expression: &Value) -> Evaluation {
+        let result = match self.eval(expression, &Environment::new()) {
+            Some(evaluated) => self.into_data(evaluated),
+            None => {
+                self.diagnostics.push(Diagnostic::FuelExhausted);
+                Value::from(absent::FUEL_EXHAUSTED)
+            }
         };
         Evaluation {
             result,
             diagnostics: self.diagnostics,
             dependencies: self.dependencies,
-            unconsumed: self.unconsumed,
-            steps: self.initial_fuel - self.remaining,
+            remaining_fuel: self.remaining_fuel,
         }
     }
 
-    fn eval(&mut self, expression: &Value, environment: &Environment) -> RuntimeValue {
-        if !self.burn() {
-            return RuntimeValue::Data(Value::from(error::FUEL_EXHAUSTED));
-        }
-        let root = self.depth == 0;
-        self.depth += 1;
-        let result = match expression {
+    fn eval(&mut self, expression: &Value, environment: &Environment) -> Option<RuntimeValue> {
+        self.burn()?;
+        match expression {
             Value::Cell(cell) => self.eval_cell(*cell, environment),
             Value::Record(fields) if fields.contains_key(&vocabulary::QUOTE) => {
                 self.eval_quote(expression, environment)
             }
             Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
-                self.eval_call(expression, environment, root)
+                self.eval_call(expression, environment)
             }
             Value::Record(fields)
                 if fields.contains_key(&vocabulary::PARAMS)
@@ -227,31 +213,21 @@ where
                 self.eval_function(expression, environment)
             }
             Value::Blob(_) | Value::List(_) | Value::Record(_) => {
-                RuntimeValue::Data(expression.clone())
+                Some(RuntimeValue::Data(expression.clone()))
             }
-        };
-        self.depth -= 1;
-        result
-    }
-
-    fn burn(&mut self) -> bool {
-        if self.remaining == 0 {
-            if !self.halted {
-                self.diagnostics.push(Diagnostic::FuelExhausted);
-                self.halted = true;
-            }
-            false
-        } else {
-            self.remaining -= 1;
-            true
         }
     }
 
-    fn failure(&mut self, diagnostic: Diagnostic, cell: CellId) -> RuntimeValue {
-        RuntimeValue::Data(self.failure_value(diagnostic, cell))
+    fn burn(&mut self) -> Option<()> {
+        self.remaining_fuel = self.remaining_fuel.checked_sub(1)?;
+        (self.remaining_fuel > 0).then_some(())
     }
 
-    fn failure_value(&mut self, diagnostic: Diagnostic, cell: CellId) -> Value {
+    fn absent(&mut self, diagnostic: Diagnostic, cell: CellId) -> RuntimeValue {
+        RuntimeValue::Data(self.absent_value(diagnostic, cell))
+    }
+
+    fn absent_value(&mut self, diagnostic: Diagnostic, cell: CellId) -> Value {
         self.diagnostics.push(diagnostic);
         Value::from(cell)
     }
@@ -259,24 +235,24 @@ where
     fn into_data(&mut self, value: RuntimeValue) -> Value {
         match value {
             RuntimeValue::Data(value) => value,
-            RuntimeValue::Closure { .. } | RuntimeValue::Foreign(_) => self.failure_value(
+            RuntimeValue::Closure { .. } => self.absent_value(
                 Diagnostic::FunctionIsNotData,
-                error::FUNCTION_IS_NOT_DATA,
+                absent::FUNCTION_IS_NOT_DATA,
             ),
         }
     }
 
-    fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> RuntimeValue {
+    fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> Option<RuntimeValue> {
         if let Some(value) = environment.get(&cell) {
-            value.clone()
+            Some(value.clone())
         } else if self.foreign.get(cell).is_some() {
-            RuntimeValue::Foreign(cell)
+            Some(RuntimeValue::Data(Value::from(cell)))
         } else if let Some(first) = self
             .resolving
             .iter()
             .position(|resolving| *resolving == cell)
         {
-            self.failure(
+            Some(self.absent(
                 Diagnostic::CellCycle(
                     self.resolving[first..]
                         .iter()
@@ -284,8 +260,8 @@ where
                         .chain([cell])
                         .collect(),
                 ),
-                error::CELL_CYCLE,
-            )
+                absent::CELL_CYCLE,
+            ))
         } else {
             self.dependencies.insert(cell);
             match (self.resolve)(cell) {
@@ -295,14 +271,18 @@ where
                     self.resolving.pop();
                     result
                 }
-                None => self.failure(Diagnostic::MissingCell(cell), error::MISSING_CELL),
+                None => Some(self.absent(Diagnostic::MissingCell(cell), absent::MISSING_CELL)),
             }
         }
     }
 
-    fn eval_function(&mut self, expression: &Value, environment: &Environment) -> RuntimeValue {
+    fn eval_function(
+        &mut self,
+        expression: &Value,
+        environment: &Environment,
+    ) -> Option<RuntimeValue> {
         let fields = expression.as_record().expect("matched record");
-        match (
+        Some(match (
             fields.get(&vocabulary::PARAMS).and_then(Value::as_list),
             fields.get(&vocabulary::BODY),
         ) {
@@ -312,19 +292,19 @@ where
                     .map(|parameter| parameter.as_cell().ok_or_else(|| parameter.clone()))
                     .collect::<Result<Vec<_>, _>>();
                 match params {
-                    Err(parameter) => self.failure(
+                    Err(parameter) => self.absent(
                         Diagnostic::InvalidParameter(parameter),
-                        error::INVALID_PARAMETER,
+                        absent::INVALID_PARAMETER,
                     ),
-                    Ok(params) if params.contains(&vocabulary::FUNCTION) => self.failure(
+                    Ok(params) if params.contains(&vocabulary::FUNCTION) => self.absent(
                         Diagnostic::ReservedParameter(vocabulary::FUNCTION),
-                        error::INVALID_PARAMETER,
+                        absent::INVALID_PARAMETER,
                     ),
                     Ok(params) if duplicate(&params).is_some() => {
                         let duplicate = duplicate(&params).expect("matched duplicate");
-                        self.failure(
+                        self.absent(
                             Diagnostic::DuplicateParameter(duplicate),
-                            error::INVALID_PARAMETER,
+                            absent::INVALID_PARAMETER,
                         )
                     }
                     Ok(params) => RuntimeValue::Closure {
@@ -334,134 +314,120 @@ where
                     },
                 }
             }
-            _ => self.failure(Diagnostic::MalformedFunction, error::MALFORMED_FUNCTION),
-        }
+            _ => self.absent(Diagnostic::MalformedFunction, absent::MALFORMED_FUNCTION),
+        })
     }
 
     fn eval_call(
         &mut self,
         expression: &Value,
         environment: &Environment,
-        root: bool,
-    ) -> RuntimeValue {
+    ) -> Option<RuntimeValue> {
         let fields = expression.as_record().expect("matched record");
         let callable = self.eval(
             fields
                 .get(&vocabulary::FUNCTION)
                 .expect("matched function field"),
             environment,
-        );
-        if self.halted {
-            return callable;
-        }
-        let params = match &callable {
-            RuntimeValue::Closure { params, .. } => Some(params.clone()),
-            RuntimeValue::Foreign(function) => Some(
+        )?;
+        let (params, foreign) = match &callable {
+            RuntimeValue::Closure { params, .. } => (params.clone(), None),
+            RuntimeValue::Data(value) => match value.as_cell().and_then(|cell| {
                 self.foreign
-                    .get(*function)
-                    .expect("foreign function was resolved")
-                    .params
-                    .clone(),
-            ),
-            RuntimeValue::Data(value) => {
-                return self.failure(
-                    Diagnostic::NotCallable(value.clone()),
-                    error::NOT_CALLABLE,
-                );
-            }
-        }
-        .expect("all callable variants provide params");
-        if root {
-            self.unconsumed.extend(
-                fields
-                    .keys()
-                    .filter(|field| {
-                        **field != vocabulary::FUNCTION && !params.contains(field)
-                    })
-                    .copied(),
-            );
-        }
+                    .get(cell)
+                    .map(|function| (cell, function.params.clone()))
+            }) {
+                Some((cell, params)) => (params, Some(cell)),
+                None => {
+                    return Some(self.absent(
+                        Diagnostic::NotCallable(value.clone()),
+                        absent::NOT_CALLABLE,
+                    ));
+                }
+            },
+        };
         if let Some(missing) = params
             .iter()
             .find(|parameter| !fields.contains_key(*parameter))
         {
-            return self.failure(
+            return Some(self.absent(
                 Diagnostic::MissingArgument(*missing),
-                error::MISSING_ARGUMENT,
-            );
+                absent::MISSING_ARGUMENT,
+            ));
         }
         let mut arguments = Environment::new();
         for parameter in &params {
             let argument = self.eval(
                 fields.get(parameter).expect("checked argument"),
                 environment,
-            );
-            if self.halted {
-                return argument;
-            }
+            )?;
             arguments.insert(*parameter, argument);
         }
-        match callable {
-            RuntimeValue::Closure {
-                body,
-                mut environment,
-                ..
-            } => {
+        match (callable, foreign) {
+            (
+                RuntimeValue::Closure {
+                    body,
+                    mut environment,
+                    ..
+                },
+                None,
+            ) => {
                 environment.extend(arguments);
                 self.eval(&body, &environment)
             }
-            RuntimeValue::Foreign(function) => {
+            (RuntimeValue::Data(_), Some(function)) => {
                 let values = params
                     .iter()
                     .map(|parameter| match arguments.get(parameter) {
                         Some(RuntimeValue::Data(value)) => Ok(value.clone()),
-                        Some(RuntimeValue::Closure { .. } | RuntimeValue::Foreign(_)) => {
-                            Err(*parameter)
-                        }
+                        Some(RuntimeValue::Closure { .. }) => Err(*parameter),
                         None => unreachable!("checked argument"),
                     })
                     .collect::<Result<Vec<_>, _>>();
                 match values {
-                    Ok(values) => RuntimeValue::Data(
+                    Ok(values) => Some(RuntimeValue::Data(
                         (self
                             .foreign
                             .get(function)
                             .expect("foreign function was resolved")
                             .call)(&values),
-                    ),
-                    Err(parameter) => self.failure(
+                    )),
+                    Err(parameter) => Some(self.absent(
                         Diagnostic::ForeignArgumentIsFunction(parameter),
-                        error::FOREIGN_ARGUMENT_IS_FUNCTION,
-                    ),
+                        absent::FOREIGN_ARGUMENT_IS_FUNCTION,
+                    )),
                 }
             }
-            RuntimeValue::Data(_) => unreachable!("checked callable"),
+            (RuntimeValue::Closure { .. }, Some(_)) | (RuntimeValue::Data(_), None) => {
+                unreachable!("callable kind and foreign identity were established together")
+            }
         }
     }
 
-    fn eval_quote(&mut self, expression: &Value, environment: &Environment) -> RuntimeValue {
+    fn eval_quote(
+        &mut self,
+        expression: &Value,
+        environment: &Environment,
+    ) -> Option<RuntimeValue> {
         let template = expression
             .as_record()
             .expect("matched record")
             .get(&vocabulary::QUOTE)
             .expect("matched quote field");
-        RuntimeValue::Data(self.expand_quote(template, environment))
+        Some(RuntimeValue::Data(self.expand_quote(template, environment)?))
     }
 
-    fn expand_quote(&mut self, template: &Value, environment: &Environment) -> Value {
-        if !self.burn() {
-            return Value::from(error::FUEL_EXHAUSTED);
-        }
+    fn expand_quote(&mut self, template: &Value, environment: &Environment) -> Option<Value> {
+        self.burn()?;
         match template {
-            Value::Cell(_) | Value::Blob(_) => template.clone(),
-            Value::List(elements) => Value::List(
-                elements
-                    .iter()
-                    .map(|(position, value)| {
-                        (position.clone(), self.expand_quote(value, environment))
-                    })
-                    .collect(),
-            ),
+            Value::Cell(_) | Value::Blob(_) => Some(template.clone()),
+            Value::List(elements) => elements
+                .iter()
+                .map(|(position, value)| {
+                    Some((position.clone(), self.expand_quote(value, environment)?))
+                })
+                .collect::<Option<_>>()
+                .map(Value::List),
             Value::Record(fields) if fields.contains_key(&vocabulary::UNQUOTE) => {
                 let evaluated = self.eval(
                     fields
@@ -469,14 +435,15 @@ where
                         .expect("matched unquote field"),
                     environment,
                 );
-                self.into_data(evaluated)
+                Some(self.into_data(evaluated?))
             }
-            Value::Record(fields) => Value::Record(
-                fields
-                    .iter()
-                    .map(|(field, value)| (*field, self.expand_quote(value, environment)))
-                    .collect(),
-            ),
+            Value::Record(fields) => fields
+                .iter()
+                .map(|(field, value)| {
+                    Some((*field, self.expand_quote(value, environment)?))
+                })
+                .collect::<Option<_>>()
+                .map(Value::Record),
         }
     }
 }
@@ -526,16 +493,12 @@ pub fn evaluate(
     Evaluator {
         resolve: &resolve,
         foreign,
-        remaining: fuel,
-        initial_fuel: fuel,
+        remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
         resolving: Vec::new(),
-        depth: 0,
-        unconsumed: BTreeSet::new(),
-        halted: false,
     }
-    .evaluate(expression)
+    .run(expression)
 }
 
 pub fn library() -> Cells {
@@ -550,20 +513,20 @@ pub fn library() -> Cells {
         cells.set_value(cell, progred_name::record(name, []));
     }
     for (cell, name) in [
-        (error::FUEL_EXHAUSTED, "fuel exhausted"),
-        (error::MISSING_CELL, "missing cell"),
-        (error::CELL_CYCLE, "cell cycle"),
-        (error::MALFORMED_FUNCTION, "malformed function"),
-        (error::INVALID_PARAMETER, "invalid parameter"),
-        (error::NOT_CALLABLE, "not callable"),
-        (error::MISSING_ARGUMENT, "missing argument"),
+        (absent::FUEL_EXHAUSTED, "fuel exhausted"),
+        (absent::MISSING_CELL, "missing cell"),
+        (absent::CELL_CYCLE, "cell cycle"),
+        (absent::MALFORMED_FUNCTION, "malformed function"),
+        (absent::INVALID_PARAMETER, "invalid parameter"),
+        (absent::NOT_CALLABLE, "not callable"),
+        (absent::MISSING_ARGUMENT, "missing argument"),
         (
-            error::FOREIGN_ARGUMENT_IS_FUNCTION,
+            absent::FOREIGN_ARGUMENT_IS_FUNCTION,
             "foreign argument is function",
         ),
-        (error::FUNCTION_IS_NOT_DATA, "function is not data"),
+        (absent::FUNCTION_IS_NOT_DATA, "function is not data"),
     ] {
-        cells.set_value(cell, grap_error::named(name));
+        cells.set_value(cell, grap_absent::named(name));
     }
     cells
 }
@@ -590,7 +553,18 @@ mod tests {
         );
         assert_eq!(evaluation.result, value);
         assert!(evaluation.dependencies.is_empty());
-        assert_eq!(evaluation.steps, 1);
+    }
+
+    #[test]
+    fn consuming_the_entire_fuel_allowance_is_exhaustion() {
+        let value = blob("one step");
+        let exhausted = evaluate(&value, |_| None, &ForeignFunctions::new(), 1);
+        assert_eq!(exhausted.result, Value::from(absent::FUEL_EXHAUSTED));
+        assert_eq!(exhausted.diagnostics, [Diagnostic::FuelExhausted]);
+        assert_eq!(exhausted.remaining_fuel, 0);
+        let completed = evaluate(&value, |_| None, &ForeignFunctions::new(), 2);
+        assert_eq!(completed.result, value);
+        assert_eq!(completed.remaining_fuel, 1);
     }
 
     #[test]
@@ -710,6 +684,35 @@ mod tests {
     }
 
     #[test]
+    fn foreign_functions_are_cell_values_until_called() {
+        let echo = new_cell_id();
+        let input = new_cell_id();
+        let mut foreign = ForeignFunctions::new();
+        foreign
+            .register(echo, [input], |arguments| arguments[0].clone())
+            .unwrap();
+
+        let evaluation = evaluate(
+            &Value::from(echo),
+            |_| Some(blob("foreign cells do not resolve as data")),
+            &foreign,
+            10,
+        );
+        assert_eq!(evaluation.result, Value::from(echo));
+        assert!(evaluation.dependencies.is_empty());
+        assert_eq!(
+            evaluate(
+                &call(Value::from(echo), [(input, Value::from(echo))]),
+                |_| None,
+                &foreign,
+                10,
+            )
+            .result,
+            Value::from(echo)
+        );
+    }
+
+    #[test]
     fn quote_interpolates_explicit_unquotes_once_without_following_cells() {
         let field = new_cell_id();
         let cell = new_cell_id();
@@ -752,7 +755,7 @@ mod tests {
     }
 
     #[test]
-    fn failures_are_stable_error_values_with_diagnostics() {
+    fn absents_are_stable_values_with_diagnostics() {
         let missing = new_cell_id();
         let evaluation = evaluate(
             &Value::from(missing),
@@ -760,7 +763,7 @@ mod tests {
             &ForeignFunctions::new(),
             10,
         );
-        assert_eq!(evaluation.result, Value::from(error::MISSING_CELL));
+        assert_eq!(evaluation.result, Value::from(absent::MISSING_CELL));
         assert_eq!(evaluation.diagnostics, [Diagnostic::MissingCell(missing)]);
 
         let malformed = Value::record([(
@@ -768,7 +771,7 @@ mod tests {
             Value::list(Vec::<Value>::new()),
         )]);
         let evaluation = evaluate(&malformed, |_| None, &ForeignFunctions::new(), 10);
-        assert_eq!(evaluation.result, Value::from(error::MALFORMED_FUNCTION));
+        assert_eq!(evaluation.result, Value::from(absent::MALFORMED_FUNCTION));
     }
 
     #[test]
@@ -785,7 +788,7 @@ mod tests {
             &ForeignFunctions::new(),
             30,
         );
-        assert_eq!(evaluation.result, Value::from(error::FUEL_EXHAUSTED));
+        assert_eq!(evaluation.result, Value::from(absent::FUEL_EXHAUSTED));
 
         let a = new_cell_id();
         let b = new_cell_id();
@@ -799,20 +802,22 @@ mod tests {
             &ForeignFunctions::new(),
             20,
         );
-        assert_eq!(evaluation.result, Value::from(error::CELL_CYCLE));
+        assert_eq!(evaluation.result, Value::from(absent::CELL_CYCLE));
     }
 
     #[test]
-    fn malformed_calls_report_unconsumed_fields() {
+    fn extra_call_fields_do_not_prevent_calling() {
         let parameter = new_cell_id();
         let extra = new_cell_id();
         let expression = call(
             function([parameter], Value::from(parameter)),
-            [(extra, blob("still data"))],
+            [
+                (parameter, blob("result")),
+                (extra, blob("still graph data")),
+            ],
         );
         let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::new(), 10);
-        assert_eq!(evaluation.result, Value::from(error::MISSING_ARGUMENT));
-        assert_eq!(evaluation.unconsumed, BTreeSet::from([extra]));
+        assert_eq!(evaluation.result, blob("result"));
     }
 
     #[test]
@@ -838,7 +843,7 @@ mod tests {
     }
 
     #[test]
-    fn library_describes_the_grap_forms_and_errors() {
+    fn library_describes_the_grap_forms_and_absents() {
         let library = library();
         for (cell, name) in [
             (vocabulary::FUNCTION, "function"),
@@ -849,8 +854,8 @@ mod tests {
         ] {
             assert_eq!(library.value(cell).and_then(progred_name::read), Some(name));
         }
-        assert!(grap_error::is_error(
-            library.value(error::MISSING_CELL).unwrap()
+        assert!(grap_absent::is_absent(
+            library.value(absent::MISSING_CELL).unwrap()
         ));
         assert_eq!(library.cells().count(), 14);
     }

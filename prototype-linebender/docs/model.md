@@ -53,7 +53,7 @@ cell is simply an alias.
 
 Conventions recognize the positive facts they require rather than
 rejecting records for having additional fields. Thus `{f64: bits,
-created-at: time}` still has an f64 facet, and `{isa: error, name:
+created-at: time}` still has an f64 facet, and `{isa: absent, name:
 "missing cell"}` still has both classifications. A projection that
 replaces the whole record has a stricter obligation: it may do so only
 when it accounts for every field it would hide; enriched values remain

@@ -6,7 +6,7 @@ members = [
     "conventions/name",
     "conventions/text",
     "grap",
-    "grap/libraries/error",
+    "grap/libraries/absent",
     "grap/libraries/f64",
     "grap/libraries/geometry",
     "experiments/rust-wasm-projection",

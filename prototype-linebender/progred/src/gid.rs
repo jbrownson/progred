@@ -835,7 +835,7 @@ mod grap_demo_file {
     }
 
     #[test]
-    fn the_grap_demo_exercises_live_functions_data_and_errors() {
+    fn the_grap_demo_exercises_live_functions_data_and_absents() {
         let (mut doc, binders) = fixture();
         for (label, expected) in [
             ("add_result", grap_f64::value(7.0)),
@@ -867,7 +867,7 @@ mod grap_demo_file {
         assert_eq!(
             evaluate(
                 &doc,
-                grap_expression(entry(&doc, &binders, "type_error")),
+                grap_expression(entry(&doc, &binders, "type_absent")),
             )
             .result,
             Value::from(grap_f64::vocabulary::LEFT_NOT_F64)
@@ -878,7 +878,7 @@ mod grap_demo_file {
                 grap_expression(entry(&doc, &binders, "missing_argument")),
             )
             .result,
-            Value::from(grap::error::MISSING_ARGUMENT)
+            Value::from(grap::absent::MISSING_ARGUMENT)
         );
         assert_eq!(
             evaluate(
@@ -886,14 +886,17 @@ mod grap_demo_file {
                 grap_expression(entry(&doc, &binders, "not_callable")),
             )
             .result,
-            Value::from(grap::error::NOT_CALLABLE)
+            Value::from(grap::absent::NOT_CALLABLE)
         );
 
-        let metadata = evaluate(
-            &doc,
-            grap_expression(entry(&doc, &binders, "metadata_call")),
+        assert_eq!(
+            evaluate(
+                &doc,
+                grap_expression(entry(&doc, &binders, "metadata_call")),
+            )
+            .result,
+            grap_f64::value(7.0)
         );
-        assert_eq!(metadata.unconsumed, [binders["note"]].into_iter().collect());
 
         doc.cells
             .set_value(binders["a_value"], grap_f64::value(5.0));

@@ -95,8 +95,8 @@ function's parameter cells:
 The apparent names above are binder sugar in gid notation. Matching is
 by cell identity. Renaming a parameter changes no program reference,
 and there is no parallel symbol-ID system. Additional top-level call
-fields are valid graph data. Evaluation reports fields the selected
-function did not consume for tooling and future pattern composition.
+fields are valid graph data and do not prevent the selected function
+from being called.
 The result arm under `grap` is derived and read-only; the expression
 arm, `grap` field, and rest of its enclosing record remain ordinary
 visible projections. Raw exposes only the stored expression and any
@@ -131,8 +131,9 @@ to have document paths.
 Evaluating a cell is transparent:
 
 1. A lexical binding with that cell identity wins.
-2. A cell registered by a library as a foreign function produces its
-   host implementation.
+2. A cell registered by a library as a foreign function remains that
+   cell value. When it reaches function position, the registry supplies
+   its parameter shape and host implementation.
 3. Otherwise the cell is resolved through the caller's document-over-
    library source and its value is evaluated.
 
@@ -177,15 +178,15 @@ Otherwise the structural view remains visible, even though Grap and
 the relevant library can still use the recognized facet.
 
 Every external cell read is collected as a dependency. The set is
-reported even when evaluation produces an error value, ready for future
+reported even when evaluation produces an absent, ready for future
 precise invalidation. Every evaluation also has explicit fuel, and cell
-cycles receive a stable error value. Invalid Grap never damages the
-underlying document: its error value is projected like any other normal
+cycles produce a stable absent. Invalid Grap never damages the
+underlying document: its absent is projected like any other normal
 form, and the stored expression remains editable in Raw or wherever
 the same expression cell is projected outside a `grap` field.
 
 The evaluator lives in its own `grap` crate. It depends on the graph
-core and the shared Grap error and name conventions, but knows no f64,
+core and the shared Grap absent and name conventions, but knows no f64,
 geometry, UI, file, or Linebender concepts. `grap-f64` and
 `grap-geometry` are separate libraries composed by the application.
 Their identities and ordinary graph-side values live in the built-in
@@ -202,29 +203,29 @@ ordered pattern-matching clauses, some written in Rust and some in the
 graph. A dispatch index may later optimize that composition without
 becoming part of its semantics. Merely closing over the current lookup
 would be cosmetic. A genuine clause protocol must give a matched clause
-recursive evaluation and say whether a returned error means “decline;
-try another clause” or “this clause handled the value and failed.” The
+recursive evaluation and say whether a returned absent means “decline;
+try another clause” or “this clause handled the value as absent.” The
 current table can then be wrapped as the first Rust-authored clause;
 graph-side bootstrapping is not required.
 
 Every evaluation returns a `Value`, including malformed programs,
-missing cells, cycles, and exhausted fuel. Core evaluator failures and
-library-specific failures are stable error-cell values. Host-facing
-diagnostics accompany core failures with occurrence-specific detail,
-such as which cell was missing, without introducing a separate failure
-channel into Grap or changing Grap control flow. When an evaluated call
-returns one of those cells, the projection shows its ordinary name as
-the result.
+missing cells, cycles, and exhausted fuel. Core evaluator and library
+absences are stable absent-cell values. Host-facing diagnostics
+accompany core absences with occurrence-specific detail,
+such as which cell was missing, without introducing a separate host
+result channel into Grap or changing Grap control flow. When an
+evaluated call returns one of those cells, the projection shows its
+ordinary name as the result.
 
 The bootstrap f64 and geometry libraries define stable library cells
-for their failure modes and return those identities as values: several
-semantically distinct custom nulls, not freshly allocated error
-occurrences. Each sentinel's library value is a record containing
-`isa: error`. The general `isa` relation lives in the independent
+for their absent cases and return those identities as values: several
+semantically distinct custom nulls, not freshly allocated occurrences.
+Each absent's library value is a record containing `isa: absent`. The
+general `isa` relation lives in the independent
 `progred-isa` library: it is a convention over graph data, not part of
-Grap or `progred-graph`. The error library owns only the `error`
+Grap or `progred-graph`. The absent library owns only the `absent`
 classification and uses that relation. Additional static facts can be
-added as fields on each sentinel's record. Error meaning remains
+added as fields on each absent's record. Absent meaning remains
 library data rather than an evaluator feature.
 
 ## First Vertical Slice
@@ -237,7 +238,7 @@ the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, a graph-defined function, and a
 circle; it also keeps extra call metadata in Raw, demonstrates
 quote/unquote and inert returned data, and shows stable type,
-missing-argument, and not-callable error cells as ordinary projected
+missing-argument, and not-callable absents as ordinary projected
 results. The demo projects one graph expression cell both directly and
 by reference under `grap`, making their shared identity visible through
 hover while the latter also carries its derived result.
@@ -276,7 +277,7 @@ construction, not by filling out a language checklist:
 - make a direct manipulation write its controlling graph values;
 - use the dependency set to reevaluate only affected results if full
   frame evaluation becomes material;
-- add errors and evaluation traces as projections over the same graph,
+- add absents and evaluation traces as projections over the same graph,
   while keeping Raw as the escape hatch.
 
 The next language work should be forced by manipulating this example:
