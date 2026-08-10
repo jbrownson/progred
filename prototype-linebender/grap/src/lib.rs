@@ -290,36 +290,38 @@ where
         body: &Value,
         environment: &Environment,
     ) -> RuntimeValue {
-        match parameters.as_list() {
-            Some(parameters) => {
-                let params = parameters
-                    .values()
-                    .map(|parameter| parameter.as_cell().ok_or_else(|| parameter.clone()))
-                    .collect::<Result<Vec<_>, _>>();
-                match params {
-                    Err(parameter) => self.absent(
-                        Diagnostic::InvalidParameter(parameter),
-                        absent::INVALID_PARAMETER,
-                    ),
-                    Ok(params) if params.contains(&vocabulary::FUNCTION) => self.absent(
-                        Diagnostic::ReservedParameter(vocabulary::FUNCTION),
-                        absent::INVALID_PARAMETER,
-                    ),
-                    Ok(params) if duplicate(&params).is_some() => {
-                        let duplicate = duplicate(&params).expect("matched duplicate");
-                        self.absent(
-                            Diagnostic::DuplicateParameter(duplicate),
-                            absent::INVALID_PARAMETER,
-                        )
-                    }
-                    Ok(params) => RuntimeValue::Closure {
-                        params,
-                        body: body.clone(),
-                        environment: environment.clone(),
-                    },
-                }
+        let Some(parameters) = parameters.as_list() else {
+            return self.absent(Diagnostic::MalformedFunction, absent::MALFORMED_FUNCTION);
+        };
+        let params = parameters
+            .values()
+            .map(|parameter| parameter.as_cell().ok_or_else(|| parameter.clone()))
+            .collect::<Result<Vec<_>, _>>();
+        let params = match params {
+            Ok(params) => params,
+            Err(parameter) => {
+                return self.absent(
+                    Diagnostic::InvalidParameter(parameter),
+                    absent::INVALID_PARAMETER,
+                );
             }
-            _ => self.absent(Diagnostic::MalformedFunction, absent::MALFORMED_FUNCTION),
+        };
+        if params.contains(&vocabulary::FUNCTION) {
+            return self.absent(
+                Diagnostic::ReservedParameter(vocabulary::FUNCTION),
+                absent::INVALID_PARAMETER,
+            );
+        }
+        if let Some(duplicate) = duplicate(&params) {
+            return self.absent(
+                Diagnostic::DuplicateParameter(duplicate),
+                absent::INVALID_PARAMETER,
+            );
+        }
+        RuntimeValue::Closure {
+            params,
+            body: body.clone(),
+            environment: environment.clone(),
         }
     }
 
