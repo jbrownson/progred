@@ -201,6 +201,9 @@ where
         match expression {
             Value::Cell(cell) => self.eval_cell(*cell, environment),
             Value::Record(fields) => {
+                // Open records may match more than one form. For now the evaluator
+                // uses the simple precedence quote, call, then definition; an
+                // ambiguous-form absent can replace it if overlaps matter in practice.
                 if let Some(template) = fields.get(&vocabulary::QUOTE) {
                     self.eval_quote(template, environment)
                 } else if let Some(function) = fields.get(&vocabulary::FUNCTION) {
