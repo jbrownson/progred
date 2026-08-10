@@ -168,6 +168,24 @@ enum RuntimeValue {
 type Environment = HashMap<CellId, RuntimeValue>;
 type EvalResult<T> = Result<T, Value>;
 
+enum CallTarget {
+    Graph {
+        params: Vec<CellId>,
+        body: Value,
+        environment: Environment,
+    },
+    Foreign(ForeignFunction),
+}
+
+impl CallTarget {
+    fn params(&self) -> &[CellId] {
+        match self {
+            CallTarget::Graph { params, .. } => params,
+            CallTarget::Foreign(function) => &function.params,
+        }
+    }
+}
+
 struct Evaluator<'a, R> {
     resolve: &'a R,
     foreign: &'a ForeignFunctions,
@@ -337,16 +355,21 @@ where
         environment: &Environment,
     ) -> EvalResult<RuntimeValue> {
         let callable = self.eval(function, environment)?;
-        let (params, foreign_call) = match &callable {
-            RuntimeValue::Closure { params, .. } => (params.clone(), None),
+        let target = match callable {
+            RuntimeValue::Closure {
+                params,
+                body,
+                environment,
+            } => CallTarget::Graph {
+                params,
+                body,
+                environment,
+            },
             RuntimeValue::Data(value) => match value
                 .as_cell()
-                .and_then(|cell| self.foreign.get(cell))
+                .and_then(|cell| self.foreign.get(cell).cloned())
             {
-                Some(function) => (
-                    function.params.clone(),
-                    Some(Rc::clone(&function.call)),
-                ),
+                Some(function) => CallTarget::Foreign(function),
                 None => {
                     return Ok(self.absent(
                         Diagnostic::NotCallable(value.clone()),
@@ -355,8 +378,8 @@ where
                 }
             },
         };
-        let mut expressions = Vec::with_capacity(params.len());
-        for parameter in &params {
+        let mut expressions = Vec::with_capacity(target.params().len());
+        for parameter in target.params() {
             let Some(expression) = argument(*parameter) else {
                 return Ok(self.absent(
                     Diagnostic::MissingArgument(*parameter),
@@ -365,42 +388,35 @@ where
             };
             expressions.push((*parameter, expression));
         }
-        let mut arguments = Environment::new();
+        let mut arguments = Vec::with_capacity(expressions.len());
         for (parameter, expression) in expressions {
             let value = self.eval(expression, environment)?;
-            arguments.insert(parameter, value);
+            arguments.push((parameter, value));
         }
-        match (callable, foreign_call) {
-            (
-                RuntimeValue::Closure {
-                    body,
-                    mut environment,
-                    ..
-                },
-                None,
-            ) => {
+        match target {
+            CallTarget::Graph {
+                body,
+                mut environment,
+                ..
+            } => {
                 environment.extend(arguments);
                 self.eval(&body, &environment)
             }
-            (RuntimeValue::Data(_), Some(call)) => {
-                let values = params
-                    .iter()
-                    .map(|parameter| match arguments.get(parameter) {
-                        Some(RuntimeValue::Data(value)) => Ok(value.clone()),
-                        Some(RuntimeValue::Closure { .. }) => Err(*parameter),
-                        None => unreachable!("checked argument"),
+            CallTarget::Foreign(function) => {
+                let values = arguments
+                    .into_iter()
+                    .map(|(parameter, argument)| match argument {
+                        RuntimeValue::Data(value) => Ok(value),
+                        RuntimeValue::Closure { .. } => Err(parameter),
                     })
                     .collect::<Result<Vec<_>, _>>();
                 match values {
-                    Ok(values) => Ok(RuntimeValue::Data(call(&values))),
+                    Ok(values) => Ok(RuntimeValue::Data((function.call)(&values))),
                     Err(parameter) => Ok(self.absent(
                         Diagnostic::ForeignArgumentIsFunction(parameter),
                         absent::FOREIGN_ARGUMENT_IS_FUNCTION,
                     )),
                 }
-            }
-            (RuntimeValue::Closure { .. }, Some(_)) | (RuntimeValue::Data(_), None) => {
-                unreachable!("callable kind and foreign identity were established together")
             }
         }
     }
