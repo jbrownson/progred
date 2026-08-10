@@ -332,14 +332,16 @@ where
         environment: &Environment,
     ) -> Option<RuntimeValue> {
         let callable = self.eval(function, environment)?;
-        let (params, foreign) = match &callable {
+        let (params, foreign_call) = match &callable {
             RuntimeValue::Closure { params, .. } => (params.clone(), None),
-            RuntimeValue::Data(value) => match value.as_cell().and_then(|cell| {
-                self.foreign
-                    .get(cell)
-                    .map(|function| (cell, function.params.clone()))
-            }) {
-                Some((cell, params)) => (params, Some(cell)),
+            RuntimeValue::Data(value) => match value
+                .as_cell()
+                .and_then(|cell| self.foreign.get(cell))
+            {
+                Some(function) => (
+                    function.params.clone(),
+                    Some(Rc::clone(&function.call)),
+                ),
                 None => {
                     return Some(self.absent(
                         Diagnostic::NotCallable(value.clone()),
@@ -363,7 +365,7 @@ where
             let value = self.eval(expression, environment)?;
             arguments.insert(parameter, value);
         }
-        match (callable, foreign) {
+        match (callable, foreign_call) {
             (
                 RuntimeValue::Closure {
                     body,
@@ -375,7 +377,7 @@ where
                 environment.extend(arguments);
                 self.eval(&body, &environment)
             }
-            (RuntimeValue::Data(_), Some(function)) => {
+            (RuntimeValue::Data(_), Some(call)) => {
                 let values = params
                     .iter()
                     .map(|parameter| match arguments.get(parameter) {
@@ -385,13 +387,7 @@ where
                     })
                     .collect::<Result<Vec<_>, _>>();
                 match values {
-                    Ok(values) => Some(RuntimeValue::Data(
-                        (self
-                            .foreign
-                            .get(function)
-                            .expect("foreign function was resolved")
-                            .call)(&values),
-                    )),
+                    Ok(values) => Some(RuntimeValue::Data(call(&values))),
                     Err(parameter) => Some(self.absent(
                         Diagnostic::ForeignArgumentIsFunction(parameter),
                         absent::FOREIGN_ARGUMENT_IS_FUNCTION,
