@@ -166,6 +166,7 @@ enum RuntimeValue {
 }
 
 type Environment = HashMap<CellId, RuntimeValue>;
+type EvalResult<T> = Result<T, Value>;
 
 struct Evaluator<'a, R> {
     resolve: &'a R,
@@ -182,11 +183,8 @@ where
 {
     fn run(mut self, expression: &Value) -> Evaluation {
         let result = match self.eval(expression, &Environment::new()) {
-            Some(evaluated) => self.into_data(evaluated),
-            None => {
-                self.diagnostics.push(Diagnostic::FuelExhausted);
-                Value::from(absent::FUEL_EXHAUSTED)
-            }
+            Ok(evaluated) => self.into_data(evaluated),
+            Err(result) => result,
         };
         Evaluation {
             result,
@@ -196,7 +194,7 @@ where
         }
     }
 
-    fn eval(&mut self, expression: &Value, environment: &Environment) -> Option<RuntimeValue> {
+    fn eval(&mut self, expression: &Value, environment: &Environment) -> EvalResult<RuntimeValue> {
         self.burn()?;
         match expression {
             Value::Cell(cell) => self.eval_cell(*cell, environment),
@@ -214,21 +212,28 @@ where
                         fields.get(&vocabulary::BODY),
                     ) {
                         (Some(parameters), Some(body)) => {
-                            Some(self.eval_function(parameters, body, environment))
+                            Ok(self.eval_function(parameters, body, environment))
                         }
-                        _ => Some(RuntimeValue::Data(expression.clone())),
+                        _ => Ok(RuntimeValue::Data(expression.clone())),
                     }
                 }
             }
             Value::Blob(_) | Value::List(_) => {
-                Some(RuntimeValue::Data(expression.clone()))
+                Ok(RuntimeValue::Data(expression.clone()))
             }
         }
     }
 
-    fn burn(&mut self) -> Option<()> {
-        self.remaining_fuel = self.remaining_fuel.checked_sub(1)?;
-        (self.remaining_fuel > 0).then_some(())
+    fn burn(&mut self) -> EvalResult<()> {
+        self.remaining_fuel = self.remaining_fuel.saturating_sub(1);
+        if self.remaining_fuel == 0 {
+            Err(self.absent_value(
+                Diagnostic::FuelExhausted,
+                absent::FUEL_EXHAUSTED,
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     fn absent(&mut self, diagnostic: Diagnostic, cell: CellId) -> RuntimeValue {
@@ -250,17 +255,17 @@ where
         }
     }
 
-    fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> Option<RuntimeValue> {
+    fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> EvalResult<RuntimeValue> {
         if let Some(value) = environment.get(&cell) {
-            Some(value.clone())
+            Ok(value.clone())
         } else if self.foreign.get(cell).is_some() {
-            Some(RuntimeValue::Data(Value::from(cell)))
+            Ok(RuntimeValue::Data(Value::from(cell)))
         } else if let Some(first) = self
             .resolving
             .iter()
             .position(|resolving| *resolving == cell)
         {
-            Some(self.absent(
+            Ok(self.absent(
                 Diagnostic::CellCycle(
                     self.resolving[first..]
                         .iter()
@@ -279,7 +284,7 @@ where
                     self.resolving.pop();
                     result
                 }
-                None => Some(self.absent(Diagnostic::MissingCell(cell), absent::MISSING_CELL)),
+                None => Ok(self.absent(Diagnostic::MissingCell(cell), absent::MISSING_CELL)),
             }
         }
     }
@@ -330,7 +335,7 @@ where
         function: &Value,
         argument: impl Fn(CellId) -> Option<&'v Value>,
         environment: &Environment,
-    ) -> Option<RuntimeValue> {
+    ) -> EvalResult<RuntimeValue> {
         let callable = self.eval(function, environment)?;
         let (params, foreign_call) = match &callable {
             RuntimeValue::Closure { params, .. } => (params.clone(), None),
@@ -343,7 +348,7 @@ where
                     Some(Rc::clone(&function.call)),
                 ),
                 None => {
-                    return Some(self.absent(
+                    return Ok(self.absent(
                         Diagnostic::NotCallable(value.clone()),
                         absent::NOT_CALLABLE,
                     ));
@@ -353,7 +358,7 @@ where
         let mut expressions = Vec::with_capacity(params.len());
         for parameter in &params {
             let Some(expression) = argument(*parameter) else {
-                return Some(self.absent(
+                return Ok(self.absent(
                     Diagnostic::MissingArgument(*parameter),
                     absent::MISSING_ARGUMENT,
                 ));
@@ -387,8 +392,8 @@ where
                     })
                     .collect::<Result<Vec<_>, _>>();
                 match values {
-                    Ok(values) => Some(RuntimeValue::Data(call(&values))),
-                    Err(parameter) => Some(self.absent(
+                    Ok(values) => Ok(RuntimeValue::Data(call(&values))),
+                    Err(parameter) => Ok(self.absent(
                         Diagnostic::ForeignArgumentIsFunction(parameter),
                         absent::FOREIGN_ARGUMENT_IS_FUNCTION,
                     )),
@@ -404,32 +409,32 @@ where
         &mut self,
         template: &Value,
         environment: &Environment,
-    ) -> Option<RuntimeValue> {
-        Some(RuntimeValue::Data(self.expand_quote(template, environment)?))
+    ) -> EvalResult<RuntimeValue> {
+        Ok(RuntimeValue::Data(self.expand_quote(template, environment)?))
     }
 
-    fn expand_quote(&mut self, template: &Value, environment: &Environment) -> Option<Value> {
+    fn expand_quote(&mut self, template: &Value, environment: &Environment) -> EvalResult<Value> {
         self.burn()?;
         match template {
-            Value::Cell(_) | Value::Blob(_) => Some(template.clone()),
+            Value::Cell(_) | Value::Blob(_) => Ok(template.clone()),
             Value::List(elements) => elements
                 .iter()
                 .map(|(position, value)| {
-                    Some((position.clone(), self.expand_quote(value, environment)?))
+                    Ok((position.clone(), self.expand_quote(value, environment)?))
                 })
-                .collect::<Option<_>>()
+                .collect::<EvalResult<_>>()
                 .map(Value::List),
             Value::Record(fields) => match fields.get(&vocabulary::UNQUOTE) {
                 Some(expression) => {
                     let evaluated = self.eval(expression, environment);
-                    Some(self.into_data(evaluated?))
+                    Ok(self.into_data(evaluated?))
                 }
                 None => fields
                     .iter()
                     .map(|(field, value)| {
-                        Some((*field, self.expand_quote(value, environment)?))
+                        Ok((*field, self.expand_quote(value, environment)?))
                     })
-                    .collect::<Option<_>>()
+                    .collect::<EvalResult<_>>()
                     .map(Value::Record),
             },
         }
