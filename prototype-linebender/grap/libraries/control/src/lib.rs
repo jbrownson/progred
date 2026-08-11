@@ -1,0 +1,384 @@
+//! Grap evaluation control supplied by Rust functions. `case`
+//! evaluates one subject, structurally matches ordered patterns, and
+//! evaluates only the selected expression.
+
+use grap::{Environment, Evaluate, ForeignFunctions, Halt, RegistrationError};
+use progred_graph::{CellId, Cells, Value};
+use std::collections::BTreeMap;
+
+pub mod vocabulary {
+    use progred_graph::CellId;
+
+    pub const CASE: CellId = CellId::from_u128(0xb3f6a62e4926889bcfcd338025f4a6f9);
+    pub const VALUE: CellId = CellId::from_u128(0x00dafdc01c7e014edd857e174c6c8b6f);
+    pub const ALTERNATIVES: CellId =
+        CellId::from_u128(0xa9aadcb44755963498c743fa114f0f00);
+    pub const DEFAULT: CellId =
+        CellId::from_u128(0x3ad1a352453c8b21da757b48913b2c9f);
+    pub const PATTERN: CellId =
+        CellId::from_u128(0xb9dc97198709bc6f7bae4c7afc7d424f);
+    pub const BIND: CellId = CellId::from_u128(0x5e46d12705690e8a377eb0f16ad9dba6);
+
+    pub const INVALID_ALTERNATIVES: CellId =
+        CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
+    pub const INVALID_ALTERNATIVE: CellId =
+        CellId::from_u128(0xaa627ebeb1091e8359f7a8eea45a6ccd);
+    pub const INVALID_BINDER: CellId =
+        CellId::from_u128(0x59ad0fb67728f245dce57b0cee360969);
+}
+
+pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> {
+    foreign.register(
+        vocabulary::CASE,
+        [
+            vocabulary::VALUE,
+            vocabulary::ALTERNATIVES,
+            vocabulary::DEFAULT,
+        ],
+        case_foreign,
+    )
+}
+
+fn case_foreign(
+    evaluate: &mut Evaluate<'_>,
+    arguments: &[Value],
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    let [value, alternatives, default] = arguments else {
+        unreachable!("Grap checks foreign arity before calling")
+    };
+    let value = evaluate(value, environment)?;
+    let alternatives = evaluate(alternatives, environment)?;
+    match select(&value, &alternatives) {
+        Selection::Expression {
+            expression,
+            bindings,
+        } => evaluate(expression, &environment.extended(bindings)),
+        Selection::Default => evaluate(default, environment),
+        Selection::Invalid(cell) => Ok(Value::from(cell)),
+    }
+}
+
+enum Selection<'a> {
+    Expression {
+        expression: &'a Value,
+        bindings: BTreeMap<CellId, Value>,
+    },
+    Default,
+    Invalid(CellId),
+}
+
+fn select<'a>(value: &Value, alternatives: &'a Value) -> Selection<'a> {
+    let Some(alternatives) = alternatives.as_list() else {
+        return Selection::Invalid(vocabulary::INVALID_ALTERNATIVES);
+    };
+    for alternative in alternatives.values() {
+        let Some(fields) = alternative.as_record() else {
+            return Selection::Invalid(vocabulary::INVALID_ALTERNATIVE);
+        };
+        let (Some(pattern), Some(expression)) = (
+            fields.get(&vocabulary::PATTERN),
+            fields.get(&grap::vocabulary::EXPRESSION),
+        ) else {
+            return Selection::Invalid(vocabulary::INVALID_ALTERNATIVE);
+        };
+        match destructure(pattern, value) {
+            Ok(Some(bindings)) => {
+                return Selection::Expression {
+                    expression,
+                    bindings,
+                };
+            }
+            Ok(None) => {}
+            Err(InvalidBinder) => {
+                return Selection::Invalid(vocabulary::INVALID_BINDER);
+            }
+        }
+    }
+    Selection::Default
+}
+
+struct InvalidBinder;
+
+fn destructure(
+    pattern: &Value,
+    value: &Value,
+) -> Result<Option<BTreeMap<CellId, Value>>, InvalidBinder> {
+    let mut bindings = BTreeMap::new();
+    matches_pattern(pattern, value, &mut bindings)
+        .map(|matched| matched.then_some(bindings))
+}
+
+fn matches_pattern(
+    pattern: &Value,
+    value: &Value,
+    bindings: &mut BTreeMap<CellId, Value>,
+) -> Result<bool, InvalidBinder> {
+    match pattern {
+        Value::Record(pattern_fields) => {
+            if let Some(binder) = pattern_fields.get(&vocabulary::BIND) {
+                match binder.as_cell() {
+                    Some(binder) => match bindings.get(&binder) {
+                        Some(bound) => Ok(bound == value),
+                        None => {
+                            bindings.insert(binder, value.clone());
+                            Ok(true)
+                        }
+                    },
+                    None => Err(InvalidBinder),
+                }
+            } else if let Some(value_fields) = value.as_record() {
+                pattern_fields.iter().try_fold(true, |matched, (field, pattern)| {
+                    if matched {
+                        match value_fields.get(field) {
+                            Some(value) => matches_pattern(pattern, value, bindings),
+                            None => Ok(false),
+                        }
+                    } else {
+                        Ok(false)
+                    }
+                })
+            } else {
+                Ok(false)
+            }
+        }
+        Value::List(pattern_values) => match value.as_list() {
+            Some(values) if pattern_values.len() == values.len() => pattern_values
+                .values()
+                .zip(values.values())
+                .try_fold(true, |matched, (pattern, value)| {
+                    if matched {
+                        matches_pattern(pattern, value, bindings)
+                    } else {
+                        Ok(false)
+                    }
+                }),
+            _ => Ok(false),
+        },
+        Value::Cell(_) | Value::Blob(_) => Ok(pattern == value),
+    }
+}
+
+pub fn library() -> Cells {
+    let mut cells = Cells::new();
+    for (cell, name) in [
+        (vocabulary::CASE, "case"),
+        (vocabulary::VALUE, "value"),
+        (vocabulary::ALTERNATIVES, "alternatives"),
+        (vocabulary::DEFAULT, "default"),
+        (vocabulary::PATTERN, "pattern"),
+        (vocabulary::BIND, "bind"),
+    ] {
+        cells.set_value(cell, progred_name::record(name, []));
+    }
+    for (cell, name) in [
+        (vocabulary::INVALID_ALTERNATIVES, "invalid alternatives"),
+        (vocabulary::INVALID_ALTERNATIVE, "invalid alternative"),
+        (vocabulary::INVALID_BINDER, "invalid binder"),
+    ] {
+        cells.set_value(cell, grap_absent::named(name));
+    }
+    cells
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use progred_graph::new_cell_id;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn blob(text: &str) -> Value {
+        Value::from(text.as_bytes().to_vec())
+    }
+
+    fn binding(cell: CellId) -> Value {
+        Value::record([(vocabulary::BIND, Value::from(cell))])
+    }
+
+    fn alternative(pattern: Value, expression: Value) -> Value {
+        Value::record([
+            (vocabulary::PATTERN, pattern),
+            (grap::vocabulary::EXPRESSION, expression),
+        ])
+    }
+
+    fn case_call(
+        value: Value,
+        alternatives: impl IntoIterator<Item = Value>,
+        default: Value,
+    ) -> Value {
+        grap::call(
+            Value::from(vocabulary::CASE),
+            [
+                (vocabulary::VALUE, value),
+                (vocabulary::ALTERNATIVES, Value::list(alternatives)),
+                (vocabulary::DEFAULT, default),
+            ],
+        )
+    }
+
+    fn evaluate(expression: &Value) -> grap::Evaluation {
+        let mut foreign = ForeignFunctions::new();
+        install(&mut foreign).unwrap();
+        grap::evaluate(expression, |_| None, &foreign, 100)
+    }
+
+    #[test]
+    fn case_evaluates_the_first_matching_expression_with_open_record_bindings() {
+        let first = new_cell_id();
+        let last = new_cell_id();
+        let metadata = new_cell_id();
+        let name = new_cell_id();
+        let never = new_cell_id();
+        let expression = case_call(
+            Value::record([
+                (first, blob("Ada")),
+                (last, blob("Lovelace")),
+                (metadata, blob("extra")),
+            ]),
+            [
+                alternative(
+                    Value::record([(first, blob("Grace"))]),
+                    Value::from(never),
+                ),
+                alternative(
+                    Value::record([(first, binding(name))]),
+                    Value::from(name),
+                ),
+            ],
+            Value::from(never),
+        );
+        let evaluation = evaluate(&expression);
+        assert_eq!(evaluation.result, blob("Ada"));
+        assert!(evaluation.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn case_evaluates_its_subject_once_across_all_alternatives() {
+        static SUBJECT_EVALUATIONS: AtomicUsize = AtomicUsize::new(0);
+
+        let subject = new_cell_id();
+        let mut foreign = ForeignFunctions::new();
+        install(&mut foreign).unwrap();
+        foreign
+            .register(subject, [], |_, _, _| {
+                SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);
+                Ok(blob("subject"))
+            })
+            .unwrap();
+        SUBJECT_EVALUATIONS.store(0, Ordering::SeqCst);
+
+        let expression = case_call(
+            grap::call(Value::from(subject), []),
+            [
+                alternative(blob("first"), blob("first result")),
+                alternative(blob("second"), blob("second result")),
+            ],
+            blob("default"),
+        );
+        assert_eq!(
+            grap::evaluate(&expression, |_| None, &foreign, 100).result,
+            blob("default")
+        );
+        assert_eq!(SUBJECT_EVALUATIONS.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn case_patterns_match_exact_lists_and_repeated_binders_must_agree() {
+        let element = new_cell_id();
+        let other = new_cell_id();
+        let expression = case_call(
+            Value::list([blob("left"), blob("right")]),
+            [
+                alternative(
+                    Value::list([binding(element), binding(element)]),
+                    blob("repeated"),
+                ),
+                alternative(
+                    Value::list([binding(element), binding(other)]),
+                    Value::from(other),
+                ),
+            ],
+            blob("default"),
+        );
+        assert_eq!(evaluate(&expression).result, blob("right"));
+
+        let too_short = case_call(
+            Value::list([blob("only")]),
+            [alternative(
+                Value::list([binding(element), binding(other)]),
+                blob("matched"),
+            )],
+            blob("default"),
+        );
+        assert_eq!(evaluate(&too_short).result, blob("default"));
+    }
+
+    #[test]
+    fn first_pattern_wins_even_when_its_expression_returns_an_absent() {
+        let missing = new_cell_id();
+        let expression = case_call(
+            Value::record([]),
+            [
+                alternative(Value::record([]), Value::from(missing)),
+                alternative(Value::record([]), blob("second")),
+            ],
+            blob("default"),
+        );
+        assert_eq!(
+            evaluate(&expression).result,
+            Value::from(grap::absent::MISSING_CELL)
+        );
+    }
+
+    #[test]
+    fn malformed_case_data_returns_library_absents() {
+        let invalid_alternatives = grap::call(
+            Value::from(vocabulary::CASE),
+            [
+                (vocabulary::VALUE, blob("subject")),
+                (vocabulary::ALTERNATIVES, blob("not a list")),
+                (vocabulary::DEFAULT, blob("default")),
+            ],
+        );
+        assert_eq!(
+            evaluate(&invalid_alternatives).result,
+            Value::from(vocabulary::INVALID_ALTERNATIVES)
+        );
+
+        let invalid_alternative = case_call(
+            blob("subject"),
+            [blob("not an alternative")],
+            blob("default"),
+        );
+        assert_eq!(
+            evaluate(&invalid_alternative).result,
+            Value::from(vocabulary::INVALID_ALTERNATIVE)
+        );
+
+        let invalid_binder = case_call(
+            blob("subject"),
+            [alternative(
+                Value::record([(vocabulary::BIND, blob("not a cell"))]),
+                blob("matched"),
+            )],
+            blob("default"),
+        );
+        assert_eq!(
+            evaluate(&invalid_binder).result,
+            Value::from(vocabulary::INVALID_BINDER)
+        );
+    }
+
+    #[test]
+    fn library_absences_are_classified_as_absent() {
+        let library = library();
+        for cell in [
+            vocabulary::INVALID_ALTERNATIVES,
+            vocabulary::INVALID_ALTERNATIVE,
+            vocabulary::INVALID_BINDER,
+        ] {
+            assert!(grap_absent::is_absent(library.value(cell).unwrap()));
+        }
+    }
+}

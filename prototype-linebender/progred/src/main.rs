@@ -5,6 +5,8 @@ mod conventions;
 mod filter;
 mod gid;
 mod graph_view;
+#[cfg(test)]
+mod grap_examples;
 mod history;
 mod hover;
 mod layout;

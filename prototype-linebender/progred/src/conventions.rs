@@ -20,6 +20,7 @@ pub fn library() -> Cells {
     cells.merge(progred_isa::library());
     cells.merge(grap::library());
     cells.merge(grap_absent::library());
+    cells.merge(grap_control::library());
     cells.merge(grap_f64::library());
     cells.merge(grap_geometry::library());
     cells.set_value(vocabulary::GRAP, progred_name::record("grap", []));
@@ -28,6 +29,7 @@ pub fn library() -> Cells {
 
 pub fn foreign_functions() -> grap::ForeignFunctions {
     let mut foreign = grap::ForeignFunctions::new();
+    grap_control::install(&mut foreign).expect("control foreign functions are distinct");
     grap_f64::install(&mut foreign).expect("f64 foreign functions are distinct");
     grap_geometry::install(&mut foreign).expect("geometry foreign functions are distinct");
     foreign

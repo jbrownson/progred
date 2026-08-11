@@ -3,11 +3,16 @@
     "a_value": 2f18db9829ab562571641b9b6e25b9b2,
     "add": 201af445eb7e2c270bb5ead10b781fc1,
     "add_result": 1b49f9da65e4093654db337e6e0c477a,
+    "alternatives": a9aadcb44755963498c743fa114f0f00,
     "b_value": 9194b2ed0a54573b7cb33495cc930043,
+    "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "case": b3f6a62e4926889bcfcd338025f4a6f9,
+    "case_result": c1444b3f64296e7a995b42218598ab0a,
     "circle": eba2ca3d6a0fba957bd96bfb138c7a5b,
     "circle_result": d3c65193be0a6f2a79d7d159252bab8d,
     "contains_call": 32994f52e9af60be47619b6f15366ac7,
+    "default": 3ad1a352453c8b21da757b48913b2c9f,
     "demo": 91af60b2a8d1d93fe4de7551004fe50c,
     "environment": e910025c710c25c43d0a5b296378f374,
     "evaluate": acfc5e50881292518dab3cec77cf43ee,
@@ -23,6 +28,7 @@
     "input_b": f0599427844678cc902efa15f63f9af8,
     "lambda": 2ef86729dbd93e2bf8e39dd7b07546bb,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "matched_radius": e84540a266d157054aa08db2a2590d01,
     "metadata_call": 593532224a22c20bbac82ab13f97175b,
     "missing_argument": c33ce0dfb1fd77c4a7ae99c754d89cc4,
     "multiply": d6f384c439d9d69996d545df422efd79,
@@ -31,6 +37,7 @@
     "not_callable": 81e144d4655ea57a02ce5389c0c9d811,
     "note": 96264bd943a7259dbbad378b9293f607,
     "params": 195b378d0d31d90ab0d7366c15346b70,
+    "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "radius": e2321b78d65f87918c64b7875408051a,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "scale": ccba1404490345dcf33d8a19ddaa5bd1,
@@ -39,12 +46,16 @@
     "scale_parameter": a205c013d36ef3f8fa047295793e61b4,
     "scale_value": 222efe84b66ed6181846198960a9f317,
     "type_absent": add1c43228ee478194bd066b83608685,
+    "value": 00dafdc01c7e014edd857e174c6c8b6f,
     "x_parameter": 6044a6b79a55f0fd8bc522787f213b50,
     "y_parameter": d678763cbd961acd0c4808b30e9be10b,
   },
   "cells": {
     metadata_call: {
       name: "call with metadata",
+    },
+    case_result: {
+      name: "case result",
     },
     circle_result: {
       name: "circle result",
@@ -78,6 +89,9 @@
     },
     lambda: {
       name: "lambda",
+    },
+    matched_radius: {
+      name: "matched radius",
     },
     missing_argument: {
       name: "missing argument",
@@ -209,6 +223,30 @@
             scale_parameter: scale_value,
             y_parameter: b_value,
           },
+        },
+      },
+    },
+    {
+      case_result: {
+        grap: {
+          value: {
+            function: circle,
+            radius: a_value,
+          },
+          default: "not a circle",
+          function: case,
+          alternatives: [
+            {
+              pattern: {
+                circle: {
+                  radius: {
+                    bind: matched_radius,
+                  },
+                },
+              },
+              expression: matched_radius,
+            },
+          ],
         },
       },
     },

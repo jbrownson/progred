@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 grap = { path = "../grap" }
 grap-absent = { path = "../grap/libraries/absent" }
+grap-control = { path = "../grap/libraries/control" }
 grap-f64 = { path = "../grap/libraries/f64" }
 grap-geometry = { path = "../grap/libraries/geometry" }
 progred-graph = { path = "../graph" }

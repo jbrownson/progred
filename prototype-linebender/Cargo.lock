@@ -1576,6 +1576,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "grap-control"
+version = "0.1.0"
+dependencies = [
+ "grap",
+ "grap-absent",
+ "progred-graph",
+ "progred-name",
+]
+
+[[package]]
 name = "grap-f64"
 version = "0.1.0"
 dependencies = [
@@ -3146,6 +3156,7 @@ dependencies = [
  "clipboard-rs",
  "grap",
  "grap-absent",
+ "grap-control",
  "grap-f64",
  "grap-geometry",
  "im",

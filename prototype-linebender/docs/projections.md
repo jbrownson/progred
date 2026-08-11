@@ -189,6 +189,33 @@ the calling environment. Rust arithmetic uses the same interface but
 immediately evaluates every operand. This keeps one surface call shape
 without adding strict/raw modes to Grap parameters.
 
+The control library supplies one such operation, `case`:
+
+```text
+{
+  function: case,
+  value: subject,
+  alternatives: [
+    {pattern: pattern1, expression: expression1},
+    {pattern: pattern2, expression: expression2},
+  ],
+  default: default-expression,
+}
+```
+
+`case` evaluates its subject exactly once, then tries the patterns in
+list order. Record patterns are open, list patterns are exact and
+ordered, and blobs and bare cell references match literally. A pattern
+record containing `{bind: binder-cell}` captures the corresponding
+subject value; another occurrence of that binder must capture an equal
+value. The first matching alternative extends the calling environment
+with its captures and evaluates its expression. If none match, only the
+default is evaluated. An absent returned by the selected expression is
+still its result and does not fall through to another alternative.
+`case` keeps the subject as an ordinary host value while matching; it
+does not create a hidden graph binding or make patterns depend on an
+enclosing case.
+
 There is no evaluator-level quote or literal form. At the Rust boundary
 an operand is already an inert expression; returning its expression
 returns data because call results are not evaluated again. A future
@@ -269,8 +296,9 @@ drawing, and arbitrary graph data structurally. The enclosing record
 remains ordinary visible data. `grap-demo.gid` is
 the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, the registered `evaluate` function
-with an explicit empty environment, a graph-defined function, and a
-circle; it also keeps extra call metadata in Raw, demonstrates inert
+with an explicit empty environment, a graph-defined function, a circle,
+and a `case` which destructures that circle and binds its radius; it also
+keeps extra call metadata in Raw, demonstrates inert
 returned data, and shows stable type,
 missing-argument, and not-callable absents as ordinary projected
 results. The demo projects one graph expression cell both directly and
@@ -315,9 +343,9 @@ construction, not by filling out a language checklist:
   while keeping Raw as the escape hatch.
 
 The next language work should be forced by manipulating this example:
-add Rust-backed conditional or matching control when the construction
-needs it, decide how graph patterns bind values, and make a thunk or
-cell evaluation projection only when the interaction needs one.
+use `case` when the construction needs conditional structure, refine
+patterns from concrete editing experience, and make a thunk or cell
+evaluation projection only when the interaction needs one.
 Graph-defined macros and general code generation remain out of scope
 until a concrete transformation requires them.
 
