@@ -1,6 +1,6 @@
 //! Grap evaluation control supplied by Rust functions. `case`
-//! evaluates one subject, structurally matches ordered patterns, and
-//! evaluates only the selected expression.
+//! selects one expression through structural matching; `quote`
+//! constructs data while evaluating explicit unquotes.
 
 use grap::{Environment, Evaluate, ForeignFunctions, Halt, RegistrationError};
 use progred_graph::{CellId, Cells, Value};
@@ -18,6 +18,9 @@ pub mod vocabulary {
     pub const PATTERN: CellId =
         CellId::from_u128(0xb9dc97198709bc6f7bae4c7afc7d424f);
     pub const BIND: CellId = CellId::from_u128(0x5e46d12705690e8a377eb0f16ad9dba6);
+    pub const QUOTE: CellId = CellId::from_u128(0x7f81d4812ceb33d4222e9e5cb9c82497);
+    pub const UNQUOTE: CellId =
+        CellId::from_u128(0xda48703c290e3b35d7353c38110bc953);
 
     pub const INVALID_ALTERNATIVES: CellId =
         CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
@@ -36,7 +39,55 @@ pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> 
             vocabulary::DEFAULT,
         ],
         case_foreign,
+    )?;
+    foreign.register(
+        vocabulary::QUOTE,
+        [grap::vocabulary::EXPRESSION],
+        quote_foreign,
     )
+}
+
+fn quote_foreign(
+    evaluate: &mut Evaluate<'_>,
+    arguments: &[Value],
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    let [expression] = arguments else {
+        unreachable!("Grap checks foreign arity before calling")
+    };
+    interpolate(expression, evaluate, environment)
+}
+
+fn interpolate(
+    value: &Value,
+    evaluate: &mut Evaluate<'_>,
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    match value {
+        Value::Record(fields) => match fields.get(&vocabulary::UNQUOTE) {
+            Some(expression) => evaluate(expression, environment),
+            None => Ok(Value::Record(
+                fields
+                    .iter()
+                    .map(|(field, value)| {
+                        Ok((*field, interpolate(value, evaluate, environment)?))
+                    })
+                    .collect::<Result<_, Halt>>()?,
+            )),
+        },
+        Value::List(values) => Ok(Value::List(
+            values
+                .iter()
+                .map(|(position, value)| {
+                    Ok((
+                        position.clone(),
+                        interpolate(value, evaluate, environment)?,
+                    ))
+                })
+                .collect::<Result<_, Halt>>()?,
+        )),
+        Value::Cell(_) | Value::Blob(_) => Ok(value.clone()),
+    }
 }
 
 fn case_foreign(
@@ -168,6 +219,8 @@ pub fn library() -> Cells {
         (vocabulary::DEFAULT, "default"),
         (vocabulary::PATTERN, "pattern"),
         (vocabulary::BIND, "bind"),
+        (vocabulary::QUOTE, "quote"),
+        (vocabulary::UNQUOTE, "unquote"),
     ] {
         cells.set_value(cell, progred_name::record(name, []));
     }
@@ -217,10 +270,86 @@ mod tests {
         )
     }
 
+    fn quote_call(expression: Value) -> Value {
+        grap::call(
+            Value::from(vocabulary::QUOTE),
+            [(grap::vocabulary::EXPRESSION, expression)],
+        )
+    }
+
     fn evaluate(expression: &Value) -> grap::Evaluation {
         let mut foreign = ForeignFunctions::new();
         install(&mut foreign).unwrap();
         grap::evaluate(expression, |_| None, &foreign, 100)
+    }
+
+    #[test]
+    fn quote_returns_recognized_expressions_as_data() {
+        let function = new_cell_id();
+        let expression = grap::call(Value::from(function), []);
+        let evaluation = evaluate(&quote_call(expression.clone()));
+        assert_eq!(evaluation.result, expression);
+        assert!(evaluation.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn quote_interpolates_unquotes_in_its_calling_environment() {
+        let parameter = new_cell_id();
+        let field = new_cell_id();
+        let template = Value::list([Value::record([(
+            field,
+            Value::record([(vocabulary::UNQUOTE, Value::from(parameter))]),
+        )])]);
+        let positions = template.as_list().unwrap().keys().cloned().collect::<Vec<_>>();
+        let expression = grap::call(
+            grap::lambda([parameter], quote_call(template)),
+            [(parameter, blob("spliced"))],
+        );
+        let evaluation = evaluate(&expression);
+        assert_eq!(
+            evaluation.result,
+            Value::list([Value::record([(field, blob("spliced"))])])
+        );
+        assert_eq!(
+            evaluation
+                .result
+                .as_list()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            positions
+        );
+    }
+
+    #[test]
+    fn unquote_is_ordinary_data_outside_quote() {
+        let missing = new_cell_id();
+        let expression = Value::record([(
+            vocabulary::UNQUOTE,
+            Value::from(missing),
+        )]);
+        let evaluation = evaluate(&expression);
+        assert_eq!(evaluation.result, expression);
+        assert!(evaluation.diagnostics.is_empty());
+        assert!(evaluation.dependencies.is_empty());
+    }
+
+    #[test]
+    fn quote_does_not_revisit_an_unquoted_result() {
+        let missing = new_cell_id();
+        let inner = Value::record([(
+            vocabulary::UNQUOTE,
+            Value::from(missing),
+        )]);
+        let expression = quote_call(Value::record([(
+            vocabulary::UNQUOTE,
+            inner.clone(),
+        )]));
+        let evaluation = evaluate(&expression);
+        assert_eq!(evaluation.result, inner);
+        assert!(evaluation.diagnostics.is_empty());
+        assert!(evaluation.dependencies.is_empty());
     }
 
     #[test]
@@ -371,8 +500,18 @@ mod tests {
     }
 
     #[test]
-    fn library_absences_are_classified_as_absent() {
+    fn library_describes_quote_and_classifies_absences() {
         let library = library();
+        assert_eq!(
+            library.value(vocabulary::QUOTE).and_then(progred_name::read),
+            Some("quote")
+        );
+        assert_eq!(
+            library
+                .value(vocabulary::UNQUOTE)
+                .and_then(progred_name::read),
+            Some("unquote")
+        );
         for cell in [
             vocabulary::INVALID_ALTERNATIVES,
             vocabulary::INVALID_ALTERNATIVE,

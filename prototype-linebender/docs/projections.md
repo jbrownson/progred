@@ -218,12 +218,32 @@ enclosing case.
 
 There is no evaluator-level quote or literal form. At the Rust boundary
 an operand is already an inert expression; returning its expression
-returns data because call results are not evaluated again. A future
-template operation can be an ordinary registered Rust function that
-walks its raw input and recursively evaluates only explicit
-interpolations. First-class suspended work can pair an expression with
-its environment as ordinary graph data when a program genuinely needs
-to store or forward that pair.
+returns data because call results are not evaluated again. The control
+library uses that property to implement `quote` as an ordinary registered
+Rust function:
+
+```text
+{
+  function: quote,
+  expression: {
+    preserved: {function: some-call},
+    interpolated: {unquote: expression},
+  },
+}
+```
+
+`quote` walks the original raw expression structurally. Cells and blobs
+are copied, and list positions and record labels are preserved. A record
+containing `unquote` is a replacement leaf: its value is evaluated in
+the quote call's environment and the result is spliced into the output.
+That result is not walked again, which gives one layer of interpolation.
+An unquote-shaped record outside `quote` is ordinary self-evaluating data;
+the core evaluator never recognizes it. Ordinary data needs no quote to
+evaluate to itself—quote is useful for preserving recognized expression
+forms as data and for explicit interpolation while constructing data.
+First-class suspended work can still pair an expression with its
+environment as ordinary graph data when a program genuinely needs to
+store or forward that pair.
 
 These conventions match what is present, not what is absent. Record
 patterns are open unless a particular domain explicitly says
@@ -296,9 +316,10 @@ drawing, and arbitrary graph data structurally. The enclosing record
 remains ordinary visible data. `grap-demo.gid` is
 the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, the registered `evaluate` function
-with an explicit empty environment, a graph-defined function, a circle,
-and a `case` which destructures that circle and binds its radius; it also
-keeps extra call metadata in Raw, demonstrates inert
+with an explicit empty environment, graph-defined functions, a circle,
+a `case` which destructures that circle and binds its radius, and a
+function which uses quote/unquote to generate alternatives for another
+case; it also keeps extra call metadata in Raw, demonstrates inert
 returned data, and shows stable type,
 missing-argument, and not-callable absents as ordinary projected
 results. The demo projects one graph expression cell both directly and

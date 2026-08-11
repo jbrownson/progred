@@ -84,6 +84,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         ("graph_function_result", grap_f64::value(34.0)),
         ("circle_result", grap_geometry::value(34.0)),
         ("case_result", grap_f64::value(3.0)),
+        ("quoted_case_result", grap_f64::value(3.0)),
         ("metadata_call", grap_f64::value(7.0)),
     ] {
         assert_eq!(
@@ -148,5 +149,13 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         )
         .result,
         grap_geometry::value(54.0)
+    );
+    assert_eq!(
+        evaluate(
+            &doc,
+            grap_expression(demo_entry(&doc, &binders, "quoted_case_result")),
+        )
+        .result,
+        grap_f64::value(5.0)
     );
 }
