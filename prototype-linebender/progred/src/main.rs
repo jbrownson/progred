@@ -1,11 +1,13 @@
 //! Window shell: winit + Vello plumbing around pure frame drawing.
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
+mod commands;
 mod completion;
 mod conventions;
 mod display;
 mod document;
 mod filter;
+mod frame;
 mod gid;
 #[cfg(test)]
 mod grap_examples;
@@ -26,35 +28,30 @@ mod store;
 #[cfg(test)]
 mod test_values;
 
+use crate::frame::{Dispatch, FrameDisposition, FrameVisibility, Hovered, frame_disposition};
 use crate::model::{Model, Selected, ViewFlags};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use parley::{FontContext, LayoutContext};
-use progred_graph::{CellId, Step, Value};
-use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::edit::{EditCtx, LineEditPointerDown, LineEditState, TextClipboard};
-use puri::geometry::Placement;
-use puri::handler::{Handler, HasHandler, ImeEvent};
-use puri::text::TextCtx;
-use puri_vello::VelloCanvas;
-use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-use ui_events::pointer::{PointerButton, PointerEvent};
+use puri::edit::TextClipboard;
+use puri::handler::ImeEvent;
+use ui_events::keyboard::KeyboardEvent;
+use ui_events::pointer::PointerEvent;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::kurbo::{Affine, Point, Rect, Size, Stroke, Vec2};
+use vello::kurbo::{Point, Rect, Size, Vec2};
 use vello::peniko::{Brush, Color};
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
 use vello::{AaConfig, Renderer, RendererOptions, Scene};
 use winit::application::ApplicationHandler;
-use winit::dpi::{LogicalSize, PhysicalPosition};
+use winit::dpi::LogicalSize;
 use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
 /// Everything arriving through the event-loop proxy.
-enum UserEvent {
+pub(crate) enum UserEvent {
     #[cfg(target_os = "macos")]
     MacMenu(macos_menu::Event),
     Menu(menu::Selection),
@@ -63,13 +60,13 @@ enum UserEvent {
 
 /// The action a discard confirmation gates. One at a time: requests
 /// while a sheet is up are dropped.
-enum AfterDiscard {
+pub(crate) enum AfterDiscard {
     New,
     Open,
     Quit,
 }
 
-enum RenderState {
+pub(crate) enum RenderState {
     Active {
         surface: Box<RenderSurface<'static>>,
         valid_surface: bool,
@@ -86,9 +83,9 @@ enum RenderState {
 /// The pasteboard type structural copies ride under, beside their
 /// plain text; its PRESENCE is the structure/text distinction, so
 /// text that merely spells Value JSON is never mistaken for a copy.
-const CLIPBOARD_FORMAT: &str = "com.progred.value";
+pub(crate) const CLIPBOARD_FORMAT: &str = "com.progred.value";
 
-struct SystemTextClipboard;
+pub(crate) struct SystemTextClipboard;
 
 impl TextClipboard for SystemTextClipboard {
     fn get_text(&mut self) -> Option<String> {
@@ -106,65 +103,54 @@ impl TextClipboard for SystemTextClipboard {
     }
 }
 
-struct Dispatch {
-    handler: Handler<App>,
-    descends: Vec<navigate::Descend>,
-    /// One nominal line height at the frame's scale — the quantum
-    /// keyboard navigation reads rows with.
-    line: f64,
-    max_scroll: f64,
-    max_scroll_x: f64,
-    popup: Option<completion::Popup>,
-}
-
-struct App {
-    context: RenderContext,
-    renderers: Vec<Option<Renderer>>,
-    state: RenderState,
-    scene: Scene,
-    font_cx: FontContext,
-    layout_cx: LayoutContext<Brush>,
-    text_clipboard: SystemTextClipboard,
-    text_cache: puri::text::TextCache,
-    model: Model,
+pub(crate) struct App {
+    pub(crate) context: RenderContext,
+    pub(crate) renderers: Vec<Option<Renderer>>,
+    pub(crate) state: RenderState,
+    pub(crate) scene: Scene,
+    pub(crate) font_cx: FontContext,
+    pub(crate) layout_cx: LayoutContext<Brush>,
+    pub(crate) text_clipboard: SystemTextClipboard,
+    pub(crate) text_cache: puri::text::TextCache,
+    pub(crate) model: Model,
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
-    doc_path: Option<PathBuf>,
+    pub(crate) doc_path: Option<PathBuf>,
     /// The notation's file-local binder table, surviving load → save
     /// so spellings round-trip; never part of the model, invisible
     /// in the document.
-    binders: gid::Binders,
+    pub(crate) binders: gid::Binders,
     #[cfg(target_os = "macos")]
-    native_menu: macos_menu::Menu,
-    menu: menu::State,
+    pub(crate) native_menu: macos_menu::Menu,
+    pub(crate) menu: menu::State,
     /// Last pointer position, for anchoring pinch zoom.
-    cursor: Point,
+    pub(crate) cursor: Point,
     /// The pointer position while it is inside the window. It is an
     /// input to placement's internal hover resolution.
-    pointer: Option<Point>,
+    pub(crate) pointer: Option<Point>,
     /// Derived from pointer input and settled geometry. Kept outside
     /// the model for air hysteresis, pressed-gesture freezing, and the
     /// event-to-redraw handoff.
-    hover: Option<Hovered>,
+    pub(crate) hover: Option<Hovered>,
     /// A button is down: gestures keep the hover they began with, so
     /// hover resolution stands down until release.
-    pressed: bool,
+    pub(crate) pressed: bool,
     /// Whether settled geometry has resolved `hover` for the
     /// next draw. Geometry-changing redraw sources clear it.
-    hover_is_current: bool,
+    pub(crate) hover_is_current: bool,
     /// The selection identity last scrolled into view — path AND
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
     /// scrolling.
-    revealed: Option<(document::Path, std::mem::Discriminant<selection::Selection>)>,
-    dispatch: Option<Dispatch>,
-    reducer: WindowEventReducer,
+    pub(crate) revealed: Option<(document::Path, std::mem::Discriminant<selection::Selection>)>,
+    pub(crate) dispatch: Option<Dispatch>,
+    pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
-    proxy: winit::event_loop::EventLoopProxy<UserEvent>,
-    pending_discard: Option<AfterDiscard>,
+    pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
+    pub(crate) pending_discard: Option<AfterDiscard>,
 }
 
-fn menu_height(scale: f64) -> f64 {
+pub(crate) fn menu_height(scale: f64) -> f64 {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = scale;
@@ -176,7 +162,7 @@ fn menu_height(scale: f64) -> f64 {
     }
 }
 
-fn content_viewport(viewport: Size, scale: f64) -> Rect {
+pub(crate) fn content_viewport(viewport: Size, scale: f64) -> Rect {
     Rect::new(
         0.0,
         menu_height(scale).min(viewport.height),
@@ -185,7 +171,7 @@ fn content_viewport(viewport: Size, scale: f64) -> Rect {
     )
 }
 
-fn graph_panel(viewport: Size, scale: f64) -> Rect {
+pub(crate) fn graph_panel(viewport: Size, scale: f64) -> Rect {
     let content = content_viewport(viewport, scale);
     graph_view::panel(content.width(), content.height()) + Vec2::new(0.0, content.y0)
 }
@@ -205,7 +191,7 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
 
 /// The selection as a restorable edge path — pendings and graph
 /// selections restore as nothing, being disposable.
-fn edge_path(selection: &Option<Selected>) -> Option<document::Path> {
+pub(crate) fn edge_path(selection: &Option<Selected>) -> Option<document::Path> {
     match selection {
         Some(Selected::Tree(selection::Selection::Edge { path, .. })) => Some(path.clone()),
         _ => None,
@@ -213,14 +199,14 @@ fn edge_path(selection: &Option<Selected>) -> Option<document::Path> {
 }
 
 /// No modifiers at all — the gate for the bare editing keys.
-fn plain(event: &KeyboardEvent) -> bool {
+pub(crate) fn plain(event: &KeyboardEvent) -> bool {
     !(event.modifiers.ctrl()
         || event.modifiers.meta()
         || event.modifiers.alt()
         || event.modifiers.shift())
 }
 
-fn dialog() -> rfd::FileDialog {
+pub(crate) fn dialog() -> rfd::FileDialog {
     rfd::FileDialog::new().add_filter("gid", &["gid"])
 }
 
@@ -605,283 +591,8 @@ fn main() {
         .expect("Couldn't run event loop");
 }
 
-/// The app's one hover, the selection's shape: what the resting
-/// pointer claims in whichever pane it rests over.
-#[derive(Clone, Debug, PartialEq)]
-enum Hovered {
-    Tree(hover::Hovering),
-    Graph(graph_view::GraphNode),
-    #[cfg(target_os = "linux")]
-    Menu(menu::Hover),
-}
-
-enum HoverHit {
-    Tree(hover::HoverClaim),
-    Graph(Option<graph_view::GraphNode>),
-    #[cfg(target_os = "linux")]
-    Menu(Option<menu::Hover>),
-}
-
-struct HoverResolver<'a> {
-    current: &'a mut Option<Hovered>,
-    pointer: Option<Point>,
-    pressed: bool,
-    reach: f64,
-    hit: Option<HoverHit>,
-}
-
-impl HoverResolver<'_> {
-    fn resolve(self) {
-        *self.current = resolved_hover(
-            self.current.as_ref(),
-            self.hit,
-            self.pointer,
-            self.pressed,
-            self.reach,
-        );
-    }
-}
-
-#[derive(Clone, Copy)]
-enum FrameVisibility {
-    Silent,
-    Visible,
-}
-
-struct FrameDescription<'a> {
-    model: &'a Model,
-    view: ViewFlags,
-    menu: menu::State,
-    availability: menu::Availability,
-    hover: Option<Hovered>,
-    scale: f64,
-    viewport: Size,
-}
-
-struct FrameResources<'a> {
-    fonts: &'a mut FontContext,
-    layouts: &'a mut LayoutContext<Brush>,
-    text_cache: &'a mut puri::text::TextCache,
-}
-
-/// One read-only pass over the UI. Drawing is optional; every pass
-/// still produces transient dispatch data and resolves pointer hover.
-struct Frame<'a> {
-    scene: Option<&'a mut Scene>,
-    hover: HoverResolver<'a>,
-    handler: Handler<App>,
-    descends: Vec<navigate::Descend>,
-    /// How far the document can scroll given this frame's content and
-    /// viewport; dispatch clamps against it.
-    max_scroll: f64,
-    max_scroll_x: f64,
-    /// The pending row's completion popup, emitted during placement;
-    /// drawn after the body and committed from at dispatch.
-    popup: Option<completion::Popup>,
-}
-
-impl<'a> Frame<'a> {
-    fn new(scene: Option<&'a mut Scene>, hover: HoverResolver<'a>) -> Self {
-        Self {
-            scene,
-            hover,
-            handler: Handler::new(),
-            descends: Vec::new(),
-            max_scroll: 0.0,
-            max_scroll_x: 0.0,
-            popup: None,
-        }
-    }
-
-    fn finish(self, scale: f64) -> Dispatch {
-        self.hover.resolve();
-        Dispatch {
-            handler: self.handler,
-            descends: self.descends,
-            line: 14.0 * scale,
-            max_scroll: self.max_scroll,
-            max_scroll_x: self.max_scroll_x,
-            popup: self.popup,
-        }
-    }
-}
-
-impl hover::HasHover<hover::HoverClaim> for Frame<'_> {
-    fn pointer(&self) -> Option<Point> {
-        self.hover.pointer
-    }
-
-    fn claim_hover(&mut self, claim: hover::HoverClaim) {
-        self.hover.hit = Some(HoverHit::Tree(claim));
-    }
-}
-
-impl hover::HasHover<Option<graph_view::GraphNode>> for Frame<'_> {
-    fn pointer(&self) -> Option<Point> {
-        self.hover.pointer
-    }
-
-    fn claim_hover(&mut self, claim: Option<graph_view::GraphNode>) {
-        self.hover.hit = Some(HoverHit::Graph(claim));
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl hover::HasHover<Option<menu::Hover>> for Frame<'_> {
-    fn pointer(&self) -> Option<Point> {
-        self.hover.pointer
-    }
-
-    fn claim_hover(&mut self, claim: Option<menu::Hover>) {
-        self.hover.hit = Some(HoverHit::Menu(claim));
-    }
-}
-
-impl completion::HasPopup for Frame<'_> {
-    fn popup(&mut self) -> &mut Option<completion::Popup> {
-        &mut self.popup
-    }
-}
-
-impl HasHandler<App> for Frame<'_> {
-    fn handler(&mut self) -> &mut Handler<App> {
-        &mut self.handler
-    }
-}
-
-impl navigate::HasDescends for Frame<'_> {
-    fn descends(&mut self) -> &mut Vec<navigate::Descend> {
-        &mut self.descends
-    }
-}
-
-impl Canvas for Frame<'_> {
-    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).fill(shape, brush, transform);
-        }
-    }
-
-    fn stroke(
-        &mut self,
-        shape: impl Into<Shape>,
-        style: Stroke,
-        brush: impl Into<Brush>,
-        transform: Affine,
-    ) {
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).stroke(shape, style, brush, transform);
-        }
-    }
-
-    fn glyph_run(&mut self, run: GlyphRun) {
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).glyph_run(run);
-        }
-    }
-
-    fn clip(
-        &mut self,
-        shape: impl Into<Shape>,
-        transform: Affine,
-        content: impl FnOnce(&mut Self),
-    ) {
-        let shape = shape.into();
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).push_clip(&shape, transform);
-        }
-        content(self);
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).pop_clip();
-        }
-    }
-}
-
-fn resolved_hover(
-    current: Option<&Hovered>,
-    hit: Option<HoverHit>,
-    pointer: Option<Point>,
-    pressed: bool,
-    reach: f64,
-) -> Option<Hovered> {
-    match (pressed, pointer) {
-        (true, _) => current.cloned(),
-        (false, None) => None,
-        (false, Some(point)) => match hit {
-            Some(HoverHit::Tree(hover::HoverClaim::Direct(hovering))) => hovering.map(Hovered::Tree),
-            Some(HoverHit::Graph(node)) => node.map(Hovered::Graph),
-            #[cfg(target_os = "linux")]
-            Some(HoverHit::Menu(hover)) => hover.map(Hovered::Menu),
-            Some(HoverHit::Tree(hover::HoverClaim::Air)) | None => {
-                let tree = match current {
-                    Some(Hovered::Tree(hovering)) => Some(hovering),
-                    _ => None,
-                };
-                match hover::resolve_hover(hover::HoverClaim::Air, tree, point, reach) {
-                    Some(next) => next.map(Hovered::Tree),
-                    None => current.cloned(),
-                }
-            }
-        },
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum FrameDisposition {
-    Retain,
-    Remint { reveal_selection: bool },
-}
-
-fn frame_disposition(handled: bool, frame_input_changed: bool) -> FrameDisposition {
-    if handled {
-        FrameDisposition::Remint {
-            reveal_selection: true,
-        }
-    } else if frame_input_changed {
-        FrameDisposition::Remint {
-            reveal_selection: false,
-        }
-    } else {
-        FrameDisposition::Retain
-    }
-}
-
 impl App {
-    /// Scrolls the document, clamped to the frame's content.
-    fn scroll_document(
-        &mut self,
-        update: &ui_events::pointer::PointerScrollEvent,
-        scale: f64,
-        viewport: f64,
-        max_scroll: f64,
-        max_scroll_x: f64,
-    ) -> bool {
-        let line = 40.0 * scale;
-        let delta = update.delta.to_pixel_delta(
-            PhysicalPosition { x: line, y: line },
-            PhysicalPosition {
-                x: viewport,
-                y: viewport,
-            },
-        );
-        // ScrollDelta documents positive as viewport-down/right, but
-        // ui-events-winit passes winit deltas through raw, where
-        // positive is scroll-up/left; subtract to match reality.
-        // Stepping from the clamped position keeps the first tick
-        // responsive when a resize left the stored offset out of
-        // bounds.
-        let next =
-            (self.model.scroll.clamp(0.0, max_scroll) - delta.y / scale).clamp(0.0, max_scroll);
-        let next_x = (self.model.scroll_x.clamp(0.0, max_scroll_x) - delta.x / scale)
-            .clamp(0.0, max_scroll_x);
-        (next != self.model.scroll || next_x != self.model.scroll_x) && {
-            self.model.scroll = next;
-            self.model.scroll_x = next_x;
-            true
-        }
-    }
-
-    fn title(&self) -> String {
+    pub(crate) fn title(&self) -> String {
         let dirty = if self.model.history.dirty() {
             " •"
         } else {
@@ -893,7 +604,7 @@ impl App {
         }
     }
 
-    fn refresh_title(&self) {
+    pub(crate) fn refresh_title(&self) {
         if let RenderState::Active { window, .. } = &self.state {
             window.set_title(&self.title());
         }
@@ -902,13 +613,13 @@ impl App {
     /// Menu enablement follows the model: gray what can't act. Save
     /// stays live for untitled documents — it defers to the save
     /// panel, per platform convention.
-    fn sync_menus(&self) {
+    pub(crate) fn sync_menus(&self) {
         #[cfg(target_os = "macos")]
         self.native_menu
             .sync(self.menu_availability(), self.model.view);
     }
 
-    fn menu_availability(&self) -> menu::Availability {
+    pub(crate) fn menu_availability(&self) -> menu::Availability {
         menu::Availability {
             save: self.model.history.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
@@ -916,7 +627,7 @@ impl App {
         }
     }
 
-    fn handle_menu_selection(&mut self, event_loop: &ActiveEventLoop, selection: menu::Selection) {
+    pub(crate) fn handle_menu_selection(&mut self, event_loop: &ActiveEventLoop, selection: menu::Selection) {
         match selection {
             menu::Selection::New => self.request_discard(event_loop, AfterDiscard::New),
             menu::Selection::Open => self.request_discard(event_loop, AfterDiscard::Open),
@@ -936,12 +647,12 @@ impl App {
         }
     }
 
-    fn choose_menu(&mut self, selection: menu::Selection) {
+    pub(crate) fn choose_menu(&mut self, selection: menu::Selection) {
         self.menu.close();
         let _ = self.proxy.send_event(UserEvent::Menu(selection));
     }
 
-    fn menu_key(&mut self, event: &KeyboardEvent) -> bool {
+    pub(crate) fn menu_key(&mut self, event: &KeyboardEvent) -> bool {
         #[cfg(not(target_os = "linux"))]
         {
             let _ = event;
@@ -970,7 +681,7 @@ impl App {
 
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
-    fn step_history(&mut self, back: bool) {
+    pub(crate) fn step_history(&mut self, back: bool) {
         let current = self.model.doc.clone();
         let selection = edge_path(&self.model.selection);
         let restored = if back {
@@ -1015,7 +726,7 @@ impl App {
     /// main run loop, so the answer is awaited on a throwaway thread
     /// and routed back through the proxy — blocking here would
     /// deadlock the loop the sheet needs.
-    fn request_discard(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
+    pub(crate) fn request_discard(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
         if !self.model.history.dirty() {
             self.proceed(event_loop, then);
             return;
@@ -1048,7 +759,7 @@ impl App {
     }
 
     /// The action a confirmed (or unneeded) discard proceeds to.
-    fn proceed(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
+    pub(crate) fn proceed(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
         match then {
             AfterDiscard::New => self.adopt_model(
                 document::Document {
@@ -1076,7 +787,7 @@ impl App {
     /// always asks. Write-through editing means the graph is always
     /// current, so there is nothing to flush first. A cancelled dialog
     /// saves nothing.
-    fn menu_save(&mut self, save_as: bool) {
+    pub(crate) fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target = in_place.or_else(|| dialog().set_file_name("untitled.gid").save_file());
         if let Some(path) = target {
@@ -1101,7 +812,7 @@ impl App {
     /// immediately, as every mutation site does: the retained handler
     /// was built from the old document, and its dispatches must not
     /// run against the new model.
-    fn adopt_model(&mut self, doc: document::Document, path: Option<PathBuf>, binders: gid::Binders) {
+    pub(crate) fn adopt_model(&mut self, doc: document::Document, path: Option<PathBuf>, binders: gid::Binders) {
         self.binders = binders;
         let view = self.model.view;
         self.model = Model {
@@ -1133,7 +844,7 @@ impl App {
         }
     }
 
-    fn adopt_doc_path(&mut self, path: PathBuf) {
+    pub(crate) fn adopt_doc_path(&mut self, path: PathBuf) {
         self.doc_path = Some(path);
         if let RenderState::Active { window, .. } = &self.state {
             window.set_title(&self.title());
@@ -1143,649 +854,10 @@ impl App {
 
     /// Scroll-to-reveal, computed from the freshly retained dispatch
     /// pass BEFORE anything draws, so the reveal lands in the next
-    /// presented frame with no corrective flash. Fires once per
-    /// selection-identity change (path AND variant — Enter keeps the
-    /// path while opening a pending), so it never fights manual
-    /// scrolling. The target is the popup anchor while pending — it
-    /// marks the authoring row — else the selection's rect.
-    fn reveal_selection(&mut self, dispatch: &Dispatch, scale: f64, viewport: Size) -> bool {
-        let reveal = self
-            .model
-            .tree_selection()
-            .map(|s| (s.path().to_vec(), std::mem::discriminant(s)));
-        if reveal == self.revealed {
-            false
-        } else {
-            self.revealed = reveal.clone();
-            let target = dispatch
-                .popup
-                .as_ref()
-                .map(|popup| popup.anchor)
-                .or_else(|| {
-                    reveal.as_ref().and_then(|(path, _)| {
-                        dispatch
-                            .descends
-                            .iter()
-                            .find(|descend| &descend.path == path)
-                            .map(|descend| descend.rect)
-                    })
-                });
-            target.is_some_and(|rect| {
-                let before = (self.model.scroll, self.model.scroll_x);
-                let pad = 12.0 * scale;
-                let content = content_viewport(viewport, scale);
-                let mut scroll = self.model.scroll;
-                // The pad is the landing margin, not the trigger: fully
-                // visible rects are left alone, so a click near an edge
-                // doesn't nudge.
-                if rect.y1 > content.y1 {
-                    scroll += (rect.y1 + pad - content.y1) / scale;
-                }
-                // Checked against the adjusted position, so when the rect
-                // is taller than the viewport the top wins.
-                let top = rect.y0 - (scroll - self.model.scroll) * scale;
-                if top < content.y0 {
-                    scroll += (top - pad - content.y0) / scale;
-                }
-                self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
-                // The same chase horizontally, against the width the
-                // graph panel leaves visible.
-                let visible = if self.view_flags().graph {
-                    graph_panel(viewport, scale).x0
-                } else {
-                    viewport.width
-                };
-                let mut scroll_x = self.model.scroll_x;
-                if rect.x1 > visible {
-                    scroll_x += (rect.x1 + pad - visible) / scale;
-                }
-                let left = rect.x0 - (scroll_x - self.model.scroll_x) * scale;
-                if left < 0.0 {
-                    scroll_x += (left - pad) / scale;
-                }
-                self.model.scroll_x = scroll_x.clamp(0.0, dispatch.max_scroll_x);
-                (self.model.scroll, self.model.scroll_x) != before
-            })
-        }
-    }
 
-    fn view_flags(&self) -> ViewFlags {
-        self.model.view
-    }
-
-    fn build_frame(&mut self, visibility: FrameVisibility, scale: f64, viewport: Size) -> Dispatch {
-        let view = self.view_flags();
-        let availability = self.menu_availability();
-        let presented_hover = self.hover.clone();
-        let scene = match visibility {
-            FrameVisibility::Silent => None,
-            FrameVisibility::Visible => Some(&mut self.scene),
-        };
-        let description = FrameDescription {
-            model: &self.model,
-            view,
-            menu: self.menu,
-            availability,
-            hover: presented_hover,
-            scale,
-            viewport,
-        };
-        let resources = FrameResources {
-            fonts: &mut self.font_cx,
-            layouts: &mut self.layout_cx,
-            text_cache: &mut self.text_cache,
-        };
-        let hover = HoverResolver {
-            current: &mut self.hover,
-            pointer: self.pointer,
-            pressed: self.pressed,
-            reach: 8.0 * scale,
-            hit: None,
-        };
-        let mut frame = Frame::new(scene, hover);
-        run_frame(&mut frame, description, resources);
-        frame.finish(scale)
-    }
-
-    /// Mint dispatch data from the final state of a transition. A
-    /// silent pass supplies reveal geometry and resolves hover;
-    /// scrolling to reveal changes geometry and earns one rebuild.
-    fn retain_dispatch(&mut self, scale: f64, viewport: Size, reveal_selection: bool) -> bool {
-        let before = self.hover.clone();
-        let mut dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
-        if reveal_selection && self.reveal_selection(&dispatch, scale, viewport) {
-            dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
-        }
-        let hover_changed = self.hover != before;
-        self.dispatch = Some(dispatch);
-        self.hover_is_current = true;
-        hover_changed
-    }
-
-    /// Graph-view keys: Delete detaches the selected node — the
-    /// cell's whole entry removed and every link to it unlinked, or
-    /// the root emptied. The one selection slot means this and the
-    /// document delete below can never both match; Escape falls
-    /// through to the universal clear in `insert_key`.
-    fn graph_key(&mut self, event: &KeyboardEvent) -> bool {
-        event.state.is_down()
-            && plain(event)
-            && matches!(
-                &event.key,
-                Key::Named(NamedKey::Backspace | NamedKey::Delete)
-            )
-            && match self.model.graph_selection() {
-                Some(selection) => {
-                    let selection = *selection;
-                    let before = self.model.doc.clone();
-                    if graph_view::delete_selection(&mut self.model.doc, &selection) {
-                        self.model.history.record(before, None);
-                        self.refresh_title();
-                    }
-                    self.model.selection = None;
-                    true
-                }
-                None => false,
-            }
-    }
-
-    /// Backspace or Delete removes the selected edge — a focused atom
-    /// editor claims the keys while it has text and declines on an
-    /// empty buffer, so emptying a string then backspacing again
-    /// deletes the element. Selection lands on the next sibling, else
-    /// the previous, else the parent.
-    fn delete_key(&mut self, descends: &[navigate::Descend], event: &KeyboardEvent) -> bool {
-        event.state.is_down()
-            && plain(event)
-            && matches!(
-                &event.key,
-                Key::Named(NamedKey::Backspace | NamedKey::Delete)
-            )
-            && self.delete_selected_edge(descends)
-    }
-
-    /// Deletes the selected edge and lands the selection on a
-    /// survivor — Backspace/Delete's action, and cut's second half.
-    fn delete_selected_edge(&mut self, descends: &[navigate::Descend]) -> bool {
-        match &self.model.selection {
-            // Only a real edge deletes; a pending's Backspace is its
-            // cancel, handled by insert_key.
-            Some(Selected::Tree(selection::Selection::Edge { path, recorded, .. })) => {
-                let path = path.clone();
-                // Backspacing through the value and once more to
-                // delete the edge is one gesture: when this edge has
-                // the open run, its frame (pre-run document, edge
-                // intact) already covers the deletion.
-                let covered = *recorded;
-                let before = self.model.doc.clone();
-                selection::delete_edge(&mut self.model.doc, &self.model.library, &path) && {
-                    if !covered {
-                        self.model.history.record(before, Some(path.clone()));
-                        self.refresh_title();
-                    }
-                    let next = navigate::selection_after_delete(descends, &path);
-                    self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                        &self.model.sources(),
-                        next,
-                    )));
-                    true
-                }
-            }
-            _ => false,
-        }
-    }
-
-    /// The chosen entry's action — from the frame's popup, else the
-    /// query's inferred atom.
-    fn chosen_action(
-        popup: &Option<completion::Popup>,
-        query: &LineEditState,
-        choice: usize,
-        labels: bool,
-    ) -> completion::EntryAction {
-        popup
-            .as_ref()
-            .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
-            .map(|entry| entry.action.clone())
-            .unwrap_or_else(|| {
-                if labels {
-                    completion::EntryAction::NewLabel(query.text().to_string())
-                } else {
-                    completion::EntryAction::Value(selection::resolve_query(query.text()))
-                }
-            })
-    }
-
-    /// Commits a pointed-at value into the open pending — the
-    /// command-click gesture. A value-stage pending commits and
-    /// selects the edge; a label stage advances to its value stage.
-    /// False when nothing is pending — or when the picked value
-    /// cannot label (a list, a record, a blob) at the label stage —
-    /// so the click falls through rather than spending the pending.
-    fn pick_identity(&mut self, id: Value) -> bool {
-        if matches!(
-            self.model.selection,
-            Some(Selected::Tree(selection::Selection::PendingEdge { .. }))
-        ) && id.as_cell().is_none()
-        {
-            return false;
-        }
-        match self.model.selection.take() {
-            Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                self.commit_value(path, &completion::EntryAction::Value(id));
-                true
-            }
-            Some(Selected::Tree(selection::Selection::PendingEdge {
-                parent, replacing, ..
-            })) => {
-                self.commit_label(parent, replacing, &completion::EntryAction::Value(id));
-                true
-            }
-            selection => {
-                self.model.selection = selection;
-                false
-            }
-        }
-    }
-
-    /// Commits the pending value stage — one undo step — and selects
-    /// the edge it wrote.
-    fn commit_value(&mut self, path: document::Path, action: &completion::EntryAction) {
-        let before = self.model.doc.clone();
-        if completion::commit_pending(&mut self.model.doc, &self.model.library, &path, action) {
-            self.model.history.record(before, None);
-            self.refresh_title();
-        }
-        self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-            &self.model.sources(),
-            path,
-        )));
-    }
-
-    /// A resolved label advances the pending edge to its value stage —
-    /// or selects the existing field when the label is taken (rename
-    /// included: a taken label never clobbers its field, selection
-    /// communicates it, and replacing it means deleting it first).
-    /// A free-text label persists its newly named cell before the
-    /// value stage; a bare-cell choice has nothing to persist. A
-    /// rename re-keys the field and creates its label cell in one
-    /// history step, the value carried.
-    fn commit_label(
-        &mut self,
-        parent: document::Path,
-        replacing: Option<CellId>,
-        action: &completion::EntryAction,
-    ) {
-        let Some((label, created)) = completion::resolve_label(action) else {
-            return;
-        };
-        let mut path = parent.clone();
-        path.push(Step::Key(label));
-        if self.model.sources().resolve(&path).is_some() {
-            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                &self.model.sources(),
-                path,
-            )));
-            return;
-        }
-        match replacing {
-            Some(old) => {
-                let before = self.model.doc.clone();
-                if let Some((cell, value)) = &created {
-                    self.model.doc.cells.set_value(*cell, value.clone());
-                }
-                let renamed = selection::rename_field(
-                    &mut self.model.doc,
-                    &self.model.library,
-                    &parent,
-                    &old,
-                    label,
-                );
-                if renamed {
-                    self.model.history.record(before, None);
-                    self.refresh_title();
-                } else {
-                    if let Some((cell, _)) = created {
-                        self.model.doc.cells.clear_value(cell);
-                    }
-                    // The rename could not land; back to the field.
-                    path = parent;
-                    path.push(Step::Key(old));
-                }
-                self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                    &self.model.sources(),
-                    path,
-                )));
-            }
-            None => {
-                if let Some((cell, value)) = created {
-                    let before = self.model.doc.clone();
-                    self.model.doc.cells.set_value(cell, value);
-                    self.model.history.record(before, None);
-                    self.refresh_title();
-                }
-                self.model.selection = Some(Selected::Tree(selection::pending_value(path)));
-            }
-        }
-    }
-
-    /// Structural copy/paste, the shell's fallback: a focused text
-    /// editor's own clipboard handling wins by dispatch order, so
-    /// these fire on cell, list, and graph selections. Deliberately
-    /// NOT menu items — muda accelerators intercept ahead of key
-    /// dispatch, which would take Cmd+C/V away from text editing.
-    fn clipboard_key(&mut self, descends: &[navigate::Descend], event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !raw::command(&event.modifiers) {
-            return false;
-        }
-        let Key::Character(c) = &event.key else {
-            return false;
-        };
-        match c.to_lowercase().as_str() {
-            "c" => self.copy_selection(),
-            "x" => self.copy_selection() && self.delete_selected_edge(descends),
-            "v" => self.paste_clipboard(),
-            _ => false,
-        }
-    }
-
-    /// Copies the selected value — SHALLOW: a link is its identity
-    /// alone, no cell values travel; the value carries its own inline
-    /// structure. Graph selections copy their node's value.
-    fn copy_selection(&self) -> bool {
-        use clipboard_rs::{Clipboard, ClipboardContext};
-        let sources = self.model.sources();
-        let value = match &self.model.selection {
-            Some(Selected::Tree(selection)) => sources.resolve(selection.path()).cloned(),
-            Some(Selected::Graph(graph_view::GraphSelection::Node(node))) => {
-                graph_view::node_value(&self.model.doc, node)
-            }
-            None => None,
-        };
-        let Some(value) = value else {
-            return false;
-        };
-        let (text, structural) = selection::to_clipboard(&value);
-        ClipboardContext::new()
-            .and_then(|cb| {
-                if structural {
-                    // Both representations: the private format says
-                    // "structure", the text reads anywhere.
-                    cb.set(vec![
-                        clipboard_rs::ClipboardContent::Other(
-                            CLIPBOARD_FORMAT.to_string(),
-                            text.clone().into_bytes(),
-                        ),
-                        clipboard_rs::ClipboardContent::Text(text),
-                    ])
-                } else {
-                    cb.set_text(text)
-                }
-            })
-            .is_ok()
-    }
-
-    /// The private format's payload, when the clipboard carries one.
-    fn clipboard_structure(&self) -> Option<Value> {
-        use clipboard_rs::{Clipboard, ClipboardContext};
-        let bytes = ClipboardContext::new()
-            .ok()
-            .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
-        selection::from_structure(&bytes)
-    }
-
-    /// Cmd+V while a pending is open and the clipboard CARRIES
-    /// STRUCTURE — the private format, not a text shape — commits the
-    /// value into the pending, ahead of the focused query's own text
-    /// paste. Everything else keeps the text path: pasting "hi",
-    /// 0xff, or even text that happens to spell Value JSON lands in
-    /// the query as characters. Claims the chord even when the pick
-    /// declines (the label stage takes only what can label).
-    fn pending_paste_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !raw::command(&event.modifiers) {
-            return false;
-        }
-        if !matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "v") {
-            return false;
-        }
-        if !matches!(
-            self.model.selection,
-            Some(Selected::Tree(
-                selection::Selection::Pending { .. } | selection::Selection::PendingEdge { .. }
-            ))
-        ) {
-            return false;
-        }
-        let Some(value) = self.clipboard_structure() else {
-            return false;
-        };
-        self.pick_identity(value);
-        true
-    }
-
-    /// Pastes the clipboard's value — the private format's structure
-    /// when it carries one, else the text's query reading: into an
-    /// open pending first (the label stage narrows to atoms through
-    /// the pick), else over the selected edge — one undo step, the
-    /// selection remounted so a pasted atom gets its editor.
-    fn paste_clipboard(&mut self) -> bool {
-        use clipboard_rs::{Clipboard, ClipboardContext};
-        let value = match self.clipboard_structure() {
-            Some(value) => value,
-            None => {
-                let Some(text) = ClipboardContext::new()
-                    .ok()
-                    .and_then(|cb| cb.get_text().ok())
-                else {
-                    return false;
-                };
-                if text.is_empty() {
-                    return false;
-                }
-                selection::from_clipboard(&text)
-            }
-        };
-        if self.pick_identity(value.clone()) {
-            return true;
-        }
-        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection else {
-            return false;
-        };
-        let path = path.clone();
-        // Idempotent pastes stay off the undo stack, as write_through
-        // keeps no-op rewrites off it.
-        if self.model.sources().resolve(&path) == Some(&value) {
-            return true;
-        }
-        let before = self.model.doc.clone();
-        if selection::set_value(&mut self.model.doc, &self.model.library, &path, value) {
-            self.model.history.record(before, Some(path.clone()));
-            self.refresh_title();
-            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                &self.model.sources(),
-                path,
-            )));
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Enter advances a pending stage or begins one (the chains live
-    /// in raw). Plain Enter is a new peer BESIDE the selection: a
-    /// sibling element in a list (Shift+Enter before), a new field on
-    /// the parent record otherwise; the root has nothing beside it
-    /// and takes the field on itself. The command chord authors
-    /// WITHIN the selection: a field on the selected cell, an
-    /// appended element on a list (with Shift, at the front). Labels
-    /// author first, then values; list elements are one-stage value
-    /// pendings, the projection minting the position.
-    /// On an empty document Enter begins the root value. Escape
-    /// clears the selection from anywhere, discarding any pending
-    /// with the graph untouched; Backspace on an empty query cancels
-    /// a pending back to its anchor instead, keeping the keyboard
-    /// flow.
-    fn insert_key(
-        &mut self,
-        descends: &[navigate::Descend],
-        popup: &Option<completion::Popup>,
-        event: &KeyboardEvent,
-    ) -> bool {
-        event.state.is_down()
-            && match &event.key {
-                // While pending, plain vertical arrows drive the popup
-                // choice; chorded arrows stay structure keys.
-                Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
-                    if !raw::command(&event.modifiers) =>
-                {
-                    match &mut self.model.selection {
-                        Some(Selected::Tree(
-                            selection::Selection::Pending { choice, .. }
-                            | selection::Selection::PendingEdge { choice, .. },
-                        )) => {
-                            let len = popup.as_ref().map(|p| p.entries.len()).unwrap_or(0);
-                            *choice = match direction {
-                                NamedKey::ArrowUp => choice.saturating_sub(1),
-                                _ => (*choice + 1).min(len.saturating_sub(1)),
-                            };
-                            true
-                        }
-                        _ => false,
-                    }
-                }
-                Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(Selected::Tree(selection::Selection::Pending {
-                        path,
-                        query,
-                        choice,
-                    })) => {
-                        let action = Self::chosen_action(popup, &query, choice, false);
-                        self.commit_value(path, &action);
-                        true
-                    }
-                    Some(Selected::Tree(selection::Selection::PendingEdge {
-                        parent,
-                        query,
-                        choice,
-                        replacing,
-                    })) => {
-                        let action = Self::chosen_action(popup, &query, choice, true);
-                        self.commit_label(parent, replacing, &action);
-                        true
-                    }
-                    selection => {
-                        // Only a tree selection anchors authoring; a
-                        // graph selection has no path to author at.
-                        let tree = match &selection {
-                            Some(Selected::Tree(current)) => Some(current),
-                            _ => None,
-                        };
-                        let sources = self.model.sources();
-                        let shift = event.modifiers.shift();
-                        let started = match tree {
-                            Some(current) if raw::command(&event.modifiers) => {
-                                selection::pending_insert(&sources, current.path(), shift)
-                            }
-                            Some(current) => selection::pending_enter(&sources, current.path(), shift),
-                            None => selection::pending_root(&sources),
-                        };
-                        let began = started.is_some();
-                        self.model.selection = started.map(Selected::Tree).or(selection);
-                        began
-                    }
-                },
-                Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
-                Key::Named(NamedKey::Backspace) => {
-                    match &self.model.selection {
-                        Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                            let back = navigate::selection_after_delete(descends, path);
-                            // Cancelling the empty document's root
-                            // pending deselects — reselecting it
-                            // would pend again.
-                            self.model.selection = (!(back.is_empty()
-                                && self.model.doc.root.is_none()))
-                            .then(|| {
-                                Selected::Tree(selection::Selection::edge(&self.model.sources(), back))
-                            });
-                            true
-                        }
-                        Some(Selected::Tree(selection::Selection::PendingEdge {
-                            parent,
-                            replacing,
-                            ..
-                        })) => {
-                            // A cancelled rename returns to its field;
-                            // a cancelled new field to the record.
-                            let mut back = parent.clone();
-                            if let Some(old) = replacing {
-                                back.push(Step::Key(*old));
-                            }
-                            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                                &self.model.sources(),
-                                back,
-                            )));
-                            true
-                        }
-                        _ => false,
-                    }
-                }
-                _ => false,
-            }
-    }
-
-    /// Cmd+L re-opens the selected field's label as its seeded rename
-    /// query — the keyboard route to what clicking the label does. The
-    /// popup opens only on this explicit ask, never during navigation.
-    /// (Cmd+R belongs to the Raw view toggle.)
-    fn rename_key(&mut self, event: &KeyboardEvent) -> bool {
-        event.state.is_down()
-            && raw::command(&event.modifiers)
-            && matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "l")
-            && match &self.model.selection {
-                Some(Selected::Tree(selection::Selection::Edge { path, .. })) => {
-                    let path = path.clone();
-                    match selection::pending_rename(&self.model.sources(), &path) {
-                        Some(pending) => {
-                            self.model.selection = Some(Selected::Tree(pending));
-                            true
-                        }
-                        None => false,
-                    }
-                }
-                _ => false,
-            }
-    }
-
-    /// Space toggles the selection's collapse override, and Cmd+Up /
-    /// Cmd+Down close and open it — the fold axis of the keyboard's
-    /// third dimension, under the same keys that walk the rows. A
-    /// focused string editor claims Space first and types instead.
-    fn collapse_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() {
-            return false;
-        }
-        let set = match &event.key {
-            Key::Character(c) if c.as_str() == " " => None,
-            Key::Named(NamedKey::ArrowUp) if raw::command(&event.modifiers) => Some(true),
-            Key::Named(NamedKey::ArrowDown) if raw::command(&event.modifiers) => Some(false),
-            _ => return false,
-        };
-        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection else {
-            return false;
-        };
-        let path = path.clone();
-        let sources = sources::Sources {
-            doc: &self.model.doc,
-            library: &self.model.library,
-        };
-        match set {
-            None => selection::toggle_collapse(&sources, &mut self.model.collapse, &path),
-            Some(closed) => selection::set_collapse(&sources, &mut self.model.collapse, &path, closed),
-        }
-    }
 
     /// Renders the current model to the surface, from `RedrawRequested`.
-    fn redraw(&mut self) {
+    pub(crate) fn redraw(&mut self) {
         let RenderState::Active {
             surface,
             valid_surface: true,
@@ -1883,469 +955,4 @@ impl App {
     }
 }
 
-fn run_frame(
-    frame: &mut Frame<'_>,
-    description: FrameDescription<'_>,
-    resources: FrameResources<'_>,
-) {
-    let FrameDescription {
-        model,
-        view,
-        menu,
-        availability,
-        hover,
-        scale,
-        viewport,
-    } = description;
-    let FrameResources {
-        fonts: font_cx,
-        layouts: layout_cx,
-        text_cache,
-    } = resources;
-    let (viewport_width, viewport_height) = (viewport.width, viewport.height);
-    // Empty space deselects — the one slot, whichever pane filled it.
-    // Registered before the content places, so the descend handlers
-    // (registered as they place) take precedence, and only a press
-    // that claims no edge falls through to here.
-    frame.handler().on_pointer_down(|app: &mut App, event| {
-        event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
-    });
-    // Mark-and-sweep by pass: entries the previous pass never used
-    // are dropped here, everything else carries over — the steady
-    // state is the visible text, shaped once.
-    text_cache.sweep();
-    let mut tcx = TextCtx {
-        fonts: font_cx,
-        layouts: layout_cx,
-        scale: scale as f32,
-        cache: text_cache,
-    };
-    let styles = display::Styles::new(scale);
-    #[cfg(target_os = "linux")]
-    let menu_hover = match hover.as_ref() {
-        Some(Hovered::Menu(hover)) => Some(*hover),
-        _ => None,
-    };
-    #[cfg(target_os = "linux")]
-    let application_menu = menu::view(
-        &mut tcx,
-        menu::Description {
-            state: menu,
-            availability,
-            raw: view.raw,
-            graph: view.graph,
-            hover: menu_hover,
-            scale,
-            width: viewport_width,
-        },
-        menu::Hooks {
-            toggle: Rc::new(|app: &mut App, section| app.menu.toggle(section)),
-            select: Rc::new(|app: &mut App, selection| app.choose_menu(selection)),
-        },
-    );
-    #[cfg(not(target_os = "linux"))]
-    let _ = (menu, availability);
-    let content_viewport = content_viewport(viewport, scale);
-    #[cfg(target_os = "linux")]
-    layout::place(
-        application_menu.bar,
-        frame,
-        Placement::new(
-            Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
-            Rect::new(0.0, 0.0, viewport_width, viewport_height),
-        ),
-    );
-    let (tree_hover, graph_hover) = match hover.as_ref() {
-        Some(Hovered::Tree(hovering)) => (Some(&hovering.hover), None),
-        Some(Hovered::Graph(node)) => (None, Some(node)),
-        #[cfg(target_os = "linux")]
-        Some(Hovered::Menu(_)) => (None, None),
-        None => (None, None),
-    };
-    // The Raw view is ONE bit, threaded as itself: name lookups
-    // derive from it downstream, no policy swapped here, and the
-    // model's configured policy rides along untouched.
-    let sources = model.sources();
-    let graph_node = model.graph_node();
-    let margin = 12.0 * scale;
-    // The width layout answers to: the window, less the graph panel
-    // when it is up — the panel overlays the right side, and content
-    // should break rather than run beneath it.
-    let body_width = if view.graph {
-        graph_panel(viewport, scale).x0 - 2.0 * margin
-    } else {
-        viewport_width - 2.0 * margin
-    };
-    let hover_node = graph_hover
-        .and_then(|node| graph_view::node_value(&model.doc, node))
-        .filter(|value| !matches!(value, Value::Record(_)));
-    let body = raw::project(
-        raw::ProjectDescription {
-            sources,
-            selection: model.tree_selection(),
-            graph_node: graph_node.as_ref(),
-            hover: tree_hover,
-            hover_node: hover_node.as_ref(),
-            collapse: &model.collapse,
-            names: &model.names,
-            raw: view.raw,
-            styles: &styles,
-            width: body_width,
-            projection: projection::Projection::new(&model.foreign),
-        },
-        &mut tcx,
-        raw::Hooks {
-            // The selection transition: re-selecting the same path
-            // keeps its editor state, and a reported text click seeds
-            // or advances the editor's caret — focus and cursor
-            // placement are one event.
-            select: Rc::new(move |app: &mut App, path, click| {
-                // A label pending has no path of its own — path()
-                // names its PARENT — so a reported click is always a
-                // real selection change (the pending row swallows its
-                // own clicks before they can reach here).
-                let fresh = match app.model.tree_selection() {
-                    Some(selection::Selection::PendingEdge { .. }) | None => true,
-                    Some(current) => current.path() != path,
-                };
-                if fresh {
-                    app.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                        &app.model.sources(),
-                        path,
-                    )));
-                } else if click.is_none()
-                    && let Some(line) = app
-                        .model
-                        .tree_selection_mut()
-                        .and_then(selection::Selection::edit_mut)
-                {
-                    // Re-selecting without a text click lands the
-                    // caret at the end, same as a fresh mount.
-                    line.cursor_to_end();
-                }
-                if let Some(click) = click
-                    && let Some(line) = app
-                        .model
-                        .tree_selection_mut()
-                        .and_then(selection::Selection::edit_mut)
-                {
-                    // A tap sequence never spans targets: the click
-                    // that mounts an editor is its first, whatever
-                    // the physical count says — selecting the cell
-                    // was stage one, not half a double-click, and a
-                    // quick click on a neighboring atom is not a
-                    // double-click in this one.
-                    let count = if fresh { 1 } else { click.count };
-                    line.pointer_down(
-                        &click.presentation,
-                        &mut app.font_cx,
-                        &mut app.layout_cx,
-                        scale as f32,
-                        LineEditPointerDown {
-                            point: click.point,
-                            shift: click.shift,
-                            count,
-                        },
-                    );
-                }
-            }),
-            toggle: Rc::new(|app: &mut App, path| {
-                selection::toggle_collapse(
-                    &sources::Sources {
-                        doc: &app.model.doc,
-                        library: &app.model.library,
-                    },
-                    &mut app.model.collapse,
-                    &path,
-                );
-            }),
-            rename: Rc::new(|app: &mut App, path, index| {
-                if let Some(mut pending) = selection::pending_rename(&app.model.sources(), &path) {
-                    // The index was hit-tested against the label that
-                    // was clicked, in the label's own face; the seed
-                    // shares its spelling, so the caret lands under
-                    // the pointer in whatever face the editor draws.
-                    if let Some(line) = pending.edit_mut() {
-                        line.cursor_to(index);
-                    }
-                    app.model.selection = Some(Selected::Tree(pending));
-                }
-            }),
-            edit: Rc::new(edit_ctx),
-            pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-            insert: Rc::new(|app: &mut App, path| {
-                if let Some(pending) = selection::pending_after(&app.model.sources(), &path) {
-                    app.model.selection = Some(Selected::Tree(pending));
-                }
-            }),
-        },
-    );
-    // The body rides Progred's scroll container: margins pad into the
-    // content, the window is the viewport, and the app's clamped
-    // offsets (ordinary model state) shift it. The horizontal
-    // maximum answers to the LAYOUT width — content should only
-    // scroll where even the block forms overflowed it — not the
-    // window edge the viewport clips at.
-    let content = layout::pad(vello::kurbo::Insets::uniform(margin), body);
-    frame.max_scroll = ((content.extent.height() - content_viewport.height()) / scale).max(0.0);
-    frame.max_scroll_x = ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
-    let offset = Vec2::new(
-        model.scroll_x.clamp(0.0, frame.max_scroll_x) * scale,
-        model.scroll.clamp(0.0, frame.max_scroll) * scale,
-    );
-    let max_scroll = frame.max_scroll;
-    let max_scroll_x = frame.max_scroll_x;
-    let graph_panel_rect = view.graph.then(|| graph_panel(viewport, scale));
-    layout::place_scrolled(
-        content,
-        frame,
-        Placement::new(content_viewport, content_viewport),
-        offset,
-        move |app, update| {
-            let point = Point::new(update.state.position.x, update.state.position.y);
-            !graph_panel_rect.is_some_and(|panel| panel.contains(point))
-                && app.scroll_document(
-                    update,
-                    scale,
-                    content_viewport.height(),
-                    max_scroll,
-                    max_scroll_x,
-                )
-        },
-    );
-    // The graph pane draws over the document's right side; placed
-    // after the body so its handlers win inside the panel.
-    if view.graph {
-        let panel = graph_panel(viewport, scale);
-        let pane = graph_view::pane(
-            &sources,
-            &model.graph,
-            model.graph_selection(),
-            model.tree_selection(),
-            graph_hover,
-            tree_hover,
-            &model.names,
-            view.raw,
-            &mut tcx,
-            panel,
-            &graph_view::Hooks {
-                press_node: Rc::new(|app: &mut App, id, grab, world| {
-                    // Grabbing a node drops a tree selection (its
-                    // editor must not stay focused behind the drag);
-                    // a graph selection stands until the release
-                    // decides click or drag.
-                    if matches!(app.model.selection, Some(Selected::Tree(_))) {
-                        app.model.selection = None;
-                    }
-                    app.model.graph.press_node(id, grab, world);
-                }),
-                press_background: Rc::new(|app: &mut App, panel| {
-                    app.model.graph.press_background(panel);
-                }),
-                drag_to: Rc::new(|app: &mut App, world, panel, px| {
-                    app.model.graph.drag_to(world, panel, px)
-                }),
-                release: Rc::new(|app: &mut App| match app.model.graph.release() {
-                    Some(graph_view::Release::ClickNode(id)) => {
-                        app.model.selection =
-                            Some(Selected::Graph(graph_view::GraphSelection::Node(id)));
-                        true
-                    }
-                    Some(graph_view::Release::ClickBackground) => {
-                        app.model.selection = None;
-                        true
-                    }
-                    Some(graph_view::Release::Drag) => true,
-                    None => false,
-                }),
-                scroll: Rc::new(|app: &mut App, delta, cursor, scale| {
-                    app.model.graph.scroll(delta, cursor, scale);
-                }),
-                pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-            },
-        );
-        let rect = pane.extent.rect_at(Point::new(panel.x0, panel.y0));
-        layout::place(pane, frame, Placement::new(rect, content_viewport));
-    }
 
-    // The pending row's popup draws after the body, so it overlays
-    // and its click targets win.
-    if let Some(popup) = frame.popup.take() {
-        let hovered_entry = match tree_hover {
-            Some(hover::Hover::Entry(index)) => Some(*index),
-            _ => None,
-        };
-        let commit = |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
-            Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                app.commit_value(path, action);
-            }
-            Some(Selected::Tree(selection::Selection::PendingEdge {
-                parent, replacing, ..
-            })) => {
-                app.commit_label(parent, replacing, action);
-            }
-            selection => app.model.selection = selection,
-        };
-        let card = raw::popup_view(&mut tcx, &styles, &popup, hovered_entry, commit);
-        // Below the anchor, unless it would run off the bottom and
-        // fits above — then flip on top, as the TypeScript prototype
-        // did. The card's extent is known before placement.
-        let below = popup.anchor.y1 + 4.0 * scale;
-        let above = popup.anchor.y0 - 4.0 * scale - card.extent.height();
-        let y =
-            if below + card.extent.height() > content_viewport.y1 && above >= content_viewport.y0 {
-                above
-            } else {
-                below
-            };
-        let rect = card.extent.rect_at(Point::new(popup.anchor.x0, y));
-        layout::place(card, frame, Placement::new(rect, content_viewport));
-        frame.popup = Some(popup);
-    }
-
-    #[cfg(target_os = "linux")]
-    if let Some((x, popup)) = application_menu.popup {
-        let rect = popup.extent.rect_at(Point::new(x, content_viewport.y0));
-        let headings = Rect::new(
-            0.0,
-            0.0,
-            application_menu.heading_width,
-            content_viewport.y0,
-        );
-        frame.handler().on_pointer_down(move |app, event| {
-            let point = Point::new(event.state.position.x, event.state.position.y);
-            event.button == Some(PointerButton::Primary)
-                && !headings.contains(point)
-                && !rect.contains(point)
-                && app.menu.close()
-        });
-        frame.handler().on_pointer_down(move |_, event| {
-            event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
-        });
-        frame.handler().on_scroll(move |_, event| {
-            rect.contains(Point::new(event.state.position.x, event.state.position.y))
-        });
-        layout::place(
-            popup,
-            frame,
-            Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
-        );
-    }
-}
-
-/// Dispatch-time access to the selection's editor. Retained-frame
-/// dispatch can outlive the editor by a frame — deselect, then a move
-/// in the same gesture — so absence declines rather than panics.
-fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
-    let App {
-        model,
-        font_cx,
-        layout_cx,
-        text_clipboard,
-        ..
-    } = app;
-    let state = model
-        .tree_selection_mut()
-        .and_then(selection::Selection::edit_mut)?;
-    Some(EditCtx {
-        state,
-        fonts: font_cx,
-        layouts: layout_cx,
-        clipboard: text_clipboard,
-    })
-}
-
-#[cfg(test)]
-mod frame_tests {
-    use super::*;
-
-    #[test]
-    fn only_transitions_and_changed_frame_inputs_remint() {
-        assert_eq!(frame_disposition(false, false), FrameDisposition::Retain);
-        assert_eq!(
-            frame_disposition(false, true),
-            FrameDisposition::Remint {
-                reveal_selection: false,
-            }
-        );
-        assert_eq!(
-            frame_disposition(true, false),
-            FrameDisposition::Remint {
-                reveal_selection: true,
-            }
-        );
-        assert_eq!(
-            frame_disposition(true, true),
-            FrameDisposition::Remint {
-                reveal_selection: true,
-            }
-        );
-    }
-
-    #[test]
-    fn hover_resolution_keeps_only_real_hysteresis_state() {
-        let hovering = hover::Hovering {
-            hover: hover::Hover::Value(Vec::new()),
-            rect: vello::kurbo::Rect::new(10.0, 10.0, 20.0, 20.0),
-        };
-        let current = Hovered::Tree(hovering.clone());
-        assert_eq!(
-            resolved_hover(
-                Some(&current),
-                None,
-                Some(Point::new(24.0, 15.0)),
-                false,
-                8.0,
-            ),
-            Some(current.clone())
-        );
-        assert_eq!(
-            resolved_hover(
-                Some(&current),
-                Some(HoverHit::Graph(Some(graph_view::GraphNode::Root))),
-                Some(Point::ZERO),
-                false,
-                8.0,
-            ),
-            Some(Hovered::Graph(graph_view::GraphNode::Root))
-        );
-        assert_eq!(
-            resolved_hover(
-                Some(&current),
-                Some(HoverHit::Tree(hover::HoverClaim::Direct(None))),
-                Some(Point::ZERO),
-                true,
-                8.0,
-            ),
-            Some(current)
-        );
-        assert_eq!(resolved_hover(None, None, None, false, 8.0), None);
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn menu_hover_uses_the_ordinary_settled_resolver() {
-        let hover = menu::Hover::Item(menu::Selection::Save);
-        assert_eq!(
-            resolved_hover(
-                None,
-                Some(HoverHit::Menu(Some(hover))),
-                Some(Point::new(20.0, 40.0)),
-                false,
-                8.0,
-            ),
-            Some(Hovered::Menu(hover))
-        );
-        assert_eq!(
-            resolved_hover(
-                Some(&Hovered::Menu(hover)),
-                Some(HoverHit::Menu(None)),
-                Some(Point::new(20.0, 40.0)),
-                false,
-                8.0,
-            ),
-            None
-        );
-    }
-}
