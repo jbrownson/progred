@@ -2562,6 +2562,24 @@ gone with the swap. An even-rawer all-space-and-bytes inspection
 view (positions visible) remains a separate hypothetical, as the
 module doc always framed it.
 
+Linux application menus landed 2026-08-11 as Progred-drawn chrome,
+using the existing box algebra, Puri drawing, and placement handlers;
+there is no GTK menu integration. One platform-neutral definition of
+sections, entries, labels, item kinds, and shortcut chords drives Muda
+on macOS, the Linux dropdowns, and Linux Ctrl shortcuts. That
+definition is keyed by platform, so it places Quit in Linux's File
+menu and in the macOS application menu; adapters only translate the
+result and supply native modifier spelling. Graph and Raw moved from
+Muda-owned checkbox state to ordinary Progred view state, with the
+native menu synchronized as a projection. The Linux bar consumes
+viewport space above the document, and its dropdown is a last-placed
+overlay. Menu targets participate in the same settled hover resolver
+as the document and graph, so their highlighting needs no shell redraw
+policy. Clipboard commands remain outside both menu implementations so
+focused text editing keeps first refusal. This first slice is
+mouse-and-shortcut complete; keyboard navigation within an open
+dropdown remains later polish.
+
 ## Copy/Paste
 
 Shallow shipped 2026-07-10 (user call: only the selected

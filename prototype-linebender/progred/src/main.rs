@@ -4,14 +4,15 @@
 mod conventions;
 mod filter;
 mod gid;
-mod graph_view;
 #[cfg(test)]
 mod grap_examples;
+mod graph_view;
 mod history;
 mod hover;
 mod layout;
 #[cfg(target_os = "macos")]
 mod macos_menu;
+mod menu;
 mod raw;
 mod sources;
 mod store;
@@ -47,16 +48,15 @@ use winit::window::{Window, WindowId};
 /// Everything arriving through the event-loop proxy.
 enum UserEvent {
     #[cfg(target_os = "macos")]
-    Menu(macos_menu::Event),
+    MacMenu(macos_menu::Event),
+    Menu(menu::Selection),
     Discard(bool),
 }
 
 /// The action a discard confirmation gates. One at a time: requests
 /// while a sheet is up are dropped.
 enum AfterDiscard {
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     New,
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Open,
     Quit,
 }
@@ -127,7 +127,8 @@ struct App {
     /// in the document.
     binders: gid::Binders,
     #[cfg(target_os = "macos")]
-    menu: macos_menu::Menu,
+    native_menu: macos_menu::Menu,
+    menu: menu::State,
     /// Last pointer position, for anchoring pinch zoom.
     cursor: Point,
     /// The pointer position while it is inside the window. It is an
@@ -157,12 +158,38 @@ struct App {
 
 /// The View menu's frame inputs: which panes and layers this frame
 /// shows.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 struct ViewFlags {
     graph: bool,
     /// The one Raw bit: convention layers derive from it — names
     /// answer bare identities. Lists stay lists; kind is data.
     raw: bool,
+}
+
+fn menu_height(scale: f64) -> f64 {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = scale;
+        0.0
+    }
+    #[cfg(target_os = "linux")]
+    {
+        menu::bar_height(scale)
+    }
+}
+
+fn content_viewport(viewport: Size, scale: f64) -> Rect {
+    Rect::new(
+        0.0,
+        menu_height(scale).min(viewport.height),
+        viewport.width,
+        viewport.height,
+    )
+}
+
+fn graph_panel(viewport: Size, scale: f64) -> Rect {
+    let content = content_viewport(viewport, scale);
+    graph_view::panel(content.width(), content.height()) + Vec2::new(0.0, content.y0)
 }
 
 /// The position carried by any pointer translation, for cursor
@@ -203,28 +230,12 @@ impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             #[cfg(target_os = "macos")]
-            UserEvent::Menu(event) => match self.menu.event_kind(&event) {
-                Some(macos_menu::EventKind::NewSelected) => {
-                    self.request_discard(event_loop, AfterDiscard::New)
+            UserEvent::MacMenu(event) => {
+                if let Some(selection) = self.native_menu.selection(&event) {
+                    self.handle_menu_selection(event_loop, selection);
                 }
-                Some(macos_menu::EventKind::OpenSelected) => {
-                    self.request_discard(event_loop, AfterDiscard::Open)
-                }
-                Some(macos_menu::EventKind::SaveSelected) => self.menu_save(false),
-                Some(macos_menu::EventKind::SaveAsSelected) => self.menu_save(true),
-                Some(macos_menu::EventKind::QuitSelected) => {
-                    self.request_discard(event_loop, AfterDiscard::Quit)
-                }
-                Some(macos_menu::EventKind::UndoSelected) => self.step_history(true),
-                Some(macos_menu::EventKind::RedoSelected) => self.step_history(false),
-                Some(macos_menu::EventKind::ViewChanged)
-                    if let RenderState::Active { window, .. } = &self.state =>
-                {
-                    self.hover_is_current = false;
-                    window.request_redraw();
-                }
-                Some(macos_menu::EventKind::ViewChanged) | None => {}
-            },
+            }
+            UserEvent::Menu(selection) => self.handle_menu_selection(event_loop, selection),
             UserEvent::Discard(accepted) => {
                 let pending = self.pending_discard.take();
                 if accepted && let Some(then) = pending {
@@ -238,7 +249,7 @@ impl ApplicationHandler<UserEvent> for App {
         // After launch, so winit cannot replace it (its own default
         // menu is disabled at loop construction).
         #[cfg(target_os = "macos")]
-        self.menu.install();
+        self.native_menu.install();
 
         let RenderState::Suspended(cached_window) = &mut self.state else {
             return;
@@ -301,7 +312,7 @@ impl ApplicationHandler<UserEvent> for App {
             && self.view_flags().graph
         {
             let size = window.inner_size();
-            let panel = graph_view::panel(size.width as f64, size.height as f64);
+            let panel = graph_panel(Size::new(size.width as f64, size.height as f64), scale);
             let anchor = if panel.contains(self.cursor) {
                 self.cursor - panel.center()
             } else {
@@ -358,6 +369,7 @@ impl ApplicationHandler<UserEvent> for App {
                     // is open — the query must never eat Value JSON.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
                         self.pending_paste_key(&key_event)
+                            || self.menu_key(&key_event)
                             || dispatch.handler.dispatch_key(self, &key_event)
                             || self.clipboard_key(&dispatch.descends, &key_event)
                             || self.graph_key(&key_event)
@@ -547,7 +559,7 @@ fn main() {
     let event_loop = builder.build().expect("Couldn't create event loop");
     let proxy = event_loop.create_proxy();
     #[cfg(target_os = "macos")]
-    let menu = macos_menu::Menu::new();
+    let native_menu = macos_menu::Menu::new();
     #[cfg(target_os = "macos")]
     macos_menu::route_events(proxy.clone());
 
@@ -569,13 +581,15 @@ fn main() {
             foreign: conventions::foreign_functions(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
+            view: ViewFlags::default(),
             scroll: 0.0,
             scroll_x: 0.0,
         },
         doc_path,
         binders,
         #[cfg(target_os = "macos")]
-        menu,
+        native_menu,
+        menu: menu::State::default(),
         cursor: Point::ZERO,
         pointer: None,
         hover: None,
@@ -609,6 +623,8 @@ enum Selected {
 enum Hovered {
     Tree(raw::Hovering),
     Graph(graph_view::GraphNode),
+    #[cfg(target_os = "linux")]
+    Menu(menu::Hover),
 }
 
 struct Model {
@@ -626,6 +642,7 @@ struct Model {
     foreign: grap::ForeignFunctions,
     graph: graph_view::GraphView,
     history: history::History,
+    view: ViewFlags,
     /// Document scroll offsets in logical pixels, so the position
     /// survives moving between monitor scales. May exceed the
     /// current maximum after a resize: placement clamps effectively,
@@ -681,6 +698,8 @@ impl Model {
 enum HoverHit {
     Tree(raw::HoverClaim),
     Graph(Option<graph_view::GraphNode>),
+    #[cfg(target_os = "linux")]
+    Menu(Option<menu::Hover>),
 }
 
 struct HoverResolver<'a> {
@@ -712,6 +731,8 @@ enum FrameVisibility {
 struct FrameDescription<'a> {
     model: &'a Model,
     view: ViewFlags,
+    menu: menu::State,
+    availability: menu::Availability,
     hover: Option<Hovered>,
     scale: f64,
     viewport: Size,
@@ -782,6 +803,17 @@ impl hover::HasHover<Option<graph_view::GraphNode>> for Frame<'_> {
 
     fn claim_hover(&mut self, claim: Option<graph_view::GraphNode>) {
         self.hover.hit = Some(HoverHit::Graph(claim));
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl hover::HasHover<Option<menu::Hover>> for Frame<'_> {
+    fn pointer(&self) -> Option<Point> {
+        self.hover.pointer
+    }
+
+    fn claim_hover(&mut self, claim: Option<menu::Hover>) {
+        self.hover.hit = Some(HoverHit::Menu(claim));
     }
 }
 
@@ -858,6 +890,8 @@ fn resolved_hover(
         (false, Some(point)) => match hit {
             Some(HoverHit::Tree(raw::HoverClaim::Direct(hovering))) => hovering.map(Hovered::Tree),
             Some(HoverHit::Graph(node)) => node.map(Hovered::Graph),
+            #[cfg(target_os = "linux")]
+            Some(HoverHit::Menu(hover)) => hover.map(Hovered::Menu),
             Some(HoverHit::Tree(raw::HoverClaim::Air)) | None => {
                 let tree = match current {
                     Some(Hovered::Tree(hovering)) => Some(hovering),
@@ -950,16 +984,69 @@ impl App {
     /// panel, per platform convention.
     fn sync_menus(&self) {
         #[cfg(target_os = "macos")]
-        self.menu.sync(
-            self.model.history.dirty() || self.doc_path.is_none(),
-            self.model.history.can_undo(),
-            self.model.history.can_redo(),
-        );
+        self.native_menu
+            .sync(self.menu_availability(), self.model.view);
+    }
+
+    fn menu_availability(&self) -> menu::Availability {
+        menu::Availability {
+            save: self.model.history.dirty() || self.doc_path.is_none(),
+            undo: self.model.history.can_undo(),
+            redo: self.model.history.can_redo(),
+        }
+    }
+
+    fn handle_menu_selection(&mut self, event_loop: &ActiveEventLoop, selection: menu::Selection) {
+        match selection {
+            menu::Selection::New => self.request_discard(event_loop, AfterDiscard::New),
+            menu::Selection::Open => self.request_discard(event_loop, AfterDiscard::Open),
+            menu::Selection::Save => self.menu_save(false),
+            menu::Selection::SaveAs => self.menu_save(true),
+            menu::Selection::Quit => self.request_discard(event_loop, AfterDiscard::Quit),
+            menu::Selection::Undo => self.step_history(true),
+            menu::Selection::Redo => self.step_history(false),
+            menu::Selection::Raw => self.model.view.raw = !self.model.view.raw,
+            menu::Selection::Graph => self.model.view.graph = !self.model.view.graph,
+        }
+        if matches!(selection, menu::Selection::Raw | menu::Selection::Graph)
+            && let RenderState::Active { window, .. } = &self.state
+        {
+            self.hover_is_current = false;
+            window.request_redraw();
+        }
+    }
+
+    fn choose_menu(&mut self, selection: menu::Selection) {
+        self.menu.close();
+        let _ = self.proxy.send_event(UserEvent::Menu(selection));
+    }
+
+    fn menu_key(&mut self, event: &KeyboardEvent) -> bool {
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = event;
+            false
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if event.state.is_down()
+                && plain(event)
+                && matches!(event.key, Key::Named(NamedKey::Escape))
+            {
+                self.menu.close()
+            } else {
+                menu::shortcut(event)
+                    .filter(|selection| self.menu_availability().enabled(*selection))
+                    .is_some_and(|selection| {
+                        self.choose_menu(selection);
+                        true
+                    })
+            }
+        }
     }
 
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     fn step_history(&mut self, back: bool) {
         let current = self.model.doc.clone();
         let selection = edge_path(&self.model.selection);
@@ -1066,7 +1153,6 @@ impl App {
     /// always asks. Write-through editing means the graph is always
     /// current, so there is nothing to flush first. A cancelled dialog
     /// saves nothing.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target = in_place.or_else(|| dialog().set_file_name("untitled.gid").save_file());
@@ -1094,6 +1180,7 @@ impl App {
     /// run against the new model.
     fn adopt_model(&mut self, doc: raw::Document, path: Option<PathBuf>, binders: gid::Binders) {
         self.binders = binders;
+        let view = self.model.view;
         self.model = Model {
             doc,
             selection: None,
@@ -1103,6 +1190,7 @@ impl App {
             foreign: conventions::foreign_functions(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
+            view,
             scroll: 0.0,
             scroll_x: 0.0,
         };
@@ -1162,24 +1250,25 @@ impl App {
             target.is_some_and(|rect| {
                 let before = (self.model.scroll, self.model.scroll_x);
                 let pad = 12.0 * scale;
+                let content = content_viewport(viewport, scale);
                 let mut scroll = self.model.scroll;
                 // The pad is the landing margin, not the trigger: fully
                 // visible rects are left alone, so a click near an edge
                 // doesn't nudge.
-                if rect.y1 > viewport.height {
-                    scroll += (rect.y1 + pad - viewport.height) / scale;
+                if rect.y1 > content.y1 {
+                    scroll += (rect.y1 + pad - content.y1) / scale;
                 }
                 // Checked against the adjusted position, so when the rect
                 // is taller than the viewport the top wins.
                 let top = rect.y0 - (scroll - self.model.scroll) * scale;
-                if top < 0.0 {
-                    scroll += (top - pad) / scale;
+                if top < content.y0 {
+                    scroll += (top - pad - content.y0) / scale;
                 }
                 self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
                 // The same chase horizontally, against the width the
                 // graph panel leaves visible.
                 let visible = if self.view_flags().graph {
-                    graph_view::panel(viewport.width, viewport.height).x0
+                    graph_panel(viewport, scale).x0
                 } else {
                     viewport.width
                 };
@@ -1198,24 +1287,12 @@ impl App {
     }
 
     fn view_flags(&self) -> ViewFlags {
-        #[cfg(target_os = "macos")]
-        {
-            ViewFlags {
-                graph: self.menu.graph(),
-                raw: self.menu.raw(),
-            }
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            ViewFlags {
-                graph: false,
-                raw: false,
-            }
-        }
+        self.model.view
     }
 
     fn build_frame(&mut self, visibility: FrameVisibility, scale: f64, viewport: Size) -> Dispatch {
         let view = self.view_flags();
+        let availability = self.menu_availability();
         let presented_hover = self.hover.clone();
         let scene = match visibility {
             FrameVisibility::Silent => None,
@@ -1224,6 +1301,8 @@ impl App {
         let description = FrameDescription {
             model: &self.model,
             view,
+            menu: self.menu,
+            availability,
             hover: presented_hover,
             scale,
             viewport,
@@ -1889,6 +1968,8 @@ fn run_frame(
     let FrameDescription {
         model,
         view,
+        menu,
+        availability,
         hover,
         scale,
         viewport,
@@ -1917,9 +1998,45 @@ fn run_frame(
         cache: text_cache,
     };
     let styles = raw::RawStyles::new(scale);
+    #[cfg(target_os = "linux")]
+    let menu_hover = match hover.as_ref() {
+        Some(Hovered::Menu(hover)) => Some(*hover),
+        _ => None,
+    };
+    #[cfg(target_os = "linux")]
+    let application_menu = menu::view(
+        &mut tcx,
+        menu::Description {
+            state: menu,
+            availability,
+            raw: view.raw,
+            graph: view.graph,
+            hover: menu_hover,
+            scale,
+            width: viewport_width,
+        },
+        menu::Hooks {
+            toggle: Rc::new(|app: &mut App, section| app.menu.toggle(section)),
+            select: Rc::new(|app: &mut App, selection| app.choose_menu(selection)),
+        },
+    );
+    #[cfg(not(target_os = "linux"))]
+    let _ = (menu, availability);
+    let content_viewport = content_viewport(viewport, scale);
+    #[cfg(target_os = "linux")]
+    layout::place(
+        application_menu.bar,
+        frame,
+        Placement::new(
+            Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
+            Rect::new(0.0, 0.0, viewport_width, viewport_height),
+        ),
+    );
     let (tree_hover, graph_hover) = match hover.as_ref() {
         Some(Hovered::Tree(hovering)) => (Some(&hovering.hover), None),
         Some(Hovered::Graph(node)) => (None, Some(node)),
+        #[cfg(target_os = "linux")]
+        Some(Hovered::Menu(_)) => (None, None),
         None => (None, None),
     };
     // The Raw view is ONE bit, threaded as itself: name lookups
@@ -1932,7 +2049,7 @@ fn run_frame(
     // when it is up — the panel overlays the right side, and content
     // should break rather than run beneath it.
     let body_width = if view.graph {
-        graph_view::panel(viewport_width, viewport_height).x0 - 2.0 * margin
+        graph_panel(viewport, scale).x0 - 2.0 * margin
     } else {
         viewport_width - 2.0 * margin
     };
@@ -2057,7 +2174,7 @@ fn run_frame(
     // scroll where even the block forms overflowed it — not the
     // window edge the viewport clips at.
     let content = layout::pad(vello::kurbo::Insets::uniform(margin), body);
-    frame.max_scroll = ((content.extent.height() - viewport_height) / scale).max(0.0);
+    frame.max_scroll = ((content.extent.height() - content_viewport.height()) / scale).max(0.0);
     frame.max_scroll_x = ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
     let offset = Vec2::new(
         model.scroll_x.clamp(0.0, frame.max_scroll_x) * scale,
@@ -2065,24 +2182,28 @@ fn run_frame(
     );
     let max_scroll = frame.max_scroll;
     let max_scroll_x = frame.max_scroll_x;
-    let graph_panel = view
-        .graph
-        .then(|| graph_view::panel(viewport_width, viewport_height));
+    let graph_panel_rect = view.graph.then(|| graph_panel(viewport, scale));
     layout::place_scrolled(
         content,
         frame,
-        Placement::root(Rect::new(0.0, 0.0, viewport_width, viewport_height)),
+        Placement::new(content_viewport, content_viewport),
         offset,
         move |app, update| {
             let point = Point::new(update.state.position.x, update.state.position.y);
-            !graph_panel.is_some_and(|panel| panel.contains(point))
-                && app.scroll_document(update, scale, viewport_height, max_scroll, max_scroll_x)
+            !graph_panel_rect.is_some_and(|panel| panel.contains(point))
+                && app.scroll_document(
+                    update,
+                    scale,
+                    content_viewport.height(),
+                    max_scroll,
+                    max_scroll_x,
+                )
         },
     );
     // The graph pane draws over the document's right side; placed
     // after the body so its handlers win inside the panel.
     if view.graph {
-        let panel = graph_view::panel(viewport_width, viewport_height);
+        let panel = graph_panel(viewport, scale);
         let pane = graph_view::pane(
             &sources,
             &model.graph,
@@ -2131,11 +2252,7 @@ fn run_frame(
             },
         );
         let rect = pane.extent.rect_at(Point::new(panel.x0, panel.y0));
-        layout::place(
-            pane,
-            frame,
-            Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
-        );
+        layout::place(pane, frame, Placement::new(rect, content_viewport));
     }
 
     // The pending row's popup draws after the body, so it overlays
@@ -2162,18 +2279,42 @@ fn run_frame(
         // did. The card's extent is known before placement.
         let below = popup.anchor.y1 + 4.0 * scale;
         let above = popup.anchor.y0 - 4.0 * scale - card.extent.height();
-        let y = if below + card.extent.height() > viewport_height && above >= 0.0 {
-            above
-        } else {
-            below
-        };
+        let y =
+            if below + card.extent.height() > content_viewport.y1 && above >= content_viewport.y0 {
+                above
+            } else {
+                below
+            };
         let rect = card.extent.rect_at(Point::new(popup.anchor.x0, y));
+        layout::place(card, frame, Placement::new(rect, content_viewport));
+        frame.popup = Some(popup);
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Some((x, popup)) = application_menu.popup {
+        let rect = popup.extent.rect_at(Point::new(x, content_viewport.y0));
+        let headings = Rect::new(
+            0.0,
+            0.0,
+            application_menu.heading_width,
+            content_viewport.y0,
+        );
+        frame.handler().on_pointer_down(move |app, event| {
+            let point = Point::new(event.state.position.x, event.state.position.y);
+            event.button == Some(PointerButton::Primary)
+                && !headings.contains(point)
+                && !rect.contains(point)
+                && app.menu.close()
+        });
+        frame.handler().on_pointer_down(move |_, event| {
+            event.button == Some(PointerButton::Primary)
+                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+        });
         layout::place(
-            card,
+            popup,
             frame,
             Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
         );
-        frame.popup = Some(popup);
     }
 }
 
@@ -2264,5 +2405,31 @@ mod frame_tests {
             Some(current)
         );
         assert_eq!(resolved_hover(None, None, None, false, 8.0), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn menu_hover_uses_the_ordinary_settled_resolver() {
+        let hover = menu::Hover::Item(menu::Selection::Save);
+        assert_eq!(
+            resolved_hover(
+                None,
+                Some(HoverHit::Menu(Some(hover))),
+                Some(Point::new(20.0, 40.0)),
+                false,
+                8.0,
+            ),
+            Some(Hovered::Menu(hover))
+        );
+        assert_eq!(
+            resolved_hover(
+                Some(&Hovered::Menu(hover)),
+                Some(HoverHit::Menu(None)),
+                Some(Point::new(20.0, 40.0)),
+                false,
+                8.0,
+            ),
+            None
+        );
     }
 }

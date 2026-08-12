@@ -1,203 +1,150 @@
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{
-    CheckMenuItem, Menu as MudaMenu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu,
+    CheckMenuItem, IsMenuItem, Menu as MudaMenu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem,
+    Submenu,
 };
 use winit::event_loop::EventLoopProxy;
 
-use crate::UserEvent;
+use crate::menu::{self, Entry, Item, Kind, Platform, Selection, ShortcutKey};
+use crate::{UserEvent, ViewFlags};
 
 pub struct Event(MenuEvent);
 
-#[derive(Clone, Copy)]
-pub enum EventKind {
-    NewSelected,
-    OpenSelected,
-    SaveSelected,
-    SaveAsSelected,
-    QuitSelected,
-    UndoSelected,
-    RedoSelected,
-    ViewChanged,
-}
-
 pub struct Menu {
     root: MudaMenu,
-    ids: MenuIds,
-    items: MenuItems,
+    items: Vec<(Selection, NativeItem)>,
 }
 
-struct MenuIds {
-    new: MenuId,
-    open: MenuId,
-    save: MenuId,
-    save_as: MenuId,
-    quit: MenuId,
-    undo: MenuId,
-    redo: MenuId,
-    graph: MenuId,
-    raw: MenuId,
+enum NativeItem {
+    Command(MenuItem),
+    Check(CheckMenuItem),
 }
 
-struct MenuItems {
-    save: MenuItem,
-    undo: MenuItem,
-    redo: MenuItem,
-    graph: CheckMenuItem,
-    raw: CheckMenuItem,
+impl NativeItem {
+    fn new(item: Item) -> Self {
+        match item.kind {
+            Kind::Command => {
+                Self::Command(MenuItem::new(item.label, true, Some(accelerator(item))))
+            }
+            Kind::Check => Self::Check(CheckMenuItem::new(
+                item.label,
+                true,
+                false,
+                Some(accelerator(item)),
+            )),
+        }
+    }
+
+    fn as_menu_item(&self) -> &dyn IsMenuItem {
+        match self {
+            Self::Command(item) => item,
+            Self::Check(item) => item,
+        }
+    }
+
+    fn id(&self) -> &MenuId {
+        self.as_menu_item().id()
+    }
+
+    fn set_enabled(&self, enabled: bool) {
+        match self {
+            Self::Command(item) => item.set_enabled(enabled),
+            Self::Check(item) => item.set_enabled(enabled),
+        }
+    }
+
+    fn set_checked(&self, checked: bool) {
+        if let Self::Check(item) = self {
+            item.set_checked(checked);
+        }
+    }
+}
+
+fn accelerator(item: Item) -> Accelerator {
+    let shortcut = item.shortcut;
+    Accelerator::new(
+        Some(if shortcut.shift {
+            Modifiers::META | Modifiers::SHIFT
+        } else {
+            Modifiers::META
+        }),
+        match shortcut.key {
+            ShortcutKey::G => Code::KeyG,
+            ShortcutKey::N => Code::KeyN,
+            ShortcutKey::O => Code::KeyO,
+            ShortcutKey::Q => Code::KeyQ,
+            ShortcutKey::R => Code::KeyR,
+            ShortcutKey::S => Code::KeyS,
+            ShortcutKey::Z => Code::KeyZ,
+        },
+    )
+}
+
+fn item(items: &[(Selection, NativeItem)], selection: Selection) -> &NativeItem {
+    &items
+        .iter()
+        .find(|(candidate, _)| *candidate == selection)
+        .expect("shared menu item")
+        .1
+}
+
+fn section_menu(menu: &menu::Menu, items: &[(Selection, NativeItem)]) -> Submenu {
+    let submenu = Submenu::new(menu.label, true);
+    for entry in &menu.entries {
+        match entry {
+            Entry::Item(selection) => submenu
+                .append(item(items, selection.selection).as_menu_item())
+                .expect("menu item"),
+            Entry::Separator => submenu
+                .append(&PredefinedMenuItem::separator())
+                .expect("menu separator"),
+            Entry::About => submenu
+                .append(&PredefinedMenuItem::about(None, None))
+                .expect("about item"),
+        }
+    }
+    submenu
 }
 
 impl Menu {
     pub fn new() -> Self {
-        let accel = Modifiers::META;
-        let new = MenuItem::new(
-            "New",
-            true,
-            Some(Accelerator::new(Some(accel), Code::KeyN)),
-        );
-        let open = MenuItem::new(
-            "Open…",
-            true,
-            Some(Accelerator::new(Some(accel), Code::KeyO)),
-        );
-        let save = MenuItem::new(
-            "Save",
-            true,
-            Some(Accelerator::new(Some(accel), Code::KeyS)),
-        );
-        let save_as = MenuItem::new(
-            "Save As…",
-            true,
-            Some(Accelerator::new(
-                Some(accel | Modifiers::SHIFT),
-                Code::KeyS,
-            )),
-        );
-        let quit = MenuItem::new(
-            "Quit Progred",
-            true,
-            Some(Accelerator::new(Some(accel), Code::KeyQ)),
-        );
-        let undo = MenuItem::new(
-            "Undo",
-            true,
-            Some(Accelerator::new(Some(accel), Code::KeyZ)),
-        );
-        let redo = MenuItem::new(
-            "Redo",
-            true,
-            Some(Accelerator::new(
-                Some(accel | Modifiers::SHIFT),
-                Code::KeyZ,
-            )),
-        );
-        let graph = CheckMenuItem::new(
-            "Graph",
-            true,
-            false,
-            Some(Accelerator::new(Some(accel), Code::KeyG)),
-        );
-        let raw = CheckMenuItem::new(
-            "Raw",
-            true,
-            false,
-            Some(Accelerator::new(Some(accel), Code::KeyR)),
-        );
+        let definition = menu::definition(Platform::MacOs);
+        let items = menu::items(&definition)
+            .map(|item| (item.selection, NativeItem::new(item)))
+            .collect::<Vec<_>>();
         let root = MudaMenu::new();
-        let ids = MenuIds {
-            new: new.id().clone(),
-            open: open.id().clone(),
-            save: save.id().clone(),
-            save_as: save_as.id().clone(),
-            quit: quit.id().clone(),
-            undo: undo.id().clone(),
-            redo: redo.id().clone(),
-            graph: graph.id().clone(),
-            raw: raw.id().clone(),
-        };
-        root.append_items(&[
-            &Submenu::with_items(
-                "Progred",
-                true,
-                &[
-                    &PredefinedMenuItem::about(None, None),
-                    &PredefinedMenuItem::separator(),
-                    &quit,
-                ],
-            )
-            .expect("app menu"),
-            &Submenu::with_items(
-                "File",
-                true,
-                &[
-                    &new,
-                    &open,
-                    &PredefinedMenuItem::separator(),
-                    &save,
-                    &save_as,
-                ],
-            )
-            .expect("file menu"),
-            &Submenu::with_items("Edit", true, &[&undo, &redo]).expect("edit menu"),
-            &Submenu::with_items("View", true, &[&raw, &graph]).expect("view menu"),
-        ])
-        .expect("menu bar");
-        Self {
-            root,
-            ids,
-            items: MenuItems {
-                save,
-                undo,
-                redo,
-                graph,
-                raw,
-            },
+        for menu in &definition {
+            root.append(&section_menu(menu, &items))
+                .expect("menu section");
         }
+        Self { root, items }
     }
 
     pub fn install(&self) {
         self.root.init_for_nsapp();
     }
 
-    pub fn event_kind(&self, event: &Event) -> Option<EventKind> {
-        let id = event.0.id();
-        if *id == self.ids.new {
-            Some(EventKind::NewSelected)
-        } else if *id == self.ids.open {
-            Some(EventKind::OpenSelected)
-        } else if *id == self.ids.save {
-            Some(EventKind::SaveSelected)
-        } else if *id == self.ids.save_as {
-            Some(EventKind::SaveAsSelected)
-        } else if *id == self.ids.quit {
-            Some(EventKind::QuitSelected)
-        } else if *id == self.ids.undo {
-            Some(EventKind::UndoSelected)
-        } else if *id == self.ids.redo {
-            Some(EventKind::RedoSelected)
-        } else if *id == self.ids.graph || *id == self.ids.raw {
-            Some(EventKind::ViewChanged)
-        } else {
-            None
+    pub fn selection(&self, event: &Event) -> Option<Selection> {
+        self.items
+            .iter()
+            .find(|(_, item)| item.id() == event.0.id())
+            .map(|(selection, _)| *selection)
+    }
+
+    pub fn sync(&self, availability: menu::Availability, view: ViewFlags) {
+        for (selection, item) in &self.items {
+            item.set_enabled(availability.enabled(*selection));
+            item.set_checked(match selection {
+                Selection::Raw => view.raw,
+                Selection::Graph => view.graph,
+                _ => false,
+            });
         }
-    }
-
-    pub fn sync(&self, save: bool, undo: bool, redo: bool) {
-        self.items.save.set_enabled(save);
-        self.items.undo.set_enabled(undo);
-        self.items.redo.set_enabled(redo);
-    }
-
-    pub fn graph(&self) -> bool {
-        self.items.graph.is_checked()
-    }
-
-    pub fn raw(&self) -> bool {
-        self.items.raw.is_checked()
     }
 }
 
 pub fn route_events(proxy: EventLoopProxy<UserEvent>) {
     MenuEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::Menu(Event(event)));
+        let _ = proxy.send_event(UserEvent::MacMenu(Event(event)));
     }));
 }
