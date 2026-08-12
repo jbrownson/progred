@@ -1,6 +1,7 @@
 //! Window shell: winit + Vello plumbing around pure frame drawing.
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
+mod completion;
 mod conventions;
 mod display;
 mod document;
@@ -110,7 +111,7 @@ struct Dispatch {
     line: f64,
     max_scroll: f64,
     max_scroll_x: f64,
-    popup: Option<raw::Popup>,
+    popup: Option<completion::Popup>,
 }
 
 struct App {
@@ -761,7 +762,7 @@ struct Frame<'a> {
     max_scroll_x: f64,
     /// The pending row's completion popup, emitted during placement;
     /// drawn after the body and committed from at dispatch.
-    popup: Option<raw::Popup>,
+    popup: Option<completion::Popup>,
 }
 
 impl<'a> Frame<'a> {
@@ -821,8 +822,8 @@ impl hover::HasHover<Option<menu::Hover>> for Frame<'_> {
     }
 }
 
-impl raw::HasPopup for Frame<'_> {
-    fn popup(&mut self) -> &mut Option<raw::Popup> {
+impl completion::HasPopup for Frame<'_> {
+    fn popup(&mut self) -> &mut Option<completion::Popup> {
         &mut self.popup
     }
 }
@@ -1422,20 +1423,20 @@ impl App {
     /// The chosen entry's action — from the frame's popup, else the
     /// query's inferred atom.
     fn chosen_action(
-        popup: &Option<raw::Popup>,
+        popup: &Option<completion::Popup>,
         query: &LineEditState,
         choice: usize,
         labels: bool,
-    ) -> raw::EntryAction {
+    ) -> completion::EntryAction {
         popup
             .as_ref()
             .and_then(|p| p.entries.get(choice.min(p.entries.len().saturating_sub(1))))
             .map(|entry| entry.action.clone())
             .unwrap_or_else(|| {
                 if labels {
-                    raw::EntryAction::NewLabel(query.text().to_string())
+                    completion::EntryAction::NewLabel(query.text().to_string())
                 } else {
-                    raw::EntryAction::Value(selection::resolve_query(query.text()))
+                    completion::EntryAction::Value(selection::resolve_query(query.text()))
                 }
             })
     }
@@ -1456,13 +1457,13 @@ impl App {
         }
         match self.model.selection.take() {
             Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                self.commit_value(path, &raw::EntryAction::Value(id));
+                self.commit_value(path, &completion::EntryAction::Value(id));
                 true
             }
             Some(Selected::Tree(selection::Selection::PendingEdge {
                 parent, replacing, ..
             })) => {
-                self.commit_label(parent, replacing, &raw::EntryAction::Value(id));
+                self.commit_label(parent, replacing, &completion::EntryAction::Value(id));
                 true
             }
             selection => {
@@ -1474,9 +1475,9 @@ impl App {
 
     /// Commits the pending value stage — one undo step — and selects
     /// the edge it wrote.
-    fn commit_value(&mut self, path: document::Path, action: &raw::EntryAction) {
+    fn commit_value(&mut self, path: document::Path, action: &completion::EntryAction) {
         let before = self.model.doc.clone();
-        if raw::commit_pending(&mut self.model.doc, &self.model.library, &path, action) {
+        if completion::commit_pending(&mut self.model.doc, &self.model.library, &path, action) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
@@ -1498,9 +1499,9 @@ impl App {
         &mut self,
         parent: document::Path,
         replacing: Option<CellId>,
-        action: &raw::EntryAction,
+        action: &completion::EntryAction,
     ) {
-        let Some((label, created)) = raw::resolve_label(action) else {
+        let Some((label, created)) = completion::resolve_label(action) else {
             return;
         };
         let mut path = parent.clone();
@@ -1712,7 +1713,7 @@ impl App {
     fn insert_key(
         &mut self,
         descends: &[raw::Descend],
-        popup: &Option<raw::Popup>,
+        popup: &Option<completion::Popup>,
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -2259,7 +2260,7 @@ fn run_frame(
             Some(raw::Hover::Entry(index)) => Some(*index),
             _ => None,
         };
-        let commit = |app: &mut App, action: &raw::EntryAction| match app.model.selection.take() {
+        let commit = |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
             Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
                 app.commit_value(path, action);
             }
