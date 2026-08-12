@@ -3,7 +3,7 @@
 //! pre-mutation snapshots. Every mutation site records its own step
 //! explicitly; text-run coalescing is not history's concern — the
 //! run is the mounted editor's lifetime, and write-through reports
-//! only the run's first write (see `raw::write_through`).
+//! only the run's first write (see `selection::write_through`).
 
 use crate::document::{Document, Path};
 

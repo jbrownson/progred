@@ -15,8 +15,9 @@
 use crate::conventions::Names;
 use crate::hover::HasHover;
 use crate::layout::{Extent, Node, leaf};
-use crate::document::Document;
-use crate::raw::{Selection, command, short_id};
+use crate::document::{Document, short_id};
+use crate::raw::command;
+use crate::selection::Selection;
 use crate::sources::Sources;
 use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};

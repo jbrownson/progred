@@ -17,6 +17,7 @@ mod macos_menu;
 mod menu;
 mod projection;
 mod raw;
+mod selection;
 mod sources;
 mod store;
 #[cfg(test)]
@@ -151,7 +152,7 @@ struct App {
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
     /// scrolling.
-    revealed: Option<(document::Path, std::mem::Discriminant<raw::Selection>)>,
+    revealed: Option<(document::Path, std::mem::Discriminant<selection::Selection>)>,
     dispatch: Option<Dispatch>,
     reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
@@ -212,7 +213,7 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
 /// selections restore as nothing, being disposable.
 fn edge_path(selection: &Option<Selected>) -> Option<document::Path> {
     match selection {
-        Some(Selected::Tree(raw::Selection::Edge { path, .. })) => Some(path.clone()),
+        Some(Selected::Tree(selection::Selection::Edge { path, .. })) => Some(path.clone()),
         _ => None,
     }
 }
@@ -388,7 +389,7 @@ impl ApplicationHandler<UserEvent> for App {
                             ) {
                                 Some(path) => {
                                     self.model.selection =
-                                        Some(Selected::Tree(raw::selected_by_arrow(
+                                        Some(Selected::Tree(selection::selected_by_arrow(
                                             &self.model.sources(),
                                             path,
                                             &key_event,
@@ -440,7 +441,7 @@ impl ApplicationHandler<UserEvent> for App {
                         let before = model.doc.clone();
                         // True on the first write of the editor's
                         // life: the run's one step opens here.
-                        if raw::write_through(&mut model.doc, &model.library, selection) {
+                        if selection::write_through(&mut model.doc, &model.library, selection) {
                             let path = selection.path().to_vec();
                             model.history.record(before, Some(path));
                             self.refresh_title();
@@ -578,7 +579,7 @@ fn main() {
         model: Model {
             doc,
             selection: None,
-            collapse: raw::Collapse::default(),
+            collapse: selection::Collapse::default(),
             names: conventions::Names::default(),
             library: conventions::library(),
             foreign: conventions::foreign_functions(),
@@ -616,7 +617,7 @@ fn main() {
 // One instance lives in the model; the variants' size gap is moot.
 #[allow(clippy::large_enum_variant)]
 enum Selected {
-    Tree(raw::Selection),
+    Tree(selection::Selection),
     Graph(graph_view::GraphSelection),
 }
 
@@ -633,7 +634,7 @@ enum Hovered {
 struct Model {
     doc: document::Document,
     selection: Option<Selected>,
-    collapse: raw::Collapse,
+    collapse: selection::Collapse,
     /// The name policy: an editor setting, not document state, so it
     /// survives document swaps.
     names: conventions::Names,
@@ -665,14 +666,14 @@ impl Model {
         }
     }
 
-    fn tree_selection(&self) -> Option<&raw::Selection> {
+    fn tree_selection(&self) -> Option<&selection::Selection> {
         match &self.selection {
             Some(Selected::Tree(selection)) => Some(selection),
             _ => None,
         }
     }
 
-    fn tree_selection_mut(&mut self) -> Option<&mut raw::Selection> {
+    fn tree_selection_mut(&mut self) -> Option<&mut selection::Selection> {
         match &mut self.selection {
             Some(Selected::Tree(selection)) => Some(selection),
             _ => None,
@@ -1067,7 +1068,7 @@ impl App {
             // also drops any graph selection, which may reference
             // content the restored document no longer has.
             self.model.selection = restore
-                .map(|path| Selected::Tree(raw::Selection::edge(&self.model.sources(), path)));
+                .map(|path| Selected::Tree(selection::Selection::edge(&self.model.sources(), path)));
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
                 let window = window.clone();
@@ -1168,7 +1169,7 @@ impl App {
                     self.model.history.mark_saved();
                     // A run must not straddle the save mark, or edits
                     // after it would coalesce into a pre-save step.
-                    raw::break_edit_run(self.model.tree_selection_mut());
+                    selection::break_edit_run(self.model.tree_selection_mut());
                     self.adopt_doc_path(path);
                 }
                 Err(error) => {
@@ -1190,7 +1191,7 @@ impl App {
         self.model = Model {
             doc,
             selection: None,
-            collapse: raw::Collapse::default(),
+            collapse: selection::Collapse::default(),
             names: self.model.names.clone(),
             library: conventions::library(),
             foreign: conventions::foreign_functions(),
@@ -1393,7 +1394,7 @@ impl App {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
-            Some(Selected::Tree(raw::Selection::Edge { path, recorded, .. })) => {
+            Some(Selected::Tree(selection::Selection::Edge { path, recorded, .. })) => {
                 let path = path.clone();
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
@@ -1401,13 +1402,13 @@ impl App {
                 // intact) already covers the deletion.
                 let covered = *recorded;
                 let before = self.model.doc.clone();
-                raw::delete_edge(&mut self.model.doc, &self.model.library, &path) && {
+                selection::delete_edge(&mut self.model.doc, &self.model.library, &path) && {
                     if !covered {
                         self.model.history.record(before, Some(path.clone()));
                         self.refresh_title();
                     }
                     let next = raw::selection_after_delete(descends, &path);
-                    self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                    self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                         &self.model.sources(),
                         next,
                     )));
@@ -1434,7 +1435,7 @@ impl App {
                 if labels {
                     raw::EntryAction::NewLabel(query.text().to_string())
                 } else {
-                    raw::EntryAction::Value(raw::resolve_query(query.text()))
+                    raw::EntryAction::Value(selection::resolve_query(query.text()))
                 }
             })
     }
@@ -1448,17 +1449,17 @@ impl App {
     fn pick_identity(&mut self, id: Value) -> bool {
         if matches!(
             self.model.selection,
-            Some(Selected::Tree(raw::Selection::PendingEdge { .. }))
+            Some(Selected::Tree(selection::Selection::PendingEdge { .. }))
         ) && id.as_cell().is_none()
         {
             return false;
         }
         match self.model.selection.take() {
-            Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
+            Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
                 self.commit_value(path, &raw::EntryAction::Value(id));
                 true
             }
-            Some(Selected::Tree(raw::Selection::PendingEdge {
+            Some(Selected::Tree(selection::Selection::PendingEdge {
                 parent, replacing, ..
             })) => {
                 self.commit_label(parent, replacing, &raw::EntryAction::Value(id));
@@ -1479,7 +1480,7 @@ impl App {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+        self.model.selection = Some(Selected::Tree(selection::Selection::edge(
             &self.model.sources(),
             path,
         )));
@@ -1505,7 +1506,7 @@ impl App {
         let mut path = parent.clone();
         path.push(Step::Key(label));
         if self.model.sources().resolve(&path).is_some() {
-            self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                 &self.model.sources(),
                 path,
             )));
@@ -1517,7 +1518,7 @@ impl App {
                 if let Some((cell, value)) = &created {
                     self.model.doc.cells.set_value(*cell, value.clone());
                 }
-                let renamed = raw::rename_field(
+                let renamed = selection::rename_field(
                     &mut self.model.doc,
                     &self.model.library,
                     &parent,
@@ -1535,7 +1536,7 @@ impl App {
                     path = parent;
                     path.push(Step::Key(old));
                 }
-                self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                     &self.model.sources(),
                     path,
                 )));
@@ -1547,7 +1548,7 @@ impl App {
                     self.model.history.record(before, None);
                     self.refresh_title();
                 }
-                self.model.selection = Some(Selected::Tree(raw::pending_value(path)));
+                self.model.selection = Some(Selected::Tree(selection::pending_value(path)));
             }
         }
     }
@@ -1588,7 +1589,7 @@ impl App {
         let Some(value) = value else {
             return false;
         };
-        let (text, structural) = raw::to_clipboard(&value);
+        let (text, structural) = selection::to_clipboard(&value);
         ClipboardContext::new()
             .and_then(|cb| {
                 if structural {
@@ -1614,7 +1615,7 @@ impl App {
         let bytes = ClipboardContext::new()
             .ok()
             .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
-        raw::from_structure(&bytes)
+        selection::from_structure(&bytes)
     }
 
     /// Cmd+V while a pending is open and the clipboard CARRIES
@@ -1634,7 +1635,7 @@ impl App {
         if !matches!(
             self.model.selection,
             Some(Selected::Tree(
-                raw::Selection::Pending { .. } | raw::Selection::PendingEdge { .. }
+                selection::Selection::Pending { .. } | selection::Selection::PendingEdge { .. }
             ))
         ) {
             return false;
@@ -1665,13 +1666,13 @@ impl App {
                 if text.is_empty() {
                     return false;
                 }
-                raw::from_clipboard(&text)
+                selection::from_clipboard(&text)
             }
         };
         if self.pick_identity(value.clone()) {
             return true;
         }
-        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection else {
+        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection else {
             return false;
         };
         let path = path.clone();
@@ -1681,10 +1682,10 @@ impl App {
             return true;
         }
         let before = self.model.doc.clone();
-        if raw::set_value(&mut self.model.doc, &self.model.library, &path, value) {
+        if selection::set_value(&mut self.model.doc, &self.model.library, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
-            self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                 &self.model.sources(),
                 path,
             )));
@@ -1723,8 +1724,8 @@ impl App {
                 {
                     match &mut self.model.selection {
                         Some(Selected::Tree(
-                            raw::Selection::Pending { choice, .. }
-                            | raw::Selection::PendingEdge { choice, .. },
+                            selection::Selection::Pending { choice, .. }
+                            | selection::Selection::PendingEdge { choice, .. },
                         )) => {
                             let len = popup.as_ref().map(|p| p.entries.len()).unwrap_or(0);
                             *choice = match direction {
@@ -1737,7 +1738,7 @@ impl App {
                     }
                 }
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(Selected::Tree(raw::Selection::Pending {
+                    Some(Selected::Tree(selection::Selection::Pending {
                         path,
                         query,
                         choice,
@@ -1746,7 +1747,7 @@ impl App {
                         self.commit_value(path, &action);
                         true
                     }
-                    Some(Selected::Tree(raw::Selection::PendingEdge {
+                    Some(Selected::Tree(selection::Selection::PendingEdge {
                         parent,
                         query,
                         choice,
@@ -1767,10 +1768,10 @@ impl App {
                         let shift = event.modifiers.shift();
                         let started = match tree {
                             Some(current) if raw::command(&event.modifiers) => {
-                                raw::pending_insert(&sources, current.path(), shift)
+                                selection::pending_insert(&sources, current.path(), shift)
                             }
-                            Some(current) => raw::pending_enter(&sources, current.path(), shift),
-                            None => raw::pending_root(&sources),
+                            Some(current) => selection::pending_enter(&sources, current.path(), shift),
+                            None => selection::pending_root(&sources),
                         };
                         let began = started.is_some();
                         self.model.selection = started.map(Selected::Tree).or(selection);
@@ -1780,7 +1781,7 @@ impl App {
                 Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
-                        Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
+                        Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
                             let back = raw::selection_after_delete(descends, path);
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
@@ -1788,11 +1789,11 @@ impl App {
                             self.model.selection = (!(back.is_empty()
                                 && self.model.doc.root.is_none()))
                             .then(|| {
-                                Selected::Tree(raw::Selection::edge(&self.model.sources(), back))
+                                Selected::Tree(selection::Selection::edge(&self.model.sources(), back))
                             });
                             true
                         }
-                        Some(Selected::Tree(raw::Selection::PendingEdge {
+                        Some(Selected::Tree(selection::Selection::PendingEdge {
                             parent,
                             replacing,
                             ..
@@ -1803,7 +1804,7 @@ impl App {
                             if let Some(old) = replacing {
                                 back.push(Step::Key(*old));
                             }
-                            self.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                                 &self.model.sources(),
                                 back,
                             )));
@@ -1825,9 +1826,9 @@ impl App {
             && raw::command(&event.modifiers)
             && matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "l")
             && match &self.model.selection {
-                Some(Selected::Tree(raw::Selection::Edge { path, .. })) => {
+                Some(Selected::Tree(selection::Selection::Edge { path, .. })) => {
                     let path = path.clone();
-                    match raw::pending_rename(&self.model.sources(), &path) {
+                    match selection::pending_rename(&self.model.sources(), &path) {
                         Some(pending) => {
                             self.model.selection = Some(Selected::Tree(pending));
                             true
@@ -1853,7 +1854,7 @@ impl App {
             Key::Named(NamedKey::ArrowDown) if raw::command(&event.modifiers) => Some(false),
             _ => return false,
         };
-        let Some(Selected::Tree(raw::Selection::Edge { path, .. })) = &self.model.selection else {
+        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection else {
             return false;
         };
         let path = path.clone();
@@ -1862,8 +1863,8 @@ impl App {
             library: &self.model.library,
         };
         match set {
-            None => raw::toggle_collapse(&sources, &mut self.model.collapse, &path),
-            Some(closed) => raw::set_collapse(&sources, &mut self.model.collapse, &path, closed),
+            None => selection::toggle_collapse(&sources, &mut self.model.collapse, &path),
+            Some(closed) => selection::set_collapse(&sources, &mut self.model.collapse, &path, closed),
         }
     }
 
@@ -2088,11 +2089,11 @@ fn run_frame(
                 // real selection change (the pending row swallows its
                 // own clicks before they can reach here).
                 let fresh = match app.model.tree_selection() {
-                    Some(raw::Selection::PendingEdge { .. }) | None => true,
+                    Some(selection::Selection::PendingEdge { .. }) | None => true,
                     Some(current) => current.path() != path,
                 };
                 if fresh {
-                    app.model.selection = Some(Selected::Tree(raw::Selection::edge(
+                    app.model.selection = Some(Selected::Tree(selection::Selection::edge(
                         &app.model.sources(),
                         path,
                     )));
@@ -2100,7 +2101,7 @@ fn run_frame(
                     && let Some(line) = app
                         .model
                         .tree_selection_mut()
-                        .and_then(raw::Selection::edit_mut)
+                        .and_then(selection::Selection::edit_mut)
                 {
                     // Re-selecting without a text click lands the
                     // caret at the end, same as a fresh mount.
@@ -2110,7 +2111,7 @@ fn run_frame(
                     && let Some(line) = app
                         .model
                         .tree_selection_mut()
-                        .and_then(raw::Selection::edit_mut)
+                        .and_then(selection::Selection::edit_mut)
                 {
                     // A tap sequence never spans targets: the click
                     // that mounts an editor is its first, whatever
@@ -2133,7 +2134,7 @@ fn run_frame(
                 }
             }),
             toggle: Rc::new(|app: &mut App, path| {
-                raw::toggle_collapse(
+                selection::toggle_collapse(
                     &sources::Sources {
                         doc: &app.model.doc,
                         library: &app.model.library,
@@ -2143,7 +2144,7 @@ fn run_frame(
                 );
             }),
             rename: Rc::new(|app: &mut App, path, index| {
-                if let Some(mut pending) = raw::pending_rename(&app.model.sources(), &path) {
+                if let Some(mut pending) = selection::pending_rename(&app.model.sources(), &path) {
                     // The index was hit-tested against the label that
                     // was clicked, in the label's own face; the seed
                     // shares its spelling, so the caret lands under
@@ -2157,7 +2158,7 @@ fn run_frame(
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             insert: Rc::new(|app: &mut App, path| {
-                if let Some(pending) = raw::pending_after(&app.model.sources(), &path) {
+                if let Some(pending) = selection::pending_after(&app.model.sources(), &path) {
                     app.model.selection = Some(Selected::Tree(pending));
                 }
             }),
@@ -2259,10 +2260,10 @@ fn run_frame(
             _ => None,
         };
         let commit = |app: &mut App, action: &raw::EntryAction| match app.model.selection.take() {
-            Some(Selected::Tree(raw::Selection::Pending { path, .. })) => {
+            Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
                 app.commit_value(path, action);
             }
-            Some(Selected::Tree(raw::Selection::PendingEdge {
+            Some(Selected::Tree(selection::Selection::PendingEdge {
                 parent, replacing, ..
             })) => {
                 app.commit_label(parent, replacing, action);
@@ -2330,7 +2331,7 @@ fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
     } = app;
     let state = model
         .tree_selection_mut()
-        .and_then(raw::Selection::edit_mut)?;
+        .and_then(selection::Selection::edit_mut)?;
     Some(EditCtx {
         state,
         fonts: font_cx,

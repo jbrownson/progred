@@ -28,6 +28,16 @@ pub struct Document {
 /// `docs/model.md`.
 pub type Path = Vec<Step>;
 
+/// Git-style short form of a cell id: an ellipsis and the last five
+/// hex digits, fixed length even where fewer would disambiguate.
+/// A collision within a document is unlikely (about 0.5% somewhere in
+/// a hundred-cell document) and the display can grow if it ever
+/// matters.
+pub fn short_id(id: CellId) -> String {
+    let hex = id.simple().to_string();
+    format!("…{}", &hex[hex.len() - 5..])
+}
+
 #[cfg_attr(not(test), allow(dead_code))]
 pub mod sample_vocabulary {
     use progred_graph::CellId;
