@@ -73,10 +73,12 @@ impl History {
         self.undo.len() != self.saved
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
 
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn can_redo(&self) -> bool {
         !self.redo.is_empty()
     }
