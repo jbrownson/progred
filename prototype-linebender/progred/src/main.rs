@@ -17,6 +17,7 @@ mod layout;
 mod macos_menu;
 mod menu;
 mod model;
+mod navigate;
 mod projection;
 mod raw;
 mod selection;
@@ -107,7 +108,7 @@ impl TextClipboard for SystemTextClipboard {
 
 struct Dispatch {
     handler: Handler<App>,
-    descends: Vec<raw::Descend>,
+    descends: Vec<navigate::Descend>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
     line: f64,
@@ -374,7 +375,7 @@ impl ApplicationHandler<UserEvent> for App {
                             || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
                             || self.rename_key(&key_event)
                             || self.collapse_key(&key_event)
-                            || match raw::step_selection(
+                            || match navigate::step_selection(
                                 &dispatch.descends,
                                 self.model.tree_selection(),
                                 dispatch.line,
@@ -608,14 +609,14 @@ fn main() {
 /// pointer claims in whichever pane it rests over.
 #[derive(Clone, Debug, PartialEq)]
 enum Hovered {
-    Tree(raw::Hovering),
+    Tree(hover::Hovering),
     Graph(graph_view::GraphNode),
     #[cfg(target_os = "linux")]
     Menu(menu::Hover),
 }
 
 enum HoverHit {
-    Tree(raw::HoverClaim),
+    Tree(hover::HoverClaim),
     Graph(Option<graph_view::GraphNode>),
     #[cfg(target_os = "linux")]
     Menu(Option<menu::Hover>),
@@ -669,7 +670,7 @@ struct Frame<'a> {
     scene: Option<&'a mut Scene>,
     hover: HoverResolver<'a>,
     handler: Handler<App>,
-    descends: Vec<raw::Descend>,
+    descends: Vec<navigate::Descend>,
     /// How far the document can scroll given this frame's content and
     /// viewport; dispatch clamps against it.
     max_scroll: f64,
@@ -705,12 +706,12 @@ impl<'a> Frame<'a> {
     }
 }
 
-impl hover::HasHover<raw::HoverClaim> for Frame<'_> {
+impl hover::HasHover<hover::HoverClaim> for Frame<'_> {
     fn pointer(&self) -> Option<Point> {
         self.hover.pointer
     }
 
-    fn claim_hover(&mut self, claim: raw::HoverClaim) {
+    fn claim_hover(&mut self, claim: hover::HoverClaim) {
         self.hover.hit = Some(HoverHit::Tree(claim));
     }
 }
@@ -748,8 +749,8 @@ impl HasHandler<App> for Frame<'_> {
     }
 }
 
-impl raw::HasDescends for Frame<'_> {
-    fn descends(&mut self) -> &mut Vec<raw::Descend> {
+impl navigate::HasDescends for Frame<'_> {
+    fn descends(&mut self) -> &mut Vec<navigate::Descend> {
         &mut self.descends
     }
 }
@@ -807,16 +808,16 @@ fn resolved_hover(
         (true, _) => current.cloned(),
         (false, None) => None,
         (false, Some(point)) => match hit {
-            Some(HoverHit::Tree(raw::HoverClaim::Direct(hovering))) => hovering.map(Hovered::Tree),
+            Some(HoverHit::Tree(hover::HoverClaim::Direct(hovering))) => hovering.map(Hovered::Tree),
             Some(HoverHit::Graph(node)) => node.map(Hovered::Graph),
             #[cfg(target_os = "linux")]
             Some(HoverHit::Menu(hover)) => hover.map(Hovered::Menu),
-            Some(HoverHit::Tree(raw::HoverClaim::Air)) | None => {
+            Some(HoverHit::Tree(hover::HoverClaim::Air)) | None => {
                 let tree = match current {
                     Some(Hovered::Tree(hovering)) => Some(hovering),
                     _ => None,
                 };
-                match raw::resolve_hover(raw::HoverClaim::Air, tree, point, reach) {
+                match hover::resolve_hover(hover::HoverClaim::Air, tree, point, reach) {
                     Some(next) => next.map(Hovered::Tree),
                     None => current.cloned(),
                 }
@@ -1293,7 +1294,7 @@ impl App {
     /// empty buffer, so emptying a string then backspacing again
     /// deletes the element. Selection lands on the next sibling, else
     /// the previous, else the parent.
-    fn delete_key(&mut self, descends: &[raw::Descend], event: &KeyboardEvent) -> bool {
+    fn delete_key(&mut self, descends: &[navigate::Descend], event: &KeyboardEvent) -> bool {
         event.state.is_down()
             && plain(event)
             && matches!(
@@ -1305,7 +1306,7 @@ impl App {
 
     /// Deletes the selected edge and lands the selection on a
     /// survivor — Backspace/Delete's action, and cut's second half.
-    fn delete_selected_edge(&mut self, descends: &[raw::Descend]) -> bool {
+    fn delete_selected_edge(&mut self, descends: &[navigate::Descend]) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
@@ -1322,7 +1323,7 @@ impl App {
                         self.model.history.record(before, Some(path.clone()));
                         self.refresh_title();
                     }
-                    let next = raw::selection_after_delete(descends, &path);
+                    let next = navigate::selection_after_delete(descends, &path);
                     self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                         &self.model.sources(),
                         next,
@@ -1473,7 +1474,7 @@ impl App {
     /// these fire on cell, list, and graph selections. Deliberately
     /// NOT menu items — muda accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
-    fn clipboard_key(&mut self, descends: &[raw::Descend], event: &KeyboardEvent) -> bool {
+    fn clipboard_key(&mut self, descends: &[navigate::Descend], event: &KeyboardEvent) -> bool {
         if !event.state.is_down() || !raw::command(&event.modifiers) {
             return false;
         }
@@ -1626,7 +1627,7 @@ impl App {
     /// flow.
     fn insert_key(
         &mut self,
-        descends: &[raw::Descend],
+        descends: &[navigate::Descend],
         popup: &Option<completion::Popup>,
         event: &KeyboardEvent,
     ) -> bool {
@@ -1697,7 +1698,7 @@ impl App {
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
                         Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                            let back = raw::selection_after_delete(descends, path);
+                            let back = navigate::selection_after_delete(descends, path);
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
                             // would pend again.
@@ -2171,7 +2172,7 @@ fn run_frame(
     // and its click targets win.
     if let Some(popup) = frame.popup.take() {
         let hovered_entry = match tree_hover {
-            Some(raw::Hover::Entry(index)) => Some(*index),
+            Some(hover::Hover::Entry(index)) => Some(*index),
             _ => None,
         };
         let commit = |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
@@ -2284,8 +2285,8 @@ mod frame_tests {
 
     #[test]
     fn hover_resolution_keeps_only_real_hysteresis_state() {
-        let hovering = raw::Hovering {
-            hover: raw::Hover::Value(Vec::new()),
+        let hovering = hover::Hovering {
+            hover: hover::Hover::Value(Vec::new()),
             rect: vello::kurbo::Rect::new(10.0, 10.0, 20.0, 20.0),
         };
         let current = Hovered::Tree(hovering.clone());
@@ -2312,7 +2313,7 @@ mod frame_tests {
         assert_eq!(
             resolved_hover(
                 Some(&current),
-                Some(HoverHit::Tree(raw::HoverClaim::Direct(None))),
+                Some(HoverHit::Tree(hover::HoverClaim::Direct(None))),
                 Some(Point::ZERO),
                 true,
                 8.0,

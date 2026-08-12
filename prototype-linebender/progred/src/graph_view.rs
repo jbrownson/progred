@@ -634,7 +634,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
     selection: Option<&GraphSelection>,
     doc_selection: Option<&Selection>,
     hover: Option<&GraphNode>,
-    doc_hover: Option<&crate::raw::Hover>,
+    doc_hover: Option<&crate::hover::Hover>,
     names: &Names,
     raw: bool,
     tcx: &mut TextCtx,
@@ -666,7 +666,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         .and_then(|value| value.as_cell());
     // The document's hover projects in the same way, at half voice.
     let hover_cell = doc_hover
-        .and_then(|hover| crate::raw::hover_value(sources, names, raw, doc_selection, hover))
+        .and_then(|hover| crate::hover::hover_value(sources, names, raw, doc_selection, hover))
         .and_then(|value| value.as_cell());
 
     let root_link = doc.root.as_ref().and_then(Value::as_cell);
