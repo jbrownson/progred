@@ -6,7 +6,8 @@ use muda::{
 use winit::event_loop::EventLoopProxy;
 
 use crate::menu::{self, Entry, Item, Kind, Platform, Selection, ShortcutKey};
-use crate::{UserEvent, ViewFlags};
+use crate::model::ViewFlags;
+use crate::UserEvent;
 
 pub struct Event(MenuEvent);
 

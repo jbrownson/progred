@@ -16,6 +16,7 @@ mod layout;
 #[cfg(target_os = "macos")]
 mod macos_menu;
 mod menu;
+mod model;
 mod projection;
 mod raw;
 mod selection;
@@ -24,6 +25,7 @@ mod store;
 #[cfg(test)]
 mod test_values;
 
+use crate::model::{Model, Selected, ViewFlags};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -159,16 +161,6 @@ struct App {
     /// Routes the discard sheet's answer back into the loop.
     proxy: winit::event_loop::EventLoopProxy<UserEvent>,
     pending_discard: Option<AfterDiscard>,
-}
-
-/// The View menu's frame inputs: which panes and layers this frame
-/// shows.
-#[derive(Clone, Copy, Default)]
-struct ViewFlags {
-    graph: bool,
-    /// The one Raw bit: convention layers derive from it — names
-    /// answer bare identities. Lists stay lists; kind is data.
-    raw: bool,
 }
 
 fn menu_height(scale: f64) -> f64 {
@@ -612,16 +604,6 @@ fn main() {
         .expect("Couldn't run event loop");
 }
 
-/// The app's one selection: the tree's edge or pending, or the
-/// graph's node. A single slot, so selecting in either pane
-/// inherently clears the other — there is nothing to synchronize.
-// One instance lives in the model; the variants' size gap is moot.
-#[allow(clippy::large_enum_variant)]
-enum Selected {
-    Tree(selection::Selection),
-    Graph(graph_view::GraphSelection),
-}
-
 /// The app's one hover, the selection's shape: what the resting
 /// pointer claims in whichever pane it rests over.
 #[derive(Clone, Debug, PartialEq)]
@@ -630,74 +612,6 @@ enum Hovered {
     Graph(graph_view::GraphNode),
     #[cfg(target_os = "linux")]
     Menu(menu::Hover),
-}
-
-struct Model {
-    doc: document::Document,
-    selection: Option<Selected>,
-    collapse: selection::Collapse,
-    /// The name policy: an editor setting, not document state, so it
-    /// survives document swaps.
-    names: conventions::Names,
-    /// The built-in library, read under every document; never
-    /// written, never saved.
-    library: progred_graph::Cells,
-    /// Rust implementations registered by Grap libraries; editor
-    /// configuration rather than document state.
-    foreign: grap::ForeignFunctions,
-    graph: graph_view::GraphView,
-    history: history::History,
-    view: ViewFlags,
-    /// Document scroll offsets in logical pixels, so the position
-    /// survives moving between monitor scales. May exceed the
-    /// current maximum after a resize: placement clamps effectively,
-    /// so a transient shrink-and-grow restores the position;
-    /// scrolling collapses it to the clamped reality. Both axes ride
-    /// the same gesture; scroll BARS are a later affordance.
-    scroll: f64,
-    scroll_x: f64,
-}
-
-impl Model {
-    /// The reading context: this document over the editor's library.
-    fn sources(&self) -> sources::Sources<'_> {
-        sources::Sources {
-            doc: &self.doc,
-            library: &self.library,
-        }
-    }
-
-    fn tree_selection(&self) -> Option<&selection::Selection> {
-        match &self.selection {
-            Some(Selected::Tree(selection)) => Some(selection),
-            _ => None,
-        }
-    }
-
-    fn tree_selection_mut(&mut self) -> Option<&mut selection::Selection> {
-        match &mut self.selection {
-            Some(Selected::Tree(selection)) => Some(selection),
-            _ => None,
-        }
-    }
-
-    fn graph_selection(&self) -> Option<&graph_view::GraphSelection> {
-        match &self.selection {
-            Some(Selected::Graph(selection)) => Some(selection),
-            _ => None,
-        }
-    }
-
-    /// The graph-selected node's value, for the tree's secondary
-    /// marks. Inline records are structure, not identity, so a
-    /// record root's node mirrors no mark.
-    fn graph_node(&self) -> Option<Value> {
-        match self.graph_selection() {
-            Some(graph_view::GraphSelection::Node(node)) => graph_view::node_value(&self.doc, node)
-                .filter(|value| !matches!(value, Value::Record(_))),
-            _ => None,
-        }
-    }
 }
 
 enum HoverHit {
