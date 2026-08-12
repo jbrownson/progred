@@ -24,7 +24,7 @@ use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
 use std::rc::Rc;
 use ui_events::pointer::PointerButton;
-use vello::kurbo::{Affine, Point, Rect, Size, Stroke, Vec2};
+use vello::kurbo::{Affine, Point, Size, Stroke, Vec2};
 use vello::peniko::Brush;
 use vello::Scene;
 
