@@ -3,7 +3,7 @@
 //! resolution read through both sides. Fallback is per cell value:
 //! the document's value wins whole, otherwise the library answers.
 
-use crate::raw::Document;
+use crate::document::Document;
 use progred_graph::{CellId, Cells, Step, Value};
 
 #[derive(Clone, Copy)]

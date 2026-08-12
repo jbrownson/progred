@@ -3,7 +3,7 @@
 //! their application-level evaluation behavior.
 
 use crate::gid::{Binders, parse};
-use crate::raw::Document;
+use crate::document::Document;
 use progred_graph::Value;
 
 fn grap_expression(value: &Value) -> &Value {

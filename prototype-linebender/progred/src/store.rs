@@ -5,7 +5,7 @@
 //! model.
 
 use crate::gid::{self, Binders};
-use crate::raw::Document;
+use crate::document::Document;
 use std::path::Path;
 
 pub fn load(path: &Path) -> Result<(Document, Binders), String> {
@@ -28,7 +28,7 @@ mod tests {
 
     #[test]
     fn documents_round_trip_through_disk() {
-        let doc = crate::raw::sample_document();
+        let doc = crate::document::sample_document();
         let path = std::env::temp_dir().join(format!(
             "progred-store-test-{}.gid",
             std::process::id()

@@ -2,7 +2,7 @@
 //! see docs/gid.md. The parser is lenient in the defined ways
 //! only; the printer is the canon, and saving canonicalizes.
 
-use crate::raw::Document;
+use crate::document::Document;
 use progred_graph::{CellId, Cells, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::collections::HashSet;

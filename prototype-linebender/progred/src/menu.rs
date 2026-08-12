@@ -234,6 +234,10 @@ impl State {
     pub fn close(&mut self) -> bool {
         self.open.take().is_some()
     }
+
+    pub fn captures_key(&self, event: &KeyboardEvent) -> bool {
+        self.open.is_some() && event.state.is_down()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -615,6 +619,17 @@ mod tests {
         state.toggle(1);
         assert_eq!(state.open(), None);
         assert!(!state.close());
+    }
+
+    #[test]
+    fn an_open_menu_captures_other_key_downs() {
+        let mut state = State::default();
+        let mut event = key("x", Modifiers::empty());
+        assert!(!state.captures_key(&event));
+        state.toggle(0);
+        assert!(state.captures_key(&event));
+        event.state = KeyState::Up;
+        assert!(!state.captures_key(&event));
     }
 
     #[test]

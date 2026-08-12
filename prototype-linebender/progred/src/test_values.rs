@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 
 fn sample_relation(name: &str) -> Option<CellId> {
-    use crate::raw::sample_vocabulary as sample;
+    use crate::document::sample_vocabulary as sample;
     match name {
         "at" => Some(sample::AT),
         "row" => Some(sample::ROW),

@@ -6,6 +6,10 @@
 //! values; positions are session bookkeeping and never render at all.
 
 use crate::conventions::Names;
+use crate::display::{Language, NodeLanguage, Styles, TextRole};
+use crate::document::{Document, Path};
+#[cfg(test)]
+use crate::document::{sample_document, sample_vocabulary};
 use crate::filter;
 use crate::hover::HasHover;
 use crate::layout::{
@@ -13,6 +17,7 @@ use crate::layout::{
     row, text, text_edit,
 };
 use crate::sources::Sources;
+use crate::projection::{self, Location};
 use im::OrdMap;
 use parley::layout::Layout;
 use progred_graph::{
@@ -21,7 +26,7 @@ use progred_graph::{
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{
-    EditCtx, EditStyle, LineEditDescription, LineEditPointerDown, LineEditPresentation,
+    EditCtx, LineEditDescription, LineEditPointerDown, LineEditPresentation,
     LineEditState,
 };
 use puri::geometry::Placement;
@@ -31,297 +36,8 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButton;
-use vello::kurbo::{Affine, Circle, Insets, Point, Rect, RoundedRect, Stroke};
+use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
-
-/// Shared with the mounted editors so edited atoms keep their colors.
-const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
-
-pub struct RawStyles {
-    pub label: TextStyle,
-    /// The conventional simple-name field, projected as a cell's
-    /// handle: the strongest text in a block.
-    pub name: TextStyle,
-    pub string: TextStyle,
-    pub dim: TextStyle,
-    /// Byte-identity renderings — short ids, blob hex — in monospace,
-    /// so ids read as ids and align when compared.
-    pub id: TextStyle,
-    pub edit: EditStyle,
-    pub scale: f64,
-}
-
-impl RawStyles {
-    pub fn new(scale: f64) -> Self {
-        let style = |size: f32, color: [f32; 4], weight: Option<f32>| TextStyle {
-            size,
-            brush: Brush::from(Color::new(color)),
-            weight,
-            family: parley::style::GenericFamily::SystemUi,
-        };
-        // A light, native-feeling palette: near-black primary labels,
-        // gray secondary labels, restrained literal accents.
-        Self {
-            label: style(14.0, [0.46, 0.49, 0.55, 1.0], None),
-            name: style(14.0, [0.13, 0.14, 0.16, 1.0], None),
-            string: style(14.0, STRING_COLOR, None),
-            dim: style(13.0, [0.55, 0.58, 0.64, 1.0], None),
-            id: TextStyle {
-                family: parley::style::GenericFamily::Monospace,
-                ..style(13.0, [0.55, 0.58, 0.64, 1.0], None)
-            },
-            edit: EditStyle {
-                selection: Brush::from(Color::new([0.0, 0.48, 1.0, 0.30])),
-                cursor: Brush::from(Color::new([0.13, 0.14, 0.16, 1.0])),
-            },
-            scale,
-        }
-    }
-}
-
-/// A document: its `root` value plus the cell table holding every
-/// identity's current value. Every projection path starts at `root` —
-/// typically a link, or an inline record keying the document's parts
-/// by role. The root is a location like any other — the empty path —
-/// so edits there commit to this field, and deleting it empties the
-/// document. Clones are O(1): the table and its values share
-/// structure, which is what makes snapshot undo free.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct Document {
-    pub root: Option<Value>,
-    pub cells: Cells,
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-pub mod sample_vocabulary {
-    use progred_graph::CellId;
-
-    pub const AT: CellId = CellId::from_u128(0x4c2cb3268f1911bd26a0eb74622ba097);
-    pub const ROW: CellId = CellId::from_u128(0xa791e4873aa95e21bc925dacbbbf6ea5);
-    pub const COL: CellId = CellId::from_u128(0x64bad273f94f32f9957b99a6e4d14d39);
-    pub const OF: CellId = CellId::from_u128(0x4544b0db160b6330f20a69dd3ce34e2d);
-    pub const COLOR: CellId = CellId::from_u128(0x897fc1c794c08a0506590276aa72a3d7);
-    pub const SWATCH: CellId = CellId::from_u128(0xf2aadbb9e548ea30aceb7fed5773ea8a);
-    pub const POINTS: CellId = CellId::from_u128(0xe92356b75104edae387062fcf8a859e0);
-    pub const TAGS: CellId = CellId::from_u128(0x41f5587d6560bfbebc9fb72fb0728e27);
-    pub const MATERIAL: CellId = CellId::from_u128(0xc7c1197574183c44d7e038cb52d78760);
-    pub const STYLE: CellId = CellId::from_u128(0x2b9652d2cb8cb5c9d633b34d827048b1);
-    pub const PITCH: CellId = CellId::from_u128(0x563079b77defe2a26abcdccfa47655ed);
-    pub const DOUBLE_PITCH: CellId = CellId::from_u128(0xe69c085ed00f5270f24a895cca9cd7d6);
-    pub const PROFILE: CellId = CellId::from_u128(0x3624cc3724556440847e7da953d398fc);
-    pub const SHAPE: CellId = CellId::from_u128(0xb5db29c46198e28df0c26ac4aa5a411a);
-    pub const FAVORITE: CellId = CellId::from_u128(0xa83b16a0d85afeb98d46c3459f2e7e16);
-}
-
-/// A small document shaped like a real one. The root is an inline
-/// RECORD of roles — a document keys its parts by what they are to
-/// it, and needs no identity of its own to do so. Simple names are
-/// ordinary record fields ("roof", not its kind). The corner knows its roof (cycle
-/// collapse on a real pattern); the style cell is unnamed and
-/// referenced twice (short-id heads, secondary marks); the stroke
-/// cell holds only an ordinary name record and is referenced as a
-/// label; the
-/// material cell is fully bare — referenced before anything at all
-/// is said about it; the swatch is a blob; each point's position is
-/// an inline record, point-shaped data that wants to be a value; the
-/// favorite cell holds a bare LINK to the corner — the alias pattern;
-/// and pitch flows through a small Grap function to a projected
-/// computed result.
-/// The app starts EMPTY now; this is the test fixture, and its
-/// printed form is checked in as sample.gid.
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn sample_document() -> Document {
-    let mut cells = Cells::new();
-    for (cell, name) in [
-        (sample_vocabulary::AT, "at"),
-        (sample_vocabulary::ROW, "row"),
-        (sample_vocabulary::COL, "col"),
-        (sample_vocabulary::OF, "of"),
-        (sample_vocabulary::COLOR, "color"),
-        (sample_vocabulary::SWATCH, "swatch"),
-        (sample_vocabulary::POINTS, "points"),
-        (sample_vocabulary::TAGS, "tags"),
-        (sample_vocabulary::MATERIAL, "material"),
-        (sample_vocabulary::STYLE, "style"),
-        (sample_vocabulary::PITCH, "pitch"),
-        (sample_vocabulary::DOUBLE_PITCH, "double pitch"),
-        (sample_vocabulary::PROFILE, "profile"),
-        (sample_vocabulary::SHAPE, "shape"),
-        (sample_vocabulary::FAVORITE, "favorite"),
-    ] {
-        cells.set_value(cell, progred_name::record(name, []));
-    }
-    let roof = new_cell_id();
-
-    let origin = new_cell_id();
-    cells.set_value(
-        origin,
-        progred_name::record(
-            "origin",
-            [(
-                sample_vocabulary::AT,
-                Value::record([
-                    (
-                        sample_vocabulary::ROW,
-                        progred_text::value("top"),
-                    ),
-                    (
-                        sample_vocabulary::COL,
-                        progred_text::value("left"),
-                    ),
-                ]),
-            )],
-        ),
-    );
-
-    let corner = new_cell_id();
-    cells.set_value(
-        corner,
-        progred_name::record(
-            "corner",
-            [
-                (
-                    sample_vocabulary::AT,
-                    Value::record([
-                        (
-                            sample_vocabulary::ROW,
-                            progred_text::value("bottom"),
-                        ),
-                        (
-                            sample_vocabulary::COL,
-                            progred_text::value("right"),
-                        ),
-                    ]),
-                ),
-                // A part that knows its whole: the cycle a real document
-                // has, rendered as a collapsed head rather than recursing
-                // forever.
-                (sample_vocabulary::OF, Value::from(roof)),
-            ],
-        ),
-    );
-
-    let stroke = new_cell_id();
-    cells.set_value(stroke, progred_name::record("stroke", []));
-
-    let style = new_cell_id();
-    cells.set_value(
-        style,
-        Value::record([
-            (
-                sample_vocabulary::COLOR,
-                progred_text::value("rebeccapurple"),
-            ),
-            // #663399, as bytes.
-            (
-                sample_vocabulary::SWATCH,
-                Value::from(vec![0x66, 0x33, 0x99]),
-            ),
-        ]),
-    );
-
-    let material = new_cell_id();
-
-    let favorite = new_cell_id();
-    cells.set_value(favorite, Value::from(corner));
-
-    let amount = new_cell_id();
-    cells.set_value(amount, progred_name::record("amount", []));
-
-    let double = new_cell_id();
-    cells.set_value(
-        double,
-        progred_name::record(
-            "double",
-            [
-                (
-                    grap::vocabulary::PARAMS,
-                    Value::list([Value::from(amount)]),
-                ),
-                (
-                    grap::vocabulary::BODY,
-                    grap::call(
-                        Value::from(grap_f64::vocabulary::MULTIPLY),
-                        [
-                            (grap_f64::vocabulary::LEFT, Value::from(amount)),
-                            (
-                                grap_f64::vocabulary::RIGHT,
-                                grap_f64::value(2.0),
-                            ),
-                        ],
-                    ),
-                ),
-            ],
-        ),
-    );
-
-    let pitch = new_cell_id();
-    cells.set_value(pitch, grap_f64::value(2.5));
-
-    let double_pitch = || grap::call(Value::from(double), [(amount, Value::from(pitch))]);
-    let grap_projection = |expression| {
-        Value::record([(crate::conventions::vocabulary::GRAP, expression)])
-    };
-
-    cells.set_value(
-        roof,
-        progred_name::record(
-            "roof",
-            [
-                (
-                    sample_vocabulary::POINTS,
-                    Value::list([Value::from(origin), Value::from(corner)]),
-                ),
-                (stroke, progred_text::value("hairline")),
-                (
-                    sample_vocabulary::TAGS,
-                    Value::list([progred_text::value("draft"), progred_text::value("gabled")]),
-                ),
-                (
-                    sample_vocabulary::MATERIAL,
-                    Value::from(material),
-                ),
-                (sample_vocabulary::STYLE, Value::from(style)),
-                (sample_vocabulary::PITCH, Value::from(pitch)),
-                (
-                    sample_vocabulary::DOUBLE_PITCH,
-                    grap_projection(double_pitch()),
-                ),
-                (
-                    sample_vocabulary::PROFILE,
-                    grap_projection(grap::call(
-                        Value::from(grap_geometry::vocabulary::CIRCLE),
-                        [(
-                            grap_geometry::vocabulary::RADIUS,
-                            grap::call(
-                                Value::from(grap_f64::vocabulary::MULTIPLY),
-                                [
-                                    (grap_f64::vocabulary::LEFT, double_pitch()),
-                                    (
-                                        grap_f64::vocabulary::RIGHT,
-                                        grap_f64::value(8.0),
-                                    ),
-                                ],
-                            ),
-                        )],
-                    )),
-                ),
-            ],
-        ),
-    );
-
-    Document {
-        root: Some(Value::record([
-            (sample_vocabulary::SHAPE, Value::from(roof)),
-            (sample_vocabulary::STYLE, Value::from(style)),
-            (
-                sample_vocabulary::FAVORITE,
-                Value::from(favorite),
-            ),
-        ])),
-        cells,
-    }
-}
 
 /// Per-path collapse overrides. An absent entry means "use the
 /// default", which is collapsed inside a cycle and expanded otherwise;
@@ -351,7 +67,7 @@ struct Cx<'a> {
     /// bit. Nothing else is swapped anywhere.
     raw: bool,
     collapse: &'a Collapse,
-    styles: &'a RawStyles,
+    styles: &'a Styles,
     selection: Option<&'a Selection>,
     /// The pointer's current claim, previewed by the target it names.
     hover: Option<&'a Hover>,
@@ -360,93 +76,19 @@ struct Cx<'a> {
     /// The value the hover refers to; its projections carry the faint
     /// hover variant of the secondary mark.
     secondary_hover: Option<Value>,
-    /// A domain projection may stand another view in for a value's
-    /// record form. It stands down in Raw, which shows structure as
-    /// stored.
-    projection: DomainProjection<'a>,
-    /// A field projection may reinterpret the value under a specific
-    /// label while leaving the enclosing record and its other fields
-    /// intact.
-    field_projection: FieldProjection<'a>,
-    /// An evaluator has already produced this subtree. Domain
-    /// projections still render its values, but a `grap` field in the
-    /// returned data is inert rather than requesting a second evaluation.
-    normal_form: bool,
-    /// A derived normal form has no stored child paths. Its root maps
-    /// back to the stored field value; descendants are display-only.
-    derived_root: Option<&'a [Step]>,
+    source: Source<'a>,
 }
 
-pub enum StandIn {
-    Text(String),
-    Circle { radius: f64 },
-    NormalForm(Value),
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Stored,
+    Transient { owner: &'a [Step] },
 }
 
-pub(crate) fn whole_text(value: &Value) -> Option<&str> {
-    let text = progred_text::read(value)?;
-    value
-        .as_record()?
-        .keys()
-        .all(|label| *label == progred_text::vocabulary::UTF8)
-        .then_some(text)
-}
-
-fn whole_f64(value: &Value) -> Option<f64> {
-    let number = grap_f64::read(value)?;
-    value
-        .as_record()?
-        .keys()
-        .all(|label| *label == grap_f64::vocabulary::F64)
-        .then_some(number)
-}
-
-fn whole_circle(value: &Value) -> Option<f64> {
-    let radius = grap_geometry::read(value)?;
-    let fields = value.as_record()?;
-    let circle = fields
-        .get(&grap_geometry::vocabulary::CIRCLE)?
-        .as_record()?;
-    let radius_value = circle.get(&grap_geometry::vocabulary::RADIUS)?;
-    (fields
-        .keys()
-        .all(|label| *label == grap_geometry::vocabulary::CIRCLE)
-        && circle
-            .keys()
-            .all(|label| *label == grap_geometry::vocabulary::RADIUS)
-        && radius_value
-            .as_record()?
-            .keys()
-            .all(|label| *label == grap_f64::vocabulary::F64))
-    .then_some(radius)
-}
-
-/// Compact whole-value projections supplied by the current numeric
-/// and geometry libraries. Semantic recognition remains open, while
-/// these stand-ins require the whole record so no fields disappear.
-pub(crate) fn value_stand_in(expression: &Value) -> Option<StandIn> {
-    whole_f64(expression)
-        .map(|number| StandIn::Text(number.to_string()))
-        .or_else(|| whole_circle(expression).map(|radius| StandIn::Circle { radius }))
-}
-
-pub type DomainProjection<'a> = Option<&'a dyn Fn(&Value) -> Option<StandIn>>;
-pub type FieldProjection<'a> = Option<&'a dyn Fn(CellId, &Value) -> Option<StandIn>>;
-
-/// Projection of the value under Progred's `grap` field. The field
-/// and enclosing record remain ordinary visible structure; only this
-/// child is evaluated. Core Grap does not know the field exists.
-pub(crate) fn grap_field_stand_in(
-    field: CellId,
-    expression: &Value,
-    resolve: impl Fn(CellId) -> Option<Value>,
-    foreign: &grap::ForeignFunctions,
-) -> Option<StandIn> {
-    (field == crate::conventions::vocabulary::GRAP).then(|| {
-        StandIn::NormalForm(
-            grap::evaluate(expression, resolve, foreign, grap::DEFAULT_FUEL).result,
-        )
-    })
+impl Source<'_> {
+    fn transient(self) -> bool {
+        matches!(self, Self::Transient { .. })
+    }
 }
 
 /// A reported click on projected text, in text-local coordinates.
@@ -562,16 +204,10 @@ impl Cx<'_> {
     }
 }
 
-/// A location in the projected spanning tree: Key steps into record
-/// fields, Element steps into list values, Follow steps through a
-/// link to its cell's current value. The same value can be projected
-/// at several paths, so the path — not the value — is the identity a
-/// selection names; every reference site unfolds through its own
-/// Follow, and no site is the value's home. List elements sit at
-/// positions sibling edits never move; wraps and unwraps will adjust
-/// path-keyed state through one general rewrite — see
-/// `docs/model.md`.
-pub type Path = Vec<Step>;
+pub(crate) struct ValueEditState {
+    line: LineEditState,
+    handler: crate::display::EditHandler,
+}
 
 /// What is selected: the value at a path, or a nonexistent field
     /// being authored. A selected editable atom carries its live editor state —
@@ -583,7 +219,7 @@ pub type Path = Vec<Step>;
 pub enum Selection {
     Edge {
         path: Path,
-        edit: Option<LineEditState>,
+        edit: Option<ValueEditState>,
         /// Whether this editor's write-through run has recorded its
         /// undo step: the run is the editor's lifetime, so the first
         /// write records and the rest coalesce by staying silent.
@@ -635,22 +271,14 @@ impl Selection {
         // An editor mounts only where write-through can land: the
         // owning cell must not be external.
         let edit = writable_at(sources, &path)
-            .then(|| {
-                sources
-                    .resolve(&path)
-                    .and_then(|value| {
-                        whole_text(value)
-                            .map(line_edit)
-                            .or_else(|| {
-                                whole_f64(value)
-                                    .map(|number| line_edit(&number.to_string()))
-                            })
-                    })
-            })
+            .then(|| sources.resolve(&path).and_then(projection::editor))
             .flatten();
         Selection::Edge {
             path,
-            edit,
+            edit: edit.map(|editor| ValueEditState {
+                line: line_edit(&editor.text),
+                handler: editor.handler,
+            }),
             recorded: false,
         }
     }
@@ -664,14 +292,14 @@ impl Selection {
 
     pub fn edit(&self) -> Option<&LineEditState> {
         match self {
-            Selection::Edge { edit, .. } => edit.as_ref(),
+            Selection::Edge { edit, .. } => edit.as_ref().map(|edit| &edit.line),
             Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => Some(query),
         }
     }
 
     pub fn edit_mut(&mut self) -> Option<&mut LineEditState> {
         match self {
-            Selection::Edge { edit, .. } => edit.as_mut(),
+            Selection::Edge { edit, .. } => edit.as_mut().map(|edit| &mut edit.line),
             Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => Some(query),
         }
     }
@@ -1028,7 +656,7 @@ pub fn resolve_query(text: &str) -> Value {
 /// presence is what says "structure" — never the text's shape, so
 /// text that happens to spell Value JSON stays text.
 pub fn to_clipboard(value: &Value) -> (String, bool) {
-    match (whole_text(value), value.as_blob()) {
+    match (projection::whole_text(value), value.as_blob()) {
         (Some(text), _) => (format!("\"{text}\""), false),
         (_, Some(_)) => (value.to_string(), false),
         _ => (
@@ -1419,7 +1047,7 @@ fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
         .resolve(path)
         // Compact atom projections are leaves. Once another field
         // enriches either convention, the visible record is collapsible.
-        .filter(|value| whole_text(value).is_none() && whole_f64(value).is_none())
+        .filter(|value| !projection::editable(value))
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
             Value::Blob(_) => false,
@@ -1445,8 +1073,8 @@ fn store_collapse(collapse: &mut Collapse, path: &[Step], default: bool, next: b
 
 /// Writes the selection's editor text through to its location after
 /// every handled event — the graph is the source of truth. The
-/// edited kind follows the current value: compact text and f64 values mount
-/// editors, and valid intermediate values write every keystroke. Everything funnels
+/// The projection that mounted the editor supplies its text-to-value
+/// handler, and valid intermediate values write every keystroke. Everything funnels
 /// through [`set_value`], so an element edit rebuilds its list at
 /// the owning cell and a location that no longer takes the write
 /// drops it silently — the malformed-graph rule at the mutation
@@ -1465,7 +1093,7 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
     let Some(edit) = edit else {
         return false;
     };
-    let text = edit.text().to_string();
+    let text = edit.line.text().to_string();
     let wrote = {
         let (current, next) = {
             let sources = Sources {
@@ -1473,15 +1101,7 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
                 library,
             };
             let current = sources.resolve(path);
-            let next = current.and_then(|value| {
-                whole_text(value)
-                    .map(|_| progred_text::value(text.clone()))
-                    .or_else(|| {
-                        whole_f64(value)
-                            .and_then(|_| text.parse::<f64>().ok())
-                            .map(grap_f64::value)
-                    })
-            });
+            let next = current.and_then(|current| edit.handler.apply(current, &text));
             (current.cloned(), next)
         };
         match next {
@@ -1775,7 +1395,9 @@ pub fn hover_value(
     match hover {
         Hover::Value(path) => sources
             .resolve(path)
-            .filter(|value| !matches!(value, Value::Record(_)) || whole_text(value).is_some())
+            .filter(|value| {
+                !matches!(value, Value::Record(_)) || projection::whole_text(value).is_some()
+            })
             .cloned(),
         // A dead address answers nothing: the label must still be in
         // the document, or a rename under a parked pointer would keep
@@ -1815,7 +1437,7 @@ const TOP_TRIM_EM: f64 = 0.929 - GLYPH_ASC_EM;
 const BOTTOM_TRIM_EM: f64 = 0.249 - GLYPH_DESC_EM;
 const SIDE_BEARING_EM: f64 = 0.05;
 
-fn delim_style(styles: &RawStyles) -> DelimStyle {
+fn delim_style(styles: &Styles) -> DelimStyle {
     DelimStyle::for_text_size(14.0 * styles.scale)
 }
 
@@ -1823,7 +1445,7 @@ fn delim_style(styles: &RawStyles) -> DelimStyle {
 /// what layout charges at any height. A grown tall delimiter
 /// OVERHANGS its advance on the outward side, the way a glyph's ink
 /// may exceed its advance; layout never pays for growth.
-fn delim_advance(styles: &RawStyles, delim: Delim) -> f64 {
+fn delim_advance(styles: &Styles, delim: Delim) -> f64 {
     delim_style(styles).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * styles.scale
 }
 
@@ -1843,7 +1465,7 @@ fn one_line(extent: Extent, scale: f64) -> bool {
 /// costs layout nothing and nested delimiters bow into each other's
 /// empty sides.
 fn delim_leaf<P: Canvas>(
-    styles: &RawStyles,
+    styles: &Styles,
     delim: Delim,
     open: bool,
     extent: Extent,
@@ -1879,7 +1501,7 @@ fn delim_leaf<P: Canvas>(
 /// A one-line delimiter at the font's own glyph span: the drawn
 /// family's flat form, sitting in a text row exactly where the glyph
 /// would.
-fn flat_delim<P: Canvas>(styles: &RawStyles, delim: Delim, open: bool) -> Node<P> {
+fn flat_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool) -> Node<P> {
     let em = 14.0 * styles.scale;
     let (asc, desc) = (GLYPH_ASC_EM * em, GLYPH_DESC_EM * em);
     delim_leaf(
@@ -1898,7 +1520,7 @@ fn flat_delim<P: Canvas>(styles: &RawStyles, delim: Delim, open: bool) -> Node<P
 
 /// A delimiter stretched over `content`'s extent, ink trimmed to meet
 /// the glyph span on the first and last lines.
-fn tall_delim<P: Canvas>(styles: &RawStyles, delim: Delim, open: bool, content: Extent) -> Node<P> {
+fn tall_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool, content: Extent) -> Node<P> {
     let em = 14.0 * styles.scale;
     let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
     let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
@@ -1953,7 +1575,7 @@ fn bracketed<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
 /// The one width every slot state shares: the cold box IS this wide,
 /// and the engaged query's frame never lets the field get narrower —
 /// the parity that keeps engagement from moving anything sideways.
-fn slot_width(styles: &RawStyles) -> f64 {
+fn slot_width(styles: &Styles) -> f64 {
     1.5 * 14.0 * styles.scale
 }
 
@@ -1966,7 +1588,7 @@ fn slot_width(styles: &RawStyles) -> f64 {
 /// the paint changes. The charge is exactly the text frame: the
 /// empty line SHAPED, the same runtime metrics the engaged editor's
 /// frame takes — no measured constants, one source.
-fn placeholder_box<P: Canvas>(tcx: &mut TextCtx, styles: &RawStyles) -> Node<P> {
+fn placeholder_box<P: Canvas>(tcx: &mut TextCtx, styles: &Styles) -> Node<P> {
     let line = text::<P>(tcx, "", &styles.name).extent;
     let extent = Extent {
         width: slot_width(styles),
@@ -2064,17 +1686,17 @@ fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
 /// itself for keyboard navigation. Views whose boxes span structural
 /// whitespace use [`descend_landmark`] plus explicit content claims
 /// instead.
-fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends>(
+fn source_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends>(
     cx: &Cx,
     path: Path,
     value: Option<Value>,
     hooks: &Hooks<C>,
     child: Node<P>,
 ) -> Node<P> {
-    let (path, derived) = match cx.derived_root {
-        Some(root) if root != path.as_slice() => return child,
-        Some(root) => (root.to_vec(), true),
-        None => (path, false),
+    let (path, transient) = match cx.source {
+        Source::Transient { owner } if owner != path.as_slice() => return child,
+        Source::Transient { owner } => (owner.to_vec(), true),
+        Source::Stored => (path, false),
     };
     let scale = cx.styles.scale;
     let selected = cx.selected(&path);
@@ -2088,7 +1710,7 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
         } else if hovered {
             hover_highlight(scale, p, rect);
         }
-        if !derived {
+        if !transient {
             hover_claim(p, placement, Hover::Value(path.clone()));
         }
         let select = select.clone();
@@ -2107,7 +1729,7 @@ fn descend<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDes
                     true
                 }
         });
-        if !derived {
+        if !transient {
             p.descends().push(Descend { path, rect });
         }
     })
@@ -2122,7 +1744,9 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
     match selection? {
         Selection::Edge { path, .. } => sources
             .resolve(path)
-            .filter(|value| !matches!(value, Value::Record(_)) || whole_text(value).is_some())
+            .filter(|value| {
+                !matches!(value, Value::Record(_)) || projection::whole_text(value).is_some()
+            })
             .cloned(),
         _ => None,
     }
@@ -2140,10 +1764,9 @@ pub struct ProjectDescription<'a> {
     pub collapse: &'a Collapse,
     pub names: &'a Names,
     pub raw: bool,
-    pub styles: &'a RawStyles,
+    pub styles: &'a Styles,
     pub width: f64,
-    pub projection: DomainProjection<'a>,
-    pub field_projection: FieldProjection<'a>,
+    pub projection: projection::Projection<'a>,
 }
 
 pub fn project<
@@ -2166,7 +1789,6 @@ pub fn project<
         styles,
         width,
         projection,
-        field_projection,
     } = description;
     let cx = Cx {
         sources,
@@ -2176,10 +1798,7 @@ pub fn project<
         styles,
         selection,
         hover,
-        projection,
-        field_projection,
-        normal_form: false,
-        derived_root: None,
+        source: Source::Stored,
         // The graph view's selected cell is a secondary here too:
         // its projections are the same value — and the graph view's
         // HOVERED cell is a hover secondary the same way.
@@ -2192,10 +1811,15 @@ pub fn project<
     // nothing else changes — lists and records render as themselves
     // there too, since kind is data, not convention. An empty
     // document is a selectable placeholder at the root path.
-    match sources.root() {
-        Some(root) => value_view::<C, P>(&cx, tcx, &[], &HashSet::new(), root, width, &hooks),
-        None => pending_view(&cx, tcx, Vec::new(), &hooks),
-    }
+    (if raw { projection.raw() } else { projection }).project::<C, P>(
+        &cx,
+        tcx,
+        &[],
+        &HashSet::new(),
+        Location::Root(sources.root()),
+        width,
+        &hooks,
+    )
 }
 
 /// A link rendered as its cell: PARENS are the cell's syntax — `(`
@@ -2204,7 +1828,7 @@ pub fn project<
 /// field, when present, is projected as the head while retaining its
 /// ordinary `Follow, Key(name)` path — selectable, editable,
 /// two-stage. The value after the head is an
-/// ordinary [`value_view`] at the Follow step, whatever its kind:
+/// ordinary [`descend`] at the Follow step, whatever its kind:
 /// the drawn parens stretch over whatever height it takes, and when
 /// head-beside-value overflows the width remaining here the cell
 /// BREAKS like a field row — head on its own line, value dropped
@@ -2221,6 +1845,7 @@ pub fn project<
 /// opens one more turn, as deep as you care to follow. The parens
 /// and the head claim cell-selection; gaps between claims fall
 /// through.
+#[allow(clippy::too_many_arguments)]
 fn cell_view<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
@@ -2232,6 +1857,7 @@ fn cell_view<
     cell: CellId,
     avail: f64,
     hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let name = cx.name(cell);
@@ -2272,10 +1898,23 @@ fn cell_view<
         // invitation, the affordance-lie rule in notation.
         None if cx.sources.writable(cell) => row(
             4.0 * scale,
-            vec![head, pending_view(cx, tcx, followed, hooks)],
+            vec![
+                head,
+                descend(
+                    cx,
+                    tcx,
+                    path,
+                    ancestors,
+                    &target,
+                    Step::Follow,
+                    avail,
+                    hooks,
+                    projection,
+                ),
+            ],
         ),
         None => head,
-        Some(value) => {
+        Some(_) => {
             let mut inner = ancestors.clone();
             inner.insert(cell);
             // The field-row discipline inside the parens: hug only
@@ -2291,18 +1930,30 @@ fn cell_view<
             let tab = 20.0 * scale;
             let hug = beside >= inside - tab
                 || (beside > 0.0
-                    && value_view::<C, P>(cx, tcx, &followed, &inner, value, f64::INFINITY, hooks)
+                    && descend::<C, P>(
+                        cx,
+                        tcx,
+                        path,
+                        &inner,
+                        &target,
+                        Step::Follow,
+                        f64::INFINITY,
+                        hooks,
+                        projection,
+                    )
                         .extent
                         .width
                         <= beside);
-            let value_node = value_view(
+            let value_node = descend(
                 cx,
                 tcx,
-                &followed,
+                path,
                 &inner,
-                value,
+                &target,
+                Step::Follow,
                 if hug { beside } else { inside - tab }.max(0.0),
                 hooks,
+                projection,
             );
             if hug {
                 row(4.0 * scale, vec![head, value_node])
@@ -2326,7 +1977,7 @@ fn cell_view<
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
 fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>) -> Node<P> {
-    if cx.derived_root.is_some() {
+    if cx.source.transient() {
         return child;
     }
     let selected = cx.selected(&path);
@@ -2399,10 +2050,10 @@ fn head_view<
         } else {
             secondary_mark(cx, &mark, content)
         };
-        descend(cx, edge, Some(target), hooks, content)
+        source_target(cx, edge, Some(target), hooks, content)
     } else {
         let content = secondary_mark(cx, &mark, content);
-        if cx.derived_root.is_some() {
+        if cx.source.transient() {
             content
         } else {
             decorate(content, move |p: &mut P, rect| {
@@ -2412,47 +2063,14 @@ fn head_view<
     }
 }
 
-/// Project a record field's value in the context supplied by its
-/// label. Unlike a whole-value stand-in, this leaves the record and
-/// field head visible. Grap uses it to show the ordinary expression
-/// and its evaluated normal form; normal-form children deliberately
-/// skip field projection.
-fn field_value_view<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &HashSet<CellId>,
-    key: CellId,
-    value: &Value,
-    avail: f64,
-    hooks: &Hooks<C>,
-) -> Node<P> {
-    match (!cx.raw && !cx.normal_form)
-        .then(|| {
-            cx.field_projection
-                .and_then(|projection| projection(key, value))
-        })
-        .flatten()
-    {
-        Some(StandIn::NormalForm(result)) => evaluation_view(
-            cx, tcx, path, ancestors, value, result, avail, hooks,
-        ),
-        Some(stand_in) => stand_in_view(cx, tcx, path, value, hooks, stand_in),
-        None => value_view(cx, tcx, path, ancestors, value, avail, hooks),
-    }
-}
-
 /// The projection-level account of evaluation: the stored expression
 /// remains an ordinary editable projection, followed by projection
-/// chrome and the read-only derived normal form. Keeping the expression
+/// chrome and the read-only transient result. Keeping the expression
 /// arm ordinary also preserves hover/secondary links to its other cell
 /// projections. Prefer one line; when it cannot fit, keep the arrow
 /// attached to the result on the following row.
 #[allow(clippy::too_many_arguments)]
-fn evaluation_view<
+fn evaluation_projection<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
@@ -2464,49 +2082,73 @@ fn evaluation_view<
     result: Value,
     avail: f64,
     hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let gap = 6.0 * scale;
+    let data_projection = projection.without_evaluation();
     let flat = (avail > 0.0)
         .then(|| {
-            row(
-                gap,
-                vec![
-                    value_view(
-                        cx,
-                        tcx,
-                        path,
-                        ancestors,
-                        expression,
-                        f64::INFINITY,
-                        hooks,
-                    ),
-                    text(tcx, "→", &cx.styles.dim),
-                    normal_form_view(
-                        cx,
-                        tcx,
-                        path,
-                        result.clone(),
-                        f64::INFINITY,
-                        hooks,
-                    ),
-                ],
+            let expression = project_present_value(
+                cx,
+                tcx,
+                path,
+                ancestors,
+                expression,
+                f64::INFINITY,
+                hooks,
+                data_projection,
+            );
+            let arrow = NodeLanguage::<C, P>::new(
+                tcx,
+                cx.styles,
+                None,
+                hooks.edit.clone(),
             )
+            .text("→", TextRole::Dim);
+            let result = project_transient_root(
+                cx,
+                tcx,
+                path,
+                result.clone(),
+                f64::INFINITY,
+                hooks,
+                data_projection,
+            );
+            NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+                .row(6.0, vec![expression, arrow, result])
         })
         .filter(|candidate| one_line(candidate.extent, scale));
     if let Some(candidate) = flat.filter(|candidate| candidate.extent.width <= avail) {
         return candidate;
     }
 
-    let arrow = text(tcx, "→", &cx.styles.dim);
+    let arrow = NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+        .text("→", TextRole::Dim);
     let result_avail = (avail - arrow.extent.width - gap).max(0.0);
-    let expression = value_view(cx, tcx, path, ancestors, expression, avail, hooks);
-    let result = normal_form_view(cx, tcx, path, result, result_avail, hooks);
-    col(
-        0,
-        2.0 * scale,
-        vec![expression, row(gap, vec![arrow, result])],
-    )
+    let expression = project_present_value(
+        cx,
+        tcx,
+        path,
+        ancestors,
+        expression,
+        avail,
+        hooks,
+        data_projection,
+    );
+    let result = project_transient_root(
+        cx,
+        tcx,
+        path,
+        result,
+        result_avail,
+        hooks,
+        data_projection,
+    );
+    let result_row = NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+        .row(6.0, vec![arrow, result]);
+    NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+        .col(0, 2.0, vec![expression, result_row])
 }
 
 /// One record field row: the label-and-colon head, then the value (or
@@ -2532,10 +2174,12 @@ fn field_row<
     tcx: &mut TextCtx,
     parent: &[Step],
     ancestors: &HashSet<CellId>,
+    parent_value: &Value,
     key: CellId,
     value: Option<Value>,
     avail: f64,
     hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
@@ -2555,8 +2199,24 @@ fn field_row<
         Some(_) => select_target(child.clone(), Value::Cell(key), hooks, head),
         None => pick_target(key, hooks, head),
     };
-    let Some(value) = value else {
-        return row(6.0 * scale, vec![head, pending_view(cx, tcx, child, hooks)]);
+    let Some(_) = value else {
+        return row(
+            6.0 * scale,
+            vec![
+                head,
+                descend(
+                    cx,
+                    tcx,
+                    parent,
+                    ancestors,
+                    parent_value,
+                    Step::Key(key),
+                    avail,
+                    hooks,
+                    projection,
+                ),
+            ],
+        );
     };
     // The hug decision probes the value's FLAT form: hug only where
     // the value stays WHOLE beside the label, so the first break
@@ -2577,28 +2237,30 @@ fn field_row<
     // probe that probed would recurse the exponential right back.
     let hug = beside >= avail - tab
         || (beside > 0.0
-            && field_value_view::<C, P>(
+            && descend::<C, P>(
                 cx,
                 tcx,
-                &child,
+                parent,
                 ancestors,
-                key,
-                &value,
+                parent_value,
+                Step::Key(key),
                 f64::INFINITY,
                 hooks,
+                projection,
             )
             .extent
             .width
                 <= beside);
-    let content = field_value_view(
+    let content = descend(
         cx,
         tcx,
-        &child,
+        parent,
         ancestors,
-        key,
-        &value,
+        parent_value,
+        Step::Key(key),
         if hug { beside } else { avail - tab }.max(0.0),
         hooks,
+        projection,
     );
     if hug {
         row(6.0 * scale, vec![head, content])
@@ -2658,6 +2320,7 @@ fn pending_edge_row<
 /// their own and no cycle through them — only linked cells can
 /// recurse; a cell holding one wraps this same view in its stretched
 /// parens.
+#[allow(clippy::too_many_arguments)]
 fn list_view<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
@@ -2669,6 +2332,7 @@ fn list_view<
     elements: &OrdMap<Position, Value>,
     avail: f64,
     hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let mut items: Vec<(Position, Option<Value>)> = elements
@@ -2724,7 +2388,7 @@ fn list_view<
                 path.to_vec(),
                 flat_delim(cx.styles, Delim::Bracket, true),
             )];
-            for (index, (position, value)) in items.iter().enumerate() {
+            for (index, (position, _)) in items.iter().enumerate() {
                 if index > 0 {
                     // The separator is the between: writable, its click
                     // opens a pending right here.
@@ -2737,14 +2401,17 @@ fn list_view<
                         separator
                     });
                 }
-                let mut child = path.to_vec();
-                child.push(Step::Element(position.clone()));
-                cells.push(match value {
-                    Some(value) => {
-                        value_view(cx, tcx, &child, ancestors, value, f64::INFINITY, hooks)
-                    }
-                    None => pending_view(cx, tcx, child, hooks),
-                });
+                cells.push(descend(
+                    cx,
+                    tcx,
+                    path,
+                    ancestors,
+                    &target,
+                    Step::Element(position.clone()),
+                    f64::INFINITY,
+                    hooks,
+                    projection,
+                ));
             }
             cells.push(hover_target(
                 path.to_vec(),
@@ -2767,13 +2434,18 @@ fn list_view<
     // leading dash would restate all three.
     let rows: Vec<Node<P>> = items
         .into_iter()
-        .map(|(position, value)| {
-            let mut child = path.to_vec();
-            child.push(Step::Element(position));
-            match value {
-                Some(value) => value_view(cx, tcx, &child, ancestors, &value, inside, hooks),
-                None => pending_view(cx, tcx, child, hooks),
-            }
+        .map(|(position, _)| {
+            descend(
+                cx,
+                tcx,
+                path,
+                ancestors,
+                &target,
+                Step::Element(position),
+                inside,
+                hooks,
+                projection,
+            )
         })
         .collect();
     // The block form: the brackets span the element column and are
@@ -2808,6 +2480,7 @@ fn list_view<
 /// one line reads as that literal; anything else takes the block
 /// form, the drawn braces spanning the field rows as a column. A
 /// cell holding one wraps this same view in its stretched parens.
+#[allow(clippy::too_many_arguments)]
 fn record_view<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
@@ -2819,6 +2492,7 @@ fn record_view<
     fields: &OrdMap<CellId, Value>,
     avail: f64,
     hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
 ) -> Node<P> {
     let scale = cx.styles.scale;
     let consumes_simple_name = !cx.raw
@@ -2831,7 +2505,7 @@ fn record_view<
             .is_some()
         && fields
             .get(&progred_name::vocabulary::NAME)
-            .and_then(whole_text)
+            .and_then(projection::whole_text)
             .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(CellId, Option<Value>)> = fields
         .iter()
@@ -2901,7 +2575,7 @@ fn record_view<
                 path.to_vec(),
                 flat_delim(cx.styles, Delim::Brace, true),
             )];
-            for (index, (key, value)) in items.iter().enumerate() {
+            for (index, (key, _)) in items.iter().enumerate() {
                 if index > 0 {
                     cells.push(text(tcx, ", ", &cx.styles.dim));
                 }
@@ -2914,19 +2588,17 @@ fn record_view<
                     _ => field_label(cx, tcx, path, child.clone(), key, hooks),
                 });
                 cells.push(text(tcx, ": ", &cx.styles.dim));
-                cells.push(match value {
-                    Some(value) => field_value_view(
-                        cx,
-                        tcx,
-                        &child,
-                        ancestors,
-                        *key,
-                        value,
-                        f64::INFINITY,
-                        hooks,
-                    ),
-                    None => pending_view(cx, tcx, child, hooks),
-                });
+                cells.push(descend(
+                    cx,
+                    tcx,
+                    path,
+                    ancestors,
+                    &target,
+                    Step::Key(*key),
+                    f64::INFINITY,
+                    hooks,
+                    projection,
+                ));
             }
             if let Some((query, choice)) = cx.pending_edge_under(path) {
                 if !items.is_empty() {
@@ -2951,7 +2623,20 @@ fn record_view<
     let inside = (avail - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)).max(0.0);
     let mut rows: Vec<Node<P>> = items
         .into_iter()
-        .map(|(key, value)| field_row(cx, tcx, path, ancestors, key, value, inside, hooks))
+        .map(|(key, value)| {
+            field_row(
+                cx,
+                tcx,
+                path,
+                ancestors,
+                &target,
+                key,
+                value,
+                inside,
+                hooks,
+                projection,
+            )
+        })
         .collect();
     // A new field being authored: the label query, unsorted until it
     // has a label to sort by.
@@ -3095,85 +2780,36 @@ fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P
     })
 }
 
-fn circle_stand_in<P: Canvas>(radius: f64, scale: f64) -> Node<P> {
-    let radius = radius * scale;
-    let padding = 4.0 * scale;
-    let half = radius + padding;
-    leaf(
-        Extent {
-            width: 2.0 * half,
-            ascent: half,
-            descent: half,
-        },
-        move |p: &mut P, placement| {
-            let rect = placement.rect;
-            let circle = Circle::new(
-                Point::new((rect.x0 + rect.x1) / 2.0, (rect.y0 + rect.y1) / 2.0),
-                radius,
-            );
-            p.fill(circle, Color::new([0.0, 0.48, 1.0, 0.10]), Affine::IDENTITY);
-            p.stroke(
-                circle,
-                Stroke::new(1.5 * scale),
-                Color::new([0.0, 0.36, 0.78, 0.9]),
-                Affine::IDENTITY,
-            );
-        },
-    )
-}
-
-fn stand_in_view<
+fn projected_value_view<
     C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
     tcx: &mut TextCtx,
     path: &[Step],
     value: &Value,
     hooks: &Hooks<C>,
-    stand_in: StandIn,
-) -> Node<P> {
-    match stand_in {
-        StandIn::Text(text_value) if whole_f64(value).is_some() => {
-            let editing = cx
-                .selection
-                .filter(|selection| selection.path() == path)
-                .and_then(Selection::edit);
-            let fallback = text(tcx, &text_value, &cx.styles.string);
-            let presentation = edit_presentation(&cx.styles.string);
-            let content = atom_content(
-                editing,
-                fallback,
-                presentation.clone(),
-                None,
-                tcx,
-                cx.styles,
-                hooks,
-            );
-            cursor_target(path.to_vec(), value.clone(), presentation, hooks, content)
-        }
-        StandIn::Text(text_value) => select_target(
+    editing: Option<&LineEditState>,
+    projection: projection::Projection<'_>,
+) -> Option<Node<P>> {
+    let mut display = NodeLanguage::<C, P>::new(tcx, cx.styles, editing, hooks.edit.clone());
+    let projected = projection.try_project(&mut display, value)?;
+    Some(match projected.editor {
+        Some(presentation) => cursor_target(
             path.to_vec(),
             value.clone(),
+            cx.styles.edit_presentation(&presentation),
             hooks,
-            text(tcx, &text_value, &cx.styles.string),
+            projected.view,
         ),
-        StandIn::Circle { radius } => select_target(
-            path.to_vec(),
-            value.clone(),
-            hooks,
-            circle_stand_in(radius, cx.styles.scale),
-        ),
-        StandIn::NormalForm(_) => unreachable!("normal forms use the generic value projection"),
-    }
+        None => select_target(path.to_vec(), value.clone(), hooks, projected.view),
+    })
 }
 
-/// Project an evaluator result through the same value renderer as
-/// stored graph data, but as a read-only derived subtree. The result
-/// root maps back to the stored field value's path; derived child
-/// paths do not pretend to exist in the document. `normal_form`
-/// prevents a returned `grap` field from evaluating again.
-fn normal_form_view<
+/// Starts the ordinary projection at a value with no document source.
+/// Interaction attributes the transient tree to `owner`, while its
+/// children remain read-only and have no document paths of their own.
+fn project_transient_root<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
@@ -3183,6 +2819,7 @@ fn normal_form_view<
     result: Value,
     avail: f64,
     hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
 ) -> Node<P> {
     let origin = path.to_vec();
     let select = hooks.select.clone();
@@ -3205,22 +2842,19 @@ fn normal_form_view<
         hover: None,
         secondary: None,
         secondary_hover: None,
-        projection: cx.projection,
-        field_projection: cx.field_projection,
-        normal_form: true,
-        derived_root: Some(path),
+        source: Source::Transient { owner: path },
     };
-    let projected = value_view(
+    let projected = projection.project(
         &result_cx,
         tcx,
         path,
         &HashSet::new(),
-        &result,
+        Location::Root(Some(&result)),
         avail,
         &result_hooks,
     );
-    // The normal form is not another projection of the stored source
-    // value. Its inner views may install ordinary hover claims while
+    // The transient result is not another projection of the stored
+    // source value. Its inner views may install ordinary hover claims while
     // rendering, so clear them after placement across this whole arm.
     around(projected, |p, placement, place_inner| {
         place_inner.place(p);
@@ -3228,7 +2862,100 @@ fn normal_form_view<
     })
 }
 
-fn value_view<
+/// Adds one graph step to the active source and invokes the supplied
+/// projection. The projection, not the caller, resolves the child;
+/// a missing child therefore reaches the same total fallback as an
+/// empty root.
+#[allow(clippy::too_many_arguments)]
+fn descend<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    parent_path: &[Step],
+    ancestors: &HashSet<CellId>,
+    parent: &Value,
+    step: Step,
+    avail: f64,
+    hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
+) -> Node<P> {
+    let mut path = parent_path.to_vec();
+    path.push(step.clone());
+    if step == Step::Follow {
+        let mut ancestors = ancestors.clone();
+        ancestors.extend(parent.as_cell());
+        projection.project(
+            cx,
+            tcx,
+            &path,
+            &ancestors,
+            Location::Child { parent, step },
+            avail,
+            hooks,
+        )
+    } else {
+        projection.project(
+            cx,
+            tcx,
+            &path,
+            ancestors,
+            Location::Child { parent, step },
+            avail,
+            hooks,
+        )
+    }
+}
+
+impl projection::Projection<'_> {
+    #[allow(clippy::too_many_arguments)]
+    fn project<
+        C: 'static,
+        P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+    >(
+        self,
+        cx: &Cx,
+        tcx: &mut TextCtx,
+        path: &[Step],
+        ancestors: &HashSet<CellId>,
+        location: Location<'_>,
+        avail: f64,
+        hooks: &Hooks<C>,
+    ) -> Node<P> {
+        match location.value(|cell| cx.sources.value(cell)) {
+            Some(value) => match location.field().and_then(|field| {
+                self.try_evaluate(field, value, |cell| cx.sources.value(cell).cloned())
+            }) {
+                Some(result) => evaluation_projection(
+                    cx,
+                    tcx,
+                    path,
+                    ancestors,
+                    value,
+                    result,
+                    avail,
+                    hooks,
+                    self,
+                ),
+                None => project_present_value(
+                    cx,
+                    tcx,
+                    path,
+                    ancestors,
+                    value,
+                    avail,
+                    hooks,
+                    self,
+                ),
+            },
+            None => pending_view(cx, tcx, path.to_vec(), hooks),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn project_present_value<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
@@ -3239,58 +2966,24 @@ fn value_view<
     value: &Value,
     avail: f64,
     hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
 ) -> Node<P> {
     let editing = cx
         .selection
         .filter(|selection| selection.path() == path)
         .and_then(Selection::edit);
-    let inner = match value {
-        Value::Record(_) if !cx.raw && whole_text(value).is_some() => {
-            let s = whole_text(value).expect("matched plain text");
-            // ONE shaped run, static and editing alike: the quotes are
-            // the editor's affixes, so entering an edit reshapes
-            // nothing and the caret lives strictly between them. Every
-            // click on the literal reports a caret position — a quote
-            // click lands it at the nearest end.
-            let fallback = text(tcx, &format!("\"{s}\""), &cx.styles.string);
-            let presentation = edit_presentation(&cx.styles.string).with_affixes("\"", "\"");
-            let content = atom_content(
-                editing,
-                fallback,
-                presentation.clone(),
-                None,
-                tcx,
-                cx.styles,
-                hooks,
-            );
-            cursor_target(path.to_vec(), value.clone(), presentation, hooks, content)
-        }
-        Value::Blob(bytes) => select_target(
-            path.to_vec(),
-            value.clone(),
-            hooks,
-            text(tcx, &blob_text(bytes), &cx.styles.id),
-        ),
-        // The projection chain, decided per value: links render as
-        // their cells, lists as themselves, and records may be
-        // interpreted by a domain projection outside Raw.
-        Value::Cell(cell) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks),
-        Value::List(elements) => list_view(cx, tcx, path, ancestors, elements, avail, hooks),
-        // A domain projection may stand another view in for a record —
-        // the value selects whole, its structure one Raw toggle away.
-        Value::Record(fields) => match (!cx.raw)
-            .then(|| cx.projection.and_then(|projection| projection(value)))
-            .flatten()
-        {
-            Some(StandIn::NormalForm(result)) if !cx.normal_form => {
-                normal_form_view(cx, tcx, path, result, avail, hooks)
-            }
-            Some(StandIn::NormalForm(_)) => {
-                record_view(cx, tcx, path, ancestors, fields, avail, hooks)
-            }
-            Some(stand_in) => stand_in_view(cx, tcx, path, value, hooks, stand_in),
-            None => record_view(cx, tcx, path, ancestors, fields, avail, hooks),
-        },
+    let projected = projected_value_view(
+        cx,
+        tcx,
+        path,
+        value,
+        hooks,
+        editing,
+        projection,
+    );
+    let inner = match projected {
+        Some(projected) => projected,
+        None => raw_value_view(cx, tcx, path, ancestors, value, avail, hooks, projection),
     };
     // Other projections of the selected value carry the secondary
     // mark; the selected one has the primary highlight.
@@ -3304,6 +2997,40 @@ fn value_view<
     // claimed above — structural whitespace deselects.
     let placed = descend_landmark(cx, path.to_vec(), inner);
     ground(cx, path, value, placed)
+}
+
+/// The total fallback: structural projection for every graph value.
+/// Its children re-enter [`descend`], so partial projections are
+/// considered again at every descent.
+#[allow(clippy::too_many_arguments)]
+fn raw_value_view<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    value: &Value,
+    avail: f64,
+    hooks: &Hooks<C>,
+    projection: projection::Projection<'_>,
+) -> Node<P> {
+    match value {
+        Value::Blob(bytes) => select_target(
+            path.to_vec(),
+            value.clone(),
+            hooks,
+            text(tcx, &blob_text(bytes), &cx.styles.id),
+        ),
+        Value::Cell(cell) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks, projection),
+        Value::List(elements) => {
+            list_view(cx, tcx, path, ancestors, elements, avail, hooks, projection)
+        }
+        Value::Record(fields) => {
+            record_view(cx, tcx, path, ancestors, fields, avail, hooks, projection)
+        }
+    }
 }
 
 /// An EMPTY SLOT at `path`: the [`placeholder`] widget wired to this
@@ -3333,7 +3060,7 @@ fn pending_view<
     // [`highlight_rect`] over the same frame the cold box strokes,
     // and the same ring survives the commit around the same glyphs —
     // the box never changes, only its paint.
-    descend(cx, path, None, hooks, content)
+    source_target(cx, path, None, hooks, content)
 }
 
 /// The slot widget, in the Puri idiom: its one state input is the
@@ -3437,7 +3164,7 @@ fn query_content<
 /// every other click so nothing lands on content underneath.
 pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     tcx: &mut TextCtx,
-    styles: &RawStyles,
+    styles: &Styles,
     popup: &Popup,
     hovered: Option<usize>,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
@@ -3585,7 +3312,7 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + H
     presentation: LineEditPresentation,
     placeholder: Option<(&str, &TextStyle)>,
     tcx: &mut TextCtx,
-    styles: &RawStyles,
+    styles: &Styles,
     hooks: &Hooks<C>,
 ) -> Node<P> {
     match editing {
@@ -3856,144 +3583,6 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + 
 mod tests {
     use super::*;
     use ui_events::keyboard::{KeyState, Modifiers};
-
-    #[test]
-    fn grap_fields_produce_normal_forms_without_changing_data_projection() {
-        let foreign = crate::conventions::foreign_functions();
-        let project = value_stand_in;
-        let project_grap_field = |value: &Value| {
-            grap_field_stand_in(
-                crate::conventions::vocabulary::GRAP,
-                value,
-                |_| None,
-                &foreign,
-            )
-        };
-        let grap_record = |expression| {
-            Value::record([(crate::conventions::vocabulary::GRAP, expression)])
-        };
-
-        let number = grap_f64::value(2.5);
-        assert!(matches!(project(&number), Some(StandIn::Text(_))));
-        let enriched_number = Value::record(number.as_record().unwrap().clone().update(
-            crate::test_values::label("created-at"),
-            crate::test_values::text("now"),
-        ));
-        assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
-        assert!(project(&enriched_number).is_none());
-
-        let plain_call = grap::call(
-            Value::from(grap_f64::vocabulary::ADD),
-            [
-                (grap_f64::vocabulary::LEFT, grap_f64::value(2.0)),
-                (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
-            ],
-        );
-        assert!(project(&plain_call).is_none());
-        assert!(matches!(
-            project_grap_field(&plain_call),
-            Some(StandIn::NormalForm(result)) if result == grap_f64::value(5.0)
-        ));
-        let enriched_grap_record = Value::record([
-            (
-                crate::conventions::vocabulary::GRAP,
-                plain_call.clone(),
-            ),
-            (
-                crate::test_values::label("created-at"),
-                crate::test_values::text("now"),
-            ),
-        ]);
-        assert!(project(&enriched_grap_record).is_none());
-        assert!(project(&grap_record(plain_call.clone())).is_none());
-
-        let parameter = progred_graph::new_cell_id();
-        let definition = grap::lambda([parameter], Value::from(parameter));
-        assert!(project(&definition).is_none());
-
-        let call = Value::record([
-            (
-                grap::vocabulary::FUNCTION,
-                Value::from(grap_f64::vocabulary::ADD),
-            ),
-            (grap_f64::vocabulary::LEFT, grap_f64::value(2.0)),
-            (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
-            (
-                crate::test_values::label("created-at"),
-                crate::test_values::text("now"),
-            ),
-        ]);
-        assert_eq!(
-            grap::evaluate(&call, |_| None, &foreign, grap::DEFAULT_FUEL).result,
-            grap_f64::value(5.0)
-        );
-        assert!(matches!(
-            project_grap_field(&call),
-            Some(StandIn::NormalForm(result)) if result == grap_f64::value(5.0)
-        ));
-
-        let invalid = grap::call(
-            Value::from(grap_f64::vocabulary::ADD),
-            [
-                (
-                    grap_f64::vocabulary::LEFT,
-                    Value::from(b"not a number".to_vec()),
-                ),
-                (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
-            ],
-        );
-        assert!(matches!(
-            project_grap_field(&invalid),
-            Some(StandIn::NormalForm(result))
-                if result == Value::from(grap_f64::vocabulary::LEFT_NOT_F64)
-        ));
-
-        let ordinary_record = Value::record([(
-            crate::test_values::label("ordinary data"),
-            grap::call(
-                Value::from(grap_f64::vocabulary::ADD),
-                [
-                    (grap_f64::vocabulary::LEFT, grap_f64::value(2.0)),
-                    (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
-                ],
-            ),
-        )]);
-        assert_eq!(
-            grap::evaluate(&ordinary_record, |_| None, &foreign, grap::DEFAULT_FUEL).result,
-            ordinary_record
-        );
-        assert!(project(&ordinary_record).is_none());
-
-        let circle = grap_geometry::value(20.0);
-        assert!(matches!(
-            project(&circle),
-            Some(StandIn::Circle { radius: 20.0 })
-        ));
-        let enriched_circle = Value::record(circle.as_record().unwrap().clone().update(
-            crate::test_values::label("source"),
-            crate::test_values::text("survey"),
-        ));
-        assert_eq!(grap_geometry::read(&enriched_circle), Some(20.0));
-        assert!(project(&enriched_circle).is_none());
-
-        let enriched_radius =
-            Value::record(grap_f64::value(20.0).as_record().unwrap().clone().update(
-                crate::test_values::label("unit"),
-                crate::test_values::text("millimetres"),
-            ));
-        let circle_with_enriched_radius = Value::record([(
-            grap_geometry::vocabulary::CIRCLE,
-            Value::record([(
-                grap_geometry::vocabulary::RADIUS,
-                enriched_radius,
-            )]),
-        )]);
-        assert_eq!(
-            grap_geometry::read(&circle_with_enriched_radius),
-            Some(20.0)
-        );
-        assert!(project(&circle_with_enriched_radius).is_none());
-    }
 
     struct EmptyClipboard;
 
@@ -4456,7 +4045,7 @@ mod tests {
                 .and_then(|fields| fields.get(&crate::test_values::label("x"))),
             Some(&crate::test_values::text("0"))
         );
-        assert!(whole_text(doc.root.as_ref().unwrap()).is_none());
+        assert!(projection::whole_text(doc.root.as_ref().unwrap()).is_none());
     }
 
     #[test]
@@ -4999,7 +4588,7 @@ mod tests {
         let doc = sample_document();
         let lib = crate::conventions::library();
         let sources = src(&doc, &lib);
-        let styles = RawStyles::new(1.0);
+        let styles = Styles::new(1.0);
         let mut fonts = parley::FontContext::new();
         let mut layouts = parley::LayoutContext::new();
         let mut cache = puri::text::TextCache::default();
@@ -5484,7 +5073,7 @@ mod svg_bench {
             library: &library,
         };
         let names = Names::convention();
-        let styles = RawStyles::new(1.0);
+        let styles = Styles::new(1.0);
         let collapse = Collapse::default();
         let mut fonts = parley::FontContext::new();
         let mut layouts = parley::LayoutContext::new();
@@ -5510,15 +5099,6 @@ mod svg_bench {
         // bench runs; single-digit milliseconds is healthy.
         let start = std::time::Instant::now();
         let foreign = crate::conventions::foreign_functions();
-        let projection = value_stand_in;
-        let field_projection = |field, value: &Value| {
-            grap_field_stand_in(
-                field,
-                value,
-                |cell| sources.value(cell).cloned(),
-                &foreign,
-            )
-        };
         let node = project::<Claims, Bench>(
             ProjectDescription {
                 sources,
@@ -5531,8 +5111,7 @@ mod svg_bench {
                 raw: false,
                 styles: &styles,
                 width: width - 48.0,
-                projection: Some(&projection),
-                field_projection: Some(&field_projection),
+                projection: projection::Projection::new(&foreign),
             },
             &mut tcx,
             hooks,
@@ -5842,7 +5421,7 @@ mod svg_bench {
             .find(|descend| {
                 sources
                     .resolve(&descend.path)
-                    .is_some_and(|value| whole_text(value).is_some())
+                    .is_some_and(|value| projection::whole_text(value).is_some())
                     && projected_name_owner(&descend.path).is_none()
             })
             .expect("the sample has a string leaf");
@@ -5962,7 +5541,7 @@ mod svg_bench {
         assert!(air.hover_claims.is_empty());
         // Just inside the bracket's absorbed gap, the bracket claims
         // the container outright — the widened handle.
-        let styles = RawStyles::new(1.0);
+        let styles = Styles::new(1.0);
         let list = bench
             .descends
             .iter()
@@ -6020,7 +5599,7 @@ mod svg_bench {
             };
             let card = popup_view::<Claims, Bench>(
                 &mut tcx,
-                &RawStyles::new(1.0),
+                &Styles::new(1.0),
                 &popup,
                 None,
                 |_, _| {},

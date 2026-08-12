@@ -2,6 +2,8 @@
 //! `run_frame` writes to any puri `Canvas`; here it streams into vello.
 
 mod conventions;
+mod display;
+mod document;
 mod filter;
 mod gid;
 #[cfg(test)]
@@ -13,6 +15,7 @@ mod layout;
 #[cfg(target_os = "macos")]
 mod macos_menu;
 mod menu;
+mod projection;
 mod raw;
 mod sources;
 mod store;
@@ -148,7 +151,7 @@ struct App {
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
     /// scrolling.
-    revealed: Option<(raw::Path, std::mem::Discriminant<raw::Selection>)>,
+    revealed: Option<(document::Path, std::mem::Discriminant<raw::Selection>)>,
     dispatch: Option<Dispatch>,
     reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
@@ -207,7 +210,7 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
 
 /// The selection as a restorable edge path — pendings and graph
 /// selections restore as nothing, being disposable.
-fn edge_path(selection: &Option<Selected>) -> Option<raw::Path> {
+fn edge_path(selection: &Option<Selected>) -> Option<document::Path> {
     match selection {
         Some(Selected::Tree(raw::Selection::Edge { path, .. })) => Some(path.clone()),
         _ => None,
@@ -361,15 +364,15 @@ impl ApplicationHandler<UserEvent> for App {
                 let mut frame_input_changed = false;
                 let handled = match (ime, translation) {
                     (Some(ime), _) => dispatch.handler.dispatch_ime(self, &ime),
-                    // Keys nothing claims fall through to the rename
-                    // chord, the collapse fold, and then selection
-                    // stepping, so the selected string's editor always
-                    // wins over all three. The one key that outranks
-                    // the editor: Cmd+V of STRUCTURE while a pending
-                    // is open — the query must never eat Value JSON.
+                    // An open Linux menu owns the keyboard; otherwise
+                    // its shared shortcuts are application commands.
+                    // Remaining keys reach the editor first, except
+                    // Cmd+V of STRUCTURE while a pending is open — the
+                    // query must never eat Value JSON — then fall
+                    // through to the structural commands.
                     (None, Some(WindowEventTranslation::Keyboard(key_event))) => {
-                        self.pending_paste_key(&key_event)
-                            || self.menu_key(&key_event)
+                        self.menu_key(&key_event)
+                            || self.pending_paste_key(&key_event)
                             || dispatch.handler.dispatch_key(self, &key_event)
                             || self.clipboard_key(&dispatch.descends, &key_event)
                             || self.graph_key(&key_event)
@@ -542,7 +545,7 @@ fn main() {
         // No path starts EMPTY — the sample lives in sample.gid now,
         // opened like any document.
         _ => (
-            raw::Document {
+            document::Document {
                 root: None,
                 cells: progred_graph::Cells::new(),
             },
@@ -628,7 +631,7 @@ enum Hovered {
 }
 
 struct Model {
-    doc: raw::Document,
+    doc: document::Document,
     selection: Option<Selected>,
     collapse: raw::Collapse,
     /// The name policy: an editor setting, not document state, so it
@@ -1029,7 +1032,9 @@ impl App {
         }
         #[cfg(target_os = "linux")]
         {
-            if event.state.is_down()
+            let open = self.menu.open().is_some();
+            if open
+                && event.state.is_down()
                 && plain(event)
                 && matches!(event.key, Key::Named(NamedKey::Escape))
             {
@@ -1041,6 +1046,7 @@ impl App {
                         self.choose_menu(selection);
                         true
                     })
+                    || self.menu.captures_key(event)
             }
         }
     }
@@ -1128,7 +1134,7 @@ impl App {
     fn proceed(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
         match then {
             AfterDiscard::New => self.adopt_model(
-                raw::Document {
+                document::Document {
                     root: None,
                     cells: progred_graph::Cells::new(),
                 },
@@ -1178,7 +1184,7 @@ impl App {
     /// immediately, as every mutation site does: the retained handler
     /// was built from the old document, and its dispatches must not
     /// run against the new model.
-    fn adopt_model(&mut self, doc: raw::Document, path: Option<PathBuf>, binders: gid::Binders) {
+    fn adopt_model(&mut self, doc: document::Document, path: Option<PathBuf>, binders: gid::Binders) {
         self.binders = binders;
         let view = self.model.view;
         self.model = Model {
@@ -1467,7 +1473,7 @@ impl App {
 
     /// Commits the pending value stage — one undo step — and selects
     /// the edge it wrote.
-    fn commit_value(&mut self, path: raw::Path, action: &raw::EntryAction) {
+    fn commit_value(&mut self, path: document::Path, action: &raw::EntryAction) {
         let before = self.model.doc.clone();
         if raw::commit_pending(&mut self.model.doc, &self.model.library, &path, action) {
             self.model.history.record(before, None);
@@ -1489,7 +1495,7 @@ impl App {
     /// history step, the value carried.
     fn commit_label(
         &mut self,
-        parent: raw::Path,
+        parent: document::Path,
         replacing: Option<CellId>,
         action: &raw::EntryAction,
     ) {
@@ -1997,7 +2003,7 @@ fn run_frame(
         scale: scale as f32,
         cache: text_cache,
     };
-    let styles = raw::RawStyles::new(scale);
+    let styles = display::Styles::new(scale);
     #[cfg(target_os = "linux")]
     let menu_hover = match hover.as_ref() {
         Some(Hovered::Menu(hover)) => Some(*hover),
@@ -2056,15 +2062,6 @@ fn run_frame(
     let hover_node = graph_hover
         .and_then(|node| graph_view::node_value(&model.doc, node))
         .filter(|value| !matches!(value, Value::Record(_)));
-    let value_projection = raw::value_stand_in;
-    let grap_field_projection = |field, value: &Value| {
-        raw::grap_field_stand_in(
-            field,
-            value,
-            |cell| sources.value(cell).cloned(),
-            &model.foreign,
-        )
-    };
     let body = raw::project(
         raw::ProjectDescription {
             sources,
@@ -2077,8 +2074,7 @@ fn run_frame(
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            projection: Some(&value_projection),
-            field_projection: Some(&grap_field_projection),
+            projection: projection::Projection::new(&model.foreign),
         },
         &mut tcx,
         raw::Hooks {
@@ -2309,6 +2305,9 @@ fn run_frame(
         frame.handler().on_pointer_down(move |_, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+        });
+        frame.handler().on_scroll(move |_, event| {
+            rect.contains(Point::new(event.state.position.x, event.state.position.y))
         });
         layout::place(
             popup,

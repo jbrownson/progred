@@ -25,6 +25,49 @@ without a text/compiler round trip in the interaction loop. Existing
 languages may still become projections over resolved semantics graphs
 later.
 
+## Projection and Display Layers
+
+Normal display is an ordered chain of partial projections over `Value`,
+ending in a total structural projection which can show any graph. The
+structural projection recursively re-enters the same dispatcher for every
+child instead of owning a closed set of leaf cases. This composed projection
+is passed explicitly through recursion; it is not hidden in display context.
+`descend` receives the parent `Value` and an ordinary graph `Step`, extends
+stored source provenance, and invokes the supplied projection on that
+unresolved location. The projection performs lookup, which lets its total
+fallback project a missing field or element as the ordinary pending state.
+A domain projection may replace only the structure it fully accounts for.
+Raw is the same total projection with its partial layers disabled.
+
+Computed values do not use another projection operation. They start the same
+projection at a transient root with fresh source provenance. Stored provenance
+provides a document path and therefore potential write capability; transient
+provenance has no editable document location and may attribute interaction to
+the stored expression which produced it. A Grap result also uses a composition
+with the Grap field projection removed. Thus source/editability, projection
+choice, and display interpretation remain three separate inputs.
+
+Compact domain projections target a small display vocabulary: styled text, a
+generic line editor, vector graphics, rows, and columns. Its live interpreter
+measures those operations into Progred's baseline-box layout and draws the
+resulting leaves through Puri's canvas. The total structural fallback still
+constructs layout nodes directly because it owns graph paths, editing, and
+the detailed source interaction model. The generic line editor carries a
+text-to-`Value` handler, so text and f64 use the same display operation with
+different parsers; focus and cursor remain interpreter context while source
+provenance remains projection context rather than display data. The vector operation carries ordinary
+shapes and drawing commands, so a circle is a projection result rather than
+a display-language primitive.
+
+This vocabulary is intentionally smaller than the projection system. Grap
+evaluation, domain recognition, graph paths, selection, and read-only
+provenance are projection concerns, not display constructs. The Rust
+vocabulary is expressed as a trait rather than a closed display AST, which
+already permits a lightweight test interpreter. A graph-valued display
+library can mirror this vocabulary later once graph identities for actions
+are concrete. Line breaking remains in the layout layer for now rather than
+adding HTML-like flow or `<br>` semantics prematurely.
+
 The earlier Grap design was rejected for good reasons, but they were
 properties of that design rather than of an embedded language:
 
@@ -65,7 +108,7 @@ Progred's projection layer separately defines the `grap` field. The
 ordinary record and its `grap` label remain visible, but the projection
 for the value under that label shows the stored expression through its
 ordinary editable projection, followed by `→` and the returned `Value`
-projected as a read-only normal form. Normal view therefore shows
+recursively projected from a transient, read-only root. Normal view therefore shows
 `{grap: expression → result}`, while Raw shows
 `{grap: stored-expression}`. The arrow is projection chrome, not graph
 data. `grap` is not a Grap evaluator form, so the evaluator can be used
@@ -124,7 +167,7 @@ by cell identity. Renaming a parameter changes no program reference,
 and there is no parallel symbol-ID system. Additional top-level call
 fields are valid graph data and do not prevent the selected function
 from being called.
-The result arm under `grap` is derived and read-only; the expression
+The result arm under `grap` is transient and read-only; the expression
 arm, `grap` field, and rest of its enclosing record remain ordinary
 visible projections. Raw exposes only the stored expression and any
 such metadata.
@@ -149,9 +192,10 @@ references that same cell and shows both that ordinary cell projection
 and its result. Because the expression arm is ordinary, hovering it can
 highlight the cell's other projections. The returned value goes through
 the same text, number, geometry, cell, list, and record projections as
-stored data. That subtree is marked as Grap normal form, so a returned
-value which itself contains a `grap` field is data rather than another
-request to evaluate. Derived children are currently read-only and map
+stored data. The projection which produced that subtree is removed from
+the explicit composition, so a returned value which itself contains a `grap`
+field is data rather than another request to evaluate. Transient children are
+currently read-only and map
 selection back to the stored `grap` field value rather than pretending
 to have document paths.
 
@@ -311,7 +355,7 @@ library data rather than an evaluator feature.
 ## First Vertical Slice
 
 For a `grap` field, normal projection shows the stored expression, an
-arrow, and its normal form—an f64 as text, a circle as native vector
+arrow, and its recursively projected result—an f64 as text, a circle as native vector
 drawing, and arbitrary graph data structurally. The enclosing record
 remains ordinary visible data. `grap-demo.gid` is
 the focused interactive playground: three editable f64 cells feed
@@ -324,7 +368,7 @@ returned data, and shows stable type,
 missing-argument, and not-callable absents as ordinary projected
 results. The demo projects one graph expression cell both directly and
 by reference under `grap`, making their shared identity visible through
-hover while the latter also carries its derived result.
+hover while the latter also carries its computed result.
 
 The broader checked-in `sample.gid` carries the same evaluation path
 inside the raw editor's structural examples:
@@ -341,7 +385,7 @@ inside the raw editor's structural examples:
 
 The `grap` field belongs to projection rather than evaluation. Normal
 view keeps the field visible and projects its value as
-`expression → normal-form`; Raw projects only the stored expression.
+`expression → result`; Raw projects only the stored expression.
 Compact f64 source values edit as decimal text while continuing to store
 the f64 library's byte representation, so changing `pitch` immediately
 changes both the `double_pitch` result and the projected circle. This is
@@ -369,6 +413,35 @@ patterns from concrete editing experience, and make a thunk or cell
 evaluation projection only when the interaction needs one.
 Graph-defined macros and general code generation remain out of scope
 until a concrete transformation requires them.
+
+## Parked language notes
+
+Working notes, not current work. Take them one at a time, and only
+when a construction or editing problem forces the change.
+
+- `quote` exists primarily for `unquote`: walk structure, splice, leave
+  the rest unevaluated. A sibling `literal` that copies the same way
+  but treats `{unquote: …}` as data would complete the pair. Both are
+  ordinary Rust library functions, not evaluator forms.
+- An absent from a selected `case` branch is that branch's result, not
+  fallthrough. Matching *on* an absent subject is separate and already
+  works (the subject is an ordinary value, often one of the stable
+  absent cells). Absents stay values, not implicit failure.
+- `params` is a list of cells. A user function may reuse library or
+  other binders (`left`, `right`, another function's parameter).
+  Minting a fresh cell per parameter is an authoring default, not a
+  language rule. Shared vocabulary cells *are* a calling convention;
+  `add` and `multiply` already share `left` and `right`.
+- Patterned function arguments can use the same destructure as `case`.
+  A call is already an open record, so a pattern `{left: {bind: x},
+  right: {bind: y}}` matches `{function: f, left: a, right: b, …}` and
+  ignores `function` and extras. That would replace the ordered
+  param-list binding story. `case` remains as local match (same
+  matcher, or an immediately applied patterned lambda).
+- Secondary marks should follow cells only. Lighting up equal blobs,
+  lists, or compact text is leftover from models where those were
+  identity-graph nodes. Selecting a cell should still mark every
+  mention of that cell.
 
 ## The Superseded Wasm Spike
 

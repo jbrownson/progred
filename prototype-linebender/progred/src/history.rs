@@ -5,7 +5,7 @@
 //! run is the mounted editor's lifetime, and write-through reports
 //! only the run's first write (see `raw::write_through`).
 
-use crate::raw::{Document, Path};
+use crate::document::{Document, Path};
 
 /// A pre-mutation snapshot: the document, and the selection to
 /// restore (an edge path; pendings restore as no selection — they
