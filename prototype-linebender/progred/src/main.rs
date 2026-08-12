@@ -9,6 +9,8 @@ mod graph_view;
 mod history;
 mod hover;
 mod gid;
+#[cfg(target_os = "macos")]
+mod macos_menu;
 mod plugins;
 mod raw;
 mod store;
@@ -17,8 +19,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use muda::accelerator::{Accelerator, Code, Modifiers};
-use muda::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use parley::{FontContext, LayoutContext};
 use progred_graph::{Label, Step, Value};
 use puri::draw::{Canvas, GlyphRun, Shape};
@@ -41,17 +41,19 @@ use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
-/// Everything arriving through the event-loop proxy: menu commands,
-/// and the unsaved-changes sheet's answer coming back to the loop.
+/// Everything arriving through the event-loop proxy.
 enum UserEvent {
-    Menu(MenuEvent),
+    #[cfg(target_os = "macos")]
+    Menu(macos_menu::Event),
     Discard(bool),
 }
 
 /// The action a discard confirmation gates. One at a time: requests
 /// while a sheet is up are dropped.
 enum AfterDiscard {
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     New,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Open,
     Quit,
 }
@@ -123,13 +125,8 @@ struct App {
     /// launch; `None` (with a stderr note) when the toolchain or the
     /// source is unavailable, and the raw record renders instead.
     plugin: Option<plugins::F64Plugin>,
-    /// Attached to the app once launched; commands arrive as user
-    /// events.
-    menu: Menu,
-    menu_ids: MenuIds,
-    /// Menu items whose state the shell keeps current: enablement
-    /// for save/undo/redo, muda-owned check state for the graph.
-    menu_items: MenuItems,
+    #[cfg(target_os = "macos")]
+    menu: macos_menu::Menu,
     /// Last pointer position, for anchoring pinch zoom.
     cursor: Point,
     /// The pointer position while it is inside the window. It is an
@@ -157,26 +154,6 @@ struct App {
     pending_discard: Option<AfterDiscard>,
 }
 
-struct MenuIds {
-    new: MenuId,
-    open: MenuId,
-    save: MenuId,
-    save_as: MenuId,
-    quit: MenuId,
-    undo: MenuId,
-    redo: MenuId,
-    graph: MenuId,
-    raw: MenuId,
-}
-
-struct MenuItems {
-    save: MenuItem,
-    undo: MenuItem,
-    redo: MenuItem,
-    graph: CheckMenuItem,
-    raw: CheckMenuItem,
-}
-
 /// The View menu's frame inputs: which panes and layers this frame
 /// shows.
 #[derive(Clone, Copy)]
@@ -185,91 +162,6 @@ struct ViewFlags {
     /// The one Raw bit: convention layers derive from it — names
     /// answer bare identities. Lists stay lists; kind is data.
     raw: bool,
-}
-
-/// The menu bar: file commands own their key equivalents, so the
-/// platform routes Cmd+S and friends here rather than through key
-/// dispatch. Attachment is macOS-only until another platform is run.
-fn build_menu() -> (Menu, MenuIds, MenuItems) {
-    let accel = if cfg!(target_os = "macos") {
-        Modifiers::META
-    } else {
-        Modifiers::CONTROL
-    };
-    let new = MenuItem::new("New", true, Some(Accelerator::new(Some(accel), Code::KeyN)));
-    let open = MenuItem::new("Open…", true, Some(Accelerator::new(Some(accel), Code::KeyO)));
-    let save = MenuItem::new("Save", true, Some(Accelerator::new(Some(accel), Code::KeyS)));
-    let save_as = MenuItem::new(
-        "Save As…",
-        true,
-        Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyS)),
-    );
-    let quit = MenuItem::new("Quit Progred", true, Some(Accelerator::new(Some(accel), Code::KeyQ)));
-    let undo = MenuItem::new("Undo", true, Some(Accelerator::new(Some(accel), Code::KeyZ)));
-    let redo = MenuItem::new(
-        "Redo",
-        true,
-        Some(Accelerator::new(Some(accel | Modifiers::SHIFT), Code::KeyZ)),
-    );
-    let graph = CheckMenuItem::new(
-        "Graph",
-        true,
-        false,
-        Some(Accelerator::new(Some(accel), Code::KeyG)),
-    );
-    let raw = CheckMenuItem::new(
-        "Raw",
-        true,
-        false,
-        Some(Accelerator::new(Some(accel), Code::KeyR)),
-    );
-    let menu = Menu::new();
-    let ids = MenuIds {
-        new: new.id().clone(),
-        open: open.id().clone(),
-        save: save.id().clone(),
-        save_as: save_as.id().clone(),
-        quit: quit.id().clone(),
-        undo: undo.id().clone(),
-        redo: redo.id().clone(),
-        graph: graph.id().clone(),
-        raw: raw.id().clone(),
-    };
-    menu.append_items(&[
-        &Submenu::with_items(
-            "Progred",
-            true,
-            &[
-                &PredefinedMenuItem::about(None, None),
-                &PredefinedMenuItem::separator(),
-                &quit,
-            ],
-        )
-        .expect("app menu"),
-        &Submenu::with_items(
-            "File",
-            true,
-            &[
-                &new,
-                &open,
-                &PredefinedMenuItem::separator(),
-                &save,
-                &save_as,
-            ],
-        )
-        .expect("file menu"),
-        &Submenu::with_items("Edit", true, &[&undo, &redo]).expect("edit menu"),
-        &Submenu::with_items("View", true, &[&raw, &graph]).expect("view menu"),
-    ])
-    .expect("menu bar");
-    let items = MenuItems {
-        save,
-        undo,
-        redo,
-        graph,
-        raw,
-    };
-    (menu, ids, items)
 }
 
 /// The position carried by any pointer translation, for cursor
@@ -308,35 +200,36 @@ fn dialog() -> rfd::FileDialog {
 
 impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
-        let event = match event {
-            UserEvent::Menu(event) => event,
+        match event {
+            #[cfg(target_os = "macos")]
+            UserEvent::Menu(event) => match self.menu.event_kind(&event) {
+                Some(macos_menu::EventKind::NewSelected) => {
+                    self.request_discard(event_loop, AfterDiscard::New)
+                }
+                Some(macos_menu::EventKind::OpenSelected) => {
+                    self.request_discard(event_loop, AfterDiscard::Open)
+                }
+                Some(macos_menu::EventKind::SaveSelected) => self.menu_save(false),
+                Some(macos_menu::EventKind::SaveAsSelected) => self.menu_save(true),
+                Some(macos_menu::EventKind::QuitSelected) => {
+                    self.request_discard(event_loop, AfterDiscard::Quit)
+                }
+                Some(macos_menu::EventKind::UndoSelected) => self.step_history(true),
+                Some(macos_menu::EventKind::RedoSelected) => self.step_history(false),
+                Some(macos_menu::EventKind::ViewChanged)
+                    if let RenderState::Active { window, .. } = &self.state =>
+                {
+                    self.hover_is_current = false;
+                    window.request_redraw();
+                }
+                Some(macos_menu::EventKind::ViewChanged) | None => {}
+            },
             UserEvent::Discard(accepted) => {
                 let pending = self.pending_discard.take();
                 if accepted && let Some(then) = pending {
                     self.proceed(event_loop, then);
                 }
-                return;
             }
-        };
-        if *event.id() == self.menu_ids.new {
-            self.request_discard(event_loop, AfterDiscard::New);
-        } else if *event.id() == self.menu_ids.open {
-            self.request_discard(event_loop, AfterDiscard::Open);
-        } else if *event.id() == self.menu_ids.save {
-            self.menu_save(false);
-        } else if *event.id() == self.menu_ids.save_as {
-            self.menu_save(true);
-        } else if *event.id() == self.menu_ids.quit {
-            self.request_discard(event_loop, AfterDiscard::Quit);
-        } else if *event.id() == self.menu_ids.undo {
-            self.step_history(true);
-        } else if *event.id() == self.menu_ids.redo {
-            self.step_history(false);
-        } else if (*event.id() == self.menu_ids.graph || *event.id() == self.menu_ids.raw)
-            && let RenderState::Active { window, .. } = &self.state
-        {
-            self.hover_is_current = false;
-            window.request_redraw();
         }
     }
 
@@ -344,7 +237,7 @@ impl ApplicationHandler<UserEvent> for App {
         // After launch, so winit cannot replace it (its own default
         // menu is disabled at loop construction).
         #[cfg(target_os = "macos")]
-        self.menu.init_for_nsapp();
+        self.menu.install();
 
         let RenderState::Suspended(cached_window) = &mut self.state else {
             return;
@@ -404,7 +297,7 @@ impl ApplicationHandler<UserEvent> for App {
         // Pinch zooms the graph toward the cursor; winit delivers it
         // outside the pointer stream the reducer covers.
         if let WindowEvent::PinchGesture { delta, .. } = &event
-            && self.menu_items.graph.is_checked()
+            && self.view_flags().graph
         {
             let size = window.inner_size();
             let panel = graph_view::panel(size.width as f64, size.height as f64);
@@ -654,14 +547,11 @@ fn main() {
         builder.with_default_menu(false);
     }
     let event_loop = builder.build().expect("Couldn't create event loop");
-    // The menu attaches to the app instance the event loop created;
-    // its events arrive as user events through the proxy.
-    let (menu, menu_ids, menu_items) = build_menu();
     let proxy = event_loop.create_proxy();
-    let menu_proxy = proxy.clone();
-    MenuEvent::set_event_handler(Some(move |event| {
-        let _ = menu_proxy.send_event(UserEvent::Menu(event));
-    }));
+    #[cfg(target_os = "macos")]
+    let menu = macos_menu::Menu::new();
+    #[cfg(target_os = "macos")]
+    macos_menu::route_events(proxy.clone());
 
     let mut app = App {
         context: RenderContext::new(),
@@ -688,9 +578,8 @@ fn main() {
         plugin: plugins::F64Plugin::load()
             .inspect_err(|error| eprintln!("f64 plugin: {error}"))
             .ok(),
+        #[cfg(target_os = "macos")]
         menu,
-        menu_ids,
-        menu_items,
         cursor: Point::ZERO,
         pointer: None,
         hover: None,
@@ -1057,19 +946,17 @@ impl App {
     /// stays live for untitled documents — it defers to the save
     /// panel, per platform convention.
     fn sync_menus(&self) {
-        self.menu_items
-            .save
-            .set_enabled(self.model.history.dirty() || self.doc_path.is_none());
-        self.menu_items
-            .undo
-            .set_enabled(self.model.history.can_undo());
-        self.menu_items
-            .redo
-            .set_enabled(self.model.history.can_redo());
+        #[cfg(target_os = "macos")]
+        self.menu.sync(
+            self.model.history.dirty() || self.doc_path.is_none(),
+            self.model.history.can_undo(),
+            self.model.history.can_redo(),
+        );
     }
 
     /// Undo or redo one step, restoring the snapshot's document and
     /// selection; the displaced state crosses to the other stack.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     fn step_history(&mut self, back: bool) {
         let current = self.model.doc.clone();
         let selection = edge_path(&self.model.selection);
@@ -1176,6 +1063,7 @@ impl App {
     /// always asks. Write-through editing means the graph is always
     /// current, so there is nothing to flush first. A cancelled dialog
     /// saves nothing.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target = in_place.or_else(|| dialog().set_file_name("untitled.gid").save_file());
@@ -1287,7 +1175,7 @@ impl App {
                 self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
                 // The same chase horizontally, against the width the
                 // graph panel leaves visible.
-                let visible = if self.menu_items.graph.is_checked() {
+                let visible = if self.view_flags().graph {
                     graph_view::panel(viewport.width, viewport.height).x0
                 } else {
                     viewport.width
@@ -1307,9 +1195,19 @@ impl App {
     }
 
     fn view_flags(&self) -> ViewFlags {
-        ViewFlags {
-            graph: self.menu_items.graph.is_checked(),
-            raw: self.menu_items.raw.is_checked(),
+        #[cfg(target_os = "macos")]
+        {
+            ViewFlags {
+                graph: self.menu.graph(),
+                raw: self.menu.raw(),
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            ViewFlags {
+                graph: false,
+                raw: false,
+            }
         }
     }
 
