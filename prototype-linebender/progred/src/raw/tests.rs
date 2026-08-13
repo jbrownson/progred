@@ -462,7 +462,7 @@
                 .and_then(|fields| fields.get(&crate::test_values::label("x"))),
             Some(&crate::test_values::text("0"))
         );
-        assert!(projection::whole_text(doc.root.as_ref().unwrap()).is_none());
+        assert!(crate::conventions::whole_text(doc.root.as_ref().unwrap()).is_none());
     }
 
     #[test]

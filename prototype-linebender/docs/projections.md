@@ -30,7 +30,11 @@ later.
 Normal display is an ordered chain of partial projections over `Value`,
 ending in a total structural projection which can show any graph. The
 structural projection recursively re-enters the same dispatcher for every
-child instead of owning a closed set of leaf cases. This composed projection
+child instead of owning a closed set of leaf cases. `projection` is the
+runner: location lookup and trying an explicit list of partials. Library
+packs offer compositions of the constructs they cover; the editor
+assembles the live stack from those packs and currently wires the
+bootstrap pack in `conventions`. This composed projection
 is passed explicitly through recursion; it is not hidden in display context.
 `descend` receives the parent `Value` and an ordinary graph `Step`, extends
 stored source provenance, and invokes the supplied projection on that

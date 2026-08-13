@@ -2,9 +2,8 @@
 //! a hover refers to for secondary marks.
 
 use crate::completion::{completion_entries, EntryAction};
-use crate::conventions::Names;
+use crate::conventions::{self, Names};
 use crate::document::Path;
-use crate::projection;
 use crate::selection::Selection;
 use crate::sources::Sources;
 use progred_graph::{Step, Value};
@@ -101,7 +100,7 @@ pub fn hover_value(
         Hover::Value(path) => sources
             .resolve(path)
             .filter(|value| {
-                !matches!(value, Value::Record(_)) || projection::whole_text(value).is_some()
+                !matches!(value, Value::Record(_)) || conventions::whole_text(value).is_some()
             })
             .cloned(),
         // A dead address answers nothing: the label must still be in

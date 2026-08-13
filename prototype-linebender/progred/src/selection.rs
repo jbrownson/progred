@@ -4,7 +4,7 @@
 
 use crate::document::{Document, Path, short_id};
 use crate::sources::Sources;
-use crate::projection;
+use crate::conventions;
 use progred_graph::{CellId, Cells, Position, Step, Value, position, spine};
 use puri::edit::LineEditState;
 use std::collections::HashMap;
@@ -92,7 +92,7 @@ impl Selection {
         // An editor mounts only where write-through can land: the
         // owning cell must not be external.
         let edit = writable_at(sources, &path)
-            .then(|| sources.resolve(&path).and_then(projection::editor))
+            .then(|| sources.resolve(&path).and_then(conventions::editor))
             .flatten();
         Selection::Edge {
             path,
@@ -460,7 +460,7 @@ pub fn resolve_query(text: &str) -> Value {
 /// presence is what says "structure" — never the text's shape, so
 /// text that happens to spell Value JSON stays text.
 pub fn to_clipboard(value: &Value) -> (String, bool) {
-    match (projection::whole_text(value), value.as_blob()) {
+    match (conventions::whole_text(value), value.as_blob()) {
         (Some(text), _) => (format!("\"{text}\""), false),
         (_, Some(_)) => (value.to_string(), false),
         _ => (
@@ -588,7 +588,7 @@ fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
         .resolve(path)
         // Compact atom projections are leaves. Once another field
         // enriches either convention, the visible record is collapsible.
-        .filter(|value| !projection::editable(value))
+        .filter(|value| !conventions::editable(value))
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
             Value::Blob(_) => false,

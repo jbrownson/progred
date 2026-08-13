@@ -5,7 +5,7 @@
 //! lists inline literals or bare element rows; atoms render as their
 //! values; positions are session bookkeeping and never render at all.
 
-use crate::conventions::Names;
+use crate::conventions::{self, Names, Projection};
 use crate::display::{Language, LayoutLanguage, Styles, TextRole};
 use crate::completion::{
     Entry, EntryAction, HasPopup, Popup, completion_entries,
@@ -32,7 +32,7 @@ use crate::layout::{
     row, text, text_edit,
 };
 use crate::sources::Sources;
-use crate::projection::{self, Location};
+use crate::projection::Location;
 use im::OrdMap;
 use parley::layout::Layout as TextLayout;
 use progred_graph::{CellId, Cells, Position, Step, Value, hex_string, new_cell_id};
@@ -526,7 +526,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
         Selection::Edge { path, .. } => sources
             .resolve(path)
             .filter(|value| {
-                !matches!(value, Value::Record(_)) || projection::whole_text(value).is_some()
+                !matches!(value, Value::Record(_)) || conventions::whole_text(value).is_some()
             })
             .cloned(),
         _ => None,
@@ -547,7 +547,7 @@ pub struct ProjectDescription<'a> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub projection: projection::Projection<'a>,
+    pub projection: Projection<'a>,
 }
 
 pub fn project<
@@ -638,7 +638,7 @@ fn cell_view<
     cell: CellId,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let name = cx.name(cell);
@@ -863,7 +863,7 @@ fn evaluation_projection<
     result: Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let gap = 6.0 * scale;
@@ -960,7 +960,7 @@ fn field_row<
     value: Option<Value>,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
@@ -1113,7 +1113,7 @@ fn list_view<
     elements: &OrdMap<Position, Value>,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let mut items: Vec<(Position, Option<Value>)> = elements
@@ -1273,7 +1273,7 @@ fn record_view<
     fields: &OrdMap<CellId, Value>,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let consumes_simple_name = !cx.raw
@@ -1286,7 +1286,7 @@ fn record_view<
             .is_some()
         && fields
             .get(&progred_name::vocabulary::NAME)
-            .and_then(projection::whole_text)
+            .and_then(conventions::whole_text)
             .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(CellId, Option<Value>)> = fields
         .iter()
@@ -1561,7 +1561,7 @@ fn projected_value_view<
     value: &Value,
     hooks: &Hooks<C>,
     editing: Option<&LineEditState>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Option<Layout<P>> {
     let mut display = LayoutLanguage::<C, P>::new(tcx, cx.styles, editing, hooks.edit.clone());
     let projected = projection.try_project(&mut display, value)?;
@@ -1590,7 +1590,7 @@ fn project_transient_root<
     result: Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let origin = path.to_vec();
     let select = hooks.select.clone();
@@ -1650,7 +1650,7 @@ fn descend<
     step: Step,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
@@ -1679,7 +1679,7 @@ fn descend<
     }
 }
 
-impl projection::Projection<'_> {
+impl Projection<'_> {
     #[allow(clippy::too_many_arguments)]
     fn project<
         C: 'static,
@@ -1737,7 +1737,7 @@ fn project_present_value<
     value: &Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     let editing = cx
         .selection
@@ -1785,7 +1785,7 @@ fn raw_value_view<
     value: &Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: projection::Projection<'_>,
+    projection: Projection<'_>,
 ) -> Layout<P> {
     match value {
         Value::Blob(bytes) => select_target(

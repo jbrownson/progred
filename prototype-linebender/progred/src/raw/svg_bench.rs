@@ -261,7 +261,7 @@
                 raw: false,
                 styles: &styles,
                 width: width - 48.0,
-                projection: projection::Projection::new(&foreign),
+                projection: crate::conventions::projection(&foreign),
             },
             &mut tcx,
             hooks,
@@ -571,7 +571,7 @@
             .find(|descend| {
                 sources
                     .resolve(&descend.path)
-                    .is_some_and(|value| projection::whole_text(value).is_some())
+                    .is_some_and(|value| crate::conventions::whole_text(value).is_some())
                     && projected_name_owner(&descend.path).is_none()
             })
             .expect("the sample has a string leaf");

@@ -555,7 +555,7 @@ fn node_content(
         GraphNode::Root => {
             let mark =
                 match doc.root.as_ref().and_then(|value| {
-                    crate::projection::whole_text(value).map(|text| format!("\"{text}\""))
+                    crate::conventions::whole_text(value).map(|text| format!("\"{text}\""))
                 }) {
                     Some(text) => text,
                     None => match &doc.root {
@@ -569,7 +569,7 @@ fn node_content(
             match doc
                 .root
                 .as_ref()
-                .and_then(|value| crate::projection::whole_text(value))
+                .and_then(|value| crate::conventions::whole_text(value))
             {
                 Some(_) => layout_text(tcx, &mark, size, STRING_TEXT, ui),
                 _ => layout_text(tcx, &mark, size, DIM_TEXT, ui),

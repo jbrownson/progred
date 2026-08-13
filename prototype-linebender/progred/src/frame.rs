@@ -1,6 +1,7 @@
 //! One read-only UI pass: place the document, resolve hover, emit dispatch.
 
 use crate::completion;
+use crate::conventions;
 use crate::display;
 use crate::graph_view;
 use crate::hover;
@@ -8,7 +9,6 @@ use crate::layout;
 use crate::menu;
 use crate::model::{Model, Selected, ViewFlags};
 use crate::navigate;
-use crate::projection;
 use crate::raw;
 use crate::selection;
 use crate::sources;
@@ -544,7 +544,7 @@ pub(crate) fn run_frame(
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            projection: projection::Projection::new(&model.foreign),
+            projection: conventions::projection(&model.foreign),
         },
         &mut tcx,
         raw::Hooks {
