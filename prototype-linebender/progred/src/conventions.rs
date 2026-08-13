@@ -23,23 +23,25 @@ pub mod vocabulary {
 }
 
 pub fn library() -> Cells {
-    let mut cells = progred_name::library();
-    cells.merge(progred_isa::library());
-    cells.merge(grap::library());
-    cells.merge(grap_absent::library());
-    cells.merge(grap_control::library());
-    cells.merge(grap_f64::library());
-    cells.merge(grap_geometry::library());
+    let mut cells = progred_name::library()
+        .merged(progred_isa::library())
+        .merged(grap::library())
+        .merged(grap_absent::library())
+        .merged(grap_control::library())
+        .merged(grap_f64::library())
+        .merged(grap_geometry::library());
     cells.set_value(vocabulary::GRAP, progred_name::record("grap", []));
     cells
 }
 
 pub fn foreign_functions() -> grap::ForeignFunctions {
-    let mut foreign = grap::ForeignFunctions::new();
-    grap_control::install(&mut foreign).expect("control foreign functions are distinct");
-    grap_f64::install(&mut foreign).expect("f64 foreign functions are distinct");
-    grap_geometry::install(&mut foreign).expect("geometry foreign functions are distinct");
-    foreign
+    grap::ForeignFunctions::merge_all([
+        grap::functions(),
+        grap_control::functions(),
+        grap_f64::functions(),
+        grap_geometry::functions(),
+    ])
+    .expect("library function cells are distinct")
 }
 
 pub fn name<'a>(sources: &'a Sources, cell: CellId) -> Option<&'a str> {

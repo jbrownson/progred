@@ -2,7 +2,7 @@
 //! selects one expression through structural matching; `quote`
 //! constructs data while evaluating explicit unquotes.
 
-use grap::{Environment, Evaluate, ForeignFunctions, Halt, RegistrationError};
+use grap::{Environment, Evaluate, ForeignFunctions, Halt};
 use progred_graph::{CellId, Cells, Value};
 use std::collections::BTreeMap;
 
@@ -30,21 +30,27 @@ pub mod vocabulary {
         CellId::from_u128(0x59ad0fb67728f245dce57b0cee360969);
 }
 
-pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> {
-    foreign.register(
-        vocabulary::CASE,
-        [
-            vocabulary::VALUE,
-            vocabulary::ALTERNATIVES,
-            vocabulary::DEFAULT,
-        ],
-        case_foreign,
-    )?;
-    foreign.register(
-        vocabulary::QUOTE,
-        [grap::vocabulary::EXPRESSION],
-        quote_foreign,
-    )
+pub fn functions() -> ForeignFunctions {
+    let mut foreign = ForeignFunctions::new();
+    foreign
+        .register(
+            vocabulary::CASE,
+            [
+                vocabulary::VALUE,
+                vocabulary::ALTERNATIVES,
+                vocabulary::DEFAULT,
+            ],
+            case_foreign,
+        )
+        .expect("control function cells are distinct");
+    foreign
+        .register(
+            vocabulary::QUOTE,
+            [grap::vocabulary::EXPRESSION],
+            quote_foreign,
+        )
+        .expect("control function cells are distinct");
+    foreign
 }
 
 fn quote_foreign(
@@ -278,9 +284,7 @@ mod tests {
     }
 
     fn evaluate(expression: &Value) -> grap::Evaluation {
-        let mut foreign = ForeignFunctions::new();
-        install(&mut foreign).unwrap();
-        grap::evaluate(expression, |_| None, &foreign, 100)
+        grap::evaluate(expression, |_| None, &functions(), 100)
     }
 
     #[test]
@@ -387,8 +391,7 @@ mod tests {
         static SUBJECT_EVALUATIONS: AtomicUsize = AtomicUsize::new(0);
 
         let subject = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        install(&mut foreign).unwrap();
+        let mut foreign = functions();
         foreign
             .register(subject, [], |_, _, _| {
                 SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);

@@ -102,13 +102,7 @@ pub struct ForeignFunctions {
 impl Default for ForeignFunctions {
     fn default() -> Self {
         Self {
-            functions: HashMap::from([(
-                vocabulary::EVALUATE,
-                ForeignFunction {
-                    params: vec![vocabulary::EXPRESSION, vocabulary::ENVIRONMENT],
-                    call: evaluate_foreign,
-                },
-            )]),
+            functions: HashMap::new(),
         }
     }
 }
@@ -145,6 +139,38 @@ impl ForeignFunctions {
     fn get(&self, function: CellId) -> Option<&ForeignFunction> {
         self.functions.get(&function)
     }
+
+    pub fn merge(mut self, other: Self) -> Result<Self, RegistrationError> {
+        for (cell, function) in other.functions {
+            match self.functions.entry(cell) {
+                Entry::Occupied(_) => return Err(RegistrationError::AlreadyRegistered(cell)),
+                Entry::Vacant(entry) => {
+                    entry.insert(function);
+                }
+            }
+        }
+        Ok(self)
+    }
+
+    pub fn merge_all(
+        tables: impl IntoIterator<Item = Self>,
+    ) -> Result<Self, RegistrationError> {
+        tables.into_iter().try_fold(Self::new(), Self::merge)
+    }
+}
+
+/// Core Grap's registered Rust functions. Libraries return their own
+/// tables; the editor merges them.
+pub fn functions() -> ForeignFunctions {
+    let mut foreign = ForeignFunctions::new();
+    foreign
+        .register(
+            vocabulary::EVALUATE,
+            [vocabulary::EXPRESSION, vocabulary::ENVIRONMENT],
+            evaluate_foreign,
+        )
+        .expect("core Grap registers one function");
+    foreign
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -874,7 +900,7 @@ mod tests {
                 ],
             ),
             |_| None,
-            &ForeignFunctions::new(),
+            &functions(),
             40,
         );
         assert_eq!(evaluation.result, blob("evaluated"));
@@ -1061,6 +1087,22 @@ mod tests {
         assert_eq!(
             foreign.register(function, [], |_, _, _| Ok(blob("x"))),
             Err(RegistrationError::AlreadyRegistered(function))
+        );
+    }
+
+    #[test]
+    fn merge_refuses_overlapping_tables() {
+        let function = new_cell_id();
+        let mut left = ForeignFunctions::new();
+        left.register(function, [], |_, _, _| Ok(blob("left")))
+            .unwrap();
+        let mut right = ForeignFunctions::new();
+        right
+            .register(function, [], |_, _, _| Ok(blob("right")))
+            .unwrap();
+        assert_eq!(
+            left.merge(right).err(),
+            Some(RegistrationError::AlreadyRegistered(function))
         );
     }
 

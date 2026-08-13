@@ -2,7 +2,7 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use grap::{Environment, Evaluate, ForeignFunctions, Halt, RegistrationError};
+use grap::{Environment, Evaluate, ForeignFunctions, Halt};
 use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
@@ -33,21 +33,27 @@ pub fn read(value: &Value) -> Option<f64> {
         .map(f64::from_le_bytes)
 }
 
-pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> {
-    foreign.register(
-        vocabulary::ADD,
-        [vocabulary::LEFT, vocabulary::RIGHT],
-        |evaluate, arguments, environment| {
-            binary(evaluate, arguments, environment, |left, right| left + right)
-        },
-    )?;
-    foreign.register(
-        vocabulary::MULTIPLY,
-        [vocabulary::LEFT, vocabulary::RIGHT],
-        |evaluate, arguments, environment| {
-            binary(evaluate, arguments, environment, |left, right| left * right)
-        },
-    )
+pub fn functions() -> ForeignFunctions {
+    let mut foreign = ForeignFunctions::new();
+    foreign
+        .register(
+            vocabulary::ADD,
+            [vocabulary::LEFT, vocabulary::RIGHT],
+            |evaluate, arguments, environment| {
+                binary(evaluate, arguments, environment, |left, right| left + right)
+            },
+        )
+        .expect("f64 function cells are distinct");
+    foreign
+        .register(
+            vocabulary::MULTIPLY,
+            [vocabulary::LEFT, vocabulary::RIGHT],
+            |evaluate, arguments, environment| {
+                binary(evaluate, arguments, environment, |left, right| left * right)
+            },
+        )
+        .expect("f64 function cells are distinct");
+    foreign
 }
 
 fn binary(
@@ -105,12 +111,6 @@ mod tests {
         )
     }
 
-    fn foreign() -> ForeignFunctions {
-        let mut foreign = ForeignFunctions::new();
-        install(&mut foreign).unwrap();
-        foreign
-    }
-
     #[test]
     fn representation_is_library_data() {
         assert_eq!(read(&value(2.5)), Some(2.5));
@@ -131,7 +131,7 @@ mod tests {
         let add = call(vocabulary::ADD, value(2.0), value(3.0));
         let multiply = call(vocabulary::MULTIPLY, add, value(4.0));
         assert_eq!(
-            grap::evaluate(&multiply, |_| None, &foreign(), 20).result,
+            grap::evaluate(&multiply, |_| None, &functions(), 20).result,
             value(20.0)
         );
     }
@@ -141,11 +141,11 @@ mod tests {
         let left = call(vocabulary::ADD, Value::from(b"two".to_vec()), value(3.0));
         let right = call(vocabulary::ADD, value(2.0), Value::from(b"three".to_vec()));
         assert_eq!(
-            grap::evaluate(&left, |_| None, &foreign(), 10).result,
+            grap::evaluate(&left, |_| None, &functions(), 10).result,
             Value::from(vocabulary::LEFT_NOT_F64)
         );
         assert_eq!(
-            grap::evaluate(&right, |_| None, &foreign(), 10).result,
+            grap::evaluate(&right, |_| None, &functions(), 10).result,
             Value::from(vocabulary::RIGHT_NOT_F64)
         );
     }

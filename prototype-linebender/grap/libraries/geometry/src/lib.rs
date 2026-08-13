@@ -1,7 +1,7 @@
 //! The first geometry Grap library: a circle value and a Rust-backed
 //! constructor consuming the f64 library's representation.
 
-use grap::{ForeignFunctions, RegistrationError};
+use grap::ForeignFunctions;
 use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
@@ -29,23 +29,25 @@ pub fn read(value: &Value) -> Option<f64> {
     (radius.is_finite() && radius >= 0.0).then_some(radius)
 }
 
-pub fn install(foreign: &mut ForeignFunctions) -> Result<(), RegistrationError> {
-    foreign.register(
-        vocabulary::CIRCLE,
-        [vocabulary::RADIUS],
-        |evaluate, arguments, environment| {
-            let radius = match arguments {
-                [radius] => evaluate(radius, environment)?,
-                _ => unreachable!("Grap checks foreign arity before calling"),
-            };
-            Ok(
-                grap_f64::read(&radius)
+pub fn functions() -> ForeignFunctions {
+    let mut foreign = ForeignFunctions::new();
+    foreign
+        .register(
+            vocabulary::CIRCLE,
+            [vocabulary::RADIUS],
+            |evaluate, arguments, environment| {
+                let radius = match arguments {
+                    [radius] => evaluate(radius, environment)?,
+                    _ => unreachable!("Grap checks foreign arity before calling"),
+                };
+                Ok(grap_f64::read(&radius)
                     .filter(|radius| radius.is_finite() && *radius >= 0.0)
                     .map(value)
-                    .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS)),
-            )
-        },
-    )
+                    .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS)))
+            },
+        )
+        .expect("geometry function cells are distinct");
+    foreign
 }
 
 pub fn library() -> Cells {
@@ -66,8 +68,7 @@ mod tests {
 
     #[test]
     fn circle_is_a_library_call_over_an_f64() {
-        let mut foreign = ForeignFunctions::new();
-        install(&mut foreign).unwrap();
+        let foreign = functions();
         let expression = grap::call(
             Value::from(vocabulary::CIRCLE),
             [(vocabulary::RADIUS, grap_f64::value(20.0))],
@@ -98,8 +99,7 @@ mod tests {
 
     #[test]
     fn invalid_radius_is_a_library_sentinel() {
-        let mut foreign = ForeignFunctions::new();
-        install(&mut foreign).unwrap();
+        let foreign = functions();
         let expression = grap::call(
             Value::from(vocabulary::CIRCLE),
             [(vocabulary::RADIUS, grap_f64::value(-1.0))],

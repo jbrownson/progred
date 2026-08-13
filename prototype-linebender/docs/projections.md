@@ -314,9 +314,9 @@ The evaluator lives in its own `grap` crate. It depends on the graph
 core and the shared Grap absent and name conventions, but knows no f64,
 geometry, UI, file, or Linebender concepts. `grap-f64` and
 `grap-geometry` are separate libraries composed by the application.
-Their identities and ordinary graph-side values live in the built-in
-library cells; their host-side implementations live in the generic
-foreign-function registry.
+Each crate returns its graph facts and, when it has Rust
+implementations, a foreign-function table. The editor merges those
+values; a duplicate function cell is an error.
 
 A registered Rust implementation declares the call fields it consumes,
 receives them as raw argument expressions plus the calling environment, and

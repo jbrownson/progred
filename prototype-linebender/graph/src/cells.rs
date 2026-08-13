@@ -55,6 +55,11 @@ impl Cells {
         }
     }
 
+    pub fn merged(mut self, other: Cells) -> Self {
+        self.merge(other);
+        self
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         self.data.ptr_eq(&other.data)
     }
