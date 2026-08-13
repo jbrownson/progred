@@ -1,7 +1,7 @@
 //! The semantic display vocabulary projections target, and its
-//! interpreter into Progred's measured layout nodes.
+//! interpreter into Progred's measured layouts.
 
-use crate::layout::{self, Extent, Node};
+use crate::layout::{self, Extent, Layout};
 use puri::draw::{Canvas, Shape};
 use puri::edit::{EditCtx, EditStyle, LineEditDescription, LineEditPresentation, LineEditState};
 use puri::handler::HasHandler;
@@ -154,7 +154,7 @@ pub trait Language {
 
 type EditAccess<C> = Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>;
 
-pub struct NodeLanguage<'a, 'text, C, P> {
+pub struct LayoutLanguage<'a, 'text, C, P> {
     tcx: &'a mut TextCtx<'text>,
     styles: &'a Styles,
     editing: Option<&'a LineEditState>,
@@ -162,7 +162,7 @@ pub struct NodeLanguage<'a, 'text, C, P> {
     marker: PhantomData<fn() -> P>,
 }
 
-impl<'a, 'text, C, P> NodeLanguage<'a, 'text, C, P> {
+impl<'a, 'text, C, P> LayoutLanguage<'a, 'text, C, P> {
     pub fn new(
         tcx: &'a mut TextCtx<'text>,
         styles: &'a Styles,
@@ -179,8 +179,8 @@ impl<'a, 'text, C, P> NodeLanguage<'a, 'text, C, P> {
     }
 }
 
-impl<C: 'static, P: Canvas + HasHandler<C>> Language for NodeLanguage<'_, '_, C, P> {
-    type View = Node<P>;
+impl<C: 'static, P: Canvas + HasHandler<C>> Language for LayoutLanguage<'_, '_, C, P> {
+    type View = Layout<P>;
 
     fn text(&mut self, text: &str, role: TextRole) -> Self::View {
         layout::text(self.tcx, text, self.styles.text(role))

@@ -51,7 +51,7 @@ Compact domain projections target a small display vocabulary: styled text, a
 generic line editor, vector graphics, rows, and columns. Its live interpreter
 measures those operations into Progred's baseline-box layout and draws the
 resulting leaves through Puri's canvas. The total structural fallback still
-constructs layout nodes directly because it owns graph paths, editing, and
+constructs layouts directly because it owns graph paths, editing, and
 the detailed source interaction model. The generic line editor carries a
 text-to-`Value` handler, so text and f64 use the same display operation with
 different parsers; focus and cursor remain interpreter context while source

@@ -46,13 +46,13 @@ impl From<TextMetrics> for Extent {
     }
 }
 
-pub struct Node<P> {
+pub struct Layout<P> {
     pub extent: Extent,
     kind: Kind<P>,
 }
 
 pub struct PlaceInner<P> {
-    child: Node<P>,
+    child: Layout<P>,
     placement: Placement,
 }
 
@@ -76,32 +76,32 @@ type PlaceLeaf<P> = Box<dyn FnOnce(&mut P, Placement)>;
 enum Kind<P> {
     Leaf(PlaceLeaf<P>),
     Row {
-        children: Vec<Node<P>>,
+        children: Vec<Layout<P>>,
         gap: f64,
     },
     Col {
-        children: Vec<Node<P>>,
+        children: Vec<Layout<P>>,
         gap: f64,
     },
     Pad {
-        child: Box<Node<P>>,
+        child: Box<Layout<P>>,
         insets: Insets,
     },
     Around {
-        child: Box<Node<P>>,
+        child: Box<Layout<P>>,
         place: PlaceAround<P>,
     },
 }
 
-pub fn leaf<P>(extent: Extent, place: impl FnOnce(&mut P, Placement) + 'static) -> Node<P> {
-    Node {
+pub fn leaf<P>(extent: Extent, place: impl FnOnce(&mut P, Placement) + 'static) -> Layout<P> {
+    Layout {
         extent,
         kind: Kind::Leaf(Box::new(place)),
     }
 }
 
 /// Children on one baseline: ascent and descent are the maxima.
-pub fn row<P>(gap: f64, children: Vec<Node<P>>) -> Node<P> {
+pub fn row<P>(gap: f64, children: Vec<Layout<P>>) -> Layout<P> {
     let width = children.iter().map(|c| c.extent.width).sum::<f64>()
         + gap * children.len().saturating_sub(1) as f64;
     let ascent = children
@@ -112,7 +112,7 @@ pub fn row<P>(gap: f64, children: Vec<Node<P>>) -> Node<P> {
         .iter()
         .map(|c| c.extent.descent)
         .fold(0.0_f64, f64::max);
-    Node {
+    Layout {
         extent: Extent {
             width,
             ascent,
@@ -123,7 +123,7 @@ pub fn row<P>(gap: f64, children: Vec<Node<P>>) -> Node<P> {
 }
 
 /// Children stacked; the column's baseline is child `baseline`'s.
-pub fn col<P>(baseline: usize, gap: f64, children: Vec<Node<P>>) -> Node<P> {
+pub fn col<P>(baseline: usize, gap: f64, children: Vec<Layout<P>>) -> Layout<P> {
     let extent = if children.is_empty() {
         Extent::default()
     } else {
@@ -146,15 +146,15 @@ pub fn col<P>(baseline: usize, gap: f64, children: Vec<Node<P>>) -> Node<P> {
             descent: total - ascent,
         }
     };
-    Node {
+    Layout {
         extent,
         kind: Kind::Col { children, gap },
     }
 }
 
-pub fn pad<P>(insets: Insets, child: Node<P>) -> Node<P> {
+pub fn pad<P>(insets: Insets, child: Layout<P>) -> Layout<P> {
     let e = child.extent;
-    Node {
+    Layout {
         extent: Extent {
             width: e.width + insets.x0 + insets.x1,
             ascent: e.ascent + insets.y0,
@@ -170,18 +170,18 @@ pub fn pad<P>(insets: Insets, child: Node<P>) -> Node<P> {
 /// Holds `child` to at least `min` wide by padding on the right: a
 /// frame's minimum, not the child's — the child keeps its own extent
 /// and placement.
-pub fn min_width<P>(min: f64, child: Node<P>) -> Node<P> {
+pub fn min_width<P>(min: f64, child: Layout<P>) -> Layout<P> {
     let deficit = (min - child.extent.width).max(0.0);
     pad(Insets::new(0.0, 0.0, deficit, 0.0), child)
 }
 
-/// Transparently wraps this node's placement. `place_inner` places
+/// Transparently wraps this layout's placement. `place_inner` places
 /// its content and descendants exactly once when invoked.
 pub fn around<P>(
-    child: Node<P>,
+    child: Layout<P>,
     place: impl FnOnce(&mut P, Placement, PlaceInner<P>) + 'static,
-) -> Node<P> {
-    Node {
+) -> Layout<P> {
+    Layout {
         extent: child.extent,
         kind: Kind::Around {
             child: Box::new(child),
@@ -190,12 +190,12 @@ pub fn around<P>(
     }
 }
 
-/// Run `place_before` while entering this node, before its content
+/// Run `place_before` while entering this layout, before its content
 /// and descendants.
 pub fn before<P>(
-    child: Node<P>,
+    child: Layout<P>,
     place_before: impl FnOnce(&mut P, Placement) + 'static,
-) -> Node<P> {
+) -> Layout<P> {
     around(child, move |ctx, placement, place_inner| {
         place_before(ctx, placement);
         place_inner.place(ctx);
@@ -205,16 +205,16 @@ pub fn before<P>(
 /// The historical leading decoration operation, retained as the
 /// rectangle-only spelling of [`before`].
 pub fn decorate<P>(
-    child: Node<P>,
+    child: Layout<P>,
     draw: impl FnOnce(&mut P, Rect) + 'static,
-) -> Node<P> {
+) -> Layout<P> {
     before(child, move |ctx, placement| draw(ctx, placement.rect))
 }
 
-pub fn place<P>(node: Node<P>, ctx: &mut P, placement: Placement) {
-    let extent = node.extent;
+pub fn place<P>(layout: Layout<P>, ctx: &mut P, placement: Placement) {
+    let extent = layout.extent;
     let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
-    match node.kind {
+    match layout.kind {
         Kind::Leaf(f) => f(ctx, placement),
         Kind::Row { children, gap } => {
             let mut x = at.x;
@@ -268,14 +268,14 @@ pub fn place<P>(node: Node<P>, ctx: &mut P, placement: Placement) {
     }
 }
 
-/// `at` is the top-left corner of the node.
+/// `at` is the top-left corner of the layout.
 #[cfg(test)]
-pub fn place_top_left<P>(node: Node<P>, ctx: &mut P, at: Point) {
-    let placement = Placement::root(node.extent.rect_at(at));
-    place(node, ctx, placement);
+pub fn place_top_left<P>(layout: Layout<P>, ctx: &mut P, at: Point) {
+    let placement = Placement::root(layout.extent.rect_at(at));
+    place(layout, ctx, placement);
 }
 
-pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Node<P> {
+pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Layout<P> {
     let text = puri::text::text(ctx, s, style);
     leaf(
         text.metrics().into(),
@@ -287,7 +287,7 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
     description: LineEditDescription<'_>,
     tcx: &mut TextCtx,
     with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
-) -> Node<P> {
+) -> Layout<P> {
     let edit = puri::edit::text_edit(description, tcx);
     leaf(
         edit.metrics().into(),
@@ -296,11 +296,11 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
 }
 
 pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
-    node: Node<P>,
+    layout: Layout<P>,
     accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
     action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-) -> Node<P> {
-    before(node, move |p, placement| {
+) -> Layout<P> {
+    before(layout, move |p, placement| {
         puri::interact::on_primary_pointer_down(p, placement, accepts, action);
     })
 }
@@ -308,7 +308,7 @@ pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
 /// Place `child` shifted up-left by `offset` inside a clipped
 /// viewport. The caller owns and clamps the offset.
 pub fn place_scrolled<C: 'static, P: Canvas + HasHandler<C>>(
-    child: Node<P>,
+    child: Layout<P>,
     ctx: &mut P,
     placement: Placement,
     offset: Vec2,
@@ -466,7 +466,7 @@ mod tests {
         }
     }
 
-    fn probe(extent: Extent) -> Node<Vec<Placement>> {
+    fn probe(extent: Extent) -> Layout<Vec<Placement>> {
         leaf(extent, move |placed: &mut Vec<Placement>, placement| {
             placed.push(placement)
         })

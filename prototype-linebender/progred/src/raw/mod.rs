@@ -6,7 +6,7 @@
 //! values; positions are session bookkeeping and never render at all.
 
 use crate::conventions::Names;
-use crate::display::{Language, NodeLanguage, Styles, TextRole};
+use crate::display::{Language, LayoutLanguage, Styles, TextRole};
 use crate::completion::{
     Entry, EntryAction, HasPopup, Popup, completion_entries,
 };
@@ -28,13 +28,13 @@ use crate::navigate::{Descend, HasDescends};
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
 use crate::layout::{
-    Extent, Node, around, before, col, decorate, leaf, min_width, on_primary_pointer_down, pad,
+    Extent, Layout, around, before, col, decorate, leaf, min_width, on_primary_pointer_down, pad,
     row, text, text_edit,
 };
 use crate::sources::Sources;
 use crate::projection::{self, Location};
 use im::OrdMap;
-use parley::layout::Layout;
+use parley::layout::Layout as TextLayout;
 use progred_graph::{CellId, Cells, Position, Step, Value, hex_string, new_cell_id};
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
@@ -252,7 +252,7 @@ fn delim_leaf<P: Canvas>(
     extent: Extent,
     ink_top: f64,
     ink_bottom: f64,
-) -> Node<P> {
+) -> Layout<P> {
     let style = delim_style(styles);
     let bearing = SIDE_BEARING_EM * 14.0 * styles.scale;
     let brush = styles.dim.brush.clone();
@@ -282,7 +282,7 @@ fn delim_leaf<P: Canvas>(
 /// A one-line delimiter at the font's own glyph span: the drawn
 /// family's flat form, sitting in a text row exactly where the glyph
 /// would.
-fn flat_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool) -> Node<P> {
+fn flat_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool) -> Layout<P> {
     let em = 14.0 * styles.scale;
     let (asc, desc) = (GLYPH_ASC_EM * em, GLYPH_DESC_EM * em);
     delim_leaf(
@@ -301,7 +301,7 @@ fn flat_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool) -> Node<P> {
 
 /// A delimiter stretched over `content`'s extent, ink trimmed to meet
 /// the glyph span on the first and last lines.
-fn tall_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool, content: Extent) -> Node<P> {
+fn tall_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool, content: Extent) -> Layout<P> {
     let em = 14.0 * styles.scale;
     let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
     let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
@@ -319,8 +319,8 @@ fn bracketed<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     path: &[Step],
     target: &Value,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let extent = content.extent;
     // The air between delimiter and content rides INSIDE the
     // delimiter's claim — identical pixels, and the handle's thin
@@ -369,7 +369,7 @@ fn slot_width(styles: &Styles) -> f64 {
 /// the paint changes. The charge is exactly the text frame: the
 /// empty line SHAPED, the same runtime metrics the engaged editor's
 /// frame takes — no measured constants, one source.
-fn placeholder_box<P: Canvas>(tcx: &mut TextCtx, styles: &Styles) -> Node<P> {
+fn placeholder_box<P: Canvas>(tcx: &mut TextCtx, styles: &Styles) -> Layout<P> {
     let line = text::<P>(tcx, "", &styles.name).extent;
     let extent = Extent {
         width: slot_width(styles),
@@ -472,8 +472,8 @@ fn source_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + 
     path: Path,
     value: Option<Value>,
     hooks: &Hooks<C>,
-    child: Node<P>,
-) -> Node<P> {
+    child: Layout<P>,
+) -> Layout<P> {
     let (path, transient) = match cx.source {
         Source::Transient { owner } if owner != path.as_slice() => return child,
         Source::Transient { owner } => (owner.to_vec(), true),
@@ -557,7 +557,7 @@ pub fn project<
     description: ProjectDescription<'_>,
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     let ProjectDescription {
         sources,
         selection,
@@ -639,7 +639,7 @@ fn cell_view<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let name = cx.name(cell);
     let target = Value::from(cell);
@@ -757,7 +757,7 @@ fn cell_view<
 /// rows — so clicks on structural whitespace (gutters, inter-row
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
-fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Node<P>) -> Node<P> {
+fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Layout<P>) -> Layout<P> {
     if cx.source.transient() {
         return child;
     }
@@ -799,7 +799,7 @@ fn head_view<
     cell: CellId,
     name: &Option<String>,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     let short = short_id(cell);
     let Some(name) = name else {
         return text(tcx, &short, &cx.styles.id);
@@ -864,7 +864,7 @@ fn evaluation_projection<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let gap = 6.0 * scale;
     let data_projection = projection.without_evaluation();
@@ -880,7 +880,7 @@ fn evaluation_projection<
                 hooks,
                 data_projection,
             );
-            let arrow = NodeLanguage::<C, P>::new(
+            let arrow = LayoutLanguage::<C, P>::new(
                 tcx,
                 cx.styles,
                 None,
@@ -896,7 +896,7 @@ fn evaluation_projection<
                 hooks,
                 data_projection,
             );
-            NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+            LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
                 .row(6.0, vec![expression, arrow, result])
         })
         .filter(|candidate| one_line(candidate.extent, scale));
@@ -904,7 +904,7 @@ fn evaluation_projection<
         return candidate;
     }
 
-    let arrow = NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+    let arrow = LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
         .text("→", TextRole::Dim);
     let result_avail = (avail - arrow.extent.width - gap).max(0.0);
     let expression = project_present_value(
@@ -926,9 +926,9 @@ fn evaluation_projection<
         hooks,
         data_projection,
     );
-    let result_row = NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+    let result_row = LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
         .row(6.0, vec![arrow, result]);
-    NodeLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
+    LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
         .col(0, 2.0, vec![expression, result_row])
 }
 
@@ -961,7 +961,7 @@ fn field_row<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
     child.push(Step::Key(key));
@@ -1066,7 +1066,7 @@ fn pending_edge_row<
     query: &LineEditState,
     choice: usize,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     // Both stages through the slot widget: the label engaged and
     // wearing the ring — ONLY the label, as a re-opened rename wears
     // it, so the cold value slot's box stands clear instead of
@@ -1114,7 +1114,7 @@ fn list_view<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let mut items: Vec<(Position, Option<Value>)> = elements
         .iter()
@@ -1165,7 +1165,7 @@ fn list_view<
     let writable = writable_at(&cx.sources, path);
     let mut flat = (avail > 0.0 || bare)
         .then(|| {
-            let mut cells: Vec<Node<P>> = vec![hover_target(
+            let mut cells: Vec<Layout<P>> = vec![hover_target(
                 path.to_vec(),
                 flat_delim(cx.styles, Delim::Bracket, true),
             )];
@@ -1213,7 +1213,7 @@ fn list_view<
     // say "list", every multi-line element carries its own
     // delimiter, and each value's ink selects its element — a
     // leading dash would restate all three.
-    let rows: Vec<Node<P>> = items
+    let rows: Vec<Layout<P>> = items
         .into_iter()
         .map(|(position, _)| {
             descend(
@@ -1274,7 +1274,7 @@ fn record_view<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let consumes_simple_name = !cx.raw
         && path
@@ -1352,7 +1352,7 @@ fn record_view<
     let bare = items.is_empty() && !pending_edge;
     let mut flat = (avail > 0.0 || bare)
         .then(|| {
-            let mut cells: Vec<Node<P>> = vec![hover_target(
+            let mut cells: Vec<Layout<P>> = vec![hover_target(
                 path.to_vec(),
                 flat_delim(cx.styles, Delim::Brace, true),
             )];
@@ -1402,7 +1402,7 @@ fn record_view<
     }
 
     let inside = (avail - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)).max(0.0);
-    let mut rows: Vec<Node<P>> = items
+    let mut rows: Vec<Layout<P>> = items
         .into_iter()
         .map(|(key, value)| {
             field_row(
@@ -1466,7 +1466,7 @@ fn label_spelling<'a>(cx: &'a Cx, key: &CellId) -> (String, &'a TextStyle) {
     }
 }
 
-fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &CellId) -> Node<P> {
+fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &CellId) -> Layout<P> {
     let (spelling, style) = label_spelling(cx, key);
     let inner = text(tcx, &spelling, style);
     secondary_mark(cx, &Value::Cell(*key), inner)
@@ -1481,7 +1481,7 @@ fn field_label<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     child: Path,
     key: &CellId,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     let cold = label_view(cx, tcx, key);
     if writable_at(&cx.sources, parent) {
         let (spelling, style) = label_spelling(cx, key);
@@ -1502,7 +1502,7 @@ fn field_label<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
 /// cell at the path's last Follow, so a cell inside a list carries
 /// its list's owner as context. Wraps outside the descend so the
 /// cell's own selection highlight draws over its ground.
-fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) -> Node<P> {
+fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Layout<P>) -> Layout<P> {
     let Some(cell) = value.as_cell() else {
         return content;
     };
@@ -1530,7 +1530,7 @@ fn ground<P: Canvas>(cx: &Cx, path: &[Step], value: &Value, content: Node<P>) ->
 /// projection of the selected value — an expanded block, a collapsed
 /// handle, or a label. The primary selection's geometry at lower
 /// strength, so the two read as one family.
-fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Node<P>) -> Node<P> {
+fn secondary_mark<P: Canvas>(cx: &Cx, value: &Value, content: Layout<P>) -> Layout<P> {
     let strong = cx.secondary.as_ref() == Some(value);
     let faint = !strong && cx.secondary_hover.as_ref() == Some(value);
     if !strong && !faint {
@@ -1562,8 +1562,8 @@ fn projected_value_view<
     hooks: &Hooks<C>,
     editing: Option<&LineEditState>,
     projection: projection::Projection<'_>,
-) -> Option<Node<P>> {
-    let mut display = NodeLanguage::<C, P>::new(tcx, cx.styles, editing, hooks.edit.clone());
+) -> Option<Layout<P>> {
+    let mut display = LayoutLanguage::<C, P>::new(tcx, cx.styles, editing, hooks.edit.clone());
     let projected = projection.try_project(&mut display, value)?;
     Some(match projected.editor {
         Some(presentation) => cursor_target(
@@ -1591,7 +1591,7 @@ fn project_transient_root<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let origin = path.to_vec();
     let select = hooks.select.clone();
     let select_origin = origin.clone();
@@ -1651,7 +1651,7 @@ fn descend<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
     if step == Step::Follow {
@@ -1693,7 +1693,7 @@ impl projection::Projection<'_> {
         location: Location<'_>,
         avail: f64,
         hooks: &Hooks<C>,
-    ) -> Node<P> {
+    ) -> Layout<P> {
         match location.value(|cell| cx.sources.value(cell)) {
             Some(value) => match location.field().and_then(|field| {
                 self.try_evaluate(field, value, |cell| cx.sources.value(cell).cloned())
@@ -1738,7 +1738,7 @@ fn project_present_value<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     let editing = cx
         .selection
         .filter(|selection| selection.path() == path)
@@ -1786,7 +1786,7 @@ fn raw_value_view<
     avail: f64,
     hooks: &Hooks<C>,
     projection: projection::Projection<'_>,
-) -> Node<P> {
+) -> Layout<P> {
     match value {
         Value::Blob(bytes) => select_target(
             path.to_vec(),
@@ -1817,7 +1817,7 @@ fn pending_view<
     tcx: &mut TextCtx,
     path: Path,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     let engaged = match cx.selection {
         Some(Selection::Pending {
             path: pending,
@@ -1850,7 +1850,7 @@ fn placeholder<
     engaged: Option<(&LineEditState, usize)>,
     labels: bool,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     match engaged {
         Some((query, choice)) => query_content(cx, tcx, query, choice, labels, hooks),
         None => placeholder_box(tcx, cx.styles),
@@ -1871,7 +1871,7 @@ fn query_content<
     choice: usize,
     labels: bool,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     let entries = completion_entries(&cx.sources, cx.names, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
@@ -1939,12 +1939,12 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     popup: &Popup,
     hovered: Option<usize>,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
-) -> Node<P> {
+) -> Layout<P> {
     let scale = styles.scale;
     let choice = popup.choice.min(popup.entries.len().saturating_sub(1));
     // Cells first, so rows can pad out to the widest and the chosen
     // highlight spans the card, not just its own content.
-    let cells: Vec<(Node<P>, Option<Node<P>>)> = popup
+    let cells: Vec<(Layout<P>, Option<Layout<P>>)> = popup
         .entries
         .iter()
         .map(|entry| {
@@ -1976,12 +1976,12 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         })
         .collect();
     let max_width = widths.iter().copied().fold(0.0, f64::max);
-    let rows: Vec<Node<P>> = cells
+    let rows: Vec<Layout<P>> = cells
         .into_iter()
         .zip(widths)
         .enumerate()
         .map(|(index, ((display, detail), width))| {
-            let mut cells: Vec<Node<P>> = vec![display];
+            let mut cells: Vec<Layout<P>> = vec![display];
             if let Some(detail) = detail {
                 cells.push(detail);
             }
@@ -2051,7 +2051,7 @@ fn highlighted<P: Canvas>(
     s: &str,
     matches: &[filter::Match],
     style: &TextStyle,
-) -> Node<P> {
+) -> Layout<P> {
     if matches.is_empty() {
         return text(tcx, s, style);
     }
@@ -2059,7 +2059,7 @@ fn highlighted<P: Canvas>(
         weight: Some(700.0),
         ..style.clone()
     };
-    let mut segments: Vec<Node<P>> = Vec::new();
+    let mut segments: Vec<Layout<P>> = Vec::new();
     let mut at = 0;
     for span in matches {
         if span.start > at {
@@ -2079,13 +2079,13 @@ fn highlighted<P: Canvas>(
 /// empty — its static text otherwise.
 fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends>(
     editing: Option<&LineEditState>,
-    fallback: Node<P>,
+    fallback: Layout<P>,
     presentation: LineEditPresentation,
     placeholder: Option<(&str, &TextStyle)>,
     tcx: &mut TextCtx,
     styles: &Styles,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     match editing {
         Some(line) => {
             let edit_ctx = hooks.edit.clone();
@@ -2112,8 +2112,8 @@ fn toggle_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     path: Path,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let hovered =
         matches!(cx.hover, Some(Hover::Toggle(hovered)) if hovered.as_slice() == path.as_slice());
@@ -2144,8 +2144,8 @@ fn insert_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     path: Path,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let hovered =
         matches!(cx.hover, Some(Hover::Insert(hovered)) if hovered.as_slice() == path.as_slice());
@@ -2174,8 +2174,8 @@ fn insert_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
 fn pick_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     key: CellId,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let pick = hooks.pick.clone();
     on_primary_pointer_down(
         content,
@@ -2199,7 +2199,7 @@ fn label_query<
     query: &LineEditState,
     choice: usize,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let content = placeholder(cx, tcx, Some((query, choice)), true, hooks);
     let ringed = decorate(content, move |p: &mut P, rect| {
@@ -2218,10 +2218,10 @@ fn label_query<
 fn rename_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     cx: &Cx,
     path: Path,
-    layout: Layout<Brush>,
+    layout: TextLayout<Brush>,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let scale = cx.styles.scale;
     let hovered =
         matches!(cx.hover, Some(Hover::Label(hovered)) if hovered.as_slice() == path.as_slice());
@@ -2262,8 +2262,8 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
     path: Path,
     value: Value,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let claimed = hover_target(path.clone(), content);
     quiet_select_target(path, value, hooks, claimed)
 }
@@ -2271,7 +2271,7 @@ fn select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
 /// Name the value at `path` for the pointer over this ink, adding no
 /// click of its own — the hover half of [`select_target`], and the
 /// flat literal's delimiter dress.
-fn hover_target<P: Canvas + HasHover<HoverClaim>>(path: Path, content: Node<P>) -> Node<P> {
+fn hover_target<P: Canvas + HasHover<HoverClaim>>(path: Path, content: Layout<P>) -> Layout<P> {
     before(content, move |p, placement| {
         hover_claim(p, placement, Hover::Value(path.clone()));
     })
@@ -2285,8 +2285,8 @@ fn quiet_select_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverCla
     path: Path,
     value: Value,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
     before(content, move |p, placement| {
@@ -2318,8 +2318,8 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + 
     value: Value,
     presentation: LineEditPresentation,
     hooks: &Hooks<C>,
-    content: Node<P>,
-) -> Node<P> {
+    content: Layout<P>,
+) -> Layout<P> {
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
     before(content, move |p, placement| {

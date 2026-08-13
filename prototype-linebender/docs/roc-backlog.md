@@ -184,5 +184,5 @@ content. Port the bounded behavior when a fixed-width field appears.
 
 Roc's optimized build becomes pathological on the higher-order Puri/Roclay
 graph. This is a compiler problem, not a design verdict. Rust also
-monomorphizes `Node<P>` and generic canvases, so watch compile-time growth, but
+monomorphizes `Layout<P>` and generic canvases, so watch compile-time growth, but
 do not preemptively weaken the architecture.

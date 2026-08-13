@@ -14,7 +14,7 @@
 
 use crate::conventions::Names;
 use crate::hover::HasHover;
-use crate::layout::{Extent, Node, leaf};
+use crate::layout::{self, Extent, leaf};
 use crate::document::{Document, short_id};
 use crate::raw::command;
 use crate::selection::Selection;
@@ -640,7 +640,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
     tcx: &mut TextCtx,
     panel: Rect,
     hooks: &Hooks<C>,
-) -> Node<P> {
+) -> layout::Layout<P> {
     let doc = sources.doc;
     let scale = f64::from(tcx.scale);
     let zoom = view.zoom;
