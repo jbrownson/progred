@@ -1,7 +1,6 @@
 //! One read-only UI pass: place the document, resolve hover, emit dispatch.
 
 use crate::completion;
-use crate::conventions;
 use crate::display;
 use crate::graph_view;
 use crate::hover;
@@ -540,11 +539,10 @@ pub(crate) fn run_frame(
             hover: tree_hover,
             hover_node: hover_node.as_ref(),
             collapse: &model.collapse,
-            names: &model.names,
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            projection: conventions::projection(&model.foreign),
+            foreign: &model.foreign,
         },
         &mut tcx,
         raw::Hooks {
@@ -677,7 +675,6 @@ pub(crate) fn run_frame(
             model.tree_selection(),
             graph_hover,
             tree_hover,
-            &model.names,
             view.raw,
             &mut tcx,
             panel,

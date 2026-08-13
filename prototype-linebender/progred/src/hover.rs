@@ -2,7 +2,7 @@
 //! a hover refers to for secondary marks.
 
 use crate::completion::{completion_entries, EntryAction};
-use crate::conventions::{self, Names};
+use crate::conventions;
 use crate::document::Path;
 use crate::selection::Selection;
 use crate::sources::Sources;
@@ -91,7 +91,6 @@ pub fn resolve_hover(
 /// entries as the query is typed.
 pub fn hover_value(
     sources: &Sources,
-    names: &Names,
     raw: bool,
     selection: Option<&Selection>,
     hover: &Hover,
@@ -119,7 +118,7 @@ pub fn hover_value(
                 Selection::PendingEdge { query, .. } => (query, true),
                 Selection::Edge { .. } => return None,
             };
-            let entries = completion_entries(sources, names, raw, labels, query.text());
+            let entries = completion_entries(sources, raw, labels, query.text());
             match &entries.get(*index)?.action {
                 EntryAction::Value(value) => Some(value.clone()),
                 _ => None,

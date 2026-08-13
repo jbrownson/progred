@@ -12,7 +12,6 @@
 //! Rendering and hit-testing are one pure pass: build geometry from
 //! state, draw it, register handlers over it.
 
-use crate::conventions::Names;
 use crate::hover::HasHover;
 use crate::layout::{self, Extent, leaf};
 use crate::document::{Document, short_id};
@@ -535,7 +534,6 @@ fn layout_text(
 /// the unparenthesized root value node reads as the value it is.
 fn node_content(
     sources: &Sources,
-    names: &Names,
     raw: bool,
     doc: &Document,
     node: &GraphNode,
@@ -547,7 +545,7 @@ fn node_content(
     let mono = GenericFamily::Monospace;
     match node {
         GraphNode::Cell(cell) => {
-            match crate::conventions::display_name(sources, names, raw, *cell) {
+            match crate::conventions::display_name(sources, raw, *cell) {
                 Some(name) => layout_text(tcx, &format!("({name})"), size, TEXT, ui),
                 None => layout_text(tcx, &format!("({})", short_id(*cell)), size, DIM_TEXT, mono),
             }
@@ -635,7 +633,6 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
     doc_selection: Option<&Selection>,
     hover: Option<&GraphNode>,
     doc_hover: Option<&crate::hover::Hover>,
-    names: &Names,
     raw: bool,
     tcx: &mut TextCtx,
     panel: Rect,
@@ -666,7 +663,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         .and_then(|value| value.as_cell());
     // The document's hover projects in the same way, at half voice.
     let hover_cell = doc_hover
-        .and_then(|hover| crate::hover::hover_value(sources, names, raw, doc_selection, hover))
+        .and_then(|hover| crate::hover::hover_value(sources, raw, doc_selection, hover))
         .and_then(|value| value.as_cell());
 
     let root_link = doc.root.as_ref().and_then(Value::as_cell);
@@ -675,7 +672,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         .iter()
         .filter_map(|id| {
             let world = *view.positions.get(id)?;
-            let content = node_content(sources, names, raw, doc, id, tcx, zoom);
+            let content = node_content(sources, raw, doc, id, tcx, zoom);
             let (w, h) = (f64::from(content.width()), f64::from(content.height()));
             let width = w + 2.0 * NODE_PADDING * px;
             let height = (h + 2.0 * NODE_PADDING * px).max(NODE_MIN_HEIGHT * px);

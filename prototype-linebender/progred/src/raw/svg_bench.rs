@@ -222,7 +222,6 @@
             doc,
             library: &library,
         };
-        let names = Names::convention();
         let styles = Styles::new(1.0);
         let collapse = Collapse::default();
         let mut fonts = parley::FontContext::new();
@@ -257,11 +256,10 @@
                 hover: None,
                 hover_node: None,
                 collapse: &collapse,
-                names: &names,
                 raw: false,
                 styles: &styles,
                 width: width - 48.0,
-                projection: crate::conventions::projection(&foreign),
+                foreign: &foreign,
             },
             &mut tcx,
             hooks,

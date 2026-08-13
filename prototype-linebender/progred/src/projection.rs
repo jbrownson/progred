@@ -1,6 +1,5 @@
 //! Location lookup and the runner that tries ordered partial
-//! projections. Domain stacks and field evaluation are assembled by
-//! library packs; the editor composes those packs into the live stack.
+//! projections. Packs offer the functions; the walk composes them.
 
 use crate::display::Language;
 use progred_graph::{CellId, Step, Value};

@@ -734,9 +734,8 @@
             ),
         ]);
         let sources = src(&doc, &lib);
-        let names = Names::convention();
         let displays = |labels: bool, query: &str| -> Vec<String> {
-            completion_entries(&sources, &names, false, labels, query)
+            completion_entries(&sources, false, labels, query)
                 .into_iter()
                 .map(|entry| entry.display)
                 .collect()
@@ -756,7 +755,7 @@
         assert!(label_stage.iter().all(|d| d != "new list"));
         assert!(label_stage.iter().all(|d| d != "new record"));
         assert!(label_stage.iter().any(|d| d == "new cell"));
-        let label_blob = completion_entries(&sources, &names, false, true, "0xff");
+        let label_blob = completion_entries(&sources, false, true, "0xff");
         assert_eq!(label_blob[0].display, "0xff");
         assert_eq!(label_blob[0].detail.as_deref(), Some("new label"));
         assert!(matches!(
@@ -770,12 +769,12 @@
         assert_eq!(value_blob[1], "\"0xff\"");
 
         // Reference commits are links.
-        let roof = completion_entries(&sources, &names, false, false, "roof");
+        let roof = completion_entries(&sources, false, false, "roof");
         assert!(matches!(
             &roof[0].action,
             EntryAction::Value(value) if value.as_cell() == Some(cell)
         ));
-        let circle = completion_entries(&sources, &names, false, false, "circle");
+        let circle = completion_entries(&sources, false, false, "circle");
         assert!(matches!(
             &circle[0].action,
             EntryAction::Value(value)
@@ -789,7 +788,7 @@
         let unnamed = new_cell_id();
         doc.cells.set_value(unnamed, crate::test_values::text("x"));
         let sources = src(&doc, &lib);
-        let entries = completion_entries(&sources, &names, false, false, &short_id(unnamed));
+        let entries = completion_entries(&sources, false, false, &short_id(unnamed));
         let atom = entries
             .iter()
             .position(
@@ -939,7 +938,6 @@
         let doc = sample_document();
         let lib = crate::conventions::library();
         let sources = src(&doc, &lib);
-        let names = Names::convention();
         let pending = |text: &str| Selection::Pending {
             path: Vec::new(),
             query: line_edit(text),
@@ -950,7 +948,6 @@
         assert_eq!(
             hover_value(
                 &sources,
-                &names,
                 false,
                 Some(&pending("\"a\"")),
                 &Hover::Entry(0)
@@ -960,7 +957,6 @@
         assert_eq!(
             hover_value(
                 &sources,
-                &names,
                 false,
                 Some(&pending("\"ab\"")),
                 &Hover::Entry(0)
@@ -970,13 +966,12 @@
         // Dead addresses answer nothing: a closed pending, a label
         // no longer in the document.
         assert_eq!(
-            hover_value(&sources, &names, false, None, &Hover::Entry(0)),
+            hover_value(&sources, false, None, &Hover::Entry(0)),
             None
         );
         assert_eq!(
             hover_value(
                 &sources,
-                &names,
                 false,
                 None,
                 &Hover::Label(vec![key("gone")])
@@ -986,7 +981,6 @@
         assert_eq!(
             hover_value(
                 &sources,
-                &names,
                 false,
                 None,
                 &Hover::Label(vec![key("shape"), Step::Follow, key("tags")])

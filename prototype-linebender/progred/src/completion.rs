@@ -1,6 +1,5 @@
 //! Completion offers for pending value and label queries.
 
-use crate::conventions::Names;
 use crate::document::{Document, short_id};
 use crate::filter;
 use crate::selection::{parse_blob, set_value};
@@ -59,7 +58,6 @@ pub trait HasPopup {
 /// offers.
 pub(crate) fn completion_entries(
     sources: &Sources,
-    names: &Names,
     raw: bool,
     labels: bool,
     query: &str,
@@ -118,9 +116,9 @@ pub(crate) fn completion_entries(
     let (local, external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
         .map(
-            |cell| match crate::conventions::display_name(sources, names, raw, cell) {
+            |cell| match crate::conventions::display_name(sources, raw, cell) {
                 Some(name) => (
-                    (name, true, EntryAction::Value(Value::from(cell))),
+                    (name.to_string(), true, EntryAction::Value(Value::from(cell))),
                     sources.external(cell),
                 ),
                 None => (

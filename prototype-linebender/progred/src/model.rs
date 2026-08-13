@@ -1,7 +1,6 @@
 //! The editor's durable application state: the document, selection,
 //! view flags, and the library they are read against.
 
-use crate::conventions;
 use crate::document::Document;
 use crate::graph_view;
 use crate::history;
@@ -33,9 +32,6 @@ pub(crate) struct Model {
     pub doc: Document,
     pub selection: Option<Selected>,
     pub collapse: selection::Collapse,
-    /// The name policy: an editor setting, not document state, so it
-    /// survives document swaps.
-    pub names: conventions::Names,
     /// The built-in library, read under every document; never
     /// written, never saved.
     pub library: progred_graph::Cells,

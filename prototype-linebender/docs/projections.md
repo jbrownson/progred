@@ -31,10 +31,11 @@ Normal display is an ordered chain of partial projections over `Value`,
 ending in a total structural projection which can show any graph. The
 structural projection recursively re-enters the same dispatcher for every
 child instead of owning a closed set of leaf cases. `projection` is the
-runner: location lookup and trying an explicit list of partials. Library
-packs offer compositions of the constructs they cover; the editor
-assembles the live stack from those packs and currently wires the
-bootstrap pack in `conventions`. This composed projection
+runner: location lookup and trying an explicit list of partials. Each
+partial is a function that checks its own preconditions. Library packs
+offer those functions; the walk composes them — currently
+`conventions::compact` and the `grap` field — above the structural
+fallback. Raw omits the pack functions. This composed projection
 is passed explicitly through recursion; it is not hidden in display context.
 `descend` receives the parent `Value` and an ordinary graph `Step`, extends
 stored source provenance, and invokes the supplied projection on that

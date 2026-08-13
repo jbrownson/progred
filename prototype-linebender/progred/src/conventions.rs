@@ -1,7 +1,6 @@
 //! Bootstrap library pack: merged well-known libraries, the `grap`
-//! field convention, and the compact projection of the constructs this
-//! pack covers. The editor currently wires that composed projection as
-//! the live stack.
+//! field convention, and compact projections of the constructs this
+//! pack covers. Each function checks its own preconditions.
 
 use crate::display::{
     EditHandler, EditPresentation, Editor, Graphic, GraphicCommand, Language, LineEdit, TextRole,
@@ -11,7 +10,6 @@ use crate::projection::{self, Projected};
 use crate::sources::Sources;
 use progred_graph::{CellId, Cells, Value};
 use puri::draw::Shape;
-use std::rc::Rc;
 use vello::kurbo::{Circle, Point, Stroke};
 use vello::peniko::{Brush, Color};
 
@@ -44,92 +42,31 @@ pub fn foreign_functions() -> grap::ForeignFunctions {
     foreign
 }
 
-/// A swappable display policy. The bootstrap policy recognizes the
-/// ordinary simple-name relation; languages and domains can layer
-/// scope-sensitive, multilingual, or computed descriptions later.
-#[derive(Clone)]
-pub struct Names(Rc<dyn Fn(&Sources, CellId) -> Option<String>>);
-
-impl Names {
-    pub fn convention() -> Self {
-        Self(Rc::new(|sources, cell| {
-            sources
-                .value(cell)
-                .and_then(progred_name::read)
-                .map(str::to_owned)
-        }))
-    }
-
-    pub fn of(&self, sources: &Sources, cell: CellId) -> Option<String> {
-        (self.0)(sources, cell)
-    }
-}
-
-impl Default for Names {
-    fn default() -> Self {
-        Self::convention()
-    }
+pub fn name<'a>(sources: &'a Sources, cell: CellId) -> Option<&'a str> {
+    sources.value(cell).and_then(progred_name::read)
 }
 
 /// Raw shows the uninterpreted value and therefore uses the short id.
-/// Other views ask their configured display policy.
-pub fn display_name(sources: &Sources, names: &Names, raw: bool, cell: CellId) -> Option<String> {
-    (!raw).then(|| names.of(sources, cell)).flatten()
+pub fn display_name<'a>(sources: &'a Sources, raw: bool, cell: CellId) -> Option<&'a str> {
+    (!raw).then(|| name(sources, cell)).flatten()
 }
 
-/// The compact projection this pack covers, plus the `grap` field
-/// evaluation convention.
-#[derive(Clone, Copy)]
-pub struct Projection<'a> {
-    foreign: &'a grap::ForeignFunctions,
-    domains: bool,
-    evaluation: bool,
+pub fn compact<D: Language>(
+    display: &mut D,
+    value: &Value,
+) -> Option<Projected<D::View>> {
+    projection::try_partials([text, f64, circle], display, value)
 }
 
-pub fn projection(foreign: &grap::ForeignFunctions) -> Projection<'_> {
-    Projection {
-        foreign,
-        domains: true,
-        evaluation: true,
-    }
-}
-
-impl Projection<'_> {
-    pub fn raw(self) -> Self {
-        Self {
-            domains: false,
-            evaluation: false,
-            ..self
-        }
-    }
-
-    pub fn without_evaluation(self) -> Self {
-        Self {
-            evaluation: false,
-            ..self
-        }
-    }
-
-    pub fn try_project<D: Language>(
-        self,
-        display: &mut D,
-        value: &Value,
-    ) -> Option<Projected<D::View>> {
-        self.domains
-            .then(|| projection::try_partials([text, f64, circle], display, value))
-            .flatten()
-    }
-
-    pub fn try_evaluate(
-        self,
-        field: CellId,
-        expression: &Value,
-        resolve: impl Fn(CellId) -> Option<Value>,
-    ) -> Option<Value> {
-        (self.evaluation && field == vocabulary::GRAP).then(|| {
-            grap::evaluate(expression, resolve, self.foreign, grap::DEFAULT_FUEL).result
-        })
-    }
+pub fn grap(
+    foreign: &grap::ForeignFunctions,
+    field: CellId,
+    expression: &Value,
+    resolve: impl Fn(CellId) -> Option<Value>,
+) -> Option<Value> {
+    (field == vocabulary::GRAP).then(|| {
+        grap::evaluate(expression, resolve, foreign, grap::DEFAULT_FUEL).result
+    })
 }
 
 pub fn editor(value: &Value) -> Option<Editor> {
@@ -303,9 +240,7 @@ mod tests {
         let mut display = TestLanguage;
         let number = grap_f64::value(2.5);
         assert_eq!(
-            projection(&foreign_functions())
-                .try_project(&mut display, &number)
-                .map(|projected| projected.view),
+            compact(&mut display, &number).map(|projected| projected.view),
             Some(View::Text("2.5".to_string()))
         );
 
@@ -314,15 +249,11 @@ mod tests {
             crate::test_values::text("now"),
         ));
         assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
-        assert!(projection(&foreign_functions())
-            .try_project(&mut display, &enriched_number)
-            .is_none());
+        assert!(compact(&mut display, &enriched_number).is_none());
 
         let circle = grap_geometry::value(20.0);
         assert_eq!(
-            projection(&foreign_functions())
-                .try_project(&mut display, &circle)
-                .map(|projected| projected.view),
+            compact(&mut display, &circle).map(|projected| projected.view),
             Some(View::Circle(20.0))
         );
         let enriched_circle = Value::record(circle.as_record().unwrap().clone().update(
@@ -330,13 +261,11 @@ mod tests {
             crate::test_values::text("survey"),
         ));
         assert_eq!(grap_geometry::read(&enriched_circle), Some(20.0));
-        assert!(projection(&foreign_functions())
-            .try_project(&mut display, &enriched_circle)
-            .is_none());
+        assert!(compact(&mut display, &enriched_circle).is_none());
     }
 
     #[test]
-    fn evaluation_is_an_ordinary_contextual_projection() {
+    fn grap_evaluates_only_its_own_field() {
         let foreign = foreign_functions();
         let expression = grap::call(
             Value::from(grap_f64::vocabulary::ADD),
@@ -345,30 +274,13 @@ mod tests {
                 (grap_f64::vocabulary::RIGHT, grap_f64::value(3.0)),
             ],
         );
-        let projections = projection(&foreign);
         assert_eq!(
-            projections.try_evaluate(vocabulary::GRAP, &expression, |_| None),
+            grap(&foreign, vocabulary::GRAP, &expression, |_| None),
             Some(grap_f64::value(5.0))
         );
         assert_eq!(
-            projections
-                .without_evaluation()
-                .try_evaluate(vocabulary::GRAP, &expression, |_| None),
+            grap(&foreign, crate::test_values::label("data"), &expression, |_| None),
             None
         );
-        assert_eq!(
-            projections.try_evaluate(crate::test_values::label("data"), &expression, |_| None),
-            None
-        );
-        assert_eq!(
-            projections
-                .raw()
-                .try_evaluate(vocabulary::GRAP, &expression, |_| None),
-            None,
-        );
-        assert!(projections
-            .raw()
-            .try_project(&mut TestLanguage, &grap_f64::value(2.5))
-            .is_none());
     }
 }

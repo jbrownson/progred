@@ -5,7 +5,7 @@
 //! lists inline literals or bare element rows; atoms render as their
 //! values; positions are session bookkeeping and never render at all.
 
-use crate::conventions::{self, Names, Projection};
+use crate::conventions;
 use crate::display::{Language, LayoutLanguage, Styles, TextRole};
 use crate::completion::{
     Entry, EntryAction, HasPopup, Popup, completion_entries,
@@ -56,13 +56,9 @@ use vello::peniko::{Brush, Color};
 struct Cx<'a> {
     /// The reading context: the document read over its library.
     sources: Sources<'a>,
-    /// The editor's name policy; every display-name check asks it,
-    /// through [`Cx::name`], which derives from the raw bit.
-    names: &'a Names,
     /// The Raw view, ONE bit of view state: convention layers derive
-    /// from it — names answer None through [`Cx::name`]; domain
-    /// projections, when they arrive, stand down through the same
-    /// bit. Nothing else is swapped anywhere.
+    /// from it — names answer None through [`Cx::name`]; compact
+    /// projections stand down through the same bit.
     raw: bool,
     collapse: &'a Collapse,
     styles: &'a Styles,
@@ -138,8 +134,8 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
 impl Cx<'_> {
     /// The display name at this projection. Raw interprets no naming
     /// convention and therefore falls back to the short id.
-    fn name(&self, cell: CellId) -> Option<String> {
-        crate::conventions::display_name(&self.sources, self.names, self.raw, cell)
+    fn name(&self, cell: CellId) -> Option<&str> {
+        crate::conventions::display_name(&self.sources, self.raw, cell)
     }
 
     /// Whether `path` carries the primary highlight. A label-stage
@@ -543,11 +539,10 @@ pub struct ProjectDescription<'a> {
     pub hover: Option<&'a Hover>,
     pub hover_node: Option<&'a Value>,
     pub collapse: &'a Collapse,
-    pub names: &'a Names,
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub projection: Projection<'a>,
+    pub foreign: &'a grap::ForeignFunctions,
 }
 
 pub fn project<
@@ -565,15 +560,13 @@ pub fn project<
         hover,
         hover_node,
         collapse,
-        names,
         raw,
         styles,
         width,
-        projection,
+        foreign,
     } = description;
     let cx = Cx {
         sources,
-        names,
         raw,
         collapse,
         styles,
@@ -585,14 +578,14 @@ pub fn project<
         // HOVERED cell is a hover secondary the same way.
         secondary: secondary_of(&sources, selection).or_else(|| graph_node.cloned()),
         secondary_hover: hover
-            .and_then(|hover| hover_value(&sources, names, raw, selection, hover))
+            .and_then(|hover| hover_value(&sources, raw, selection, hover))
             .or_else(|| hover_node.cloned()),
     };
     // The Raw view derives from the one bit: names answer None and
     // nothing else changes — lists and records render as themselves
     // there too, since kind is data, not convention. An empty
     // document is a selectable placeholder at the root path.
-    (if raw { projection.raw() } else { projection }).project::<C, P>(
+    project_location(
         &cx,
         tcx,
         &[],
@@ -600,6 +593,7 @@ pub fn project<
         Location::Root(sources.root()),
         width,
         &hooks,
+        (!raw).then_some(foreign),
     )
 }
 
@@ -638,7 +632,7 @@ fn cell_view<
     cell: CellId,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let name = cx.name(cell);
@@ -671,7 +665,7 @@ fn cell_view<
         path.to_vec(),
         target.clone(),
         hooks,
-        head_view(cx, tcx, path, cell, &name, hooks),
+        head_view(cx, tcx, path, cell, name, hooks),
     );
     let content = match &value {
         // A writable bare cell's slot invites its first value; an
@@ -690,7 +684,7 @@ fn cell_view<
                     Step::Follow,
                     avail,
                     hooks,
-                    projection,
+                    grap,
                 ),
             ],
         ),
@@ -720,7 +714,7 @@ fn cell_view<
                         Step::Follow,
                         f64::INFINITY,
                         hooks,
-                        projection,
+                        grap,
                     )
                         .extent
                         .width
@@ -734,7 +728,7 @@ fn cell_view<
                 Step::Follow,
                 if hug { beside } else { inside - tab }.max(0.0),
                 hooks,
-                projection,
+                grap,
             );
             if hug {
                 row(4.0 * scale, vec![head, value_node])
@@ -797,7 +791,7 @@ fn head_view<
     tcx: &mut TextCtx,
     path: &[Step],
     cell: CellId,
-    name: &Option<String>,
+    name: Option<&str>,
     hooks: &Hooks<C>,
 ) -> Layout<P> {
     let short = short_id(cell);
@@ -863,11 +857,9 @@ fn evaluation_projection<
     result: Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let gap = 6.0 * scale;
-    let data_projection = projection.without_evaluation();
     let flat = (avail > 0.0)
         .then(|| {
             let expression = project_present_value(
@@ -878,7 +870,7 @@ fn evaluation_projection<
                 expression,
                 f64::INFINITY,
                 hooks,
-                data_projection,
+                None,
             );
             let arrow = LayoutLanguage::<C, P>::new(
                 tcx,
@@ -894,7 +886,7 @@ fn evaluation_projection<
                 result.clone(),
                 f64::INFINITY,
                 hooks,
-                data_projection,
+                None,
             );
             LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
                 .row(6.0, vec![expression, arrow, result])
@@ -915,7 +907,7 @@ fn evaluation_projection<
         expression,
         avail,
         hooks,
-        data_projection,
+        None,
     );
     let result = project_transient_root(
         cx,
@@ -924,7 +916,7 @@ fn evaluation_projection<
         result,
         result_avail,
         hooks,
-        data_projection,
+        None,
     );
     let result_row = LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
         .row(6.0, vec![arrow, result]);
@@ -960,7 +952,7 @@ fn field_row<
     value: Option<Value>,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let mut child = parent.to_vec();
@@ -994,7 +986,7 @@ fn field_row<
                     Step::Key(key),
                     avail,
                     hooks,
-                    projection,
+                    grap,
                 ),
             ],
         );
@@ -1027,7 +1019,7 @@ fn field_row<
                 Step::Key(key),
                 f64::INFINITY,
                 hooks,
-                projection,
+                grap,
             )
             .extent
             .width
@@ -1041,7 +1033,7 @@ fn field_row<
         Step::Key(key),
         if hug { beside } else { avail - tab }.max(0.0),
         hooks,
-        projection,
+        grap,
     );
     if hug {
         row(6.0 * scale, vec![head, content])
@@ -1113,7 +1105,7 @@ fn list_view<
     elements: &OrdMap<Position, Value>,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let mut items: Vec<(Position, Option<Value>)> = elements
@@ -1191,7 +1183,7 @@ fn list_view<
                     Step::Element(position.clone()),
                     f64::INFINITY,
                     hooks,
-                    projection,
+                    grap,
                 ));
             }
             cells.push(hover_target(
@@ -1225,7 +1217,7 @@ fn list_view<
                 Step::Element(position),
                 inside,
                 hooks,
-                projection,
+                grap,
             )
         })
         .collect();
@@ -1273,7 +1265,7 @@ fn record_view<
     fields: &OrdMap<CellId, Value>,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     let scale = cx.styles.scale;
     let consumes_simple_name = !cx.raw
@@ -1378,7 +1370,7 @@ fn record_view<
                     Step::Key(*key),
                     f64::INFINITY,
                     hooks,
-                    projection,
+                    grap,
                 ));
             }
             if let Some((query, choice)) = cx.pending_edge_under(path) {
@@ -1415,7 +1407,7 @@ fn record_view<
                 value,
                 inside,
                 hooks,
-                projection,
+                grap,
             )
         })
         .collect();
@@ -1461,7 +1453,7 @@ fn blob_text(bytes: &[u8]) -> String {
 /// and for hit-testing a click against what was actually drawn.
 fn label_spelling<'a>(cx: &'a Cx, key: &CellId) -> (String, &'a TextStyle) {
     match cx.name(*key) {
-        Some(name) => (name, &cx.styles.label),
+        Some(name) => (name.to_string(), &cx.styles.label),
         None => (short_id(*key), &cx.styles.id),
     }
 }
@@ -1561,10 +1553,11 @@ fn projected_value_view<
     value: &Value,
     hooks: &Hooks<C>,
     editing: Option<&LineEditState>,
-    projection: Projection<'_>,
 ) -> Option<Layout<P>> {
     let mut display = LayoutLanguage::<C, P>::new(tcx, cx.styles, editing, hooks.edit.clone());
-    let projected = projection.try_project(&mut display, value)?;
+    let projected = (!cx.raw)
+        .then(|| conventions::compact(&mut display, value))
+        .flatten()?;
     Some(match projected.editor {
         Some(presentation) => cursor_target(
             path.to_vec(),
@@ -1590,7 +1583,7 @@ fn project_transient_root<
     result: Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     let origin = path.to_vec();
     let select = hooks.select.clone();
@@ -1605,7 +1598,6 @@ fn project_transient_root<
     };
     let result_cx = Cx {
         sources: cx.sources,
-        names: cx.names,
         raw: false,
         collapse: cx.collapse,
         styles: cx.styles,
@@ -1615,7 +1607,7 @@ fn project_transient_root<
         secondary_hover: None,
         source: Source::Transient { owner: path },
     };
-    let projected = projection.project(
+    let projected = project_location(
         &result_cx,
         tcx,
         path,
@@ -1623,6 +1615,7 @@ fn project_transient_root<
         Location::Root(Some(&result)),
         avail,
         &result_hooks,
+        grap,
     );
     // The transient result is not another projection of the stored
     // source value. Its inner views may install ordinary hover claims while
@@ -1650,14 +1643,14 @@ fn descend<
     step: Step,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
     if step == Step::Follow {
         let mut ancestors = ancestors.clone();
         ancestors.extend(parent.as_cell());
-        projection.project(
+        project_location(
             cx,
             tcx,
             &path,
@@ -1665,9 +1658,10 @@ fn descend<
             Location::Child { parent, step },
             avail,
             hooks,
+            grap,
         )
     } else {
-        projection.project(
+        project_location(
             cx,
             tcx,
             &path,
@@ -1675,53 +1669,55 @@ fn descend<
             Location::Child { parent, step },
             avail,
             hooks,
+            grap,
         )
     }
 }
 
-impl Projection<'_> {
-    #[allow(clippy::too_many_arguments)]
-    fn project<
-        C: 'static,
-        P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
-    >(
-        self,
-        cx: &Cx,
-        tcx: &mut TextCtx,
-        path: &[Step],
-        ancestors: &HashSet<CellId>,
-        location: Location<'_>,
-        avail: f64,
-        hooks: &Hooks<C>,
-    ) -> Layout<P> {
-        match location.value(|cell| cx.sources.value(cell)) {
-            Some(value) => match location.field().and_then(|field| {
-                self.try_evaluate(field, value, |cell| cx.sources.value(cell).cloned())
-            }) {
-                Some(result) => evaluation_projection(
-                    cx,
-                    tcx,
-                    path,
-                    ancestors,
-                    value,
-                    result,
-                    avail,
-                    hooks,
-                    self,
-                ),
-                None => project_present_value(
-                    cx,
-                    tcx,
-                    path,
-                    ancestors,
-                    value,
-                    avail,
-                    hooks,
-                    self,
-                ),
-            },
-            None => pending_view(cx, tcx, path.to_vec(), hooks),
-        }
+#[allow(clippy::too_many_arguments)]
+fn project_location<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    location: Location<'_>,
+    avail: f64,
+    hooks: &Hooks<C>,
+    grap: Option<&grap::ForeignFunctions>,
+) -> Layout<P> {
+    match location.value(|cell| cx.sources.value(cell)) {
+        Some(value) => match grap.and_then(|foreign| {
+            location.field().and_then(|field| {
+                conventions::grap(foreign, field, value, |cell| {
+                    cx.sources.value(cell).cloned()
+                })
+            })
+        }) {
+            Some(result) => evaluation_projection(
+                cx,
+                tcx,
+                path,
+                ancestors,
+                value,
+                result,
+                avail,
+                hooks,
+            ),
+            None => project_present_value(
+                cx,
+                tcx,
+                path,
+                ancestors,
+                value,
+                avail,
+                hooks,
+                grap,
+            ),
+        },
+        None => pending_view(cx, tcx, path.to_vec(), hooks),
     }
 }
 
@@ -1737,24 +1733,16 @@ fn project_present_value<
     value: &Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     let editing = cx
         .selection
         .filter(|selection| selection.path() == path)
         .and_then(Selection::edit);
-    let projected = projected_value_view(
-        cx,
-        tcx,
-        path,
-        value,
-        hooks,
-        editing,
-        projection,
-    );
+    let projected = projected_value_view(cx, tcx, path, value, hooks, editing);
     let inner = match projected {
         Some(projected) => projected,
-        None => raw_value_view(cx, tcx, path, ancestors, value, avail, hooks, projection),
+        None => raw_value_view(cx, tcx, path, ancestors, value, avail, hooks, grap),
     };
     // Other projections of the selected value carry the secondary
     // mark; the selected one has the primary highlight.
@@ -1785,7 +1773,7 @@ fn raw_value_view<
     value: &Value,
     avail: f64,
     hooks: &Hooks<C>,
-    projection: Projection<'_>,
+    grap: Option<&grap::ForeignFunctions>,
 ) -> Layout<P> {
     match value {
         Value::Blob(bytes) => select_target(
@@ -1794,12 +1782,12 @@ fn raw_value_view<
             hooks,
             text(tcx, &blob_text(bytes), &cx.styles.id),
         ),
-        Value::Cell(cell) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks, projection),
+        Value::Cell(cell) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks, grap),
         Value::List(elements) => {
-            list_view(cx, tcx, path, ancestors, elements, avail, hooks, projection)
+            list_view(cx, tcx, path, ancestors, elements, avail, hooks, grap)
         }
         Value::Record(fields) => {
-            record_view(cx, tcx, path, ancestors, fields, avail, hooks, projection)
+            record_view(cx, tcx, path, ancestors, fields, avail, hooks, grap)
         }
     }
 }
@@ -1872,7 +1860,7 @@ fn query_content<
     labels: bool,
     hooks: &Hooks<C>,
 ) -> Layout<P> {
-    let entries = completion_entries(&cx.sources, cx.names, cx.raw, labels, query.text());
+    let entries = completion_entries(&cx.sources, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
     let content = atom_content(
