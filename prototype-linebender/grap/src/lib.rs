@@ -3,9 +3,9 @@
 //! and lists are inert data, and each recognized form chooses its own
 //! recursive evaluation.
 
-use im::OrdMap;
+use im::{HashMap, OrdMap};
 use progred_graph::{CellId, Cells, Value};
-use std::collections::{BTreeSet, HashMap, hash_map::Entry};
+use std::collections::BTreeSet;
 use std::fmt;
 
 pub mod vocabulary {
@@ -48,31 +48,18 @@ pub mod absent {
 
 pub const DEFAULT_FUEL: usize = 1_024;
 
-struct ForeignFunction {
-    params: Vec<CellId>,
-    call: ForeignCall,
+#[derive(Clone)]
+pub struct ForeignFunction {
+    pub params: Vec<CellId>,
+    pub call: fn(&mut Context, &[Value], &Environment) -> Result<Value, Halt>,
 }
-
-type ForeignCall =
-    for<'a> fn(&mut Evaluate<'a>, &[Value], &Environment) -> Result<Value, Halt>;
 
 pub struct Halt(Value);
 
-pub type Evaluate<'a> =
-    dyn FnMut(&Value, &Environment) -> Result<Value, Halt> + 'a;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Environment(OrdMap<CellId, Value>);
 
 impl Environment {
-    fn empty() -> Self {
-        Self(OrdMap::new())
-    }
-
-    fn from_value(value: &Value) -> Option<Self> {
-        value.as_record().cloned().map(Self)
-    }
-
     pub fn get(&self, cell: CellId) -> Option<&Value> {
         self.0.get(&cell)
     }
@@ -89,50 +76,48 @@ impl Environment {
                 }),
         )
     }
+}
 
-    pub fn to_value(&self) -> Value {
-        Value::Record(self.0.clone())
+impl From<Environment> for Value {
+    fn from(Environment(bindings): Environment) -> Self {
+        Value::Record(bindings)
     }
 }
 
-pub struct ForeignFunctions {
-    functions: HashMap<CellId, ForeignFunction>,
+impl From<&Environment> for Value {
+    fn from(environment: &Environment) -> Self {
+        Value::Record(environment.0.clone())
+    }
 }
 
-impl Default for ForeignFunctions {
-    fn default() -> Self {
-        Self {
-            functions: HashMap::new(),
+impl TryFrom<&Value> for Environment {
+    type Error = ();
+
+    fn try_from(value: &Value) -> Result<Self, ()> {
+        value.as_record().cloned().map(Self).ok_or(())
+    }
+}
+
+impl TryFrom<Value> for Environment {
+    type Error = ();
+
+    fn try_from(value: Value) -> Result<Self, ()> {
+        match value {
+            Value::Record(bindings) => Ok(Self(bindings)),
+            _ => Err(()),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegistrationError {
-    AlreadyRegistered(CellId),
+#[derive(Default)]
+pub struct ForeignFunctions {
+    functions: HashMap<CellId, ForeignFunction>,
 }
 
 impl ForeignFunctions {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn register(
-        &mut self,
-        function: CellId,
-        params: impl IntoIterator<Item = CellId>,
-        call: ForeignCall,
-    ) -> Result<(), RegistrationError> {
-        let params: Vec<_> = params.into_iter().collect();
-        match self.functions.entry(function) {
-            Entry::Occupied(_) => Err(RegistrationError::AlreadyRegistered(function)),
-            Entry::Vacant(entry) => {
-                entry.insert(ForeignFunction {
-                    params,
-                    call,
-                });
-                Ok(())
-            }
+    pub fn register(self, function: CellId, definition: ForeignFunction) -> Self {
+        Self {
+            functions: self.functions.update(function, definition),
         }
     }
 
@@ -140,37 +125,32 @@ impl ForeignFunctions {
         self.functions.get(&function)
     }
 
-    pub fn merge(mut self, other: Self) -> Result<Self, RegistrationError> {
-        for (cell, function) in other.functions {
-            match self.functions.entry(cell) {
-                Entry::Occupied(_) => return Err(RegistrationError::AlreadyRegistered(cell)),
-                Entry::Vacant(entry) => {
-                    entry.insert(function);
-                }
-            }
+    pub fn merge(self, other: Self) -> Self {
+        Self {
+            functions: other
+                .functions
+                .into_iter()
+                .fold(self.functions, |functions, (cell, definition)| {
+                    functions.update(cell, definition)
+                }),
         }
-        Ok(self)
     }
 
-    pub fn merge_all(
-        tables: impl IntoIterator<Item = Self>,
-    ) -> Result<Self, RegistrationError> {
-        tables.into_iter().try_fold(Self::new(), Self::merge)
+    pub fn merge_all(tables: impl IntoIterator<Item = Self>) -> Self {
+        tables.into_iter().fold(Self::default(), Self::merge)
     }
 }
 
 /// Core Grap's registered Rust functions. Libraries return their own
 /// tables; the editor merges them.
 pub fn functions() -> ForeignFunctions {
-    let mut foreign = ForeignFunctions::new();
-    foreign
-        .register(
-            vocabulary::EVALUATE,
-            [vocabulary::EXPRESSION, vocabulary::ENVIRONMENT],
-            evaluate_foreign,
-        )
-        .expect("core Grap registers one function");
-    foreign
+    ForeignFunctions::default().register(
+        vocabulary::EVALUATE,
+        ForeignFunction {
+            params: vec![vocabulary::EXPRESSION, vocabulary::ENVIRONMENT],
+            call: evaluate_foreign,
+        },
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -222,8 +202,8 @@ pub struct Evaluation {
     pub remaining_fuel: usize,
 }
 
-struct Evaluator<'a, R> {
-    resolve: &'a R,
+pub struct Context<'a> {
+    resolve: &'a dyn Fn(CellId) -> Option<Value>,
     foreign: &'a ForeignFunctions,
     remaining_fuel: usize,
     diagnostics: Vec<Diagnostic>,
@@ -231,13 +211,10 @@ struct Evaluator<'a, R> {
     resolving: Vec<CellId>,
 }
 
-impl<'a, R> Evaluator<'a, R>
-where
-    R: Fn(CellId) -> Option<Value>,
-{
+impl Context<'_> {
     fn run(mut self, expression: &Value) -> Evaluation {
         let result = self
-            .eval(expression, &Environment::empty())
+            .eval(expression, &Environment::default())
             .unwrap_or_else(|Halt(result)| result);
         Evaluation {
             result,
@@ -247,7 +224,7 @@ where
         }
     }
 
-    fn eval(
+    pub fn eval(
         &mut self,
         expression: &Value,
         environment: &Environment,
@@ -355,7 +332,7 @@ where
         let closure = Value::Record(
             fields
                 .clone()
-                .update(vocabulary::ENVIRONMENT, environment.to_value()),
+                .update(vocabulary::ENVIRONMENT, Value::from(environment)),
         );
         Value::record([(vocabulary::CLOSURE, closure)])
     }
@@ -430,10 +407,7 @@ where
             };
             arguments.push(expression.clone());
         }
-        let mut evaluate = |expression: &Value, environment: &Environment| {
-            self.eval(expression, environment)
-        };
-        (function.call)(&mut evaluate, &arguments, calling_environment)
+        (function.call)(self, &arguments, calling_environment)
     }
 }
 
@@ -451,7 +425,7 @@ fn closure_target(value: &Value) -> Option<(Vec<CellId>, Value, Environment)> {
     Some((
         params,
         fields.get(&vocabulary::BODY)?.clone(),
-        Environment::from_value(fields.get(&vocabulary::ENVIRONMENT)?)?,
+        Environment::try_from(fields.get(&vocabulary::ENVIRONMENT)?).ok()?,
     ))
 }
 
@@ -467,16 +441,16 @@ fn foreign_target<'a>(
 }
 
 fn evaluate_foreign(
-    evaluate: &mut Evaluate<'_>,
+    context: &mut Context,
     arguments: &[Value],
     calling_environment: &Environment,
 ) -> Result<Value, Halt> {
     match arguments {
         [expression, environment] => {
-            let environment = evaluate(environment, calling_environment)?;
-            match Environment::from_value(&environment) {
-                Some(environment) => evaluate(expression, &environment),
-                None => Ok(Value::from(absent::INVALID_ENVIRONMENT)),
+            let environment = context.eval(environment, calling_environment)?;
+            match Environment::try_from(environment) {
+                Ok(environment) => context.eval(expression, &environment),
+                Err(()) => Ok(Value::from(absent::INVALID_ENVIRONMENT)),
             }
         }
         _ => unreachable!("Grap checks foreign arity before calling"),
@@ -510,7 +484,7 @@ pub fn evaluate(
     foreign: &ForeignFunctions,
     fuel: usize,
 ) -> Evaluation {
-    Evaluator {
+    Context {
         resolve: &resolve,
         foreign,
         remaining_fuel: fuel,
@@ -567,7 +541,7 @@ mod tests {
         let evaluation = evaluate(
             &value,
             |candidate| (candidate == cell).then(|| blob("not followed")),
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             10,
         );
         assert_eq!(evaluation.result, value);
@@ -577,11 +551,11 @@ mod tests {
     #[test]
     fn consuming_the_entire_fuel_allowance_is_exhaustion() {
         let value = blob("one step");
-        let exhausted = evaluate(&value, |_| None, &ForeignFunctions::new(), 1);
+        let exhausted = evaluate(&value, |_| None, &ForeignFunctions::default(), 1);
         assert_eq!(exhausted.result, Value::from(absent::FUEL_EXHAUSTED));
         assert_eq!(exhausted.diagnostics, [Diagnostic::FuelExhausted]);
         assert_eq!(exhausted.remaining_fuel, 0);
-        let completed = evaluate(&value, |_| None, &ForeignFunctions::new(), 2);
+        let completed = evaluate(&value, |_| None, &ForeignFunctions::default(), 2);
         assert_eq!(completed.result, value);
         assert_eq!(completed.remaining_fuel, 1);
     }
@@ -597,7 +571,7 @@ mod tests {
                 cell if cell == second => Some(blob("done")),
                 _ => None,
             },
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             10,
         );
         assert_eq!(evaluation.result, blob("done"));
@@ -617,7 +591,7 @@ mod tests {
         let evaluation = evaluate(
             &expression,
             |cell| (cell == function_cell).then(|| definition.clone()),
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             30,
         );
         assert_eq!(evaluation.result, blob("x"));
@@ -638,7 +612,7 @@ mod tests {
         let evaluation = evaluate(
             &expression,
             |cell| (cell == parameter).then(|| blob("document")),
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             20,
         );
         assert_eq!(evaluation.result, blob("local"));
@@ -655,7 +629,7 @@ mod tests {
             evaluate(
                 &call(outer, [(x, blob("captured"))]),
                 |_| None,
-                &ForeignFunctions::new(),
+                &ForeignFunctions::default(),
                 50,
             )
             .result,
@@ -670,13 +644,16 @@ mod tests {
         let field = new_cell_id();
         let call_shaped_data = call(Value::from(new_cell_id()), []);
         let held = call(Value::from(hold), [(input, call_shaped_data.clone())]);
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(hold, [input], |_, arguments, _| match arguments {
-                [argument] => Ok(argument.clone()),
-                _ => unreachable!("Grap checks foreign arity before calling"),
-            })
-            .unwrap();
+        let foreign = ForeignFunctions::default().register(
+            hold,
+            ForeignFunction {
+                params: vec![input],
+                call: |_, arguments, _| match arguments {
+                    [argument] => Ok(argument.clone()),
+                    _ => unreachable!("Grap checks foreign arity before calling"),
+                },
+            },
+        );
         let graph = lambda([input], Value::from(input));
         assert_eq!(
             evaluate(
@@ -709,17 +686,16 @@ mod tests {
     fn registered_cells_evaluate_to_explicit_foreign_callables() {
         let echo = new_cell_id();
         let input = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(
-                echo,
-                [input],
-                |evaluate, arguments, environment| match arguments {
-                    [argument] => evaluate(argument, environment),
+        let foreign = ForeignFunctions::default().register(
+            echo,
+            ForeignFunction {
+                params: vec![input],
+                call: |context, arguments, environment| match arguments {
+                    [argument] => context.eval(argument, environment),
                     _ => unreachable!("Grap checks foreign arity before calling"),
                 },
-            )
-            .unwrap();
+            },
+        );
 
         let evaluation = evaluate(
             &Value::from(echo),
@@ -747,17 +723,16 @@ mod tests {
         let echo = new_cell_id();
         let callable = new_cell_id();
         let input = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(
-                echo,
-                [input],
-                |evaluate, arguments, environment| match arguments {
-                    [argument] => evaluate(argument, environment),
+        let foreign = ForeignFunctions::default().register(
+            echo,
+            ForeignFunction {
+                params: vec![input],
+                call: |context, arguments, environment| match arguments {
+                    [argument] => context.eval(argument, environment),
                     _ => unreachable!("Grap checks foreign arity before calling"),
                 },
-            )
-            .unwrap();
+            },
+        );
         let apply = lambda(
             [callable, input],
             call(Value::from(callable), [(input, Value::from(input))]),
@@ -783,23 +758,22 @@ mod tests {
         let no = new_cell_id();
         let parameter = new_cell_id();
         let missing = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(
-                choose,
-                [condition, yes, no],
-                |evaluate, arguments, environment| match arguments {
+        let foreign = ForeignFunctions::default().register(
+            choose,
+            ForeignFunction {
+                params: vec![condition, yes, no],
+                call: |context, arguments, environment| match arguments {
                     [condition, yes, no] => {
-                        if evaluate(condition, environment)? == blob("true") {
-                            evaluate(yes, environment)
+                        if context.eval(condition, environment)? == blob("true") {
+                            context.eval(yes, environment)
                         } else {
-                            evaluate(no, environment)
+                            context.eval(no, environment)
                         }
                     }
                     _ => unreachable!("Grap checks foreign arity before calling"),
                 },
-            )
-            .unwrap();
+            },
+        );
         let select_parameter = lambda(
             [parameter],
             call(
@@ -825,12 +799,13 @@ mod tests {
     fn rust_functions_can_expose_the_calling_environment_as_graph_data() {
         let inspect = new_cell_id();
         let parameter = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(inspect, [], |_, _, environment| {
-                Ok(environment.to_value())
-            })
-            .unwrap();
+        let foreign = ForeignFunctions::default().register(
+            inspect,
+            ForeignFunction {
+                params: Vec::new(),
+                call: |_, _, environment| Ok(Value::from(environment)),
+            },
+        );
         let inspect_from_body = lambda(
             [parameter],
             call(Value::from(inspect), []),
@@ -857,20 +832,19 @@ mod tests {
         let bind = new_cell_id();
         let value = new_cell_id();
         let body = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(
-                bind,
-                [value, body],
-                |evaluate, arguments, environment| match arguments {
+        let foreign = ForeignFunctions::default().register(
+            bind,
+            ForeignFunction {
+                params: vec![value, body],
+                call: |context, arguments, environment| match arguments {
                     [value, body] => {
-                        let value = evaluate(value, environment)?;
-                        evaluate(body, &environment.extended([(BINDING, value)]))
+                        let value = context.eval(value, environment)?;
+                        context.eval(body, &environment.extended([(BINDING, value)]))
                     }
                     _ => unreachable!("Grap supplies the registered fields"),
                 },
-            )
-            .unwrap();
+            },
+        );
         let evaluation = evaluate(
             &call(
                 Value::from(bind),
@@ -917,7 +891,7 @@ mod tests {
         let closure = evaluate(
             &call(make_constant, [(captured, blob("remembered"))]),
             |_| None,
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             40,
         )
         .result;
@@ -925,7 +899,7 @@ mod tests {
             evaluate(
                 &call(closure.clone(), []),
                 |_| None,
-                &ForeignFunctions::new(),
+                &ForeignFunctions::default(),
                 40,
             )
             .result,
@@ -949,7 +923,7 @@ mod tests {
         let evaluation = evaluate(
             &Value::from(missing),
             |_| None,
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             10,
         );
         assert_eq!(evaluation.result, Value::from(absent::MISSING_CELL));
@@ -959,7 +933,7 @@ mod tests {
             (vocabulary::PARAMS, blob("not a list")),
             (vocabulary::BODY, blob("body")),
         ]);
-        let evaluation = evaluate(&malformed, |_| None, &ForeignFunctions::new(), 10);
+        let evaluation = evaluate(&malformed, |_| None, &ForeignFunctions::default(), 10);
         assert_eq!(evaluation.result, Value::from(absent::MALFORMED_LAMBDA));
     }
 
@@ -975,7 +949,7 @@ mod tests {
             let evaluation = evaluate(
                 &incomplete,
                 |_| None,
-                &ForeignFunctions::new(),
+                &ForeignFunctions::default(),
                 10,
             );
             assert_eq!(evaluation.result, incomplete);
@@ -994,7 +968,7 @@ mod tests {
         let evaluation = evaluate(
             &call(Value::from(recurse), [(parameter, blob("again"))]),
             |cell| (cell == recurse).then(|| definition.clone()),
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             30,
         );
         assert_eq!(evaluation.result, Value::from(absent::FUEL_EXHAUSTED));
@@ -1008,7 +982,7 @@ mod tests {
                 cell if cell == b => Some(Value::from(a)),
                 _ => None,
             },
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             20,
         );
         assert_eq!(evaluation.result, Value::from(absent::CELL_CYCLE));
@@ -1025,7 +999,7 @@ mod tests {
                 (extra, blob("still graph data")),
             ],
         );
-        let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::new(), 10);
+        let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::default(), 10);
         assert_eq!(evaluation.result, blob("result"));
     }
 
@@ -1039,7 +1013,7 @@ mod tests {
         let evaluation = evaluate(
             &call(definition, [(parameter, blob("argument"))]),
             |_| None,
-            &ForeignFunctions::new(),
+            &ForeignFunctions::default(),
             30,
         );
         assert!(closure_target(&evaluation.result).is_some());
@@ -1050,12 +1024,11 @@ mod tests {
     fn foreign_parameters_may_repeat_and_name_the_function_field() {
         let function = new_cell_id();
         let parameter = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(
-                function,
-                [vocabulary::FUNCTION, parameter, parameter],
-                |_, arguments, _| match arguments {
+        let foreign = ForeignFunctions::default().register(
+            function,
+            ForeignFunction {
+                params: vec![vocabulary::FUNCTION, parameter, parameter],
+                call: |_, arguments, _| match arguments {
                     [function, first, second] => {
                         assert!(function.as_cell().is_some());
                         assert_eq!(first, second);
@@ -1063,8 +1036,8 @@ mod tests {
                     }
                     _ => unreachable!("Grap checks foreign arity before calling"),
                 },
-            )
-            .unwrap();
+            },
+        );
         assert_eq!(
             evaluate(
                 &call(Value::from(function), [(parameter, blob("argument"))]),
@@ -1078,31 +1051,31 @@ mod tests {
     }
 
     #[test]
-    fn registration_refuses_only_duplicate_implementations() {
+    fn a_later_table_overrides_a_shared_cell() {
         let function = new_cell_id();
-        let mut foreign = ForeignFunctions::new();
-        foreign
-            .register(function, [], |_, _, _| Ok(blob("x")))
-            .unwrap();
-        assert_eq!(
-            foreign.register(function, [], |_, _, _| Ok(blob("x"))),
-            Err(RegistrationError::AlreadyRegistered(function))
+        let left = ForeignFunctions::default().register(
+            function,
+            ForeignFunction {
+                params: Vec::new(),
+                call: |_, _, _| Ok(blob("left")),
+            },
         );
-    }
-
-    #[test]
-    fn merge_refuses_overlapping_tables() {
-        let function = new_cell_id();
-        let mut left = ForeignFunctions::new();
-        left.register(function, [], |_, _, _| Ok(blob("left")))
-            .unwrap();
-        let mut right = ForeignFunctions::new();
-        right
-            .register(function, [], |_, _, _| Ok(blob("right")))
-            .unwrap();
+        let right = ForeignFunctions::default().register(
+            function,
+            ForeignFunction {
+                params: Vec::new(),
+                call: |_, _, _| Ok(blob("right")),
+            },
+        );
         assert_eq!(
-            left.merge(right).err(),
-            Some(RegistrationError::AlreadyRegistered(function))
+            evaluate(
+                &call(Value::from(function), []),
+                |_| None,
+                &left.merge(right),
+                10,
+            )
+            .result,
+            blob("right")
         );
     }
 

@@ -1,7 +1,7 @@
 //! The first geometry Grap library: a circle value and a Rust-backed
 //! constructor consuming the f64 library's representation.
 
-use grap::ForeignFunctions;
+use grap::{ForeignFunction, ForeignFunctions};
 use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
@@ -30,14 +30,13 @@ pub fn read(value: &Value) -> Option<f64> {
 }
 
 pub fn functions() -> ForeignFunctions {
-    let mut foreign = ForeignFunctions::new();
-    foreign
-        .register(
-            vocabulary::CIRCLE,
-            [vocabulary::RADIUS],
-            |evaluate, arguments, environment| {
+    ForeignFunctions::default().register(
+        vocabulary::CIRCLE,
+        ForeignFunction {
+            params: vec![vocabulary::RADIUS],
+            call: |context, arguments, environment| {
                 let radius = match arguments {
-                    [radius] => evaluate(radius, environment)?,
+                    [radius] => context.eval(radius, environment)?,
                     _ => unreachable!("Grap checks foreign arity before calling"),
                 };
                 Ok(grap_f64::read(&radius)
@@ -45,9 +44,8 @@ pub fn functions() -> ForeignFunctions {
                     .map(value)
                     .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS)))
             },
-        )
-        .expect("geometry function cells are distinct");
-    foreign
+        },
+    )
 }
 
 pub fn library() -> Cells {

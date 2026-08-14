@@ -41,7 +41,6 @@ pub fn foreign_functions() -> grap::ForeignFunctions {
         grap_f64::functions(),
         grap_geometry::functions(),
     ])
-    .expect("library function cells are distinct")
 }
 
 pub fn name<'a>(sources: &'a Sources, cell: CellId) -> Option<&'a str> {

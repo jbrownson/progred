@@ -316,11 +316,12 @@ geometry, UI, file, or Linebender concepts. `grap-f64` and
 `grap-geometry` are separate libraries composed by the application.
 Each crate returns its graph facts and, when it has Rust
 implementations, a foreign-function table. The editor merges those
-values; a duplicate function cell is an error.
+values; a later table overrides a shared cell.
 
 A registered Rust implementation declares the call fields it consumes,
-receives them as raw argument expressions plus the calling environment, and
-may recursively evaluate any of them. Its semantic result is still an
+receives them as raw argument expressions, the calling environment, and
+the live evaluation context, and may recursively evaluate any of them
+through that context. Its semantic result is still an
 ordinary `Value`; the host `Result` only propagates evaluator halting
 such as exhausted fuel. Rust environments remain validated evaluator
 values and become graph records only through an explicit conversion.

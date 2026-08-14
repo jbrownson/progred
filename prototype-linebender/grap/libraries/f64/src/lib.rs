@@ -2,7 +2,7 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use grap::{Environment, Evaluate, ForeignFunctions, Halt};
+use grap::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
@@ -34,37 +34,36 @@ pub fn read(value: &Value) -> Option<f64> {
 }
 
 pub fn functions() -> ForeignFunctions {
-    let mut foreign = ForeignFunctions::new();
-    foreign
+    ForeignFunctions::default()
         .register(
             vocabulary::ADD,
-            [vocabulary::LEFT, vocabulary::RIGHT],
-            |evaluate, arguments, environment| {
-                binary(evaluate, arguments, environment, |left, right| left + right)
+            ForeignFunction {
+                params: vec![vocabulary::LEFT, vocabulary::RIGHT],
+                call: |context, arguments, environment| {
+                    binary(context, arguments, environment, |left, right| left + right)
+                },
             },
         )
-        .expect("f64 function cells are distinct");
-    foreign
         .register(
             vocabulary::MULTIPLY,
-            [vocabulary::LEFT, vocabulary::RIGHT],
-            |evaluate, arguments, environment| {
-                binary(evaluate, arguments, environment, |left, right| left * right)
+            ForeignFunction {
+                params: vec![vocabulary::LEFT, vocabulary::RIGHT],
+                call: |context, arguments, environment| {
+                    binary(context, arguments, environment, |left, right| left * right)
+                },
             },
         )
-        .expect("f64 function cells are distinct");
-    foreign
 }
 
 fn binary(
-    evaluate: &mut Evaluate<'_>,
+    context: &mut Context,
     arguments: &[Value],
     environment: &Environment,
     operation: impl FnOnce(f64, f64) -> f64,
 ) -> Result<Value, Halt> {
     let arguments = arguments
         .iter()
-        .map(|argument| evaluate(argument, environment))
+        .map(|argument| context.eval(argument, environment))
         .collect::<Result<Vec<_>, Halt>>()?;
     Ok(match arguments.as_slice() {
         [left, right] => match (read(left), read(right)) {

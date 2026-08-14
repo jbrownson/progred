@@ -2,7 +2,7 @@
 //! selects one expression through structural matching; `quote`
 //! constructs data while evaluating explicit unquotes.
 
-use grap::{Environment, Evaluate, ForeignFunctions, Halt};
+use grap::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_graph::{CellId, Cells, Value};
 use std::collections::BTreeMap;
 
@@ -31,52 +31,51 @@ pub mod vocabulary {
 }
 
 pub fn functions() -> ForeignFunctions {
-    let mut foreign = ForeignFunctions::new();
-    foreign
+    ForeignFunctions::default()
         .register(
             vocabulary::CASE,
-            [
-                vocabulary::VALUE,
-                vocabulary::ALTERNATIVES,
-                vocabulary::DEFAULT,
-            ],
-            case_foreign,
+            ForeignFunction {
+                params: vec![
+                    vocabulary::VALUE,
+                    vocabulary::ALTERNATIVES,
+                    vocabulary::DEFAULT,
+                ],
+                call: case_foreign,
+            },
         )
-        .expect("control function cells are distinct");
-    foreign
         .register(
             vocabulary::QUOTE,
-            [grap::vocabulary::EXPRESSION],
-            quote_foreign,
+            ForeignFunction {
+                params: vec![grap::vocabulary::EXPRESSION],
+                call: quote_foreign,
+            },
         )
-        .expect("control function cells are distinct");
-    foreign
 }
 
 fn quote_foreign(
-    evaluate: &mut Evaluate<'_>,
+    context: &mut Context,
     arguments: &[Value],
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let [expression] = arguments else {
         unreachable!("Grap checks foreign arity before calling")
     };
-    interpolate(expression, evaluate, environment)
+    interpolate(expression, context, environment)
 }
 
 fn interpolate(
     value: &Value,
-    evaluate: &mut Evaluate<'_>,
+    context: &mut Context,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     match value {
         Value::Record(fields) => match fields.get(&vocabulary::UNQUOTE) {
-            Some(expression) => evaluate(expression, environment),
+            Some(expression) => context.eval(expression, environment),
             None => Ok(Value::Record(
                 fields
                     .iter()
                     .map(|(field, value)| {
-                        Ok((*field, interpolate(value, evaluate, environment)?))
+                        Ok((*field, interpolate(value, context, environment)?))
                     })
                     .collect::<Result<_, Halt>>()?,
             )),
@@ -87,7 +86,7 @@ fn interpolate(
                 .map(|(position, value)| {
                     Ok((
                         position.clone(),
-                        interpolate(value, evaluate, environment)?,
+                        interpolate(value, context, environment)?,
                     ))
                 })
                 .collect::<Result<_, Halt>>()?,
@@ -97,21 +96,21 @@ fn interpolate(
 }
 
 fn case_foreign(
-    evaluate: &mut Evaluate<'_>,
+    context: &mut Context,
     arguments: &[Value],
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let [value, alternatives, default] = arguments else {
         unreachable!("Grap checks foreign arity before calling")
     };
-    let value = evaluate(value, environment)?;
-    let alternatives = evaluate(alternatives, environment)?;
+    let value = context.eval(value, environment)?;
+    let alternatives = context.eval(alternatives, environment)?;
     match select(&value, &alternatives) {
         Selection::Expression {
             expression,
             bindings,
-        } => evaluate(expression, &environment.extended(bindings)),
-        Selection::Default => evaluate(default, environment),
+        } => context.eval(expression, &environment.extended(bindings)),
+        Selection::Default => context.eval(default, environment),
         Selection::Invalid(cell) => Ok(Value::from(cell)),
     }
 }
@@ -391,13 +390,16 @@ mod tests {
         static SUBJECT_EVALUATIONS: AtomicUsize = AtomicUsize::new(0);
 
         let subject = new_cell_id();
-        let mut foreign = functions();
-        foreign
-            .register(subject, [], |_, _, _| {
-                SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);
-                Ok(blob("subject"))
-            })
-            .unwrap();
+        let foreign = functions().register(
+            subject,
+            ForeignFunction {
+                params: Vec::new(),
+                call: |_, _, _| {
+                    SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);
+                    Ok(blob("subject"))
+                },
+            },
+        );
         SUBJECT_EVALUATIONS.store(0, Ordering::SeqCst);
 
         let expression = case_call(
