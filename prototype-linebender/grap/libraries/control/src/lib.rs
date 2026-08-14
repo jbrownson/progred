@@ -35,18 +35,12 @@ pub fn functions() -> ForeignFunctions {
         .register(
             vocabulary::CASE,
             ForeignFunction {
-                params: vec![
-                    vocabulary::VALUE,
-                    vocabulary::ALTERNATIVES,
-                    vocabulary::DEFAULT,
-                ],
                 call: case_foreign,
             },
         )
         .register(
             vocabulary::QUOTE,
             ForeignFunction {
-                params: vec![grap::vocabulary::EXPRESSION],
                 call: quote_foreign,
             },
         )
@@ -54,11 +48,11 @@ pub fn functions() -> ForeignFunctions {
 
 fn quote_foreign(
     context: &mut Context,
-    arguments: &[Value],
+    call: &Value,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    let [expression] = arguments else {
-        unreachable!("Grap checks foreign arity before calling")
+    let Some(expression) = context.field(call, grap::vocabulary::EXPRESSION) else {
+        return Ok(context.missing_argument(grap::vocabulary::EXPRESSION));
     };
     interpolate(expression, context, environment)
 }
@@ -97,11 +91,17 @@ fn interpolate(
 
 fn case_foreign(
     context: &mut Context,
-    arguments: &[Value],
+    call: &Value,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    let [value, alternatives, default] = arguments else {
-        unreachable!("Grap checks foreign arity before calling")
+    let Some(value) = context.field(call, vocabulary::VALUE) else {
+        return Ok(context.missing_argument(vocabulary::VALUE));
+    };
+    let Some(alternatives) = context.field(call, vocabulary::ALTERNATIVES) else {
+        return Ok(context.missing_argument(vocabulary::ALTERNATIVES));
+    };
+    let Some(default) = context.field(call, vocabulary::DEFAULT) else {
+        return Ok(context.missing_argument(vocabulary::DEFAULT));
     };
     let value = context.eval(value, environment)?;
     let alternatives = context.eval(alternatives, environment)?;
@@ -393,7 +393,6 @@ mod tests {
         let foreign = functions().register(
             subject,
             ForeignFunction {
-                params: Vec::new(),
                 call: |_, _, _| {
                     SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);
                     Ok(blob("subject"))

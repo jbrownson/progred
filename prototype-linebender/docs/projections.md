@@ -318,10 +318,10 @@ Each crate returns its graph facts and, when it has Rust
 implementations, a foreign-function table. The editor merges those
 values; a later table overrides a shared cell.
 
-A registered Rust implementation declares the call fields it consumes,
-receives them as raw argument expressions, the calling environment, and
-the live evaluation context, and may recursively evaluate any of them
-through that context. Its semantic result is still an
+A registered Rust implementation receives the call record, the calling
+environment, and the live evaluation context. It looks up the fields it
+consumes as raw argument expressions and may recursively evaluate any
+of them through that context. Its semantic result is still an
 ordinary `Value`; the host `Result` only propagates evaluator halting
 such as exhausted fuel. Rust environments remain validated evaluator
 values and become graph records only through an explicit conversion.

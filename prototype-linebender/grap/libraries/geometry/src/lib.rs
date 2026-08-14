@@ -33,12 +33,11 @@ pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::CIRCLE,
         ForeignFunction {
-            params: vec![vocabulary::RADIUS],
-            call: |context, arguments, environment| {
-                let radius = match arguments {
-                    [radius] => context.eval(radius, environment)?,
-                    _ => unreachable!("Grap checks foreign arity before calling"),
+            call: |context, call, environment| {
+                let Some(radius) = context.field(call, vocabulary::RADIUS) else {
+                    return Ok(context.missing_argument(vocabulary::RADIUS));
                 };
+                let radius = context.eval(radius, environment)?;
                 Ok(grap_f64::read(&radius)
                     .filter(|radius| radius.is_finite() && *radius >= 0.0)
                     .map(value)

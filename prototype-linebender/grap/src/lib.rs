@@ -50,8 +50,7 @@ pub const DEFAULT_FUEL: usize = 1_024;
 
 #[derive(Clone)]
 pub struct ForeignFunction {
-    pub params: Vec<CellId>,
-    pub call: fn(&mut Context, &[Value], &Environment) -> Result<Value, Halt>,
+    pub call: fn(&mut Context, &Value, &Environment) -> Result<Value, Halt>,
 }
 
 pub struct Halt(Value);
@@ -147,7 +146,6 @@ pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::EVALUATE,
         ForeignFunction {
-            params: vec![vocabulary::EXPRESSION, vocabulary::ENVIRONMENT],
             call: evaluate_foreign,
         },
     )
@@ -236,8 +234,8 @@ impl Context<'_> {
                 // Open records may match more than one form. For now the evaluator
                 // uses the simple precedence call, then lambda; an
                 // ambiguous-form absent can replace it if overlaps matter in practice.
-                if let Some(function) = fields.get(&vocabulary::FUNCTION) {
-                    self.eval_call(function, |field| fields.get(&field), environment)
+                if fields.get(&vocabulary::FUNCTION).is_some() {
+                    self.eval_call(expression, environment)
                 } else {
                     match (
                         fields.get(&vocabulary::PARAMS),
@@ -266,6 +264,14 @@ impl Context<'_> {
         } else {
             Ok(())
         }
+    }
+
+    pub fn field<'a>(&self, call: &'a Value, label: CellId) -> Option<&'a Value> {
+        call.as_record()?.get(&label)
+    }
+
+    pub fn missing_argument(&mut self, cell: CellId) -> Value {
+        self.absent(Diagnostic::MissingArgument(cell), absent::MISSING_ARGUMENT)
     }
 
     fn absent(&mut self, diagnostic: Diagnostic, cell: CellId) -> Value {
@@ -337,24 +343,31 @@ impl Context<'_> {
         Value::record([(vocabulary::CLOSURE, closure)])
     }
 
-    fn eval_call<'v>(
+    fn eval_call(
         &mut self,
-        function: &Value,
-        argument: impl Fn(CellId) -> Option<&'v Value>,
+        call: &Value,
         environment: &Environment,
     ) -> Result<Value, Halt> {
-        let foreign = self.foreign;
+        let Some(function) = self.field(call, vocabulary::FUNCTION) else {
+            return Ok(call.clone());
+        };
         let callable = self.eval(function, environment)?;
         match closure_target(&callable) {
             Some((params, body, closure_environment)) => self.eval_grap_call(
                 params,
                 body,
                 closure_environment,
-                argument,
+                call,
                 environment,
             ),
-            None => match foreign_target(&callable, foreign) {
-                Some(function) => self.eval_foreign_call(function, argument, environment),
+            None => match callable
+                .as_record()
+                .and_then(|fields| fields.get(&vocabulary::FFI))
+                .and_then(Value::as_cell)
+                .and_then(|cell| self.foreign.get(cell))
+                .cloned()
+            {
+                Some(function) => (function.call)(self, call, environment),
                 None => Ok(self.absent(
                     Diagnostic::NotCallable(callable),
                     absent::NOT_CALLABLE,
@@ -363,51 +376,23 @@ impl Context<'_> {
         }
     }
 
-    fn eval_grap_call<'v>(
+    fn eval_grap_call(
         &mut self,
         params: Vec<CellId>,
         body: Value,
         closure_environment: Environment,
-        argument: impl Fn(CellId) -> Option<&'v Value>,
+        call: &Value,
         calling_environment: &Environment,
     ) -> Result<Value, Halt> {
-        let mut expressions = Vec::with_capacity(params.len());
+        let mut arguments = Vec::with_capacity(params.len());
         for parameter in params {
-            let Some(expression) = argument(parameter) else {
-                return Ok(self.absent(
-                    Diagnostic::MissingArgument(parameter),
-                    absent::MISSING_ARGUMENT,
-                ));
+            let Some(expression) = self.field(call, parameter) else {
+                return Ok(self.missing_argument(parameter));
             };
-            expressions.push((parameter, expression));
+            arguments.push((parameter, self.eval(expression, calling_environment)?));
         }
-        let arguments = expressions
-            .into_iter()
-            .map(|(parameter, expression)| {
-                Ok((parameter, self.eval(expression, calling_environment)?))
-            })
-            .collect::<Result<Vec<_>, Halt>>()?;
         let body_environment = closure_environment.extended(arguments);
         self.eval(&body, &body_environment)
-    }
-
-    fn eval_foreign_call<'v>(
-        &mut self,
-        function: &ForeignFunction,
-        argument: impl Fn(CellId) -> Option<&'v Value>,
-        calling_environment: &Environment,
-    ) -> Result<Value, Halt> {
-        let mut arguments = Vec::with_capacity(function.params.len());
-        for parameter in &function.params {
-            let Some(expression) = argument(*parameter) else {
-                return Ok(self.absent(
-                    Diagnostic::MissingArgument(*parameter),
-                    absent::MISSING_ARGUMENT,
-                ));
-            };
-            arguments.push(expression.clone());
-        }
-        (function.call)(self, &arguments, calling_environment)
     }
 }
 
@@ -429,31 +414,21 @@ fn closure_target(value: &Value) -> Option<(Vec<CellId>, Value, Environment)> {
     ))
 }
 
-fn foreign_target<'a>(
-    value: &Value,
-    foreign: &'a ForeignFunctions,
-) -> Option<&'a ForeignFunction> {
-    value
-        .as_record()?
-        .get(&vocabulary::FFI)?
-        .as_cell()
-        .and_then(|cell| foreign.get(cell))
-}
-
 fn evaluate_foreign(
     context: &mut Context,
-    arguments: &[Value],
+    call: &Value,
     calling_environment: &Environment,
 ) -> Result<Value, Halt> {
-    match arguments {
-        [expression, environment] => {
-            let environment = context.eval(environment, calling_environment)?;
-            match Environment::try_from(environment) {
-                Ok(environment) => context.eval(expression, &environment),
-                Err(()) => Ok(Value::from(absent::INVALID_ENVIRONMENT)),
-            }
-        }
-        _ => unreachable!("Grap checks foreign arity before calling"),
+    let Some(expression) = context.field(call, vocabulary::EXPRESSION) else {
+        return Ok(context.missing_argument(vocabulary::EXPRESSION));
+    };
+    let Some(environment) = context.field(call, vocabulary::ENVIRONMENT) else {
+        return Ok(context.missing_argument(vocabulary::ENVIRONMENT));
+    };
+    let environment = context.eval(environment, calling_environment)?;
+    match Environment::try_from(environment) {
+        Ok(environment) => context.eval(expression, &environment),
+        Err(()) => Ok(Value::from(absent::INVALID_ENVIRONMENT)),
     }
 }
 
@@ -639,18 +614,18 @@ mod tests {
 
     #[test]
     fn rust_functions_control_evaluation_while_graph_functions_are_strict() {
+        const INPUT: CellId = CellId::from_u128(0x6a0d2c8e1f934b70a5c14e8d2b07f391);
         let hold = new_cell_id();
-        let input = new_cell_id();
+        let input = INPUT;
         let field = new_cell_id();
         let call_shaped_data = call(Value::from(new_cell_id()), []);
         let held = call(Value::from(hold), [(input, call_shaped_data.clone())]);
         let foreign = ForeignFunctions::default().register(
             hold,
             ForeignFunction {
-                params: vec![input],
-                call: |_, arguments, _| match arguments {
-                    [argument] => Ok(argument.clone()),
-                    _ => unreachable!("Grap checks foreign arity before calling"),
+                call: |context, call, _| match context.field(call, INPUT) {
+                    Some(value) => Ok(value.clone()),
+                    None => Ok(context.missing_argument(INPUT)),
                 },
             },
         );
@@ -684,15 +659,15 @@ mod tests {
 
     #[test]
     fn registered_cells_evaluate_to_explicit_foreign_callables() {
+        const INPUT: CellId = CellId::from_u128(0x2e9c4a71b8d0563f91a0c7e4d15b6820);
         let echo = new_cell_id();
-        let input = new_cell_id();
+        let input = INPUT;
         let foreign = ForeignFunctions::default().register(
             echo,
             ForeignFunction {
-                params: vec![input],
-                call: |context, arguments, environment| match arguments {
-                    [argument] => context.eval(argument, environment),
-                    _ => unreachable!("Grap checks foreign arity before calling"),
+                call: |context, call, environment| match context.field(call, INPUT) {
+                    Some(value) => context.eval(value, environment),
+                    None => Ok(context.missing_argument(INPUT)),
                 },
             },
         );
@@ -720,16 +695,16 @@ mod tests {
 
     #[test]
     fn foreign_callables_pass_through_grap_bindings_as_values() {
+        const INPUT: CellId = CellId::from_u128(0x94b7e20c5d1a836f4e09c2a7b6d3581f);
         let echo = new_cell_id();
         let callable = new_cell_id();
-        let input = new_cell_id();
+        let input = INPUT;
         let foreign = ForeignFunctions::default().register(
             echo,
             ForeignFunction {
-                params: vec![input],
-                call: |context, arguments, environment| match arguments {
-                    [argument] => context.eval(argument, environment),
-                    _ => unreachable!("Grap checks foreign arity before calling"),
+                call: |context, call, environment| match context.field(call, INPUT) {
+                    Some(value) => context.eval(value, environment),
+                    None => Ok(context.missing_argument(INPUT)),
                 },
             },
         );
@@ -752,25 +727,33 @@ mod tests {
 
     #[test]
     fn rust_functions_choose_which_raw_operands_to_evaluate() {
+        const CONDITION: CellId = CellId::from_u128(0x0c8f3e5a7192b4d6e1a047c59b83d20e);
+        const YES: CellId = CellId::from_u128(0x5d21a9c0e8473f6b1a4c80d2e59f37b6);
+        const NO: CellId = CellId::from_u128(0x81e4b07c3a952d6f4c10e8a7b5d6392a);
         let choose = new_cell_id();
-        let condition = new_cell_id();
-        let yes = new_cell_id();
-        let no = new_cell_id();
+        let condition = CONDITION;
+        let yes = YES;
+        let no = NO;
         let parameter = new_cell_id();
         let missing = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             choose,
             ForeignFunction {
-                params: vec![condition, yes, no],
-                call: |context, arguments, environment| match arguments {
-                    [condition, yes, no] => {
-                        if context.eval(condition, environment)? == blob("true") {
-                            context.eval(yes, environment)
-                        } else {
-                            context.eval(no, environment)
-                        }
+                call: |context, call, environment| {
+                    let Some(condition) = context.field(call, CONDITION) else {
+                        return Ok(context.missing_argument(CONDITION));
+                    };
+                    let Some(yes) = context.field(call, YES) else {
+                        return Ok(context.missing_argument(YES));
+                    };
+                    let Some(no) = context.field(call, NO) else {
+                        return Ok(context.missing_argument(NO));
+                    };
+                    if context.eval(condition, environment)? == blob("true") {
+                        context.eval(yes, environment)
+                    } else {
+                        context.eval(no, environment)
                     }
-                    _ => unreachable!("Grap checks foreign arity before calling"),
                 },
             },
         );
@@ -802,7 +785,6 @@ mod tests {
         let foreign = ForeignFunctions::default().register(
             inspect,
             ForeignFunction {
-                params: Vec::new(),
                 call: |_, _, environment| Ok(Value::from(environment)),
             },
         );
@@ -829,19 +811,23 @@ mod tests {
     fn rust_functions_evaluate_raw_operands_in_extended_environments() {
         const BINDING: CellId =
             CellId::from_u128(0xedcd2b19cf89faf94a4a72ab1e02ec31);
+        const VALUE: CellId = CellId::from_u128(0x3f7a1c90d2e84b65a0c19e4d7b5826f3);
+        const BODY: CellId = CellId::from_u128(0x70d4e8a1c5b2936f4a1e07c8d5b64920);
         let bind = new_cell_id();
-        let value = new_cell_id();
-        let body = new_cell_id();
+        let value = VALUE;
+        let body = BODY;
         let foreign = ForeignFunctions::default().register(
             bind,
             ForeignFunction {
-                params: vec![value, body],
-                call: |context, arguments, environment| match arguments {
-                    [value, body] => {
-                        let value = context.eval(value, environment)?;
-                        context.eval(body, &environment.extended([(BINDING, value)]))
-                    }
-                    _ => unreachable!("Grap supplies the registered fields"),
+                call: |context, call, environment| {
+                    let Some(value) = context.field(call, VALUE) else {
+                        return Ok(context.missing_argument(VALUE));
+                    };
+                    let Some(body) = context.field(call, BODY) else {
+                        return Ok(context.missing_argument(BODY));
+                    };
+                    let value = context.eval(value, environment)?;
+                    context.eval(body, &environment.extended([(BINDING, value)]))
                 },
             },
         );
@@ -1021,20 +1007,22 @@ mod tests {
     }
 
     #[test]
-    fn foreign_parameters_may_repeat_and_name_the_function_field() {
+    fn foreign_functions_may_consume_the_function_field() {
+        const PARAMETER: CellId = CellId::from_u128(0x4b8e0d27c1a9563f80e2c4a7d6b1359e);
         let function = new_cell_id();
-        let parameter = new_cell_id();
+        let parameter = PARAMETER;
         let foreign = ForeignFunctions::default().register(
             function,
             ForeignFunction {
-                params: vec![vocabulary::FUNCTION, parameter, parameter],
-                call: |_, arguments, _| match arguments {
-                    [function, first, second] => {
-                        assert!(function.as_cell().is_some());
-                        assert_eq!(first, second);
-                        Ok(first.clone())
-                    }
-                    _ => unreachable!("Grap checks foreign arity before calling"),
+                call: |context, call, _| {
+                    let Some(function) = context.field(call, vocabulary::FUNCTION) else {
+                        return Ok(context.missing_argument(vocabulary::FUNCTION));
+                    };
+                    let Some(value) = context.field(call, PARAMETER) else {
+                        return Ok(context.missing_argument(PARAMETER));
+                    };
+                    assert!(function.as_cell().is_some());
+                    Ok(value.clone())
                 },
             },
         );
@@ -1056,14 +1044,12 @@ mod tests {
         let left = ForeignFunctions::default().register(
             function,
             ForeignFunction {
-                params: Vec::new(),
                 call: |_, _, _| Ok(blob("left")),
             },
         );
         let right = ForeignFunctions::default().register(
             function,
             ForeignFunction {
-                params: Vec::new(),
                 call: |_, _, _| Ok(blob("right")),
             },
         );

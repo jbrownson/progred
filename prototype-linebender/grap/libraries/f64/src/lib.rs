@@ -38,18 +38,16 @@ pub fn functions() -> ForeignFunctions {
         .register(
             vocabulary::ADD,
             ForeignFunction {
-                params: vec![vocabulary::LEFT, vocabulary::RIGHT],
-                call: |context, arguments, environment| {
-                    binary(context, arguments, environment, |left, right| left + right)
+                call: |context, call, environment| {
+                    binary(context, call, environment, |left, right| left + right)
                 },
             },
         )
         .register(
             vocabulary::MULTIPLY,
             ForeignFunction {
-                params: vec![vocabulary::LEFT, vocabulary::RIGHT],
-                call: |context, arguments, environment| {
-                    binary(context, arguments, environment, |left, right| left * right)
+                call: |context, call, environment| {
+                    binary(context, call, environment, |left, right| left * right)
                 },
             },
         )
@@ -57,21 +55,22 @@ pub fn functions() -> ForeignFunctions {
 
 fn binary(
     context: &mut Context,
-    arguments: &[Value],
+    call: &Value,
     environment: &Environment,
     operation: impl FnOnce(f64, f64) -> f64,
 ) -> Result<Value, Halt> {
-    let arguments = arguments
-        .iter()
-        .map(|argument| context.eval(argument, environment))
-        .collect::<Result<Vec<_>, Halt>>()?;
-    Ok(match arguments.as_slice() {
-        [left, right] => match (read(left), read(right)) {
-            (Some(left), Some(right)) => value(operation(left, right)),
-            (None, _) => Value::from(vocabulary::LEFT_NOT_F64),
-            (_, None) => Value::from(vocabulary::RIGHT_NOT_F64),
-        },
-        _ => unreachable!("Grap checks foreign arity before calling"),
+    let Some(left) = context.field(call, vocabulary::LEFT) else {
+        return Ok(context.missing_argument(vocabulary::LEFT));
+    };
+    let Some(right) = context.field(call, vocabulary::RIGHT) else {
+        return Ok(context.missing_argument(vocabulary::RIGHT));
+    };
+    let left = context.eval(left, environment)?;
+    let right = context.eval(right, environment)?;
+    Ok(match (read(&left), read(&right)) {
+        (Some(left), Some(right)) => value(operation(left, right)),
+        (None, _) => Value::from(vocabulary::LEFT_NOT_F64),
+        (_, None) => Value::from(vocabulary::RIGHT_NOT_F64),
     })
 }
 
