@@ -54,10 +54,10 @@ fn quote_foreign(
     let Some(expression) = context.field(call, grap::vocabulary::EXPRESSION) else {
         return Ok(context.missing_argument(grap::vocabulary::EXPRESSION));
     };
-    interpolate(expression, context, environment)
+    replace_unquotes(expression, context, environment)
 }
 
-fn interpolate(
+fn replace_unquotes(
     value: &Value,
     context: &mut Context,
     environment: &Environment,
@@ -69,7 +69,7 @@ fn interpolate(
                 fields
                     .iter()
                     .map(|(field, value)| {
-                        Ok((*field, interpolate(value, context, environment)?))
+                        Ok((*field, replace_unquotes(value, context, environment)?))
                     })
                     .collect::<Result<_, Halt>>()?,
             )),
@@ -80,7 +80,7 @@ fn interpolate(
                 .map(|(position, value)| {
                     Ok((
                         position.clone(),
-                        interpolate(value, context, environment)?,
+                        replace_unquotes(value, context, environment)?,
                     ))
                 })
                 .collect::<Result<_, Halt>>()?,
@@ -296,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn quote_interpolates_unquotes_in_its_calling_environment() {
+    fn quote_replaces_unquotes_in_its_calling_environment() {
         let parameter = new_cell_id();
         let field = new_cell_id();
         let template = Value::list([Value::record([(
