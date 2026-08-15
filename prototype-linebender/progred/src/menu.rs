@@ -353,7 +353,7 @@ mod view {
     ) -> Layout<P> {
         let content = layout::pad(
             Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
-            layout::text(tcx, label, style),
+            crate::display::text(tcx, label, style),
         );
         let content = layout::decorate(content, move |p: &mut P, rect| {
             if active {
@@ -415,12 +415,12 @@ mod view {
         } else {
             &styles.disabled
         };
-        let label = layout::text(
+        let label = crate::display::text(
             tcx,
             &format!("{}  {}", if checked { "✓" } else { " " }, item.label),
             style,
         );
-        let shortcut = layout::text(tcx, &item.shortcut.linux_label(), shortcut_style);
+        let shortcut = crate::display::text(tcx, &item.shortcut.linux_label(), shortcut_style);
         let gap =
             (width - 24.0 * scale - label.extent.width - shortcut.extent.width).max(12.0 * scale);
         let content = layout::pad(

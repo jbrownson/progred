@@ -8,10 +8,9 @@
 //! placement is the single traversal that touches the context `P`.
 
 use puri::draw::Canvas;
-use puri::edit::{EditCtx, LineEditDescription};
 use puri::geometry::Placement;
 use puri::handler::{Handler, HasHandler, capture};
-use puri::text::{TextCtx, TextMetrics, TextStyle};
+use puri::text::TextMetrics;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use vello::kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 
@@ -273,26 +272,6 @@ pub fn place<P>(layout: Layout<P>, ctx: &mut P, placement: Placement) {
 pub fn place_top_left<P>(layout: Layout<P>, ctx: &mut P, at: Point) {
     let placement = Placement::root(layout.extent.rect_at(at));
     place(layout, ctx, placement);
-}
-
-pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Layout<P> {
-    let text = puri::text::text(ctx, s, style);
-    leaf(
-        text.metrics().into(),
-        move |canvas, placement| text.place(canvas, placement),
-    )
-}
-
-pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
-    description: LineEditDescription<'_>,
-    tcx: &mut TextCtx,
-    with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
-) -> Layout<P> {
-    let edit = puri::edit::text_edit(description, tcx);
-    leaf(
-        edit.metrics().into(),
-        move |p, placement| edit.place(p, placement, with),
-    )
 }
 
 pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(

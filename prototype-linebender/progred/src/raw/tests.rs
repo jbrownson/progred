@@ -999,7 +999,7 @@
         let doc = sample_document();
         let lib = crate::conventions::library();
         let sources = src(&doc, &lib);
-        let styles = Styles::new(1.0);
+        let styles = crate::stack::styles(1.0);
         let mut fonts = parley::FontContext::new();
         let mut layouts = parley::LayoutContext::new();
         let mut cache = puri::text::TextCache::default();

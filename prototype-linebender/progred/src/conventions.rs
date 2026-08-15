@@ -1,10 +1,7 @@
 //! Bootstrap libraries and the closed-record projections they
 //! cover. Each function checks its own preconditions.
 
-use crate::display::{
-    EditHandler, EditPresentation, Editor, Language, LineEdit, TextRole,
-};
-use crate::projection::Projected;
+use crate::display::LineEdit;
 use crate::sources::Sources;
 use progred_graph::{CellId, Cells, Value};
 
@@ -56,14 +53,6 @@ pub fn grap(
     })
 }
 
-pub fn editor(value: &Value) -> Option<Editor> {
-    text_editor(value).or_else(|| f64_editor(value))
-}
-
-pub fn editable(value: &Value) -> bool {
-    whole_text(value).is_some() || whole_f64(value).is_some()
-}
-
 pub fn whole_text(value: &Value) -> Option<&str> {
     let text = progred_text::read(value)?;
     value
@@ -82,107 +71,49 @@ fn whole_f64(value: &Value) -> Option<f64> {
         .then_some(number)
 }
 
-fn text_value(_: &Value, text: &str) -> Option<Value> {
+fn text_value(text: &str) -> Option<Value> {
     Some(progred_text::value(text))
 }
 
-fn f64_value(_: &Value, text: &str) -> Option<Value> {
+fn f64_value(text: &str) -> Option<Value> {
     text.parse::<f64>().ok().map(grap_f64::value)
 }
 
-fn text_editor(value: &Value) -> Option<Editor> {
-    whole_text(value).map(|text| Editor {
+pub fn text(value: &Value) -> Option<LineEdit> {
+    whole_text(value).map(|text| LineEdit {
         text: text.to_string(),
-        handler: EditHandler::new(text_value),
-        presentation: EditPresentation::new(TextRole::String).with_affixes("\"", "\""),
+        parser: text_value,
+        prefix: "\"".into(),
+        suffix: "\"".into(),
     })
 }
 
-fn f64_editor(value: &Value) -> Option<Editor> {
-    whole_f64(value).map(|number| Editor {
+pub fn f64(value: &Value) -> Option<LineEdit> {
+    whole_f64(value).map(|number| LineEdit {
         text: number.to_string(),
-        handler: EditHandler::new(f64_value),
-        presentation: EditPresentation::new(TextRole::Number),
+        parser: f64_value,
+        prefix: String::new(),
+        suffix: String::new(),
     })
-}
-
-fn project_editor<D: Language>(display: &mut D, editor: Editor) -> Projected<D::View> {
-    let presentation = editor.presentation.clone();
-    let view = display.line_edit(LineEdit {
-        editor,
-        placeholder: None,
-    });
-    Projected {
-        view,
-        editor: Some(presentation),
-    }
-}
-
-pub fn text<D: Language>(display: &mut D, value: &Value) -> Option<Projected<D::View>> {
-    let editor = text_editor(value)?;
-    Some(project_editor(display, editor))
-}
-
-pub fn f64<D: Language>(display: &mut D, value: &Value) -> Option<Projected<D::View>> {
-    let editor = f64_editor(value)?;
-    Some(project_editor(display, editor))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display;
-
-    #[derive(Debug, PartialEq)]
-    enum View {
-        Text(String),
-        Row,
-        Col,
-    }
-
-    #[derive(Default)]
-    struct TestLanguage;
-
-    impl display::Language for TestLanguage {
-        type View = View;
-
-        fn text(&mut self, text: &str, _: TextRole) -> Self::View {
-            View::Text(text.to_string())
-        }
-
-        fn line_edit(&mut self, edit: display::LineEdit) -> Self::View {
-            View::Text(format!(
-                "{}{}{}",
-                edit.editor.presentation.prefix,
-                edit.editor.text,
-                edit.editor.presentation.suffix
-            ))
-        }
-
-        fn row(&mut self, _: f64, _: Vec<Self::View>) -> Self::View {
-            View::Row
-        }
-
-        fn col(&mut self, _: usize, _: f64, _: Vec<Self::View>) -> Self::View {
-            View::Col
-        }
-    }
 
     #[test]
-    fn domain_projections_are_partial_and_open_recognition_stays_visible() {
-        let mut display = TestLanguage;
+    fn closed_f64_is_an_editor_and_extra_fields_stay_structural() {
         let number = grap_f64::value(2.5);
-        assert_eq!(
-            crate::stack::values(&mut display, &number).map(|projected| projected.view),
-            Some(View::Text("2.5".to_string()))
-        );
+        let edit = crate::stack::values(&number).unwrap();
+        assert_eq!(edit.text, "2.5");
+        assert!(edit.prefix.is_empty());
 
         let enriched_number = Value::record(number.as_record().unwrap().clone().update(
             crate::test_values::label("created-at"),
             crate::test_values::text("now"),
         ));
         assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
-        assert!(crate::stack::values(&mut display, &enriched_number).is_none());
+        assert!(crate::stack::values(&enriched_number).is_none());
     }
 
     #[test]

@@ -222,7 +222,7 @@
             doc,
             library: &library,
         };
-        let styles = Styles::new(1.0);
+        let styles = crate::stack::styles(1.0);
         let collapse = Collapse::default();
         let mut fonts = parley::FontContext::new();
         let mut layouts = parley::LayoutContext::new();
@@ -674,7 +674,7 @@
         assert!(air.hover_claims.is_empty());
         // Just inside the bracket's absorbed gap, the bracket claims
         // the container outright — the widened handle.
-        let styles = Styles::new(1.0);
+        let styles = crate::stack::styles(1.0);
         let list = bench
             .descends
             .iter()
@@ -732,7 +732,7 @@
             };
             let card = popup_view::<Claims, Bench>(
                 &mut tcx,
-                &Styles::new(1.0),
+                &crate::stack::styles(1.0),
                 &popup,
                 None,
                 |_, _| {},

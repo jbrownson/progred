@@ -25,9 +25,9 @@ impl Collapse {
     }
 }
 
-pub(crate) struct ValueEditState {
+pub(crate) struct LineEditing {
     pub(crate) line: LineEditState,
-    pub(crate) handler: crate::display::EditHandler,
+    pub(crate) parser: fn(&str) -> Option<Value>,
 }
 
 /// What is selected: the value at a path, or a nonexistent field
@@ -40,7 +40,7 @@ pub(crate) struct ValueEditState {
 pub enum Selection {
     Edge {
         path: Path,
-        edit: Option<ValueEditState>,
+        edit: Option<LineEditing>,
         /// Whether this editor's write-through run has recorded its
         /// undo step: the run is the editor's lifetime, so the first
         /// write records and the rest coalesce by staying silent.
@@ -92,13 +92,13 @@ impl Selection {
         // An editor mounts only where write-through can land: the
         // owning cell must not be external.
         let edit = writable_at(sources, &path)
-            .then(|| sources.resolve(&path).and_then(conventions::editor))
+            .then(|| sources.resolve(&path).and_then(crate::stack::values))
             .flatten();
         Selection::Edge {
             path,
-            edit: edit.map(|editor| ValueEditState {
-                line: line_edit(&editor.text),
-                handler: editor.handler,
+            edit: edit.map(|line| LineEditing {
+                line: line_edit(&line.text),
+                parser: line.parser,
             }),
             recorded: false,
         }
@@ -588,7 +588,7 @@ fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
         .resolve(path)
         // Compact atom projections are leaves. Once another field
         // enriches either convention, the visible record is collapsible.
-        .filter(|value| !conventions::editable(value))
+        .filter(|value| crate::stack::values(value).is_none())
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
             Value::Blob(_) => false,
@@ -614,8 +614,8 @@ fn store_collapse(collapse: &mut Collapse, path: &[Step], default: bool, next: b
 
 /// Writes the selection's editor text through to its location after
 /// every handled event — the graph is the source of truth.
-/// The projection that mounted the editor supplies its text-to-value
-/// handler, and valid intermediate values write every keystroke. Everything funnels
+/// The projection that mounted the line supplies its parser, and
+/// valid intermediate values write every keystroke. Everything funnels
 /// through [`set_value`], so an element edit rebuilds its list at
 /// the owning cell and a location that no longer takes the write
 /// drops it silently — the malformed-graph rule at the mutation
@@ -642,7 +642,7 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
                 library,
             };
             let current = sources.resolve(path);
-            let next = current.and_then(|current| edit.handler.apply(current, &text));
+            let next = current.and_then(|_| (edit.parser)(&text));
             (current.cloned(), next)
         };
         match next {

@@ -49,25 +49,17 @@ projection at a transient root with fresh source provenance. Stored provenance
 provides a document path and therefore potential write capability; transient
 provenance has no editable document location and may attribute interaction to
 the stored expression which produced it. A Grap result also uses a composition
-with the Grap field projection removed. Thus source/editability, projection
-choice, and display interpretation remain three separate inputs.
+with the Grap field projection removed. Source/editability and
+projection choice remain separate inputs.
 
-Closed-record projections target a small display vocabulary: styled text, a
-generic line editor, rows, and columns. Its live interpreter
-measures those operations into Progred's baseline-box layout and draws the
-resulting leaves through Puri's canvas. The total structural fallback still
-constructs layouts directly because it owns graph paths, editing, and
-the detailed source interaction model. The generic line editor carries a
-text-to-`Value` handler, so text and f64 use the same display operation with
-different parsers; focus and cursor remain interpreter context while source
-provenance remains projection context rather than display data. This vocabulary is intentionally smaller than the projection system. Grap
-evaluation, domain recognition, graph paths, selection, and read-only
-provenance are projection concerns, not display constructs. The Rust
-vocabulary is expressed as a trait rather than a closed display AST, which
-already permits a lightweight test interpreter. A graph-valued display
-library can mirror this vocabulary later once graph identities for actions
-are concrete. Line breaking remains in the layout layer for now rather than
-adding HTML-like flow or `<br>` semantics prematurely.
+Closed-record value projections return a `LineEdit`: the same
+description for text and f64, with different parsers and
+affixes. The structural walk builds Progred layouts directly; it owns
+graph paths, editing, and source interaction. Focus and cursor live on
+the selection. Grap evaluation, domain recognition, and provenance are
+projection concerns, not a separate display language. Line breaking
+remains in the layout layer for now rather than adding HTML-like flow
+or `<br>` semantics prematurely.
 
 The earlier Grap design was rejected for good reasons, but they were
 properties of that design rather than of an embedded language:

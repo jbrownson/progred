@@ -1,7 +1,6 @@
 //! One read-only UI pass: place the document, resolve hover, emit dispatch.
 
 use crate::completion;
-use crate::display;
 use crate::graph_view;
 use crate::hover;
 use crate::layout;
@@ -472,7 +471,7 @@ pub(crate) fn run_frame(
         scale: scale as f32,
         cache: text_cache,
     };
-    let styles = display::Styles::new(scale);
+    let styles = crate::stack::styles(scale);
     #[cfg(target_os = "linux")]
     let menu_hover = match hover.as_ref() {
         Some(Hovered::Menu(hover)) => Some(*hover),

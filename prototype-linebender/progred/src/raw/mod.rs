@@ -6,7 +6,7 @@
 //! values; positions are session bookkeeping and never render at all.
 
 use crate::conventions;
-use crate::display::{Language, LayoutLanguage, Styles, TextRole};
+use crate::styles::Styles;
 use crate::completion::{
     Entry, EntryAction, HasPopup, Popup, completion_entries,
 };
@@ -27,9 +27,10 @@ use crate::hover::{HasHover, Hover, HoverClaim, Hovering, hover_value, resolve_h
 use crate::navigate::{Descend, HasDescends};
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
+use crate::display::{self, text};
 use crate::layout::{
     Extent, Layout, around, before, col, decorate, leaf, min_width, on_primary_pointer_down, pad,
-    row, text, text_edit,
+    row,
 };
 use crate::sources::Sources;
 use crate::projection::Location;
@@ -872,13 +873,7 @@ fn evaluation_projection<
                 hooks,
                 None,
             );
-            let arrow = LayoutLanguage::<C, P>::new(
-                tcx,
-                cx.styles,
-                None,
-                hooks.edit.clone(),
-            )
-            .text("→", TextRole::Dim);
+            let arrow = text(tcx, "→", &cx.styles.dim);
             let result = project_transient_root(
                 cx,
                 tcx,
@@ -888,16 +883,14 @@ fn evaluation_projection<
                 hooks,
                 None,
             );
-            LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
-                .row(6.0, vec![expression, arrow, result])
+            row(6.0 * scale, vec![expression, arrow, result])
         })
         .filter(|candidate| one_line(candidate.extent, scale));
     if let Some(candidate) = flat.filter(|candidate| candidate.extent.width <= avail) {
         return candidate;
     }
 
-    let arrow = LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
-        .text("→", TextRole::Dim);
+    let arrow = text(tcx, "→", &cx.styles.dim);
     let result_avail = (avail - arrow.extent.width - gap).max(0.0);
     let expression = project_present_value(
         cx,
@@ -918,10 +911,8 @@ fn evaluation_projection<
         hooks,
         None,
     );
-    let result_row = LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
-        .row(6.0, vec![arrow, result]);
-    LayoutLanguage::<C, P>::new(tcx, cx.styles, None, hooks.edit.clone())
-        .col(0, 2.0, vec![expression, result_row])
+    let result_row = row(6.0 * scale, vec![arrow, result]);
+    col(0, 2.0 * scale, vec![expression, result_row])
 }
 
 /// One record field row: the label-and-colon head, then the value (or
@@ -1554,21 +1545,15 @@ fn projected_value_view<
     hooks: &Hooks<C>,
     editing: Option<&LineEditState>,
 ) -> Option<Layout<P>> {
-    let mut display = LayoutLanguage::<C, P>::new(tcx, cx.styles, editing, hooks.edit.clone());
-    let projected = cx
-        .values
-        .then(|| crate::stack::values(&mut display, value))
-        .flatten()?;
-    Some(match projected.editor {
-        Some(presentation) => cursor_target(
-            path.to_vec(),
-            value.clone(),
-            cx.styles.edit_presentation(&presentation),
-            hooks,
-            projected.view,
-        ),
-        None => select_target(path.to_vec(), value.clone(), hooks, projected.view),
-    })
+    let line = cx.values.then(|| crate::stack::values(value)).flatten()?;
+    let edit = hooks.edit.clone();
+    Some(cursor_target(
+        path.to_vec(),
+        value.clone(),
+        cx.styles.line_presentation(&line.prefix, &line.suffix),
+        hooks,
+        display::line_edit(tcx, cx.styles, &line, editing, move |c| edit(c)),
+    ))
 }
 
 /// Starts the ordinary projection at a value with no document source.
@@ -2079,7 +2064,7 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + H
     match editing {
         Some(line) => {
             let edit_ctx = hooks.edit.clone();
-            text_edit(
+            display::text_edit(
                 LineEditDescription {
                     state: line,
                     focused: true,

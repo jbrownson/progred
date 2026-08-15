@@ -1,13 +1,7 @@
 //! Location lookup and the runner that tries ordered partial
-//! projections. Packs offer the functions; the walk composes them.
+//! projections.
 
-use crate::display::Language;
 use progred_graph::{CellId, Step, Value};
-
-pub struct Projected<V> {
-    pub view: V,
-    pub editor: Option<crate::display::EditPresentation>,
-}
 
 /// A place a projection can begin. Children retain the parent and
 /// step rather than arriving pre-resolved, so absence is visible to
@@ -46,17 +40,13 @@ impl Location<'_> {
     }
 }
 
-pub type Partial<D> =
-    for<'a> fn(&mut D, &'a Value) -> Option<Projected<<D as Language>::View>>;
+pub type Partial<T> = fn(&Value) -> Option<T>;
 
-pub fn try_partials<D: Language>(
-    partials: impl IntoIterator<Item = Partial<D>>,
-    display: &mut D,
+pub fn try_partials<T>(
+    partials: impl IntoIterator<Item = Partial<T>>,
     value: &Value,
-) -> Option<Projected<D::View>> {
-    partials
-        .into_iter()
-        .find_map(|partial| partial(display, value))
+) -> Option<T> {
+    partials.into_iter().find_map(|partial| partial(value))
 }
 
 #[cfg(test)]

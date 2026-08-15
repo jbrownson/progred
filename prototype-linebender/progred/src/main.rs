@@ -26,6 +26,7 @@ mod selection;
 mod sources;
 mod stack;
 mod store;
+mod styles;
 #[cfg(test)]
 mod test_values;
 
