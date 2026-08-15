@@ -774,11 +774,11 @@
             &roof[0].action,
             EntryAction::Value(value) if value.as_cell() == Some(cell)
         ));
-        let circle = completion_entries(&sources, false, false, "circle");
+        let add = completion_entries(&sources, false, false, "add");
         assert!(matches!(
-            &circle[0].action,
+            &add[0].action,
             EntryAction::Value(value)
-                if value.as_cell() == Some(grap_geometry::vocabulary::CIRCLE)
+                if value.as_cell() == Some(grap_f64::vocabulary::ADD)
         ));
 
         // A bare id never outranks the typed text: the string the

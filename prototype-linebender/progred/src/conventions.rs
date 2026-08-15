@@ -1,17 +1,12 @@
-//! Bootstrap library pack: merged well-known libraries, the `grap`
-//! field convention, and compact projections of the constructs this
-//! pack covers. Each function checks its own preconditions.
+//! Bootstrap libraries and the closed-record projections they
+//! cover. Each function checks its own preconditions.
 
 use crate::display::{
-    EditHandler, EditPresentation, Editor, Graphic, GraphicCommand, Language, LineEdit, TextRole,
+    EditHandler, EditPresentation, Editor, Language, LineEdit, TextRole,
 };
-use crate::layout::Extent;
-use crate::projection::{self, Projected};
+use crate::projection::Projected;
 use crate::sources::Sources;
 use progred_graph::{CellId, Cells, Value};
-use puri::draw::Shape;
-use vello::kurbo::{Circle, Point, Stroke};
-use vello::peniko::{Brush, Color};
 
 pub mod vocabulary {
     use progred_graph::CellId;
@@ -28,8 +23,7 @@ pub fn library() -> Cells {
         .merged(grap::library())
         .merged(grap_absent::library())
         .merged(grap_control::library())
-        .merged(grap_f64::library())
-        .merged(grap_geometry::library());
+        .merged(grap_f64::library());
     cells.set_value(vocabulary::GRAP, progred_name::record("grap", []));
     cells
 }
@@ -39,7 +33,6 @@ pub fn foreign_functions() -> grap::ForeignFunctions {
         grap::functions(),
         grap_control::functions(),
         grap_f64::functions(),
-        grap_geometry::functions(),
     ])
 }
 
@@ -50,13 +43,6 @@ pub fn name<'a>(sources: &'a Sources, cell: CellId) -> Option<&'a str> {
 /// Raw shows the uninterpreted value and therefore uses the short id.
 pub fn display_name<'a>(sources: &'a Sources, raw: bool, cell: CellId) -> Option<&'a str> {
     (!raw).then(|| name(sources, cell)).flatten()
-}
-
-pub fn compact<D: Language>(
-    display: &mut D,
-    value: &Value,
-) -> Option<Projected<D::View>> {
-    projection::try_partials([text, f64, circle], display, value)
 }
 
 pub fn grap(
@@ -96,26 +82,6 @@ fn whole_f64(value: &Value) -> Option<f64> {
         .then_some(number)
 }
 
-fn whole_circle(value: &Value) -> Option<f64> {
-    let radius = grap_geometry::read(value)?;
-    let fields = value.as_record()?;
-    let circle = fields
-        .get(&grap_geometry::vocabulary::CIRCLE)?
-        .as_record()?;
-    let radius_value = circle.get(&grap_geometry::vocabulary::RADIUS)?;
-    (fields
-        .keys()
-        .all(|label| *label == grap_geometry::vocabulary::CIRCLE)
-        && circle
-            .keys()
-            .all(|label| *label == grap_geometry::vocabulary::RADIUS)
-        && radius_value
-            .as_record()?
-            .keys()
-            .all(|label| *label == grap_f64::vocabulary::F64))
-    .then_some(radius)
-}
-
 fn text_value(_: &Value, text: &str) -> Option<Value> {
     Some(progred_text::value(text))
 }
@@ -152,43 +118,14 @@ fn project_editor<D: Language>(display: &mut D, editor: Editor) -> Projected<D::
     }
 }
 
-fn text<D: Language>(display: &mut D, value: &Value) -> Option<Projected<D::View>> {
+pub fn text<D: Language>(display: &mut D, value: &Value) -> Option<Projected<D::View>> {
     let editor = text_editor(value)?;
     Some(project_editor(display, editor))
 }
 
-fn f64<D: Language>(display: &mut D, value: &Value) -> Option<Projected<D::View>> {
+pub fn f64<D: Language>(display: &mut D, value: &Value) -> Option<Projected<D::View>> {
     let editor = f64_editor(value)?;
     Some(project_editor(display, editor))
-}
-
-fn circle<D: Language>(display: &mut D, value: &Value) -> Option<Projected<D::View>> {
-    whole_circle(value).map(|radius| {
-        let padding = 4.0;
-        let half = radius + padding;
-        let shape = Shape::Circle(Circle::new(Point::new(half, half), radius));
-        Projected {
-            view: display.graphic(Graphic {
-                extent: Extent {
-                    width: 2.0 * half,
-                    ascent: half,
-                    descent: half,
-                },
-                commands: vec![
-                    GraphicCommand::Fill {
-                        shape: shape.clone(),
-                        brush: Brush::from(Color::new([0.0, 0.48, 1.0, 0.10])),
-                    },
-                    GraphicCommand::Stroke {
-                        shape,
-                        style: Stroke::new(1.5),
-                        brush: Brush::from(Color::new([0.0, 0.36, 0.78, 0.9])),
-                    },
-                ],
-            }),
-            editor: None,
-        }
-    })
 }
 
 #[cfg(test)]
@@ -199,7 +136,6 @@ mod tests {
     #[derive(Debug, PartialEq)]
     enum View {
         Text(String),
-        Circle(f64),
         Row,
         Col,
     }
@@ -223,10 +159,6 @@ mod tests {
             ))
         }
 
-        fn graphic(&mut self, graphic: display::Graphic) -> Self::View {
-            View::Circle(graphic.extent.width / 2.0 - 4.0)
-        }
-
         fn row(&mut self, _: f64, _: Vec<Self::View>) -> Self::View {
             View::Row
         }
@@ -241,7 +173,7 @@ mod tests {
         let mut display = TestLanguage;
         let number = grap_f64::value(2.5);
         assert_eq!(
-            compact(&mut display, &number).map(|projected| projected.view),
+            crate::stack::values(&mut display, &number).map(|projected| projected.view),
             Some(View::Text("2.5".to_string()))
         );
 
@@ -250,19 +182,7 @@ mod tests {
             crate::test_values::text("now"),
         ));
         assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
-        assert!(compact(&mut display, &enriched_number).is_none());
-
-        let circle = grap_geometry::value(20.0);
-        assert_eq!(
-            compact(&mut display, &circle).map(|projected| projected.view),
-            Some(View::Circle(20.0))
-        );
-        let enriched_circle = Value::record(circle.as_record().unwrap().clone().update(
-            crate::test_values::label("source"),
-            crate::test_values::text("survey"),
-        ));
-        assert_eq!(grap_geometry::read(&enriched_circle), Some(20.0));
-        assert!(compact(&mut display, &enriched_circle).is_none());
+        assert!(crate::stack::values(&mut display, &enriched_number).is_none());
     }
 
     #[test]

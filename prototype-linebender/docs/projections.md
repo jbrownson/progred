@@ -33,9 +33,9 @@ structural projection recursively re-enters the same dispatcher for every
 child instead of owning a closed set of leaf cases. `projection` is the
 runner: location lookup and trying an explicit list of partials. Each
 partial is a function that checks its own preconditions. Library packs
-offer those functions; the walk composes them — currently
-`conventions::compact` and the `grap` field — above the structural
-fallback. Raw omits the pack functions. This composed projection
+offer those functions; the editor assembles the live list — currently
+`stack::values` and the `grap` field — above the structural
+fallback. Raw is that fallback alone. This composed projection
 is passed explicitly through recursion; it is not hidden in display context.
 `descend` receives the parent `Value` and an ordinary graph `Step`, extends
 stored source provenance, and invokes the supplied projection on that
@@ -52,19 +52,15 @@ the stored expression which produced it. A Grap result also uses a composition
 with the Grap field projection removed. Thus source/editability, projection
 choice, and display interpretation remain three separate inputs.
 
-Compact domain projections target a small display vocabulary: styled text, a
-generic line editor, vector graphics, rows, and columns. Its live interpreter
+Closed-record projections target a small display vocabulary: styled text, a
+generic line editor, rows, and columns. Its live interpreter
 measures those operations into Progred's baseline-box layout and draws the
 resulting leaves through Puri's canvas. The total structural fallback still
 constructs layouts directly because it owns graph paths, editing, and
 the detailed source interaction model. The generic line editor carries a
 text-to-`Value` handler, so text and f64 use the same display operation with
 different parsers; focus and cursor remain interpreter context while source
-provenance remains projection context rather than display data. The vector operation carries ordinary
-shapes and drawing commands, so a circle is a projection result rather than
-a display-language primitive.
-
-This vocabulary is intentionally smaller than the projection system. Grap
+provenance remains projection context rather than display data. This vocabulary is intentionally smaller than the projection system. Grap
 evaluation, domain recognition, graph paths, selection, and read-only
 provenance are projection concerns, not display constructs. The Rust
 vocabulary is expressed as a trait rather than a closed display AST, which
@@ -296,8 +292,8 @@ store or forward that pair.
 
 These conventions match what is present, not what is absent. Record
 patterns are open unless a particular domain explicitly says
-otherwise. The current compact f64 and circle views are deliberately
-stricter than semantic recognition: they replace a whole record only
+otherwise. The current closed f64 view is deliberately
+stricter than semantic recognition: it replaces a whole record only
 when every field in that record belongs to the displayed facet.
 Otherwise the structural view remains visible, even though Grap and
 the relevant library can still use the recognized facet.
@@ -312,11 +308,12 @@ the same expression cell is projected outside a `grap` field.
 
 The evaluator lives in its own `grap` crate. It depends on the graph
 core and the shared Grap absent and name conventions, but knows no f64,
-geometry, UI, file, or Linebender concepts. `grap-f64` and
-`grap-geometry` are separate libraries composed by the application.
-Each crate returns its graph facts and, when it has Rust
-implementations, a foreign-function table. The editor merges those
-values; a later table overrides a shared cell.
+geometry, UI, file, or Linebender concepts. `grap-f64` is part of the
+conventions bootstrap; `grap-geometry` is a separate library the
+editor composes for the checked-in examples. Each crate returns its
+graph facts and, when it has Rust implementations, a foreign-function
+table. The editor merges those values; a later table overrides a
+shared cell.
 
 A registered Rust implementation receives the call record, the calling
 environment, and the live evaluation context. It looks up the fields it
@@ -361,8 +358,8 @@ library data rather than an evaluator feature.
 ## First Vertical Slice
 
 For a `grap` field, normal projection shows the stored expression, an
-arrow, and its recursively projected result—an f64 as text, a circle as native vector
-drawing, and arbitrary graph data structurally. The enclosing record
+arrow, and its recursively projected result—an f64 as text, and
+arbitrary graph data structurally. The enclosing record
 remains ordinary visible data. `grap-demo.gid` is
 the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, the registered `evaluate` function
@@ -387,14 +384,14 @@ inside the raw editor's structural examples:
   result is `5`.
 - a nested expression multiplies that result by `8`, passes the result
   as the radius of `circle`, and projects the resulting radius-40
-  profile through Puri's drawing interface.
+  circle as ordinary graph structure.
 
 The `grap` field belongs to projection rather than evaluation. Normal
 view keeps the field visible and projects its value as
 `expression → result`; Raw projects only the stored expression.
 Compact f64 source values edit as decimal text while continuing to store
 the f64 library's byte representation, so changing `pitch` immediately
-changes both the `double_pitch` result and the projected circle. This is
+changes both the `double_pitch` result and the projected circle record. This is
 intentionally not yet the CAD interaction: it provides a tangible graph
 edit, evaluation, and projection loop from which the evaluator can be
 redesigned.

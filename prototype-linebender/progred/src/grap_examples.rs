@@ -17,7 +17,7 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
     grap::evaluate(
         expression,
         |cell| doc.cells.value(cell).cloned(),
-        &crate::conventions::foreign_functions(),
+        &crate::stack::foreign_functions(),
         grap::DEFAULT_FUEL,
     )
 }

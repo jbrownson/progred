@@ -1,15 +1,14 @@
 //! The semantic display vocabulary projections target, and its
 //! interpreter into Progred's measured layouts.
 
-use crate::layout::{self, Extent, Layout};
-use puri::draw::{Canvas, Shape};
+use crate::layout::{self, Layout};
+use puri::draw::Canvas;
 use puri::edit::{EditCtx, EditStyle, LineEditDescription, LineEditPresentation, LineEditState};
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextStyle};
 use progred_graph::Value;
 use std::marker::PhantomData;
 use std::rc::Rc;
-use vello::kurbo::{Affine, Stroke};
 use vello::peniko::{Brush, Color};
 
 const STRING_COLOR: [f32; 4] = [0.55, 0.33, 0.28, 1.0];
@@ -122,32 +121,14 @@ pub struct LineEdit {
     pub placeholder: Option<(String, TextRole)>,
 }
 
-pub struct Graphic {
-    pub extent: Extent,
-    pub commands: Vec<GraphicCommand>,
-}
-
-pub enum GraphicCommand {
-    Fill {
-        shape: Shape,
-        brush: Brush,
-    },
-    Stroke {
-        shape: Shape,
-        style: Stroke,
-        brush: Brush,
-    },
-}
-
 /// Projection-facing display operations. `View` is deliberately
-/// abstract: the live app interprets to `Node`, while tests and later
+/// abstract: the live app interprets to layout, while tests and later
 /// host interpreters can consume the same vocabulary independently.
 pub trait Language {
     type View;
 
     fn text(&mut self, text: &str, role: TextRole) -> Self::View;
     fn line_edit(&mut self, edit: LineEdit) -> Self::View;
-    fn graphic(&mut self, graphic: Graphic) -> Self::View;
     fn row(&mut self, gap: f64, children: Vec<Self::View>) -> Self::View;
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Self::View>) -> Self::View;
 }
@@ -220,34 +201,6 @@ impl<C: 'static, P: Canvas + HasHandler<C>> Language for LayoutLanguage<'_, '_, 
         }
     }
 
-    fn graphic(&mut self, graphic: Graphic) -> Self::View {
-        let scale = self.styles.scale;
-        let extent = Extent {
-            width: graphic.extent.width * scale,
-            ascent: graphic.extent.ascent * scale,
-            descent: graphic.extent.descent * scale,
-        };
-        layout::leaf(
-            extent,
-            move |p: &mut P, placement| {
-                let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
-                    * Affine::scale(scale);
-                for command in graphic.commands {
-                    match command {
-                        GraphicCommand::Fill { shape, brush } => {
-                            p.fill(shape, brush, transform);
-                        }
-                        GraphicCommand::Stroke {
-                            shape,
-                            style,
-                            brush,
-                        } => p.stroke(shape, style, brush, transform),
-                    }
-                }
-            },
-        )
-    }
-
     fn row(&mut self, gap: f64, children: Vec<Self::View>) -> Self::View {
         layout::row(gap * self.styles.scale, children)
     }
@@ -255,5 +208,4 @@ impl<C: 'static, P: Canvas + HasHandler<C>> Language for LayoutLanguage<'_, '_, 
     fn col(&mut self, baseline: usize, gap: f64, children: Vec<Self::View>) -> Self::View {
         layout::col(baseline, gap * self.styles.scale, children)
     }
-
 }

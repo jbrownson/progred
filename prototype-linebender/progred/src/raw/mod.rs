@@ -56,10 +56,10 @@ use vello::peniko::{Brush, Color};
 struct Cx<'a> {
     /// The reading context: the document read over its library.
     sources: Sources<'a>,
-    /// The Raw view, ONE bit of view state: convention layers derive
-    /// from it — names answer None through [`Cx::name`]; compact
-    /// projections stand down through the same bit.
+    /// Names and field order derive from this view bit. Value
+    /// projections and Grap evaluation come from the editor's stack.
     raw: bool,
+    values: bool,
     collapse: &'a Collapse,
     styles: &'a Styles,
     selection: Option<&'a Selection>,
@@ -542,7 +542,8 @@ pub struct ProjectDescription<'a> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub foreign: &'a grap::ForeignFunctions,
+    pub values: bool,
+    pub grap: Option<&'a grap::ForeignFunctions>,
 }
 
 pub fn project<
@@ -563,11 +564,13 @@ pub fn project<
         raw,
         styles,
         width,
-        foreign,
+        values,
+        grap,
     } = description;
     let cx = Cx {
         sources,
         raw,
+        values,
         collapse,
         styles,
         selection,
@@ -581,10 +584,7 @@ pub fn project<
             .and_then(|hover| hover_value(&sources, raw, selection, hover))
             .or_else(|| hover_node.cloned()),
     };
-    // The Raw view derives from the one bit: names answer None and
-    // nothing else changes — lists and records render as themselves
-    // there too, since kind is data, not convention. An empty
-    // document is a selectable placeholder at the root path.
+    // An empty document is a selectable placeholder at the root path.
     project_location(
         &cx,
         tcx,
@@ -593,7 +593,7 @@ pub fn project<
         Location::Root(sources.root()),
         width,
         &hooks,
-        (!raw).then_some(foreign),
+        grap,
     )
 }
 
@@ -1555,8 +1555,9 @@ fn projected_value_view<
     editing: Option<&LineEditState>,
 ) -> Option<Layout<P>> {
     let mut display = LayoutLanguage::<C, P>::new(tcx, cx.styles, editing, hooks.edit.clone());
-    let projected = (!cx.raw)
-        .then(|| conventions::compact(&mut display, value))
+    let projected = cx
+        .values
+        .then(|| crate::stack::values(&mut display, value))
         .flatten()?;
     Some(match projected.editor {
         Some(presentation) => cursor_target(
@@ -1599,6 +1600,7 @@ fn project_transient_root<
     let result_cx = Cx {
         sources: cx.sources,
         raw: false,
+        values: cx.values,
         collapse: cx.collapse,
         styles: cx.styles,
         selection: None,

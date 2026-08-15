@@ -24,6 +24,7 @@ mod projection;
 mod raw;
 mod selection;
 mod sources;
+mod stack;
 mod store;
 #[cfg(test)]
 mod test_values;
@@ -560,8 +561,8 @@ fn main() {
             doc,
             selection: None,
             collapse: selection::Collapse::default(),
-            library: conventions::library(),
-            foreign: conventions::foreign_functions(),
+            library: stack::library(),
+            foreign: stack::foreign_functions(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view: ViewFlags::default(),
@@ -818,8 +819,8 @@ impl App {
             doc,
             selection: None,
             collapse: selection::Collapse::default(),
-            library: conventions::library(),
-            foreign: conventions::foreign_functions(),
+            library: stack::library(),
+            foreign: stack::foreign_functions(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view,

@@ -542,7 +542,8 @@ pub(crate) fn run_frame(
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            foreign: &model.foreign,
+            values: !view.raw,
+            grap: (!view.raw).then_some(&model.foreign),
         },
         &mut tcx,
         raw::Hooks {

@@ -217,7 +217,7 @@
         pointer: Option<Point>,
         viewport: Option<Rect>,
     ) -> (Bench, Extent) {
-        let library = crate::conventions::library();
+        let library = crate::stack::library();
         let sources = Sources {
             doc,
             library: &library,
@@ -247,7 +247,7 @@
         // Numbers only, no assert (user call) — read them when the
         // bench runs; single-digit milliseconds is healthy.
         let start = std::time::Instant::now();
-        let foreign = crate::conventions::foreign_functions();
+        let foreign = crate::stack::foreign_functions();
         let node = project::<Claims, Bench>(
             ProjectDescription {
                 sources,
@@ -259,7 +259,8 @@
                 raw: false,
                 styles: &styles,
                 width: width - 48.0,
-                foreign: &foreign,
+                values: true,
+                grap: Some(&foreign),
             },
             &mut tcx,
             hooks,
@@ -308,22 +309,6 @@
         write_cmds(&mut out, &bench.list.0);
         writeln!(out, "</svg>").unwrap();
         std::fs::write(out_path, out).unwrap();
-    }
-
-    fn contains_circle(commands: &[DrawCmd]) -> bool {
-        commands.iter().any(|command| match command {
-            DrawCmd::Fill { shape, .. } | DrawCmd::Stroke { shape, .. } => {
-                matches!(shape, Shape::Circle(_))
-            }
-            DrawCmd::Clip { children, .. } => contains_circle(children),
-            DrawCmd::GlyphRun(_) => false,
-        })
-    }
-
-    #[test]
-    fn grap_geometry_reaches_the_canvas() {
-        let (bench, _) = place(&sample_document(), None, 900.0);
-        assert!(contains_circle(&bench.list.0));
     }
 
     #[test]
@@ -554,7 +539,7 @@
     fn placement_claims_the_hover_innermost_last() {
         let doc = sample_document();
         let (bench, _) = place(&doc, None, 560.0);
-        let library = crate::conventions::library();
+        let library = crate::stack::library();
         let sources = Sources {
             doc: &doc,
             library: &library,
@@ -839,7 +824,7 @@
             root: Some(crate::test_values::text("")),
             cells: Cells::new(),
         };
-        let library = crate::conventions::library();
+        let library = crate::stack::library();
         let sel = Selection::edge(
             &Sources {
                 doc: &empty_string,
@@ -860,7 +845,7 @@
     #[test]
     fn svg_bench_renders_a_label_rename() {
         let doc = sample_document();
-        let library = crate::conventions::library();
+        let library = crate::stack::library();
         let path = vec![
             Step::Key(crate::test_values::label("shape")),
             Step::Follow,
@@ -880,7 +865,7 @@
     #[test]
     fn svg_bench_renders_a_pending_edge() {
         let doc = sample_document();
-        let library = crate::conventions::library();
+        let library = crate::stack::library();
         let edge = pending_edge(
             &Sources {
                 doc: &doc,
