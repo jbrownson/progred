@@ -523,7 +523,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
         Selection::Edge { path, .. } => sources
             .resolve(path)
             .filter(|value| {
-                !matches!(value, Value::Record(_)) || conventions::whole_text(value).is_some()
+                !matches!(value, Value::Record(_)) || progred_text::read(value).is_some()
             })
             .cloned(),
         _ => None,
@@ -1269,7 +1269,7 @@ fn record_view<
             .is_some()
         && fields
             .get(&progred_name::vocabulary::NAME)
-            .and_then(conventions::whole_text)
+            .and_then(progred_text::read)
             .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(CellId, Option<Value>)> = fields
         .iter()

@@ -317,6 +317,41 @@
     }
 
     #[test]
+    fn editing_an_f64_keeps_unrelated_fields() {
+        let lib = Cells::new();
+        let cell = new_cell_id();
+        let unit = crate::test_values::label("unit");
+        let mut cells = Cells::new();
+        cells.set_value(
+            cell,
+            Value::record(
+                grap_f64::value(2.5)
+                    .as_record()
+                    .unwrap()
+                    .clone()
+                    .update(unit, crate::test_values::text("mm")),
+            ),
+        );
+        let mut doc = Document {
+            root: Some(Value::from(cell)),
+            cells,
+        };
+        let path = vec![Step::Follow];
+        let mut selection = Selection::edge(&src(&doc, &lib), path.clone());
+        selection.edit_mut().unwrap().set_text("8");
+        assert!(write_through(&mut doc, &lib, &mut selection));
+        let value = src(&doc, &lib).resolve(&path).unwrap();
+        assert_eq!(grap_f64::read(value), Some(8.0));
+        assert_eq!(
+            value
+                .as_record()
+                .and_then(|fields| fields.get(&unit))
+                .and_then(progred_text::read),
+            Some("mm")
+        );
+    }
+
+    #[test]
     fn element_edits_rebuild_the_list_at_the_owning_cell() {
         let lib = Cells::new();
         let (mut doc, _) = doc_of(vec![(
@@ -447,8 +482,8 @@
         ));
         assert_eq!(doc.root, Some(crate::test_values::text("root")));
         // Text is a record convention, so a structural write can
-        // enrich it. The extra field then keeps the compact text
-        // projection from hiding structure.
+        // enrich it. The text facet remains, and so does the extra
+        // field.
         assert!(set_value(
             &mut doc,
             &lib,
@@ -462,7 +497,7 @@
                 .and_then(|fields| fields.get(&crate::test_values::label("x"))),
             Some(&crate::test_values::text("0"))
         );
-        assert!(crate::conventions::whole_text(doc.root.as_ref().unwrap()).is_none());
+        assert!(progred_text::read(doc.root.as_ref().unwrap()).is_some());
     }
 
     #[test]

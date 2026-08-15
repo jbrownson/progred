@@ -4,7 +4,6 @@
 
 use crate::document::{Document, Path, short_id};
 use crate::sources::Sources;
-use crate::conventions;
 use progred_graph::{CellId, Cells, Position, Step, Value, position, spine};
 use puri::edit::LineEditState;
 use std::collections::HashMap;
@@ -27,7 +26,7 @@ impl Collapse {
 
 pub(crate) struct LineEditing {
     pub(crate) line: LineEditState,
-    pub(crate) parser: fn(&str) -> Option<Value>,
+    pub(crate) update: fn(&Value, &str) -> Option<Value>,
 }
 
 /// What is selected: the value at a path, or a nonexistent field
@@ -98,7 +97,7 @@ impl Selection {
             path,
             edit: edit.map(|line| LineEditing {
                 line: line_edit(&line.text),
-                parser: line.parser,
+                update: line.update,
             }),
             recorded: false,
         }
@@ -460,7 +459,7 @@ pub fn resolve_query(text: &str) -> Value {
 /// presence is what says "structure" — never the text's shape, so
 /// text that happens to spell Value JSON stays text.
 pub fn to_clipboard(value: &Value) -> (String, bool) {
-    match (conventions::whole_text(value), value.as_blob()) {
+    match (progred_text::read(value), value.as_blob()) {
         (Some(text), _) => (format!("\"{text}\""), false),
         (_, Some(_)) => (value.to_string(), false),
         _ => (
@@ -614,7 +613,7 @@ fn store_collapse(collapse: &mut Collapse, path: &[Step], default: bool, next: b
 
 /// Writes the selection's editor text through to its location after
 /// every handled event — the graph is the source of truth.
-/// The projection that mounted the line supplies its parser, and
+/// The projection that mounted the line supplies its update, and
 /// valid intermediate values write every keystroke. Everything funnels
 /// through [`set_value`], so an element edit rebuilds its list at
 /// the owning cell and a location that no longer takes the write
@@ -642,7 +641,7 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
                 library,
             };
             let current = sources.resolve(path);
-            let next = current.and_then(|_| (edit.parser)(&text));
+            let next = current.and_then(|current| (edit.update)(current, &text));
             (current.cloned(), next)
         };
         match next {

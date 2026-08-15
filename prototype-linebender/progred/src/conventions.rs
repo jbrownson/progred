@@ -1,5 +1,5 @@
-//! Bootstrap libraries and the closed-record projections they
-//! cover. Each function checks its own preconditions.
+//! Bootstrap libraries and the facet projections they cover. Each
+//! function checks its own preconditions.
 
 use crate::display::LineEdit;
 use crate::sources::Sources;
@@ -53,45 +53,40 @@ pub fn grap(
     })
 }
 
-pub fn whole_text(value: &Value) -> Option<&str> {
-    let text = progred_text::read(value)?;
-    value
-        .as_record()?
-        .keys()
-        .all(|label| *label == progred_text::vocabulary::UTF8)
-        .then_some(text)
+fn overlay(current: &Value, parsed: Value) -> Value {
+    match (current.as_record(), parsed.as_record()) {
+        (Some(current), Some(parsed)) => Value::record(
+            parsed
+                .iter()
+                .fold(current.clone(), |fields, (key, value)| {
+                    fields.update(*key, value.clone())
+                }),
+        ),
+        _ => parsed,
+    }
 }
 
-fn whole_f64(value: &Value) -> Option<f64> {
-    let number = grap_f64::read(value)?;
-    value
-        .as_record()?
-        .keys()
-        .all(|label| *label == grap_f64::vocabulary::F64)
-        .then_some(number)
+fn text_value(current: &Value, text: &str) -> Option<Value> {
+    Some(overlay(current, progred_text::value(text)))
 }
 
-fn text_value(text: &str) -> Option<Value> {
-    Some(progred_text::value(text))
-}
-
-fn f64_value(text: &str) -> Option<Value> {
-    text.parse::<f64>().ok().map(grap_f64::value)
+fn f64_value(current: &Value, text: &str) -> Option<Value> {
+    text.parse::<f64>().ok().map(|n| overlay(current, grap_f64::value(n)))
 }
 
 pub fn text(value: &Value) -> Option<LineEdit> {
-    whole_text(value).map(|text| LineEdit {
+    progred_text::read(value).map(|text| LineEdit {
         text: text.to_string(),
-        parser: text_value,
+        update: text_value,
         prefix: "\"".into(),
         suffix: "\"".into(),
     })
 }
 
 pub fn f64(value: &Value) -> Option<LineEdit> {
-    whole_f64(value).map(|number| LineEdit {
+    grap_f64::read(value).map(|number| LineEdit {
         text: number.to_string(),
-        parser: f64_value,
+        update: f64_value,
         prefix: String::new(),
         suffix: String::new(),
     })
@@ -102,18 +97,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn closed_f64_is_an_editor_and_extra_fields_stay_structural() {
+    fn f64_line_recognizes_an_open_record() {
         let number = grap_f64::value(2.5);
         let edit = crate::stack::values(&number).unwrap();
         assert_eq!(edit.text, "2.5");
         assert!(edit.prefix.is_empty());
 
-        let enriched_number = Value::record(number.as_record().unwrap().clone().update(
-            crate::test_values::label("created-at"),
-            crate::test_values::text("now"),
+        let tagged = Value::record(number.as_record().unwrap().clone().update(
+            crate::test_values::label("unit"),
+            crate::test_values::text("mm"),
         ));
-        assert_eq!(grap_f64::read(&enriched_number), Some(2.5));
-        assert!(crate::stack::values(&enriched_number).is_none());
+        assert_eq!(grap_f64::read(&tagged), Some(2.5));
+        assert_eq!(
+            crate::stack::values(&tagged).map(|edit| edit.text),
+            Some("2.5".into())
+        );
     }
 
     #[test]

@@ -13,7 +13,7 @@ use progred_graph::Value;
 #[derive(Clone)]
 pub struct LineEdit {
     pub text: String,
-    pub parser: fn(&str) -> Option<Value>,
+    pub update: fn(&Value, &str) -> Option<Value>,
     pub prefix: String,
     pub suffix: String,
 }

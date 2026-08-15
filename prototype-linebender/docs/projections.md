@@ -53,7 +53,7 @@ with the Grap field projection removed. Source/editability and
 projection choice remain separate inputs.
 
 Closed-record value projections return a `LineEdit`: the same
-description for text and f64, with different parsers and
+description for text and f64, with different updates and
 affixes. The structural walk builds Progred layouts directly; it owns
 graph paths, editing, and source interaction. Focus and cursor live on
 the selection. Grap evaluation, domain recognition, and provenance are
@@ -284,11 +284,10 @@ store or forward that pair.
 
 These conventions match what is present, not what is absent. Record
 patterns are open unless a particular domain explicitly says
-otherwise. The current closed f64 view is deliberately
-stricter than semantic recognition: it replaces a whole record only
-when every field in that record belongs to the displayed facet.
-Otherwise the structural view remains visible, even though Grap and
-the relevant library can still use the recognized facet.
+otherwise. Text and f64 line projections use the same open
+recognition as Grap, so a later projection can wrap them (a unit
+around a number). Each line's update sees the current value and the
+new text, so it can keep extra fields or replace the value.
 
 Every external cell read is collected as a dependency. The set is
 reported even when evaluation produces an absent, ready for future
