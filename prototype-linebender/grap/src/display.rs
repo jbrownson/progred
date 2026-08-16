@@ -61,8 +61,8 @@ mod tests {
         let (shown, result) = arms(&layout);
         assert!(matches!(
             shown,
-            Layout::Nest { step, value }
-                if *step == Step::Key(GRAP) && *value == expression
+            Layout::At { steps, value }
+                if *steps == [Step::Key(GRAP)] && *value == expression
         ));
         assert!(matches!(
             result,
@@ -101,8 +101,8 @@ mod tests {
         let (nested, _) = arms(&layout);
         assert!(matches!(
             nested,
-            Layout::Nest { step, value }
-                if *step == Step::Key(GRAP) && *value == inner
+            Layout::At { steps, value }
+                if *steps == [Step::Key(GRAP)] && *value == inner
         ));
     }
 }

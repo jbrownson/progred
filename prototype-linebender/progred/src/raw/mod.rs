@@ -38,9 +38,8 @@ use crate::layout::{
 };
 use crate::sources::Sources;
 use crate::projection::Location;
-use im::OrdMap;
 use parley::layout::Layout as TextLayout;
-use progred_graph::{CellId, Position, Step, Value, hex_string};
+use progred_graph::{CellId, Position, Step, Value};
 #[cfg(test)]
 use progred_graph::{Cells, new_cell_id};
 use puri::delim::{self, Delim, DelimStyle};
@@ -141,19 +140,7 @@ fn realize<
         }
         progred_display::Layout::OnClick { child, click } => {
             let inner = realize(cx, tcx, path, ancestors, hooks, value, *child, avail);
-            match click {
-                progred_display::Click::Select => {
-                    select_target(path.to_vec(), value.clone(), hooks, inner)
-                }
-                progred_display::Click::Line(line) => cursor_target(
-                    path.to_vec(),
-                    value.clone(),
-                    cx.styles.line_presentation(&line.prefix, &line.suffix),
-                    hooks,
-                    Some(line),
-                    inner,
-                ),
-            }
+            realize_click(cx, tcx, path, hooks, value, click, inner)
         }
         progred_display::Layout::OnKey { child, key } => {
             let inner = realize(cx, tcx, path, ancestors, hooks, value, *child, avail);
@@ -179,26 +166,64 @@ fn realize<
                 .collect();
             col(baseline, gap * scale, children)
         }
-        progred_display::Layout::Nest { step, value: nested } => {
-            let mut nested_path = path.to_vec();
-            nested_path.push(step.clone());
-            let mut follow_ancestors;
-            let ancestors = if step == Step::Follow {
-                follow_ancestors = ancestors.clone();
-                follow_ancestors.extend(value.as_cell());
-                &follow_ancestors
-            } else {
-                ancestors
-            };
-            project_present_value(cx, tcx, &nested_path, ancestors, &nested, avail, hooks)
+        progred_display::Layout::Pad {
+            left,
+            top,
+            right,
+            bottom,
+            child,
+        } => {
+            let left = left * scale;
+            let right = right * scale;
+            pad(
+                Insets::new(left, top * scale, right, bottom * scale),
+                realize(
+                    cx,
+                    tcx,
+                    path,
+                    ancestors,
+                    hooks,
+                    value,
+                    *child,
+                    (avail - left - right).max(0.0),
+                ),
+            )
         }
-        progred_display::Layout::Project(projected) => {
-            project_present_value(cx, tcx, path, ancestors, &projected, avail, hooks)
+        progred_display::Layout::Bracket { delim, child } => {
+            let reserved =
+                2.0 * (delim_advance(cx.styles, display_delim(delim)) + 2.0 * scale);
+            let inner = realize(
+                cx,
+                tcx,
+                path,
+                ancestors,
+                hooks,
+                value,
+                *child,
+                (avail - reserved).max(0.0),
+            );
+            bracketed(cx, display_delim(delim), path, value, hooks, inner)
+        }
+        progred_display::Layout::Descend { step } => descend(
+            cx,
+            tcx,
+            path,
+            ancestors,
+            value,
+            step,
+            avail,
+            hooks,
+        ),
+        progred_display::Layout::At { steps, value: nested } => {
+            realize_at(cx, tcx, path, ancestors, steps, nested, avail, hooks)
         }
         progred_display::Layout::Transient { value: computed, fuel } => {
             project_transient_root(cx, tcx, path, computed, fuel, avail, hooks)
         }
         progred_display::Layout::Group { flat, broken } => {
+            if avail <= 0.0 {
+                return realize(cx, tcx, path, ancestors, hooks, value, *broken, avail);
+            }
             let candidate = realize(
                 cx,
                 tcx,
@@ -209,11 +234,119 @@ fn realize<
                 *flat,
                 f64::INFINITY,
             );
-            if one_line(candidate.extent, scale) && candidate.extent.width <= avail {
+            let fits = one_line(candidate.extent, scale) && candidate.extent.width <= avail;
+            if fits {
+                return candidate;
+            }
+            let broken = realize(cx, tcx, path, ancestors, hooks, value, *broken, avail);
+            if one_line(candidate.extent, scale) && candidate.extent.width <= broken.extent.width {
                 candidate
             } else {
-                realize(cx, tcx, path, ancestors, hooks, value, *broken, avail)
+                broken
             }
+        }
+    }
+}
+
+fn display_delim(delim: progred_display::Delim) -> Delim {
+    match delim {
+        progred_display::Delim::Paren => Delim::Paren,
+        progred_display::Delim::Bracket => Delim::Bracket,
+        progred_display::Delim::Brace => Delim::Brace,
+    }
+}
+
+fn realize_at<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    steps: Vec<Step>,
+    nested: Value,
+    avail: f64,
+    hooks: &Hooks<C>,
+) -> Measured<P> {
+    let mut path = path.to_vec();
+    let mut follow_ancestors = ancestors.clone();
+    for step in &steps {
+        if *step == Step::Follow {
+            if let Some(cell) = cx.sources.resolve(&path).and_then(Value::as_cell) {
+                follow_ancestors.insert(cell);
+            }
+        }
+        path.push(step.clone());
+    }
+    project_present_value(
+        cx,
+        tcx,
+        &path,
+        &follow_ancestors,
+        &nested,
+        avail,
+        hooks,
+    )
+}
+
+fn realize_click<
+    C: 'static,
+    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
+>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    hooks: &Hooks<C>,
+    value: &Value,
+    click: progred_display::Click,
+    inner: Measured<P>,
+) -> Measured<P> {
+    match click {
+        progred_display::Click::Select => {
+            select_target(path.to_vec(), value.clone(), hooks, inner)
+        }
+        progred_display::Click::Quiet => {
+            quiet_select_target(path.to_vec(), value.clone(), hooks, inner)
+        }
+        progred_display::Click::Line(line) => cursor_target(
+            path.to_vec(),
+            value.clone(),
+            cx.styles.line_presentation(&line.prefix, &line.suffix),
+            hooks,
+            Some(line),
+            inner,
+        ),
+        progred_display::Click::Toggle => toggle_target(cx, path.to_vec(), hooks, inner),
+        progred_display::Click::Insert { after } => {
+            let mut target = path.to_vec();
+            target.push(Step::Element(after));
+            insert_target(cx, target, hooks, inner)
+        }
+        progred_display::Click::Rename { key } => {
+            let mut child = path.to_vec();
+            child.push(Step::Key(key));
+            let (spelling, style) = label_spelling(cx, &key);
+            let layout = line_layout(tcx, &spelling, style);
+            rename_target(cx, child, layout, hooks, inner)
+        }
+        progred_display::Click::Pick { key } => pick_target(key, hooks, inner),
+        progred_display::Click::Field { key } => {
+            let mut child = path.to_vec();
+            child.push(Step::Key(key));
+            select_target(child, Value::from(key), hooks, inner)
+        }
+        progred_display::Click::Absorb => {
+            before(inner, move |p: &mut P, placement| {
+                hover_block(p, placement);
+                p.handler().on_pointer_down(move |_, event| {
+                    event.button == Some(PointerButton::Primary)
+                        && placement.contains(Point::new(
+                            event.state.position.x,
+                            event.state.position.y,
+                        ))
+                });
+            })
         }
     }
 }
@@ -233,9 +366,40 @@ fn leaf_display<
             let style = match face {
                 progred_display::Face::Name => &cx.styles.name,
                 progred_display::Face::Dim => &cx.styles.dim,
+                progred_display::Face::Label => &cx.styles.label,
+                progred_display::Face::Id => &cx.styles.id,
             };
             display::text(tcx, &text, style)
         }
+        progred_display::Display::Delim { delim, open } => hover_target(
+            path.to_vec(),
+            flat_delim(cx.styles, display_delim(delim), open),
+        ),
+        progred_display::Display::Head { cell } => {
+            head_view(cx, tcx, path, cell, cx.name(cell), hooks)
+        }
+        progred_display::Display::Query { labels } => {
+            let engaged = if labels {
+                cx.pending_rename_under(path)
+                    .map(|(_, query, choice)| (query, choice))
+                    .or_else(|| cx.pending_edge_under(path))
+            } else {
+                match cx.selection {
+                    Some(Selection::Pending {
+                        path: pending,
+                        query,
+                        choice,
+                    }) if pending.as_slice() == path => Some((query, *choice)),
+                    _ => None,
+                }
+            };
+            match engaged {
+                Some((query, choice)) if labels => label_query(cx, tcx, query, choice, hooks),
+                Some((query, choice)) => placeholder(cx, tcx, Some((query, choice)), false, hooks),
+                None => display::text(tcx, "…", &cx.styles.dim),
+            }
+        }
+        progred_display::Display::Slot => placeholder(cx, tcx, None, false, hooks),
         progred_display::Display::LineEdit(line) => {
             let editing = cx
                 .selection
@@ -766,149 +930,6 @@ pub fn project<
     )
 }
 
-/// A link rendered as its cell: PARENS are the cell's syntax — `(`
-/// name-or-short-id value `)` — completing the delimiter family
-/// (brackets say list, braces say record). A conventional simple-name
-/// field, when present, is projected as the head while retaining its
-/// ordinary `Follow, Key(name)` path — selectable, editable,
-/// two-stage. The value after the head is an
-/// ordinary [`descend`] at the Follow step, whatever its kind:
-/// the drawn parens stretch over whatever height it takes, and when
-/// head-beside-value overflows the width remaining here the cell
-/// BREAKS like a field row — head on its own line, value dropped
-/// below at the tab, parens spanning both. A WRITABLE valueless cell
-/// — a bare cell — renders the [`placeholder`] box in
-/// the value's place (the empty-slot rule in [`Selection::edge`]
-/// makes selecting it begin the first value); an external valueless
-/// cell renders head-only, complete. Cells COLLAPSE like containers
-/// — Space toggles the override at the cell's path — but the
-/// collapsed form is `( … )`: pure elision, never a summary, a cell
-/// does not introspect its value. CYCLE RE-ENTRY is the same
-/// machinery with the DEFAULT flipped: the repeated cell defaults
-/// collapsed, and expanding — Space, or clicking the ellipsis —
-/// opens one more turn, as deep as you care to follow. The parens
-/// and the head claim cell-selection; gaps between claims fall
-/// through.
-#[allow(clippy::too_many_arguments)]
-fn cell_view<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &HashSet<CellId>,
-    cell: CellId,
-    avail: f64,
-    hooks: &Hooks<C>,
-) -> Measured<P> {
-    let scale = cx.styles.scale;
-    let name = cx.name(cell);
-    let target = Value::from(cell);
-    let mut followed = path.to_vec();
-    followed.push(Step::Follow);
-    let value = cx.sources.value(cell).cloned();
-    // A pending inside the value forces the cell open.
-    let pending_inside = cx.pending_child_of(&followed).is_some()
-        || cx.pending_edge_under(&followed).is_some()
-        || cx.pending_rename_under(&followed).is_some();
-    let elided = value.is_some()
-        && !pending_inside
-        && cx.collapse.collapsed(path, ancestors.contains(&cell));
-    if elided {
-        // The ellipsis is the way back open: clicking it expands one
-        // turn (the parens still select the cell).
-        return bracketed(
-            cx,
-            Delim::Paren,
-            path,
-            &target,
-            hooks,
-            toggle_target(cx, path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
-        );
-    }
-    // The head claims cell-selection — the gap beside the name
-    // included; an engaged name inside still wins its own clicks.
-    let head = select_target(
-        path.to_vec(),
-        target.clone(),
-        hooks,
-        head_view(cx, tcx, path, cell, name, hooks),
-    );
-    let content = match &value {
-        // A writable bare cell's slot invites its first value; an
-        // EXTERNAL bare cell is complete as it stands — no hole, no
-        // invitation, the affordance-lie rule in notation.
-        None if cx.sources.writable(cell) => row(
-            4.0 * scale,
-            vec![
-                head,
-                descend(
-                    cx,
-                    tcx,
-                    path,
-                    ancestors,
-                    &target,
-                    Step::Follow,
-                    avail,
-                    hooks,
-                ),
-            ],
-        ),
-        None => head,
-        Some(_) => {
-            let mut inner = ancestors.clone();
-            inner.insert(cell);
-            // The field-row discipline inside the parens: hug only
-            // where the value stays WHOLE beside the head, probed
-            // with a CLOSED unbounded build; else drop at the tab
-            // with its wider budget. A head narrower than the tab
-            // hugs whatever the value does — dropping there buys no
-            // room — and that guard, or the short-circuit at no room
-            // beside, decides the unbounded and crushed budgets
-            // without probing.
-            let inside = avail - 2.0 * (delim_advance(cx.styles, Delim::Paren) + 2.0 * scale);
-            let beside = inside - head.extent.width - 4.0 * scale;
-            let tab = 20.0 * scale;
-            let hug = beside >= inside - tab
-                || (beside > 0.0
-                    && descend::<C, P>(
-                        cx,
-                        tcx,
-                        path,
-                        &inner,
-                        &target,
-                        Step::Follow,
-                        f64::INFINITY,
-                        hooks,
-                    )
-                        .extent
-                        .width
-                        <= beside);
-            let value_node = descend(
-                cx,
-                tcx,
-                path,
-                &inner,
-                &target,
-                Step::Follow,
-                if hug { beside } else { inside - tab }.max(0.0),
-                hooks,
-            );
-            if hug {
-                row(4.0 * scale, vec![head, value_node])
-            } else {
-                col(
-                    0,
-                    2.0 * scale,
-                    vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), value_node)],
-                )
-            }
-        }
-    };
-    bracketed(cx, Delim::Paren, path, &target, hooks, content)
-}
-
 /// Marks `child` as the projection of `path` WITHOUT claiming any
 /// clicks: the highlight, reveal rect, and keyboard reach of
 /// [`descend`] over the full bounds, while pointer selection belongs
@@ -1040,553 +1061,12 @@ fn head_view<
     }
 }
 
-/// One record field row: the label-and-colon head, then the value (or
-/// its pending query). `parent` is the record's own path — a cell's
-/// followed path or an inline record's. A real field's label and
-/// colon select the field, like its value — grouped so one target
-/// spans both and the gap between. A pending row's plain click falls
-/// through (the not-yet-field can't be selected), but command still
-/// picks its label's identity. Three alternatives, the outermost
-/// level degrading first: the value HUGS the label while it stays
-/// whole beside it; else it DROPS below at a fixed tab with the drop
-/// position's wider budget — never aligned under the label's own
-/// width, which is the indentation that drifts. A head narrower than
-/// the tab hugs whatever the value does — dropping there buys no
-/// room — which is where the lisp-flavored broken-beside form
-/// survives, and the overflow answer when nothing fits anywhere.
-#[allow(clippy::too_many_arguments)]
-fn field_row<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    parent: &[Step],
-    ancestors: &HashSet<CellId>,
-    parent_value: &Value,
-    key: CellId,
-    value: Option<Value>,
-    avail: f64,
-    hooks: &Hooks<C>,
-) -> Measured<P> {
-    let scale = cx.styles.scale;
-    let mut child = parent.to_vec();
-    child.push(Step::Key(key));
-    // A re-opened label renders as its seeded query; cold, a
-    // writable label's one click is its own edit — selecting the
-    // field belongs to the value's ink (and the head's colon), which
-    // already claims the same path.
-    let label = match cx.pending_rename_under(parent) {
-        Some((replacing, query, choice)) if replacing == &key => {
-            label_query(cx, tcx, query, choice, hooks)
-        }
-        _ => field_label(cx, tcx, parent, child.clone(), &key, hooks),
-    };
-    let head = row(0.0, vec![label, text(tcx, ":", &cx.styles.dim)]);
-    let head = match &value {
-        Some(_) => select_target(child.clone(), Value::Cell(key), hooks, head),
-        None => pick_target(key, hooks, head),
-    };
-    let Some(_) = value else {
-        return row(
-            6.0 * scale,
-            vec![
-                head,
-                descend(
-                    cx,
-                    tcx,
-                    parent,
-                    ancestors,
-                    parent_value,
-                    Step::Key(key),
-                    avail,
-                    hooks,
-                ),
-            ],
-        );
-    };
-    // The hug decision probes the value's FLAT form: hug only where
-    // the value stays WHOLE beside the label, so the first break
-    // lands at the outermost level that cannot stay flat — the
-    // literal gate's ordering carried into the hug seam. The
-    // unbounded probe is CLOSED — every nested fit test passes, so
-    // nothing branches inside (the literal candidates' own build) —
-    // and ONE real build follows at the chosen position; building
-    // both positions recursed probes-within-probes and went
-    // exponential exactly at narrow widths.
-    let beside = avail - head.extent.width - 6.0 * scale;
-    let tab = 20.0 * scale;
-    // A head narrower than the tab hugs whatever the value does: the
-    // drop would offer LESS room and overflow wider, so the guard is
-    // both the lisp-flavored form's remaining home and the overflow
-    // tie-break. That guard at unbounded budgets, and the short-
-    // circuit at no room beside, keep forced builds probe-free — a
-    // probe that probed would recurse the exponential right back.
-    let hug = beside >= avail - tab
-        || (beside > 0.0
-            && descend::<C, P>(
-                cx,
-                tcx,
-                parent,
-                ancestors,
-                parent_value,
-                Step::Key(key),
-                f64::INFINITY,
-                hooks,
-            )
-            .extent
-            .width
-                <= beside);
-    let content = descend(
-        cx,
-        tcx,
-        parent,
-        ancestors,
-        parent_value,
-        Step::Key(key),
-        if hug { beside } else { avail - tab }.max(0.0),
-        hooks,
-    );
-    if hug {
-        row(6.0 * scale, vec![head, content])
-    } else {
-        col(
-            0,
-            2.0 * scale,
-            vec![head, pad(Insets::new(tab, 0.0, 0.0, 0.0), content)],
-        )
-    }
-}
-
-/// The label-query row of a new field being authored on a record. The
-/// authoring locus carries the primary itself; its parent is
-/// deliberately unmarked.
-fn pending_edge_row<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    query: &LineEditState,
-    choice: usize,
-    hooks: &Hooks<C>,
-) -> Measured<P> {
-    // Both stages through the slot widget: the label engaged and
-    // wearing the ring — ONLY the label, as a re-opened rename wears
-    // it, so the cold value slot's box stands clear instead of
-    // colliding with a row-wide outline — the value to come cold.
-    let pending_row = row(
-        0.0,
-        vec![
-            label_query(cx, tcx, query, choice, hooks),
-            text(tcx, ": ", &cx.styles.dim),
-            placeholder(cx, tcx, None, false, hooks),
-        ],
-    );
-    before(pending_row, move |p: &mut P, placement| {
-        // The row owns its clicks: nothing here means "select the
-        // parent", so nothing may fall through to it. (The query's
-        // caret target, registered after, still wins inside itself.)
-        hover_block(p, placement);
-        p.handler().on_pointer_down(move |_, event| {
-            event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-        });
-    })
-}
-
-/// A list value: its elements as bare ordered rows — the position is
-/// session identity, not information; order carries it. Collapsed —
-/// override-only; a value has no identity to recur through — it
-/// elides to `[ … ]`; a list whose literal `["a", "b"]` fits
-/// the width and stays one line reads as that literal; anything else
-/// takes the block form, the drawn brackets spanning the element
-/// rows as a column. Lists have no identity, so there is no head of
-/// their own and no cycle through them — only linked cells can
-/// recurse; a cell holding one wraps this same view in its stretched
-/// parens.
-#[allow(clippy::too_many_arguments)]
-fn list_view<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &HashSet<CellId>,
-    elements: &OrdMap<Position, Value>,
-    avail: f64,
-    hooks: &Hooks<C>,
-) -> Measured<P> {
-    let scale = cx.styles.scale;
-    let mut items: Vec<(Position, Option<Value>)> = elements
-        .iter()
-        .map(|(position, value)| (position.clone(), Some(value.clone())))
-        .collect();
-    if let Some(Step::Element(position)) = cx.pending_child_of(path) {
-        items.push((position, None));
-        items.sort_by(|a, b| a.0.cmp(&b.0));
-    }
-    let target = Value::List(elements.clone());
-
-    // A pending child forces the list open; the collapse override
-    // outranks the layout the content would pick. Collapsed is pure
-    // elision — no summary — and the ellipsis is the way back open.
-    let collapsed = !items.is_empty()
-        && items.iter().all(|(_, value)| value.is_some())
-        && cx.collapse.collapsed(path, false);
-    if collapsed {
-        return select_target(
-            path.to_vec(),
-            target,
-            hooks,
-            row(
-                4.0 * scale,
-                vec![
-                    flat_delim(cx.styles, Delim::Bracket, true),
-                    toggle_target(cx, path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
-                    flat_delim(cx.styles, Delim::Bracket, false),
-                ],
-            ),
-        );
-    }
-
-    // The literal candidate, kept when it FITS: within the width
-    // remaining here and one line tall (a pending inside can force a
-    // child open, and a broken child disqualifies the literal,
-    // however narrow). Children build against an UNBOUNDED budget, so
-    // every nested fit test passes and the candidate materializes in
-    // one all-flat construction — no branching inside; this enclosing
-    // test is the one gate (Wadler's fits test, operationally). On
-    // rejection the block form rebuilds them against its own columns.
-    // At zero budget no literal can be accepted; skipping the
-    // candidate keeps zero-budget probe builds closed and cheap. An
-    // EMPTY list is the exception both ways: `[]` is its one form —
-    // a block of zero rows is not a representation — so it takes the
-    // literal whatever the width says.
-    let bare = items.is_empty();
-    let writable = writable_at(&cx.sources, path);
-    let mut flat = (avail > 0.0 || bare)
-        .then(|| {
-            let mut cells: Vec<Measured<P>> = vec![hover_target(
-                path.to_vec(),
-                flat_delim(cx.styles, Delim::Bracket, true),
-            )];
-            for (index, (position, _)) in items.iter().enumerate() {
-                if index > 0 {
-                    // The separator is the between: writable, its click
-                    // opens a pending right here.
-                    let separator = text(tcx, ", ", &cx.styles.dim);
-                    cells.push(if writable {
-                        let mut previous = path.to_vec();
-                        previous.push(Step::Element(items[index - 1].0.clone()));
-                        insert_target(cx, previous, hooks, separator)
-                    } else {
-                        separator
-                    });
-                }
-                cells.push(descend(
-                    cx,
-                    tcx,
-                    path,
-                    ancestors,
-                    &target,
-                    Step::Element(position.clone()),
-                    f64::INFINITY,
-                    hooks,
-                ));
-            }
-            cells.push(hover_target(
-                path.to_vec(),
-                flat_delim(cx.styles, Delim::Bracket, false),
-            ));
-            row(0.0, cells)
-        })
-        .filter(|candidate| one_line(candidate.extent, scale));
-    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
-        // The one-line literal is all content: it selects the list
-        // whole, elements winning their own spans — and stays QUIET
-        // for the pointer, so its gaps hold whatever the hover was.
-        return quiet_select_target(path.to_vec(), target, hooks, candidate);
-    }
-
-    let inside = (avail - 2.0 * (delim_advance(cx.styles, Delim::Bracket) + 2.0 * scale)).max(0.0);
-    // Element rows are bare values: the spanning brackets already
-    // say "list", every multi-line element carries its own
-    // delimiter, and each value's ink selects its element — a
-    // leading dash would restate all three.
-    let rows: Vec<Measured<P>> = items
-        .into_iter()
-        .map(|(position, _)| {
-            descend(
-                cx,
-                tcx,
-                path,
-                ancestors,
-                &target,
-                Step::Element(position),
-                inside,
-                hooks,
-            )
-        })
-        .collect();
-    // The block form: the brackets span the element column and are
-    // the list's click claims; everything between the rows falls
-    // through. Collapsing is Space on the selection — no button.
-    let block = bracketed(
-        cx,
-        Delim::Bracket,
-        path,
-        &target,
-        hooks,
-        col(0, 4.0 * scale, rows),
-    );
-    // The general rule: first alternative that FITS, in priority
-    // order; when none fits, the NARROWEST attempted, priority
-    // breaking ties. A small list's block form can be WIDER than its
-    // literal (the dash overhead), and kicking to it would overflow
-    // more.
-    match flat {
-        Some(candidate) if candidate.extent.width <= block.extent.width => {
-            quiet_select_target(path.to_vec(), target, hooks, candidate)
-        }
-        _ => block,
-    }
-}
-
-/// A record value: an anonymous content-compared value, BRACED —
-/// braces mark records the way parens mark cells. Field rows at the
-/// record's own path. Collapsed — override-only, since a value has
-/// no identity to recur through — it elides to `{ … }`; a
-/// record whose literal `{x: "1", y: "2"}` fits the width and stays
-/// one line reads as that literal; anything else takes the block
-/// form, the drawn braces spanning the field rows as a column. A
-/// cell holding one wraps this same view in its stretched parens.
-#[allow(clippy::too_many_arguments)]
-fn record_view<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &HashSet<CellId>,
-    fields: &OrdMap<CellId, Value>,
-    avail: f64,
-    hooks: &Hooks<C>,
-) -> Measured<P> {
-    let scale = cx.styles.scale;
-    let consumes_simple_name = !cx.raw
-        && path
-            .split_last()
-            .filter(|(step, _)| matches!(step, Step::Follow))
-            .and_then(|(_, parent)| cx.sources.resolve(parent))
-            .and_then(Value::as_cell)
-            .and_then(|cell| cx.name(cell))
-            .is_some()
-        && fields
-            .get(&progred_name::vocabulary::NAME)
-            .and_then(progred_text::read)
-            .is_some_and(|name| !name.is_empty());
-    let mut items: Vec<(CellId, Option<Value>)> = fields
-        .iter()
-        .filter(|(key, _)| {
-            !consumes_simple_name || **key != progred_name::vocabulary::NAME
-        })
-        .map(|(key, value)| (*key, Some(value.clone())))
-        .collect();
-    if let Some(Step::Key(key)) = cx.pending_child_of(path) {
-        items.push((key, None));
-    }
-    items.sort_by(|(left, _), (right, _)| match (cx.name(*left), cx.name(*right)) {
-        (Some(left_name), Some(right_name)) => {
-            left_name.cmp(&right_name).then(left.cmp(right))
-        }
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => left.cmp(right),
-    });
-    let pending_edge = cx.pending_edge_under(path).is_some();
-    let renaming = cx.pending_rename_under(path);
-    let target = Value::Record(fields.clone());
-
-    // A pending inside forces the record open; the collapse override
-    // outranks the layout the content would pick. Collapsed is pure
-    // elision — no summary — and the ellipsis is the way back open.
-    let collapsed = !items.is_empty()
-        && !pending_edge
-        && renaming.is_none()
-        && items.iter().all(|(_, value)| value.is_some())
-        && cx.collapse.collapsed(path, false);
-    if collapsed {
-        return select_target(
-            path.to_vec(),
-            target,
-            hooks,
-            row(
-                4.0 * scale,
-                vec![
-                    flat_delim(cx.styles, Delim::Brace, true),
-                    toggle_target(cx, path.to_vec(), hooks, text(tcx, "…", &cx.styles.dim)),
-                    flat_delim(cx.styles, Delim::Brace, false),
-                ],
-            ),
-        );
-    }
-
-    // The literal candidate, kept when it FITS: within the width
-    // remaining here and one line tall (a pending inside can force a
-    // child open). A new field's label query rides the literal like
-    // any other fragment — authoring alone never forces the block
-    // form. Children build against an UNBOUNDED budget, so every
-    // nested fit test passes and the candidate materializes in one
-    // all-flat construction — no branching inside; this enclosing
-    // test is the one gate (Wadler's fits test, operationally). On
-    // rejection the block form rebuilds them against its own columns.
-    // At zero budget no literal can be accepted; skipping the
-    // candidate keeps zero-budget probe builds closed and cheap. An
-    // EMPTY record is the exception both ways: `{}` is its one form —
-    // a block of zero rows is not a representation — so it takes the
-    // literal whatever the width says. An active label query counts
-    // as content and layouts normally.
-    let bare = items.is_empty() && !pending_edge;
-    let mut flat = (avail > 0.0 || bare)
-        .then(|| {
-            let mut cells: Vec<Measured<P>> = vec![hover_target(
-                path.to_vec(),
-                flat_delim(cx.styles, Delim::Brace, true),
-            )];
-            for (index, (key, _)) in items.iter().enumerate() {
-                if index > 0 {
-                    cells.push(text(tcx, ", ", &cx.styles.dim));
-                }
-                let mut child = path.to_vec();
-                child.push(Step::Key(*key));
-                cells.push(match renaming {
-                    Some((replacing, query, choice)) if replacing == key => {
-                        label_query(cx, tcx, query, choice, hooks)
-                    }
-                    _ => field_label(cx, tcx, path, child.clone(), key, hooks),
-                });
-                cells.push(text(tcx, ": ", &cx.styles.dim));
-                cells.push(descend(
-                    cx,
-                    tcx,
-                    path,
-                    ancestors,
-                    &target,
-                    Step::Key(*key),
-                    f64::INFINITY,
-                    hooks,
-                ));
-            }
-            if let Some((query, choice)) = cx.pending_edge_under(path) {
-                if !items.is_empty() {
-                    cells.push(text(tcx, ", ", &cx.styles.dim));
-                }
-                cells.push(pending_edge_row(cx, tcx, query, choice, hooks));
-            }
-            cells.push(hover_target(
-                path.to_vec(),
-                flat_delim(cx.styles, Delim::Brace, false),
-            ));
-            row(0.0, cells)
-        })
-        .filter(|candidate| one_line(candidate.extent, scale));
-    if let Some(candidate) = flat.take_if(|candidate| candidate.extent.width <= avail || bare) {
-        // The one-line literal is all content: it selects the record
-        // whole, fields winning their own spans — and stays QUIET
-        // for the pointer, so its gaps hold whatever the hover was.
-        return quiet_select_target(path.to_vec(), target, hooks, candidate);
-    }
-
-    let inside = (avail - 2.0 * (delim_advance(cx.styles, Delim::Brace) + 2.0 * scale)).max(0.0);
-    let mut rows: Vec<Measured<P>> = items
-        .into_iter()
-        .map(|(key, value)| {
-            field_row(
-                cx,
-                tcx,
-                path,
-                ancestors,
-                &target,
-                key,
-                value,
-                inside,
-                hooks,
-            )
-        })
-        .collect();
-    // A new field being authored: the label query, unsorted until it
-    // has a label to sort by.
-    if let Some((query, choice)) = cx.pending_edge_under(path) {
-        rows.push(pending_edge_row(cx, tcx, query, choice, hooks));
-    }
-    // The block form: the braces span the field column and are the
-    // record's click claims; everything between the rows falls
-    // through. Collapsing is Space on the selection — no button.
-    let block = bracketed(
-        cx,
-        Delim::Brace,
-        path,
-        &target,
-        hooks,
-        col(0, 4.0 * scale, rows),
-    );
-    // The general rule: first alternative that FITS, in priority
-    // order; when none fits, the NARROWEST attempted, priority
-    // breaking ties. A small record's block form can be WIDER than
-    // its literal, and kicking to it would overflow more.
-    match flat {
-        Some(candidate) if candidate.extent.width <= block.extent.width => {
-            quiet_select_target(path.to_vec(), target, hooks, candidate)
-        }
-        _ => block,
-    }
-}
-
-/// A blob's display: `0x` and its bytes, truncated past sixteen —
-/// the mini hex editor is a later projection; this is the floor.
-fn blob_text(bytes: &[u8]) -> String {
-    if bytes.len() <= 16 {
-        format!("0x{}", hex_string(bytes))
-    } else {
-        format!("0x{}… ({} bytes)", hex_string(&bytes[..8]), bytes.len())
-    }
-}
-
 /// The spelling and face a label draws with — one truth for the view
 /// and for hit-testing a click against what was actually drawn.
 fn label_spelling<'a>(cx: &'a Cx, key: &CellId) -> (String, &'a TextStyle) {
     match cx.name(*key) {
         Some(name) => (name.to_string(), &cx.styles.label),
         None => (short_id(*key), &cx.styles.id),
-    }
-}
-
-fn label_view<P: Canvas>(cx: &Cx, tcx: &mut TextCtx, key: &CellId) -> Measured<P> {
-    let (spelling, style) = label_spelling(cx, key);
-    let inner = text(tcx, &spelling, style);
-    secondary_mark(cx, &Value::Cell(*key), inner)
-}
-
-/// A cold field label; writable, its one click re-opens it as the
-/// seeded rename, the caret hit-tested against this very layout.
-fn field_label<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    parent: &[Step],
-    child: Path,
-    key: &CellId,
-    hooks: &Hooks<C>,
-) -> Measured<P> {
-    let cold = label_view(cx, tcx, key);
-    if writable_at(&cx.sources, parent) {
-        let (spelling, style) = label_spelling(cx, key);
-        let layout = line_layout(tcx, &spelling, style);
-        rename_target(cx, child, layout, hooks, cold)
-    } else {
-        cold
     }
 }
 
@@ -1793,7 +1273,16 @@ fn project_present_value<
     };
     let inner = match projected {
         Some(projected) => projected,
-        None => raw_value_view(cx, tcx, path, ancestors, value, avail, hooks),
+        None => realize(
+            cx,
+            tcx,
+            path,
+            ancestors,
+            hooks,
+            value,
+            structure::of(cx, path, ancestors, value),
+            avail,
+        ),
     };
     // Other projections of the selected value carry the secondary
     // mark; the selected one has the primary highlight.
@@ -1807,39 +1296,6 @@ fn project_present_value<
     // claimed above — structural whitespace deselects.
     let placed = descend_landmark(cx, path.to_vec(), hooks, inner);
     ground(cx, path, value, placed)
-}
-
-/// The total fallback: structural projection for every graph value.
-/// Its children re-enter [`descend`], so partial projections are
-/// considered again at every descent.
-#[allow(clippy::too_many_arguments)]
-fn raw_value_view<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    ancestors: &HashSet<CellId>,
-    value: &Value,
-    avail: f64,
-    hooks: &Hooks<C>,
-) -> Measured<P> {
-    match value {
-        Value::Blob(bytes) => select_target(
-            path.to_vec(),
-            value.clone(),
-            hooks,
-            text(tcx, &blob_text(bytes), &cx.styles.id),
-        ),
-        Value::Cell(cell) => cell_view(cx, tcx, path, ancestors, *cell, avail, hooks),
-        Value::List(elements) => {
-            list_view(cx, tcx, path, ancestors, elements, avail, hooks)
-        }
-        Value::Record(fields) => {
-            record_view(cx, tcx, path, ancestors, fields, avail, hooks)
-        }
-    }
 }
 
 /// An EMPTY SLOT at `path`: the [`placeholder`] widget wired to this
@@ -2390,6 +1846,8 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + 
     })
 }
 
+
+mod structure;
 
 #[cfg(test)]
 mod tests;
