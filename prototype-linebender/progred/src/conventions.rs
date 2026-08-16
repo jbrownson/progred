@@ -55,13 +55,9 @@ pub fn grap(
 
 fn overlay(current: &Value, parsed: Value) -> Value {
     match (current.as_record(), parsed.as_record()) {
-        (Some(current), Some(parsed)) => Value::record(
-            parsed
-                .iter()
-                .fold(current.clone(), |fields, (key, value)| {
-                    fields.update(*key, value.clone())
-                }),
-        ),
+        (Some(current), Some(parsed)) => {
+            Value::record(current.clone().union_with(parsed.clone(), |_, incoming| incoming))
+        }
         _ => parsed,
     }
 }
