@@ -11,6 +11,7 @@ use vello::kurbo::Rect;
 /// rect it occupied, collected fresh every frame in placement order.
 /// [`step_selection`] reads it to move the selection by keyboard;
 /// clicks go through each descend's own handler, not this list.
+#[derive(Clone)]
 pub struct Descend {
     pub path: Path,
     /// The settled rect, for scroll-to-selection.

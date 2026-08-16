@@ -7,11 +7,13 @@
 
 use crate::styles::Styles;
 use crate::completion::{
-    Entry, EntryAction, HasPopup, Popup, completion_entries,
+    EntryAction, HasPopup, Popup, completion_entries,
 };
 #[cfg(test)]
-use crate::completion::{resolve_entry, resolve_label};
-use crate::document::{Document, Path, short_id};
+use crate::completion::{Entry, resolve_entry, resolve_label};
+use crate::document::{Path, short_id};
+#[cfg(test)]
+use crate::document::Document;
 #[cfg(test)]
 use crate::document::{sample_document, sample_vocabulary};
 use crate::filter;
@@ -22,20 +24,25 @@ use crate::selection::{
     pending_follow, pending_insert, pending_into, pending_rename, pending_value, rename_field,
     resolve_query, set_collapse, set_value, to_clipboard, toggle_collapse, write_through,
 };
-use crate::hover::{HasHover, Hover, HoverClaim, Hovering, hover_value, resolve_hover};
+use crate::hover::{HasHover, Hover, HoverClaim, Hovering, hover_value};
+#[cfg(test)]
+use crate::hover::resolve_hover;
 use crate::navigate::{Descend, HasDescends};
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
 use crate::display::{self, text};
 use crate::layout::{
-    Extent, Measured, around, before, col, decorate, leaf, min_width, on_primary_pointer_down, pad,
+    Extent, Measured, around, before, col, decorate, leaf, min_width, on_key, on_primary_pointer_down,
+    pad,
     row,
 };
 use crate::sources::Sources;
 use crate::projection::Location;
 use im::OrdMap;
 use parley::layout::Layout as TextLayout;
-use progred_graph::{CellId, Cells, Position, Step, Value, hex_string, new_cell_id};
+use progred_graph::{CellId, Position, Step, Value, hex_string};
+#[cfg(test)]
+use progred_graph::{Cells, new_cell_id};
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{
@@ -47,7 +54,9 @@ use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextStyle, caret_index, line_layout};
 use std::collections::HashSet;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
+use ui_events::keyboard::{Key, NamedKey};
+#[cfg(test)]
+use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::PointerButton;
 use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
@@ -143,6 +152,12 @@ fn realize<
                 ),
             }
         }
+        progred_display::Layout::OnKey { child, key } => {
+            let inner = realize(cx, tcx, path, ancestors, hooks, value, *child, avail);
+            match key {
+                progred_display::Key::Delete => bind_delete(cx, hooks, inner),
+            }
+        }
         progred_display::Layout::Row { gap, children } => {
             let children = children
                 .into_iter()
@@ -228,7 +243,6 @@ fn leaf_display<
 ) -> Measured<P> {
     match content {
         progred_display::Display::Text(text) => display::text(tcx, &text, &cx.styles.name),
-        progred_display::Display::Dim(text) => display::text(tcx, &text, &cx.styles.dim),
         progred_display::Display::LineEdit(line) => {
             let editing = cx
                 .selection
@@ -296,6 +310,9 @@ pub struct Hooks<C> {
     /// Open a pending sibling after the element at `path` — the flat
     /// list separator's click.
     pub insert: Rc<dyn Fn(&mut C, Path)>,
+    /// Delete the selected edge. Installed on the selected descend
+    /// so Raw and library projections share one handler.
+    pub delete: Rc<dyn Fn(&mut C) -> bool>,
 }
 
 /// The platform command modifier, for pointer gestures.
@@ -923,14 +940,19 @@ fn cell_view<
 /// rows — so clicks on structural whitespace (gutters, inter-row
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
-fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Measured<P>) -> Measured<P> {
+fn descend_landmark<C: 'static, P: Canvas + HasDescends + HasHandler<C>>(
+    cx: &Cx,
+    path: Path,
+    hooks: &Hooks<C>,
+    child: Measured<P>,
+) -> Measured<P> {
     if cx.source.transient() {
         return child;
     }
     let selected = cx.selected(&path);
     let hovered = cx.hovered_value(&path);
     let scale = cx.styles.scale;
-    decorate(child, move |p: &mut P, rect| {
+    let marked = decorate(child, move |p: &mut P, rect| {
         if selected {
             primary_highlight(scale, p, rect);
         } else if hovered {
@@ -940,6 +962,31 @@ fn descend_landmark<P: Canvas + HasDescends>(cx: &Cx, path: Path, child: Measure
             path: path.clone(),
             rect,
         });
+    });
+    if selected {
+        bind_delete(cx, hooks, marked)
+    } else {
+        marked
+    }
+}
+
+fn bind_delete<C: 'static, P: HasHandler<C>>(
+    cx: &Cx,
+    hooks: &Hooks<C>,
+    child: Measured<P>,
+) -> Measured<P> {
+    if cx.source.transient() {
+        return child;
+    }
+    let delete = hooks.delete.clone();
+    on_key(child, move |ctx, event| {
+        crate::plain(event)
+            && matches!(
+                &event.key,
+                Key::Named(NamedKey::Backspace | NamedKey::Delete)
+            )
+            && event.state.is_down()
+            && delete(ctx)
     })
 }
 
@@ -1650,6 +1697,7 @@ fn project_transient_root<
         edit: Rc::new(|_| None),
         pick: hooks.pick.clone(),
         insert: Rc::new(|_, _| {}),
+        delete: Rc::new(|_| false),
     };
     let result_cx = Cx {
         sources: cx.sources,
@@ -1779,7 +1827,7 @@ fn project_present_value<
     // A landmark, not a target: highlight and keyboard reach span
     // the full bounds, while clicks belong to the content each arm
     // claimed above — structural whitespace deselects.
-    let placed = descend_landmark(cx, path.to_vec(), inner);
+    let placed = descend_landmark(cx, path.to_vec(), hooks, inner);
     ground(cx, path, value, placed)
 }
 

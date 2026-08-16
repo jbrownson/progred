@@ -17,7 +17,6 @@ pub struct LineEdit {
 #[derive(Clone)]
 pub enum Display {
     Text(String),
-    Dim(String),
     LineEdit(LineEdit),
 }
 
@@ -31,6 +30,13 @@ pub enum Click {
     Line(LineEdit),
 }
 
+/// A key a subtree can claim.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Key {
+    /// Backspace and Delete.
+    Delete,
+}
+
 /// Unevaluated layout: grouping, walk, and leaves. Distinct from
 /// Progred's measured boxes (those have extents and place closures).
 #[derive(Clone)]
@@ -39,6 +45,10 @@ pub enum Layout {
     OnClick {
         child: Box<Layout>,
         click: Click,
+    },
+    OnKey {
+        child: Box<Layout>,
+        key: Key,
     },
     Row { gap: f64, children: Vec<Layout> },
     Col {
@@ -67,10 +77,6 @@ pub fn text(text: impl Into<String>) -> Layout {
     Layout::Leaf(Display::Text(text.into()))
 }
 
-pub fn dim(text: impl Into<String>) -> Layout {
-    Layout::Leaf(Display::Dim(text.into()))
-}
-
 pub fn leaf(display: Display) -> Layout {
     Layout::Leaf(display)
 }
@@ -79,6 +85,27 @@ pub fn on_click(child: Layout, click: Click) -> Layout {
     Layout::OnClick {
         child: Box::new(child),
         click,
+    }
+}
+
+pub fn on_key(child: Layout, key: Key) -> Layout {
+    Layout::OnKey {
+        child: Box::new(child),
+        key,
+    }
+}
+
+/// The `LineEdit` a layout mounts, if the whole thing is an
+/// [`editable_line`] (or a key wrapper around one).
+pub fn line_edit_of(layout: &Layout) -> Option<&LineEdit> {
+    match layout {
+        Layout::OnClick {
+            click: Click::Line(line),
+            ..
+        } => Some(line),
+        Layout::OnClick { child, .. } | Layout::OnKey { child, .. } => line_edit_of(child),
+        Layout::Leaf(Display::LineEdit(line)) => Some(line),
+        _ => None,
     }
 }
 

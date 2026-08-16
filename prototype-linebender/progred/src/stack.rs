@@ -40,10 +40,23 @@ pub fn project(env: &dyn Env, value: &Value) -> Option<Layout> {
     projection::try_partials(&loaded().projections, env, value)
 }
 
-/// Line leaves text and f64 recognize. Used when a selection is
-/// created without a click (keyboard). A click carries its own line.
+/// The line a projection would mount for `value`, if the whole
+/// layout is an editable line. Keyboard landings use this; a click
+/// already has the line on the event.
 pub fn line(value: &Value) -> Option<LineEdit> {
-    progred_text::line(value).or_else(|| grap_f64::line(value))
+    project(&NoEval, value).and_then(|layout| progred_display::line_edit_of(&layout).cloned())
+}
+
+struct NoEval;
+
+impl Env for NoEval {
+    fn evaluate(&self, _: &Value) -> Value {
+        Value::record([])
+    }
+
+    fn transient(&self) -> bool {
+        false
+    }
 }
 
 pub fn styles(scale: f64) -> Styles {

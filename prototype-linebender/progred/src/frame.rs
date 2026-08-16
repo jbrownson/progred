@@ -428,6 +428,7 @@ impl App {
             dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
         }
         let hover_changed = self.hover != before;
+        self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
         self.hover_is_current = true;
         hover_changed
@@ -453,7 +454,9 @@ pub(crate) fn run_frame(
         layouts: layout_cx,
         text_cache,
     } = resources;
-    let (viewport_width, viewport_height) = (viewport.width, viewport.height);
+    let viewport_width = viewport.width;
+    #[cfg(target_os = "linux")]
+    let viewport_height = viewport.height;
     // Empty space deselects — the one slot, whichever pane filled it.
     // Registered before the content places, so the descend handlers
     // (registered as they place) take precedence, and only a press
@@ -637,6 +640,10 @@ pub(crate) fn run_frame(
                 if let Some(pending) = selection::pending_after(&app.model.sources(), &path) {
                     app.model.selection = Some(Selected::Tree(pending));
                 }
+            }),
+            delete: Rc::new(|app: &mut App| {
+                let descends = app.last_descends.clone();
+                app.delete_selected_edge(&descends)
             }),
         },
     );

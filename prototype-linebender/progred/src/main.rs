@@ -57,6 +57,7 @@ use winit::window::{Window, WindowId};
 pub(crate) enum UserEvent {
     #[cfg(target_os = "macos")]
     MacMenu(macos_menu::Event),
+    #[cfg(target_os = "linux")]
     Menu(menu::Selection),
     Discard(bool),
 }
@@ -147,6 +148,10 @@ pub(crate) struct App {
     /// scrolling.
     pub(crate) revealed: Option<(document::Path, std::mem::Discriminant<selection::Selection>)>,
     pub(crate) dispatch: Option<Dispatch>,
+    /// Geometry from the last minted frame, so projection key
+    /// handlers can land a delete the same way the shell fallback
+    /// does.
+    pub(crate) last_descends: Vec<navigate::Descend>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
@@ -222,6 +227,7 @@ impl ApplicationHandler<UserEvent> for App {
                     self.handle_menu_selection(event_loop, selection);
                 }
             }
+            #[cfg(target_os = "linux")]
             UserEvent::Menu(selection) => self.handle_menu_selection(event_loop, selection),
             UserEvent::Discard(accepted) => {
                 let pending = self.pending_discard.take();
@@ -583,6 +589,7 @@ fn main() {
         hover_is_current: false,
         revealed: None,
         dispatch: None,
+        last_descends: Vec::new(),
         reducer: WindowEventReducer::default(),
         proxy,
         pending_discard: None,
@@ -649,6 +656,7 @@ impl App {
         }
     }
 
+    #[cfg(target_os = "linux")]
     pub(crate) fn choose_menu(&mut self, selection: menu::Selection) {
         self.menu.close();
         let _ = self.proxy.send_event(UserEvent::Menu(selection));
@@ -889,6 +897,7 @@ impl App {
         let dispatch = self.build_frame(FrameVisibility::Visible, scale, viewport);
         // Recover from any geometry invalidation the shell failed to mark.
         let hover_changed = self.hover != before;
+        self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
         self.hover_is_current = true;
 

@@ -1,5 +1,6 @@
 //! Platform-neutral menu state and selections, plus Linux's Progred-drawn view.
 
+#[cfg(any(test, target_os = "linux"))]
 use ui_events::keyboard::{Key, KeyboardEvent};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,6 +67,7 @@ pub enum ShortcutKey {
 }
 
 impl ShortcutKey {
+    #[cfg(any(test, target_os = "linux"))]
     pub const fn label(self) -> &'static str {
         match self {
             Self::G => "G",
@@ -223,18 +225,22 @@ pub struct State {
 }
 
 impl State {
+    #[cfg(any(test, target_os = "linux"))]
     pub fn open(&self) -> Option<usize> {
         self.open
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub fn toggle(&mut self, menu: usize) {
         self.open = (self.open != Some(menu)).then_some(menu);
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub fn close(&mut self) -> bool {
         self.open.take().is_some()
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub fn captures_key(&self, event: &KeyboardEvent) -> bool {
         self.open.is_some() && event.state.is_down()
     }
@@ -258,6 +264,7 @@ impl Availability {
     }
 }
 
+#[cfg(any(test, target_os = "linux"))]
 pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
     let modifiers = &event.modifiers;
     if !event.state.is_down() || !modifiers.ctrl() || modifiers.meta() || modifiers.alt() {

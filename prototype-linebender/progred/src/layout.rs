@@ -11,6 +11,7 @@ use puri::draw::Canvas;
 use puri::geometry::Placement;
 use puri::handler::{Handler, HasHandler, capture};
 use puri::text::TextMetrics;
+use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use vello::kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 
@@ -281,6 +282,15 @@ pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
 ) -> Measured<P> {
     before(layout, move |p, placement| {
         puri::interact::on_primary_pointer_down(p, placement, accepts, action);
+    })
+}
+
+pub fn on_key<C: 'static, P: HasHandler<C>>(
+    layout: Measured<P>,
+    action: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static,
+) -> Measured<P> {
+    before(layout, move |p, _| {
+        p.handler().on_key(action);
     })
 }
 

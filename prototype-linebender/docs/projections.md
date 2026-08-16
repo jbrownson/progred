@@ -54,7 +54,7 @@ with the Grap value partial removed. Source/editability and
 projection choice remain separate inputs.
 
 A partial returns a `Layout`: boxes plus display leaves (`Text`,
-`Dim`, `LineEdit`). Text and f64 share `editable_line`, which is a
+`LineEdit`). Text and f64 share `editable_line`, which is a
 line leaf plus a click that selects it and places the caret. `grap` is
 grouping (`nest`, `evaluate`, `transient`, `arrow`). The live
 interpreter measures that layout; clicks become Puri handlers. The
