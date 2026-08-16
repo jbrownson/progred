@@ -116,7 +116,7 @@ pub(crate) fn completion_entries(
     let (local, external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
         .map(
-            |cell| match crate::conventions::display_name(sources, raw, cell) {
+            |cell| match (!raw).then(|| sources.name(cell)).flatten() {
                 Some(name) => (
                     (name.to_string(), true, EntryAction::Value(Value::from(cell))),
                     sources.external(cell),

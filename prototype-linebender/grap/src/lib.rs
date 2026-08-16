@@ -8,6 +8,9 @@ use progred_graph::{CellId, Cells, Value};
 use std::collections::BTreeSet;
 use std::fmt;
 
+mod display;
+pub use display::display;
+
 pub mod vocabulary {
     use progred_graph::CellId;
 
@@ -23,6 +26,8 @@ pub mod vocabulary {
         CellId::from_u128(0xacfc5e50881292518dab3cec77cf43ee);
     pub const EXPRESSION: CellId =
         CellId::from_u128(0xccc55b0eb63b9f564ea74436094d4014);
+    /// Projection request, not an evaluator form.
+    pub const GRAP: CellId = CellId::from_u128(0xac807d20d964e141d44c1b2eb98e5ca9);
 }
 
 pub mod absent {
@@ -481,6 +486,7 @@ pub fn library() -> Cells {
         (vocabulary::FFI, "ffi"),
         (vocabulary::EVALUATE, "evaluate"),
         (vocabulary::EXPRESSION, "expression"),
+        (vocabulary::GRAP, "grap"),
     ] {
         cells.set_value(cell, progred_name::record(name, []));
     }
@@ -1077,12 +1083,13 @@ mod tests {
             (vocabulary::FFI, "ffi"),
             (vocabulary::EVALUATE, "evaluate"),
             (vocabulary::EXPRESSION, "expression"),
+            (vocabulary::GRAP, "grap"),
         ] {
             assert_eq!(library.value(cell).and_then(progred_name::read), Some(name));
         }
         assert!(grap_absent::is_absent(
             library.value(absent::MISSING_CELL).unwrap()
         ));
-        assert_eq!(library.cells().count(), 16);
+        assert_eq!(library.cells().count(), 17);
     }
 }

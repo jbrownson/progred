@@ -1,6 +1,5 @@
 //! A loaded library: cells, foreign functions, and projections.
 
-use crate::conventions;
 use grap::ForeignFunctions;
 use progred_display::Partial;
 use progred_graph::Cells;
@@ -43,15 +42,10 @@ pub fn text() -> Library {
 }
 
 pub fn grap() -> Library {
-    let mut cells = grap::library();
-    cells.set_value(
-        conventions::vocabulary::GRAP,
-        progred_name::record("grap", []),
-    );
     Library {
-        cells,
+        cells: grap::library(),
         functions: grap::functions(),
-        projections: vec![conventions::display],
+        projections: vec![grap::display],
         ..Library::default()
     }
 }

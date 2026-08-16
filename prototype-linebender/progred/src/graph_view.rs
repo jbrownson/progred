@@ -545,7 +545,7 @@ fn node_content(
     let mono = GenericFamily::Monospace;
     match node {
         GraphNode::Cell(cell) => {
-            match crate::conventions::display_name(sources, raw, *cell) {
+            match (!raw).then(|| sources.name(*cell)).flatten() {
                 Some(name) => layout_text(tcx, &format!("({name})"), size, TEXT, ui),
                 None => layout_text(tcx, &format!("({})", short_id(*cell)), size, DIM_TEXT, mono),
             }

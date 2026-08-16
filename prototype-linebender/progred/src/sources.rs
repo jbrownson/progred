@@ -20,6 +20,10 @@ impl<'a> Sources<'a> {
             .or_else(|| self.library.value(cell))
     }
 
+    pub fn name(&self, cell: CellId) -> Option<&'a str> {
+        self.value(cell).and_then(progred_name::read)
+    }
+
     pub fn root(&self) -> Option<&'a Value> {
         self.doc.root.as_ref()
     }

@@ -3,7 +3,6 @@
 
 mod commands;
 mod completion;
-mod conventions;
 mod display;
 mod document;
 mod filter;

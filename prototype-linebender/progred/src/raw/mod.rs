@@ -328,7 +328,7 @@ impl Cx<'_> {
     /// The display name at this projection. Raw interprets no naming
     /// convention and therefore falls back to the short id.
     fn name(&self, cell: CellId) -> Option<&str> {
-        crate::conventions::display_name(&self.sources, self.raw, cell)
+        (!self.raw).then(|| self.sources.name(cell)).flatten()
     }
 
     /// Whether `path` carries the primary highlight. A label-stage

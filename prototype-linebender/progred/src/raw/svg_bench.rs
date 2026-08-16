@@ -384,7 +384,7 @@
             .expect("inert-data demo entry");
         let record = vec![Step::Element(position), Step::Key(label)];
         let mut result = record.clone();
-        result.push(Step::Key(crate::conventions::vocabulary::GRAP));
+        result.push(Step::Key(grap::vocabulary::GRAP));
         let mut source_note = result.clone();
         source_note.push(Step::Key(binders["note"]));
         let (bench, _) = place(&doc, None, 560.0);

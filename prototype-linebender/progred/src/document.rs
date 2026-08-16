@@ -206,7 +206,7 @@ pub fn sample_document() -> Document {
 
     let double_pitch = || grap::call(Value::from(double), [(amount, Value::from(pitch))]);
     let grap_projection = |expression| {
-        Value::record([(crate::conventions::vocabulary::GRAP, expression)])
+        Value::record([(grap::vocabulary::GRAP, expression)])
     };
 
     cells.set_value(

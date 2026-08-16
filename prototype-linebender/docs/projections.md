@@ -99,7 +99,7 @@ uses three more identities in explicit callable values: `closure`,
 registered call rather than evaluator syntax. Core Grap has no number or
 geometry type and no arithmetic or geometry operation.
 
-Progred's projection layer separately defines a `grap` value partial.
+The grap crate offers a `grap` value partial alongside the evaluator.
 A record with a `grap` field is replaced by the stored
 expression (nested under that field so editing stays on
 `…+Key(grap)`), then `→`, then the returned `Value` recursively
@@ -107,8 +107,8 @@ projected from a transient, read-only root with this partial failing
 closed. Recognition is open: other fields do not block it. The default
 projection therefore shows `expression → result`, while Raw shows
 the stored record. The arrow is projection chrome, not graph
-data. `grap` is not a Grap evaluator form, so the evaluator can be used
-without Progred and cannot observe the field.
+data. `grap` is not an evaluator form: `evaluate` does not observe the
+field, and a host that never loads the projection never sees it.
 
 A lambda is a record requiring two semantic fields:
 

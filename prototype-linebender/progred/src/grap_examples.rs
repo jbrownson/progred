@@ -9,7 +9,7 @@ use progred_graph::Value;
 fn grap_expression(value: &Value) -> &Value {
     value
         .as_record()
-        .and_then(|fields| fields.get(&crate::conventions::vocabulary::GRAP))
+        .and_then(|fields| fields.get(&grap::vocabulary::GRAP))
         .expect("Grap projection boundary")
 }
 
