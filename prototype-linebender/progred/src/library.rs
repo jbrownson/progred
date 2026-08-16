@@ -20,25 +20,22 @@ impl Default for Library {
     }
 }
 
-pub fn name() -> Library {
-    Library {
-        cells: progred_name::library(),
-        ..Library::default()
-    }
-}
-
-pub fn isa() -> Library {
-    Library {
-        cells: progred_isa::library(),
-        ..Library::default()
-    }
-}
-
-pub fn text() -> Library {
-    Library {
-        projections: vec![progred_text::display],
-        ..Library::default()
-    }
+/// Name, isa, and text: the editor's conventions library.
+pub fn conventions() -> Library {
+    merge([
+        Library {
+            cells: progred_name::library(),
+            ..Library::default()
+        },
+        Library {
+            cells: progred_isa::library(),
+            ..Library::default()
+        },
+        Library {
+            projections: vec![progred_text::display],
+            ..Library::default()
+        },
+    ])
 }
 
 pub fn grap() -> Library {

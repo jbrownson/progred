@@ -13,9 +13,7 @@ use vello::peniko::{Brush, Color};
 
 pub fn libraries() -> Vec<Library> {
     vec![
-        library::name(),
-        library::isa(),
-        library::text(),
+        library::conventions(),
         library::grap(),
         library::absent(),
         library::control(),

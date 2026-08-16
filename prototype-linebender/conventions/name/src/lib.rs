@@ -1,7 +1,5 @@
-//! An optional convention for attaching one nonempty, simple
-//! human-readable name to a record. The field remains ordinary graph
-//! data: languages and domain projections may use other naming
-//! structures or compute displays.
+//! A nonempty simple name on a record. The field is ordinary graph
+//! data. This editor assumes the library; other hosts need not.
 
 use progred_graph::{CellId, Cells, Value};
 

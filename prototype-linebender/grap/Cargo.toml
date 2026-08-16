@@ -6,6 +6,6 @@ edition = "2024"
 [dependencies]
 grap-absent = { path = "libraries/absent" }
 im = "15"
-progred-display = { path = "../conventions/display" }
+progred-display = { path = "../display" }
 progred-name = { path = "../conventions/name" }
 progred-graph = { path = "../graph" }

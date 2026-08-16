@@ -1,6 +1,5 @@
-//! An optional semantic convention for structurally classifying
-//! Progred graph values. It is independent of Grap and of the graph
-//! data model itself.
+//! Structural classification of graph values (`isa`). Independent of
+//! Grap and of the data model. This editor assumes the library.
 
 use progred_graph::{CellId, Cells, Value};
 

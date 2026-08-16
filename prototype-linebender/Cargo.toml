@@ -2,7 +2,7 @@
 resolver = "3"
 members = [
     "graph",
-    "conventions/display",
+    "display",
     "conventions/isa",
     "conventions/name",
     "conventions/text",

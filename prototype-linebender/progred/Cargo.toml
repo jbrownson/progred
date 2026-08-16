@@ -9,7 +9,7 @@ grap-absent = { path = "../grap/libraries/absent" }
 grap-control = { path = "../grap/libraries/control" }
 grap-f64 = { path = "../grap/libraries/f64" }
 grap-geometry = { path = "../grap/libraries/geometry" }
-progred-display = { path = "../conventions/display" }
+progred-display = { path = "../display" }
 progred-graph = { path = "../graph" }
 progred-isa = { path = "../conventions/isa" }
 progred-name = { path = "../conventions/name" }
