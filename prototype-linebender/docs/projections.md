@@ -33,10 +33,11 @@ structural projection recursively re-enters the same dispatcher for every
 child instead of owning a closed set of leaf cases. `projection` is the
 runner: location lookup and trying an explicit list of partials. Each
 partial is a function that checks its own preconditions. Library packs
-offer those functions; the editor assembles the live list — currently
-`stack::values` and the `grap` field — above the structural
-fallback. Raw is that fallback alone. This composed projection
-is passed explicitly through recursion; it is not hidden in display context.
+offer those functions as `Layout`-returning partials; the editor
+assembles one list from `stack::libraries` — text, f64, and the
+`grap` value partial — above the structural fallback. Raw is that
+fallback alone. This composed projection is passed explicitly through
+recursion; it is not hidden in display context.
 `descend` receives the parent `Value` and an ordinary graph `Step`, extends
 stored source provenance, and invokes the supplied projection on that
 unresolved location. The projection performs lookup, which lets its total
@@ -49,17 +50,18 @@ projection at a transient root with fresh source provenance. Stored provenance
 provides a document path and therefore potential write capability; transient
 provenance has no editable document location and may attribute interaction to
 the stored expression which produced it. A Grap result also uses a composition
-with the Grap field projection removed. Source/editability and
+with the Grap value partial removed. Source/editability and
 projection choice remain separate inputs.
 
-Closed-record value projections return a `LineEdit`: the same
-description for text and f64, with different updates and
-affixes. The structural walk builds Progred layouts directly; it owns
-graph paths, editing, and source interaction. Focus and cursor live on
-the selection. Grap evaluation, domain recognition, and provenance are
-projection concerns, not a separate display language. Line breaking
-remains in the layout layer for now rather than adding HTML-like flow
-or `<br>` semantics prematurely.
+A partial returns a `Layout`: boxes plus display leaves (`Text`,
+`Dim`, `LineEdit`). Text and f64 share `editable_line`, which is a
+line leaf plus a click that selects it and places the caret. `grap` is
+grouping (`nest`, `evaluate`, `transient`, `arrow`). The live
+interpreter measures that layout; clicks become Puri handlers. The
+structural walk is the total fallback and owns graph paths, editing,
+and source interaction. Focus and cursor live on the selection.
+Line breaking remains in the layout layer for now rather than adding
+HTML-like flow or `<br>` semantics prematurely.
 
 The earlier Grap design was rejected for good reasons, but they were
 properties of that design rather than of an embedded language:
@@ -97,13 +99,14 @@ uses three more identities in explicit callable values: `closure`,
 registered call rather than evaluator syntax. Core Grap has no number or
 geometry type and no arithmetic or geometry operation.
 
-Progred's projection layer separately defines the `grap` field. The
-ordinary record and its `grap` label remain visible, but the projection
-for the value under that label shows the stored expression through its
-ordinary editable projection, followed by `→` and the returned `Value`
-recursively projected from a transient, read-only root. Normal view therefore shows
-`{grap: expression → result}`, while Raw shows
-`{grap: stored-expression}`. The arrow is projection chrome, not graph
+Progred's projection layer separately defines a `grap` value partial.
+A record with a `grap` field is replaced by the stored
+expression (nested under that field so editing stays on
+`…+Key(grap)`), then `→`, then the returned `Value` recursively
+projected from a transient, read-only root with this partial failing
+closed. Recognition is open: other fields do not block it. The default
+projection therefore shows `expression → result`, while Raw shows
+the stored record. The arrow is projection chrome, not graph
 data. `grap` is not a Grap evaluator form, so the evaluator can be used
 without Progred and cannot observe the field.
 
@@ -161,9 +164,8 @@ and there is no parallel symbol-ID system. Additional top-level call
 fields are valid graph data and do not prevent the selected function
 from being called.
 The result arm under `grap` is transient and read-only; the expression
-arm, `grap` field, and rest of its enclosing record remain ordinary
-visible projections. Raw exposes only the stored expression and any
-such metadata.
+arm remains an ordinary visible projection at the `grap` field path.
+Raw exposes only the stored wrapper and any such metadata.
 
 Numbers remain a library convention rather than a data-model variant.
 The separate f64 library represents an f64 as eight little-endian bytes
@@ -185,11 +187,11 @@ references that same cell and shows both that ordinary cell projection
 and its result. Because the expression arm is ordinary, hovering it can
 highlight the cell's other projections. The returned value goes through
 the same text, number, geometry, cell, list, and record projections as
-stored data. The projection which produced that subtree is removed from
-the explicit composition, so a returned value which itself contains a `grap`
+stored data. The `grap` partial is removed from the composition used
+on a transient result, so a returned value which itself contains a `grap`
 field is data rather than another request to evaluate. Transient children are
 currently read-only and map
-selection back to the stored `grap` field value rather than pretending
+selection back to the stored wrapper rather than pretending
 to have document paths.
 
 Evaluating a cell is transparent:
@@ -299,12 +301,10 @@ the same expression cell is projected outside a `grap` field.
 
 The evaluator lives in its own `grap` crate. It depends on the graph
 core and the shared Grap absent and name conventions, but knows no f64,
-geometry, UI, file, or Linebender concepts. `grap-f64` is part of the
-conventions bootstrap; `grap-geometry` is a separate library the
-editor composes for the checked-in examples. Each crate returns its
-graph facts and, when it has Rust implementations, a foreign-function
-table. The editor merges those values; a later table overrides a
-shared cell.
+geometry, UI, file, or Linebender concepts. `grap-f64` and `grap-geometry` are `Library` values the editor
+loads. Each offers cells, optional foreign functions, and optional
+projections. The editor's list is `stack::libraries`; a later
+foreign table overrides a shared cell.
 
 A registered Rust implementation receives the call record, the calling
 environment, and the live evaluation context. It looks up the fields it
@@ -348,10 +348,10 @@ library data rather than an evaluator feature.
 
 ## First Vertical Slice
 
-For a `grap` field, normal projection shows the stored expression, an
-arrow, and its recursively projected result—an f64 as text, and
-arbitrary graph data structurally. The enclosing record
-remains ordinary visible data. `grap-demo.gid` is
+For a record with a `grap` field, the default projection shows
+the stored expression, an arrow, and its recursively projected
+result—an f64 as text, and arbitrary graph data structurally.
+`grap-demo.gid` is
 the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, the registered `evaluate` function
 with an explicit empty environment, graph-defined functions, a circle,
@@ -377,9 +377,9 @@ inside the raw editor's structural examples:
   as the radius of `circle`, and projects the resulting radius-40
   circle as ordinary graph structure.
 
-The `grap` field belongs to projection rather than evaluation. Normal
-view keeps the field visible and projects its value as
-`expression → result`; Raw projects only the stored expression.
+The `grap` field belongs to projection rather than evaluation. The
+default projection replaces such a record with `expression → result`;
+Raw projects the stored record.
 Compact f64 source values edit as decimal text while continuing to store
 the f64 library's byte representation, so changing `pitch` immediately
 changes both the `double_pitch` result and the projected circle record. This is

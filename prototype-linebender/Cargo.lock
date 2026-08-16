@@ -1591,6 +1591,7 @@ version = "0.1.0"
 dependencies = [
  "grap",
  "grap-absent",
+ "progred-display",
  "progred-graph",
  "progred-name",
 ]
@@ -3143,6 +3144,7 @@ dependencies = [
  "muda",
  "parley",
  "pollster",
+ "progred-display",
  "progred-graph",
  "progred-isa",
  "progred-name",
@@ -3157,6 +3159,13 @@ dependencies = [
  "ui-events-winit",
  "vello",
  "winit",
+]
+
+[[package]]
+name = "progred-display"
+version = "0.1.0"
+dependencies = [
+ "progred-graph",
 ]
 
 [[package]]
@@ -3189,6 +3198,7 @@ dependencies = [
 name = "progred-text"
 version = "0.1.0"
 dependencies = [
+ "progred-display",
  "progred-graph",
 ]
 

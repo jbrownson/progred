@@ -1,28 +1,49 @@
-//! The editor's assembled libraries, theme, and value projections.
+//! The editor's loaded libraries, theme, and assembled offerings.
 
-use crate::conventions;
 use crate::display::LineEdit;
+use crate::library::{self, Library};
 use crate::projection;
 use crate::styles::Styles;
 use parley::style::GenericFamily;
+use progred_display::{Env, Layout};
 use progred_graph::{Cells, Value};
 use puri::edit::EditStyle;
 use puri::text::TextStyle;
 use vello::peniko::{Brush, Color};
 
+pub fn libraries() -> Vec<Library> {
+    vec![
+        library::name(),
+        library::isa(),
+        library::text(),
+        library::grap(),
+        library::absent(),
+        library::control(),
+        library::f64(),
+        library::geometry(),
+    ]
+}
+
+fn loaded() -> Library {
+    library::merge(libraries())
+}
+
 pub fn library() -> Cells {
-    conventions::library().merged(grap_geometry::library())
+    loaded().cells
 }
 
 pub fn foreign_functions() -> grap::ForeignFunctions {
-    grap::ForeignFunctions::merge_all([
-        conventions::foreign_functions(),
-        grap_geometry::functions(),
-    ])
+    loaded().functions
 }
 
-pub fn values(value: &Value) -> Option<LineEdit> {
-    projection::try_partials([conventions::text, conventions::f64], value)
+pub fn project(env: &dyn Env, value: &Value) -> Option<Layout> {
+    projection::try_partials(&loaded().projections, env, value)
+}
+
+/// Line leaves text and f64 recognize. Used when a selection is
+/// created without a click (keyboard). A click carries its own line.
+pub fn line(value: &Value) -> Option<LineEdit> {
+    progred_text::line(value).or_else(|| grap_f64::line(value))
 }
 
 pub fn styles(scale: f64) -> Styles {

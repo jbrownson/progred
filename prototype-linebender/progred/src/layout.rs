@@ -1,6 +1,6 @@
-//! Progred's boxes with baselines: the TeX/pict model. A box is (width, ascent,
-//! descent) plus a way to place itself; rows compose on baselines,
-//! columns stack with a chosen child's baseline.
+//! Progred's boxes with baselines: the TeX/pict model. A [`Measured`]
+//! box is (width, ascent, descent) plus a way to place itself; rows
+//! compose on baselines, columns stack with a chosen child's baseline.
 //!
 //! Invariants the future pretty-printing layer relies on: extents are
 //! known at construction (before placement), construction has no side
@@ -45,13 +45,13 @@ impl From<TextMetrics> for Extent {
     }
 }
 
-pub struct Layout<P> {
+pub struct Measured<P> {
     pub extent: Extent,
     kind: Kind<P>,
 }
 
 pub struct PlaceInner<P> {
-    child: Layout<P>,
+    child: Measured<P>,
     placement: Placement,
 }
 
@@ -75,32 +75,32 @@ type PlaceLeaf<P> = Box<dyn FnOnce(&mut P, Placement)>;
 enum Kind<P> {
     Leaf(PlaceLeaf<P>),
     Row {
-        children: Vec<Layout<P>>,
+        children: Vec<Measured<P>>,
         gap: f64,
     },
     Col {
-        children: Vec<Layout<P>>,
+        children: Vec<Measured<P>>,
         gap: f64,
     },
     Pad {
-        child: Box<Layout<P>>,
+        child: Box<Measured<P>>,
         insets: Insets,
     },
     Around {
-        child: Box<Layout<P>>,
+        child: Box<Measured<P>>,
         place: PlaceAround<P>,
     },
 }
 
-pub fn leaf<P>(extent: Extent, place: impl FnOnce(&mut P, Placement) + 'static) -> Layout<P> {
-    Layout {
+pub fn leaf<P>(extent: Extent, place: impl FnOnce(&mut P, Placement) + 'static) -> Measured<P> {
+    Measured {
         extent,
         kind: Kind::Leaf(Box::new(place)),
     }
 }
 
 /// Children on one baseline: ascent and descent are the maxima.
-pub fn row<P>(gap: f64, children: Vec<Layout<P>>) -> Layout<P> {
+pub fn row<P>(gap: f64, children: Vec<Measured<P>>) -> Measured<P> {
     let width = children.iter().map(|c| c.extent.width).sum::<f64>()
         + gap * children.len().saturating_sub(1) as f64;
     let ascent = children
@@ -111,7 +111,7 @@ pub fn row<P>(gap: f64, children: Vec<Layout<P>>) -> Layout<P> {
         .iter()
         .map(|c| c.extent.descent)
         .fold(0.0_f64, f64::max);
-    Layout {
+    Measured {
         extent: Extent {
             width,
             ascent,
@@ -122,7 +122,7 @@ pub fn row<P>(gap: f64, children: Vec<Layout<P>>) -> Layout<P> {
 }
 
 /// Children stacked; the column's baseline is child `baseline`'s.
-pub fn col<P>(baseline: usize, gap: f64, children: Vec<Layout<P>>) -> Layout<P> {
+pub fn col<P>(baseline: usize, gap: f64, children: Vec<Measured<P>>) -> Measured<P> {
     let extent = if children.is_empty() {
         Extent::default()
     } else {
@@ -145,15 +145,15 @@ pub fn col<P>(baseline: usize, gap: f64, children: Vec<Layout<P>>) -> Layout<P> 
             descent: total - ascent,
         }
     };
-    Layout {
+    Measured {
         extent,
         kind: Kind::Col { children, gap },
     }
 }
 
-pub fn pad<P>(insets: Insets, child: Layout<P>) -> Layout<P> {
+pub fn pad<P>(insets: Insets, child: Measured<P>) -> Measured<P> {
     let e = child.extent;
-    Layout {
+    Measured {
         extent: Extent {
             width: e.width + insets.x0 + insets.x1,
             ascent: e.ascent + insets.y0,
@@ -169,7 +169,7 @@ pub fn pad<P>(insets: Insets, child: Layout<P>) -> Layout<P> {
 /// Holds `child` to at least `min` wide by padding on the right: a
 /// frame's minimum, not the child's — the child keeps its own extent
 /// and placement.
-pub fn min_width<P>(min: f64, child: Layout<P>) -> Layout<P> {
+pub fn min_width<P>(min: f64, child: Measured<P>) -> Measured<P> {
     let deficit = (min - child.extent.width).max(0.0);
     pad(Insets::new(0.0, 0.0, deficit, 0.0), child)
 }
@@ -177,10 +177,10 @@ pub fn min_width<P>(min: f64, child: Layout<P>) -> Layout<P> {
 /// Transparently wraps this layout's placement. `place_inner` places
 /// its content and descendants exactly once when invoked.
 pub fn around<P>(
-    child: Layout<P>,
+    child: Measured<P>,
     place: impl FnOnce(&mut P, Placement, PlaceInner<P>) + 'static,
-) -> Layout<P> {
-    Layout {
+) -> Measured<P> {
+    Measured {
         extent: child.extent,
         kind: Kind::Around {
             child: Box::new(child),
@@ -192,9 +192,9 @@ pub fn around<P>(
 /// Run `place_before` while entering this layout, before its content
 /// and descendants.
 pub fn before<P>(
-    child: Layout<P>,
+    child: Measured<P>,
     place_before: impl FnOnce(&mut P, Placement) + 'static,
-) -> Layout<P> {
+) -> Measured<P> {
     around(child, move |ctx, placement, place_inner| {
         place_before(ctx, placement);
         place_inner.place(ctx);
@@ -204,13 +204,13 @@ pub fn before<P>(
 /// The historical leading decoration operation, retained as the
 /// rectangle-only spelling of [`before`].
 pub fn decorate<P>(
-    child: Layout<P>,
+    child: Measured<P>,
     draw: impl FnOnce(&mut P, Rect) + 'static,
-) -> Layout<P> {
+) -> Measured<P> {
     before(child, move |ctx, placement| draw(ctx, placement.rect))
 }
 
-pub fn place<P>(layout: Layout<P>, ctx: &mut P, placement: Placement) {
+pub fn place<P>(layout: Measured<P>, ctx: &mut P, placement: Placement) {
     let extent = layout.extent;
     let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
     match layout.kind {
@@ -269,16 +269,16 @@ pub fn place<P>(layout: Layout<P>, ctx: &mut P, placement: Placement) {
 
 /// `at` is the top-left corner of the layout.
 #[cfg(test)]
-pub fn place_top_left<P>(layout: Layout<P>, ctx: &mut P, at: Point) {
+pub fn place_top_left<P>(layout: Measured<P>, ctx: &mut P, at: Point) {
     let placement = Placement::root(layout.extent.rect_at(at));
     place(layout, ctx, placement);
 }
 
 pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
-    layout: Layout<P>,
+    layout: Measured<P>,
     accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
     action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-) -> Layout<P> {
+) -> Measured<P> {
     before(layout, move |p, placement| {
         puri::interact::on_primary_pointer_down(p, placement, accepts, action);
     })
@@ -287,7 +287,7 @@ pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
 /// Place `child` shifted up-left by `offset` inside a clipped
 /// viewport. The caller owns and clamps the offset.
 pub fn place_scrolled<C: 'static, P: Canvas + HasHandler<C>>(
-    child: Layout<P>,
+    child: Measured<P>,
     ctx: &mut P,
     placement: Placement,
     offset: Vec2,
@@ -445,7 +445,7 @@ mod tests {
         }
     }
 
-    fn probe(extent: Extent) -> Layout<Vec<Placement>> {
+    fn probe(extent: Extent) -> Measured<Vec<Placement>> {
         leaf(extent, move |placed: &mut Vec<Placement>, placement| {
             placed.push(placement)
         })

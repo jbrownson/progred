@@ -317,6 +317,28 @@
     }
 
     #[test]
+    fn a_line_click_mounts_the_projected_line() {
+        let lib = Cells::new();
+        let cell = new_cell_id();
+        let mut cells = Cells::new();
+        cells.set_value(cell, grap_f64::value(2.5));
+        let mut doc = Document {
+            root: Some(Value::from(cell)),
+            cells,
+        };
+        let path = vec![Step::Follow];
+        let line = grap_f64::line(&grap_f64::value(2.5)).unwrap();
+        let mut selection = Selection::from_line(&src(&doc, &lib), path.clone(), &line);
+        assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
+        selection.edit_mut().unwrap().set_text("4");
+        assert!(write_through(&mut doc, &lib, &mut selection));
+        assert_eq!(
+            src(&doc, &lib).resolve(&path).and_then(grap_f64::read),
+            Some(4.0)
+        );
+    }
+
+    #[test]
     fn editing_an_f64_keeps_unrelated_fields() {
         let lib = Cells::new();
         let cell = new_cell_id();
@@ -760,7 +782,7 @@
 
     #[test]
     fn completion_offers_follow_the_stage() {
-        let lib = crate::conventions::library();
+        let lib = crate::stack::library();
         let (mut doc, cell) = doc_of(vec![
             progred_name::field("roof"),
             (
@@ -924,7 +946,7 @@
     #[test]
     fn pending_rename_seeds_the_current_spelling() {
         let doc = sample_document();
-        let lib = crate::conventions::library();
+        let lib = crate::stack::library();
         let sources = src(&doc, &lib);
         // A cell label seeds its ordinary name — the spelling whose
         // first choice resolves back to the same identity, so committing
@@ -971,7 +993,7 @@
         // type — the mark must follow what the entry NOW is, not
         // what it was when the pointer arrived.
         let doc = sample_document();
-        let lib = crate::conventions::library();
+        let lib = crate::stack::library();
         let sources = src(&doc, &lib);
         let pending = |text: &str| Selection::Pending {
             path: Vec::new(),
@@ -1032,7 +1054,7 @@
         // editor's font agreeing with the label's (short ids draw
         // monospace; the editor draws system-ui).
         let doc = sample_document();
-        let lib = crate::conventions::library();
+        let lib = crate::stack::library();
         let sources = src(&doc, &lib);
         let styles = crate::stack::styles(1.0);
         let mut fonts = parley::FontContext::new();
@@ -1127,7 +1149,7 @@
     #[test]
     fn the_sample_document_shows_the_constructs() {
         let doc = sample_document();
-        let lib = crate::conventions::library();
+        let lib = crate::stack::library();
         let sources = src(&doc, &lib);
         // The root is an inline record of roles.
         assert!(doc.root.as_ref().unwrap().as_record().is_some());

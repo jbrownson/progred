@@ -1,8 +1,7 @@
 [package]
-name = "progred-text"
+name = "progred-display"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-progred-display = { path = "../display" }
 progred-graph = { path = "../../graph" }

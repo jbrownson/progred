@@ -2,23 +2,15 @@
 //! graphics or other Grap-backed widgets. Each measures, then places
 //! by drawing and registering Puri handlers.
 
-use crate::layout::{self, Layout};
+use crate::layout::{self, Measured};
 use crate::styles::Styles;
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, LineEditDescription, LineEditState};
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextStyle};
-use progred_graph::Value;
+pub use progred_display::LineEdit;
 
-#[derive(Clone)]
-pub struct LineEdit {
-    pub text: String,
-    pub update: fn(&Value, &str) -> Option<Value>,
-    pub prefix: String,
-    pub suffix: String,
-}
-
-pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Layout<P> {
+pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Measured<P> {
     let text = puri::text::text(ctx, s, style);
     layout::leaf(
         text.metrics().into(),
@@ -30,7 +22,7 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
     description: LineEditDescription<'_>,
     tcx: &mut TextCtx,
     with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
-) -> Layout<P> {
+) -> Measured<P> {
     let edit = puri::edit::text_edit(description, tcx);
     layout::leaf(
         edit.metrics().into(),
@@ -44,7 +36,7 @@ pub fn line_edit<C: 'static, P: Canvas + HasHandler<C>>(
     line: &LineEdit,
     editing: Option<&LineEditState>,
     edit: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
-) -> Layout<P> {
+) -> Measured<P> {
     match editing {
         Some(state) => text_edit(
             LineEditDescription {

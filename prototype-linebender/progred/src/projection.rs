@@ -29,24 +29,16 @@ impl Location<'_> {
         }
     }
 
-    pub fn field(&self) -> Option<CellId> {
-        match self {
-            Self::Child {
-                step: Step::Key(label),
-                ..
-            } => Some(*label),
-            _ => None,
-        }
-    }
 }
 
-pub type Partial<T> = fn(&Value) -> Option<T>;
-
-pub fn try_partials<T>(
-    partials: impl IntoIterator<Item = Partial<T>>,
+pub fn try_partials<'a>(
+    partials: impl IntoIterator<Item = &'a progred_display::Partial>,
+    env: &dyn progred_display::Env,
     value: &Value,
-) -> Option<T> {
-    partials.into_iter().find_map(|partial| partial(value))
+) -> Option<progred_display::Layout> {
+    partials
+        .into_iter()
+        .find_map(|partial| partial(env, value))
 }
 
 #[cfg(test)]

@@ -91,14 +91,22 @@ impl Selection {
         // An editor mounts only where write-through can land: the
         // owning cell must not be external.
         let edit = writable_at(sources, &path)
-            .then(|| sources.resolve(&path).and_then(crate::stack::values))
+            .then(|| sources.resolve(&path).and_then(crate::stack::line))
             .flatten();
         Selection::Edge {
             path,
-            edit: edit.map(|line| LineEditing {
-                line: line_edit(&line.text),
-                update: line.update,
-            }),
+            edit: edit.map(line_editing),
+            recorded: false,
+        }
+    }
+
+    /// A click on an editable line: the projection already named the
+    /// line, so the selection does not look the value up again.
+    pub fn from_line(sources: &Sources, path: Path, line: &crate::display::LineEdit) -> Self {
+        let edit = writable_at(sources, &path).then(|| line_editing(line.clone()));
+        Selection::Edge {
+            path,
+            edit,
             recorded: false,
         }
     }
@@ -132,6 +140,13 @@ impl Selection {
 // keyboard landing, which seeds the start (`selected_by_arrow`).
 pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
+}
+
+fn line_editing(line: crate::display::LineEdit) -> LineEditing {
+    LineEditing {
+        line: line_edit(&line.text),
+        update: line.update,
+    }
 }
 
 /// The selection an arrow step lands on: the caret seeds the side the
@@ -587,7 +602,7 @@ fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
         .resolve(path)
         // Compact atom projections are leaves. Once another field
         // enriches either convention, the visible record is collapsible.
-        .filter(|value| crate::stack::values(value).is_none())
+        .filter(|value| crate::stack::line(value).is_none())
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
             Value::Blob(_) => false,

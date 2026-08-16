@@ -542,7 +542,7 @@ pub(crate) fn run_frame(
             styles: &styles,
             width: body_width,
             values: !view.raw,
-            grap: (!view.raw).then_some(&model.foreign),
+            foreign: &model.foreign,
         },
         &mut tcx,
         raw::Hooks {
@@ -560,10 +560,19 @@ pub(crate) fn run_frame(
                     Some(current) => current.path() != path,
                 };
                 if fresh {
-                    app.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                        &app.model.sources(),
-                        path,
-                    )));
+                    let next = {
+                        let sources = app.model.sources();
+                        match click.as_ref() {
+                            Some(click) => match &click.line {
+                                Some(line) => {
+                                    selection::Selection::from_line(&sources, path, line)
+                                }
+                                None => selection::Selection::edge(&sources, path),
+                            },
+                            None => selection::Selection::edge(&sources, path),
+                        }
+                    };
+                    app.model.selection = Some(Selected::Tree(next));
                 } else if click.is_none()
                     && let Some(line) = app
                         .model

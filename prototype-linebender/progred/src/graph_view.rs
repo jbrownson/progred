@@ -637,7 +637,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
     tcx: &mut TextCtx,
     panel: Rect,
     hooks: &Hooks<C>,
-) -> layout::Layout<P> {
+) -> layout::Measured<P> {
     let doc = sources.doc;
     let scale = f64::from(tcx.scale);
     let zoom = view.zoom;

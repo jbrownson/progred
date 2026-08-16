@@ -711,7 +711,7 @@ a clipped viewport) — while offset CUSTODY stays app state, the
 LineEditState pattern. The document body now places through it,
 with real clipping for the first time. It is a placement ENTRY,
 not a composable node, deliberately: wrapping a child inside a
-'static leaf closure cannot capture Layout<P> for lifetime-carrying
+'static leaf closure cannot capture Measured<P> for lifetime-carrying
 P, so nesting scroll areas needs a first-class clip node kind in
 layout — that lands with SCROLL BARS, still deferred. The GRAPH
 pane already uses the same clip idiom inline (a leaf that clips

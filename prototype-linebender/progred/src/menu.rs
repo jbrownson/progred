@@ -278,7 +278,7 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
 mod view {
     use super::{Availability, Entry, Hover, Item, Kind, Platform, Selection, State, definition};
     use crate::hover::HasHover;
-    use crate::layout::{self, Extent, Layout};
+    use crate::layout::{self, Extent, Measured};
     use puri::draw::Canvas;
     use puri::handler::HasHandler;
     use puri::text::{TextCtx, TextStyle};
@@ -305,9 +305,9 @@ mod view {
     }
 
     pub struct View<P> {
-        pub bar: Layout<P>,
+        pub bar: Measured<P>,
         pub heading_width: f64,
-        pub popup: Option<(f64, Layout<P>)>,
+        pub popup: Option<(f64, Measured<P>)>,
     }
 
     struct Styles {
@@ -334,7 +334,7 @@ mod view {
         BAR_HEIGHT * scale
     }
 
-    fn hover_target<P: HasHover<Option<Hover>>>(hover: Hover, content: Layout<P>) -> Layout<P> {
+    fn hover_target<P: HasHover<Option<Hover>>>(hover: Hover, content: Measured<P>) -> Measured<P> {
         layout::before(content, move |p, placement| {
             if p.pointer().is_some_and(|point| placement.contains(point)) {
                 p.claim_hover(Some(hover));
@@ -350,7 +350,7 @@ mod view {
         active: bool,
         scale: f64,
         toggle: Rc<dyn Fn(&mut C, usize)>,
-    ) -> Layout<P> {
+    ) -> Measured<P> {
         let content = layout::pad(
             Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
             crate::display::text(tcx, label, style),
@@ -370,7 +370,7 @@ mod view {
         )
     }
 
-    fn separator<P: Canvas>(scale: f64, width: f64) -> Layout<P> {
+    fn separator<P: Canvas>(scale: f64, width: f64) -> Measured<P> {
         layout::leaf(
             Extent {
                 width,
@@ -403,7 +403,7 @@ mod view {
         scale: f64,
         width: f64,
         select: Rc<dyn Fn(&mut C, Selection)>,
-    ) -> Layout<P> {
+    ) -> Measured<P> {
         let selection = item.selection;
         let style = if enabled {
             &styles.text
@@ -452,7 +452,7 @@ mod view {
         description: &Description,
         menu_entries: &[Entry],
         select: Rc<dyn Fn(&mut C, Selection)>,
-    ) -> Layout<P> {
+    ) -> Measured<P> {
         let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
         let entries = menu_entries

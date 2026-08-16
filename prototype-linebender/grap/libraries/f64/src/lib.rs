@@ -3,6 +3,7 @@
 //! functions.
 
 use grap::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use progred_display::{Env, Layout, LineEdit, editable_line, overlay};
 use progred_graph::{Cells, Value};
 
 pub mod vocabulary {
@@ -31,6 +32,23 @@ pub fn read(value: &Value) -> Option<f64> {
         .and_then(Value::as_blob)
         .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
         .map(f64::from_le_bytes)
+}
+
+fn update(current: &Value, text: &str) -> Option<Value> {
+    text.parse::<f64>().ok().map(|n| overlay(current, value(n)))
+}
+
+pub fn line(value: &Value) -> Option<LineEdit> {
+    read(value).map(|number| LineEdit {
+        text: number.to_string(),
+        update,
+        prefix: String::new(),
+        suffix: String::new(),
+    })
+}
+
+pub fn display(_: &dyn Env, value: &Value) -> Option<Layout> {
+    line(value).map(editable_line)
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -114,14 +132,26 @@ mod tests {
         assert_eq!(read(&value(2.5)), Some(2.5));
         assert_eq!(read(&Value::from(b"2.5".to_vec())), None);
 
+        let extra = new_cell_id();
         let with_extra = Value::record(
             value(2.5)
                 .as_record()
                 .unwrap()
                 .clone()
-                .update(new_cell_id(), Value::from(b"degrees".to_vec())),
+                .update(extra, Value::from(b"degrees".to_vec())),
         );
         assert_eq!(read(&with_extra), Some(2.5));
+        assert_eq!(line(&with_extra).map(|edit| edit.text), Some("2.5".into()));
+        assert_eq!(
+            (line(&with_extra).unwrap().update)(&with_extra, "3"),
+            Some(Value::record(
+                value(3.0)
+                    .as_record()
+                    .unwrap()
+                    .clone()
+                    .update(extra, Value::from(b"degrees".to_vec())),
+            ))
+        );
     }
 
     #[test]

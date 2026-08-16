@@ -14,6 +14,7 @@ mod grap_examples;
 mod graph_view;
 mod history;
 mod hover;
+mod library;
 mod layout;
 #[cfg(target_os = "macos")]
 mod macos_menu;
