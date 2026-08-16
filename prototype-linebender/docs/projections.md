@@ -49,14 +49,13 @@ Computed values do not use another projection operation. They start the same
 projection at a transient root with fresh source provenance. Stored provenance
 provides a document path and therefore potential write capability; transient
 provenance has no editable document location and may attribute interaction to
-the stored expression which produced it. A Grap result also uses a composition
-with the Grap value partial removed. Source/editability and
+the stored expression which produced it. Source/editability and
 projection choice remain separate inputs.
 
 A partial returns a `Layout`: boxes plus display leaves (`Text`,
 `LineEdit`). Text and f64 share `editable_line`, which is a
 line leaf plus a click that selects it and places the caret. `grap` is
-grouping (`nest`, `evaluate`, `transient`, `arrow`). The live
+grouping (`nest`, `evaluate`, `transient`, `group`). The live
 interpreter measures that layout; clicks become Puri handlers. The
 structural walk is the total fallback and owns graph paths, editing,
 and source interaction. Focus and cursor live on the selection.
@@ -103,10 +102,12 @@ The grap crate offers a `grap` value partial alongside the evaluator.
 A record with a `grap` field is replaced by the stored
 expression (nested under that field so editing stays on
 `…+Key(grap)`), then `→`, then the returned `Value` recursively
-projected from a transient, read-only root with this partial failing
-closed. Recognition is open: other fields do not block it. The default
+projected from a transient, read-only root. If that result has a
+`grap` field, the same partial matches and evaluates it, continuing
+the same fuel allowance. Recognition
+is open: other fields do not block it. The default
 projection therefore shows `expression → result`, while Raw shows
-the stored record. The arrow is projection chrome, not graph
+the stored record. The `→` is a dim leaf, not graph
 data. `grap` is not an evaluator form: `evaluate` does not observe the
 field, and a host that never loads the projection never sees it.
 
@@ -187,9 +188,8 @@ references that same cell and shows both that ordinary cell projection
 and its result. Because the expression arm is ordinary, hovering it can
 highlight the cell's other projections. The returned value goes through
 the same text, number, geometry, cell, list, and record projections as
-stored data. The `grap` partial is removed from the composition used
-on a transient result, so a returned value which itself contains a `grap`
-field is data rather than another request to evaluate. Transient children are
+stored data, including `grap` if the result carries that field.
+Transient children are
 currently read-only and map
 selection back to the stored wrapper rather than pretending
 to have document paths.

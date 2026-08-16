@@ -3,17 +3,19 @@
 //! projection never sees it.
 
 use crate::vocabulary::GRAP;
-use progred_display::{Env, Layout, arrow, nest, transient};
+use progred_display::{Click, Env, Layout, col, dim, group, nest, on_click, row, transient};
 use progred_graph::{Step, Value};
 
 pub fn display(env: &dyn Env, value: &Value) -> Option<Layout> {
     let expression = value.as_record()?.get(&GRAP)?;
-    (!env.transient()).then(|| {
-        arrow(
-            nest(Step::Key(GRAP), expression),
-            transient(&env.evaluate(expression)),
-        )
-    })
+    let (result, fuel) = env.evaluate(expression);
+    let expression = nest(Step::Key(GRAP), expression);
+    let shaft = on_click(dim("→"), Click::Select);
+    let result = transient(&result, fuel);
+    Some(group(
+        row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
+        col(0, 2.0, [expression, row(6.0, [shaft, result])]),
+    ))
 }
 
 #[cfg(test)]
@@ -22,17 +24,12 @@ mod tests {
     use progred_graph::new_cell_id;
 
     struct TestEnv {
-        computed: bool,
         result: Value,
     }
 
     impl Env for TestEnv {
-        fn evaluate(&self, _: &Value) -> Value {
-            self.result.clone()
-        }
-
-        fn transient(&self) -> bool {
-            self.computed
+        fn evaluate(&self, _: &Value) -> (Value, usize) {
+            (self.result.clone(), 7)
         }
     }
 
@@ -40,31 +37,36 @@ mod tests {
         Value::record(std::iter::once((GRAP, expression)).chain(extra))
     }
 
-    fn stored() -> TestEnv {
+    fn env() -> TestEnv {
         TestEnv {
-            computed: false,
             result: Value::from(vec![1]),
         }
     }
 
-    #[test]
-    fn a_record_with_the_field_is_an_arrow() {
-        let expression = Value::from(vec![0]);
-        let Layout::Arrow {
-            expression: shown,
-            result,
-        } = display(&stored(), &wrapper(expression.clone(), [])).unwrap()
-        else {
-            panic!("expected an arrow");
+    fn arms(layout: &Layout) -> (&Layout, &Layout) {
+        let Layout::Group { flat, .. } = layout else {
+            panic!("expected a group");
         };
+        let Layout::Row { children, .. } = flat.as_ref() else {
+            panic!("expected a row");
+        };
+        assert_eq!(children.len(), 3);
+        (&children[0], &children[2])
+    }
+
+    #[test]
+    fn a_record_with_the_field_is_expression_then_result() {
+        let expression = Value::from(vec![0]);
+        let layout = display(&env(), &wrapper(expression.clone(), [])).unwrap();
+        let (shown, result) = arms(&layout);
         assert!(matches!(
-            shown.as_ref(),
+            shown,
             Layout::Nest { step, value }
                 if *step == Step::Key(GRAP) && *value == expression
         ));
         assert!(matches!(
-            result.as_ref(),
-            Layout::Transient(value) if *value == Value::from(vec![1])
+            result,
+            Layout::Transient { value, fuel: 7 } if *value == Value::from(vec![1])
         ));
     }
 
@@ -72,24 +74,35 @@ mod tests {
     fn other_fields_do_not_block_recognition() {
         assert!(matches!(
             display(
-                &stored(),
+                &env(),
                 &wrapper(Value::from(vec![0]), [(new_cell_id(), Value::from(vec![2]))]),
             ),
-            Some(Layout::Arrow { .. })
+            Some(Layout::Group { .. })
         ));
     }
 
     #[test]
-    fn a_transient_result_fails_closed() {
-        assert!(
-            display(
-                &TestEnv {
-                    computed: true,
-                    result: Value::from(vec![1]),
-                },
-                &wrapper(Value::from(vec![0]), []),
-            )
-            .is_none()
-        );
+    fn a_grap_shaped_result_is_another_projection() {
+        let inner = Value::from(vec![2]);
+        let result = wrapper(inner.clone(), []);
+        let layout = display(
+            &TestEnv {
+                result: result.clone(),
+            },
+            &wrapper(Value::from(vec![0]), []),
+        )
+        .unwrap();
+        let (_, shown) = arms(&layout);
+        assert!(matches!(
+            shown,
+            Layout::Transient { value, fuel: 7 } if *value == result
+        ));
+        let layout = display(&env(), &result).unwrap();
+        let (nested, _) = arms(&layout);
+        assert!(matches!(
+            nested,
+            Layout::Nest { step, value }
+                if *step == Step::Key(GRAP) && *value == inner
+        ));
     }
 }

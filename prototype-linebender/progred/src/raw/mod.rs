@@ -81,6 +81,7 @@ struct Cx<'a> {
     /// hover variant of the secondary mark.
     secondary_hover: Option<Value>,
     source: Source<'a>,
+    fuel: std::cell::Cell<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -100,18 +101,20 @@ struct ProjectEnv<'a, 's> {
 }
 
 impl progred_display::Env for ProjectEnv<'_, '_> {
-    fn evaluate(&self, expression: &Value) -> Value {
-        grap::evaluate(
+    fn evaluate(&self, expression: &Value) -> (Value, usize) {
+        let fuel = if self.cx.source.transient() {
+            self.cx.fuel.get()
+        } else {
+            grap::DEFAULT_FUEL
+        };
+        let evaluation = grap::evaluate(
             expression,
             |cell| self.cx.sources.value(cell).cloned(),
             self.cx.foreign,
-            grap::DEFAULT_FUEL,
-        )
-        .result
-    }
-
-    fn transient(&self) -> bool {
-        self.cx.source.transient()
+            fuel,
+        );
+        self.cx.fuel.set(evaluation.remaining_fuel);
+        (evaluation.result, evaluation.remaining_fuel)
     }
 }
 
@@ -192,41 +195,25 @@ fn realize<
         progred_display::Layout::Project(projected) => {
             project_present_value(cx, tcx, path, ancestors, &projected, avail, hooks)
         }
-        progred_display::Layout::Transient(computed) => {
-            project_transient_root(cx, tcx, path, computed, avail, hooks)
+        progred_display::Layout::Transient { value: computed, fuel } => {
+            project_transient_root(cx, tcx, path, computed, fuel, avail, hooks)
         }
-        progred_display::Layout::Arrow { expression, result } => {
-            let gap = 6.0 * scale;
-            let shown = realize(
+        progred_display::Layout::Group { flat, broken } => {
+            let candidate = realize(
                 cx,
                 tcx,
                 path,
                 ancestors,
                 hooks,
                 value,
-                (*expression).clone(),
+                *flat,
                 f64::INFINITY,
             );
-            let arrow = arrow_handle(cx, tcx, path, hooks, value);
-            let computed = realize(
-                cx,
-                tcx,
-                path,
-                ancestors,
-                hooks,
-                value,
-                (*result).clone(),
-                f64::INFINITY,
-            );
-            let flat = row(gap, vec![shown, arrow, computed]);
-            if one_line(flat.extent, scale) && flat.extent.width <= avail {
-                return flat;
+            if one_line(candidate.extent, scale) && candidate.extent.width <= avail {
+                candidate
+            } else {
+                realize(cx, tcx, path, ancestors, hooks, value, *broken, avail)
             }
-            let shown = realize(cx, tcx, path, ancestors, hooks, value, *expression, avail);
-            let arrow = arrow_handle(cx, tcx, path, hooks, value);
-            let remaining = (avail - arrow.extent.width - gap).max(0.0);
-            let computed = realize(cx, tcx, path, ancestors, hooks, value, *result, remaining);
-            col(0, 2.0 * scale, vec![shown, row(gap, vec![arrow, computed])])
         }
     }
 }
@@ -242,7 +229,13 @@ fn leaf_display<
     content: progred_display::Display,
 ) -> Measured<P> {
     match content {
-        progred_display::Display::Text(text) => display::text(tcx, &text, &cx.styles.name),
+        progred_display::Display::Text { text, face } => {
+            let style = match face {
+                progred_display::Face::Name => &cx.styles.name,
+                progred_display::Face::Dim => &cx.styles.dim,
+            };
+            display::text(tcx, &text, style)
+        }
         progred_display::Display::LineEdit(line) => {
             let editing = cx
                 .selection
@@ -252,24 +245,6 @@ fn leaf_display<
             display::line_edit(tcx, cx.styles, &line, editing, move |c| edit(c))
         }
     }
-}
-
-fn arrow_handle<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    hooks: &Hooks<C>,
-    value: &Value,
-) -> Measured<P> {
-    select_target(
-        path.to_vec(),
-        value.clone(),
-        hooks,
-        display::text(tcx, "→", &cx.styles.dim),
-    )
 }
 
 /// A reported click on projected text, in text-local coordinates.
@@ -770,6 +745,7 @@ pub fn project<
         selection,
         hover,
         source: Source::Stored,
+        fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
         // The graph view's selected cell is a secondary here too:
         // its projections are the same value — and the graph view's
         // HOVERED cell is a hover secondary the same way.
@@ -1684,6 +1660,7 @@ fn project_transient_root<
     tcx: &mut TextCtx,
     path: &[Step],
     result: Value,
+    fuel: usize,
     avail: f64,
     hooks: &Hooks<C>,
 ) -> Measured<P> {
@@ -1711,6 +1688,7 @@ fn project_transient_root<
         secondary: None,
         secondary_hover: None,
         source: Source::Transient { owner: path },
+        fuel: std::cell::Cell::new(fuel),
     };
     let projected = project_location(
         &result_cx,

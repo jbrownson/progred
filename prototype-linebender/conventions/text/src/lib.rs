@@ -79,11 +79,8 @@ mod tests {
     struct Unused;
 
     impl Env for Unused {
-        fn evaluate(&self, _: &Value) -> Value {
-            Value::record([])
-        }
-        fn transient(&self) -> bool {
-            false
+        fn evaluate(&self, _: &Value) -> (Value, usize) {
+            (Value::record([]), 0)
         }
     }
 

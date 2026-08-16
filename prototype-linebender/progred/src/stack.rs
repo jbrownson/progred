@@ -50,12 +50,8 @@ pub fn line(value: &Value) -> Option<LineEdit> {
 struct NoEval;
 
 impl Env for NoEval {
-    fn evaluate(&self, _: &Value) -> Value {
-        Value::record([])
-    }
-
-    fn transient(&self) -> bool {
-        false
+    fn evaluate(&self, _: &Value) -> (Value, usize) {
+        (Value::record([]), 0)
     }
 }
 
