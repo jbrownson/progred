@@ -7,7 +7,7 @@ use progred_graph::Cells;
 pub struct Library {
     pub cells: Cells,
     pub functions: ForeignFunctions,
-    pub projections: Vec<Partial>,
+    pub projection: Option<Partial>,
 }
 
 impl Default for Library {
@@ -15,7 +15,7 @@ impl Default for Library {
         Self {
             cells: Cells::new(),
             functions: ForeignFunctions::default(),
-            projections: Vec::new(),
+            projection: None,
         }
     }
 }
@@ -32,7 +32,7 @@ pub fn conventions() -> Library {
             ..Library::default()
         },
         Library {
-            projections: vec![progred_text::display],
+            projection: Some(progred_text::display),
             ..Library::default()
         },
     ])
@@ -42,7 +42,7 @@ pub fn grap() -> Library {
     Library {
         cells: grap::library(),
         functions: grap::functions(),
-        projections: vec![grap::display],
+        projection: Some(grap::display),
         ..Library::default()
     }
 }
@@ -66,7 +66,7 @@ pub fn f64() -> Library {
     Library {
         cells: grap_f64::library(),
         functions: grap_f64::functions(),
-        projections: vec![grap_f64::display],
+        projection: Some(grap_f64::display),
         ..Library::default()
     }
 }
@@ -84,11 +84,7 @@ pub fn merge(libraries: impl IntoIterator<Item = Library>) -> Library {
         Library {
             cells: all.cells.merged(next.cells),
             functions: all.functions.merge(next.functions),
-            projections: {
-                let mut projections = all.projections;
-                projections.extend(next.projections);
-                projections
-            },
+            projection: all.projection.or(next.projection),
         }
     })
 }

@@ -35,7 +35,11 @@ pub fn foreign_functions() -> grap::ForeignFunctions {
 }
 
 pub fn project(env: &dyn Env, value: &Value) -> Option<Layout> {
-    projection::try_partials(&loaded().projections, env, value)
+    projection::try_partials(
+        libraries().into_iter().filter_map(|library| library.projection),
+        env,
+        value,
+    )
 }
 
 /// The line a projection would mount for `value`, if the whole

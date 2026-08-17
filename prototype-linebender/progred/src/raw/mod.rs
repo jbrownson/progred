@@ -17,7 +17,7 @@ use crate::document::Document;
 #[cfg(test)]
 use crate::document::{sample_document, sample_vocabulary};
 use crate::filter;
-use crate::selection::{Collapse, Selection, last_follow, writable_at};
+use crate::selection::{Collapse, Selection, last_follow};
 #[cfg(test)]
 use crate::selection::{
     break_edit_run, delete_edge, from_clipboard, from_structure, line_edit, pending_edge,

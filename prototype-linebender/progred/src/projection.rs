@@ -31,14 +31,12 @@ impl Location<'_> {
 
 }
 
-pub fn try_partials<'a>(
-    partials: impl IntoIterator<Item = &'a progred_display::Partial>,
+pub fn try_partials(
+    partials: impl IntoIterator<Item = progred_display::Partial>,
     env: &dyn progred_display::Env,
     value: &Value,
 ) -> Option<progred_display::Layout> {
-    partials
-        .into_iter()
-        .find_map(|partial| partial(env, value))
+    partials.into_iter().find_map(|partial| partial(env, value))
 }
 
 #[cfg(test)]
