@@ -39,7 +39,7 @@ use crate::layout::{
 use crate::sources::Sources;
 use crate::projection::Location;
 use parley::layout::Layout as TextLayout;
-use progred_graph::{CellId, Position, Step, Value};
+use progred_graph::{CellId, Step, Value};
 #[cfg(test)]
 use progred_graph::{Cells, new_cell_id};
 use puri::delim::{self, Delim, DelimStyle};
