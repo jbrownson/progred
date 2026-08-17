@@ -1,4 +1,5 @@
     use super::*;
+    use progred_graph::Position;
     use ui_events::keyboard::{KeyState, Modifiers};
 
     struct EmptyClipboard;
@@ -1312,4 +1313,3 @@
         );
         assert!(Selection::edge(&src(&doc, &lib), path).edit().is_none());
     }
-
