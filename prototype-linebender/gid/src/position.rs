@@ -1,4 +1,4 @@
-//! Session-only element identity for list values. A position is a
+//! Session-only element identity for GID list values. A position is a
 //! byte string read as the binary fraction `0.b₁b₂…`, so trailing
 //! zero bits are value-neutral and plain lexicographic comparison —
 //! the derived ordering — is the dense order. Canonical form:

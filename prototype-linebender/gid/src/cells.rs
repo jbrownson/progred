@@ -1,4 +1,4 @@
-//! The identity table: each cell id maps directly to its current
+//! The GID identity table: each cell id maps directly to its current
 //! structural value. A referenced id absent from the table is a bare
 //! cell. Cells are the only mutable state; values are persistent, so
 //! clones retain structural sharing.

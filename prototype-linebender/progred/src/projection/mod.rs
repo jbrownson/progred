@@ -4,23 +4,20 @@
 #[cfg(test)]
 use crate::completion::{Entry, resolve_entry, resolve_label};
 use crate::completion::{EntryAction, HasPopup, Popup, completion_entries};
-#[cfg(test)]
-use crate::document::Document;
-use crate::document::{Path, short_id};
-#[cfg(test)]
-use crate::document::{sample_document, sample_vocabulary};
 use crate::filter;
 #[cfg(test)]
 use crate::hover::resolve_hover;
 use crate::hover::{HasHover, Hover, HoverClaim, Hovering, hover_value};
+use crate::identity::short_id;
 use crate::measured::{
-    Extent, Measured, around, before, col, decorate, leaf, min_width, on_key,
-    on_primary_pointer_down, pad, row,
+    Extent, Measured, around, before, col, decorate, leaf, min_width, on_key, pad, row,
 };
 use crate::navigate::{Descend, HasDescends};
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
 use crate::render::{self, text};
+#[cfg(test)]
+use crate::sample::{sample_document, sample_vocabulary};
 use crate::selection::{Collapse, Selection, last_follow};
 #[cfg(test)]
 use crate::selection::{
@@ -31,11 +28,10 @@ use crate::selection::{
 use crate::sources::Sources;
 use crate::styles::Styles;
 mod location;
-use location::Location;
-use parley::layout::Layout as TextLayout;
-use progred_graph::{CellId, Step, Value};
+use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
-use progred_graph::{Cells, new_cell_id};
+use gid::{Cells, Document, new_cell_id};
+use location::Location;
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{
@@ -43,7 +39,9 @@ use puri::edit::{
 };
 use puri::geometry::Placement;
 use puri::handler::HasHandler;
-use puri::text::{TextCtx, TextStyle, caret_index, line_layout};
+use puri::text::{TextCtx, TextStyle};
+#[cfg(test)]
+use puri::text::{caret_index, line_layout};
 use std::collections::HashSet;
 use std::rc::Rc;
 #[cfg(test)]
@@ -51,17 +49,34 @@ use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{Key, NamedKey};
 use ui_events::pointer::PointerButton;
 use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
-use vello::peniko::{Brush, Color};
+#[cfg(test)]
+use vello::peniko::Brush;
+use vello::peniko::Color;
 
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
-#[derive(Clone, Default)]
-pub struct Projection {
-    partials: Box<[progred_display::Partial]>,
+pub struct Projection<World> {
+    partials: Box<[progred_display::Partial<World, Hover>]>,
 }
 
-impl Projection {
-    pub fn new(partials: impl IntoIterator<Item = progred_display::Partial>) -> Self {
+impl<World> Clone for Projection<World> {
+    fn clone(&self) -> Self {
+        Self {
+            partials: self.partials.clone(),
+        }
+    }
+}
+
+impl<World> Default for Projection<World> {
+    fn default() -> Self {
+        Self {
+            partials: Box::new([]),
+        }
+    }
+}
+
+impl<World> Projection<World> {
+    pub fn new(partials: impl IntoIterator<Item = progred_display::Partial<World, Hover>>) -> Self {
         Self {
             partials: partials.into_iter().collect(),
         }
@@ -71,13 +86,27 @@ impl Projection {
         &self,
         env: &dyn progred_display::Env,
         value: &Value,
-    ) -> Option<progred_display::Layout> {
-        self.partials.iter().find_map(|partial| partial(env, value))
+        select: progred_display::ClickHandler<World>,
+        hover: Hover,
+    ) -> Option<progred_display::Layout<World, Hover>> {
+        self.partials.iter().find_map(|partial| {
+            partial(progred_display::ProjectionInput {
+                env,
+                value,
+                select: select.clone(),
+                hover: hover.clone(),
+            })
+        })
     }
 
     pub fn line(&self, value: &Value) -> Option<render::LineEdit> {
-        self.apply(&NoEval, value)
-            .and_then(|layout| progred_display::line_edit_of(&layout).cloned())
+        self.apply(
+            &NoEval,
+            value,
+            Rc::new(|_, _| false),
+            Hover::Value(Vec::new()),
+        )
+        .and_then(|layout| progred_display::line_edit_of(&layout).cloned())
     }
 }
 
@@ -153,31 +182,31 @@ fn realize<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
-    projection: Option<&Projection>,
+    projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
     hooks: &Hooks<C>,
     value: &Value,
-    layout: progred_display::Layout,
+    layout: progred_display::Layout<C, Hover>,
     avail: f64,
 ) -> Measured<P> {
     let scale = cx.styles.scale;
     match layout {
-        progred_display::Layout::Leaf(content) => leaf_display(cx, tcx, path, hooks, content),
-        progred_display::Layout::OnClick { child, click } => {
-            let inner = realize(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
-            );
-            realize_click(cx, tcx, path, hooks, value, click, inner)
+        progred_display::Layout::Leaf(content) => {
+            leaf_display(cx, tcx, path, hooks, value, content)
         }
-        progred_display::Layout::OnKey { child, key } => {
+        progred_display::Layout::OnClick { child, handler } => {
             let inner = realize(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
             );
-            match key {
-                progred_display::Key::Delete => bind_delete(cx, hooks, inner),
-            }
+            realize_click(handler, inner)
+        }
+        progred_display::Layout::OnHover { child, hover } => {
+            let inner = realize(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            );
+            realize_hover(cx, hover, inner)
         }
         progred_display::Layout::Row { gap, children } => {
             let children = children
@@ -303,7 +332,7 @@ fn realize_at<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
-    projection: Option<&Projection>,
+    projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -334,59 +363,48 @@ fn realize_at<
     )
 }
 
-fn realize_click<
-    C: 'static,
-    P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    hooks: &Hooks<C>,
-    value: &Value,
-    click: progred_display::Click,
+fn realize_click<C: 'static, P: HasHandler<C>>(
+    handler: progred_display::ClickHandler<C>,
     inner: Measured<P>,
 ) -> Measured<P> {
-    match click {
-        progred_display::Click::Select => select_target(path.to_vec(), value.clone(), hooks, inner),
-        progred_display::Click::Quiet => {
-            quiet_select_target(path.to_vec(), value.clone(), hooks, inner)
+    before(inner, move |p, placement| {
+        p.handler().on_pointer_down(move |world, event| {
+            event.button == Some(PointerButton::Primary)
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && handler(
+                    world,
+                    progred_display::PointerClick {
+                        x: event.state.position.x - placement.rect.x0,
+                        y: event.state.position.y - placement.rect.y0,
+                        shift: event.state.modifiers.shift(),
+                        command: command(&event.state.modifiers),
+                        count: event.state.count.max(1),
+                    },
+                )
+        });
+    })
+}
+
+fn realize_hover<P: Canvas + HasHover<HoverClaim>>(
+    cx: &Cx,
+    hover: Option<Hover>,
+    inner: Measured<P>,
+) -> Measured<P> {
+    let active = hover.as_ref().is_some_and(|hover| cx.hover == Some(hover));
+    let highlight = matches!(
+        hover.as_ref(),
+        Some(Hover::Label(_) | Hover::Toggle(_) | Hover::Insert(_))
+    );
+    let scale = cx.styles.scale;
+    before(inner, move |p, placement| {
+        if active && highlight {
+            hover_highlight(scale, p, placement.rect);
         }
-        progred_display::Click::Line(line) => cursor_target(
-            path.to_vec(),
-            value.clone(),
-            cx.styles.line_presentation(&line.prefix, &line.suffix),
-            hooks,
-            Some(line),
-            inner,
-        ),
-        progred_display::Click::Toggle => toggle_target(cx, path.to_vec(), hooks, inner),
-        progred_display::Click::Insert { after } => {
-            let mut target = path.to_vec();
-            target.push(Step::Element(after));
-            insert_target(cx, target, hooks, inner)
+        match hover {
+            Some(hover) => hover_claim(p, placement, hover),
+            None => hover_block(p, placement),
         }
-        progred_display::Click::Rename { key } => {
-            let mut child = path.to_vec();
-            child.push(Step::Key(key));
-            let (spelling, style) = label_spelling(cx, &key);
-            let layout = line_layout(tcx, &spelling, style);
-            rename_target(cx, child, layout, hooks, inner)
-        }
-        progred_display::Click::Pick { key } => pick_target(key, hooks, inner),
-        progred_display::Click::Field { key } => {
-            let mut child = path.to_vec();
-            child.push(Step::Key(key));
-            select_target(child, Value::from(key), hooks, inner)
-        }
-        progred_display::Click::Absorb => before(inner, move |p: &mut P, placement| {
-            hover_block(p, placement);
-            p.handler().on_pointer_down(move |_, event| {
-                event.button == Some(PointerButton::Primary)
-                    && placement
-                        .contains(Point::new(event.state.position.x, event.state.position.y))
-            });
-        }),
-    }
+    })
 }
 
 fn leaf_display<
@@ -397,6 +415,7 @@ fn leaf_display<
     tcx: &mut TextCtx,
     path: &[Step],
     hooks: &Hooks<C>,
+    value: &Value,
     content: progred_display::Display,
 ) -> Measured<P> {
     match content {
@@ -444,7 +463,15 @@ fn leaf_display<
                 .filter(|selection| selection.path() == path)
                 .and_then(Selection::edit);
             let edit = hooks.edit.clone();
-            render::line_edit(tcx, cx.styles, &line, editing, move |c| edit(c))
+            let content = render::line_edit(tcx, cx.styles, &line, editing, move |c| edit(c));
+            cursor_target(
+                path.to_vec(),
+                value.clone(),
+                cx.styles.line_presentation(&line.prefix, &line.suffix),
+                hooks,
+                Some(line),
+                content,
+            )
         }
     }
 }
@@ -499,6 +526,22 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
     } else {
         modifiers.ctrl()
     }
+}
+
+fn select_handler<C: 'static>(
+    path: Path,
+    value: Value,
+    hooks: &Hooks<C>,
+) -> progred_display::ClickHandler<C> {
+    let select = hooks.select.clone();
+    let pick = hooks.pick.clone();
+    Rc::new(move |world, click| {
+        let picked = click.command && pick(world, value.clone());
+        if !picked {
+            select(world, path.clone(), None);
+        }
+        true
+    })
 }
 
 impl Cx<'_> {
@@ -907,7 +950,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
 /// The explicit-state boundary: everything a projection pass reads.
 /// `width` is the space the projection may fill; containers choose
 /// flat or broken forms greedily from the root down.
-pub struct ProjectDescription<'a> {
+pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
     pub selection: Option<&'a Selection>,
     pub graph_node: Option<&'a Value>,
@@ -917,7 +960,7 @@ pub struct ProjectDescription<'a> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub projection: Option<&'a Projection>,
+    pub projection: Option<&'a Projection<World>>,
     pub foreign: &'a grap::ForeignFunctions,
 }
 
@@ -925,7 +968,7 @@ pub fn project<
     C: 'static,
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
-    description: ProjectDescription<'_>,
+    description: ProjectDescription<'_, C>,
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
 ) -> Measured<P> {
@@ -1180,7 +1223,7 @@ fn project_transient_root<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
-    projection: Option<&Projection>,
+    projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
     result: Value,
@@ -1232,7 +1275,7 @@ fn project_transient_root<
     })
 }
 
-/// Adds one graph step to the active source and invokes the supplied
+/// Adds one GID step to the active source and invokes the supplied
 /// projection. The projection, not the caller, resolves the child;
 /// a missing child therefore reaches the same total fallback as an
 /// empty root.
@@ -1242,7 +1285,7 @@ fn descend<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
-    projection: Option<&Projection>,
+    projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     parent_path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -1286,7 +1329,7 @@ fn project_location<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
-    projection: Option<&Projection>,
+    projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -1308,7 +1351,7 @@ fn project_present_value<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
-    projection: Option<&Projection>,
+    projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -1317,7 +1360,14 @@ fn project_present_value<
     hooks: &Hooks<C>,
 ) -> Measured<P> {
     let projected = projection
-        .and_then(|projection| projection.apply(&ProjectEnv { cx }, value))
+        .and_then(|projection| {
+            projection.apply(
+                &ProjectEnv { cx },
+                value,
+                select_handler(path.to_vec(), value.clone(), hooks),
+                Hover::Value(path.to_vec()),
+            )
+        })
         .map(|layout| {
             realize(
                 cx, projection, tcx, path, ancestors, hooks, value, layout, avail,
@@ -1325,17 +1375,12 @@ fn project_present_value<
         });
     let inner = match projected {
         Some(projected) => projected,
-        None => realize(
-            cx,
-            projection,
-            tcx,
-            path,
-            ancestors,
-            hooks,
-            value,
-            structure::of(cx, path, ancestors, value),
-            avail,
-        ),
+        None => {
+            let layout = structure::of(cx, tcx, path, ancestors, value, hooks);
+            realize(
+                cx, projection, tcx, path, ancestors, hooks, value, layout, avail,
+            )
+        }
     };
     // Other projections of the selected value carry the secondary
     // mark; the selected one has the primary highlight.
@@ -1652,85 +1697,6 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + H
     }
 }
 
-/// A click that reports a collapse toggle for `path` without
-/// selecting — [`disclosure`]'s click on arbitrary content, the
-/// collapsed forms' way back open.
-fn toggle_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
-    cx: &Cx,
-    path: Path,
-    hooks: &Hooks<C>,
-    content: Measured<P>,
-) -> Measured<P> {
-    let scale = cx.styles.scale;
-    let hovered =
-        matches!(cx.hover, Some(Hover::Toggle(hovered)) if hovered.as_slice() == path.as_slice());
-    let toggle = hooks.toggle.clone();
-    let target = path.clone();
-    let content = before(content, move |p, placement| {
-        let rect = placement.rect;
-        if hovered {
-            hover_highlight(scale, p, rect);
-        }
-        hover_claim(p, placement, Hover::Toggle(path.clone()));
-    });
-    on_primary_pointer_down(
-        content,
-        |_| true,
-        move |ctx, _| {
-            toggle(ctx, target.clone());
-            true
-        },
-    )
-}
-
-/// A flat list separator: its click opens a pending sibling between
-/// the elements it separates — after the element at `path`. Only
-/// offered where the insert could commit, [`pending_beside`]'s
-/// affordance-lie rule.
-fn insert_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
-    cx: &Cx,
-    path: Path,
-    hooks: &Hooks<C>,
-    content: Measured<P>,
-) -> Measured<P> {
-    let scale = cx.styles.scale;
-    let hovered =
-        matches!(cx.hover, Some(Hover::Insert(hovered)) if hovered.as_slice() == path.as_slice());
-    let insert = hooks.insert.clone();
-    let target = path.clone();
-    let content = before(content, move |p, placement| {
-        let rect = placement.rect;
-        if hovered {
-            hover_highlight(scale, p, rect);
-        }
-        hover_claim(p, placement, Hover::Insert(path.clone()));
-    });
-    on_primary_pointer_down(
-        content,
-        |_| true,
-        move |ctx, _| {
-            insert(ctx, target.clone());
-            true
-        },
-    )
-}
-
-/// A command-click pick target with no plain-click behavior — for
-/// parts like a pending row's label, whose plain click deliberately
-/// falls through.
-fn pick_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
-    key: CellId,
-    hooks: &Hooks<C>,
-    content: Measured<P>,
-) -> Measured<P> {
-    let pick = hooks.pick.clone();
-    on_primary_pointer_down(
-        content,
-        |event| command(&event.state.modifiers),
-        move |ctx, _| pick(ctx, Value::Cell(key)),
-    )
-}
-
 /// The label stage engaged — a rename's re-opened label or a new
 /// field's — its query wearing the primary ring explicitly: a
 /// pending edge has no path of its own for [`descend`] to mark, and
@@ -1755,50 +1721,6 @@ fn label_query<
     // The ring's outset rides inside the node, so glued neighbors —
     // the colon, a flat comma — clear its ink.
     pad(Insets::new(4.0 * scale, 0.0, 4.0 * scale, 0.0), ringed)
-}
-
-/// A writable field label's one pointer job: a plain click re-opens
-/// it as its seeded query — selecting the field belongs to the
-/// value's own ink, which claims the same path. Command-clicks
-/// decline so the head's pick still wins; read-only labels never
-/// register and keep the head's select.
-fn rename_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
-    cx: &Cx,
-    path: Path,
-    layout: TextLayout<Brush>,
-    hooks: &Hooks<C>,
-    content: Measured<P>,
-) -> Measured<P> {
-    let scale = cx.styles.scale;
-    let hovered =
-        matches!(cx.hover, Some(Hover::Label(hovered)) if hovered.as_slice() == path.as_slice());
-    let rename = hooks.rename.clone();
-    before(content, move |p, placement| {
-        let rect = placement.rect;
-        if hovered {
-            hover_highlight(scale, p, rect);
-        }
-        hover_claim(p, placement, Hover::Label(path.clone()));
-        let rename = rename.clone();
-        let target = path.clone();
-        let layout = layout.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && !command(&event.state.modifiers)
-                && {
-                    let index = caret_index(
-                        &layout,
-                        Point::new(
-                            event.state.position.x - rect.x0,
-                            event.state.position.y - rect.y0,
-                        ),
-                    );
-                    rename(ctx, target.clone(), index);
-                    true
-                }
-        });
-    })
 }
 
 /// A plain click-to-select target for `path` — for parts like labels

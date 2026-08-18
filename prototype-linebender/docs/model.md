@@ -4,7 +4,7 @@ Date: 2026-07-03
 
 ## Cell-Only Labels And Library Text (2026-08-09)
 
-This tightens the current model further. The graph core now has exactly
+This tightens the current model further. The GID core now has exactly
 two atoms, `Cell(CellId)` and `Blob(Vec<u8>)`, and a record label is
 always a `CellId`. Strings are not a privileged scalar and there is no
 second, textual label namespace. The two leaf cases are direct `Value`
@@ -16,7 +16,7 @@ reader is open to unrelated fields, like the f64 reader, so text may
 carry provenance, history, or other facets. The normal projection uses
 the compact quoted editor only for the exact one-field representation;
 an enriched text record stays structural so no metadata is hidden.
-Quoted values in GID are surface sugar for this convention, not a core
+Quoted values in the GID text bridge are surface sugar for this convention, not a core
 value variant.
 
 Free-form label authoring still feels direct. Choosing arbitrary text
@@ -27,7 +27,7 @@ may have the same displayed name while remaining distinct relations,
 and naming, scoping, multilingual display, and domain-specific label
 policies remain above the substrate.
 
-## Cell Names Are Ordinary Graph Data (2026-08-08)
+## Cell Names Are Ordinary GID Data (2026-08-08)
 
 This reverses the 2026-07-20 decision, preserved in the historical
 record below, to give every cell a special optional name alongside its
@@ -45,7 +45,7 @@ without changing the data model.
 
 The normal projection may consume a direct text-convention `name` field
 and project that same field as the editable cell head; Raw shows the
-field in place and uses the short id as the head. The GID printer may
+field in place and uses the short id as the head. The text-bridge printer may
 peek at this convention to derive readable file-local binders, but the
 hint has no model or file semantics and need not be unique. A bare cell
 has no place to keep a name, and an alias whose whole value is another
@@ -238,7 +238,7 @@ the sketch, with these calls made in conversation:
   Every write now splits at its LAST Follow: the link before it
   names the owning, authority-gated cell; the Key/Element suffix is
   a pure value spine rebuilt through the new `spine` lens
-  (get/set/without in progred-graph) — the brief's "(cell, path)"
+  (get/set/without in gid) — the brief's "(cell, path)"
   write unit made literal. Each reference site unfolds through its
   own Follow: paths stay per-site, and no site is the value's home
   (the table entry is).
@@ -1302,8 +1302,9 @@ the 8px air hysteresis, resolved against the prior footprint. The SVG
 tests now inspect placement claims directly rather than dispatching
 synthetic or real moves.
 
-THE GID NOTATION (2026-07-22, evening; docs/gid.md is the
-spec). The domains conversation ran the whole arc — language
+THE GID NOTATION (2026-07-22, evening; now the temporary text bridge
+in docs/gid-text.md; this section records the superseded original
+decision). The domains conversation ran the whole arc — language
 candidates surveyed (invented cores vs popular languages; JS/Boa
 verified AST-enterable, wasm/Rust weighed), Grap designed (one
 form: records headed by `is`, heads reduce or stand as tagged
@@ -1335,13 +1336,13 @@ structural-only layout). JSON serialization deleted
 whole — no fallback, scratch files are disposable, the reader
 lives in git history. Parked in the spec: raw-structure load/save,
 a gid atom, numeric literals, the binary sibling. Naming SETTLED
-next day: GID is the format, a GID ID is the identifier
+next day: GID was called the text format and a GID ID the identifier
 (user-called; `.gid` verified unclaimed — WinHelp's dead index
 files and a niche simulator's project dirs are the only priors).
-Same day: the app starts EMPTY (the sample became sample.gid,
+Same day: the app starts EMPTY (the sample became sample.gid.txt,
 checked in and pinned as the printer's golden fixed-point test;
 `sample_document()` lives on as the test fixture), and the file
-dialogs speak `.gid`.
+dialogs now speak `.gid.txt`, reserving `.gid` for native storage.
 
 ## Data Layer v2: The Typed Model (2026-07-09; superseded 2026-07-20, see v3 above)
 
@@ -1468,7 +1469,7 @@ systems, if ever, is an export projection (the Wikidata pattern),
 never the native model.
 
 Shipped 2026-07-09, same session. What landed matches the layout;
-notes from the build: `progred-graph` is four small modules (value,
+notes from the build: `gid` is four small modules (value,
 position, mutgid, gid) and the old `id.rs` is gone whole — spaces,
 payload disciplines, strict reads, the general form. The editor's
 write path became TWO functions: `set_value` (split at the last Key
@@ -1606,7 +1607,7 @@ Considered and settled 2026-07-05:
   an Id, which is what terminates the regress — and node ids themselves
   are just the payload discipline of one well-known space. Strings and
   numbers are two more. This is the spec AND the representation: the
-  new prototype's `progred-graph` stores `Id { space: Uuid, payload:
+  new prototype's `gid` stores `Id { space: Uuid, payload:
   Vec<u8> }` directly (fields private so constructors own canonical
   payloads), with the well-known spaces keeping their privileged
   serialized spellings and a general `value` form for the rest.
@@ -2317,7 +2318,7 @@ the conventions are typeable from keystroke one and picking "name"
 yields the NAME node rather than a lookalike string label (the fresh-
 document trap). The graph pane's SNAPSHOT stays document-only —
 library facts enrich display, they don't populate the picture.
-StackedGid retired from progred-graph. One hole surfaced by use the
+StackedGid retired from gid. One hole surfaced by use the
 same day (user: can't edit the name node's name, but CAN add it an
 arbitrary edge — intentional?): resolution-gating protected library
 EDGES but not library ENTITIES — the entity's id resolves through any

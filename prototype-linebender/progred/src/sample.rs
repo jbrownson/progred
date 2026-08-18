@@ -1,46 +1,10 @@
-//! A document: its root value plus the cell table. Paths name
-//! locations in that structure. The sample fixture lives here because
-//! it is document data, not a projection.
+//! Progred's sample GID document used by tests and render fixtures.
 
-use progred_graph::{CellId, Cells, Step, Value, new_cell_id};
-
-/// A document: its `root` value plus the cell table holding every
-/// identity's current value. Every projection path starts at `root` —
-/// typically a link, or an inline record keying the document's parts
-/// by role. The root is a location like any other — the empty path —
-/// so edits there commit to this field, and deleting it empties the
-/// document. Clones are O(1): the table and its values share
-/// structure, which is what makes snapshot undo free.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct Document {
-    pub root: Option<Value>,
-    pub cells: Cells,
-}
-
-/// A location in the projected spanning tree: Key steps into record
-/// fields, Element steps into list values, Follow steps through a
-/// link to its cell's current value. The same value can be projected
-/// at several paths, so the path — not the value — is the identity a
-/// selection names; every reference site unfolds through its own
-/// Follow, and no site is the value's home. List elements sit at
-/// positions sibling edits never move; wraps and unwraps will adjust
-/// path-keyed state through one general rewrite — see
-/// `docs/model.md`.
-pub type Path = Vec<Step>;
-
-/// Git-style short form of a cell id: an ellipsis and the last five
-/// hex digits, fixed length even where fewer would disambiguate.
-/// A collision within a document is unlikely (about 0.5% somewhere in
-/// a hundred-cell document) and the display can grow if it ever
-/// matters.
-pub fn short_id(id: CellId) -> String {
-    let hex = id.simple().to_string();
-    format!("…{}", &hex[hex.len() - 5..])
-}
+use gid::{Cells, Document, Value, new_cell_id};
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub mod sample_vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const AT: CellId = CellId::from_u128(0x4c2cb3268f1911bd26a0eb74622ba097);
     pub const ROW: CellId = CellId::from_u128(0xa791e4873aa95e21bc925dacbbbf6ea5);
@@ -74,7 +38,7 @@ pub mod sample_vocabulary {
 /// and pitch flows through a small Grap function to a projected
 /// computed result.
 /// The app starts EMPTY now; this is the test fixture, and its
-/// printed form is checked in as sample.gid.
+/// text-bridge form is checked in as sample.gid.txt.
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn sample_document() -> Document {
     let mut cells = Cells::new();
@@ -107,14 +71,8 @@ pub fn sample_document() -> Document {
             [(
                 sample_vocabulary::AT,
                 Value::record([
-                    (
-                        sample_vocabulary::ROW,
-                        progred_text::value("top"),
-                    ),
-                    (
-                        sample_vocabulary::COL,
-                        progred_text::value("left"),
-                    ),
+                    (sample_vocabulary::ROW, progred_text::value("top")),
+                    (sample_vocabulary::COL, progred_text::value("left")),
                 ]),
             )],
         ),
@@ -129,14 +87,8 @@ pub fn sample_document() -> Document {
                 (
                     sample_vocabulary::AT,
                     Value::record([
-                        (
-                            sample_vocabulary::ROW,
-                            progred_text::value("bottom"),
-                        ),
-                        (
-                            sample_vocabulary::COL,
-                            progred_text::value("right"),
-                        ),
+                        (sample_vocabulary::ROW, progred_text::value("bottom")),
+                        (sample_vocabulary::COL, progred_text::value("right")),
                     ]),
                 ),
                 // A part that knows its whole: the cycle a real document
@@ -180,20 +132,14 @@ pub fn sample_document() -> Document {
         progred_name::record(
             "double",
             [
-                (
-                    grap::vocabulary::PARAMS,
-                    Value::list([Value::from(amount)]),
-                ),
+                (grap::vocabulary::PARAMS, Value::list([Value::from(amount)])),
                 (
                     grap::vocabulary::BODY,
                     grap::call(
                         Value::from(grap_f64::vocabulary::MULTIPLY),
                         [
                             (grap_f64::vocabulary::LEFT, Value::from(amount)),
-                            (
-                                grap_f64::vocabulary::RIGHT,
-                                grap_f64::value(2.0),
-                            ),
+                            (grap_f64::vocabulary::RIGHT, grap_f64::value(2.0)),
                         ],
                     ),
                 ),
@@ -205,9 +151,7 @@ pub fn sample_document() -> Document {
     cells.set_value(pitch, grap_f64::value(2.5));
 
     let double_pitch = || grap::call(Value::from(double), [(amount, Value::from(pitch))]);
-    let grap_projection = |expression| {
-        Value::record([(grap::vocabulary::GRAP, expression)])
-    };
+    let grap_projection = |expression| Value::record([(grap::vocabulary::GRAP, expression)]);
 
     cells.set_value(
         roof,
@@ -223,10 +167,7 @@ pub fn sample_document() -> Document {
                     sample_vocabulary::TAGS,
                     Value::list([progred_text::value("draft"), progred_text::value("gabled")]),
                 ),
-                (
-                    sample_vocabulary::MATERIAL,
-                    Value::from(material),
-                ),
+                (sample_vocabulary::MATERIAL, Value::from(material)),
                 (sample_vocabulary::STYLE, Value::from(style)),
                 (sample_vocabulary::PITCH, Value::from(pitch)),
                 (
@@ -243,10 +184,7 @@ pub fn sample_document() -> Document {
                                 Value::from(grap_f64::vocabulary::MULTIPLY),
                                 [
                                     (grap_f64::vocabulary::LEFT, double_pitch()),
-                                    (
-                                        grap_f64::vocabulary::RIGHT,
-                                        grap_f64::value(8.0),
-                                    ),
+                                    (grap_f64::vocabulary::RIGHT, grap_f64::value(8.0)),
                                 ],
                             ),
                         )],
@@ -260,10 +198,7 @@ pub fn sample_document() -> Document {
         root: Some(Value::record([
             (sample_vocabulary::SHAPE, Value::from(roof)),
             (sample_vocabulary::STYLE, Value::from(style)),
-            (
-                sample_vocabulary::FAVORITE,
-                Value::from(favorite),
-            ),
+            (sample_vocabulary::FAVORITE, Value::from(favorite)),
         ])),
         cells,
     }

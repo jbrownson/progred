@@ -1,5 +1,5 @@
 use super::*;
-use progred_graph::Position;
+use gid::Position;
 use ui_events::keyboard::{KeyState, Modifiers};
 
 struct EmptyClipboard;
@@ -17,17 +17,26 @@ fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
 }
 
 fn make_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
-    Selection::edge(&src(doc, library), &crate::stack::load().projection, path)
+    Selection::edge(
+        &src(doc, library),
+        &crate::stack::load::<()>().projection,
+        path,
+    )
 }
 
 fn toggle_fold(sources: &Sources, collapse: &mut Collapse, path: &[Step]) -> bool {
-    toggle_collapse(sources, &crate::stack::load().projection, collapse, path)
+    toggle_collapse(
+        sources,
+        &crate::stack::load::<()>().projection,
+        collapse,
+        path,
+    )
 }
 
 fn set_fold(sources: &Sources, collapse: &mut Collapse, path: &[Step], closed: bool) -> bool {
     set_collapse(
         sources,
-        &crate::stack::load().projection,
+        &crate::stack::load::<()>().projection,
         collapse,
         path,
         closed,
@@ -788,7 +797,7 @@ fn clipboard_spellings_round_trip() {
 
 #[test]
 fn completion_offers_follow_the_stage() {
-    let lib = crate::stack::load().library;
+    let lib = crate::stack::load::<()>().library;
     let (mut doc, cell) = doc_of(vec![
         progred_name::field("roof"),
         (
@@ -948,7 +957,7 @@ fn minting_seeds_bare_and_named_cells() {
 #[test]
 fn pending_rename_seeds_the_current_spelling() {
     let doc = sample_document();
-    let lib = crate::stack::load().library;
+    let lib = crate::stack::load::<()>().library;
     let sources = src(&doc, &lib);
     // A cell label seeds its ordinary name — the spelling whose
     // first choice resolves back to the same identity, so committing
@@ -995,7 +1004,7 @@ fn entry_hover_marks_follow_the_live_query() {
     // type — the mark must follow what the entry NOW is, not
     // what it was when the pointer arrived.
     let doc = sample_document();
-    let lib = crate::stack::load().library;
+    let lib = crate::stack::load::<()>().library;
     let sources = src(&doc, &lib);
     let pending = |text: &str| Selection::Pending {
         path: Vec::new(),
@@ -1038,7 +1047,7 @@ fn a_mounting_click_can_place_the_rename_caret() {
     // editor's font agreeing with the label's (short ids draw
     // monospace; the editor draws system-ui).
     let doc = sample_document();
-    let lib = crate::stack::load().library;
+    let lib = crate::stack::load::<()>().library;
     let sources = src(&doc, &lib);
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
@@ -1133,7 +1142,7 @@ fn rename_carries_the_value_and_never_a_sibling() {
 #[test]
 fn the_sample_document_shows_the_constructs() {
     let doc = sample_document();
-    let lib = crate::stack::load().library;
+    let lib = crate::stack::load::<()>().library;
     let sources = src(&doc, &lib);
     // The root is an inline record of roles.
     assert!(doc.root.as_ref().unwrap().as_record().is_some());

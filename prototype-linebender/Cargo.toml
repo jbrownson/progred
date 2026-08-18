@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "graph",
+    "gid",
     "display",
     "conventions/isa",
     "conventions/name",

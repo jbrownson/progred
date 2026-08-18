@@ -1,10 +1,10 @@
-//! Unresolved projection locations and graph-step lookup.
+//! Unresolved projection locations and GID-step lookup.
 
-use progred_graph::{CellId, Step, Value};
+use gid::{CellId, Step, Value};
 
 /// A place a projection can begin. Children retain the parent and
 /// step rather than arriving pre-resolved, so absence is visible to
-/// the projection just like every other graph state.
+/// the projection just like every other GID state.
 pub enum Location<'a> {
     Root(Option<&'a Value>),
     Child { parent: &'a Value, step: Step },

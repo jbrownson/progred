@@ -1389,6 +1389,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gid"
+version = "0.1.0"
+dependencies = [
+ "getrandom",
+ "im",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "gimli"
 version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1560,10 +1570,10 @@ dependencies = [
 name = "grap"
 version = "0.1.0"
 dependencies = [
+ "gid",
  "grap-absent",
  "im",
  "progred-display",
- "progred-graph",
  "progred-name",
 ]
 
@@ -1571,7 +1581,7 @@ dependencies = [
 name = "grap-absent"
 version = "0.1.0"
 dependencies = [
- "progred-graph",
+ "gid",
  "progred-isa",
  "progred-name",
 ]
@@ -1580,9 +1590,9 @@ dependencies = [
 name = "grap-control"
 version = "0.1.0"
 dependencies = [
+ "gid",
  "grap",
  "grap-absent",
- "progred-graph",
  "progred-name",
 ]
 
@@ -1590,10 +1600,10 @@ dependencies = [
 name = "grap-f64"
 version = "0.1.0"
 dependencies = [
+ "gid",
  "grap",
  "grap-absent",
  "progred-display",
- "progred-graph",
  "progred-name",
 ]
 
@@ -1601,10 +1611,10 @@ dependencies = [
 name = "grap-geometry"
 version = "0.1.0"
 dependencies = [
+ "gid",
  "grap",
  "grap-absent",
  "grap-f64",
- "progred-graph",
  "progred-name",
 ]
 
@@ -3136,6 +3146,7 @@ name = "progred"
 version = "0.1.0"
 dependencies = [
  "clipboard-rs",
+ "gid",
  "grap",
  "grap-absent",
  "grap-control",
@@ -3146,7 +3157,6 @@ dependencies = [
  "parley",
  "pollster",
  "progred-display",
- "progred-graph",
  "progred-isa",
  "progred-name",
  "progred-text",
@@ -3166,24 +3176,14 @@ dependencies = [
 name = "progred-display"
 version = "0.1.0"
 dependencies = [
- "progred-graph",
-]
-
-[[package]]
-name = "progred-graph"
-version = "0.1.0"
-dependencies = [
- "getrandom",
- "im",
- "serde",
- "serde_json",
+ "gid",
 ]
 
 [[package]]
 name = "progred-isa"
 version = "0.1.0"
 dependencies = [
- "progred-graph",
+ "gid",
  "progred-name",
 ]
 
@@ -3191,7 +3191,7 @@ dependencies = [
 name = "progred-name"
 version = "0.1.0"
 dependencies = [
- "progred-graph",
+ "gid",
  "progred-text",
 ]
 
@@ -3199,8 +3199,8 @@ dependencies = [
 name = "progred-text"
 version = "0.1.0"
 dependencies = [
+ "gid",
  "progred-display",
- "progred-graph",
 ]
 
 [[package]]
@@ -3464,8 +3464,8 @@ dependencies = [
 name = "rust-wasm-projection"
 version = "0.1.0"
 dependencies = [
+ "gid",
  "grap-f64",
- "progred-graph",
  "progred-text",
  "serde_json",
  "wasmtime",

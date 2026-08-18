@@ -3,8 +3,7 @@
 //! resolution read through both sides. Fallback is per cell value:
 //! the document's value wins whole, otherwise the library answers.
 
-use crate::document::Document;
-use progred_graph::{CellId, Cells, Step, Value};
+use gid::{CellId, Cells, Document, Step, Value};
 
 #[derive(Clone, Copy)]
 pub struct Sources<'a> {
@@ -58,7 +57,7 @@ impl<'a> Sources<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     fn doc_of(cells: Cells) -> Document {
         Document { root: None, cells }
@@ -172,10 +171,7 @@ mod tests {
 
         assert_eq!(sources.resolve(&[]), Some(&Value::from(root)));
         assert_eq!(
-            sources.resolve(&[
-                Step::Follow,
-                Step::Key(progred_name::vocabulary::NAME),
-            ]),
+            sources.resolve(&[Step::Follow, Step::Key(progred_name::vocabulary::NAME),]),
             Some(&crate::test_values::text("scene"))
         );
         let items = [Step::Follow, Step::Key(crate::test_values::label("items"))];
@@ -208,7 +204,7 @@ mod tests {
         };
         assert!(bare_sources.resolve(&[]).is_some());
         assert_eq!(bare_sources.resolve(&[Step::Follow]), None);
-        let gone = progred_graph::position::between(Some(&positions[1]), None).unwrap();
+        let gone = gid::position::between(Some(&positions[1]), None).unwrap();
         assert_eq!(
             sources.resolve(&[
                 Step::Follow,

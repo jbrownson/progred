@@ -1,11 +1,10 @@
 //! Pointer hover: the placement claim, air hysteresis, and the value
 //! a hover refers to for secondary marks.
 
-use crate::completion::{completion_entries, EntryAction};
-use crate::document::Path;
+use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
-use progred_graph::{Step, Value};
+use gid::{Path, Step, Value};
 use vello::kurbo::{Point, Rect};
 
 /// Settled placement's internal pointer hit test. Later claims replace

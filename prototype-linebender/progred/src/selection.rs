@@ -2,10 +2,11 @@
 //! locations in a [`Document`]; this module owns what is selected
 //! there and how authoring and mutation land.
 
-use crate::document::{Document, Path, short_id};
+use crate::identity::short_id;
 use crate::projection::Projection;
 use crate::sources::Sources;
-use progred_graph::{CellId, Cells, Position, Step, Value, position, spine};
+use crate::spine;
+use gid::{CellId, Cells, Document, Path, Position, Step, Value, position};
 use puri::edit::LineEditState;
 use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -77,7 +78,7 @@ impl Selection {
     /// there to select, only something to begin, so it pends
     /// immediately: the empty document's root, and a valueless
     /// writable cell's Follow slot (its rendered placeholder).
-    pub fn edge(sources: &Sources, projection: &Projection, path: Path) -> Self {
+    pub fn edge<World>(sources: &Sources, projection: &Projection<World>, path: Path) -> Self {
         let empty_slot = match path.split_last() {
             None => sources.root().is_none(),
             Some((Step::Follow, parent)) => sources
@@ -159,9 +160,9 @@ fn line_editing(line: crate::render::LineEdit) -> LineEditing {
 /// crosses projected text in one press. The end-seeded default already IS
 /// the rightward case; a leftward landing seeds the START instead of
 /// grinding back through every character.
-pub fn selected_by_arrow(
+pub fn selected_by_arrow<World>(
     sources: &Sources,
-    projection: &Projection,
+    projection: &Projection<World>,
     path: Path,
     event: &KeyboardEvent,
 ) -> Selection {
@@ -576,9 +577,9 @@ pub fn rename_field(
 /// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
-pub fn toggle_collapse(
+pub fn toggle_collapse<World>(
     sources: &Sources,
-    projection: &Projection,
+    projection: &Projection<World>,
     collapse: &mut Collapse,
     path: &[Step],
 ) -> bool {
@@ -594,9 +595,9 @@ pub fn toggle_collapse(
 
 /// The directional twin: close or open the value at `path` — the fold
 /// axis of keyboard navigation. Returns whether the state changed.
-pub fn set_collapse(
+pub fn set_collapse<World>(
     sources: &Sources,
-    projection: &Projection,
+    projection: &Projection<World>,
     collapse: &mut Collapse,
     path: &[Step],
     closed: bool,
@@ -613,7 +614,11 @@ pub fn set_collapse(
 /// The default collapse for the value at `path` — collapsed inside a
 /// cycle, expanded otherwise — or `None` when there is nothing to
 /// collapse.
-fn collapse_default(sources: &Sources, projection: &Projection, path: &[Step]) -> Option<bool> {
+fn collapse_default<World>(
+    sources: &Sources,
+    projection: &Projection<World>,
+    path: &[Step],
+) -> Option<bool> {
     sources
         .resolve(path)
         // Compact atom projections are leaves. Once another field

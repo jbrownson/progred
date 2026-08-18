@@ -2,16 +2,25 @@
 
 use crate::library::{self, Library};
 use crate::projection::Projection;
-use progred_graph::Cells;
+use gid::Cells;
 
-#[derive(Clone)]
-pub struct Stack {
+pub struct Stack<World> {
     pub library: Cells,
     pub foreign: grap::ForeignFunctions,
-    pub projection: Projection,
+    pub projection: Projection<World>,
 }
 
-pub fn load() -> Stack {
+impl<World> Clone for Stack<World> {
+    fn clone(&self) -> Self {
+        Self {
+            library: self.library.clone(),
+            foreign: self.foreign.clone(),
+            projection: self.projection.clone(),
+        }
+    }
+}
+
+pub fn load<World>() -> Stack<World> {
     let (library, foreign, partials) = libraries().fold(
         (Cells::new(), grap::ForeignFunctions::default(), Vec::new()),
         |(library, foreign, mut partials), next| {
@@ -30,7 +39,7 @@ pub fn load() -> Stack {
     }
 }
 
-fn libraries() -> impl Iterator<Item = Library> {
+fn libraries<World>() -> impl Iterator<Item = Library<World>> {
     [
         library::conventions(),
         library::grap(),

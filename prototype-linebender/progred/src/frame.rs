@@ -10,9 +10,10 @@ use crate::navigate;
 use crate::projection;
 use crate::selection;
 use crate::sources;
+use crate::stack;
 use crate::{App, content_viewport, graph_panel};
+use gid::Value;
 use parley::{FontContext, LayoutContext};
-use progred_graph::Value;
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditPointerDown};
 use puri::geometry::Placement;
@@ -82,6 +83,7 @@ pub(crate) enum FrameVisibility {
 
 pub(crate) struct FrameDescription<'a> {
     model: &'a Model,
+    stack: &'a stack::Stack<App>,
     view: ViewFlags,
     menu: menu::State,
     availability: menu::Availability,
@@ -406,6 +408,7 @@ impl App {
         };
         let description = FrameDescription {
             model: &self.model,
+            stack: &self.stack,
             view,
             menu: self.menu,
             availability,
@@ -459,6 +462,7 @@ pub(crate) fn run_frame(
 ) {
     let FrameDescription {
         model,
+        stack,
         view,
         menu,
         availability,
@@ -536,7 +540,10 @@ pub(crate) fn run_frame(
     // The Raw view is ONE bit, threaded as itself: name lookups
     // derive from it downstream, no policy swapped here, and the
     // model's configured policy rides along untouched.
-    let sources = model.sources();
+    let sources = sources::Sources {
+        doc: &model.doc,
+        library: &stack.library,
+    };
     let graph_node = model.graph_node();
     let margin = 12.0 * scale;
     // The width layout answers to: the window, less the graph panel
@@ -561,8 +568,8 @@ pub(crate) fn run_frame(
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            projection: (!view.raw).then_some(&model.stack.projection),
-            foreign: &model.stack.foreign,
+            projection: (!view.raw).then_some(&stack.projection),
+            foreign: &stack.foreign,
         },
         &mut tcx,
         projection::Hooks {
@@ -581,21 +588,19 @@ pub(crate) fn run_frame(
                 };
                 if fresh {
                     let next = {
-                        let sources = app.model.sources();
+                        let sources = app.sources();
                         match click.as_ref() {
                             Some(click) => match &click.line {
                                 Some(line) => selection::Selection::from_line(&sources, path, line),
                                 None => selection::Selection::edge(
                                     &sources,
-                                    &app.model.stack.projection,
+                                    &app.stack.projection,
                                     path,
                                 ),
                             },
-                            None => selection::Selection::edge(
-                                &sources,
-                                &app.model.stack.projection,
-                                path,
-                            ),
+                            None => {
+                                selection::Selection::edge(&sources, &app.stack.projection, path)
+                            }
                         }
                     };
                     app.model.selection = Some(Selected::Tree(next));
@@ -639,15 +644,15 @@ pub(crate) fn run_frame(
                 selection::toggle_collapse(
                     &sources::Sources {
                         doc: &app.model.doc,
-                        library: &app.model.stack.library,
+                        library: &app.stack.library,
                     },
-                    &app.model.stack.projection,
+                    &app.stack.projection,
                     &mut app.model.collapse,
                     &path,
                 );
             }),
             rename: Rc::new(|app: &mut App, path, index| {
-                if let Some(mut pending) = selection::pending_rename(&app.model.sources(), &path) {
+                if let Some(mut pending) = selection::pending_rename(&app.sources(), &path) {
                     // The index was hit-tested against the label that
                     // was clicked, in the label's own face; the seed
                     // shares its spelling, so the caret lands under
@@ -661,7 +666,7 @@ pub(crate) fn run_frame(
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             insert: Rc::new(|app: &mut App, path| {
-                if let Some(pending) = selection::pending_after(&app.model.sources(), &path) {
+                if let Some(pending) = selection::pending_after(&app.sources(), &path) {
                     app.model.selection = Some(Selected::Tree(pending));
                 }
             }),

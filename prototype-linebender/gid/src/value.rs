@@ -1,4 +1,4 @@
-//! Values and cells: every shape — atom, list, record — is a pure
+//! GID values and cells: every shape — atom, list, record — is a pure
 //! structural value compared by content; identity is a cell, a minted
 //! 128-bit id whose current value lives in the `Cells` table. Values are
 //! finite trees; the graph lives in the links. One canonical spelling

@@ -2,11 +2,11 @@
 //! their absent identities; their values classify those identities as
 //! absents through the independent `isa` convention.
 
-use progred_graph::{Cells, Value};
+use gid::{Cells, Value};
 use progred_isa::Isa as _;
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const ABSENT: CellId =
         CellId::from_u128(0xd9c0a7145a38859a245640d3469cbcd4);
@@ -36,7 +36,7 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     #[test]
     fn absent_is_an_extensible_structural_classification() {

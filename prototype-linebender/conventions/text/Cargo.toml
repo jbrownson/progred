@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 progred-display = { path = "../../display" }
-progred-graph = { path = "../../graph" }
+gid = { path = "../../gid" }

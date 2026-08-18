@@ -1,9 +1,7 @@
-//! The gid notation: the raw projection's grammar, made writable —
-//! see docs/gid.md. The parser is lenient in the defined ways
-//! only; the printer is the canon, and saving canonicalizes.
+//! Temporary text import/export for GID documents. This binder notation
+//! bridges to text-based tools; it is not GID's native representation.
 
-use crate::document::Document;
-use progred_graph::{CellId, Cells, Value, new_cell_id};
+use gid::{CellId, Cells, Document, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -33,11 +31,11 @@ struct Parser<'a> {
 
 /// A bare token under the two-namespace rule.
 enum Token {
-    Gid(CellId),
+    CellId(CellId),
     Binder(String),
 }
 
-fn as_gid(token: &str) -> Option<CellId> {
+fn as_cell_id(token: &str) -> Option<CellId> {
     (token.len() == 32 && token.bytes().all(|b| b.is_ascii_hexdigit()))
         .then(|| CellId::parse_str(token).ok())
         .flatten()
@@ -142,22 +140,22 @@ impl Parser<'_> {
         Ok(token)
     }
 
-    /// A bare token as an identity: gid, or binder minting on first
+    /// A bare token as an identity: cell-id literal, or binder minting on first
     /// use — create-on-reference at the file layer.
     fn token(&mut self) -> Result<Token, String> {
         let token = self.bare()?;
-        if let Some(gid) = as_gid(&token.to_ascii_lowercase()) {
-            return Ok(Token::Gid(gid));
+        if let Some(cell) = as_cell_id(&token.to_ascii_lowercase()) {
+            return Ok(Token::CellId(cell));
         }
         if !valid_binder(token) {
-            return Err(format!("`{token}` is neither a gid nor a binder"));
+            return Err(format!("`{token}` is neither a cell id nor a binder"));
         }
         Ok(Token::Binder(token.to_string()))
     }
 
     fn resolve(&mut self, token: Token) -> CellId {
         match token {
-            Token::Gid(gid) => gid,
+            Token::CellId(cell) => cell,
             Token::Binder(binder) => *self.binders.entry(binder).or_insert_with(new_cell_id),
         }
     }
@@ -246,15 +244,15 @@ impl Parser<'_> {
                         if !valid_binder(&binder) {
                             return Err(format!("`{binder}` is not a usable binder"));
                         }
-                        if as_gid(&binder.to_ascii_lowercase()).is_some() {
-                            return Err(format!("`{binder}` spells a gid, not a binder"));
+                        if as_cell_id(&binder.to_ascii_lowercase()).is_some() {
+                            return Err(format!("`{binder}` spells a cell id, not a binder"));
                         }
                         p.eat(':')?;
                         let token = p.bare()?;
-                        let gid = as_gid(&token.to_ascii_lowercase()).ok_or_else(|| {
-                            format!("`binders` maps binders to gid literals, got `{token}`")
+                        let cell = as_cell_id(&token.to_ascii_lowercase()).ok_or_else(|| {
+                            format!("`binders` maps binders to cell-id literals, got `{token}`")
                         })?;
-                        if p.binders.insert(binder.clone(), gid).is_some() {
+                        if p.binders.insert(binder.clone(), cell).is_some() {
                             return Err(format!(
                                 "binder `{binder}` bound twice (`binders` also must \
                                  precede any use of them)"
@@ -272,14 +270,14 @@ impl Parser<'_> {
                     p.eat('{')?;
                     p.separated('}', |p| {
                         let token = p.token()?;
-                        let gid = p.resolve(token);
+                        let cell = p.resolve(token);
                         // Stating a cell twice — by any spelling —
                         // fails rather than clobbering.
-                        if !stated.insert(gid) {
+                        if !stated.insert(cell) {
                             return Err("a cell stated twice".to_string());
                         }
                         p.eat(':')?;
-                        cells.set_value(gid, p.value()?);
+                        cells.set_value(cell, p.value()?);
                         Ok(())
                     })?;
                     Ok(())
@@ -299,40 +297,40 @@ impl Parser<'_> {
 
 /// The canonical printer — deterministic from (document, binders).
 pub fn print(doc: &Document, binders: &Binders) -> String {
-    // Loaded binders survive for gids the document still mentions.
+    // Loaded binders survive for cell identities the document still mentions.
     // Every other identity receives a deterministic binder: its
-    // simple name when available, otherwise its short gid suffix.
-    let mentioned = mentioned_gids(doc);
+    // simple name when available, otherwise its short id suffix.
+    let mentioned = mentioned_cell_ids(doc);
     let mut spell: BTreeMap<CellId, String> = BTreeMap::new();
-    for (binder, gid) in binders {
-        if mentioned.contains(gid) {
-            spell.entry(*gid).or_insert_with(|| binder.clone());
+    for (binder, cell) in binders {
+        if mentioned.contains(cell) {
+            spell.entry(*cell).or_insert_with(|| binder.clone());
         }
     }
     let mut taken: HashSet<String> = spell.values().cloned().collect();
     let mut named: Vec<(&str, CellId)> = doc
         .cells
         .iter()
-        .filter_map(|(gid, value)| progred_name::read(value).map(|name| (name, *gid)))
+        .filter_map(|(cell, value)| progred_name::read(value).map(|name| (name, *cell)))
         .collect();
     named.sort();
-    for (name, gid) in &named {
-        if spell.contains_key(gid) {
+    for (name, cell) in &named {
+        if spell.contains_key(cell) {
             continue;
         }
         let candidate = unique_binder(derive_binder(name), &mut taken);
-        spell.insert(*gid, candidate);
+        spell.insert(*cell, candidate);
     }
     let mut remaining: Vec<CellId> = mentioned
         .iter()
         .copied()
-        .filter(|gid| !spell.contains_key(gid))
+        .filter(|cell| !spell.contains_key(cell))
         .collect();
     remaining.sort();
-    for gid in remaining {
-        let hex = gid.simple().to_string();
+    for cell in remaining {
+        let hex = cell.simple().to_string();
         let candidate = unique_binder(format!("_{}", &hex[hex.len() - 5..]), &mut taken);
-        spell.insert(gid, candidate);
+        spell.insert(cell, candidate);
     }
 
     let mut out = String::new();
@@ -340,15 +338,18 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     if !spell.is_empty() {
         out.push_str("  \"binders\": {\n");
         let mut table: Vec<(&String, &CellId)> =
-            spell.iter().map(|(gid, binder)| (binder, gid)).collect();
+            spell.iter().map(|(cell, binder)| (binder, cell)).collect();
         table.sort();
-        for (binder, gid) in table {
-            let _ = writeln!(out, "    {}: {},", quoted(binder), gid.simple());
+        for (binder, cell) in table {
+            let _ = writeln!(out, "    {}: {},", quoted(binder), cell.simple());
         }
         out.push_str("  },\n");
     }
-    let mut entries: Vec<(CellId, &Value)> =
-        doc.cells.iter().map(|(gid, value)| (*gid, value)).collect();
+    let mut entries: Vec<(CellId, &Value)> = doc
+        .cells
+        .iter()
+        .map(|(cell, value)| (*cell, value))
+        .collect();
     entries.sort_by(
         |a, b| match (progred_name::read(a.1), progred_name::read(b.1)) {
             (Some(x), Some(y)) => x.cmp(y).then(a.0.cmp(&b.0)),
@@ -359,9 +360,9 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     );
     if !entries.is_empty() {
         out.push_str("  \"cells\": {\n");
-        for (gid, value) in entries {
+        for (cell, value) in entries {
             out.push_str("    ");
-            out.push_str(&identity(&spell, gid));
+            out.push_str(&identity(&spell, cell));
             out.push_str(": ");
             print_value(&mut out, value, &spell, 2);
             out.push_str(",\n");
@@ -377,47 +378,47 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     out
 }
 
-fn identity(spell: &BTreeMap<CellId, String>, gid: CellId) -> String {
-    match spell.get(&gid) {
+fn identity(spell: &BTreeMap<CellId, String>, cell: CellId) -> String {
+    match spell.get(&cell) {
         Some(binder) => binder.clone(),
-        None => gid.simple().to_string(),
+        None => cell.simple().to_string(),
     }
 }
 
-/// Every gid the document mentions: cell entries, links in values,
+/// Every cell identity the document mentions: cell entries, links in values,
 /// cells used as labels.
-fn mentioned_gids(doc: &Document) -> HashSet<CellId> {
-    let mut gids: HashSet<CellId> = doc.cells.cells().copied().collect();
-    fn walk(value: &Value, gids: &mut HashSet<CellId>) {
+fn mentioned_cell_ids(doc: &Document) -> HashSet<CellId> {
+    let mut ids: HashSet<CellId> = doc.cells.cells().copied().collect();
+    fn walk(value: &Value, ids: &mut HashSet<CellId>) {
         if plain_text(value).is_none() {
             match value {
                 Value::Cell(cell) => {
-                    gids.insert(*cell);
+                    ids.insert(*cell);
                 }
                 Value::Blob(_) => {}
                 Value::List(elements) => {
                     for element in elements.values() {
-                        walk(element, gids);
+                        walk(element, ids);
                     }
                 }
                 Value::Record(fields) => {
                     for (label, field) in fields {
-                        gids.insert(*label);
-                        walk(field, gids);
+                        ids.insert(*label);
+                        walk(field, ids);
                     }
                 }
             }
         }
     }
-    for gid in doc.cells.cells().copied().collect::<Vec<_>>() {
-        if let Some(value) = doc.cells.value(gid) {
-            walk(value, &mut gids);
+    for cell in doc.cells.cells().copied().collect::<Vec<_>>() {
+        if let Some(value) = doc.cells.value(cell) {
+            walk(value, &mut ids);
         }
     }
     if let Some(root) = &doc.root {
-        walk(root, &mut gids);
+        walk(root, &mut ids);
     }
-    gids
+    ids
 }
 
 /// The notation's own string spelling — exactly the four escapes the
@@ -455,7 +456,7 @@ fn derive_binder(name: &str) -> String {
     {
         out.insert(0, '_');
     }
-    if as_gid(&out.to_ascii_lowercase()).is_some() {
+    if as_cell_id(&out.to_ascii_lowercase()).is_some() {
         out.insert(0, '_');
     }
     out
@@ -486,7 +487,7 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
                     let _ = write!(out, "{byte:02x}");
                 }
             }
-            Value::Cell(gid) => out.push_str(&identity(spell, *gid)),
+            Value::Cell(cell) => out.push_str(&identity(spell, *cell)),
             Value::List(elements) if elements.is_empty() => out.push_str("[]"),
             Value::List(elements) => {
                 out.push_str("[\n");
@@ -570,7 +571,7 @@ mod tests {
 
     #[test]
     fn leniencies_normalize_and_minting_persists() {
-        // Uppercase gid, no trailing commas, a binder never declared:
+        // Uppercase cell id, no trailing commas, a binder never declared:
         // all defined leniencies; saving canonicalizes.
         let text = r#"{"cells": {florp: "x"},
                        "root": {a: florp, b: 9D2C1E10AB3440DE963D02D5F4B1A5A5}}"#;
@@ -601,7 +602,7 @@ mod tests {
             },
         }"#;
         assert!(parse(aliased).is_err());
-        // Duplicate simple-name facts are ordinary graph data.
+        // Duplicate simple-name facts are ordinary GID data.
         let (doc, _) = parse_ok(
             r#"{"binders": {
                 "name": 02e562654d6d0828d3a7559e6f75fffe,
@@ -622,9 +623,9 @@ mod tests {
     #[test]
     fn derived_binders_come_from_simple_name_facts() {
         let mut cells = Cells::new();
-        let gid = new_cell_id();
+        let cell = new_cell_id();
         cells.set_value(
-            gid,
+            cell,
             progred_name::record(
                 "grap program",
                 [(
@@ -634,7 +635,7 @@ mod tests {
             ),
         );
         let doc = Document {
-            root: Some(Value::from(gid)),
+            root: Some(Value::from(cell)),
             cells,
         };
         let printed = print(&doc, &Binders::new());
@@ -728,7 +729,7 @@ mod checked_in_files {
     /// it back is the identity — the printer's golden fixture.
     #[test]
     fn the_sample_file_is_a_fixed_point() {
-        let text = include_str!("../../sample.gid");
+        let text = include_str!("../../sample.gid.txt");
         let (doc, binders) = parse(text).expect("the sample parses");
         assert!(doc.root.is_some());
         assert_eq!(print(&doc, &binders), text);
@@ -736,7 +737,7 @@ mod checked_in_files {
 
     #[test]
     fn the_grap_demo_is_a_fixed_point() {
-        let text = include_str!("../../grap-demo.gid");
+        let text = include_str!("../../grap-demo.gid.txt");
         let (doc, binders) = parse(text).expect("the Grap demo parses");
         assert_eq!(print(&doc, &binders), text);
     }

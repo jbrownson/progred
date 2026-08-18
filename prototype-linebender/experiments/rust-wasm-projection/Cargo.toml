@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 grap-f64 = { path = "../../grap/libraries/f64" }
-progred-graph = { path = "../../graph" }
+gid = { path = "../../gid" }
 serde_json = "1.0"
 wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "runtime", "wat", "std", "parallel-compilation"] }
 

@@ -8,4 +8,4 @@ grap-absent = { path = "libraries/absent" }
 im = "15"
 progred-display = { path = "../display" }
 progred-name = { path = "../conventions/name" }
-progred-graph = { path = "../graph" }
+gid = { path = "../gid" }

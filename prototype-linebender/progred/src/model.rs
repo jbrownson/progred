@@ -1,13 +1,10 @@
-//! The editor's durable application state: the document, selection,
-//! view flags, and the loaded editor stack they are read against.
+//! The editor's durable document state: document, selection, view,
+//! graph, and history.
 
-use crate::document::Document;
 use crate::graph_view;
 use crate::history;
 use crate::selection;
-use crate::sources;
-use crate::stack;
-use progred_graph::Value;
+use gid::{Document, Value};
 
 /// The View menu's frame inputs: which panes and layers this frame
 /// shows.
@@ -33,9 +30,6 @@ pub(crate) struct Model {
     pub doc: Document,
     pub selection: Option<Selected>,
     pub collapse: selection::Collapse,
-    /// The editor configuration read under every document: library
-    /// cells, Rust functions, and the composed projection.
-    pub stack: stack::Stack,
     pub graph: graph_view::GraphView,
     pub history: history::History,
     pub view: ViewFlags,
@@ -50,14 +44,6 @@ pub(crate) struct Model {
 }
 
 impl Model {
-    /// The reading context: this document over the editor's library.
-    pub fn sources(&self) -> sources::Sources<'_> {
-        sources::Sources {
-            doc: &self.doc,
-            library: &self.stack.library,
-        }
-    }
-
     pub fn tree_selection(&self) -> Option<&selection::Selection> {
         match &self.selection {
             Some(Selected::Tree(selection)) => Some(selection),

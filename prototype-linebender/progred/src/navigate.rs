@@ -1,8 +1,7 @@
 //! Keyboard navigation over a frame's settled descends.
 
-use crate::document::Path;
 use crate::selection::Selection;
-use progred_graph::Step;
+use gid::{Path, Step};
 use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use vello::kurbo::Rect;

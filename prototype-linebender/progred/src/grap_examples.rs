@@ -1,10 +1,9 @@
 //! Executable checks for the Grap programs in the checked-in example
-//! documents. GID owns their notation round trips; this module owns
+//! documents. The GID text bridge owns their notation round trips; this module owns
 //! their application-level evaluation behavior.
 
-use crate::document::Document;
-use crate::gid::{Binders, parse};
-use progred_graph::Value;
+use crate::gid_text::{Binders, parse};
+use gid::{Document, Value};
 
 fn grap_expression(value: &Value) -> &Value {
     value
@@ -17,14 +16,14 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
     grap::evaluate(
         expression,
         |cell| doc.cells.value(cell).cloned(),
-        &crate::stack::load().foreign,
+        &crate::stack::load::<()>().foreign,
         grap::DEFAULT_FUEL,
     )
 }
 
 #[test]
 fn the_sample_contains_a_projectable_grap_computation() {
-    let (doc, binders) = parse(include_str!("../../sample.gid")).expect("the sample parses");
+    let (doc, binders) = parse(include_str!("../../sample.gid.txt")).expect("the sample parses");
     let roof = doc
         .root
         .as_ref()
@@ -55,7 +54,7 @@ fn the_sample_contains_a_projectable_grap_computation() {
 }
 
 fn demo_fixture() -> (Document, Binders) {
-    parse(include_str!("../../grap-demo.gid")).expect("the Grap demo parses")
+    parse(include_str!("../../grap-demo.gid.txt")).expect("the Grap demo parses")
 }
 
 fn demo_entry<'a>(doc: &'a Document, binders: &Binders, label: &str) -> &'a Value {

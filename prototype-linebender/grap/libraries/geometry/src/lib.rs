@@ -2,10 +2,10 @@
 //! constructor consuming the f64 library's representation.
 
 use grap::{ForeignFunction, ForeignFunctions};
-use progred_graph::{Cells, Value};
+use gid::{Cells, Value};
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const CIRCLE: CellId = CellId::from_u128(0xeba2ca3d6a0fba957bd96bfb138c7a5b);
     pub const RADIUS: CellId = CellId::from_u128(0xe2321b78d65f87918c64b7875408051a);
@@ -61,7 +61,7 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     #[test]
     fn circle_is_a_library_call_over_an_f64() {

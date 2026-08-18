@@ -1,10 +1,10 @@
-//! A nonempty simple name on a record. The field is ordinary graph
+//! A nonempty simple name on a record. The field is ordinary GID
 //! data. This editor assumes the library; other hosts need not.
 
-use progred_graph::{CellId, Cells, Value};
+use gid::{CellId, Cells, Value};
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const NAME: CellId = CellId::from_u128(0x02e562654d6d0828d3a7559e6f75fffe);
 }
@@ -35,7 +35,7 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     #[test]
     fn names_are_extensible_ordinary_record_data() {

@@ -5,7 +5,7 @@
 //! run is the mounted editor's lifetime, and write-through reports
 //! only the run's first write (see `selection::write_through`).
 
-use crate::document::{Document, Path};
+use gid::{Document, Path};
 
 /// A pre-mutation snapshot: the document, and the selection to
 /// restore (an edge path; pendings restore as no selection — they
@@ -87,7 +87,7 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Cells, Step, Value, new_cell_id};
+    use gid::{Cells, Step, Value, new_cell_id};
 
     fn x() -> Step {
         Step::Key(crate::test_values::label("x"))

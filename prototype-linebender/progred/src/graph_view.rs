@@ -12,15 +12,15 @@
 //! Rendering and hit-testing are one pure pass: build geometry from
 //! state, draw it, register handlers over it.
 
-use crate::document::{Document, short_id};
 use crate::hover::HasHover;
+use crate::identity::short_id;
 use crate::measured::{self, Extent, leaf};
 use crate::projection::command;
 use crate::selection::Selection;
 use crate::sources::Sources;
+use gid::{CellId, Document, Value};
 use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};
-use progred_graph::{CellId, Value};
 use puri::draw::Canvas;
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, draw_layout};
@@ -900,7 +900,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{Cells, new_cell_id};
+    use gid::{Cells, new_cell_id};
 
     fn doc() -> (Document, CellId, CellId) {
         let mut cells = Cells::new();

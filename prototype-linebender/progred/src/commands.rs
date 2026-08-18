@@ -1,7 +1,6 @@
 //! Editor commands: insert, delete, clipboard, rename, collapse.
 
 use crate::completion;
-use crate::document;
 use crate::graph_view;
 use crate::model::Selected;
 use crate::navigate;
@@ -9,7 +8,7 @@ use crate::projection;
 use crate::selection;
 use crate::sources;
 use crate::{App, CLIPBOARD_FORMAT, plain};
-use progred_graph::{CellId, Step, Value};
+use gid::{CellId, Path, Step, Value};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -74,15 +73,15 @@ impl App {
                 // intact) already covers the deletion.
                 let covered = *recorded;
                 let before = self.model.doc.clone();
-                selection::delete_edge(&mut self.model.doc, &self.model.stack.library, &path) && {
+                selection::delete_edge(&mut self.model.doc, &self.stack.library, &path) && {
                     if !covered {
                         self.model.history.record(before, Some(path.clone()));
                         self.refresh_title();
                     }
                     let next = navigate::selection_after_delete(descends, &path);
                     self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                        &self.model.sources(),
-                        &self.model.stack.projection,
+                        &self.sources(),
+                        &self.stack.projection,
                         next,
                     )));
                     true
@@ -147,20 +146,15 @@ impl App {
 
     /// Commits the pending value stage — one undo step — and selects
     /// the edge it wrote.
-    pub(crate) fn commit_value(&mut self, path: document::Path, action: &completion::EntryAction) {
+    pub(crate) fn commit_value(&mut self, path: Path, action: &completion::EntryAction) {
         let before = self.model.doc.clone();
-        if completion::commit_pending(
-            &mut self.model.doc,
-            &self.model.stack.library,
-            &path,
-            action,
-        ) {
+        if completion::commit_pending(&mut self.model.doc, &self.stack.library, &path, action) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
         self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-            &self.model.sources(),
-            &self.model.stack.projection,
+            &self.sources(),
+            &self.stack.projection,
             path,
         )));
     }
@@ -175,7 +169,7 @@ impl App {
     /// history step, the value carried.
     pub(crate) fn commit_label(
         &mut self,
-        parent: document::Path,
+        parent: Path,
         replacing: Option<CellId>,
         action: &completion::EntryAction,
     ) {
@@ -184,10 +178,10 @@ impl App {
         };
         let mut path = parent.clone();
         path.push(Step::Key(label));
-        if self.model.sources().resolve(&path).is_some() {
+        if self.sources().resolve(&path).is_some() {
             self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                &self.model.sources(),
-                &self.model.stack.projection,
+                &self.sources(),
+                &self.stack.projection,
                 path,
             )));
             return;
@@ -200,7 +194,7 @@ impl App {
                 }
                 let renamed = selection::rename_field(
                     &mut self.model.doc,
-                    &self.model.stack.library,
+                    &self.stack.library,
                     &parent,
                     &old,
                     label,
@@ -217,8 +211,8 @@ impl App {
                     path.push(Step::Key(old));
                 }
                 self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                    &self.model.sources(),
-                    &self.model.stack.projection,
+                    &self.sources(),
+                    &self.stack.projection,
                     path,
                 )));
             }
@@ -263,7 +257,7 @@ impl App {
     /// structure. Graph selections copy their node's value.
     pub(crate) fn copy_selection(&self) -> bool {
         use clipboard_rs::{Clipboard, ClipboardContext};
-        let sources = self.model.sources();
+        let sources = self.sources();
         let value = match &self.model.selection {
             Some(Selected::Tree(selection)) => sources.resolve(selection.path()).cloned(),
             Some(Selected::Graph(graph_view::GraphSelection::Node(node))) => {
@@ -364,16 +358,16 @@ impl App {
         let path = path.clone();
         // Idempotent pastes stay off the undo stack, as write_through
         // keeps no-op rewrites off it.
-        if self.model.sources().resolve(&path) == Some(&value) {
+        if self.sources().resolve(&path) == Some(&value) {
             return true;
         }
         let before = self.model.doc.clone();
-        if selection::set_value(&mut self.model.doc, &self.model.stack.library, &path, value) {
+        if selection::set_value(&mut self.model.doc, &self.stack.library, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
             self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                &self.model.sources(),
-                &self.model.stack.projection,
+                &self.sources(),
+                &self.stack.projection,
                 path,
             )));
             true
@@ -451,7 +445,7 @@ impl App {
                             Some(Selected::Tree(current)) => Some(current),
                             _ => None,
                         };
-                        let sources = self.model.sources();
+                        let sources = self.sources();
                         let shift = event.modifiers.shift();
                         let started = match tree {
                             Some(current) if projection::command(&event.modifiers) => {
@@ -478,8 +472,8 @@ impl App {
                             self.model.selection =
                                 (!(back.is_empty() && self.model.doc.root.is_none())).then(|| {
                                     Selected::Tree(selection::Selection::edge(
-                                        &self.model.sources(),
-                                        &self.model.stack.projection,
+                                        &self.sources(),
+                                        &self.stack.projection,
                                         back,
                                     ))
                                 });
@@ -498,8 +492,8 @@ impl App {
                             }
                             self.model.selection =
                                 Some(Selected::Tree(selection::Selection::edge(
-                                    &self.model.sources(),
-                                    &self.model.stack.projection,
+                                    &self.sources(),
+                                    &self.stack.projection,
                                     back,
                                 )));
                             true
@@ -522,7 +516,7 @@ impl App {
             && match &self.model.selection {
                 Some(Selected::Tree(selection::Selection::Edge { path, .. })) => {
                     let path = path.clone();
-                    match selection::pending_rename(&self.model.sources(), &path) {
+                    match selection::pending_rename(&self.sources(), &path) {
                         Some(pending) => {
                             self.model.selection = Some(Selected::Tree(pending));
                             true
@@ -555,18 +549,18 @@ impl App {
         let path = path.clone();
         let sources = sources::Sources {
             doc: &self.model.doc,
-            library: &self.model.stack.library,
+            library: &self.stack.library,
         };
         match set {
             None => selection::toggle_collapse(
                 &sources,
-                &self.model.stack.projection,
+                &self.stack.projection,
                 &mut self.model.collapse,
                 &path,
             ),
             Some(closed) => selection::set_collapse(
                 &sources,
-                &self.model.stack.projection,
+                &self.stack.projection,
                 &mut self.model.collapse,
                 &path,
                 closed,

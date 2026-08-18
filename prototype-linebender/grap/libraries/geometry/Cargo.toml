@@ -8,4 +8,4 @@ grap = { path = "../.." }
 grap-absent = { path = "../absent" }
 grap-f64 = { path = "../f64" }
 progred-name = { path = "../../../conventions/name" }
-progred-graph = { path = "../../../graph" }
+gid = { path = "../../../gid" }

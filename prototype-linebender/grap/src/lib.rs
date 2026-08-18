@@ -1,10 +1,10 @@
-//! A small evaluator whose expressions and results are Progred graph
+//! A small evaluator whose expressions and results are GID
 //! values. The evaluator recognizes only Grap forms; ordinary records
 //! and lists are inert data, and each recognized form chooses its own
 //! recursive evaluation.
 
 use im::{HashMap, OrdMap};
-use progred_graph::{CellId, Cells, Value};
+use gid::{CellId, Cells, Value};
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -12,7 +12,7 @@ mod display;
 pub use display::display;
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const FUNCTION: CellId = CellId::from_u128(0x751fca4373debdd0b7e6eb73e08d684b);
     pub const PARAMS: CellId = CellId::from_u128(0x195b378d0d31d90ab0d7366c15346b70);
@@ -31,7 +31,7 @@ pub mod vocabulary {
 }
 
 pub mod absent {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const FUEL_EXHAUSTED: CellId =
         CellId::from_u128(0x513628d759c04b3e7088b575e555a80e);
@@ -508,7 +508,7 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     fn blob(text: &str) -> Value {
         Value::from(text.as_bytes().to_vec())
@@ -988,7 +988,7 @@ mod tests {
             lambda([parameter], Value::from(parameter)),
             [
                 (parameter, blob("result")),
-                (extra, blob("still graph data")),
+                (extra, blob("still GID data")),
             ],
         );
         let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::default(), 10);

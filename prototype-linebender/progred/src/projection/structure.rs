@@ -2,22 +2,35 @@
 //! supplies collapse, names, and pending state while building the
 //! tree; `realize` is the only interpreter.
 
-use super::Cx;
-use crate::document::short_id;
+use super::{Cx, Hooks, select_handler};
+use crate::hover::Hover;
+use crate::identity::short_id;
 use crate::selection::writable_at;
+use gid::{CellId, Step, Value, hex_string};
 use progred_display::{
-    Click, Delim, Layout, bracket, col, delim, descend, dim, group, head, hug, id, label, on_click,
-    query, row, slot,
+    Delim, Layout, PointerClick, block_hover, bracket, col, delim, descend, dim, group, head, hug,
+    id, label, on_click, on_hover, query, row, slot,
 };
-use progred_graph::{CellId, Step, Value, hex_string};
+use puri::text::{TextCtx, caret_index, line_layout};
 use std::collections::HashSet;
+use std::rc::Rc;
+use vello::kurbo::Point;
 
-pub fn of(cx: &Cx, path: &[Step], ancestors: &HashSet<CellId>, value: &Value) -> Layout {
+type View<World> = Layout<World, Hover>;
+
+pub fn of<World: 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    value: &Value,
+    hooks: &Hooks<World>,
+) -> View<World> {
     match value {
-        Value::Blob(bytes) => on_click(id(blob_text(bytes)), Click::Select),
-        Value::Cell(cell) => cell_layout(cx, path, ancestors, *cell),
-        Value::List(elements) => list_layout(cx, path, elements),
-        Value::Record(fields) => record_layout(cx, path, fields),
+        Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
+        Value::Cell(cell) => cell_layout(cx, path, ancestors, *cell, hooks),
+        Value::List(elements) => list_layout(cx, path, elements, hooks),
+        Value::Record(fields) => record_layout(cx, tcx, path, fields, hooks),
     }
 }
 
@@ -29,7 +42,13 @@ fn blob_text(bytes: &[u8]) -> String {
     }
 }
 
-fn cell_layout(cx: &Cx, path: &[Step], ancestors: &HashSet<CellId>, cell: CellId) -> Layout {
+fn cell_layout<World: 'static>(
+    cx: &Cx,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    cell: CellId,
+    hooks: &Hooks<World>,
+) -> View<World> {
     let mut followed = path.to_vec();
     followed.push(Step::Follow);
     let value = cx.sources.value(cell);
@@ -40,19 +59,22 @@ fn cell_layout(cx: &Cx, path: &[Step], ancestors: &HashSet<CellId>, cell: CellId
         && !pending_inside
         && cx.collapse.collapsed(path, ancestors.contains(&cell));
     if elided {
-        return on_click(
+        return selectable(
             row(
                 4.0,
                 [
                     delim(Delim::Paren, true),
-                    on_click(dim("…"), Click::Toggle),
+                    toggle(dim("…"), path, hooks),
                     delim(Delim::Paren, false),
                 ],
             ),
-            Click::Select,
+            path,
+            &Value::from(cell),
+            hooks,
+            true,
         );
     }
-    let head = on_click(head(cell), Click::Select);
+    let head = selectable(head(cell), path, &Value::from(cell), hooks, true);
     let inner = match value {
         None if !cx.sources.writable(cell) => head,
         None | Some(_) => hug(head, descend(Step::Follow), 4.0, 20.0),
@@ -60,12 +82,13 @@ fn cell_layout(cx: &Cx, path: &[Step], ancestors: &HashSet<CellId>, cell: CellId
     bracket(Delim::Paren, inner)
 }
 
-fn list_layout(
+fn list_layout<World: 'static>(
     cx: &Cx,
     path: &[Step],
-    elements: &im::OrdMap<progred_graph::Position, Value>,
-) -> Layout {
-    let mut items: Vec<(progred_graph::Position, bool)> = elements
+    elements: &im::OrdMap<gid::Position, Value>,
+    hooks: &Hooks<World>,
+) -> View<World> {
+    let mut items: Vec<(gid::Position, bool)> = elements
         .iter()
         .map(|(position, _)| (position.clone(), true))
         .collect();
@@ -77,25 +100,31 @@ fn list_layout(
         && items.iter().all(|(_, present)| *present)
         && cx.collapse.collapsed(path, false);
     if collapsed {
-        return on_click(
+        return selectable(
             row(
                 4.0,
                 [
                     delim(Delim::Bracket, true),
-                    on_click(dim("…"), Click::Toggle),
+                    toggle(dim("…"), path, hooks),
                     delim(Delim::Bracket, false),
                 ],
             ),
-            Click::Select,
+            path,
+            &Value::List(elements.clone()),
+            hooks,
+            true,
         );
     }
     if items.is_empty() {
-        return on_click(
+        return selectable(
             row(
                 0.0,
                 [delim(Delim::Bracket, true), delim(Delim::Bracket, false)],
             ),
-            Click::Quiet,
+            path,
+            &Value::List(elements.clone()),
+            hooks,
+            false,
         );
     }
     let writable = writable_at(&cx.sources, path);
@@ -104,12 +133,7 @@ fn list_layout(
         if index > 0 {
             let separator = dim(", ");
             flat.push(if writable {
-                on_click(
-                    separator,
-                    Click::Insert {
-                        after: items[index - 1].0.clone(),
-                    },
-                )
+                insert(separator, path, items[index - 1].0.clone(), hooks)
             } else {
                 separator
             });
@@ -117,17 +141,29 @@ fn list_layout(
         flat.push(descend(Step::Element(position.clone())));
     }
     flat.push(delim(Delim::Bracket, false));
-    let rows: Vec<Layout> = items
+    let rows: Vec<View<World>> = items
         .iter()
         .map(|(position, _)| descend(Step::Element(position.clone())))
         .collect();
     group(
-        on_click(row(0.0, flat), Click::Quiet),
+        selectable(
+            row(0.0, flat),
+            path,
+            &Value::List(elements.clone()),
+            hooks,
+            false,
+        ),
         bracket(Delim::Bracket, col(0, 4.0, rows)),
     )
 }
 
-fn record_layout(cx: &Cx, path: &[Step], fields: &im::OrdMap<CellId, Value>) -> Layout {
+fn record_layout<World: 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    fields: &im::OrdMap<CellId, Value>,
+    hooks: &Hooks<World>,
+) -> View<World> {
     let consumes_simple_name = !cx.raw
         && path
             .split_last()
@@ -164,22 +200,28 @@ fn record_layout(cx: &Cx, path: &[Step], fields: &im::OrdMap<CellId, Value>) -> 
         && items.iter().all(|(_, present)| *present)
         && cx.collapse.collapsed(path, false);
     if collapsed {
-        return on_click(
+        return selectable(
             row(
                 4.0,
                 [
                     delim(Delim::Brace, true),
-                    on_click(dim("…"), Click::Toggle),
+                    toggle(dim("…"), path, hooks),
                     delim(Delim::Brace, false),
                 ],
             ),
-            Click::Select,
+            path,
+            &Value::Record(fields.clone()),
+            hooks,
+            true,
         );
     }
     if items.is_empty() && !pending_edge {
-        return on_click(
+        return selectable(
             row(0.0, [delim(Delim::Brace, true), delim(Delim::Brace, false)]),
-            Click::Quiet,
+            path,
+            &Value::Record(fields.clone()),
+            hooks,
+            false,
         );
     }
     let mut flat = vec![delim(Delim::Brace, true)];
@@ -189,7 +231,7 @@ fn record_layout(cx: &Cx, path: &[Step], fields: &im::OrdMap<CellId, Value>) -> 
         }
         let name = match cx.pending_rename_under(path) {
             Some((replacing, _, _)) if replacing == key => query(true),
-            _ => field_label(cx, path, *key),
+            _ => field_label(cx, tcx, path, *key, hooks),
         };
         flat.push(name);
         flat.push(dim(": "));
@@ -202,53 +244,178 @@ fn record_layout(cx: &Cx, path: &[Step], fields: &im::OrdMap<CellId, Value>) -> 
         flat.push(pending_edge_layout());
     }
     flat.push(delim(Delim::Brace, false));
-    let mut rows: Vec<Layout> = items
+    let mut rows: Vec<View<World>> = items
         .iter()
-        .map(|(key, present)| field_row(cx, path, *key, *present))
+        .map(|(key, present)| field_row(cx, tcx, path, *key, *present, hooks))
         .collect();
     if pending_edge {
         rows.push(pending_edge_layout());
     }
     group(
-        on_click(row(0.0, flat), Click::Quiet),
+        selectable(
+            row(0.0, flat),
+            path,
+            &Value::Record(fields.clone()),
+            hooks,
+            false,
+        ),
         bracket(Delim::Brace, col(0, 4.0, rows)),
     )
 }
 
-fn field_head(cx: &Cx, path: &[Step], key: CellId, present: bool) -> Layout {
+fn field_head<World: 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    key: CellId,
+    present: bool,
+    hooks: &Hooks<World>,
+) -> View<World> {
     let label = match cx.pending_rename_under(path) {
         Some((replacing, _, _)) if replacing == &key => query(true),
-        _ => field_label(cx, path, key),
+        _ => field_label(cx, tcx, path, key, hooks),
     };
     let head = row(0.0, [label, dim(":")]);
     if present {
-        on_click(head, Click::Field { key })
+        let mut child = path.to_vec();
+        child.push(Step::Key(key));
+        selectable(head, &child, &Value::from(key), hooks, true)
     } else {
-        on_click(head, Click::Pick { key })
+        pick(head, key, hooks)
     }
 }
 
-fn field_row(cx: &Cx, path: &[Step], key: CellId, present: bool) -> Layout {
+fn field_row<World: 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    key: CellId,
+    present: bool,
+    hooks: &Hooks<World>,
+) -> View<World> {
     hug(
-        field_head(cx, path, key, present),
+        field_head(cx, tcx, path, key, present, hooks),
         descend(Step::Key(key)),
         6.0,
         20.0,
     )
 }
 
-fn field_label(cx: &Cx, path: &[Step], key: CellId) -> Layout {
+fn field_label<World: 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    key: CellId,
+    hooks: &Hooks<World>,
+) -> View<World> {
     let shown = match cx.name(key) {
         Some(name) => label(name),
         None => id(short_id(key)),
     };
     if writable_at(&cx.sources, path) {
-        on_click(shown, Click::Rename { key })
+        rename(cx, tcx, shown, path, key, hooks)
     } else {
         shown
     }
 }
 
-fn pending_edge_layout() -> Layout {
-    on_click(row(0.0, [query(true), dim(": "), slot()]), Click::Absorb)
+fn selectable<World: 'static>(
+    child: View<World>,
+    path: &[Step],
+    value: &Value,
+    hooks: &Hooks<World>,
+    claim_hover: bool,
+) -> View<World> {
+    let path = path.to_vec();
+    let clicked = on_click(child, select_handler(path.clone(), value.clone(), hooks));
+    if claim_hover {
+        on_hover(clicked, Hover::Value(path))
+    } else {
+        clicked
+    }
+}
+
+fn toggle<World: 'static>(child: View<World>, path: &[Step], hooks: &Hooks<World>) -> View<World> {
+    let target = path.to_vec();
+    let toggle = hooks.toggle.clone();
+    on_hover(
+        on_click(
+            child,
+            Rc::new(move |world, _| {
+                toggle(world, target.clone());
+                true
+            }),
+        ),
+        Hover::Toggle(path.to_vec()),
+    )
+}
+
+fn insert<World: 'static>(
+    child: View<World>,
+    path: &[Step],
+    after: gid::Position,
+    hooks: &Hooks<World>,
+) -> View<World> {
+    let mut target = path.to_vec();
+    target.push(Step::Element(after));
+    let insert = hooks.insert.clone();
+    let handler_target = target.clone();
+    on_hover(
+        on_click(
+            child,
+            Rc::new(move |world, _| {
+                insert(world, handler_target.clone());
+                true
+            }),
+        ),
+        Hover::Insert(target),
+    )
+}
+
+fn pick<World: 'static>(child: View<World>, key: CellId, hooks: &Hooks<World>) -> View<World> {
+    let pick = hooks.pick.clone();
+    on_click(
+        child,
+        Rc::new(move |world, click: PointerClick| click.command && pick(world, Value::Cell(key))),
+    )
+}
+
+fn rename<World: 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    child: View<World>,
+    path: &[Step],
+    key: CellId,
+    hooks: &Hooks<World>,
+) -> View<World> {
+    let mut target = path.to_vec();
+    target.push(Step::Key(key));
+    let (spelling, style) = super::label_spelling(cx, &key);
+    let layout = line_layout(tcx, &spelling, style);
+    let rename = hooks.rename.clone();
+    let handler_target = target.clone();
+    on_hover(
+        on_click(
+            child,
+            Rc::new(move |world, click: PointerClick| {
+                if click.command {
+                    return false;
+                }
+                rename(
+                    world,
+                    handler_target.clone(),
+                    caret_index(&layout, Point::new(click.x, click.y)),
+                );
+                true
+            }),
+        ),
+        Hover::Label(target),
+    )
+}
+
+fn pending_edge_layout<World: 'static>() -> View<World> {
+    block_hover(on_click(
+        row(0.0, [query(true), dim(": "), slot()]),
+        Rc::new(|_, _| true),
+    ))
 }

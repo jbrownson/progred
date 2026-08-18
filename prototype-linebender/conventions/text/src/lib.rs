@@ -1,20 +1,17 @@
-//! A UTF-8 text convention over ordinary graph data. Text is a
-//! positively recognized record facet, not a graph-core atom.
+//! A UTF-8 text convention over ordinary GID data. Text is a
+//! positively recognized record facet, not a GID-core atom.
 
-use progred_display::{Env, Layout, LineEdit, editable_line, overlay};
-use progred_graph::Value;
+use gid::Value;
+use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, overlay};
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
 }
 
 pub fn value(text: impl Into<String>) -> Value {
-    Value::record([(
-        vocabulary::UTF8,
-        Value::from(text.into().into_bytes()),
-    )])
+    Value::record([(vocabulary::UTF8, Value::from(text.into().into_bytes()))])
 }
 
 pub fn read(value: &Value) -> Option<&str> {
@@ -38,14 +35,16 @@ pub fn line(value: &Value) -> Option<LineEdit> {
     })
 }
 
-pub fn display(_: &dyn Env, value: &Value) -> Option<Layout> {
-    line(value).map(editable_line)
+pub fn display<World, Hover>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    line(input.value).map(editable_line)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     #[test]
     fn utf8_is_an_open_convention_over_bytes() {
@@ -78,7 +77,7 @@ mod tests {
 
     struct Unused;
 
-    impl Env for Unused {
+    impl progred_display::Env for Unused {
         fn evaluate(&self, _: &Value) -> (Value, usize) {
             (Value::record([]), 0)
         }
@@ -86,13 +85,14 @@ mod tests {
 
     #[test]
     fn display_is_an_editable_line() {
-        use progred_display::Click;
         assert!(matches!(
-            display(&Unused, &value("hi")),
-            Some(Layout::OnClick {
-                click: Click::Line(line),
-                ..
-            }) if line.text == "hi"
+            display::<(), ()>(ProjectionInput {
+                env: &Unused,
+                value: &value("hi"),
+                select: std::rc::Rc::new(|_, _| false),
+                hover: (),
+            }),
+            Some(Layout::Leaf(progred_display::Display::LineEdit(line))) if line.text == "hi"
         ));
     }
 }

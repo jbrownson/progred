@@ -2,12 +2,12 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
+use gid::{Cells, Value};
 use grap::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
-use progred_display::{Env, Layout, LineEdit, editable_line, overlay};
-use progred_graph::{Cells, Value};
+use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, overlay};
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const F64: CellId = CellId::from_u128(0xed11fde03b7c2c1ba2fccc3cdba5d561);
     pub const ADD: CellId = CellId::from_u128(0x201af445eb7e2c270bb5ead10b781fc1);
@@ -19,10 +19,7 @@ pub mod vocabulary {
 }
 
 pub fn value(value: f64) -> Value {
-    Value::record([(
-        vocabulary::F64,
-        Value::from(value.to_le_bytes().to_vec()),
-    )])
+    Value::record([(vocabulary::F64, Value::from(value.to_le_bytes().to_vec()))])
 }
 
 pub fn read(value: &Value) -> Option<f64> {
@@ -47,8 +44,10 @@ pub fn line(value: &Value) -> Option<LineEdit> {
     })
 }
 
-pub fn display(_: &dyn Env, value: &Value) -> Option<Layout> {
-    line(value).map(editable_line)
+pub fn display<World, Hover>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    line(input.value).map(editable_line)
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -115,15 +114,12 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::{CellId, new_cell_id};
+    use gid::{CellId, new_cell_id};
 
     fn call(function: CellId, left: Value, right: Value) -> Value {
         grap::call(
             Value::from(function),
-            [
-                (vocabulary::LEFT, left),
-                (vocabulary::RIGHT, right),
-            ],
+            [(vocabulary::LEFT, left), (vocabulary::RIGHT, right)],
         )
     }
 

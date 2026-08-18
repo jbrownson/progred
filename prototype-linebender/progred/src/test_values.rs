@@ -1,9 +1,9 @@
-use progred_graph::{CellId, Value, new_cell_id};
+use gid::{CellId, Value, new_cell_id};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 
 fn sample_relation(name: &str) -> Option<CellId> {
-    use crate::document::sample_vocabulary as sample;
+    use crate::sample::sample_vocabulary as sample;
     match name {
         "at" => Some(sample::AT),
         "row" => Some(sample::ROW),

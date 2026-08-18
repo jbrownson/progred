@@ -6,4 +6,4 @@ edition = "2024"
 [dependencies]
 progred-isa = { path = "../../../conventions/isa" }
 progred-name = { path = "../../../conventions/name" }
-progred-graph = { path = "../../../graph" }
+gid = { path = "../../../gid" }

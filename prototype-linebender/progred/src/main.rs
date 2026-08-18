@@ -3,15 +3,15 @@
 
 mod commands;
 mod completion;
-mod document;
 mod filter;
 mod frame;
-mod gid;
+mod gid_text;
 #[cfg(test)]
 mod grap_examples;
 mod graph_view;
 mod history;
 mod hover;
+mod identity;
 mod library;
 #[cfg(target_os = "macos")]
 mod macos_menu;
@@ -21,13 +21,16 @@ mod model;
 mod navigate;
 mod projection;
 mod render;
+#[cfg(test)]
+mod sample;
 mod selection;
 mod sources;
+mod spine;
 mod stack;
-mod store;
 mod styles;
 #[cfg(test)]
 mod test_values;
+mod text_store;
 
 use crate::frame::{Dispatch, FrameDisposition, FrameVisibility, Hovered, frame_disposition};
 use crate::model::{Model, Selected, ViewFlags};
@@ -114,14 +117,17 @@ pub(crate) struct App {
     pub(crate) layout_cx: LayoutContext<Brush>,
     pub(crate) text_clipboard: SystemTextClipboard,
     pub(crate) text_cache: puri::text::TextCache,
+    /// Editor configuration shared by every document loaded into the
+    /// app: library cells, Rust functions, and composed projection.
+    pub(crate) stack: stack::Stack<App>,
     pub(crate) model: Model,
     /// Where the document lives; `None` is untitled until the first
     /// save asks for a path.
     pub(crate) doc_path: Option<PathBuf>,
-    /// The notation's file-local binder table, surviving load → save
+    /// The text bridge's file-local binder table, surviving load → save
     /// so spellings round-trip; never part of the model, invisible
     /// in the document.
-    pub(crate) binders: gid::Binders,
+    pub(crate) text_binders: gid_text::Binders,
     #[cfg(target_os = "macos")]
     pub(crate) native_menu: macos_menu::Menu,
     pub(crate) menu: menu::State,
@@ -144,7 +150,7 @@ pub(crate) struct App {
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
     /// scrolling.
-    pub(crate) revealed: Option<(document::Path, std::mem::Discriminant<selection::Selection>)>,
+    pub(crate) revealed: Option<(gid::Path, std::mem::Discriminant<selection::Selection>)>,
     pub(crate) dispatch: Option<Dispatch>,
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
@@ -197,7 +203,7 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
 
 /// The selection as a restorable edge path — pendings and graph
 /// selections restore as nothing, being disposable.
-pub(crate) fn edge_path(selection: &Option<Selected>) -> Option<document::Path> {
+pub(crate) fn edge_path(selection: &Option<Selected>) -> Option<gid::Path> {
     match selection {
         Some(Selected::Tree(selection::Selection::Edge { path, .. })) => Some(path.clone()),
         _ => None,
@@ -212,8 +218,8 @@ pub(crate) fn plain(event: &KeyboardEvent) -> bool {
         || event.modifiers.shift())
 }
 
-pub(crate) fn dialog() -> rfd::FileDialog {
-    rfd::FileDialog::new().add_filter("gid", &["gid"])
+pub(crate) fn text_dialog() -> rfd::FileDialog {
+    rfd::FileDialog::new().add_filter("GID text", &["txt"])
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -377,8 +383,8 @@ impl ApplicationHandler<UserEvent> for App {
                                 Some(path) => {
                                     self.model.selection =
                                         Some(Selected::Tree(selection::selected_by_arrow(
-                                            &self.model.sources(),
-                                            &self.model.stack.projection,
+                                            &self.sources(),
+                                            &self.stack.projection,
                                             path,
                                             &key_event,
                                         )));
@@ -424,13 +430,13 @@ impl ApplicationHandler<UserEvent> for App {
                     _ => false,
                 };
                 if handled {
+                    let library = &self.stack.library;
                     let model = &mut self.model;
                     if let Some(Selected::Tree(selection)) = &mut model.selection {
                         let before = model.doc.clone();
                         // True on the first write of the editor's
                         // life: the run's one step opens here.
-                        if selection::write_through(&mut model.doc, &model.stack.library, selection)
-                        {
+                        if selection::write_through(&mut model.doc, library, selection) {
                             let path = selection.path().to_vec();
                             model.history.record(before, Some(path));
                             self.refresh_title();
@@ -528,18 +534,18 @@ fn main() {
     // not parse is refused rather than silently replaced, so a save
     // cannot clobber it with the sample.
     let (doc, binders) = match &doc_path {
-        Some(path) if path.exists() => store::load(path).unwrap_or_else(|error| {
+        Some(path) if path.exists() => text_store::load(path).unwrap_or_else(|error| {
             eprintln!("failed to load {}: {error}", path.display());
             std::process::exit(1);
         }),
-        // No path starts EMPTY — the sample lives in sample.gid now,
+        // No path starts EMPTY — the sample lives in sample.gid.txt now,
         // opened like any document.
         _ => (
-            document::Document {
+            gid::Document {
                 root: None,
-                cells: progred_graph::Cells::new(),
+                cells: gid::Cells::new(),
             },
-            gid::Binders::new(),
+            gid_text::Binders::new(),
         ),
     };
 
@@ -565,11 +571,11 @@ fn main() {
         layout_cx: LayoutContext::new(),
         text_clipboard: SystemTextClipboard,
         text_cache: puri::text::TextCache::default(),
+        stack: stack::load(),
         model: Model {
             doc,
             selection: None,
             collapse: selection::Collapse::default(),
-            stack: stack::load(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view: ViewFlags::default(),
@@ -577,7 +583,7 @@ fn main() {
             scroll_x: 0.0,
         },
         doc_path,
-        binders,
+        text_binders: binders,
         #[cfg(target_os = "macos")]
         native_menu,
         menu: menu::State::default(),
@@ -600,6 +606,14 @@ fn main() {
 }
 
 impl App {
+    /// The current document read over the app's library.
+    pub(crate) fn sources(&self) -> sources::Sources<'_> {
+        sources::Sources {
+            doc: &self.model.doc,
+            library: &self.stack.library,
+        }
+    }
+
     pub(crate) fn title(&self) -> String {
         let dirty = if self.model.history.dirty() {
             " •"
@@ -709,8 +723,8 @@ impl App {
             // content the restored document no longer has.
             self.model.selection = restore.map(|path| {
                 Selected::Tree(selection::Selection::edge(
-                    &self.model.sources(),
-                    &self.model.stack.projection,
+                    &self.sources(),
+                    &self.stack.projection,
                     path,
                 ))
             });
@@ -780,16 +794,16 @@ impl App {
     pub(crate) fn proceed(&mut self, event_loop: &ActiveEventLoop, then: AfterDiscard) {
         match then {
             AfterDiscard::New => self.adopt_model(
-                document::Document {
+                gid::Document {
                     root: None,
-                    cells: progred_graph::Cells::new(),
+                    cells: gid::Cells::new(),
                 },
                 None,
-                gid::Binders::new(),
+                gid_text::Binders::new(),
             ),
             AfterDiscard::Open => {
-                if let Some(path) = dialog().pick_file() {
-                    match store::load(&path) {
+                if let Some(path) = text_dialog().pick_file() {
+                    match text_store::load(&path) {
                         Ok((doc, binders)) => self.adopt_model(doc, Some(path), binders),
                         Err(error) => {
                             eprintln!("failed to open {}: {error}", path.display());
@@ -802,14 +816,15 @@ impl App {
     }
 
     /// Save saves in place, or asks for a path when untitled; save-as
-    /// always asks. Write-through editing means the graph is always
+    /// always asks. Write-through editing means the GID document is always
     /// current, so there is nothing to flush first. A cancelled dialog
     /// saves nothing.
     pub(crate) fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
-        let target = in_place.or_else(|| dialog().set_file_name("untitled.gid").save_file());
+        let target =
+            in_place.or_else(|| text_dialog().set_file_name("untitled.gid.txt").save_file());
         if let Some(path) = target {
-            match store::save(&path, &self.model.doc, &self.binders) {
+            match text_store::save(&path, &self.model.doc, &self.text_binders) {
                 Ok(()) => {
                     self.model.history.mark_saved();
                     // A run must not straddle the save mark, or edits
@@ -832,17 +847,16 @@ impl App {
     /// run against the new model.
     pub(crate) fn adopt_model(
         &mut self,
-        doc: document::Document,
+        doc: gid::Document,
         path: Option<PathBuf>,
-        binders: gid::Binders,
+        text_binders: gid_text::Binders,
     ) {
-        self.binders = binders;
+        self.text_binders = text_binders;
         let view = self.model.view;
         self.model = Model {
             doc,
             selection: None,
             collapse: selection::Collapse::default(),
-            stack: self.model.stack.clone(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view,

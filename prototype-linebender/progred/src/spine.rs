@@ -1,12 +1,13 @@
-//! The value lens: pure reads and rebuilds along a spine of Key and
+//! Progred's value lens: pure reads and rebuilds along a spine of Key and
 //! Element steps within one value. Every editor write reduces to
 //! splitting its path at the last Follow — the owning cell — and
 //! rebuilding that cell's value along the remaining spine with these.
 //! A Follow inside a spine crosses an identity boundary, which is the
 //! caller's split point, never the lens's: it declines.
 
-use crate::value::{Step, Value};
+use gid::{Step, Value};
 
+#[cfg(test)]
 pub fn get<'a>(value: &'a Value, spine: &[Step]) -> Option<&'a Value> {
     spine.iter().try_fold(value, |value, step| match step {
         Step::Key(label) => value.as_record()?.get(label),
@@ -79,8 +80,7 @@ pub fn without(value: &Value, spine: &[Step]) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::position;
-    use crate::CellId;
+    use gid::{CellId, position};
 
     fn relation(name: &str) -> CellId {
         CellId::from_u128(match name {

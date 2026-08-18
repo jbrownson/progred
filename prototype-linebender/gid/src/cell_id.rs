@@ -1,4 +1,4 @@
-//! Opaque cell identity: construction, parsing, and stable external
+//! Opaque GID cell identity: construction, parsing, and stable external
 //! spellings. All 128 bits are identity; there are no UUID version or
 //! variant bits.
 

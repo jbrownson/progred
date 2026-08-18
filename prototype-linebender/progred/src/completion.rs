@@ -1,10 +1,10 @@
 //! Completion offers for pending value and label queries.
 
-use crate::document::{Document, short_id};
 use crate::filter;
+use crate::identity::short_id;
 use crate::selection::{parse_blob, set_value};
 use crate::sources::Sources;
-use progred_graph::{CellId, Cells, Step, Value, new_cell_id};
+use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use vello::kurbo::Rect;
 
 /// A completion offer on a pending. The display styles itself by the
@@ -115,18 +115,20 @@ pub(crate) fn completion_entries(
     // and it leaves.
     let (local, external): (Vec<_>, Vec<_>) = document_cells(sources)
         .into_iter()
-        .map(
-            |cell| match (!raw).then(|| sources.name(cell)).flatten() {
-                Some(name) => (
-                    (name.to_string(), true, EntryAction::Value(Value::from(cell))),
-                    sources.external(cell),
+        .map(|cell| match (!raw).then(|| sources.name(cell)).flatten() {
+            Some(name) => (
+                (
+                    name.to_string(),
+                    true,
+                    EntryAction::Value(Value::from(cell)),
                 ),
-                None => (
-                    (short_id(cell), false, EntryAction::Value(Value::from(cell))),
-                    sources.external(cell),
-                ),
-            },
-        )
+                sources.external(cell),
+            ),
+            None => (
+                (short_id(cell), false, EntryAction::Value(Value::from(cell))),
+                sources.external(cell),
+            ),
+        })
         .partition(|(_, external)| !*external);
     let strip_origin = |((display, named, action), _)| (display, named, action);
     let mut local: Vec<_> = local.into_iter().map(strip_origin).collect();

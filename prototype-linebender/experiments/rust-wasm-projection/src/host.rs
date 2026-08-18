@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use progred_graph::Value;
+use gid::Value;
 use wasmtime::{Config, Engine, Instance, Module, Store};
 
 const ABI_VERSION: u32 = 1;
@@ -223,7 +223,7 @@ fn load_file(host: &Host, source: &Path, cache: &Path) -> Result<Plugin, String>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     const ECHO: &str = r#"(module
   (memory (export "memory") 1)

@@ -1,10 +1,10 @@
-//! Structural classification of graph values (`isa`). Independent of
-//! Grap and of the data model. This editor assumes the library.
+//! Structural classification of GID values (`isa`). Independent of
+//! Grap and of the GID core. This editor assumes the library.
 
-use progred_graph::{CellId, Cells, Value};
+use gid::{CellId, Cells, Value};
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const ISA: CellId = CellId::from_u128(0xdcedb3a466c3a3e2c6b2826153e82e78);
 }
@@ -39,7 +39,7 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
 
     #[test]
     fn classification_is_structural_and_extensible() {

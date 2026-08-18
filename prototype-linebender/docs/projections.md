@@ -8,7 +8,7 @@ longer on the application's live f64 projection path.
 ## The Decision
 
 Bootstrap Progred with Grap, a small language embedded directly in the
-existing graph data. Grap-defined functions are strict and pure, while
+existing GID data. Grap-defined functions are strict and pure, while
 registered Rust functions receive raw operands and control recursive
 evaluation. Grap is not another syntax tree and adds
 nothing to `Value`: records, lists, blobs, and cell references remain
@@ -28,7 +28,7 @@ later.
 ## Projection and Display Layers
 
 Normal display is an ordered chain of partial projections over `Value`,
-ending in a total structural projection which can show any graph. The
+ending in a total structural projection which can show any GID value. The
 structural projection recursively re-enters the same dispatcher for every
 child instead of owning a closed set of leaf cases. `projection` is the
 runner: location lookup and trying an explicit list of partials. Each
@@ -38,7 +38,7 @@ assembles their cells and foreign functions along with one reusable
 projection — text, f64, and the `grap` value partial — above the structural fallback. Raw is that
 fallback alone. This composed projection is passed explicitly through
 recursion; it is not hidden in display context.
-`descend` receives the parent `Value` and an ordinary graph `Step`, extends
+`descend` receives the parent `Value` and an ordinary GID `Step`, extends
 stored source provenance, and invokes the supplied projection on that
 unresolved location. The projection performs lookup, which lets its total
 fallback project a missing field or element as the ordinary pending state.
@@ -52,12 +52,15 @@ provenance has no editable document location and may attribute interaction to
 the stored expression which produced it. Source/editability and
 projection choice remain separate inputs.
 
-A partial returns a `Layout`: boxes plus display leaves (`Text`,
-`LineEdit`). Text and f64 share `editable_line`, which is a
-line leaf plus a click that selects it and places the caret. `grap` is
-grouping (`at`, `descend`, `group`, `bracket`, `hug`). The live
-interpreter measures that layout; clicks become Puri handlers. The
-structural walk is the total fallback and owns graph paths, editing,
+A partial returns a `Layout<World, Hover>`: boxes, display leaves
+(`Text`, `LineEdit`), generic hover claims, and owned callbacks over
+the live application world. Text and f64 share `editable_line`; its
+library-supplied value update is wired to focus, selection, and caret
+interaction by the editor runtime. `grap` is grouping (`at`, `descend`,
+`group`, `bracket`, `hug`). The live interpreter measures that layout;
+callbacks become Puri handlers. There is no projection-action enum or
+central reducer: a callback receives `&mut World` when it fires. The
+structural walk is the total fallback and owns GID paths, editing,
 and source interaction. Focus and cursor live on the selection.
 Line breaking remains in the layout layer for now rather than adding
 HTML-like flow or `<br>` semantics prematurely.
@@ -87,7 +90,7 @@ properties of that design rather than of an embedded language:
 Semantic labels are library cell IDs, not strings. The IDs are
 once-minted random 128-bit cell identities, checked in as library
 facts; they are not derived from, or hashes of, their names. Their
-simple names are ordinary graph facts supplied by the `progred-name`
+simple names are ordinary GID facts supplied by the `progred-name`
 library convention, not metadata in the cell table.
 
 Core Grap source forms use `function`, `params`, and `body` to
@@ -159,10 +162,10 @@ function's parameter cells:
 }
 ```
 
-The apparent names above are binder sugar in gid notation. Matching is
+The apparent names above are binder sugar in the GID text bridge. Matching is
 by cell identity. Renaming a parameter changes no program reference,
 and there is no parallel symbol-ID system. Additional top-level call
-fields are valid graph data and do not prevent the selected function
+fields are valid GID data and do not prevent the selected function
 from being called.
 The result arm under `grap` is transient and read-only; the expression
 arm remains an ordinary visible projection at the `grap` field path.
@@ -200,7 +203,7 @@ Evaluating a cell is transparent:
 2. A cell registered by a library as a foreign function evaluates to
    `{ffi: cell}` without document resolution. When that value reaches
    function position, the registry supplies its parameter shape and host
-   implementation; the graph value does not duplicate either.
+   implementation; the GID value does not duplicate either.
 3. Otherwise the cell is resolved through the caller's document-over-
    library source and its value is evaluated.
 
@@ -221,7 +224,7 @@ that environment. An unrelated record evaluates to itself without
 inspecting its children.
 
 Grap-defined functions are strict call-by-value, not eager traversal of
-all graph data. Rust implementations are evaluator-aware: an `if`
+all GID data. Rust implementations are evaluator-aware: an `if`
 implementation can evaluate its condition and exactly one raw branch,
 while a matcher can evaluate a selected branch in an extended copy of
 the calling environment. Rust arithmetic uses the same interface but
@@ -281,7 +284,7 @@ the core evaluator never recognizes it. Ordinary data needs no quote to
 evaluate to itself—quote is useful for preserving recognized expression
 forms as data and for explicit interpolation while constructing data.
 First-class suspended work can still pair an expression with its
-environment as ordinary graph data when a program genuinely needs to
+environment as ordinary GID data when a program genuinely needs to
 store or forward that pair.
 
 These conventions match what is present, not what is absent. Record
@@ -299,7 +302,7 @@ underlying document: its absent is projected like any other normal
 form, and the stored expression remains editable in Raw or wherever
 the same expression cell is projected outside a `grap` field.
 
-The evaluator lives in its own `grap` crate. It depends on the graph
+The evaluator lives in its own `grap` crate. It depends on the GID
 core and the shared Grap absent and name conventions, but knows no f64,
 geometry, UI, file, or Linebender concepts. `grap-f64` and `grap-geometry` are `Library` values the editor
 loads. Each offers cells, optional foreign functions, and optional
@@ -312,7 +315,7 @@ consumes as raw argument expressions and may recursively evaluate any
 of them through that context. Its semantic result is still an
 ordinary `Value`; the host `Result` only propagates evaluator halting
 such as exhausted fuel. Rust environments remain validated evaluator
-values and become graph records only through an explicit conversion.
+values and become GID records only through an explicit conversion.
 The registered `evaluate` implementation evaluates its environment
 argument, converts the resulting record to an environment, then asks the
 same evaluator to interpret its raw expression argument there. It is an
@@ -322,7 +325,7 @@ Grap-defined functions deliberately have less authority: their
 arguments are evaluated before binding and their bodies are pure over
 those values and the captured lexical environment. Rust currently owns
 evaluation-control operations such as conditionals and matching. A
-separate graph-defined macro representation can be added later if a
+separate Grap-defined macro representation can be added later if a
 concrete need justifies it; every Grap function does not need to become
 an operative in advance.
 
@@ -340,8 +343,8 @@ for their absent cases and return those identities as values: several
 semantically distinct custom nulls, not freshly allocated occurrences.
 Each absent's library value is a record containing `isa: absent`. The
 general `isa` relation lives in the independent
-`progred-isa` library: it is a convention over graph data, not part of
-Grap or `progred-graph`. The absent library owns only the `absent`
+`progred-isa` library: it is a convention over GID data, not part of
+Grap or `gid`. The absent library owns only the `absent`
 classification and uses that relation. Additional static facts can be
 added as fields on each absent's record. Absent meaning remains
 library data rather than an evaluator feature.
@@ -350,21 +353,21 @@ library data rather than an evaluator feature.
 
 For a record with a `grap` field, the default projection shows
 the stored expression, an arrow, and its recursively projected
-result—an f64 as text, and arbitrary graph data structurally.
-`grap-demo.gid` is
+result—an f64 as text, and arbitrary GID data structurally.
+`grap-demo.gid.txt` is
 the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, the registered `evaluate` function
-with an explicit empty environment, graph-defined functions, a circle,
+with an explicit empty environment, Grap-defined functions, a circle,
 a `case` which destructures that circle and binds its radius, and a
 function which uses quote/unquote to generate alternatives for another
 case; it also keeps extra call metadata in Raw, demonstrates inert
 returned data, and shows stable type,
 missing-argument, and not-callable absents as ordinary projected
-results. The demo projects one graph expression cell both directly and
+results. The demo projects one Grap expression cell both directly and
 by reference under `grap`, making their shared identity visible through
 hover while the latter also carries its computed result.
 
-The broader checked-in `sample.gid` carries the same evaluation path
+The broader checked-in `sample.gid.txt` carries the same evaluation path
 inside the raw editor's structural examples:
 
 - `pitch` is a cell containing f64 `2.5`.
@@ -375,7 +378,7 @@ inside the raw editor's structural examples:
   result is `5`.
 - a nested expression multiplies that result by `8`, passes the result
   as the radius of `circle`, and projects the resulting radius-40
-  circle as ordinary graph structure.
+  circle as ordinary GID structure.
 
 The `grap` field belongs to projection rather than evaluation. The
 default projection replaces such a record with `expression → result`;
@@ -383,7 +386,7 @@ Raw projects the stored record.
 Compact f64 source values edit as decimal text while continuing to store
 the f64 library's byte representation, so changing `pitch` immediately
 changes both the `double_pitch` result and the projected circle record. This is
-intentionally not yet the CAD interaction: it provides a tangible graph
+intentionally not yet the CAD interaction: it provides a tangible GID
 edit, evaluation, and projection loop from which the evaluator can be
 redesigned.
 
@@ -395,17 +398,17 @@ construction, not by filling out a language checklist:
 - introduce the smallest geometry values and foreign operations the
   construction needs;
 - project evaluated geometry through Puri rather than only text;
-- make a direct manipulation write its controlling graph values;
+- make a direct manipulation write its controlling GID values;
 - use the dependency set to reevaluate only affected results if full
   frame evaluation becomes material;
-- add absents and evaluation traces as projections over the same graph,
+- add absents and evaluation traces as projections over the same GID value,
   while keeping Raw as the escape hatch.
 
 The next language work should be forced by manipulating this example:
 use `case` when the construction needs conditional structure, refine
 patterns from concrete editing experience, and make a thunk or cell
 evaluation projection only when the interaction needs one.
-Graph-defined macros and general code generation remain out of scope
+Grap-defined macros and general code generation remain out of scope
 until a concrete transformation requires them.
 
 ## Parked language notes

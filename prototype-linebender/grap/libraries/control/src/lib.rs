@@ -3,11 +3,11 @@
 //! constructs data while evaluating explicit unquotes.
 
 use grap::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
-use progred_graph::{CellId, Cells, Value};
+use gid::{CellId, Cells, Value};
 use std::collections::BTreeMap;
 
 pub mod vocabulary {
-    use progred_graph::CellId;
+    use gid::CellId;
 
     pub const CASE: CellId = CellId::from_u128(0xb3f6a62e4926889bcfcd338025f4a6f9);
     pub const VALUE: CellId = CellId::from_u128(0x00dafdc01c7e014edd857e174c6c8b6f);
@@ -242,7 +242,7 @@ pub fn library() -> Cells {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use progred_graph::new_cell_id;
+    use gid::new_cell_id;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn blob(text: &str) -> Value {

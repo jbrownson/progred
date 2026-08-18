@@ -217,7 +217,7 @@ fn place_with_inputs(
     pointer: Option<Point>,
     viewport: Option<Rect>,
 ) -> (Bench, Extent) {
-    let stack = crate::stack::load();
+    let stack = crate::stack::load::<Claims>();
     let sources = Sources {
         doc,
         library: &stack.library,
@@ -324,8 +324,8 @@ fn svg_bench_renders_the_sample_projection() {
 
 #[test]
 fn svg_bench_renders_the_grap_demo() {
-    let (doc, _) =
-        crate::gid::parse(include_str!("../../../grap-demo.gid")).expect("the Grap demo parses");
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../grap-demo.gid.txt"))
+        .expect("the Grap demo parses");
     render(&doc, None, 900.0, "../target/grap_demo.svg");
     render(&doc, None, 560.0, "../target/grap_demo_narrow.svg");
 }
@@ -365,8 +365,8 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
 
 #[test]
 fn expression_children_are_real() {
-    let (doc, binders) =
-        crate::gid::parse(include_str!("../../../grap-demo.gid")).expect("the Grap demo parses");
+    let (doc, binders) = crate::gid_text::parse(include_str!("../../../grap-demo.gid.txt"))
+        .expect("the Grap demo parses");
     let label = binders["inert_data"];
     let position = doc
         .root
@@ -535,7 +535,7 @@ fn air_holds_only_within_a_little_gap_of_the_hover() {
 fn placement_claims_the_hover_innermost_last() {
     let doc = sample_document();
     let (bench, _) = place(&doc, None, 560.0);
-    let library = crate::stack::load().library;
+    let library = crate::stack::load::<()>().library;
     let sources = Sources {
         doc: &doc,
         library: &library,
@@ -820,7 +820,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: Some(crate::test_values::text("")),
         cells: Cells::new(),
     };
-    let stack = crate::stack::load();
+    let stack = crate::stack::load::<Claims>();
     let sel = Selection::edge(
         &Sources {
             doc: &empty_string,
@@ -842,7 +842,7 @@ fn svg_bench_renders_the_placeholder_notation() {
 #[test]
 fn svg_bench_renders_a_label_rename() {
     let doc = sample_document();
-    let library = crate::stack::load().library;
+    let library = crate::stack::load::<()>().library;
     let path = vec![
         Step::Key(crate::test_values::label("shape")),
         Step::Follow,
@@ -862,7 +862,7 @@ fn svg_bench_renders_a_label_rename() {
 #[test]
 fn svg_bench_renders_a_pending_edge() {
     let doc = sample_document();
-    let library = crate::stack::load().library;
+    let library = crate::stack::load::<()>().library;
     let edge = pending_edge(
         &Sources {
             doc: &doc,

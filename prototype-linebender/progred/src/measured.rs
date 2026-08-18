@@ -272,6 +272,7 @@ pub fn place_top_left<P>(layout: Measured<P>, ctx: &mut P, at: Point) {
     place(layout, ctx, placement);
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
     layout: Measured<P>,
     accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
