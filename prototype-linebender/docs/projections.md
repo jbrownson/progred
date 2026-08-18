@@ -33,9 +33,9 @@ structural projection recursively re-enters the same dispatcher for every
 child instead of owning a closed set of leaf cases. `projection` is the
 runner: location lookup and trying an explicit list of partials. Each
 partial is a function that checks its own preconditions. Library packs
-offer those functions as `Layout`-returning partials; the editor
-assembles one list from `stack::libraries` — text, f64, and the
-`grap` value partial — above the structural fallback. Raw is that
+offer those functions as `Layout`-returning partials; `stack::load`
+assembles their cells and foreign functions along with one reusable
+projection — text, f64, and the `grap` value partial — above the structural fallback. Raw is that
 fallback alone. This composed projection is passed explicitly through
 recursion; it is not hidden in display context.
 `descend` receives the parent `Value` and an ordinary graph `Step`, extends
@@ -303,8 +303,8 @@ The evaluator lives in its own `grap` crate. It depends on the graph
 core and the shared Grap absent and name conventions, but knows no f64,
 geometry, UI, file, or Linebender concepts. `grap-f64` and `grap-geometry` are `Library` values the editor
 loads. Each offers cells, optional foreign functions, and optional
-projections. The editor's list is `stack::libraries`; a later
-foreign table overrides a shared cell.
+projections. The editor merges them once into its loaded `Stack`; a
+later foreign table overrides a shared cell.
 
 A registered Rust implementation receives the call record, the calling
 environment, and the live evaluation context. It looks up the fields it

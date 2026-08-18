@@ -3,6 +3,7 @@
 //! there and how authoring and mutation land.
 
 use crate::document::{Document, Path, short_id};
+use crate::projection::Projection;
 use crate::sources::Sources;
 use progred_graph::{CellId, Cells, Position, Step, Value, position, spine};
 use puri::edit::LineEditState;
@@ -76,7 +77,7 @@ impl Selection {
     /// there to select, only something to begin, so it pends
     /// immediately: the empty document's root, and a valueless
     /// writable cell's Follow slot (its rendered placeholder).
-    pub fn edge(sources: &Sources, path: Path) -> Self {
+    pub fn edge(sources: &Sources, projection: &Projection, path: Path) -> Self {
         let empty_slot = match path.split_last() {
             None => sources.root().is_none(),
             Some((Step::Follow, parent)) => sources
@@ -91,7 +92,11 @@ impl Selection {
         // An editor mounts only where write-through can land: the
         // owning cell must not be external.
         let edit = writable_at(sources, &path)
-            .then(|| sources.resolve(&path).and_then(crate::stack::line))
+            .then(|| {
+                sources
+                    .resolve(&path)
+                    .and_then(|value| projection.line(value))
+            })
             .flatten();
         Selection::Edge {
             path,
@@ -102,7 +107,7 @@ impl Selection {
 
     /// A click on an editable line: the projection already named the
     /// line, so the selection does not look the value up again.
-    pub fn from_line(sources: &Sources, path: Path, line: &crate::display::LineEdit) -> Self {
+    pub fn from_line(sources: &Sources, path: Path, line: &crate::render::LineEdit) -> Self {
         let edit = writable_at(sources, &path).then(|| line_editing(line.clone()));
         Selection::Edge {
             path,
@@ -142,7 +147,7 @@ pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
 }
 
-fn line_editing(line: crate::display::LineEdit) -> LineEditing {
+fn line_editing(line: crate::render::LineEdit) -> LineEditing {
     LineEditing {
         line: line_edit(&line.text),
         update: line.update,
@@ -154,8 +159,13 @@ fn line_editing(line: crate::display::LineEdit) -> LineEditing {
 /// crosses projected text in one press. The end-seeded default already IS
 /// the rightward case; a leftward landing seeds the START instead of
 /// grinding back through every character.
-pub fn selected_by_arrow(sources: &Sources, path: Path, event: &KeyboardEvent) -> Selection {
-    let mut selection = Selection::edge(sources, path);
+pub fn selected_by_arrow(
+    sources: &Sources,
+    projection: &Projection,
+    path: Path,
+    event: &KeyboardEvent,
+) -> Selection {
+    let mut selection = Selection::edge(sources, projection, path);
     if matches!(&event.key, Key::Named(NamedKey::ArrowLeft))
         && let Some(edit) = selection.edit_mut()
     {
@@ -566,8 +576,13 @@ pub fn rename_field(
 /// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
-pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Step]) -> bool {
-    match collapse_default(sources, path) {
+pub fn toggle_collapse(
+    sources: &Sources,
+    projection: &Projection,
+    collapse: &mut Collapse,
+    path: &[Step],
+) -> bool {
+    match collapse_default(sources, projection, path) {
         Some(default) => {
             let next = !collapse.collapsed(path, default);
             store_collapse(collapse, path, default, next);
@@ -581,11 +596,12 @@ pub fn toggle_collapse(sources: &Sources, collapse: &mut Collapse, path: &[Step]
 /// axis of keyboard navigation. Returns whether the state changed.
 pub fn set_collapse(
     sources: &Sources,
+    projection: &Projection,
     collapse: &mut Collapse,
     path: &[Step],
     closed: bool,
 ) -> bool {
-    match collapse_default(sources, path) {
+    match collapse_default(sources, projection, path) {
         Some(default) if collapse.collapsed(path, default) != closed => {
             store_collapse(collapse, path, default, closed);
             true
@@ -597,12 +613,12 @@ pub fn set_collapse(
 /// The default collapse for the value at `path` — collapsed inside a
 /// cycle, expanded otherwise — or `None` when there is nothing to
 /// collapse.
-fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
+fn collapse_default(sources: &Sources, projection: &Projection, path: &[Step]) -> Option<bool> {
     sources
         .resolve(path)
         // Compact atom projections are leaves. Once another field
         // enriches either convention, the visible record is collapsible.
-        .filter(|value| crate::stack::line(value).is_none())
+        .filter(|value| projection.line(value).is_none())
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
             Value::Blob(_) => false,

@@ -1,11 +1,12 @@
 //! The editor's durable application state: the document, selection,
-//! view flags, and the library they are read against.
+//! view flags, and the loaded editor stack they are read against.
 
 use crate::document::Document;
 use crate::graph_view;
 use crate::history;
 use crate::selection;
 use crate::sources;
+use crate::stack;
 use progred_graph::Value;
 
 /// The View menu's frame inputs: which panes and layers this frame
@@ -32,12 +33,9 @@ pub(crate) struct Model {
     pub doc: Document,
     pub selection: Option<Selected>,
     pub collapse: selection::Collapse,
-    /// The built-in library, read under every document; never
-    /// written, never saved.
-    pub library: progred_graph::Cells,
-    /// Rust implementations registered by Grap libraries; editor
-    /// configuration rather than document state.
-    pub foreign: grap::ForeignFunctions,
+    /// The editor configuration read under every document: library
+    /// cells, Rust functions, and the composed projection.
+    pub stack: stack::Stack,
     pub graph: graph_view::GraphView,
     pub history: history::History,
     pub view: ViewFlags,
@@ -56,7 +54,7 @@ impl Model {
     pub fn sources(&self) -> sources::Sources<'_> {
         sources::Sources {
             doc: &self.doc,
-            library: &self.library,
+            library: &self.stack.library,
         }
     }
 

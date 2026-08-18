@@ -285,7 +285,7 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
 mod view {
     use super::{Availability, Entry, Hover, Item, Kind, Platform, Selection, State, definition};
     use crate::hover::HasHover;
-    use crate::layout::{self, Extent, Measured};
+    use crate::measured::{self, Extent, Measured};
     use puri::draw::Canvas;
     use puri::handler::HasHandler;
     use puri::text::{TextCtx, TextStyle};
@@ -342,7 +342,7 @@ mod view {
     }
 
     fn hover_target<P: HasHover<Option<Hover>>>(hover: Hover, content: Measured<P>) -> Measured<P> {
-        layout::before(content, move |p, placement| {
+        measured::before(content, move |p, placement| {
             if p.pointer().is_some_and(|point| placement.contains(point)) {
                 p.claim_hover(Some(hover));
             }
@@ -358,16 +358,16 @@ mod view {
         scale: f64,
         toggle: Rc<dyn Fn(&mut C, usize)>,
     ) -> Measured<P> {
-        let content = layout::pad(
+        let content = measured::pad(
             Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
-            crate::display::text(tcx, label, style),
+            crate::render::text(tcx, label, style),
         );
-        let content = layout::decorate(content, move |p: &mut P, rect| {
+        let content = measured::decorate(content, move |p: &mut P, rect| {
             if active {
                 p.fill(rect, Color::new([0.82, 0.83, 0.86, 1.0]), Affine::IDENTITY);
             }
         });
-        layout::on_primary_pointer_down(
+        measured::on_primary_pointer_down(
             hover_target(Hover::Heading(index), content),
             |_| true,
             move |app, _| {
@@ -378,7 +378,7 @@ mod view {
     }
 
     fn separator<P: Canvas>(scale: f64, width: f64) -> Measured<P> {
-        layout::leaf(
+        measured::leaf(
             Extent {
                 width,
                 ascent: 4.0 * scale,
@@ -422,25 +422,25 @@ mod view {
         } else {
             &styles.disabled
         };
-        let label = crate::display::text(
+        let label = crate::render::text(
             tcx,
             &format!("{}  {}", if checked { "✓" } else { " " }, item.label),
             style,
         );
-        let shortcut = crate::display::text(tcx, &item.shortcut.linux_label(), shortcut_style);
+        let shortcut = crate::render::text(tcx, &item.shortcut.linux_label(), shortcut_style);
         let gap =
             (width - 24.0 * scale - label.extent.width - shortcut.extent.width).max(12.0 * scale);
-        let content = layout::pad(
+        let content = measured::pad(
             Insets::new(12.0 * scale, 5.0 * scale, 12.0 * scale, 5.0 * scale),
-            layout::row(gap, vec![label, shortcut]),
+            measured::row(gap, vec![label, shortcut]),
         );
-        let content = layout::decorate(content, move |p: &mut P, rect| {
+        let content = measured::decorate(content, move |p: &mut P, rect| {
             if enabled && hovered {
                 p.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
             }
         });
         if enabled {
-            layout::on_primary_pointer_down(
+            measured::on_primary_pointer_down(
                 hover_target(Hover::Item(selection), content),
                 |_| true,
                 move |app, _| {
@@ -486,8 +486,8 @@ mod view {
                 Entry::About => unreachable!("About is only in the macOS application menu"),
             })
             .collect();
-        layout::before(
-            layout::decorate(layout::col(0, 0.0, entries), move |p: &mut P, rect| {
+        measured::before(
+            measured::decorate(measured::col(0, 0.0, entries), move |p: &mut P, rect| {
                 p.fill(
                     rect,
                     Color::new([0.975, 0.975, 0.982, 1.0]),
@@ -545,15 +545,15 @@ mod view {
                 .map(|menu| popup(tcx, &styles, &description, &menu.entries, hooks.select))
         });
         let height = bar_height(description.scale);
-        let bar = layout::decorate(
-            layout::min_width(
+        let bar = measured::decorate(
+            measured::min_width(
                 description.width,
-                layout::row(
+                measured::row(
                     0.0,
                     // A zero-width baseline strut gives the bar its fixed height
                     // without shifting the headings; the box algebra has no
                     // minimum-ascent-and-descent wrapper yet.
-                    std::iter::once(layout::leaf(
+                    std::iter::once(measured::leaf(
                         Extent {
                             width: 0.0,
                             ascent: height * 0.7,

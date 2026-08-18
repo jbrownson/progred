@@ -1,4 +1,4 @@
-//! Structural projection as a total `Value → Layout`. The editor
+//! Raw structural projection as a total `Value → Layout`. The editor
 //! supplies collapse, names, and pending state while building the
 //! tree; `realize` is the only interpreter.
 
@@ -29,12 +29,7 @@ fn blob_text(bytes: &[u8]) -> String {
     }
 }
 
-fn cell_layout(
-    cx: &Cx,
-    path: &[Step],
-    ancestors: &HashSet<CellId>,
-    cell: CellId,
-) -> Layout {
+fn cell_layout(cx: &Cx, path: &[Step], ancestors: &HashSet<CellId>, cell: CellId) -> Layout {
     let mut followed = path.to_vec();
     followed.push(Step::Follow);
     let value = cx.sources.value(cell);
@@ -96,7 +91,10 @@ fn list_layout(
     }
     if items.is_empty() {
         return on_click(
-            row(0.0, [delim(Delim::Bracket, true), delim(Delim::Bracket, false)]),
+            row(
+                0.0,
+                [delim(Delim::Bracket, true), delim(Delim::Bracket, false)],
+            ),
             Click::Quiet,
         );
     }
@@ -129,11 +127,7 @@ fn list_layout(
     )
 }
 
-fn record_layout(
-    cx: &Cx,
-    path: &[Step],
-    fields: &im::OrdMap<CellId, Value>,
-) -> Layout {
+fn record_layout(cx: &Cx, path: &[Step], fields: &im::OrdMap<CellId, Value>) -> Layout {
     let consumes_simple_name = !cx.raw
         && path
             .split_last()
@@ -154,12 +148,14 @@ fn record_layout(
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {
         items.push((key, false));
     }
-    items.sort_by(|(left, _), (right, _)| match (cx.name(*left), cx.name(*right)) {
-        (Some(left_name), Some(right_name)) => left_name.cmp(&right_name).then(left.cmp(right)),
-        (Some(_), None) => std::cmp::Ordering::Less,
-        (None, Some(_)) => std::cmp::Ordering::Greater,
-        (None, None) => left.cmp(right),
-    });
+    items.sort_by(
+        |(left, _), (right, _)| match (cx.name(*left), cx.name(*right)) {
+            (Some(left_name), Some(right_name)) => left_name.cmp(&right_name).then(left.cmp(right)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => left.cmp(right),
+        },
+    );
     let pending_edge = cx.pending_edge_under(path).is_some();
     let renaming = cx.pending_rename_under(path);
     let collapsed = !items.is_empty()
@@ -233,7 +229,12 @@ fn field_head(cx: &Cx, path: &[Step], key: CellId, present: bool) -> Layout {
 }
 
 fn field_row(cx: &Cx, path: &[Step], key: CellId, present: bool) -> Layout {
-    hug(field_head(cx, path, key, present), descend(Step::Key(key)), 6.0, 20.0)
+    hug(
+        field_head(cx, path, key, present),
+        descend(Step::Key(key)),
+        6.0,
+        20.0,
+    )
 }
 
 fn field_label(cx: &Cx, path: &[Step], key: CellId) -> Layout {
@@ -249,8 +250,5 @@ fn field_label(cx: &Cx, path: &[Step], key: CellId) -> Layout {
 }
 
 fn pending_edge_layout() -> Layout {
-    on_click(
-        row(0.0, [query(true), dim(": "), slot()]),
-        Click::Absorb,
-    )
+    on_click(row(0.0, [query(true), dim(": "), slot()]), Click::Absorb)
 }

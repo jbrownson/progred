@@ -1,21 +1,18 @@
-//! Things that go in layout leaves: text, line edits, and later
-//! graphics or other Grap-backed widgets. Each measures, then places
-//! by drawing and registering Puri handlers.
+//! Lower display leaves to measured Puri drawing and interaction.
 
-use crate::layout::{self, Measured};
+use crate::measured::{self, Measured};
 use crate::styles::Styles;
+pub use progred_display::LineEdit;
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, LineEditDescription, LineEditState};
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextStyle};
-pub use progred_display::LineEdit;
 
 pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Measured<P> {
     let text = puri::text::text(ctx, s, style);
-    layout::leaf(
-        text.metrics().into(),
-        move |canvas, placement| text.place(canvas, placement),
-    )
+    measured::leaf(text.metrics().into(), move |canvas, placement| {
+        text.place(canvas, placement)
+    })
 }
 
 pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
@@ -24,10 +21,9 @@ pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
     with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
 ) -> Measured<P> {
     let edit = puri::edit::text_edit(description, tcx);
-    layout::leaf(
-        edit.metrics().into(),
-        move |p, placement| edit.place(p, placement, with),
-    )
+    measured::leaf(edit.metrics().into(), move |p, placement| {
+        edit.place(p, placement, with)
+    })
 }
 
 pub fn line_edit<C: 'static, P: Canvas + HasHandler<C>>(

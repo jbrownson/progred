@@ -1,5 +1,4 @@
-//! Location lookup and the runner that tries ordered partial
-//! projections.
+//! Unresolved projection locations and graph-step lookup.
 
 use progred_graph::{CellId, Step, Value};
 
@@ -8,17 +7,11 @@ use progred_graph::{CellId, Step, Value};
 /// the projection just like every other graph state.
 pub enum Location<'a> {
     Root(Option<&'a Value>),
-    Child {
-        parent: &'a Value,
-        step: Step,
-    },
+    Child { parent: &'a Value, step: Step },
 }
 
 impl Location<'_> {
-    pub fn value<'a>(
-        &'a self,
-        resolve: impl Fn(CellId) -> Option<&'a Value>,
-    ) -> Option<&'a Value> {
+    pub fn value<'a>(&'a self, resolve: impl Fn(CellId) -> Option<&'a Value>) -> Option<&'a Value> {
         match self {
             Self::Root(value) => *value,
             Self::Child { parent, step } => match step {
@@ -28,15 +21,6 @@ impl Location<'_> {
             },
         }
     }
-
-}
-
-pub fn try_partials(
-    partials: impl IntoIterator<Item = progred_display::Partial>,
-    env: &dyn progred_display::Env,
-    value: &Value,
-) -> Option<progred_display::Layout> {
-    partials.into_iter().find_map(|partial| partial(env, value))
 }
 
 #[cfg(test)]

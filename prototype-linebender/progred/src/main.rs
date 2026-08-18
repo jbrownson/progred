@@ -3,7 +3,6 @@
 
 mod commands;
 mod completion;
-mod display;
 mod document;
 mod filter;
 mod frame;
@@ -14,14 +13,14 @@ mod graph_view;
 mod history;
 mod hover;
 mod library;
-mod layout;
 #[cfg(target_os = "macos")]
 mod macos_menu;
+mod measured;
 mod menu;
 mod model;
 mod navigate;
 mod projection;
-mod raw;
+mod render;
 mod selection;
 mod sources;
 mod stack;
@@ -379,6 +378,7 @@ impl ApplicationHandler<UserEvent> for App {
                                     self.model.selection =
                                         Some(Selected::Tree(selection::selected_by_arrow(
                                             &self.model.sources(),
+                                            &self.model.stack.projection,
                                             path,
                                             &key_event,
                                         )));
@@ -429,7 +429,8 @@ impl ApplicationHandler<UserEvent> for App {
                         let before = model.doc.clone();
                         // True on the first write of the editor's
                         // life: the run's one step opens here.
-                        if selection::write_through(&mut model.doc, &model.library, selection) {
+                        if selection::write_through(&mut model.doc, &model.stack.library, selection)
+                        {
                             let path = selection.path().to_vec();
                             model.history.record(before, Some(path));
                             self.refresh_title();
@@ -568,8 +569,7 @@ fn main() {
             doc,
             selection: None,
             collapse: selection::Collapse::default(),
-            library: stack::library(),
-            foreign: stack::foreign_functions(),
+            stack: stack::load(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view: ViewFlags::default(),
@@ -635,7 +635,11 @@ impl App {
         }
     }
 
-    pub(crate) fn handle_menu_selection(&mut self, event_loop: &ActiveEventLoop, selection: menu::Selection) {
+    pub(crate) fn handle_menu_selection(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        selection: menu::Selection,
+    ) {
         match selection {
             menu::Selection::New => self.request_discard(event_loop, AfterDiscard::New),
             menu::Selection::Open => self.request_discard(event_loop, AfterDiscard::Open),
@@ -703,8 +707,13 @@ impl App {
             // One slot: restoring (or clearing) the tree selection
             // also drops any graph selection, which may reference
             // content the restored document no longer has.
-            self.model.selection = restore
-                .map(|path| Selected::Tree(selection::Selection::edge(&self.model.sources(), path)));
+            self.model.selection = restore.map(|path| {
+                Selected::Tree(selection::Selection::edge(
+                    &self.model.sources(),
+                    &self.model.stack.projection,
+                    path,
+                ))
+            });
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
                 let window = window.clone();
@@ -821,15 +830,19 @@ impl App {
     /// immediately, as every mutation site does: the retained handler
     /// was built from the old document, and its dispatches must not
     /// run against the new model.
-    pub(crate) fn adopt_model(&mut self, doc: document::Document, path: Option<PathBuf>, binders: gid::Binders) {
+    pub(crate) fn adopt_model(
+        &mut self,
+        doc: document::Document,
+        path: Option<PathBuf>,
+        binders: gid::Binders,
+    ) {
         self.binders = binders;
         let view = self.model.view;
         self.model = Model {
             doc,
             selection: None,
             collapse: selection::Collapse::default(),
-            library: stack::library(),
-            foreign: stack::foreign_functions(),
+            stack: self.model.stack.clone(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view,
@@ -862,7 +875,6 @@ impl App {
 
     /// Scroll-to-reveal, computed from the freshly retained dispatch
     /// pass BEFORE anything draws, so the reveal lands in the next
-
 
     /// Renders the current model to the surface, from `RedrawRequested`.
     pub(crate) fn redraw(&mut self) {
@@ -963,5 +975,3 @@ impl App {
         }
     }
 }
-
-

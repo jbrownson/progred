@@ -12,10 +12,10 @@
 //! Rendering and hit-testing are one pure pass: build geometry from
 //! state, draw it, register handlers over it.
 
-use crate::hover::HasHover;
-use crate::layout::{self, Extent, leaf};
 use crate::document::{Document, short_id};
-use crate::raw::command;
+use crate::hover::HasHover;
+use crate::measured::{self, Extent, leaf};
+use crate::projection::command;
 use crate::selection::Selection;
 use crate::sources::Sources;
 use parley::style::GenericFamily;
@@ -448,7 +448,7 @@ pub fn delete_selection(doc: &mut Document, selection: &GraphSelection) -> bool 
     !(doc.cells.ptr_eq(&before) && doc.root == before_root)
 }
 
-/// Dispatch-time callbacks the shell injects, mirroring `raw::Hooks`:
+/// Dispatch-time callbacks the shell injects, mirroring projection hooks:
 /// the pane reports what happened in world coordinates; the shell
 /// owns the transitions.
 pub struct Hooks<C> {
@@ -544,26 +544,25 @@ fn node_content(
     let ui = GenericFamily::SystemUi;
     let mono = GenericFamily::Monospace;
     match node {
-        GraphNode::Cell(cell) => {
-            match (!raw).then(|| sources.name(*cell)).flatten() {
-                Some(name) => layout_text(tcx, &format!("({name})"), size, TEXT, ui),
-                None => layout_text(tcx, &format!("({})", short_id(*cell)), size, DIM_TEXT, mono),
-            }
-        }
+        GraphNode::Cell(cell) => match (!raw).then(|| sources.name(*cell)).flatten() {
+            Some(name) => layout_text(tcx, &format!("({name})"), size, TEXT, ui),
+            None => layout_text(tcx, &format!("({})", short_id(*cell)), size, DIM_TEXT, mono),
+        },
         GraphNode::Root => {
-            let mark =
-                match doc.root.as_ref().and_then(|value| {
-                    progred_text::read(value).map(|text| format!("\"{text}\""))
-                }) {
-                    Some(text) => text,
-                    None => match &doc.root {
-                        Some(Value::Record(_)) => "{…}".to_string(),
-                        Some(Value::List(elements)) if elements.is_empty() => "[ ]".to_string(),
-                        Some(Value::List(_)) => "[…]".to_string(),
-                        Some(other) => other.to_string(),
-                        None => String::new(),
-                    },
-                };
+            let mark = match doc
+                .root
+                .as_ref()
+                .and_then(|value| progred_text::read(value).map(|text| format!("\"{text}\"")))
+            {
+                Some(text) => text,
+                None => match &doc.root {
+                    Some(Value::Record(_)) => "{…}".to_string(),
+                    Some(Value::List(elements)) if elements.is_empty() => "[ ]".to_string(),
+                    Some(Value::List(_)) => "[…]".to_string(),
+                    Some(other) => other.to_string(),
+                    None => String::new(),
+                },
+            };
             match doc
                 .root
                 .as_ref()
@@ -637,7 +636,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
     tcx: &mut TextCtx,
     panel: Rect,
     hooks: &Hooks<C>,
-) -> layout::Measured<P> {
+) -> measured::Measured<P> {
     let doc = sources.doc;
     let scale = f64::from(tcx.scale);
     let zoom = view.zoom;

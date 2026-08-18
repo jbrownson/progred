@@ -1,22 +1,26 @@
-//! The raw projection: any document rendered with no schema, in the
-//! delimiter family — `(` cell `)`, `[` list `]`, `{` record `}`.
-//! A cell heads with its conventional simple name (the ordinary name
-//! field projected in place) or its short id; records are field rows,
-//! lists inline literals or bare element rows; atoms render as their
-//! values; positions are session bookkeeping and never render at all.
+//! The editor's tree-projection runtime: interpret display layouts,
+//! retain source provenance, and fall back to total structural display.
 
-use crate::styles::Styles;
-use crate::completion::{
-    EntryAction, HasPopup, Popup, completion_entries,
-};
 #[cfg(test)]
 use crate::completion::{Entry, resolve_entry, resolve_label};
-use crate::document::{Path, short_id};
+use crate::completion::{EntryAction, HasPopup, Popup, completion_entries};
 #[cfg(test)]
 use crate::document::Document;
+use crate::document::{Path, short_id};
 #[cfg(test)]
 use crate::document::{sample_document, sample_vocabulary};
 use crate::filter;
+#[cfg(test)]
+use crate::hover::resolve_hover;
+use crate::hover::{HasHover, Hover, HoverClaim, Hovering, hover_value};
+use crate::measured::{
+    Extent, Measured, around, before, col, decorate, leaf, min_width, on_key,
+    on_primary_pointer_down, pad, row,
+};
+use crate::navigate::{Descend, HasDescends};
+#[cfg(test)]
+use crate::navigate::{projected_name_owner, step_selection};
+use crate::render::{self, text};
 use crate::selection::{Collapse, Selection, last_follow};
 #[cfg(test)]
 use crate::selection::{
@@ -24,20 +28,10 @@ use crate::selection::{
     pending_follow, pending_insert, pending_into, pending_rename, pending_value, rename_field,
     resolve_query, set_collapse, set_value, to_clipboard, toggle_collapse, write_through,
 };
-use crate::hover::{HasHover, Hover, HoverClaim, Hovering, hover_value};
-#[cfg(test)]
-use crate::hover::resolve_hover;
-use crate::navigate::{Descend, HasDescends};
-#[cfg(test)]
-use crate::navigate::{projected_name_owner, step_selection};
-use crate::display::{self, text};
-use crate::layout::{
-    Extent, Measured, around, before, col, decorate, leaf, min_width, on_key, on_primary_pointer_down,
-    pad,
-    row,
-};
 use crate::sources::Sources;
-use crate::projection::Location;
+use crate::styles::Styles;
+mod location;
+use location::Location;
 use parley::layout::Layout as TextLayout;
 use progred_graph::{CellId, Step, Value};
 #[cfg(test)]
@@ -45,20 +39,55 @@ use progred_graph::{Cells, new_cell_id};
 use puri::delim::{self, Delim, DelimStyle};
 use puri::draw::Canvas;
 use puri::edit::{
-    EditCtx, LineEditDescription, LineEditPointerDown, LineEditPresentation,
-    LineEditState,
+    EditCtx, LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState,
 };
 use puri::geometry::Placement;
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextStyle, caret_index, line_layout};
 use std::collections::HashSet;
 use std::rc::Rc;
-use ui_events::keyboard::{Key, NamedKey};
 #[cfg(test)]
 use ui_events::keyboard::KeyboardEvent;
+use ui_events::keyboard::{Key, NamedKey};
 use ui_events::pointer::PointerButton;
 use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
+
+/// One ordered composition of partial value projections. The
+/// structural fallback lives in this runtime and is always total.
+#[derive(Clone, Default)]
+pub struct Projection {
+    partials: Box<[progred_display::Partial]>,
+}
+
+impl Projection {
+    pub fn new(partials: impl IntoIterator<Item = progred_display::Partial>) -> Self {
+        Self {
+            partials: partials.into_iter().collect(),
+        }
+    }
+
+    fn apply(
+        &self,
+        env: &dyn progred_display::Env,
+        value: &Value,
+    ) -> Option<progred_display::Layout> {
+        self.partials.iter().find_map(|partial| partial(env, value))
+    }
+
+    pub fn line(&self, value: &Value) -> Option<render::LineEdit> {
+        self.apply(&NoEval, value)
+            .and_then(|layout| progred_display::line_edit_of(&layout).cloned())
+    }
+}
+
+struct NoEval;
+
+impl progred_display::Env for NoEval {
+    fn evaluate(&self, _: &Value) -> (Value, usize) {
+        (Value::record([]), 0)
+    }
+}
 
 /// Read-only projection context threaded through every view.
 struct Cx<'a> {
@@ -67,7 +96,6 @@ struct Cx<'a> {
     /// Names and field order derive from this view bit. Value
     /// projections come from the editor's stack; `grap` is one of them.
     raw: bool,
-    values: bool,
     foreign: &'a grap::ForeignFunctions,
     collapse: &'a Collapse,
     styles: &'a Styles,
@@ -125,6 +153,7 @@ fn realize<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
+    projection: Option<&Projection>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -135,15 +164,17 @@ fn realize<
 ) -> Measured<P> {
     let scale = cx.styles.scale;
     match layout {
-        progred_display::Layout::Leaf(content) => {
-            leaf_display(cx, tcx, path, hooks, content)
-        }
+        progred_display::Layout::Leaf(content) => leaf_display(cx, tcx, path, hooks, content),
         progred_display::Layout::OnClick { child, click } => {
-            let inner = realize(cx, tcx, path, ancestors, hooks, value, *child, avail);
+            let inner = realize(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            );
             realize_click(cx, tcx, path, hooks, value, click, inner)
         }
         progred_display::Layout::OnKey { child, key } => {
-            let inner = realize(cx, tcx, path, ancestors, hooks, value, *child, avail);
+            let inner = realize(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            );
             match key {
                 progred_display::Key::Delete => bind_delete(cx, hooks, inner),
             }
@@ -151,7 +182,11 @@ fn realize<
         progred_display::Layout::Row { gap, children } => {
             let children = children
                 .into_iter()
-                .map(|child| realize(cx, tcx, path, ancestors, hooks, value, child, avail))
+                .map(|child| {
+                    realize(
+                        cx, projection, tcx, path, ancestors, hooks, value, child, avail,
+                    )
+                })
                 .collect();
             row(gap * scale, children)
         }
@@ -162,7 +197,11 @@ fn realize<
         } => {
             let children = children
                 .into_iter()
-                .map(|child| realize(cx, tcx, path, ancestors, hooks, value, child, avail))
+                .map(|child| {
+                    realize(
+                        cx, projection, tcx, path, ancestors, hooks, value, child, avail,
+                    )
+                })
                 .collect();
             col(baseline, gap * scale, children)
         }
@@ -179,6 +218,7 @@ fn realize<
                 Insets::new(left, top * scale, right, bottom * scale),
                 realize(
                     cx,
+                    projection,
                     tcx,
                     path,
                     ancestors,
@@ -190,10 +230,10 @@ fn realize<
             )
         }
         progred_display::Layout::Bracket { delim, child } => {
-            let reserved =
-                2.0 * (delim_advance(cx.styles, display_delim(delim)) + 2.0 * scale);
+            let reserved = 2.0 * (delim_advance(cx.styles, display_delim(delim)) + 2.0 * scale);
             let inner = realize(
                 cx,
+                projection,
                 tcx,
                 path,
                 ancestors,
@@ -205,27 +245,27 @@ fn realize<
             bracketed(cx, display_delim(delim), path, value, hooks, inner)
         }
         progred_display::Layout::Descend { step } => descend(
-            cx,
-            tcx,
-            path,
-            ancestors,
-            value,
-            step,
-            avail,
-            hooks,
+            cx, projection, tcx, path, ancestors, value, step, avail, hooks,
         ),
-        progred_display::Layout::At { steps, value: nested } => {
-            realize_at(cx, tcx, path, ancestors, steps, nested, avail, hooks)
-        }
-        progred_display::Layout::Transient { value: computed, fuel } => {
-            project_transient_root(cx, tcx, path, computed, fuel, avail, hooks)
-        }
+        progred_display::Layout::At {
+            steps,
+            value: nested,
+        } => realize_at(
+            cx, projection, tcx, path, ancestors, steps, nested, avail, hooks,
+        ),
+        progred_display::Layout::Transient {
+            value: computed,
+            fuel,
+        } => project_transient_root(cx, projection, tcx, path, computed, fuel, avail, hooks),
         progred_display::Layout::Group { flat, broken } => {
             if avail <= 0.0 {
-                return realize(cx, tcx, path, ancestors, hooks, value, *broken, avail);
+                return realize(
+                    cx, projection, tcx, path, ancestors, hooks, value, *broken, avail,
+                );
             }
             let candidate = realize(
                 cx,
+                projection,
                 tcx,
                 path,
                 ancestors,
@@ -238,7 +278,9 @@ fn realize<
             if fits {
                 return candidate;
             }
-            let broken = realize(cx, tcx, path, ancestors, hooks, value, *broken, avail);
+            let broken = realize(
+                cx, projection, tcx, path, ancestors, hooks, value, *broken, avail,
+            );
             if one_line(candidate.extent, scale) && candidate.extent.width <= broken.extent.width {
                 candidate
             } else {
@@ -261,6 +303,7 @@ fn realize_at<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
+    projection: Option<&Projection>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -281,6 +324,7 @@ fn realize_at<
     }
     project_present_value(
         cx,
+        projection,
         tcx,
         &path,
         &follow_ancestors,
@@ -303,9 +347,7 @@ fn realize_click<
     inner: Measured<P>,
 ) -> Measured<P> {
     match click {
-        progred_display::Click::Select => {
-            select_target(path.to_vec(), value.clone(), hooks, inner)
-        }
+        progred_display::Click::Select => select_target(path.to_vec(), value.clone(), hooks, inner),
         progred_display::Click::Quiet => {
             quiet_select_target(path.to_vec(), value.clone(), hooks, inner)
         }
@@ -336,18 +378,14 @@ fn realize_click<
             child.push(Step::Key(key));
             select_target(child, Value::from(key), hooks, inner)
         }
-        progred_display::Click::Absorb => {
-            before(inner, move |p: &mut P, placement| {
-                hover_block(p, placement);
-                p.handler().on_pointer_down(move |_, event| {
-                    event.button == Some(PointerButton::Primary)
-                        && placement.contains(Point::new(
-                            event.state.position.x,
-                            event.state.position.y,
-                        ))
-                });
-            })
-        }
+        progred_display::Click::Absorb => before(inner, move |p: &mut P, placement| {
+            hover_block(p, placement);
+            p.handler().on_pointer_down(move |_, event| {
+                event.button == Some(PointerButton::Primary)
+                    && placement
+                        .contains(Point::new(event.state.position.x, event.state.position.y))
+            });
+        }),
     }
 }
 
@@ -369,7 +407,7 @@ fn leaf_display<
                 progred_display::Face::Label => &cx.styles.label,
                 progred_display::Face::Id => &cx.styles.id,
             };
-            display::text(tcx, &text, style)
+            render::text(tcx, &text, style)
         }
         progred_display::Display::Delim { delim, open } => hover_target(
             path.to_vec(),
@@ -396,7 +434,7 @@ fn leaf_display<
             match engaged {
                 Some((query, choice)) if labels => label_query(cx, tcx, query, choice, hooks),
                 Some((query, choice)) => placeholder(cx, tcx, Some((query, choice)), false, hooks),
-                None => display::text(tcx, "…", &cx.styles.dim),
+                None => render::text(tcx, "…", &cx.styles.dim),
             }
         }
         progred_display::Display::Slot => placeholder(cx, tcx, None, false, hooks),
@@ -406,7 +444,7 @@ fn leaf_display<
                 .filter(|selection| selection.path() == path)
                 .and_then(Selection::edit);
             let edit = hooks.edit.clone();
-            display::line_edit(tcx, cx.styles, &line, editing, move |c| edit(c))
+            render::line_edit(tcx, cx.styles, &line, editing, move |c| edit(c))
         }
     }
 }
@@ -423,7 +461,7 @@ pub struct TextClick {
     pub presentation: LineEditPresentation,
     /// Set when the click is on an [`editable_line`]; the selection
     /// mounts that line instead of looking the value up again.
-    pub line: Option<display::LineEdit>,
+    pub line: Option<render::LineEdit>,
 }
 
 /// Dispatch-time callbacks the shell injects: what selecting a path
@@ -629,7 +667,12 @@ fn flat_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool) -> Measured<
 
 /// A delimiter stretched over `content`'s extent, ink trimmed to meet
 /// the glyph span on the first and last lines.
-fn tall_delim<P: Canvas>(styles: &Styles, delim: Delim, open: bool, content: Extent) -> Measured<P> {
+fn tall_delim<P: Canvas>(
+    styles: &Styles,
+    delim: Delim,
+    open: bool,
+    content: Extent,
+) -> Measured<P> {
     let em = 14.0 * styles.scale;
     let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
     let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
@@ -874,7 +917,7 @@ pub struct ProjectDescription<'a> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
-    pub values: bool,
+    pub projection: Option<&'a Projection>,
     pub foreign: &'a grap::ForeignFunctions,
 }
 
@@ -896,13 +939,12 @@ pub fn project<
         raw,
         styles,
         width,
-        values,
+        projection,
         foreign,
     } = description;
     let cx = Cx {
         sources,
         raw,
-        values,
         foreign,
         collapse,
         styles,
@@ -921,6 +963,7 @@ pub fn project<
     // An empty document is a selectable placeholder at the root path.
     project_location(
         &cx,
+        projection,
         tcx,
         &[],
         &HashSet::new(),
@@ -1137,6 +1180,7 @@ fn project_transient_root<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
+    projection: Option<&Projection>,
     tcx: &mut TextCtx,
     path: &[Step],
     result: Value,
@@ -1159,7 +1203,6 @@ fn project_transient_root<
     let result_cx = Cx {
         sources: cx.sources,
         raw: false,
-        values: cx.values,
         foreign: cx.foreign,
         collapse: cx.collapse,
         styles: cx.styles,
@@ -1172,6 +1215,7 @@ fn project_transient_root<
     };
     let projected = project_location(
         &result_cx,
+        projection,
         tcx,
         path,
         &HashSet::new(),
@@ -1198,6 +1242,7 @@ fn descend<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
+    projection: Option<&Projection>,
     tcx: &mut TextCtx,
     parent_path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -1213,6 +1258,7 @@ fn descend<
         ancestors.extend(parent.as_cell());
         project_location(
             cx,
+            projection,
             tcx,
             &path,
             &ancestors,
@@ -1223,6 +1269,7 @@ fn descend<
     } else {
         project_location(
             cx,
+            projection,
             tcx,
             &path,
             ancestors,
@@ -1239,6 +1286,7 @@ fn project_location<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
+    projection: Option<&Projection>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -1247,7 +1295,9 @@ fn project_location<
     hooks: &Hooks<C>,
 ) -> Measured<P> {
     match location.value(|cell| cx.sources.value(cell)) {
-        Some(value) => project_present_value(cx, tcx, path, ancestors, value, avail, hooks),
+        Some(value) => {
+            project_present_value(cx, projection, tcx, path, ancestors, value, avail, hooks)
+        }
         None => pending_view(cx, tcx, path.to_vec(), hooks),
     }
 }
@@ -1258,6 +1308,7 @@ fn project_present_value<
     P: Canvas + HasHandler<C> + HasHover<HoverClaim> + HasDescends + HasPopup,
 >(
     cx: &Cx,
+    projection: Option<&Projection>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
@@ -1265,16 +1316,18 @@ fn project_present_value<
     avail: f64,
     hooks: &Hooks<C>,
 ) -> Measured<P> {
-    let projected = if cx.values {
-        crate::stack::project(&ProjectEnv { cx }, value)
-            .map(|layout| realize(cx, tcx, path, ancestors, hooks, value, layout, avail))
-    } else {
-        None
-    };
+    let projected = projection
+        .and_then(|projection| projection.apply(&ProjectEnv { cx }, value))
+        .map(|layout| {
+            realize(
+                cx, projection, tcx, path, ancestors, hooks, value, layout, avail,
+            )
+        });
     let inner = match projected {
         Some(projected) => projected,
         None => realize(
             cx,
+            projection,
             tcx,
             path,
             ancestors,
@@ -1583,7 +1636,7 @@ fn atom_content<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + H
     match editing {
         Some(line) => {
             let edit_ctx = hooks.edit.clone();
-            display::text_edit(
+            render::text_edit(
                 LineEditDescription {
                     state: line,
                     focused: true,
@@ -1812,7 +1865,7 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + 
     value: Value,
     presentation: LineEditPresentation,
     hooks: &Hooks<C>,
-    line: Option<display::LineEdit>,
+    line: Option<render::LineEdit>,
     content: Measured<P>,
 ) -> Measured<P> {
     let select = hooks.select.clone();
@@ -1846,10 +1899,9 @@ fn cursor_target<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim> + 
     })
 }
 
-
 mod structure;
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod svg_bench;
+#[cfg(test)]
+mod tests;

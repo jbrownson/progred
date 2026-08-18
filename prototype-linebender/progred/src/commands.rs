@@ -5,7 +5,7 @@ use crate::document;
 use crate::graph_view;
 use crate::model::Selected;
 use crate::navigate;
-use crate::raw;
+use crate::projection;
 use crate::selection;
 use crate::sources;
 use crate::{App, CLIPBOARD_FORMAT, plain};
@@ -46,7 +46,11 @@ impl App {
     /// empty buffer, so emptying a string then backspacing again
     /// deletes the element. Selection lands on the next sibling, else
     /// the previous, else the parent.
-    pub(crate) fn delete_key(&mut self, descends: &[navigate::Descend], event: &KeyboardEvent) -> bool {
+    pub(crate) fn delete_key(
+        &mut self,
+        descends: &[navigate::Descend],
+        event: &KeyboardEvent,
+    ) -> bool {
         event.state.is_down()
             && plain(event)
             && matches!(
@@ -70,7 +74,7 @@ impl App {
                 // intact) already covers the deletion.
                 let covered = *recorded;
                 let before = self.model.doc.clone();
-                selection::delete_edge(&mut self.model.doc, &self.model.library, &path) && {
+                selection::delete_edge(&mut self.model.doc, &self.model.stack.library, &path) && {
                     if !covered {
                         self.model.history.record(before, Some(path.clone()));
                         self.refresh_title();
@@ -78,6 +82,7 @@ impl App {
                     let next = navigate::selection_after_delete(descends, &path);
                     self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                         &self.model.sources(),
+                        &self.model.stack.projection,
                         next,
                     )));
                     true
@@ -144,12 +149,18 @@ impl App {
     /// the edge it wrote.
     pub(crate) fn commit_value(&mut self, path: document::Path, action: &completion::EntryAction) {
         let before = self.model.doc.clone();
-        if completion::commit_pending(&mut self.model.doc, &self.model.library, &path, action) {
+        if completion::commit_pending(
+            &mut self.model.doc,
+            &self.model.stack.library,
+            &path,
+            action,
+        ) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
         self.model.selection = Some(Selected::Tree(selection::Selection::edge(
             &self.model.sources(),
+            &self.model.stack.projection,
             path,
         )));
     }
@@ -176,6 +187,7 @@ impl App {
         if self.model.sources().resolve(&path).is_some() {
             self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                 &self.model.sources(),
+                &self.model.stack.projection,
                 path,
             )));
             return;
@@ -188,7 +200,7 @@ impl App {
                 }
                 let renamed = selection::rename_field(
                     &mut self.model.doc,
-                    &self.model.library,
+                    &self.model.stack.library,
                     &parent,
                     &old,
                     label,
@@ -206,6 +218,7 @@ impl App {
                 }
                 self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                     &self.model.sources(),
+                    &self.model.stack.projection,
                     path,
                 )));
             }
@@ -226,8 +239,12 @@ impl App {
     /// these fire on cell, list, and graph selections. Deliberately
     /// NOT menu items — muda accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
-    pub(crate) fn clipboard_key(&mut self, descends: &[navigate::Descend], event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !raw::command(&event.modifiers) {
+    pub(crate) fn clipboard_key(
+        &mut self,
+        descends: &[navigate::Descend],
+        event: &KeyboardEvent,
+    ) -> bool {
+        if !event.state.is_down() || !projection::command(&event.modifiers) {
             return false;
         }
         let Key::Character(c) = &event.key else {
@@ -294,7 +311,7 @@ impl App {
     /// the query as characters. Claims the chord even when the pick
     /// declines (the label stage takes only what can label).
     pub(crate) fn pending_paste_key(&mut self, event: &KeyboardEvent) -> bool {
-        if !event.state.is_down() || !raw::command(&event.modifiers) {
+        if !event.state.is_down() || !projection::command(&event.modifiers) {
             return false;
         }
         if !matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "v") {
@@ -340,7 +357,8 @@ impl App {
         if self.pick_identity(value.clone()) {
             return true;
         }
-        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection else {
+        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection
+        else {
             return false;
         };
         let path = path.clone();
@@ -350,11 +368,12 @@ impl App {
             return true;
         }
         let before = self.model.doc.clone();
-        if selection::set_value(&mut self.model.doc, &self.model.library, &path, value) {
+        if selection::set_value(&mut self.model.doc, &self.model.stack.library, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
             self.model.selection = Some(Selected::Tree(selection::Selection::edge(
                 &self.model.sources(),
+                &self.model.stack.projection,
                 path,
             )));
             true
@@ -388,7 +407,7 @@ impl App {
                 // While pending, plain vertical arrows drive the popup
                 // choice; chorded arrows stay structure keys.
                 Key::Named(direction @ (NamedKey::ArrowUp | NamedKey::ArrowDown))
-                    if !raw::command(&event.modifiers) =>
+                    if !projection::command(&event.modifiers) =>
                 {
                     match &mut self.model.selection {
                         Some(Selected::Tree(
@@ -435,10 +454,12 @@ impl App {
                         let sources = self.model.sources();
                         let shift = event.modifiers.shift();
                         let started = match tree {
-                            Some(current) if raw::command(&event.modifiers) => {
+                            Some(current) if projection::command(&event.modifiers) => {
                                 selection::pending_insert(&sources, current.path(), shift)
                             }
-                            Some(current) => selection::pending_enter(&sources, current.path(), shift),
+                            Some(current) => {
+                                selection::pending_enter(&sources, current.path(), shift)
+                            }
                             None => selection::pending_root(&sources),
                         };
                         let began = started.is_some();
@@ -454,11 +475,14 @@ impl App {
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
                             // would pend again.
-                            self.model.selection = (!(back.is_empty()
-                                && self.model.doc.root.is_none()))
-                            .then(|| {
-                                Selected::Tree(selection::Selection::edge(&self.model.sources(), back))
-                            });
+                            self.model.selection =
+                                (!(back.is_empty() && self.model.doc.root.is_none())).then(|| {
+                                    Selected::Tree(selection::Selection::edge(
+                                        &self.model.sources(),
+                                        &self.model.stack.projection,
+                                        back,
+                                    ))
+                                });
                             true
                         }
                         Some(Selected::Tree(selection::Selection::PendingEdge {
@@ -472,10 +496,12 @@ impl App {
                             if let Some(old) = replacing {
                                 back.push(Step::Key(*old));
                             }
-                            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
-                                &self.model.sources(),
-                                back,
-                            )));
+                            self.model.selection =
+                                Some(Selected::Tree(selection::Selection::edge(
+                                    &self.model.sources(),
+                                    &self.model.stack.projection,
+                                    back,
+                                )));
                             true
                         }
                         _ => false,
@@ -491,7 +517,7 @@ impl App {
     /// (Cmd+R belongs to the Raw view toggle.)
     pub(crate) fn rename_key(&mut self, event: &KeyboardEvent) -> bool {
         event.state.is_down()
-            && raw::command(&event.modifiers)
+            && projection::command(&event.modifiers)
             && matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "l")
             && match &self.model.selection {
                 Some(Selected::Tree(selection::Selection::Edge { path, .. })) => {
@@ -518,21 +544,33 @@ impl App {
         }
         let set = match &event.key {
             Key::Character(c) if c.as_str() == " " => None,
-            Key::Named(NamedKey::ArrowUp) if raw::command(&event.modifiers) => Some(true),
-            Key::Named(NamedKey::ArrowDown) if raw::command(&event.modifiers) => Some(false),
+            Key::Named(NamedKey::ArrowUp) if projection::command(&event.modifiers) => Some(true),
+            Key::Named(NamedKey::ArrowDown) if projection::command(&event.modifiers) => Some(false),
             _ => return false,
         };
-        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection else {
+        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection
+        else {
             return false;
         };
         let path = path.clone();
         let sources = sources::Sources {
             doc: &self.model.doc,
-            library: &self.model.library,
+            library: &self.model.stack.library,
         };
         match set {
-            None => selection::toggle_collapse(&sources, &mut self.model.collapse, &path),
-            Some(closed) => selection::set_collapse(&sources, &mut self.model.collapse, &path, closed),
+            None => selection::toggle_collapse(
+                &sources,
+                &self.model.stack.projection,
+                &mut self.model.collapse,
+                &path,
+            ),
+            Some(closed) => selection::set_collapse(
+                &sources,
+                &self.model.stack.projection,
+                &mut self.model.collapse,
+                &path,
+                closed,
+            ),
         }
     }
 }

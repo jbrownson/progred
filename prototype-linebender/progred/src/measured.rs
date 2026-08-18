@@ -1,4 +1,4 @@
-//! Progred's boxes with baselines: the TeX/pict model. A [`Measured`]
+//! Progred's measured boxes with baselines: the TeX/pict model. A [`Measured`]
 //! box is (width, ascent, descent) plus a way to place itself; rows
 //! compose on baselines, columns stack with a chosen child's baseline.
 //!
@@ -204,10 +204,7 @@ pub fn before<P>(
 
 /// The historical leading decoration operation, retained as the
 /// rectangle-only spelling of [`before`].
-pub fn decorate<P>(
-    child: Measured<P>,
-    draw: impl FnOnce(&mut P, Rect) + 'static,
-) -> Measured<P> {
+pub fn decorate<P>(child: Measured<P>, draw: impl FnOnce(&mut P, Rect) + 'static) -> Measured<P> {
     before(child, move |ctx, placement| draw(ctx, placement.rect))
 }
 
@@ -365,12 +362,7 @@ mod tests {
     }
 
     impl<C> Canvas for Frame<C> {
-        fn fill(
-            &mut self,
-            shape: impl Into<Shape>,
-            brush: impl Into<Brush>,
-            transform: Affine,
-        ) {
+        fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
             self.list.fill(shape, brush, transform);
         }
 
@@ -484,7 +476,10 @@ mod tests {
 
     #[test]
     fn row_places_children_on_one_baseline() {
-        let r = row(4.0, vec![probe(ext(10.0, 8.0, 2.0)), probe(ext(20.0, 12.0, 4.0))]);
+        let r = row(
+            4.0,
+            vec![probe(ext(10.0, 8.0, 2.0)), probe(ext(20.0, 12.0, 4.0))],
+        );
         assert_eq!(r.extent, ext(34.0, 12.0, 4.0));
 
         let mut placed = Vec::new();
@@ -596,9 +591,7 @@ mod tests {
             place_inner.place(ctx);
             ctx.events.push("after");
         });
-        let mut ctx = Ctx {
-            events: Vec::new(),
-        };
+        let mut ctx = Ctx { events: Vec::new() };
         place(
             wrapped,
             &mut ctx,
@@ -617,9 +610,7 @@ mod tests {
         }
         let child = leaf(ext(10.0, 5.0, 5.0), |ctx: &mut Ctx, _| ctx.placed = true);
         let wrapped = around(child, |_: &mut Ctx, _, _| {});
-        let mut ctx = Ctx {
-            placed: false,
-        };
+        let mut ctx = Ctx { placed: false };
         place_top_left(wrapped, &mut ctx, Point::ZERO);
         assert!(!ctx.placed);
     }
@@ -660,19 +651,23 @@ mod tests {
             Vec2::new(5.0, 40.0),
             |_, _| false,
         );
-        let [DrawCmd::Clip {
-            shape: Shape::Rect(clip),
-            children,
-            ..
-        }] = &frame.list.0[..]
+        let [
+            DrawCmd::Clip {
+                shape: Shape::Rect(clip),
+                children,
+                ..
+            },
+        ] = &frame.list.0[..]
         else {
             panic!("expected one clip");
         };
         assert_eq!(*clip, Rect::new(10.0, 20.0, 90.0, 70.0));
-        let [DrawCmd::Fill {
-            shape: Shape::Rect(dot),
-            ..
-        }] = &children[..]
+        let [
+            DrawCmd::Fill {
+                shape: Shape::Rect(dot),
+                ..
+            },
+        ] = &children[..]
         else {
             panic!("expected the probe inside the clip");
         };
@@ -717,13 +712,36 @@ mod tests {
             },
         );
         let mut log = Vec::new();
-        assert!(!frame.handler.dispatch_pointer_down(&mut log, &down_at(20.0, 5.0)));
-        assert!(!frame.handler.dispatch_scroll(&mut log, &scroll_at(20.0, 5.0)));
-        assert!(frame.handler.dispatch_pointer_down(&mut log, &down_at(5.0, 5.0)));
-        assert!(frame.handler.dispatch_scroll(&mut log, &scroll_at(5.0, 5.0)));
-        assert!(frame.handler.dispatch_pointer_move(&mut log, &move_at(20.0, 5.0)));
-        assert!(frame.handler.dispatch_pointer_up(&mut log, &down_at(20.0, 5.0)));
+        assert!(
+            !frame
+                .handler
+                .dispatch_pointer_down(&mut log, &down_at(20.0, 5.0))
+        );
+        assert!(
+            !frame
+                .handler
+                .dispatch_scroll(&mut log, &scroll_at(20.0, 5.0))
+        );
+        assert!(
+            frame
+                .handler
+                .dispatch_pointer_down(&mut log, &down_at(5.0, 5.0))
+        );
+        assert!(
+            frame
+                .handler
+                .dispatch_scroll(&mut log, &scroll_at(5.0, 5.0))
+        );
+        assert!(
+            frame
+                .handler
+                .dispatch_pointer_move(&mut log, &move_at(20.0, 5.0))
+        );
+        assert!(
+            frame
+                .handler
+                .dispatch_pointer_up(&mut log, &down_at(20.0, 5.0))
+        );
         assert_eq!(log, ["down", "scroll", "move", "up"]);
     }
-
 }

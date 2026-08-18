@@ -1192,7 +1192,7 @@ washed 0.08; a whole string lights, never a caret; selection
 outranks hover), `Label`/`Toggle` light their own ink, `Entry`
 fills its popup row at 0.08 (chosen keeps 0.14) and CARRIES THE
 VALUE it would commit. SECONDARY HOVER rides the same state:
-`Hovered` is the shell's `Selected` twin (`Tree(raw::Hover) |
+`Hovered` is the shell's `Selected` twin (`Tree(hover::Hovering) |
 Graph(GraphNode)`), and `hover_value` — `secondary_of`'s hover
 twin — feeds `cx.secondary_hover`, so hovering a value, a label,
 a popup reference, or a graph node marks the value's OTHER

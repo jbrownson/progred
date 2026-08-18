@@ -2,8 +2,8 @@
 //! documents. GID owns their notation round trips; this module owns
 //! their application-level evaluation behavior.
 
-use crate::gid::{Binders, parse};
 use crate::document::Document;
+use crate::gid::{Binders, parse};
 use progred_graph::Value;
 
 fn grap_expression(value: &Value) -> &Value {
@@ -17,15 +17,14 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
     grap::evaluate(
         expression,
         |cell| doc.cells.value(cell).cloned(),
-        &crate::stack::foreign_functions(),
+        &crate::stack::load().foreign,
         grap::DEFAULT_FUEL,
     )
 }
 
 #[test]
 fn the_sample_contains_a_projectable_grap_computation() {
-    let (doc, binders) =
-        parse(include_str!("../../sample.gid")).expect("the sample parses");
+    let (doc, binders) = parse(include_str!("../../sample.gid")).expect("the sample parses");
     let roof = doc
         .root
         .as_ref()
@@ -36,15 +35,13 @@ fn the_sample_contains_a_projectable_grap_computation() {
         .and_then(Value::as_record)
         .expect("roof record");
     let expression = grap_expression(
-        roof
-            .get(&crate::test_values::label("double pitch"))
+        roof.get(&crate::test_values::label("double pitch"))
             .expect("Grap expression"),
     );
     assert_eq!(evaluate(&doc, expression).result, grap_f64::value(5.0));
 
     let profile = grap_expression(
-        roof
-            .get(&crate::test_values::label("profile"))
+        roof.get(&crate::test_values::label("profile"))
             .expect("profile call"),
     );
     let evaluation = evaluate(&doc, profile);
@@ -88,11 +85,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         ("metadata_call", grap_f64::value(7.0)),
     ] {
         assert_eq!(
-            evaluate(
-                &doc,
-                grap_expression(demo_entry(&doc, &binders, label)),
-            )
-            .result,
+            evaluate(&doc, grap_expression(demo_entry(&doc, &binders, label)),).result,
             expected
         );
     }

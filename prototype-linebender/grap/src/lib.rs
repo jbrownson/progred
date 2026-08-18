@@ -113,7 +113,7 @@ impl TryFrom<Value> for Environment {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ForeignFunctions {
     functions: HashMap<CellId, ForeignFunction>,
 }

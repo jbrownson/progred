@@ -3,15 +3,14 @@
 use crate::completion;
 use crate::graph_view;
 use crate::hover;
-use crate::layout;
+use crate::measured;
 use crate::menu;
 use crate::model::{Model, Selected, ViewFlags};
 use crate::navigate;
-use crate::raw;
+use crate::projection;
 use crate::selection;
 use crate::sources;
 use crate::{App, content_viewport, graph_panel};
-use winit::dpi::PhysicalPosition;
 use parley::{FontContext, LayoutContext};
 use progred_graph::Value;
 use puri::draw::{Canvas, GlyphRun, Shape};
@@ -22,9 +21,10 @@ use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
 use std::rc::Rc;
 use ui_events::pointer::PointerButton;
+use vello::Scene;
 use vello::kurbo::{Affine, Point, Size, Stroke, Vec2};
 use vello::peniko::Brush;
-use vello::Scene;
+use winit::dpi::PhysicalPosition;
 
 pub(crate) struct Dispatch {
     pub(crate) handler: Handler<App>,
@@ -260,7 +260,9 @@ pub(crate) fn resolved_hover(
         (true, _) => current.cloned(),
         (false, None) => None,
         (false, Some(point)) => match hit {
-            Some(HoverHit::Tree(hover::HoverClaim::Direct(hovering))) => hovering.map(Hovered::Tree),
+            Some(HoverHit::Tree(hover::HoverClaim::Direct(hovering))) => {
+                hovering.map(Hovered::Tree)
+            }
             Some(HoverHit::Graph(node)) => node.map(Hovered::Graph),
             #[cfg(target_os = "linux")]
             Some(HoverHit::Menu(hover)) => hover.map(Hovered::Menu),
@@ -319,7 +321,12 @@ impl App {
     /// path while opening a pending), so it never fights manual
     /// scrolling. The target is the popup anchor while pending — it
     /// marks the authoring row — else the selection's rect.
-    pub(crate) fn reveal_selection(&mut self, dispatch: &Dispatch, scale: f64, viewport: Size) -> bool {
+    pub(crate) fn reveal_selection(
+        &mut self,
+        dispatch: &Dispatch,
+        scale: f64,
+        viewport: Size,
+    ) -> bool {
         let reveal = self
             .model
             .tree_selection()
@@ -384,7 +391,12 @@ impl App {
         self.model.view
     }
 
-    pub(crate) fn build_frame(&mut self, visibility: FrameVisibility, scale: f64, viewport: Size) -> Dispatch {
+    pub(crate) fn build_frame(
+        &mut self,
+        visibility: FrameVisibility,
+        scale: f64,
+        viewport: Size,
+    ) -> Dispatch {
         let view = self.view_flags();
         let availability = self.menu_availability();
         let presented_hover = self.hover.clone();
@@ -421,7 +433,12 @@ impl App {
     /// Mint dispatch data from the final state of a transition. A
     /// silent pass supplies reveal geometry and resolves hover;
     /// scrolling to reveal changes geometry and earns one rebuild.
-    pub(crate) fn retain_dispatch(&mut self, scale: f64, viewport: Size, reveal_selection: bool) -> bool {
+    pub(crate) fn retain_dispatch(
+        &mut self,
+        scale: f64,
+        viewport: Size,
+        reveal_selection: bool,
+    ) -> bool {
         let before = self.hover.clone();
         let mut dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
         if reveal_selection && self.reveal_selection(&dispatch, scale, viewport) {
@@ -474,7 +491,7 @@ pub(crate) fn run_frame(
         scale: scale as f32,
         cache: text_cache,
     };
-    let styles = crate::stack::styles(scale);
+    let styles = crate::styles::editor(scale);
     #[cfg(target_os = "linux")]
     let menu_hover = match hover.as_ref() {
         Some(Hovered::Menu(hover)) => Some(*hover),
@@ -501,7 +518,7 @@ pub(crate) fn run_frame(
     let _ = (menu, availability);
     let content_viewport = content_viewport(viewport, scale);
     #[cfg(target_os = "linux")]
-    layout::place(
+    measured::place(
         application_menu.bar,
         frame,
         Placement::new(
@@ -533,8 +550,8 @@ pub(crate) fn run_frame(
     let hover_node = graph_hover
         .and_then(|node| graph_view::node_value(&model.doc, node))
         .filter(|value| !matches!(value, Value::Record(_)));
-    let body = raw::project(
-        raw::ProjectDescription {
+    let body = projection::project(
+        projection::ProjectDescription {
             sources,
             selection: model.tree_selection(),
             graph_node: graph_node.as_ref(),
@@ -544,11 +561,11 @@ pub(crate) fn run_frame(
             raw: view.raw,
             styles: &styles,
             width: body_width,
-            values: !view.raw,
-            foreign: &model.foreign,
+            projection: (!view.raw).then_some(&model.stack.projection),
+            foreign: &model.stack.foreign,
         },
         &mut tcx,
-        raw::Hooks {
+        projection::Hooks {
             // The selection transition: re-selecting the same path
             // keeps its editor state, and a reported text click seeds
             // or advances the editor's caret — focus and cursor
@@ -567,12 +584,18 @@ pub(crate) fn run_frame(
                         let sources = app.model.sources();
                         match click.as_ref() {
                             Some(click) => match &click.line {
-                                Some(line) => {
-                                    selection::Selection::from_line(&sources, path, line)
-                                }
-                                None => selection::Selection::edge(&sources, path),
+                                Some(line) => selection::Selection::from_line(&sources, path, line),
+                                None => selection::Selection::edge(
+                                    &sources,
+                                    &app.model.stack.projection,
+                                    path,
+                                ),
                             },
-                            None => selection::Selection::edge(&sources, path),
+                            None => selection::Selection::edge(
+                                &sources,
+                                &app.model.stack.projection,
+                                path,
+                            ),
                         }
                     };
                     app.model.selection = Some(Selected::Tree(next));
@@ -616,8 +639,9 @@ pub(crate) fn run_frame(
                 selection::toggle_collapse(
                     &sources::Sources {
                         doc: &app.model.doc,
-                        library: &app.model.library,
+                        library: &app.model.stack.library,
                     },
+                    &app.model.stack.projection,
                     &mut app.model.collapse,
                     &path,
                 );
@@ -653,7 +677,7 @@ pub(crate) fn run_frame(
     // maximum answers to the LAYOUT width — content should only
     // scroll where even the block forms overflowed it — not the
     // window edge the viewport clips at.
-    let content = layout::pad(vello::kurbo::Insets::uniform(margin), body);
+    let content = measured::pad(vello::kurbo::Insets::uniform(margin), body);
     frame.max_scroll = ((content.extent.height() - content_viewport.height()) / scale).max(0.0);
     frame.max_scroll_x = ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
     let offset = Vec2::new(
@@ -663,7 +687,7 @@ pub(crate) fn run_frame(
     let max_scroll = frame.max_scroll;
     let max_scroll_x = frame.max_scroll_x;
     let graph_panel_rect = view.graph.then(|| graph_panel(viewport, scale));
-    layout::place_scrolled(
+    measured::place_scrolled(
         content,
         frame,
         Placement::new(content_viewport, content_viewport),
@@ -731,7 +755,7 @@ pub(crate) fn run_frame(
             },
         );
         let rect = pane.extent.rect_at(Point::new(panel.x0, panel.y0));
-        layout::place(pane, frame, Placement::new(rect, content_viewport));
+        measured::place(pane, frame, Placement::new(rect, content_viewport));
     }
 
     // The pending row's popup draws after the body, so it overlays
@@ -741,18 +765,21 @@ pub(crate) fn run_frame(
             Some(hover::Hover::Entry(index)) => Some(*index),
             _ => None,
         };
-        let commit = |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
-            Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                app.commit_value(path, action);
-            }
-            Some(Selected::Tree(selection::Selection::PendingEdge {
-                parent, replacing, ..
-            })) => {
-                app.commit_label(parent, replacing, action);
-            }
-            selection => app.model.selection = selection,
-        };
-        let card = raw::popup_view(&mut tcx, &styles, &popup, hovered_entry, commit);
+        let commit =
+            |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
+                Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
+                    app.commit_value(path, action);
+                }
+                Some(Selected::Tree(selection::Selection::PendingEdge {
+                    parent,
+                    replacing,
+                    ..
+                })) => {
+                    app.commit_label(parent, replacing, action);
+                }
+                selection => app.model.selection = selection,
+            };
+        let card = projection::popup_view(&mut tcx, &styles, &popup, hovered_entry, commit);
         // Below the anchor, unless it would run off the bottom and
         // fits above — then flip on top, as the TypeScript prototype
         // did. The card's extent is known before placement.
@@ -765,7 +792,7 @@ pub(crate) fn run_frame(
                 below
             };
         let rect = card.extent.rect_at(Point::new(popup.anchor.x0, y));
-        layout::place(card, frame, Placement::new(rect, content_viewport));
+        measured::place(card, frame, Placement::new(rect, content_viewport));
         frame.popup = Some(popup);
     }
 
@@ -792,7 +819,7 @@ pub(crate) fn run_frame(
         frame.handler().on_scroll(move |_, event| {
             rect.contains(Point::new(event.state.position.x, event.state.position.y))
         });
-        layout::place(
+        measured::place(
             popup,
             frame,
             Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
@@ -821,7 +848,6 @@ pub(crate) fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
         clipboard: text_clipboard,
     })
 }
-
 
 #[cfg(test)]
 mod frame_tests {
@@ -916,4 +942,3 @@ mod frame_tests {
         );
     }
 }
-
