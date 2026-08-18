@@ -5,6 +5,7 @@ use crate::identity::short_id;
 use crate::selection::{parse_blob, set_value};
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
+use progred_libraries::{name, text};
 use vello::kurbo::Rect;
 
 /// A completion offer on a pending. The display styles itself by the
@@ -72,7 +73,7 @@ pub(crate) fn completion_entries(
     let atom = blob
         .as_ref()
         .map(|bytes| Value::from(bytes.clone()))
-        .unwrap_or_else(|| progred_text::value(text));
+        .unwrap_or_else(|| text::value(text));
     // Quotes and `0x` state atom intent, so the atom leads; otherwise
     // a confident (non-fuzzy) NAMED match is likelier the intent than
     // a new literal — typing a visible name should default to the
@@ -87,13 +88,13 @@ pub(crate) fn completion_entries(
         detail: None,
         matches: Vec::new(),
         id: false,
-        action: EntryAction::Value(progred_text::value(query)),
+        action: EntryAction::Value(text::value(query)),
     });
     let atom_entry = Entry {
         display: if labels {
             text.to_string()
         } else {
-            progred_text::read(&atom)
+            text::read(&atom)
                 .map(|text| format!("\"{text}\""))
                 .unwrap_or_else(|| atom.to_string())
         },
@@ -253,7 +254,7 @@ pub fn resolve_label(action: &EntryAction) -> Option<(CellId, Option<(CellId, Va
         EntryAction::Value(value) => value.as_cell().map(|cell| (cell, None)),
         EntryAction::NewLabel(name) => {
             let cell = new_cell_id();
-            Some((cell, Some((cell, progred_name::record(name, [])))))
+            Some((cell, Some((cell, name::record(name, [])))))
         }
         EntryAction::NewCell => Some((new_cell_id(), None)),
         EntryAction::NewList | EntryAction::NewRecord => None,

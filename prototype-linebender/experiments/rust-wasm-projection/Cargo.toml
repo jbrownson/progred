@@ -4,10 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-grap-f64 = { path = "../../grap/libraries/f64" }
+progred-libraries = { path = "../../libraries" }
 gid = { path = "../../gid" }
 serde_json = "1.0"
 wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "runtime", "wat", "std", "parallel-compilation"] }
 
 [dev-dependencies]
-progred-text = { path = "../../conventions/text" }

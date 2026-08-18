@@ -21,6 +21,7 @@ use crate::sources::Sources;
 use gid::{CellId, Document, Value};
 use parley::style::GenericFamily;
 use parley::{Layout, StyleProperty};
+use progred_libraries::text;
 use puri::draw::Canvas;
 use puri::handler::HasHandler;
 use puri::text::{TextCtx, draw_layout};
@@ -552,7 +553,7 @@ fn node_content(
             let mark = match doc
                 .root
                 .as_ref()
-                .and_then(|value| progred_text::read(value).map(|text| format!("\"{text}\"")))
+                .and_then(|value| text::read(value).map(|text| format!("\"{text}\"")))
             {
                 Some(text) => text,
                 None => match &doc.root {
@@ -563,11 +564,7 @@ fn node_content(
                     None => String::new(),
                 },
             };
-            match doc
-                .root
-                .as_ref()
-                .and_then(|value| progred_text::read(value))
-            {
+            match doc.root.as_ref().and_then(|value| text::read(value)) {
                 Some(_) => layout_text(tcx, &mark, size, STRING_TEXT, ui),
                 _ => layout_text(tcx, &mark, size, DIM_TEXT, ui),
             }
@@ -951,7 +948,7 @@ mod tests {
         assert!(
             snapshot
                 .edges
-                .contains(&(GraphNode::Cell(a), progred_text::vocabulary::UTF8))
+                .contains(&(GraphNode::Cell(a), text::vocabulary::UTF8))
         );
         // A link root adds no synthetic node.
         assert!(!snapshot.nodes.contains(&GraphNode::Root));

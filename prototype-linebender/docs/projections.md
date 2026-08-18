@@ -32,9 +32,10 @@ ending in a total structural projection which can show any GID value. The
 structural projection recursively re-enters the same dispatcher for every
 child instead of owning a closed set of leaf cases. `projection` is the
 runner: location lookup and trying an explicit list of partials. Each
-partial is a function that checks its own preconditions. Library packs
-offer those functions as `Layout`-returning partials; `stack::load`
-assembles their cells and foreign functions along with one reusable
+partial is a function that checks its own preconditions. Each built-in
+library module exports one `Library` value containing its cells, foreign
+functions, and ordered partial projections; `stack::load` folds those
+values and builds one reusable
 projection — text, f64, and the `grap` value partial — above the structural fallback. Raw is that
 fallback alone. This composed projection is passed explicitly through
 recursion; it is not hidden in display context.
@@ -90,8 +91,8 @@ properties of that design rather than of an embedded language:
 Semantic labels are library cell IDs, not strings. The IDs are
 once-minted random 128-bit cell identities, checked in as library
 facts; they are not derived from, or hashes of, their names. Their
-simple names are ordinary GID facts supplied by the `progred-name`
-library convention, not metadata in the cell table.
+simple names are ordinary GID facts supplied by the `name`
+library, not metadata in the cell table.
 
 Core Grap source forms use `function`, `params`, and `body` to
 distinguish applications and lambdas from ordinary records. Evaluation
@@ -101,7 +102,8 @@ uses three more identities in explicit callable values: `closure`,
 registered call rather than evaluator syntax. Core Grap has no number or
 geometry type and no arithmetic or geometry operation.
 
-The grap crate offers a `grap` value partial alongside the evaluator.
+The built-in Grap library offers a `grap` value partial alongside the
+runtime evaluator.
 A record with a `grap` field is replaced by the stored
 expression (nested under that field so editing stays on
 `…+Key(grap)`), then `→`, then the returned `Value` recursively
@@ -302,12 +304,15 @@ underlying document: its absent is projected like any other normal
 form, and the stored expression remains editable in Raw or wherever
 the same expression cell is projected outside a `grap` field.
 
-The evaluator lives in its own `grap` crate. It depends on the GID
-core and the shared Grap absent and name conventions, but knows no f64,
-geometry, UI, file, or Linebender concepts. `grap-f64` and `grap-geometry` are `Library` values the editor
-loads. Each offers cells, optional foreign functions, and optional
-projections. The editor merges them once into its loaded `Stack`; a
-later foreign table overrides a shared cell.
+The evaluator runtime lives in its own `grap` crate and depends only on
+GID plus its persistent-map implementation. It knows no names, absent
+classification, projection, f64, geometry, UI, file, or Linebender
+concepts. The `progred-libraries` package contains one module per
+built-in conceptual library: Grap, name, text, isa, absent, control,
+f64, and geometry. Each module exports its complete `Library` value.
+`Library` is the product of the cells, foreign-function table, and
+ordered-partial-list monoids. The editor folds those values once into
+its loaded `Stack`; a later foreign table overrides a shared cell.
 
 A registered Rust implementation receives the call record, the calling
 environment, and the live evaluation context. It looks up the fields it
@@ -343,7 +348,7 @@ for their absent cases and return those identities as values: several
 semantically distinct custom nulls, not freshly allocated occurrences.
 Each absent's library value is a record containing `isa: absent`. The
 general `isa` relation lives in the independent
-`progred-isa` library: it is a convention over GID data, not part of
+`isa` library: it is a convention over GID data, not part of
 Grap or `gid`. The absent library owns only the `absent`
 classification and uses that relation. Additional static facts can be
 added as fields on each absent's record. Absent meaning remains

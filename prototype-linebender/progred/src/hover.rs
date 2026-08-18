@@ -5,6 +5,7 @@ use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
 use gid::{Path, Step, Value};
+use progred_libraries::text;
 use vello::kurbo::{Point, Rect};
 
 /// Settled placement's internal pointer hit test. Later claims replace
@@ -96,9 +97,7 @@ pub fn hover_value(
     match hover {
         Hover::Value(path) => sources
             .resolve(path)
-            .filter(|value| {
-                !matches!(value, Value::Record(_)) || progred_text::read(value).is_some()
-            })
+            .filter(|value| !matches!(value, Value::Record(_)) || text::read(value).is_some())
             .cloned(),
         // A dead address answers nothing: the label must still be in
         // the document, or a rename under a parked pointer would keep

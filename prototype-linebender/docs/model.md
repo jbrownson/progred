@@ -36,7 +36,7 @@ value. The core retains the identity/value split from the next section:
 bare. There is no `Cell` sum, metadata half, `set_name`, or `Step::Name`.
 
 The bootstrap simple-name convention is an ordinary record field whose
-label is the randomly minted `progred-name` library cell. A record such
+label is the randomly minted built-in `name` library cell. A record such
 as `{name: "roof", ...}` therefore contains one value, not a special
 name plus a wrapped value. `isa` works the same way. This keeps the core
 honest for multiple languages and naming systems: names may later be

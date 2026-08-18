@@ -1,8 +1,11 @@
 //! The first geometry Grap library: a circle value and a Rust-backed
 //! constructor consuming the f64 library's representation.
 
-use grap::{ForeignFunction, ForeignFunctions};
+use crate::{Library, absent, f64, name};
 use gid::{Cells, Value};
+#[cfg(test)]
+use grap_runtime as grap;
+use grap_runtime::{ForeignFunction, ForeignFunctions};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -15,7 +18,7 @@ pub mod vocabulary {
 pub fn value(radius: f64) -> Value {
     Value::record([(
         vocabulary::CIRCLE,
-        Value::record([(vocabulary::RADIUS, grap_f64::value(radius))]),
+        Value::record([(vocabulary::RADIUS, f64::value(radius))]),
     )])
 }
 
@@ -25,7 +28,7 @@ pub fn read(value: &Value) -> Option<f64> {
         .get(&vocabulary::CIRCLE)
         .and_then(Value::as_record)
         .and_then(|circle| circle.get(&vocabulary::RADIUS))
-        .and_then(grap_f64::read)?;
+        .and_then(f64::read)?;
     (radius.is_finite() && radius >= 0.0).then_some(radius)
 }
 
@@ -38,7 +41,7 @@ pub fn functions() -> ForeignFunctions {
                     return Ok(context.missing_argument(vocabulary::RADIUS));
                 };
                 let radius = context.eval(radius, environment)?;
-                Ok(grap_f64::read(&radius)
+                Ok(f64::read(&radius)
                     .filter(|radius| radius.is_finite() && *radius >= 0.0)
                     .map(value)
                     .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS)))
@@ -47,15 +50,16 @@ pub fn functions() -> ForeignFunctions {
     )
 }
 
-pub fn library() -> Cells {
+pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
-    cells.set_value(vocabulary::CIRCLE, progred_name::record("circle", []));
-    cells.set_value(vocabulary::RADIUS, progred_name::record("radius", []));
-    cells.set_value(
-        vocabulary::INVALID_RADIUS,
-        grap_absent::named("invalid radius"),
-    );
-    cells
+    cells.set_value(vocabulary::CIRCLE, name::record("circle", []));
+    cells.set_value(vocabulary::RADIUS, name::record("radius", []));
+    cells.set_value(vocabulary::INVALID_RADIUS, absent::named("invalid radius"));
+    Library {
+        cells,
+        functions: functions(),
+        ..Library::default()
+    }
 }
 
 #[cfg(test)]
@@ -68,7 +72,7 @@ mod tests {
         let foreign = functions();
         let expression = grap::call(
             Value::from(vocabulary::CIRCLE),
-            [(vocabulary::RADIUS, grap_f64::value(20.0))],
+            [(vocabulary::RADIUS, f64::value(20.0))],
         );
         assert_eq!(
             grap::evaluate(&expression, |_| None, &foreign, 10).result,
@@ -87,7 +91,7 @@ mod tests {
         let with_extra = Value::record(enriched.as_record().unwrap().clone().update(
             vocabulary::CIRCLE,
             Value::record([
-                (vocabulary::RADIUS, grap_f64::value(20.0)),
+                (vocabulary::RADIUS, f64::value(20.0)),
                 (new_cell_id(), Value::from(b"survey".to_vec())),
             ]),
         ));
@@ -99,15 +103,15 @@ mod tests {
         let foreign = functions();
         let expression = grap::call(
             Value::from(vocabulary::CIRCLE),
-            [(vocabulary::RADIUS, grap_f64::value(-1.0))],
+            [(vocabulary::RADIUS, f64::value(-1.0))],
         );
         let evaluation = grap::evaluate(&expression, |_| None, &foreign, 10);
-        assert_eq!(
-            evaluation.result,
-            Value::from(vocabulary::INVALID_RADIUS)
-        );
-        assert!(grap_absent::is_absent(
-            library().value(vocabulary::INVALID_RADIUS).unwrap()
+        assert_eq!(evaluation.result, Value::from(vocabulary::INVALID_RADIUS));
+        assert!(absent::is_absent(
+            library::<(), ()>()
+                .cells
+                .value(vocabulary::INVALID_RADIUS)
+                .unwrap()
         ));
     }
 }

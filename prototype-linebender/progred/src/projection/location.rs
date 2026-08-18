@@ -1,6 +1,8 @@
 //! Unresolved projection locations and GID-step lookup.
 
 use gid::{CellId, Step, Value};
+#[cfg(test)]
+use progred_libraries::f64;
 
 /// A place a projection can begin. Children retain the parent and
 /// step rather than arriving pre-resolved, so absence is visible to
@@ -30,8 +32,8 @@ mod tests {
     #[test]
     fn a_child_location_looks_up_the_step_when_projected() {
         let child = crate::test_values::label("child");
-        let value = Value::record([(child, grap_f64::value(2.5))]);
-        let expected = grap_f64::value(2.5);
+        let value = Value::record([(child, f64::value(2.5))]);
+        let expected = f64::value(2.5);
         assert_eq!(
             Location::Child {
                 parent: &value,

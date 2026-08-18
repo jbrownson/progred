@@ -2,6 +2,7 @@
 
 use crate::selection::Selection;
 use gid::{Path, Step};
+use progred_libraries::name;
 use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use vello::kurbo::Rect;
@@ -103,9 +104,7 @@ struct Stop {
 
 pub(crate) fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
     match path {
-        [owner @ .., Step::Follow, Step::Key(label)]
-            if *label == progred_name::vocabulary::NAME =>
-        {
+        [owner @ .., Step::Follow, Step::Key(label)] if *label == name::vocabulary::NAME => {
             Some(owner)
         }
         _ => None,

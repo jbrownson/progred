@@ -12,7 +12,6 @@ mod graph_view;
 mod history;
 mod hover;
 mod identity;
-mod library;
 #[cfg(target_os = "macos")]
 mod macos_menu;
 mod measured;

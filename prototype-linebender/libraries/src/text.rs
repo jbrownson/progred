@@ -1,7 +1,8 @@
 //! A UTF-8 text convention over ordinary GID data. Text is a
 //! positively recognized record facet, not a GID-core atom.
 
-use gid::Value;
+use crate::{Library, name};
+use gid::{Cells, Value};
 use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, overlay};
 
 pub mod vocabulary {
@@ -39,6 +40,16 @@ pub fn display<World, Hover>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     line(input.value).map(editable_line)
+}
+
+pub fn library<World, Hover>() -> Library<World, Hover> {
+    let mut cells = Cells::new();
+    cells.set_value(vocabulary::UTF8, name::record("utf8", []));
+    Library {
+        cells,
+        projections: vec![display::<World, Hover>],
+        ..Library::default()
+    }
 }
 
 #[cfg(test)]
@@ -94,5 +105,15 @@ mod tests {
             }),
             Some(Layout::Leaf(progred_display::Display::LineEdit(line))) if line.text == "hi"
         ));
+    }
+
+    #[test]
+    fn the_library_owns_its_vocabulary_and_projection() {
+        let library = library::<(), ()>();
+        assert_eq!(
+            library.cells.value(vocabulary::UTF8).and_then(name::read),
+            Some("utf8")
+        );
+        assert_eq!(library.projections.len(), 1);
     }
 }

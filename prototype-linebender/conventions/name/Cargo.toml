@@ -1,8 +1,0 @@
-[package]
-name = "progred-name"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-progred-text = { path = "../text" }
-gid = { path = "../../gid" }

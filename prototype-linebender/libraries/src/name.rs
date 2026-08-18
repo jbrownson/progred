@@ -1,6 +1,7 @@
 //! A simple name on a record. The field is ordinary GID data. This
 //! editor assumes the library; other hosts need not.
 
+use crate::{Library, text};
 use gid::{CellId, Cells, Value};
 
 pub mod vocabulary {
@@ -10,7 +11,7 @@ pub mod vocabulary {
 }
 
 pub fn field(name: impl Into<String>) -> (CellId, Value) {
-    (vocabulary::NAME, progred_text::value(name))
+    (vocabulary::NAME, text::value(name))
 }
 
 pub fn record(name: impl Into<String>, fields: impl IntoIterator<Item = (CellId, Value)>) -> Value {
@@ -21,14 +22,16 @@ pub fn read(value: &Value) -> Option<&str> {
     value
         .as_record()?
         .get(&vocabulary::NAME)
-        .and_then(progred_text::read)
+        .and_then(text::read)
 }
 
-pub fn library() -> Cells {
+pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::NAME, record("name", []));
-    cells.set_value(progred_text::vocabulary::UTF8, record("utf8", []));
-    cells
+    Library {
+        cells,
+        ..Library::default()
+    }
 }
 
 #[cfg(test)]
@@ -39,9 +42,9 @@ mod tests {
     #[test]
     fn names_are_extensible_ordinary_record_data() {
         let mut fields = record("roof", []).as_record().unwrap().clone();
-        fields.insert(new_cell_id(), progred_text::value("anything"));
+        fields.insert(new_cell_id(), text::value("anything"));
         assert_eq!(read(&Value::Record(fields)), Some("roof"));
-        assert_eq!(read(&progred_text::value("roof")), None);
+        assert_eq!(read(&text::value("roof")), None);
 
         let empty = record("", []);
         assert_eq!(read(&empty), Some(""));
@@ -50,18 +53,17 @@ mod tests {
                 .as_record()
                 .unwrap()
                 .get(&vocabulary::NAME)
-                .and_then(progred_text::read),
+                .and_then(text::read),
             Some("")
         );
     }
 
     #[test]
     fn the_name_relation_describes_itself_without_core_support() {
-        let library = library();
-        assert_eq!(library.value(vocabulary::NAME).and_then(read), Some("name"));
+        let library = library::<(), ()>();
         assert_eq!(
-            library.value(progred_text::vocabulary::UTF8).and_then(read),
-            Some("utf8")
+            library.cells.value(vocabulary::NAME).and_then(read),
+            Some("name")
         );
     }
 }

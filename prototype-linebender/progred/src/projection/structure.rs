@@ -11,6 +11,7 @@ use progred_display::{
     Delim, Layout, PointerClick, block_hover, bracket, col, delim, descend, dim, group, head, hug,
     id, label, on_click, on_hover, query, row, slot,
 };
+use progred_libraries::{name, text};
 use puri::text::{TextCtx, caret_index, line_layout};
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -173,12 +174,12 @@ fn record_layout<World: 'static>(
             .and_then(|cell| cx.name(cell))
             .is_some()
         && fields
-            .get(&progred_name::vocabulary::NAME)
-            .and_then(progred_text::read)
+            .get(&name::vocabulary::NAME)
+            .and_then(text::read)
             .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(CellId, bool)> = fields
         .iter()
-        .filter(|(key, _)| !consumes_simple_name || **key != progred_name::vocabulary::NAME)
+        .filter(|(key, _)| !consumes_simple_name || **key != name::vocabulary::NAME)
         .map(|(key, _)| (*key, true))
         .collect();
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {

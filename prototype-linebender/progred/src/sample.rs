@@ -1,6 +1,7 @@
 //! Progred's sample GID document used by tests and render fixtures.
 
 use gid::{Cells, Document, Value, new_cell_id};
+use progred_libraries::{f64, geometry, name, text};
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub mod sample_vocabulary {
@@ -59,20 +60,20 @@ pub fn sample_document() -> Document {
         (sample_vocabulary::SHAPE, "shape"),
         (sample_vocabulary::FAVORITE, "favorite"),
     ] {
-        cells.set_value(cell, progred_name::record(name, []));
+        cells.set_value(cell, name::record(name, []));
     }
     let roof = new_cell_id();
 
     let origin = new_cell_id();
     cells.set_value(
         origin,
-        progred_name::record(
+        name::record(
             "origin",
             [(
                 sample_vocabulary::AT,
                 Value::record([
-                    (sample_vocabulary::ROW, progred_text::value("top")),
-                    (sample_vocabulary::COL, progred_text::value("left")),
+                    (sample_vocabulary::ROW, text::value("top")),
+                    (sample_vocabulary::COL, text::value("left")),
                 ]),
             )],
         ),
@@ -81,14 +82,14 @@ pub fn sample_document() -> Document {
     let corner = new_cell_id();
     cells.set_value(
         corner,
-        progred_name::record(
+        name::record(
             "corner",
             [
                 (
                     sample_vocabulary::AT,
                     Value::record([
-                        (sample_vocabulary::ROW, progred_text::value("bottom")),
-                        (sample_vocabulary::COL, progred_text::value("right")),
+                        (sample_vocabulary::ROW, text::value("bottom")),
+                        (sample_vocabulary::COL, text::value("right")),
                     ]),
                 ),
                 // A part that knows its whole: the cycle a real document
@@ -100,16 +101,13 @@ pub fn sample_document() -> Document {
     );
 
     let stroke = new_cell_id();
-    cells.set_value(stroke, progred_name::record("stroke", []));
+    cells.set_value(stroke, name::record("stroke", []));
 
     let style = new_cell_id();
     cells.set_value(
         style,
         Value::record([
-            (
-                sample_vocabulary::COLOR,
-                progred_text::value("rebeccapurple"),
-            ),
+            (sample_vocabulary::COLOR, text::value("rebeccapurple")),
             // #663399, as bytes.
             (
                 sample_vocabulary::SWATCH,
@@ -124,22 +122,22 @@ pub fn sample_document() -> Document {
     cells.set_value(favorite, Value::from(corner));
 
     let amount = new_cell_id();
-    cells.set_value(amount, progred_name::record("amount", []));
+    cells.set_value(amount, name::record("amount", []));
 
     let double = new_cell_id();
     cells.set_value(
         double,
-        progred_name::record(
+        name::record(
             "double",
             [
                 (grap::vocabulary::PARAMS, Value::list([Value::from(amount)])),
                 (
                     grap::vocabulary::BODY,
                     grap::call(
-                        Value::from(grap_f64::vocabulary::MULTIPLY),
+                        Value::from(f64::vocabulary::MULTIPLY),
                         [
-                            (grap_f64::vocabulary::LEFT, Value::from(amount)),
-                            (grap_f64::vocabulary::RIGHT, grap_f64::value(2.0)),
+                            (f64::vocabulary::LEFT, Value::from(amount)),
+                            (f64::vocabulary::RIGHT, f64::value(2.0)),
                         ],
                     ),
                 ),
@@ -148,24 +146,24 @@ pub fn sample_document() -> Document {
     );
 
     let pitch = new_cell_id();
-    cells.set_value(pitch, grap_f64::value(2.5));
+    cells.set_value(pitch, f64::value(2.5));
 
     let double_pitch = || grap::call(Value::from(double), [(amount, Value::from(pitch))]);
     let grap_projection = |expression| Value::record([(grap::vocabulary::GRAP, expression)]);
 
     cells.set_value(
         roof,
-        progred_name::record(
+        name::record(
             "roof",
             [
                 (
                     sample_vocabulary::POINTS,
                     Value::list([Value::from(origin), Value::from(corner)]),
                 ),
-                (stroke, progred_text::value("hairline")),
+                (stroke, text::value("hairline")),
                 (
                     sample_vocabulary::TAGS,
-                    Value::list([progred_text::value("draft"), progred_text::value("gabled")]),
+                    Value::list([text::value("draft"), text::value("gabled")]),
                 ),
                 (sample_vocabulary::MATERIAL, Value::from(material)),
                 (sample_vocabulary::STYLE, Value::from(style)),
@@ -177,14 +175,14 @@ pub fn sample_document() -> Document {
                 (
                     sample_vocabulary::PROFILE,
                     grap_projection(grap::call(
-                        Value::from(grap_geometry::vocabulary::CIRCLE),
+                        Value::from(geometry::vocabulary::CIRCLE),
                         [(
-                            grap_geometry::vocabulary::RADIUS,
+                            geometry::vocabulary::RADIUS,
                             grap::call(
-                                Value::from(grap_f64::vocabulary::MULTIPLY),
+                                Value::from(f64::vocabulary::MULTIPLY),
                                 [
-                                    (grap_f64::vocabulary::LEFT, double_pitch()),
-                                    (grap_f64::vocabulary::RIGHT, grap_f64::value(8.0)),
+                                    (f64::vocabulary::LEFT, double_pitch()),
+                                    (f64::vocabulary::RIGHT, f64::value(8.0)),
                                 ],
                             ),
                         )],

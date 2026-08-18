@@ -52,7 +52,7 @@ rule.
 - **The two-namespace rule** — a bare token anywhere an identity can
   stand is a cell-id literal if it parses as one, else a binder.
 - **quoted text** — double-quoted, escapes `\"` `\\` `\n` `\t`.
-  In value position this is surface sugar for the `progred-text`
+  In value position this is surface sugar for the built-in `text`
   `{utf8: <blob>}` convention, not a core atom.
 - **blob** — `0x` followed by an even number of hex digits;
   lowercase on write.
@@ -116,7 +116,7 @@ keys are file syntax, not ordinary value labels:
 - **`root`** — the document's root value.
 
 The `name` in the example is not GID syntax. It is a binder for the
-well-known `progred-name` cell, used as an ordinary record label. The
+well-known `name` library cell, used as an ordinary record label. The
 bootstrap printer recognizes a text-convention value there as one optional
 hint for readable binders and ordering. The fact remains GID data:
 it need not exist or be unique, and other languages may use richer or

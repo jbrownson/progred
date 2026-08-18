@@ -1,8 +1,11 @@
-//! The editor's loaded cells, foreign functions, and projection.
+//! The editor's ordered composition of Progred libraries.
 
-use crate::library::{self, Library};
+use crate::hover::Hover;
 use crate::projection::Projection;
 use gid::Cells;
+use progred_libraries::{
+    Library, absent, control, f64, geometry, grap as grap_library, isa, name, text,
+};
 
 pub struct Stack<World> {
     pub library: Cells,
@@ -21,32 +24,24 @@ impl<World> Clone for Stack<World> {
 }
 
 pub fn load<World>() -> Stack<World> {
-    let (library, foreign, partials) = libraries().fold(
-        (Cells::new(), grap::ForeignFunctions::default(), Vec::new()),
-        |(library, foreign, mut partials), next| {
-            partials.extend(next.projection);
-            (
-                library.merged(next.cells),
-                foreign.merge(next.functions),
-                partials,
-            )
-        },
-    );
+    let library = Library::merge_all(libraries());
     Stack {
-        library,
-        foreign,
-        projection: Projection::new(partials),
+        library: library.cells,
+        foreign: library.functions,
+        projection: Projection::new(library.projections),
     }
 }
 
-fn libraries<World>() -> impl Iterator<Item = Library<World>> {
+fn libraries<World>() -> impl Iterator<Item = Library<World, Hover>> {
     [
-        library::conventions(),
-        library::grap(),
-        library::absent(),
-        library::control(),
-        library::f64(),
-        library::geometry(),
+        name::library(),
+        text::library(),
+        isa::library(),
+        grap_library::library(),
+        absent::library(),
+        control::library(),
+        f64::library(),
+        geometry::library(),
     ]
     .into_iter()
 }

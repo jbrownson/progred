@@ -7,6 +7,7 @@ use crate::projection::Projection;
 use crate::sources::Sources;
 use crate::spine;
 use gid::{CellId, Cells, Document, Path, Position, Step, Value, position};
+use progred_libraries::{name, text};
 use puri::edit::LineEditState;
 use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -311,7 +312,7 @@ pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
     writable_at(sources, parent).then_some(())?;
     let seed = sources
         .value(*key)
-        .and_then(progred_name::read)
+        .and_then(name::read)
         .map(str::to_owned)
         .unwrap_or_else(|| short_id(*key));
     Some(Selection::PendingEdge {
@@ -467,10 +468,10 @@ pub(crate) fn parse_blob(text: &str) -> Option<Vec<u8>> {
 pub fn resolve_query(text: &str) -> Value {
     let trimmed = text.trim();
     match trimmed.strip_prefix('"') {
-        Some(inner) => progred_text::value(inner.strip_suffix('"').unwrap_or(inner)),
+        Some(inner) => text::value(inner.strip_suffix('"').unwrap_or(inner)),
         None => parse_blob(trimmed)
             .map(Value::from)
-            .unwrap_or_else(|| progred_text::value(text)),
+            .unwrap_or_else(|| text::value(text)),
     }
 }
 
@@ -485,7 +486,7 @@ pub fn resolve_query(text: &str) -> Value {
 /// presence is what says "structure" — never the text's shape, so
 /// text that happens to spell Value JSON stays text.
 pub fn to_clipboard(value: &Value) -> (String, bool) {
-    match (progred_text::read(value), value.as_blob()) {
+    match (text::read(value), value.as_blob()) {
         (Some(text), _) => (format!("\"{text}\""), false),
         (_, Some(_)) => (value.to_string(), false),
         _ => (

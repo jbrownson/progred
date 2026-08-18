@@ -3,6 +3,7 @@
 /// editor frame, no window needed. `cargo test -p progred svg_bench`
 /// writes target/raw_projection.svg.
 use super::*;
+use progred_libraries::{name, text};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use puri::handler::Handler;
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
@@ -337,8 +338,8 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
     let unnamed_low = CellId::from_u128(0x02);
     let unnamed_high = CellId::from_u128(0xe1);
     let mut cells = Cells::new();
-    cells.set_value(alpha, progred_name::record("alpha", []));
-    cells.set_value(beta, progred_name::record("beta", []));
+    cells.set_value(alpha, name::record("alpha", []));
+    cells.set_value(beta, name::record("beta", []));
     let doc = Document {
         root: Some(Value::record([
             (alpha, Value::from(vec![1])),
@@ -474,7 +475,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             matches!(
                 path.last(),
                 Some(Step::Key(label))
-                    if *label == progred_name::vocabulary::NAME
+                    if *label == name::vocabulary::NAME
             )
         })
         .expect("the sample has a cell head");
@@ -550,7 +551,7 @@ fn placement_claims_the_hover_innermost_last() {
         .find(|descend| {
             sources
                 .resolve(&descend.path)
-                .is_some_and(|value| progred_text::read(value).is_some())
+                .is_some_and(|value| text::read(value).is_some())
                 && projected_name_owner(&descend.path).is_none()
         })
         .expect("the sample has a string leaf");

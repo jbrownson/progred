@@ -1,0 +1,10 @@
+[package]
+name = "progred-libraries"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gid = { path = "../gid" }
+grap-runtime = { package = "grap", path = "../grap" }
+progred-display = { path = "../display" }
+im = "15"

@@ -3,13 +3,10 @@
 //! and lists are inert data, and each recognized form chooses its own
 //! recursive evaluation.
 
+use gid::{CellId, Value};
 use im::{HashMap, OrdMap};
-use gid::{CellId, Cells, Value};
 use std::collections::BTreeSet;
 use std::fmt;
-
-mod display;
-pub use display::display;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -17,15 +14,11 @@ pub mod vocabulary {
     pub const FUNCTION: CellId = CellId::from_u128(0x751fca4373debdd0b7e6eb73e08d684b);
     pub const PARAMS: CellId = CellId::from_u128(0x195b378d0d31d90ab0d7366c15346b70);
     pub const BODY: CellId = CellId::from_u128(0x986143866eda2e2fbf9ab8484357a0c9);
-    pub const CLOSURE: CellId =
-        CellId::from_u128(0xdb39600f3ed07398c77ac120deb108a8);
-    pub const ENVIRONMENT: CellId =
-        CellId::from_u128(0xe910025c710c25c43d0a5b296378f374);
+    pub const CLOSURE: CellId = CellId::from_u128(0xdb39600f3ed07398c77ac120deb108a8);
+    pub const ENVIRONMENT: CellId = CellId::from_u128(0xe910025c710c25c43d0a5b296378f374);
     pub const FFI: CellId = CellId::from_u128(0x912adb7252d689659b6de9eeeb827658);
-    pub const EVALUATE: CellId =
-        CellId::from_u128(0xacfc5e50881292518dab3cec77cf43ee);
-    pub const EXPRESSION: CellId =
-        CellId::from_u128(0xccc55b0eb63b9f564ea74436094d4014);
+    pub const EVALUATE: CellId = CellId::from_u128(0xacfc5e50881292518dab3cec77cf43ee);
+    pub const EXPRESSION: CellId = CellId::from_u128(0xccc55b0eb63b9f564ea74436094d4014);
     /// Projection request, not an evaluator form.
     pub const GRAP: CellId = CellId::from_u128(0xac807d20d964e141d44c1b2eb98e5ca9);
 }
@@ -33,22 +26,14 @@ pub mod vocabulary {
 pub mod absent {
     use gid::CellId;
 
-    pub const FUEL_EXHAUSTED: CellId =
-        CellId::from_u128(0x513628d759c04b3e7088b575e555a80e);
-    pub const MISSING_CELL: CellId =
-        CellId::from_u128(0xa5a1b4e3d0df96bd11af00f0780136ff);
-    pub const CELL_CYCLE: CellId =
-        CellId::from_u128(0x150e0fc7e38d1670f41283c3d23a9b8d);
-    pub const MALFORMED_LAMBDA: CellId =
-        CellId::from_u128(0xfbf5894d7f62b6d0048d17d26851b415);
-    pub const INVALID_PARAMETER: CellId =
-        CellId::from_u128(0x93ca0e9199372c46ee24bd4c508e178c);
-    pub const NOT_CALLABLE: CellId =
-        CellId::from_u128(0x8624488c2d10d2a4b84560dfa99a38e6);
-    pub const MISSING_ARGUMENT: CellId =
-        CellId::from_u128(0x8b2f0db36e5c3d35595eb5666cc89c78);
-    pub const INVALID_ENVIRONMENT: CellId =
-        CellId::from_u128(0x152f2cac01f072317ab5746c5befdf9c);
+    pub const FUEL_EXHAUSTED: CellId = CellId::from_u128(0x513628d759c04b3e7088b575e555a80e);
+    pub const MISSING_CELL: CellId = CellId::from_u128(0xa5a1b4e3d0df96bd11af00f0780136ff);
+    pub const CELL_CYCLE: CellId = CellId::from_u128(0x150e0fc7e38d1670f41283c3d23a9b8d);
+    pub const MALFORMED_LAMBDA: CellId = CellId::from_u128(0xfbf5894d7f62b6d0048d17d26851b415);
+    pub const INVALID_PARAMETER: CellId = CellId::from_u128(0x93ca0e9199372c46ee24bd4c508e178c);
+    pub const NOT_CALLABLE: CellId = CellId::from_u128(0x8624488c2d10d2a4b84560dfa99a38e6);
+    pub const MISSING_ARGUMENT: CellId = CellId::from_u128(0x8b2f0db36e5c3d35595eb5666cc89c78);
+    pub const INVALID_ENVIRONMENT: CellId = CellId::from_u128(0x152f2cac01f072317ab5746c5befdf9c);
 }
 
 pub const DEFAULT_FUEL: usize = 1_024;
@@ -68,10 +53,7 @@ impl Environment {
         self.0.get(&cell)
     }
 
-    pub fn extended(
-        &self,
-        bindings: impl IntoIterator<Item = (CellId, Value)>,
-    ) -> Self {
+    pub fn extended(&self, bindings: impl IntoIterator<Item = (CellId, Value)>) -> Self {
         Self(
             bindings
                 .into_iter()
@@ -145,17 +127,6 @@ impl ForeignFunctions {
     }
 }
 
-/// Core Grap's registered Rust functions. Libraries return their own
-/// tables; the editor merges them.
-pub fn functions() -> ForeignFunctions {
-    ForeignFunctions::default().register(
-        vocabulary::EVALUATE,
-        ForeignFunction {
-            call: evaluate_foreign,
-        },
-    )
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Diagnostic {
     FuelExhausted,
@@ -227,11 +198,7 @@ impl Context<'_> {
         }
     }
 
-    pub fn eval(
-        &mut self,
-        expression: &Value,
-        environment: &Environment,
-    ) -> Result<Value, Halt> {
+    pub fn eval(&mut self, expression: &Value, environment: &Environment) -> Result<Value, Halt> {
         self.burn()?;
         match expression {
             Value::Cell(cell) => self.eval_cell(*cell, environment),
@@ -253,19 +220,16 @@ impl Context<'_> {
                     }
                 }
             }
-            Value::Blob(_) | Value::List(_) => {
-                Ok(expression.clone())
-            }
+            Value::Blob(_) | Value::List(_) => Ok(expression.clone()),
         }
     }
 
     fn burn(&mut self) -> Result<(), Halt> {
         self.remaining_fuel = self.remaining_fuel.saturating_sub(1);
         if self.remaining_fuel == 0 {
-            Err(Halt(self.absent(
-                Diagnostic::FuelExhausted,
-                absent::FUEL_EXHAUSTED,
-            )))
+            Err(Halt(
+                self.absent(Diagnostic::FuelExhausted, absent::FUEL_EXHAUSTED),
+            ))
         } else {
             Ok(())
         }
@@ -284,11 +248,7 @@ impl Context<'_> {
         Value::from(cell)
     }
 
-    fn eval_cell(
-        &mut self,
-        cell: CellId,
-        environment: &Environment,
-    ) -> Result<Value, Halt> {
+    fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> Result<Value, Halt> {
         if let Some(value) = environment.get(cell) {
             Ok(value.clone())
         } else if self.foreign.get(cell).is_some() {
@@ -348,23 +308,15 @@ impl Context<'_> {
         Value::record([(vocabulary::CLOSURE, closure)])
     }
 
-    fn eval_call(
-        &mut self,
-        call: &Value,
-        environment: &Environment,
-    ) -> Result<Value, Halt> {
+    fn eval_call(&mut self, call: &Value, environment: &Environment) -> Result<Value, Halt> {
         let Some(function) = self.field(call, vocabulary::FUNCTION) else {
             return Ok(call.clone());
         };
         let callable = self.eval(function, environment)?;
         match closure_target(&callable) {
-            Some((params, body, closure_environment)) => self.eval_grap_call(
-                params,
-                body,
-                closure_environment,
-                call,
-                environment,
-            ),
+            Some((params, body, closure_environment)) => {
+                self.eval_grap_call(params, body, closure_environment, call, environment)
+            }
             None => match callable
                 .as_record()
                 .and_then(|fields| fields.get(&vocabulary::FFI))
@@ -373,10 +325,7 @@ impl Context<'_> {
                 .cloned()
             {
                 Some(function) => (function.call)(self, call, environment),
-                None => Ok(self.absent(
-                    Diagnostic::NotCallable(callable),
-                    absent::NOT_CALLABLE,
-                )),
+                None => Ok(self.absent(Diagnostic::NotCallable(callable), absent::NOT_CALLABLE)),
             },
         }
     }
@@ -402,10 +351,7 @@ impl Context<'_> {
 }
 
 fn closure_target(value: &Value) -> Option<(Vec<CellId>, Value, Environment)> {
-    let fields = value
-        .as_record()?
-        .get(&vocabulary::CLOSURE)?
-        .as_record()?;
+    let fields = value.as_record()?.get(&vocabulary::CLOSURE)?.as_record()?;
     let params = fields
         .get(&vocabulary::PARAMS)?
         .as_list()?
@@ -419,24 +365,6 @@ fn closure_target(value: &Value) -> Option<(Vec<CellId>, Value, Environment)> {
     ))
 }
 
-fn evaluate_foreign(
-    context: &mut Context,
-    call: &Value,
-    calling_environment: &Environment,
-) -> Result<Value, Halt> {
-    let Some(expression) = context.field(call, vocabulary::EXPRESSION) else {
-        return Ok(context.missing_argument(vocabulary::EXPRESSION));
-    };
-    let Some(environment) = context.field(call, vocabulary::ENVIRONMENT) else {
-        return Ok(context.missing_argument(vocabulary::ENVIRONMENT));
-    };
-    let environment = context.eval(environment, calling_environment)?;
-    match Environment::try_from(environment) {
-        Ok(environment) => context.eval(expression, &environment),
-        Err(()) => Ok(Value::from(absent::INVALID_ENVIRONMENT)),
-    }
-}
-
 pub fn lambda(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
     Value::record([
         (
@@ -447,10 +375,7 @@ pub fn lambda(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
     ])
 }
 
-pub fn call(
-    function: Value,
-    arguments: impl IntoIterator<Item = (CellId, Value)>,
-) -> Value {
+pub fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     Value::record(
         [(vocabulary::FUNCTION, function)]
             .into_iter()
@@ -473,36 +398,6 @@ pub fn evaluate(
         resolving: Vec::new(),
     }
     .run(expression)
-}
-
-pub fn library() -> Cells {
-    let mut cells = Cells::new();
-    for (cell, name) in [
-        (vocabulary::FUNCTION, "function"),
-        (vocabulary::PARAMS, "params"),
-        (vocabulary::BODY, "body"),
-        (vocabulary::CLOSURE, "closure"),
-        (vocabulary::ENVIRONMENT, "environment"),
-        (vocabulary::FFI, "ffi"),
-        (vocabulary::EVALUATE, "evaluate"),
-        (vocabulary::EXPRESSION, "expression"),
-        (vocabulary::GRAP, "grap"),
-    ] {
-        cells.set_value(cell, progred_name::record(name, []));
-    }
-    for (cell, name) in [
-        (absent::FUEL_EXHAUSTED, "fuel exhausted"),
-        (absent::MISSING_CELL, "missing cell"),
-        (absent::CELL_CYCLE, "cell cycle"),
-        (absent::MALFORMED_LAMBDA, "malformed lambda"),
-        (absent::INVALID_PARAMETER, "invalid parameter"),
-        (absent::NOT_CALLABLE, "not callable"),
-        (absent::MISSING_ARGUMENT, "missing argument"),
-        (absent::INVALID_ENVIRONMENT, "invalid environment"),
-    ] {
-        cells.set_value(cell, grap_absent::named(name));
-    }
-    cells
 }
 
 #[cfg(test)]
@@ -637,30 +532,15 @@ mod tests {
         );
         let graph = lambda([input], Value::from(input));
         assert_eq!(
-            evaluate(
-                &held,
-                |_| None,
-                &foreign,
-                30,
-            )
-            .result,
+            evaluate(&held, |_| None, &foreign, 30,).result,
             call_shaped_data
         );
         assert_eq!(
-            evaluate(
-                &call(graph, [(input, held)]),
-                |_| None,
-                &foreign,
-                30,
-            )
-            .result,
+            evaluate(&call(graph, [(input, held)]), |_| None, &foreign, 30,).result,
             call_shaped_data
         );
         let inert = Value::record([(field, call(Value::from(hold), []))]);
-        assert_eq!(
-            evaluate(&inert, |_| None, &foreign, 30).result,
-            inert
-        );
+        assert_eq!(evaluate(&inert, |_| None, &foreign, 30).result, inert);
     }
 
     #[test]
@@ -794,10 +674,7 @@ mod tests {
                 call: |_, _, environment| Ok(Value::from(environment)),
             },
         );
-        let inspect_from_body = lambda(
-            [parameter],
-            call(Value::from(inspect), []),
-        );
+        let inspect_from_body = lambda([parameter], call(Value::from(inspect), []));
         let evaluation = evaluate(
             &call(inspect_from_body, [(parameter, blob("bound"))]),
             |_| None,
@@ -815,8 +692,7 @@ mod tests {
 
     #[test]
     fn rust_functions_evaluate_raw_operands_in_extended_environments() {
-        const BINDING: CellId =
-            CellId::from_u128(0xedcd2b19cf89faf94a4a72ab1e02ec31);
+        const BINDING: CellId = CellId::from_u128(0xedcd2b19cf89faf94a4a72ab1e02ec31);
         const VALUE: CellId = CellId::from_u128(0x3f7a1c90d2e84b65a0c19e4d7b5826f3);
         const BODY: CellId = CellId::from_u128(0x70d4e8a1c5b2936f4a1e07c8d5b64920);
         let bind = new_cell_id();
@@ -848,29 +724,6 @@ mod tests {
         );
         assert_eq!(evaluation.result, blob("locally bound"));
         assert!(evaluation.dependencies.is_empty());
-    }
-
-    #[test]
-    fn evaluate_is_an_ordinary_registered_rust_function() {
-        let input = new_cell_id();
-        let expression = call(
-            lambda([input], Value::from(input)),
-            [(input, blob("evaluated"))],
-        );
-        let evaluation = evaluate(
-            &call(
-                Value::from(vocabulary::EVALUATE),
-                [
-                    (vocabulary::EXPRESSION, expression),
-                    (vocabulary::ENVIRONMENT, Value::record([])),
-                ],
-            ),
-            |_| None,
-            &functions(),
-            40,
-        );
-        assert_eq!(evaluation.result, blob("evaluated"));
-        assert!(evaluation.diagnostics.is_empty());
     }
 
     #[test]
@@ -932,18 +785,10 @@ mod tests {
     #[test]
     fn incomplete_lambda_shapes_are_inert_data() {
         for incomplete in [
-            Value::record([(
-                vocabulary::PARAMS,
-                Value::list(Vec::<Value>::new()),
-            )]),
+            Value::record([(vocabulary::PARAMS, Value::list(Vec::<Value>::new()))]),
             Value::record([(vocabulary::BODY, blob("body"))]),
         ] {
-            let evaluation = evaluate(
-                &incomplete,
-                |_| None,
-                &ForeignFunctions::default(),
-                10,
-            );
+            let evaluation = evaluate(&incomplete, |_| None, &ForeignFunctions::default(), 10);
             assert_eq!(evaluation.result, incomplete);
             assert!(evaluation.diagnostics.is_empty());
         }
@@ -986,10 +831,7 @@ mod tests {
         let extra = new_cell_id();
         let expression = call(
             lambda([parameter], Value::from(parameter)),
-            [
-                (parameter, blob("result")),
-                (extra, blob("still GID data")),
-            ],
+            [(parameter, blob("result")), (extra, blob("still GID data"))],
         );
         let evaluation = evaluate(&expression, |_| None, &ForeignFunctions::default(), 10);
         assert_eq!(evaluation.result, blob("result"));
@@ -1069,27 +911,5 @@ mod tests {
             .result,
             blob("right")
         );
-    }
-
-    #[test]
-    fn library_describes_the_grap_forms_and_absents() {
-        let library = library();
-        for (cell, name) in [
-            (vocabulary::FUNCTION, "function"),
-            (vocabulary::PARAMS, "params"),
-            (vocabulary::BODY, "body"),
-            (vocabulary::CLOSURE, "closure"),
-            (vocabulary::ENVIRONMENT, "environment"),
-            (vocabulary::FFI, "ffi"),
-            (vocabulary::EVALUATE, "evaluate"),
-            (vocabulary::EXPRESSION, "expression"),
-            (vocabulary::GRAP, "grap"),
-        ] {
-            assert_eq!(library.value(cell).and_then(progred_name::read), Some(name));
-        }
-        assert!(grap_absent::is_absent(
-            library.value(absent::MISSING_CELL).unwrap()
-        ));
-        assert_eq!(library.cells().count(), 17);
     }
 }

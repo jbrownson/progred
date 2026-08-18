@@ -4,6 +4,7 @@
 //! the document's value wins whole, otherwise the library answers.
 
 use gid::{CellId, Cells, Document, Step, Value};
+use progred_libraries::name;
 
 #[derive(Clone, Copy)]
 pub struct Sources<'a> {
@@ -20,7 +21,7 @@ impl<'a> Sources<'a> {
     }
 
     pub fn name(&self, cell: CellId) -> Option<&'a str> {
-        self.value(cell).and_then(progred_name::read)
+        self.value(cell).and_then(name::read)
     }
 
     pub fn root(&self) -> Option<&'a Value> {
@@ -70,7 +71,7 @@ mod tests {
         library.set_value(
             cell,
             Value::record([
-                progred_name::field("lib-name"),
+                name::field("lib-name"),
                 (
                     crate::test_values::label("a"),
                     crate::test_values::text("1"),
@@ -83,22 +84,16 @@ mod tests {
             doc: &doc,
             library: &library,
         };
-        assert_eq!(
-            sources.value(cell).and_then(progred_name::read),
-            Some("lib-name")
-        );
+        assert_eq!(sources.value(cell).and_then(name::read), Some("lib-name"));
 
         let mut cells = Cells::new();
-        cells.set_value(cell, progred_name::record("mine", []));
+        cells.set_value(cell, name::record("mine", []));
         let doc = doc_of(cells);
         let sources = Sources {
             doc: &doc,
             library: &library,
         };
-        assert_eq!(
-            sources.value(cell).and_then(progred_name::read),
-            Some("mine")
-        );
+        assert_eq!(sources.value(cell).and_then(name::read), Some("mine"));
         assert_eq!(
             sources
                 .value(cell)
@@ -146,7 +141,7 @@ mod tests {
         cells.set_value(
             root,
             Value::record([
-                progred_name::field("scene"),
+                name::field("scene"),
                 (
                     crate::test_values::label("items"),
                     Value::list([
@@ -171,7 +166,7 @@ mod tests {
 
         assert_eq!(sources.resolve(&[]), Some(&Value::from(root)));
         assert_eq!(
-            sources.resolve(&[Step::Follow, Step::Key(progred_name::vocabulary::NAME),]),
+            sources.resolve(&[Step::Follow, Step::Key(name::vocabulary::NAME),]),
             Some(&crate::test_values::text("scene"))
         );
         let items = [Step::Follow, Step::Key(crate::test_values::label("items"))];

@@ -1571,51 +1571,7 @@ name = "grap"
 version = "0.1.0"
 dependencies = [
  "gid",
- "grap-absent",
  "im",
- "progred-display",
- "progred-name",
-]
-
-[[package]]
-name = "grap-absent"
-version = "0.1.0"
-dependencies = [
- "gid",
- "progred-isa",
- "progred-name",
-]
-
-[[package]]
-name = "grap-control"
-version = "0.1.0"
-dependencies = [
- "gid",
- "grap",
- "grap-absent",
- "progred-name",
-]
-
-[[package]]
-name = "grap-f64"
-version = "0.1.0"
-dependencies = [
- "gid",
- "grap",
- "grap-absent",
- "progred-display",
- "progred-name",
-]
-
-[[package]]
-name = "grap-geometry"
-version = "0.1.0"
-dependencies = [
- "gid",
- "grap",
- "grap-absent",
- "grap-f64",
- "progred-name",
 ]
 
 [[package]]
@@ -3148,18 +3104,12 @@ dependencies = [
  "clipboard-rs",
  "gid",
  "grap",
- "grap-absent",
- "grap-control",
- "grap-f64",
- "grap-geometry",
  "im",
  "muda",
  "parley",
  "pollster",
  "progred-display",
- "progred-isa",
- "progred-name",
- "progred-text",
+ "progred-libraries",
  "puri",
  "puri-vello",
  "rfd",
@@ -3180,26 +3130,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "progred-isa"
+name = "progred-libraries"
 version = "0.1.0"
 dependencies = [
  "gid",
- "progred-name",
-]
-
-[[package]]
-name = "progred-name"
-version = "0.1.0"
-dependencies = [
- "gid",
- "progred-text",
-]
-
-[[package]]
-name = "progred-text"
-version = "0.1.0"
-dependencies = [
- "gid",
+ "grap",
+ "im",
  "progred-display",
 ]
 
@@ -3465,8 +3401,7 @@ name = "rust-wasm-projection"
 version = "0.1.0"
 dependencies = [
  "gid",
- "grap-f64",
- "progred-text",
+ "progred-libraries",
  "serde_json",
  "wasmtime",
 ]

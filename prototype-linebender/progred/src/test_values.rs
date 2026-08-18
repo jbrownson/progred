@@ -1,4 +1,5 @@
 use gid::{CellId, Value, new_cell_id};
+use progred_libraries::text;
 use std::collections::BTreeMap;
 use std::sync::{Mutex, OnceLock};
 
@@ -41,5 +42,5 @@ pub fn label(name: &str) -> CellId {
 }
 
 pub fn text(text: impl Into<String>) -> Value {
-    progred_text::value(text)
+    text::value(text)
 }

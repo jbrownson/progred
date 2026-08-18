@@ -2,8 +2,11 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
+use crate::{Library, absent, name};
 use gid::{Cells, Value};
-use grap::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+#[cfg(test)]
+use grap_runtime as grap;
+use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, overlay};
 
 pub mod vocabulary {
@@ -91,7 +94,7 @@ fn binary(
     })
 }
 
-pub fn library() -> Cells {
+pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::F64, "f64"),
@@ -100,15 +103,19 @@ pub fn library() -> Cells {
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
     ] {
-        cells.set_value(cell, progred_name::record(name, []));
+        cells.set_value(cell, name::record(name, []));
     }
     for (cell, name) in [
         (vocabulary::LEFT_NOT_F64, "left is not f64"),
         (vocabulary::RIGHT_NOT_F64, "right is not f64"),
     ] {
-        cells.set_value(cell, grap_absent::named(name));
+        cells.set_value(cell, absent::named(name));
     }
-    cells
+    Library {
+        cells,
+        functions: functions(),
+        projections: vec![display::<World, Hover>],
+    }
 }
 
 #[cfg(test)]
@@ -176,33 +183,35 @@ mod tests {
 
     #[test]
     fn library_names_are_ordinary_facts_for_random_identities() {
-        let library = library();
+        let library = library::<(), ()>();
         assert_eq!(
-            library.value(vocabulary::F64).and_then(progred_name::read),
+            library.cells.value(vocabulary::F64).and_then(name::read),
             Some("f64")
         );
         assert_eq!(
-            library.value(vocabulary::ADD).and_then(progred_name::read),
+            library.cells.value(vocabulary::ADD).and_then(name::read),
             Some("add")
         );
         assert_eq!(
             library
+                .cells
                 .value(vocabulary::LEFT_NOT_F64)
-                .and_then(progred_name::read),
+                .and_then(name::read),
             Some("left is not f64")
         );
         assert_eq!(
             library
+                .cells
                 .value(vocabulary::RIGHT_NOT_F64)
-                .and_then(progred_name::read),
+                .and_then(name::read),
             Some("right is not f64")
         );
-        assert!(grap_absent::is_absent(
-            library.value(vocabulary::LEFT_NOT_F64).unwrap()
+        assert!(absent::is_absent(
+            library.cells.value(vocabulary::LEFT_NOT_F64).unwrap()
         ));
-        assert!(grap_absent::is_absent(
-            library.value(vocabulary::RIGHT_NOT_F64).unwrap()
+        assert!(absent::is_absent(
+            library.cells.value(vocabulary::RIGHT_NOT_F64).unwrap()
         ));
-        assert!(library.value(vocabulary::ADD).is_some());
+        assert!(library.cells.value(vocabulary::ADD).is_some());
     }
 }

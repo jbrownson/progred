@@ -1,5 +1,6 @@
 use super::*;
 use gid::Position;
+use progred_libraries::{f64, name, text};
 use ui_events::keyboard::{KeyState, Modifiers};
 
 struct EmptyClipboard;
@@ -153,7 +154,7 @@ fn arrows_walk_rows_down_and_lines_across() {
 
 #[test]
 fn the_cell_head_rides_its_first_line() {
-    let name = || vec![Step::Follow, Step::Key(progred_name::vocabulary::NAME)];
+    let name = || vec![Step::Follow, Step::Key(name::vocabulary::NAME)];
     // Dropped: the projected name shares the cell's head line while the
     // value opens a row below it.
     let f = || vec![Step::Follow, key("f")];
@@ -272,14 +273,11 @@ fn selecting_text_brings_an_editor() {
     doc.cells.set_value(cell, crate::test_values::text("held"));
     assert!(at(&doc, vec![Step::Follow]).edit().is_some());
     // A simple name convention is just another text field.
-    doc.cells.set_value(cell, progred_name::record("roof", []));
+    doc.cells.set_value(cell, name::record("roof", []));
     assert!(
-        at(
-            &doc,
-            vec![Step::Follow, Step::Key(progred_name::vocabulary::NAME),],
-        )
-        .edit()
-        .is_some()
+        at(&doc, vec![Step::Follow, Step::Key(name::vocabulary::NAME),],)
+            .edit()
+            .is_some()
     );
 }
 
@@ -312,7 +310,7 @@ fn compact_f64_values_edit_as_decimal_text() {
     let lib = Cells::new();
     let cell = new_cell_id();
     let mut cells = Cells::new();
-    cells.set_value(cell, grap_f64::value(2.5));
+    cells.set_value(cell, f64::value(2.5));
     let mut doc = Document {
         root: Some(Value::from(cell)),
         cells,
@@ -323,14 +321,14 @@ fn compact_f64_values_edit_as_decimal_text() {
     selection.edit_mut().unwrap().set_text("7.25");
     assert!(write_through(&mut doc, &lib, &mut selection));
     assert_eq!(
-        src(&doc, &lib).resolve(&path).and_then(grap_f64::read),
+        src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(7.25)
     );
 
     selection.edit_mut().unwrap().set_text("not a number");
     assert!(!write_through(&mut doc, &lib, &mut selection));
     assert_eq!(
-        src(&doc, &lib).resolve(&path).and_then(grap_f64::read),
+        src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(7.25)
     );
 }
@@ -340,19 +338,19 @@ fn a_line_click_mounts_the_projected_line() {
     let lib = Cells::new();
     let cell = new_cell_id();
     let mut cells = Cells::new();
-    cells.set_value(cell, grap_f64::value(2.5));
+    cells.set_value(cell, f64::value(2.5));
     let mut doc = Document {
         root: Some(Value::from(cell)),
         cells,
     };
     let path = vec![Step::Follow];
-    let line = grap_f64::line(&grap_f64::value(2.5)).unwrap();
+    let line = f64::line(&f64::value(2.5)).unwrap();
     let mut selection = Selection::from_line(&src(&doc, &lib), path.clone(), &line);
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
     selection.edit_mut().unwrap().set_text("4");
     assert!(write_through(&mut doc, &lib, &mut selection));
     assert_eq!(
-        src(&doc, &lib).resolve(&path).and_then(grap_f64::read),
+        src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(4.0)
     );
 }
@@ -366,7 +364,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
     cells.set_value(
         cell,
         Value::record(
-            grap_f64::value(2.5)
+            f64::value(2.5)
                 .as_record()
                 .unwrap()
                 .clone()
@@ -382,12 +380,12 @@ fn editing_an_f64_keeps_unrelated_fields() {
     selection.edit_mut().unwrap().set_text("8");
     assert!(write_through(&mut doc, &lib, &mut selection));
     let value = src(&doc, &lib).resolve(&path).unwrap();
-    assert_eq!(grap_f64::read(value), Some(8.0));
+    assert_eq!(f64::read(value), Some(8.0));
     assert_eq!(
         value
             .as_record()
             .and_then(|fields| fields.get(&unit))
-            .and_then(progred_text::read),
+            .and_then(text::read),
         Some("mm")
     );
 }
@@ -538,7 +536,7 @@ fn set_value_writes_fields_elements_roots_and_bare_cells() {
             .and_then(|fields| fields.get(&crate::test_values::label("x"))),
         Some(&crate::test_values::text("0"))
     );
-    assert!(progred_text::read(doc.root.as_ref().unwrap()).is_some());
+    assert!(text::read(doc.root.as_ref().unwrap()).is_some());
 }
 
 #[test]
@@ -547,7 +545,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
     let lib_cell = new_cell_id();
     lib.set_value(
         lib_cell,
-        progred_name::record(
+        name::record(
             "convention",
             [(
                 crate::test_values::label("a"),
@@ -569,7 +567,7 @@ fn external_cells_decline_writes_and_bare_cells_accept() {
     assert!(!set_value(
         &mut doc,
         &lib,
-        &[Step::Follow, Step::Key(progred_name::vocabulary::NAME),],
+        &[Step::Follow, Step::Key(name::vocabulary::NAME),],
         crate::test_values::text("mine")
     ));
     assert!(!delete_edge(&mut doc, &lib, &[Step::Follow, key("a")]));
@@ -630,7 +628,7 @@ fn delete_unlinks_fields_and_elements_and_bares_cells() {
             Value::list([crate::test_values::text("2"), crate::test_values::text("3")]),
         ),
     ]);
-    doc.cells.set_value(child, progred_name::record("c", []));
+    doc.cells.set_value(child, name::record("c", []));
 
     assert!(!delete_edge(
         &mut doc,
@@ -799,7 +797,7 @@ fn clipboard_spellings_round_trip() {
 fn completion_offers_follow_the_stage() {
     let lib = crate::stack::load::<()>().library;
     let (mut doc, cell) = doc_of(vec![
-        progred_name::field("roof"),
+        name::field("roof"),
         (
             crate::test_values::label("kind"),
             crate::test_values::text("building"),
@@ -850,7 +848,7 @@ fn completion_offers_follow_the_stage() {
     assert!(matches!(
         &add[0].action,
         EntryAction::Value(value)
-            if value.as_cell() == Some(grap_f64::vocabulary::ADD)
+            if value.as_cell() == Some(f64::vocabulary::ADD)
     ));
 
     // A bare id never outranks the typed text: the string the
@@ -863,7 +861,7 @@ fn completion_offers_follow_the_stage() {
     let entries = completion_entries(&sources, false, false, &short_id(unnamed));
     let atom = entries
         .iter()
-        .position(|e| matches!(&e.action, EntryAction::Value(v) if progred_text::read(v).is_some()))
+        .position(|e| matches!(&e.action, EntryAction::Value(v) if text::read(v).is_some()))
         .unwrap();
     let reference = entries
         .iter()
@@ -950,7 +948,7 @@ fn minting_seeds_bare_and_named_cells() {
     let (label, created) = resolve_label(&EntryAction::NewLabel("asdf".to_string())).unwrap();
     let (cell, value) = created.unwrap();
     assert_eq!(label, cell);
-    assert_eq!(progred_name::read(&value), Some("asdf"));
+    assert_eq!(name::read(&value), Some("asdf"));
     assert!(resolve_label(&EntryAction::Value(crate::test_values::text("no"))).is_none());
 }
 
@@ -983,7 +981,7 @@ fn pending_rename_seeds_the_current_spelling() {
         .unwrap()
         .keys()
         .copied()
-        .find(|cell| sources.value(*cell).and_then(progred_name::read) == Some("stroke"))
+        .find(|cell| sources.value(*cell).and_then(name::read) == Some("stroke"))
         .unwrap();
     let path = vec![key("shape"), Step::Follow, Step::Key(stroke)];
     assert_eq!(
@@ -1147,10 +1145,7 @@ fn the_sample_document_shows_the_constructs() {
     // The root is an inline record of roles.
     assert!(doc.root.as_ref().unwrap().as_record().is_some());
     let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
-    assert_eq!(
-        sources.value(roof).and_then(progred_name::read),
-        Some("roof")
-    );
+    assert_eq!(sources.value(roof).and_then(name::read), Some("roof"));
     // The material cell is referenced and fully bare.
     let material = sources
         .resolve(&[key("shape"), Step::Follow, key("material")])
@@ -1167,12 +1162,9 @@ fn the_sample_document_shows_the_constructs() {
         .unwrap()
         .keys()
         .copied()
-        .find(|cell| sources.value(*cell).and_then(progred_name::read) == Some("stroke"))
+        .find(|cell| sources.value(*cell).and_then(name::read) == Some("stroke"))
         .unwrap();
-    assert_eq!(
-        sources.value(stroke).and_then(progred_name::read),
-        Some("stroke")
-    );
+    assert_eq!(sources.value(stroke).and_then(name::read), Some("stroke"));
     // The style cell is shared by the root and the roof.
     assert_eq!(
         sources.resolve(&[key("style")]),
@@ -1208,10 +1200,7 @@ fn the_sample_document_shows_the_constructs() {
     let json = serde_json::to_string(&doc).unwrap();
     let loaded: Document = serde_json::from_str(&json).unwrap();
     assert_eq!(loaded.root, doc.root);
-    assert_eq!(
-        loaded.cells.value(roof).and_then(progred_name::read),
-        Some("roof")
-    );
+    assert_eq!(loaded.cells.value(roof).and_then(name::read), Some("roof"));
     assert_eq!(serde_json::to_string(&loaded).unwrap(), json);
 }
 
@@ -1238,7 +1227,7 @@ fn selecting_an_empty_value_slot_pends() {
     // An EXTERNAL cell has an ordinary value, so its Follow slot
     // selects normally and remains unwritable.
     let lib_cell = new_cell_id();
-    lib.set_value(lib_cell, progred_name::record("convention", []));
+    lib.set_value(lib_cell, name::record("convention", []));
     doc.root = Some(Value::from(lib_cell));
     assert!(matches!(
         make_selection(&doc, &lib, vec![Step::Follow]),
@@ -1259,41 +1248,38 @@ fn selecting_an_empty_value_slot_pends() {
 fn a_simple_name_is_an_ordinary_editable_field() {
     let lib = Cells::new();
     let (mut doc, cell) = doc_of(vec![
-        progred_name::field("old"),
+        name::field("old"),
         (
             crate::test_values::label("x"),
             crate::test_values::text("1"),
         ),
     ]);
-    let path = vec![Step::Follow, Step::Key(progred_name::vocabulary::NAME)];
+    let path = vec![Step::Follow, Step::Key(name::vocabulary::NAME)];
 
     let mut selection = make_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
     assert!(write_through(&mut doc, &lib, &mut selection));
-    assert_eq!(
-        doc.cells.value(cell).and_then(progred_name::read),
-        Some("new")
-    );
+    assert_eq!(doc.cells.value(cell).and_then(name::read), Some("new"));
     assert!(!write_through(&mut doc, &lib, &mut selection));
 
     // Empty is an ordinary text value, not a hidden spelling of
     // field absence.
     selection.edit_mut().unwrap().set_text("");
     write_through(&mut doc, &lib, &mut selection);
-    assert_eq!(doc.cells.value(cell).and_then(progred_name::read), None);
+    assert_eq!(doc.cells.value(cell).and_then(name::read), Some(""));
     assert_eq!(
         doc.cells
             .value(cell)
             .and_then(Value::as_record)
-            .and_then(|fields| { fields.get(&progred_name::vocabulary::NAME) })
-            .and_then(progred_text::read),
+            .and_then(|fields| { fields.get(&name::vocabulary::NAME) })
+            .and_then(text::read),
         Some("")
     );
 
     // Removing the field uses the same structural deletion as any
     // other record field; the rest of the value remains.
     assert!(delete_edge(&mut doc, &lib, &path));
-    assert_eq!(doc.cells.value(cell).and_then(progred_name::read), None);
+    assert_eq!(doc.cells.value(cell).and_then(name::read), None);
     assert!(
         doc.cells
             .value(cell)

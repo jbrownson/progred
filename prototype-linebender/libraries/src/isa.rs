@@ -1,6 +1,7 @@
 //! Structural classification of GID values (`isa`). Independent of
 //! Grap and of the GID core. This editor assumes the library.
 
+use crate::{Library, name};
 use gid::{CellId, Cells, Value};
 
 pub mod vocabulary {
@@ -30,10 +31,13 @@ impl Isa for Value {
     }
 }
 
-pub fn library() -> Cells {
+pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
-    cells.set_value(vocabulary::ISA, progred_name::record("isa", []));
-    cells
+    cells.set_value(vocabulary::ISA, name::record("isa", []));
+    Library {
+        cells,
+        ..Library::default()
+    }
 }
 
 #[cfg(test)]
@@ -44,10 +48,7 @@ mod tests {
     #[test]
     fn classification_is_structural_and_extensible() {
         let class = new_cell_id();
-        let mut fields = Value::record([field(class)])
-            .as_record()
-            .unwrap()
-            .clone();
+        let mut fields = Value::record([field(class)]).as_record().unwrap().clone();
         fields.insert(new_cell_id(), Value::from(vec![1]));
         let classified = Value::Record(fields);
         assert_eq!(read(&classified), Some(class));

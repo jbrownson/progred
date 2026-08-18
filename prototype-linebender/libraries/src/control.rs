@@ -2,8 +2,11 @@
 //! selects one expression through structural matching; `quote`
 //! constructs data while evaluating explicit unquotes.
 
-use grap::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use crate::{Library, absent, name};
 use gid::{CellId, Cells, Value};
+#[cfg(test)]
+use grap_runtime as grap;
+use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use std::collections::BTreeMap;
 
 pub mod vocabulary {
@@ -11,33 +14,21 @@ pub mod vocabulary {
 
     pub const CASE: CellId = CellId::from_u128(0xb3f6a62e4926889bcfcd338025f4a6f9);
     pub const VALUE: CellId = CellId::from_u128(0x00dafdc01c7e014edd857e174c6c8b6f);
-    pub const ALTERNATIVES: CellId =
-        CellId::from_u128(0xa9aadcb44755963498c743fa114f0f00);
-    pub const DEFAULT: CellId =
-        CellId::from_u128(0x3ad1a352453c8b21da757b48913b2c9f);
-    pub const PATTERN: CellId =
-        CellId::from_u128(0xb9dc97198709bc6f7bae4c7afc7d424f);
+    pub const ALTERNATIVES: CellId = CellId::from_u128(0xa9aadcb44755963498c743fa114f0f00);
+    pub const DEFAULT: CellId = CellId::from_u128(0x3ad1a352453c8b21da757b48913b2c9f);
+    pub const PATTERN: CellId = CellId::from_u128(0xb9dc97198709bc6f7bae4c7afc7d424f);
     pub const BIND: CellId = CellId::from_u128(0x5e46d12705690e8a377eb0f16ad9dba6);
     pub const QUOTE: CellId = CellId::from_u128(0x7f81d4812ceb33d4222e9e5cb9c82497);
-    pub const UNQUOTE: CellId =
-        CellId::from_u128(0xda48703c290e3b35d7353c38110bc953);
+    pub const UNQUOTE: CellId = CellId::from_u128(0xda48703c290e3b35d7353c38110bc953);
 
-    pub const INVALID_ALTERNATIVES: CellId =
-        CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
-    pub const INVALID_ALTERNATIVE: CellId =
-        CellId::from_u128(0xaa627ebeb1091e8359f7a8eea45a6ccd);
-    pub const INVALID_BINDER: CellId =
-        CellId::from_u128(0x59ad0fb67728f245dce57b0cee360969);
+    pub const INVALID_ALTERNATIVES: CellId = CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
+    pub const INVALID_ALTERNATIVE: CellId = CellId::from_u128(0xaa627ebeb1091e8359f7a8eea45a6ccd);
+    pub const INVALID_BINDER: CellId = CellId::from_u128(0x59ad0fb67728f245dce57b0cee360969);
 }
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .register(
-            vocabulary::CASE,
-            ForeignFunction {
-                call: case_foreign,
-            },
-        )
+        .register(vocabulary::CASE, ForeignFunction { call: case_foreign })
         .register(
             vocabulary::QUOTE,
             ForeignFunction {
@@ -51,8 +42,8 @@ fn quote_foreign(
     call: &Value,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    let Some(expression) = context.field(call, grap::vocabulary::EXPRESSION) else {
-        return Ok(context.missing_argument(grap::vocabulary::EXPRESSION));
+    let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION) else {
+        return Ok(context.missing_argument(grap_runtime::vocabulary::EXPRESSION));
     };
     replace_unquotes(expression, context, environment)
 }
@@ -134,7 +125,7 @@ fn select<'a>(value: &Value, alternatives: &'a Value) -> Selection<'a> {
         };
         let (Some(pattern), Some(expression)) = (
             fields.get(&vocabulary::PATTERN),
-            fields.get(&grap::vocabulary::EXPRESSION),
+            fields.get(&grap_runtime::vocabulary::EXPRESSION),
         ) else {
             return Selection::Invalid(vocabulary::INVALID_ALTERNATIVE);
         };
@@ -161,8 +152,7 @@ fn destructure(
     value: &Value,
 ) -> Result<Option<BTreeMap<CellId, Value>>, InvalidBinder> {
     let mut bindings = BTreeMap::new();
-    matches_pattern(pattern, value, &mut bindings)
-        .map(|matched| matched.then_some(bindings))
+    matches_pattern(pattern, value, &mut bindings).map(|matched| matched.then_some(bindings))
 }
 
 fn matches_pattern(
@@ -184,16 +174,18 @@ fn matches_pattern(
                     None => Err(InvalidBinder),
                 }
             } else if let Some(value_fields) = value.as_record() {
-                pattern_fields.iter().try_fold(true, |matched, (field, pattern)| {
-                    if matched {
-                        match value_fields.get(field) {
-                            Some(value) => matches_pattern(pattern, value, bindings),
-                            None => Ok(false),
+                pattern_fields
+                    .iter()
+                    .try_fold(true, |matched, (field, pattern)| {
+                        if matched {
+                            match value_fields.get(field) {
+                                Some(value) => matches_pattern(pattern, value, bindings),
+                                None => Ok(false),
+                            }
+                        } else {
+                            Ok(false)
                         }
-                    } else {
-                        Ok(false)
-                    }
-                })
+                    })
             } else {
                 Ok(false)
             }
@@ -215,7 +207,7 @@ fn matches_pattern(
     }
 }
 
-pub fn library() -> Cells {
+pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::CASE, "case"),
@@ -227,16 +219,20 @@ pub fn library() -> Cells {
         (vocabulary::QUOTE, "quote"),
         (vocabulary::UNQUOTE, "unquote"),
     ] {
-        cells.set_value(cell, progred_name::record(name, []));
+        cells.set_value(cell, name::record(name, []));
     }
     for (cell, name) in [
         (vocabulary::INVALID_ALTERNATIVES, "invalid alternatives"),
         (vocabulary::INVALID_ALTERNATIVE, "invalid alternative"),
         (vocabulary::INVALID_BINDER, "invalid binder"),
     ] {
-        cells.set_value(cell, grap_absent::named(name));
+        cells.set_value(cell, absent::named(name));
     }
-    cells
+    Library {
+        cells,
+        functions: functions(),
+        ..Library::default()
+    }
 }
 
 #[cfg(test)]
@@ -303,7 +299,12 @@ mod tests {
             field,
             Value::record([(vocabulary::UNQUOTE, Value::from(parameter))]),
         )])]);
-        let positions = template.as_list().unwrap().keys().cloned().collect::<Vec<_>>();
+        let positions = template
+            .as_list()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
         let expression = grap::call(
             grap::lambda([parameter], quote_call(template)),
             [(parameter, blob("spliced"))],
@@ -328,10 +329,7 @@ mod tests {
     #[test]
     fn unquote_is_ordinary_data_outside_quote() {
         let missing = new_cell_id();
-        let expression = Value::record([(
-            vocabulary::UNQUOTE,
-            Value::from(missing),
-        )]);
+        let expression = Value::record([(vocabulary::UNQUOTE, Value::from(missing))]);
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, expression);
         assert!(evaluation.diagnostics.is_empty());
@@ -341,14 +339,8 @@ mod tests {
     #[test]
     fn quote_does_not_revisit_an_unquoted_result() {
         let missing = new_cell_id();
-        let inner = Value::record([(
-            vocabulary::UNQUOTE,
-            Value::from(missing),
-        )]);
-        let expression = quote_call(Value::record([(
-            vocabulary::UNQUOTE,
-            inner.clone(),
-        )]));
+        let inner = Value::record([(vocabulary::UNQUOTE, Value::from(missing))]);
+        let expression = quote_call(Value::record([(vocabulary::UNQUOTE, inner.clone())]));
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, inner);
         assert!(evaluation.diagnostics.is_empty());
@@ -369,14 +361,8 @@ mod tests {
                 (metadata, blob("extra")),
             ]),
             [
-                alternative(
-                    Value::record([(first, blob("Grace"))]),
-                    Value::from(never),
-                ),
-                alternative(
-                    Value::record([(first, binding(name))]),
-                    Value::from(name),
-                ),
+                alternative(Value::record([(first, blob("Grace"))]), Value::from(never)),
+                alternative(Value::record([(first, binding(name))]), Value::from(name)),
             ],
             Value::from(never),
         );
@@ -505,15 +491,16 @@ mod tests {
 
     #[test]
     fn library_describes_quote_and_classifies_absences() {
-        let library = library();
+        let library = library::<(), ()>();
         assert_eq!(
-            library.value(vocabulary::QUOTE).and_then(progred_name::read),
+            library.cells.value(vocabulary::QUOTE).and_then(name::read),
             Some("quote")
         );
         assert_eq!(
             library
+                .cells
                 .value(vocabulary::UNQUOTE)
-                .and_then(progred_name::read),
+                .and_then(name::read),
             Some("unquote")
         );
         for cell in [
@@ -521,7 +508,7 @@ mod tests {
             vocabulary::INVALID_ALTERNATIVE,
             vocabulary::INVALID_BINDER,
         ] {
-            assert!(grap_absent::is_absent(library.value(cell).unwrap()));
+            assert!(absent::is_absent(library.cells.value(cell).unwrap()));
         }
     }
 }

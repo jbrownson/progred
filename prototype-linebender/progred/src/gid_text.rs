@@ -2,6 +2,7 @@
 //! bridges to text-based tools; it is not GID's native representation.
 
 use gid::{CellId, Cells, Document, Value, new_cell_id};
+use progred_libraries::{name, text};
 use std::collections::BTreeMap;
 use std::collections::HashSet;
 use std::fmt::Write as _;
@@ -184,7 +185,7 @@ impl Parser<'_> {
 
     fn value(&mut self) -> Result<Value, String> {
         match self.peek() {
-            Some('"') => Ok(progred_text::value(self.string()?)),
+            Some('"') => Ok(text::value(self.string()?)),
             Some('{') => {
                 self.rest = &self.rest[1..];
                 let fields = self.separated('}', |p| {
@@ -311,7 +312,7 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     let mut named: Vec<(&str, CellId)> = doc
         .cells
         .iter()
-        .filter_map(|(cell, value)| progred_name::read(value).map(|name| (name, *cell)))
+        .filter_map(|(cell, value)| name::read(value).map(|name| (name, *cell)))
         .collect();
     named.sort();
     for (name, cell) in &named {
@@ -350,14 +351,12 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
         .iter()
         .map(|(cell, value)| (*cell, value))
         .collect();
-    entries.sort_by(
-        |a, b| match (progred_name::read(a.1), progred_name::read(b.1)) {
-            (Some(x), Some(y)) => x.cmp(y).then(a.0.cmp(&b.0)),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => a.0.cmp(&b.0),
-        },
-    );
+    entries.sort_by(|a, b| match (name::read(a.1), name::read(b.1)) {
+        (Some(x), Some(y)) => x.cmp(y).then(a.0.cmp(&b.0)),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => a.0.cmp(&b.0),
+    });
     if !entries.is_empty() {
         out.push_str("  \"cells\": {\n");
         for (cell, value) in entries {
@@ -517,11 +516,11 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
 }
 
 fn plain_text(value: &Value) -> Option<&str> {
-    let text = progred_text::read(value)?;
+    let text = text::read(value)?;
     value
         .as_record()?
         .keys()
-        .all(|label| *label == progred_text::vocabulary::UTF8)
+        .all(|label| *label == text::vocabulary::UTF8)
         .then_some(text)
 }
 
@@ -556,10 +555,7 @@ mod tests {
         let (doc, binders) = parse_ok(text);
         assert_eq!(binders.len(), 9);
         let roof = binders["roof1"];
-        assert_eq!(
-            doc.cells.value(roof).and_then(progred_name::read),
-            Some("roof")
-        );
+        assert_eq!(doc.cells.value(roof).and_then(name::read), Some("roof"));
         // The canonical print is a fixed point.
         let printed = print(&doc, &binders);
         let (again, binders_again) = parse_ok(&printed);
@@ -615,7 +611,7 @@ mod tests {
         let twins = doc
             .cells
             .iter()
-            .filter(|(_, value)| progred_name::read(value) == Some("twin"))
+            .filter(|(_, value)| name::read(value) == Some("twin"))
             .count();
         assert_eq!(twins, 2);
     }
@@ -626,7 +622,7 @@ mod tests {
         let cell = new_cell_id();
         cells.set_value(
             cell,
-            progred_name::record(
+            name::record(
                 "grap program",
                 [(
                     crate::test_values::label("body"),
@@ -646,7 +642,7 @@ mod tests {
             again
                 .cells
                 .value(binders["grap_program"])
-                .and_then(progred_name::read),
+                .and_then(name::read),
             Some("grap program")
         );
         assert_eq!(print(&again, &binders), printed);
@@ -661,8 +657,8 @@ mod tests {
         let unnamed_b = CellId::from_u128(0x222222222222222222222222222abcde);
         let mut cells = Cells::new();
         cells.set_value(loaded, Value::from(vec![0]));
-        cells.set_value(named_a, progred_name::record("same", []));
-        cells.set_value(named_b, progred_name::record("same", []));
+        cells.set_value(named_a, name::record("same", []));
+        cells.set_value(named_b, name::record("same", []));
         cells.set_value(unnamed_a, Value::from(vec![1]));
         cells.set_value(unnamed_b, Value::from(vec![2]));
         let doc = Document { root: None, cells };

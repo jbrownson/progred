@@ -27,6 +27,7 @@ use crate::selection::{
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
+use progred_libraries::{name, text};
 mod location;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
@@ -939,9 +940,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
     match selection? {
         Selection::Edge { path, .. } => sources
             .resolve(path)
-            .filter(|value| {
-                !matches!(value, Value::Record(_)) || progred_text::read(value).is_some()
-            })
+            .filter(|value| !matches!(value, Value::Record(_)) || text::read(value).is_some())
             .cloned(),
         _ => None,
     }
@@ -1102,7 +1101,7 @@ fn head_view<
     };
     let mut edge = path.to_vec();
     edge.push(Step::Follow);
-    edge.push(Step::Key(progred_name::vocabulary::NAME));
+    edge.push(Step::Key(name::vocabulary::NAME));
     let editing = cx
         .selection
         .filter(|selection| selection.path() == edge.as_slice())
@@ -1118,7 +1117,7 @@ fn head_view<
         cx.styles,
         hooks,
     );
-    let mark = progred_text::value(name);
+    let mark = text::value(name);
     let target = mark.clone();
     if cx.selected(path) || cx.selected(&edge) {
         let content = cursor_target(
@@ -1541,7 +1540,7 @@ pub fn popup_view<C: 'static, P: Canvas + HasHandler<C> + HasHover<HoverClaim>>(
         .iter()
         .map(|entry| {
             let style = match &entry.action {
-                EntryAction::Value(value) if progred_text::read(value).is_some() => &styles.string,
+                EntryAction::Value(value) if text::read(value).is_some() => &styles.string,
                 EntryAction::Value(value) if value.as_blob().is_some() => &styles.id,
                 EntryAction::Value(_) if entry.id => &styles.id,
                 EntryAction::Value(_) => &styles.label,
