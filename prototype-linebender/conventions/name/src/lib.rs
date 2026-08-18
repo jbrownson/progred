@@ -1,5 +1,5 @@
-//! A nonempty simple name on a record. The field is ordinary GID
-//! data. This editor assumes the library; other hosts need not.
+//! A simple name on a record. The field is ordinary GID data. This
+//! editor assumes the library; other hosts need not.
 
 use gid::{CellId, Cells, Value};
 
@@ -22,7 +22,6 @@ pub fn read(value: &Value) -> Option<&str> {
         .as_record()?
         .get(&vocabulary::NAME)
         .and_then(progred_text::read)
-        .filter(|name| !name.is_empty())
 }
 
 pub fn library() -> Cells {
@@ -44,10 +43,10 @@ mod tests {
         assert_eq!(read(&Value::Record(fields)), Some("roof"));
         assert_eq!(read(&progred_text::value("roof")), None);
 
-        let unnamed = record("", []);
-        assert_eq!(read(&unnamed), None);
+        let empty = record("", []);
+        assert_eq!(read(&empty), Some(""));
         assert_eq!(
-            unnamed
+            empty
                 .as_record()
                 .unwrap()
                 .get(&vocabulary::NAME)
