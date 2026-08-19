@@ -1370,3 +1370,84 @@ fn the_pending_query_writes_through_to_the_payload() {
     write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut pending);
     assert_eq!(selection_payload::query(pending.payload()), Some("ab"));
 }
+
+#[test]
+fn a_projection_defined_as_data_realizes() {
+    // The display language's data form, decoded with the PROVIDED
+    // intents and realized through the ordinary pipeline — what a
+    // document-defined partial will return once stack::load reads
+    // them from libraries.
+    fn probe(
+        input: progred_display::ProjectionInput<'_, (), Hover>,
+    ) -> Option<progred_display::Layout<(), Hover>> {
+        use progred_libraries::layout as data;
+        input.value.as_blob()?;
+        data::decode(
+            &data::selectable(data::row(
+                4.0,
+                [
+                    data::text_leaf("from", data::vocabulary::NAME_FACE),
+                    data::text_leaf("data", data::vocabulary::DIM_FACE),
+                ],
+            )),
+            &input.select,
+            &input.hover,
+        )
+    }
+    let doc = Document {
+        root: Some(Value::from(vec![7u8])),
+        cells: Cells::new(),
+    };
+    let lib = Cells::new();
+    let projection: Projection<()> =
+        Projection::new([probe as progred_display::Partial<(), Hover>]);
+    let foreign = grap::ForeignFunctions::default();
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let empty = Annotations::default();
+    let measured = project::<(), crate::frame::Paint>(
+        ProjectDescription {
+            sources: Sources {
+                doc: &doc,
+                library: &lib,
+            },
+            selection: None,
+            graph_node: None,
+            annotations: &empty,
+            raw: false,
+            styles: &styles,
+            width: 500.0,
+            projection: Some(&projection),
+            foreign: &foreign,
+        },
+        &mut tcx,
+        Hooks::<()> {
+            select: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            rename: Rc::new(|_, _, _| {}),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+        },
+    );
+    assert!(measured.extent.width > 0.0);
+    let placed = measured::place(
+        measured,
+        puri::geometry::Placement::root(measured_rect(500.0)),
+    );
+    // The data's selectable attached the provided handler.
+    assert!(placed.handler.is_some());
+}
+
+fn measured_rect(width: f64) -> vello::kurbo::Rect {
+    vello::kurbo::Rect::new(0.0, 0.0, width, 100.0)
+}

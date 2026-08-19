@@ -60,10 +60,15 @@ the stack's foreign functions under the `line_update` CURRENT/INPUT
 contract; text and f64 register their write-back FFIs; declines are
 absent-classified results or any evaluator diagnostic; the payload
 carries UPDATE, so the selection is data down to the undo bit;
-(2) a Value encoding of the display
-Layout, with interaction encoded as attach-points for the PROVIDED
-intents (select, pick, hover) — arbitrary world-callbacks stay a
-Rust-partial privilege, deliberately; (3) document-loaded partials in
+(2) DONE 2026-08-19: `libraries::layout` is the
+display language's data form — one marker key per node, strings on
+the text convention and numbers on f64, interaction as attach-points
+for the PROVIDED intents (selectable/pickable/hoverable/hover block;
+arbitrary world-callbacks stay a Rust-partial privilege), walk steps
+as key cells plus a FOLLOW marker (list positions have no data form
+yet), every vocabulary cell a named library cell so authors see the
+language inside the editor, and junk decoding to None so a malformed
+layout falls through whole; (3) document-loaded partials in
 `stack::load`, grap functions composing beside the Rust ones; (4) FFI
 curation as standing practice, one deliberate capability at a time.
 

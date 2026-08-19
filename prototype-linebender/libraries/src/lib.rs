@@ -11,6 +11,7 @@ pub mod f64;
 pub mod geometry;
 pub mod grap;
 pub mod isa;
+pub mod layout;
 pub mod name;
 pub mod text;
 

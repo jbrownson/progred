@@ -4,6 +4,7 @@ use crate::hover::Hover;
 use crate::projection::Projection;
 use gid::Cells;
 use progred_libraries::{
+    layout,
     Library, absent, control, f64, geometry, grap as grap_library, isa, name, text,
 };
 
@@ -41,6 +42,7 @@ fn libraries<World>() -> impl Iterator<Item = Library<World, Hover>> {
         absent::library(),
         control::library(),
         f64::library(),
+        layout::library(),
         geometry::library(),
     ]
     .into_iter()
