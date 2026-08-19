@@ -214,7 +214,7 @@ fn place_with_inputs(
         library: &stack.library,
     };
     let styles = crate::styles::editor(1.0);
-    let collapse = Collapse::default();
+    let collapse = Annotations::default();
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
@@ -244,7 +244,7 @@ fn place_with_inputs(
             sources,
             selection,
             graph_node: None,
-            collapse: &collapse,
+            annotations: &collapse,
             raw: false,
             styles: &styles,
             width: width - 48.0,

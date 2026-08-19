@@ -3,6 +3,7 @@
 
 use crate::graph_view;
 use crate::history;
+use crate::annotations;
 use crate::selection;
 use gid::{Document, Value};
 
@@ -29,7 +30,7 @@ pub(crate) enum Selected {
 pub(crate) struct Model {
     pub doc: Document,
     pub selection: Option<Selected>,
-    pub collapse: selection::Collapse,
+    pub annotations: annotations::Annotations,
     pub graph: graph_view::GraphView,
     pub history: history::History,
     pub view: ViewFlags,

@@ -17,7 +17,8 @@ use crate::navigate::{projected_name_owner, step_selection};
 use crate::render::{self, text};
 #[cfg(test)]
 use crate::sample::{sample_document, sample_vocabulary};
-use crate::selection::{Collapse, Selection, last_follow};
+use crate::annotations::Annotations;
+use crate::selection::{Selection, last_follow};
 #[cfg(test)]
 use crate::selection::{
     break_edit_run, delete_edge, from_clipboard, from_structure, line_edit, pending_edge,
@@ -119,7 +120,7 @@ struct Cx<'a> {
     /// projections come from the editor's stack; `grap` is one of them.
     raw: bool,
     foreign: &'a grap::ForeignFunctions,
-    collapse: &'a Collapse,
+    annotations: &'a Annotations,
     styles: &'a Styles,
     selection: Option<&'a Selection>,
     /// The value whose other projections carry the secondary mark.
@@ -946,7 +947,7 @@ pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
     pub selection: Option<&'a Selection>,
     pub graph_node: Option<&'a Value>,
-    pub collapse: &'a Collapse,
+    pub annotations: &'a Annotations,
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
@@ -966,7 +967,7 @@ pub fn project<
         sources,
         selection,
         graph_node,
-        collapse,
+        annotations,
         raw,
         styles,
         width,
@@ -977,7 +978,7 @@ pub fn project<
         sources,
         raw,
         foreign,
-        collapse,
+        annotations,
         styles,
         selection,
         source: Source::Stored,
@@ -1276,7 +1277,7 @@ fn project_transient_root<
         sources: cx.sources,
         raw: false,
         foreign: cx.foreign,
-        collapse: cx.collapse,
+        annotations: cx.annotations,
         styles: cx.styles,
         selection: None,
         secondary: None,

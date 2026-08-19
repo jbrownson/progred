@@ -2,6 +2,43 @@
 
 Date: 2026-07-03
 
+## UI State As Data (Direction, 2026-08-19)
+
+Editor state migrates into GID Values so projections read and write it
+as data, and the future incremental system gets ONE dependency
+substrate: values at paths, document and UI state alike. Decided with
+two refinements that bound the ambition:
+
+- Paths are NOT encoded as Values. Access is POSITIONAL: a projection
+  receives the annotation record at its own path, and the selection's
+  PAYLOAD when its path is the selected one — never a global store,
+  never an address convention. A selection is a Rust `Path` plus a
+  `Value`; the editor owns where, libraries own what it means. We are
+  not bootstrapping the editor into its own graph — the customization
+  points speak GID, nothing more.
+- Two access patterns, two shapes. SINGLETON slots (selection, scroll,
+  view flags): "what is the X?", one read, replaced atomically —
+  setting is clearing, and one slot keeps the tree/graph exclusivity
+  structural. The PER-NODE trie (`Annotations`): path-keyed open
+  records under convention keys, queried only locally while projecting
+  that node, so distributed storage is correct there. Collapse is its
+  first convention (a `flag` value under `COLLAPSED`; the `flag`
+  library convention is truth in one byte, since GID has no boolean
+  atom).
+
+Gesture state stays Rust: IME preedit, drag anchors, the hover ring —
+state no projection could meaningfully render. The layered widget
+story follows later: once widget state inputs are data, today's
+Display leaves become blessed standard functions over boxes + vector
+ink, with phase-bound machinery (caret hit-testing, the popup channel,
+IME) remaining editor-owned hooks.
+
+Landed so far: `Annotations` replaced the collapse-only override map
+(2026-08-19). Next: the selection slot as (Path, Value) with editor
+internals staying Rust, then the positional read-only view in
+`ProjectionInput`.
+
+
 ## Cell-Only Labels And Library Text (2026-08-09)
 
 This tightens the current model further. The GID core now has exactly

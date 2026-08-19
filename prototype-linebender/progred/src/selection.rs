@@ -2,6 +2,7 @@
 //! locations in a [`Document`]; this module owns what is selected
 //! there and how authoring and mutation land.
 
+use crate::annotations::{self, Annotations};
 use crate::identity::short_id;
 use crate::projection::Projection;
 use crate::sources::Sources;
@@ -9,23 +10,7 @@ use crate::spine;
 use gid::{CellId, Cells, Document, Path, Position, Step, Value, position};
 use progred_libraries::{name, text};
 use puri::edit::LineEditState;
-use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-
-/// Per-path collapse overrides. An absent entry means "use the
-/// default", which is collapsed inside a cycle and expanded otherwise;
-/// a present entry forces it the other way. Sparse: only overrides are
-/// stored.
-#[derive(Default)]
-pub struct Collapse {
-    pub(crate) overrides: HashMap<Path, bool>,
-}
-
-impl Collapse {
-    pub fn collapsed(&self, path: &[Step], in_cycle: bool) -> bool {
-        self.overrides.get(path).copied().unwrap_or(in_cycle)
-    }
-}
 
 pub(crate) struct LineEditing {
     pub(crate) line: LineEditState,
@@ -581,13 +566,13 @@ pub fn rename_field(
 pub fn toggle_collapse<World>(
     sources: &Sources,
     projection: &Projection<World>,
-    collapse: &mut Collapse,
+    annotations: &mut Annotations,
     path: &[Step],
 ) -> bool {
     match collapse_default(sources, projection, path) {
         Some(default) => {
-            let next = !collapse.collapsed(path, default);
-            store_collapse(collapse, path, default, next);
+            let next = !annotations::collapsed(annotations, path, default);
+            annotations::set_collapsed(annotations, path, default, next);
             true
         }
         None => false,
@@ -599,13 +584,13 @@ pub fn toggle_collapse<World>(
 pub fn set_collapse<World>(
     sources: &Sources,
     projection: &Projection<World>,
-    collapse: &mut Collapse,
+    annotations: &mut Annotations,
     path: &[Step],
     closed: bool,
 ) -> bool {
     match collapse_default(sources, projection, path) {
-        Some(default) if collapse.collapsed(path, default) != closed => {
-            store_collapse(collapse, path, default, closed);
+        Some(default) if annotations::collapsed(annotations, path, default) != closed => {
+            annotations::set_collapsed(annotations, path, default, closed);
             true
         }
         _ => false,
@@ -636,16 +621,6 @@ fn collapse_default<World>(
                 .filter_map(|end| sources.resolve(&path[..end]))
                 .any(|ancestor| ancestor == value)
         })
-}
-
-/// Stays sparse: an override matching the default is removed rather
-/// than stored.
-fn store_collapse(collapse: &mut Collapse, path: &[Step], default: bool, next: bool) {
-    if next == default {
-        collapse.overrides.remove(path);
-    } else {
-        collapse.overrides.insert(path.to_vec(), next);
-    }
 }
 
 /// Writes the selection's editor text through to its location after

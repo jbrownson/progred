@@ -2,6 +2,7 @@
 //! `app_view` renders to any puri `Canvas`; here its deferred ink
 //! streams into vello.
 
+mod annotations;
 mod commands;
 mod completion;
 mod filter;
@@ -578,7 +579,7 @@ fn main() {
         model: Model {
             doc,
             selection: None,
-            collapse: selection::Collapse::default(),
+            annotations: annotations::Annotations::default(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view: ViewFlags::default(),
@@ -854,7 +855,7 @@ impl App {
         self.model = Model {
             doc,
             selection: None,
-            collapse: selection::Collapse::default(),
+            annotations: annotations::Annotations::default(),
             graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view,

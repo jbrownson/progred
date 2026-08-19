@@ -555,13 +555,13 @@ impl App {
             None => selection::toggle_collapse(
                 &sources,
                 &self.stack.projection,
-                &mut self.model.collapse,
+                &mut self.model.annotations,
                 &path,
             ),
             Some(closed) => selection::set_collapse(
                 &sources,
                 &self.stack.projection,
-                &mut self.model.collapse,
+                &mut self.model.annotations,
                 &path,
                 closed,
             ),

@@ -1,4 +1,5 @@
 use super::*;
+use crate::annotations::Annotations;
 use crate::hover::hover_value;
 use gid::Position;
 use progred_libraries::{f64, name, text};
@@ -26,7 +27,7 @@ fn make_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
     )
 }
 
-fn toggle_fold(sources: &Sources, collapse: &mut Collapse, path: &[Step]) -> bool {
+fn toggle_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step]) -> bool {
     toggle_collapse(
         sources,
         &crate::stack::load::<()>().projection,
@@ -35,7 +36,7 @@ fn toggle_fold(sources: &Sources, collapse: &mut Collapse, path: &[Step]) -> boo
     )
 }
 
-fn set_fold(sources: &Sources, collapse: &mut Collapse, path: &[Step], closed: bool) -> bool {
+fn set_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step], closed: bool) -> bool {
     set_collapse(
         sources,
         &crate::stack::load::<()>().projection,
@@ -230,13 +231,13 @@ fn set_collapse_is_directional_and_stays_sparse() {
         crate::test_values::text("1"),
     )]);
     let sources = src(&doc, &lib);
-    let mut collapse = Collapse::default();
+    let mut collapse = Annotations::default();
     assert!(set_fold(&sources, &mut collapse, &[], true));
     assert!(!set_fold(&sources, &mut collapse, &[], true));
     assert!(set_fold(&sources, &mut collapse, &[], false));
     assert!(!set_fold(&sources, &mut collapse, &[], false));
     // Matching the default stores nothing.
-    assert!(collapse.overrides.is_empty());
+    assert!(collapse.at(&[]).is_none());
     // A leaf has nothing to fold.
     let leaf = vec![Step::Follow, key("a")];
     assert!(!set_fold(&sources, &mut collapse, &leaf, true));
@@ -887,21 +888,21 @@ fn cycles_collapse_by_default_and_expand_turn_by_turn() {
     };
     let lib = Cells::new();
     let sources = src(&doc, &lib);
-    let mut collapse = Collapse::default();
+    let mut collapse = Annotations::default();
     let reentry = vec![Step::Follow, key("next")];
     // Space's toggle expands the default-collapsed re-entry.
     assert!(toggle_fold(&sources, &mut collapse, &reentry));
-    assert!(!collapse.collapsed(&reentry, true));
+    assert!(!crate::annotations::collapsed(&collapse, &reentry, true));
     // The next turn defaults collapsed at its own deeper path and
     // expands the same way — follow the cycle as far as wanted.
     let deeper: Vec<Step> = reentry.iter().chain(reentry.iter()).cloned().collect();
-    assert!(collapse.collapsed(&deeper, true));
+    assert!(crate::annotations::collapsed(&collapse, &deeper, true));
     assert!(toggle_fold(&sources, &mut collapse, &deeper));
-    assert!(!collapse.collapsed(&deeper, true));
+    assert!(!crate::annotations::collapsed(&collapse, &deeper, true));
     // Toggling back restores the default (the override is sparse).
     assert!(toggle_fold(&sources, &mut collapse, &deeper));
-    assert!(collapse.collapsed(&deeper, true));
-    assert!(collapse.overrides.is_empty() || !collapse.overrides.contains_key(&deeper));
+    assert!(crate::annotations::collapsed(&collapse, &deeper, true));
+    assert!(collapse.at(&deeper).is_none());
 }
 
 #[test]
@@ -912,15 +913,15 @@ fn any_valued_cell_and_any_container_collapse() {
         crate::test_values::text("building"),
     )]);
     let sources = src(&doc, &lib);
-    let mut collapse = Collapse::default();
+    let mut collapse = Annotations::default();
     // A plain (non-cycle) cell collapses to ( … ) via the same
     // toggle.
     assert!(toggle_fold(&sources, &mut collapse, &[]));
-    assert!(collapse.collapsed(&[], false));
+    assert!(crate::annotations::collapsed(&collapse, &[], false));
     // Its record collapses too — layout never enters into it, so
     // inline literals toggle exactly like block forms.
     assert!(toggle_fold(&sources, &mut collapse, &[Step::Follow]));
-    assert!(collapse.collapsed(&[Step::Follow], false));
+    assert!(crate::annotations::collapsed(&collapse, &[Step::Follow], false));
     // A valueless location declines.
     let empty = Document {
         root: None,

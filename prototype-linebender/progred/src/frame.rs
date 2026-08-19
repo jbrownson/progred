@@ -442,7 +442,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
             sources,
             selection: model.tree_selection(),
             graph_node: graph_node.as_ref(),
-            collapse: &model.collapse,
+            annotations: &model.annotations,
             raw: flags.raw,
             styles: &styles,
             width: body_width,
@@ -525,7 +525,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                         library: &app.stack.library,
                     },
                     &app.stack.projection,
-                    &mut app.model.collapse,
+                    &mut app.model.annotations,
                     &path,
                 );
             }),

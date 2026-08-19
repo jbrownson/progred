@@ -54,7 +54,7 @@ fn cell_layout<World: 'static>(
         || cx.pending_rename_under(&followed).is_some();
     let elided = value.is_some()
         && !pending_inside
-        && cx.collapse.collapsed(path, ancestors.contains(&cell));
+        && crate::annotations::collapsed(cx.annotations, path, ancestors.contains(&cell));
     if elided {
         return selectable(
             bracket(Delim::Paren, toggle(dim("…"), path, hooks)),
@@ -88,7 +88,7 @@ fn list_layout<World: 'static>(
     }
     let collapsed = !items.is_empty()
         && items.iter().all(|(_, present)| *present)
-        && cx.collapse.collapsed(path, false);
+        && crate::annotations::collapsed(cx.annotations, path, false);
     if collapsed {
         return selectable(
             bracket(Delim::Bracket, toggle(dim("…"), path, hooks)),
@@ -176,7 +176,7 @@ fn record_layout<World: 'static>(
         && !pending_edge
         && renaming.is_none()
         && items.iter().all(|(_, present)| *present)
-        && cx.collapse.collapsed(path, false);
+        && crate::annotations::collapsed(cx.annotations, path, false);
     if collapsed {
         return selectable(
             bracket(Delim::Brace, toggle(dim("…"), path, hooks)),
