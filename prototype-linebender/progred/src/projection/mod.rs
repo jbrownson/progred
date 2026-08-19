@@ -476,10 +476,6 @@ fn leaf_display<
             };
             render::text(tcx, &text, style)
         }
-        progred_display::Display::Delim { delim, open } => hover_target(
-            path.to_vec(),
-            flat_delim(cx.styles, display_delim(delim), open),
-        ),
         progred_display::Display::Head { cell } => {
             head_view(cx, tcx, path, cell, cx.name(cell), hooks)
         }
@@ -710,28 +706,10 @@ fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
     )
 }
 
-/// A one-line delimiter at the font's own glyph span: the drawn
-/// family's flat form, sitting in a text row exactly where the glyph
-/// would.
-fn flat_delim<C: 'static, Cv: Canvas + 'static>(styles: &Styles, delim: Delim, open: bool) -> Measured<Placed<C, Cv>> {
-    let em = 14.0 * styles.scale;
-    let (asc, desc) = (GLYPH_ASC_EM * em, GLYPH_DESC_EM * em);
-    delim_leaf(
-        styles,
-        delim,
-        open,
-        Extent {
-            width: 0.0,
-            ascent: asc,
-            descent: desc,
-        },
-        -asc,
-        desc,
-    )
-}
-
 /// A delimiter stretched over `content`'s extent, ink trimmed to meet
-/// the glyph span on the first and last lines.
+/// the glyph span on the first and last lines. The charged span never
+/// shrinks below the glyph's own, so an empty pair still stands a
+/// glyph tall — and one-line content gets exactly the flat form.
 fn tall_delim<C: 'static, Cv: Canvas + 'static>(
     styles: &Styles,
     delim: Delim,
@@ -739,6 +717,11 @@ fn tall_delim<C: 'static, Cv: Canvas + 'static>(
     content: Extent,
 ) -> Measured<Placed<C, Cv>> {
     let em = 14.0 * styles.scale;
+    let content = Extent {
+        width: content.width,
+        ascent: content.ascent.max(GLYPH_ASC_EM * em),
+        descent: content.descent.max(GLYPH_DESC_EM * em),
+    };
     let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
     let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
     delim_leaf(styles, delim, open, content, ink_top, ink_bottom)

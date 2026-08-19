@@ -7,7 +7,7 @@ use crate::hover::Hover;
 use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
 use progred_display::{
-    Delim, Layout, block_hover, bracket, col, delim, descend, dim, field_label, alternatives, head, hug,
+    Delim, Layout, alternatives, block_hover, bracket, col, descend, dim, field_label, head, hug,
     id, on_click, on_hover, pickable, query, row, slot,
 };
 use progred_libraries::{name, text};
@@ -57,14 +57,7 @@ fn cell_layout<World: 'static>(
         && cx.collapse.collapsed(path, ancestors.contains(&cell));
     if elided {
         return selectable(
-            row(
-                4.0,
-                [
-                    delim(Delim::Paren, true),
-                    toggle(dim("…"), path, hooks),
-                    delim(Delim::Paren, false),
-                ],
-            ),
+            bracket(Delim::Paren, toggle(dim("…"), path, hooks)),
             path,
             &Value::from(cell),
             hooks,
@@ -98,14 +91,7 @@ fn list_layout<World: 'static>(
         && cx.collapse.collapsed(path, false);
     if collapsed {
         return selectable(
-            row(
-                4.0,
-                [
-                    delim(Delim::Bracket, true),
-                    toggle(dim("…"), path, hooks),
-                    delim(Delim::Bracket, false),
-                ],
-            ),
+            bracket(Delim::Bracket, toggle(dim("…"), path, hooks)),
             path,
             &Value::List(elements.clone()),
             hooks,
@@ -114,10 +100,7 @@ fn list_layout<World: 'static>(
     }
     if items.is_empty() {
         return selectable(
-            row(
-                0.0,
-                [delim(Delim::Bracket, true), delim(Delim::Bracket, false)],
-            ),
+            bracket(Delim::Bracket, row(0.0, Vec::new())),
             path,
             &Value::List(elements.clone()),
             hooks,
@@ -125,7 +108,7 @@ fn list_layout<World: 'static>(
         );
     }
     let writable = writable_at(&cx.sources, path);
-    let mut flat = vec![delim(Delim::Bracket, true)];
+    let mut flat = Vec::new();
     for (index, (position, _)) in items.iter().enumerate() {
         if index > 0 {
             let separator = dim(", ");
@@ -137,14 +120,13 @@ fn list_layout<World: 'static>(
         }
         flat.push(descend(Step::Element(position.clone())));
     }
-    flat.push(delim(Delim::Bracket, false));
     let rows: Vec<View<World>> = items
         .iter()
         .map(|(position, _)| descend(Step::Element(position.clone())))
         .collect();
     alternatives([
         selectable(
-            row(0.0, flat),
+            bracket(Delim::Bracket, row(0.0, flat)),
             path,
             &Value::List(elements.clone()),
             hooks,
@@ -197,14 +179,7 @@ fn record_layout<World: 'static>(
         && cx.collapse.collapsed(path, false);
     if collapsed {
         return selectable(
-            row(
-                4.0,
-                [
-                    delim(Delim::Brace, true),
-                    toggle(dim("…"), path, hooks),
-                    delim(Delim::Brace, false),
-                ],
-            ),
+            bracket(Delim::Brace, toggle(dim("…"), path, hooks)),
             path,
             &Value::Record(fields.clone()),
             hooks,
@@ -213,14 +188,14 @@ fn record_layout<World: 'static>(
     }
     if items.is_empty() && !pending_edge {
         return selectable(
-            row(0.0, [delim(Delim::Brace, true), delim(Delim::Brace, false)]),
+            bracket(Delim::Brace, row(0.0, Vec::new())),
             path,
             &Value::Record(fields.clone()),
             hooks,
             false,
         );
     }
-    let mut flat = vec![delim(Delim::Brace, true)];
+    let mut flat = Vec::new();
     for (index, (key, _)) in items.iter().enumerate() {
         if index > 0 {
             flat.push(dim(", "));
@@ -239,7 +214,6 @@ fn record_layout<World: 'static>(
         }
         flat.push(pending_edge_layout());
     }
-    flat.push(delim(Delim::Brace, false));
     let mut rows: Vec<View<World>> = items
         .iter()
         .map(|(key, present)| field_row(cx, path, *key, *present, hooks))
@@ -249,7 +223,7 @@ fn record_layout<World: 'static>(
     }
     alternatives([
         selectable(
-            row(0.0, flat),
+            bracket(Delim::Brace, row(0.0, flat)),
             path,
             &Value::Record(fields.clone()),
             hooks,

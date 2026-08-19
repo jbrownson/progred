@@ -34,11 +34,6 @@ pub enum Display {
         face: Face,
     },
     LineEdit(LineEdit),
-    /// Flat drawn delimiter; height is the glyph span.
-    Delim {
-        delim: Delim,
-        open: bool,
-    },
     /// Cell head: conventional name without string quotes, or the short id.
     Head {
         cell: CellId,
@@ -236,10 +231,6 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
         text: text.into(),
         face,
     })
-}
-
-pub fn delim<World, Hover>(delim: Delim, open: bool) -> Layout<World, Hover> {
-    leaf(Display::Delim { delim, open })
 }
 
 pub fn head<World, Hover>(cell: CellId) -> Layout<World, Hover> {
