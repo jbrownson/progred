@@ -5,12 +5,15 @@
 //! not bootstrapped into its own graph.
 
 use gid::{CellId, Step, Value};
-use progred_libraries::flag;
 use std::collections::HashMap;
 
-/// The collapse override at a path: a flag forcing the fold either
-/// way; absent means the default (collapsed inside a cycle).
-pub const COLLAPSED: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
+/// The fold override at a path: one of two NAMED STATES, absent
+/// meaning the default (collapsed inside a cycle). Named cells, not a
+/// boolean — GID deliberately has no bool; presence covers toggles
+/// and named states cover the rest.
+pub const FOLD: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
+pub const FOLDED: CellId = CellId::from_u128(0x84c07f3b9ad2561e02c6b4d81f7a39e5);
+pub const EXPANDED: CellId = CellId::from_u128(0x1d5b0c47e8f6a923d7405c9128b3fae6);
 
 #[derive(Default)]
 pub struct Annotations {
@@ -55,17 +58,19 @@ impl Annotations {
 }
 
 pub fn collapsed(annotations: &Annotations, path: &[Step], in_cycle: bool) -> bool {
-    annotations
-        .field(path, COLLAPSED)
-        .and_then(flag::read)
-        .unwrap_or(in_cycle)
+    match annotations.field(path, FOLD).and_then(Value::as_cell) {
+        Some(state) if state == FOLDED => true,
+        Some(state) if state == EXPANDED => false,
+        _ => in_cycle,
+    }
 }
 
 /// Stays sparse: an override matching the default clears instead of
 /// storing.
 pub fn set_collapsed(annotations: &mut Annotations, path: &[Step], default: bool, next: bool) {
-    let value = (next != default).then(|| flag::value(next));
-    annotations.set_field(path, COLLAPSED, value);
+    let state =
+        (next != default).then(|| Value::Cell(if next { FOLDED } else { EXPANDED }));
+    annotations.set_field(path, FOLD, state);
 }
 
 #[cfg(test)]

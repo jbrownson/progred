@@ -22,9 +22,11 @@ two refinements that bound the ambition:
   structural. The PER-NODE trie (`Annotations`): path-keyed open
   records under convention keys, queried only locally while projecting
   that node, so distributed storage is correct there. Collapse is its
-  first convention (a `flag` value under `COLLAPSED`; the `flag`
-  library convention is truth in one byte, since GID has no boolean
-  atom).
+  first convention: `FOLD` holding one of two NAMED STATE cells
+  (`FOLDED`/`EXPANDED`), absent falling to the cycle default. GID
+  deliberately has no boolean — a general `flag` convention was tried
+  the same day and deleted within hours: presence covers toggles,
+  named cells cover states, and a bare bool at rest says nothing.
 
 Gesture state stays Rust: IME preedit, drag anchors, the hover ring —
 state no projection could meaningfully render. The layered widget

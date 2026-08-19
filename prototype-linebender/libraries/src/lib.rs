@@ -8,7 +8,6 @@ use progred_display::Partial;
 pub mod absent;
 pub mod control;
 pub mod f64;
-pub mod flag;
 pub mod geometry;
 pub mod grap;
 pub mod isa;
