@@ -3,24 +3,39 @@
 /// editor frame, no window needed. `cargo test -p progred svg_bench`
 /// writes target/raw_projection.svg.
 use super::*;
+use crate::frame::resolved_hover;
 use progred_libraries::{name, text};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
-use puri::handler::Handler;
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::fmt::Write as _;
 use vello::kurbo::{BezPath, Shape as KurboShape};
 
-type Claims = Vec<HoverClaim>;
+type World = ();
 
 struct Bench {
     list: DrawList,
-    handler: Handler<Claims>,
     descends: Vec<Descend>,
-    popup: Option<Popup>,
-    pointer: Option<Point>,
-    hover_claims: Vec<HoverClaim>,
+    /// What the probe answered for the pass's pointer input.
+    hit: Option<Claim<Hovered>>,
+}
+
+/// Probe with the pointer, then render and unpack the placed frame.
+fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
+    let hit = pointer.and_then(|point| placed.probe(point));
+    let Placed {
+        descends, renders, ..
+    } = placed;
+    let mut bench = Bench {
+        list: DrawList::new(),
+        descends,
+        hit,
+    };
+    for render in renders {
+        render(&mut bench);
+    }
+    bench
 }
 
 impl Canvas for Bench {
@@ -47,34 +62,6 @@ impl Canvas for Bench {
     ) {
         let _ = (shape.into(), transform);
         content(self);
-    }
-}
-
-impl HasHandler<Claims> for Bench {
-    fn handler(&mut self) -> &mut Handler<Claims> {
-        &mut self.handler
-    }
-}
-
-impl HasDescends for Bench {
-    fn descends(&mut self) -> &mut Vec<Descend> {
-        &mut self.descends
-    }
-}
-
-impl HasPopup for Bench {
-    fn popup(&mut self) -> &mut Option<Popup> {
-        &mut self.popup
-    }
-}
-
-impl HasHover<HoverClaim> for Bench {
-    fn pointer(&self) -> Option<Point> {
-        self.pointer
-    }
-
-    fn claim_hover(&mut self, claim: HoverClaim) {
-        self.hover_claims.push(claim);
     }
 }
 
@@ -218,7 +205,7 @@ fn place_with_inputs(
     pointer: Option<Point>,
     viewport: Option<Rect>,
 ) -> (Bench, Extent) {
-    let stack = crate::stack::load::<Claims>();
+    let stack = crate::stack::load::<World>();
     let sources = Sources {
         doc,
         library: &stack.library,
@@ -234,7 +221,7 @@ fn place_with_inputs(
         scale: 1.0,
         cache: &mut cache,
     };
-    let hooks = Hooks::<Claims> {
+    let hooks = Hooks::<World> {
         select: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
         rename: Rc::new(|_, _, _| {}),
@@ -249,7 +236,7 @@ fn place_with_inputs(
     // Numbers only, no assert (user call) — read them when the
     // bench runs; single-digit milliseconds is healthy.
     let start = std::time::Instant::now();
-    let node = project::<Claims, Bench>(
+    let node = project::<World, Bench>(
         ProjectDescription {
             sources,
             selection,
@@ -269,24 +256,15 @@ fn place_with_inputs(
     let elapsed = start.elapsed();
     eprintln!("project at {width:.0}px: {elapsed:.1?}");
     let extent = node.extent;
-    let mut bench = Bench {
-        list: DrawList::new(),
-        handler: Handler::default(),
-        descends: Vec::new(),
-        popup: None,
-        pointer,
-        hover_claims: Vec::new(),
-    };
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-    measured::place(
+    let placed = measured::place(
         node,
-        &mut bench,
         match viewport {
             Some(clip_rect) => Placement::new(rect, clip_rect),
             None => Placement::root(rect),
         },
     );
-    (bench, extent)
+    (settle(placed, pointer), extent)
 }
 
 fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {
@@ -501,34 +479,36 @@ fn air_holds_only_within_a_little_gap_of_the_hover() {
         hover: Hover::Value(vec![key("shape")]),
         rect: Rect::new(10.0, 10.0, 30.0, 20.0),
     };
-    // Direct switches unconditionally, however close.
+    let current = Hovered::Tree(current);
+    // An occluder clears unconditionally, however close.
     assert_eq!(
-        resolve_hover(
-            HoverClaim::Direct(None),
+        resolved_hover(
             Some(&current),
-            Point::new(11.0, 11.0),
+            Some(Claim::Occludes),
+            Some(Point::new(11.0, 11.0)),
+            false,
             8.0
         ),
-        Some(None)
+        None
     );
     // Air just past the footprint holds; air beyond the reach
     // clears — open space keeps no distant focus.
     assert_eq!(
-        resolve_hover(HoverClaim::Air, Some(&current), Point::new(36.0, 15.0), 8.0),
-        None
+        resolved_hover(Some(&current), None, Some(Point::new(36.0, 15.0)), false, 8.0),
+        Some(current.clone())
     );
     assert_eq!(
-        resolve_hover(HoverClaim::Air, Some(&current), Point::new(25.0, 26.0), 8.0),
-        None
+        resolved_hover(Some(&current), None, Some(Point::new(25.0, 26.0)), false, 8.0),
+        Some(current.clone())
     );
     assert_eq!(
-        resolve_hover(HoverClaim::Air, Some(&current), Point::new(60.0, 15.0), 8.0),
-        Some(None)
+        resolved_hover(Some(&current), None, Some(Point::new(60.0, 15.0)), false, 8.0),
+        None
     );
     // With nothing held, air is just air.
     assert_eq!(
-        resolve_hover(HoverClaim::Air, None, Point::new(11.0, 11.0), 8.0),
-        Some(None)
+        resolved_hover(None, None, Some(Point::new(11.0, 11.0)), false, 8.0),
+        None
     );
 }
 
@@ -559,14 +539,14 @@ fn placement_claims_the_hover_innermost_last() {
     let string_path = string.path.clone();
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(string_rect.center()));
     assert!(matches!(
-        bench.hover_claims.last(),
-        Some(HoverClaim::Direct(Some(Hovering {
+        &bench.hit,
+        Some(Claim::Names(Hovered::Tree(Hovering {
             hover: Hover::Value(path),
             ..
         }))) if *path == string_path
     ));
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(Point::new(-10.0, -10.0)));
-    assert!(bench.hover_claims.is_empty());
+    assert!(bench.hit.is_none());
 
     let center = string_rect.center();
     let clipped = place_with_inputs(
@@ -582,7 +562,7 @@ fn placement_claims_the_hover_innermost_last() {
         )),
     )
     .0;
-    assert!(clipped.hover_claims.is_empty());
+    assert!(clipped.hit.is_none());
 }
 
 /// Two flat elements and two block rows, deterministically: the
@@ -644,8 +624,8 @@ fn flat_separators_claim_the_insert_between() {
     );
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(mid));
     assert!(matches!(
-        bench.hover_claims.last(),
-        Some(HoverClaim::Direct(Some(Hovering {
+        &bench.hit,
+        Some(Claim::Names(Hovered::Tree(Hovering {
             hover: Hover::Insert(path),
             ..
         }))) if *path == first.path
@@ -668,7 +648,7 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
         560.0,
         Some(Point::new(upper.rect.center().x, gap_y)),
     );
-    assert!(air.hover_claims.is_empty());
+    assert!(air.hit.is_none());
     // Just inside the bracket's absorbed gap, the bracket claims
     // the container outright — the widened handle.
     let styles = crate::styles::editor(1.0);
@@ -687,8 +667,8 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
         )),
     );
     assert!(matches!(
-        claimed.hover_claims.last(),
-        Some(HoverClaim::Direct(Some(Hovering {
+        &claimed.hit,
+        Some(Claim::Names(Hovered::Tree(Hovering {
             hover: Hover::Value(path),
             ..
         }))) if *path == parent
@@ -727,7 +707,7 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
             scale: 1.0,
             cache: &mut cache,
         };
-        let card = popup_view::<Claims, Bench>(
+        let card = popup_view::<World, Bench>(
             &mut tcx,
             &crate::styles::editor(1.0),
             &popup,
@@ -735,28 +715,20 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
             |_, _| {},
         );
         let extent = card.extent;
-        let mut bench = Bench {
-            list: DrawList::new(),
-            handler: Handler::default(),
-            descends: Vec::new(),
-            popup: None,
-            pointer: Some(pointer),
-            hover_claims: Vec::new(),
-        };
-        measured::place_top_left(card, &mut bench, Point::ZERO);
-        (bench, extent)
+        let placed = measured::place_top_left(card, Point::ZERO);
+        (settle(placed, Some(pointer)), extent)
     };
     // The card's own padding claims-and-clears: an overlay's
     // pointer never falls through to what sits beneath it.
     let (padding, extent) = place_card(Point::new(1.0, 1.0));
-    assert_eq!(padding.hover_claims.last(), Some(&HoverClaim::Direct(None)));
+    assert_eq!(padding.hit, Some(Claim::Occludes));
     // Scanning down the card crosses both rows, each claiming its
     // index — an address into the live entries, never a snapshot.
     let winners: Vec<Hover> = (0..extent.height() as usize)
         .filter_map(|y| {
             let (bench, _) = place_card(Point::new(extent.width / 2.0, y as f64 + 0.5));
-            match bench.hover_claims.into_iter().last() {
-                Some(HoverClaim::Direct(Some(hovering))) => Some(hovering.hover),
+            match bench.hit {
+                Some(Claim::Names(Hovered::Tree(hovering))) => Some(hovering.hover),
                 _ => None,
             }
         })
@@ -821,7 +793,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: Some(crate::test_values::text("")),
         cells: Cells::new(),
     };
-    let stack = crate::stack::load::<Claims>();
+    let stack = crate::stack::load::<World>();
     let sel = Selection::edge(
         &Sources {
             doc: &empty_string,

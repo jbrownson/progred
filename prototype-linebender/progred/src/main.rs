@@ -17,6 +17,7 @@ mod macos_menu;
 mod menu;
 mod model;
 mod navigate;
+mod placed;
 mod projection;
 mod render;
 #[cfg(test)]
@@ -30,7 +31,7 @@ mod styles;
 mod test_values;
 mod text_store;
 
-use crate::frame::{Dispatch, FrameDisposition, FrameVisibility, Hovered, frame_disposition};
+use crate::frame::{Dispatch, FrameDisposition, Frame, Hovered, Paint, frame_disposition};
 use crate::model::{Model, Selected, ViewFlags};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -913,16 +914,23 @@ impl App {
         }
         let viewport = Size::new(width as f64, height as f64);
         if !self.pressed && !self.hover_is_current {
-            self.build_frame(FrameVisibility::Silent, scale, viewport);
+            self.build_frame(scale, viewport);
         }
         self.scene.reset();
         let before = self.hover.clone();
-        let dispatch = self.build_frame(FrameVisibility::Visible, scale, viewport);
+        let Frame { dispatch, renders } = self.build_frame(scale, viewport);
         // Recover from any geometry invalidation the shell failed to mark.
         let hover_changed = self.hover != before;
         self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
         self.hover_is_current = true;
+        let mut paint = Paint {
+            scene: std::mem::replace(&mut self.scene, Scene::new()),
+        };
+        for render in renders {
+            render(&mut paint);
+        }
+        self.scene = paint.scene;
 
         let RenderState::Active { surface, .. } = &mut self.state else {
             return;

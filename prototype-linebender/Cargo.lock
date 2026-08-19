@@ -2152,9 +2152,6 @@ name = "measured"
 version = "0.1.0"
 dependencies = [
  "kurbo",
- "peniko",
- "puri",
- "ui-events",
  "uig",
 ]
 
@@ -3130,6 +3127,7 @@ dependencies = [
  "skrifa",
  "ui-events",
  "ui-events-winit",
+ "uig",
  "vello",
  "winit",
 ]

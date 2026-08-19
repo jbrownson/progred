@@ -1,19 +1,12 @@
-//! Pointer hover: the placement claim, air hysteresis, and the value
-//! a hover refers to for secondary marks.
+//! Pointer hover: the tree hover's identity, its footprint, and the
+//! value a hover refers to for secondary marks.
 
 use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
 use gid::{Path, Step, Value};
 use progred_libraries::text;
-use vello::kurbo::{Point, Rect};
-
-/// Settled placement's internal pointer hit test. Later claims replace
-/// earlier ones, matching placement order: descendants and overlays win.
-pub trait HasHover<T> {
-    fn pointer(&self) -> Option<Point>;
-    fn claim_hover(&mut self, claim: T);
-}
+use vello::kurbo::Rect;
 
 /// What the pointer rests on: the claim a plain click at that point
 /// would fire. Values preview their selection; labels, toggles, and
@@ -45,40 +38,6 @@ pub enum Hover {
 pub struct Hovering {
     pub hover: Hover,
     pub rect: Rect,
-}
-
-/// One placement report for the current pointer input: what the
-/// claim under it means for the hover state.
-#[derive(Clone, Debug, PartialEq)]
-pub enum HoverClaim {
-    /// The pointer names this claim outright; `None` is an occluder
-    /// naming nothing.
-    Direct(Option<Hovering>),
-    /// Unclaimed air, anywhere on the plane — the resolver's backstop
-    /// for every pixel no claim took. Within a little gap's reach of
-    /// the current hover's footprint it HOLDS — crossing a separator
-    /// or the leading between rows never flickers — and beyond that
-    /// reach it clears, so open space keeps no distant focus.
-    Air,
-}
-
-/// What a claim does to the current hover: `Some(next)` replaces it,
-/// `None` keeps it. `reach` is the little-gap radius air holds
-/// across.
-pub fn resolve_hover(
-    claim: HoverClaim,
-    current: Option<&Hovering>,
-    point: Point,
-    reach: f64,
-) -> Option<Option<Hovering>> {
-    match claim {
-        HoverClaim::Direct(hovering) => Some(hovering),
-        HoverClaim::Air => {
-            let held =
-                current.is_some_and(|current| current.rect.inflate(reach, reach).contains(point));
-            if held { None } else { Some(None) }
-        }
-    }
 }
 
 /// The value a hover refers to — the hover's `secondary_of`, for

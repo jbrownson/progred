@@ -12,9 +12,11 @@
 //! Rendering and hit-testing are one pure pass: build geometry from
 //! state, draw it, register handlers over it.
 
-use crate::hover::HasHover;
+use crate::frame::Hovered;
 use crate::identity::short_id;
-use measured::{self, Extent, leaf};
+use crate::placed::{self, Placed};
+use measured::{self, Extent};
+use puri::hover::Claim;
 use crate::projection::command;
 use crate::selection::Selection;
 use crate::sources::Sources;
@@ -622,7 +624,7 @@ fn hit_node(hits: &[(Rect, GraphNode)], point: Point) -> Option<(Rect, GraphNode
 /// transition. `doc_selection` mirrors the document selection in as a
 /// secondary mark; `selection` is the graph's own.
 #[allow(clippy::too_many_arguments)]
-pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>(
+pub fn pane<C: 'static, Cv: Canvas + 'static>(
     sources: &Sources,
     view: &GraphView,
     selection: Option<&GraphSelection>,
@@ -633,7 +635,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
     tcx: &mut TextCtx,
     panel: Rect,
     hooks: &Hooks<C>,
-) -> measured::Measured<P> {
+) -> measured::Measured<Placed<C, Cv>> {
     let doc = sources.doc;
     let scale = f64::from(tcx.scale);
     let zoom = view.zoom;
@@ -784,7 +786,7 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         ascent: 0.0,
         descent: panel.height(),
     };
-    leaf(extent, move |p: &mut P, placement| {
+    placed::leaf(extent, move |p, placement| {
         let panel = placement.rect;
         // Everything the viewport shows stays inside the panel.
         p.clip(panel, Affine::IDENTITY, |p| {
@@ -849,9 +851,13 @@ pub fn pane<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<GraphNode>>>
         // The panel is an occluding hover claim even over its ground,
         // so the tree beneath never lights. The drag handlers remain
         // ordinary event dispatch below.
-        if let Some(point) = p.pointer().filter(|point| placement.contains(*point)) {
-            p.claim_hover(hit_node(&node_hits, point).map(|(_, id)| id));
-        }
+        let probe_hits = node_hits.clone();
+        p.claim(move |point| {
+            placement.contains(point).then(|| match hit_node(&probe_hits, point) {
+                Some((_, id)) => Claim::Names(Hovered::Graph(id)),
+                None => Claim::Occludes,
+            })
+        });
         let press_node = press_node.clone();
         let press_background = press_background.clone();
         let pick = pick.clone();

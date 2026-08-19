@@ -1,18 +1,19 @@
-//! Progred's measured boxes with baselines: the TeX/pict model. A [`Measured`]
+//! Measured boxes with baselines: the TeX/pict model. A [`Measured`]
 //! box is (width, ascent, descent) plus a way to place itself; rows
 //! compose on baselines, columns stack with a chosen child's baseline.
 //!
-//! Invariants the future pretty-printing layer relies on: extents are
-//! known at construction (before placement), construction has no side
+//! Invariants the pretty-printing layer relies on: extents are known
+//! at construction (before placement), construction has no side
 //! effects so alternative layouts can be built and discarded, and
-//! placement is the single traversal that touches the context `P`.
+//! placement is one pure traversal from settled geometry to the
+//! caller's [`Output`].
+//!
+//! The engine is generic in what placement produces. Leaves yield an
+//! `Out` from their settled [`Placement`]; containers combine children
+//! with [`Output::over`] in placement order, so the later-placed
+//! contribution is the one on top — painted last, asked first.
 
-use kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
-use puri::draw::Canvas;
-use puri::handler::{Handler, HasHandler, capture};
-use puri::text::TextMetrics;
-use ui_events::keyboard::KeyboardEvent;
-use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
+use kurbo::{Insets, Point, Rect, Size};
 use uig::Placement;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -36,64 +37,70 @@ impl Extent {
     }
 }
 
-impl From<TextMetrics> for Extent {
-    fn from(metrics: TextMetrics) -> Self {
-        Self {
-            width: metrics.width,
-            ascent: metrics.ascent,
-            descent: metrics.descent,
-        }
-    }
+/// What a placement pass accumulates: a monoid whose combine names its
+/// asymmetry. `base.over(above)` stacks `above` on top of `base`.
+pub trait Output {
+    fn empty() -> Self;
+    fn over(self, above: Self) -> Self;
 }
 
-pub struct Measured<P> {
+pub struct Measured<Out> {
     pub extent: Extent,
-    kind: Kind<P>,
+    kind: Kind<Out>,
 }
 
-pub struct PlaceInner<P> {
-    child: Measured<P>,
+/// A child held back for its wrapper: place it, move it, or drop it.
+pub struct PlaceInner<Out> {
+    child: Measured<Out>,
     placement: Placement,
 }
 
-fn child_placement(parent: Placement, rect: Rect) -> Placement {
+pub fn child_placement(parent: Placement, rect: Rect) -> Placement {
     Placement::new(rect, parent.clip_rect)
 }
 
-fn clipped_placement(placement: Placement, bounds: Rect) -> Placement {
+pub fn clipped_placement(placement: Placement, bounds: Rect) -> Placement {
     Placement::new(placement.rect, placement.clip_rect.intersect(bounds))
 }
 
-impl<P> PlaceInner<P> {
-    pub fn place(self, ctx: &mut P) {
-        place(self.child, ctx, self.placement);
+impl<Out: Output> PlaceInner<Out> {
+    pub fn place(self) -> Out {
+        place(self.child, self.placement)
+    }
+
+    pub fn place_at(self, placement: Placement) -> Out {
+        place(self.child, placement)
+    }
+
+    pub fn extent(&self) -> Extent {
+        self.child.extent
     }
 }
 
-type PlaceAround<P> = Box<dyn FnOnce(&mut P, Placement, PlaceInner<P>)>;
-type PlaceLeaf<P> = Box<dyn FnOnce(&mut P, Placement)>;
+type PlaceAround<Out> = Box<dyn FnOnce(Placement, PlaceInner<Out>) -> Out>;
+type PlaceLeaf<Out> = Box<dyn FnOnce(Placement) -> Out>;
 
-enum Kind<P> {
-    Leaf(PlaceLeaf<P>),
+enum Kind<Out> {
+    Leaf(PlaceLeaf<Out>),
     Row {
-        children: Vec<Measured<P>>,
+        children: Vec<Measured<Out>>,
         gap: f64,
     },
     Col {
-        children: Vec<Measured<P>>,
+        children: Vec<Measured<Out>>,
         gap: f64,
     },
     Pad {
-        child: Box<Measured<P>>,
+        child: Box<Measured<Out>>,
         insets: Insets,
     },
     Around {
-        child: Box<Measured<P>>,
-        place: PlaceAround<P>,
+        child: Box<Measured<Out>>,
+        place: PlaceAround<Out>,
     },
 }
 
-pub fn leaf<P>(extent: Extent, place: impl FnOnce(&mut P, Placement) + 'static) -> Measured<P> {
+pub fn leaf<Out>(extent: Extent, place: impl FnOnce(Placement) -> Out + 'static) -> Measured<Out> {
     Measured {
         extent,
         kind: Kind::Leaf(Box::new(place)),
@@ -101,7 +108,7 @@ pub fn leaf<P>(extent: Extent, place: impl FnOnce(&mut P, Placement) + 'static) 
 }
 
 /// Children on one baseline: ascent and descent are the maxima.
-pub fn row<P>(gap: f64, children: Vec<Measured<P>>) -> Measured<P> {
+pub fn row<Out>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
     let width = children.iter().map(|c| c.extent.width).sum::<f64>()
         + gap * children.len().saturating_sub(1) as f64;
     let ascent = children
@@ -123,7 +130,7 @@ pub fn row<P>(gap: f64, children: Vec<Measured<P>>) -> Measured<P> {
 }
 
 /// Children stacked; the column's baseline is child `baseline`'s.
-pub fn col<P>(baseline: usize, gap: f64, children: Vec<Measured<P>>) -> Measured<P> {
+pub fn col<Out>(baseline: usize, gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
     let extent = if children.is_empty() {
         Extent::default()
     } else {
@@ -152,7 +159,7 @@ pub fn col<P>(baseline: usize, gap: f64, children: Vec<Measured<P>>) -> Measured
     }
 }
 
-pub fn pad<P>(insets: Insets, child: Measured<P>) -> Measured<P> {
+pub fn pad<Out>(insets: Insets, child: Measured<Out>) -> Measured<Out> {
     let e = child.extent;
     Measured {
         extent: Extent {
@@ -170,17 +177,18 @@ pub fn pad<P>(insets: Insets, child: Measured<P>) -> Measured<P> {
 /// Holds `child` to at least `min` wide by padding on the right: a
 /// frame's minimum, not the child's — the child keeps its own extent
 /// and placement.
-pub fn min_width<P>(min: f64, child: Measured<P>) -> Measured<P> {
+pub fn min_width<Out>(min: f64, child: Measured<Out>) -> Measured<Out> {
     let deficit = (min - child.extent.width).max(0.0);
     pad(Insets::new(0.0, 0.0, deficit, 0.0), child)
 }
 
-/// Transparently wraps this layout's placement. `place_inner` places
-/// its content and descendants exactly once when invoked.
-pub fn around<P>(
-    child: Measured<P>,
-    place: impl FnOnce(&mut P, Placement, PlaceInner<P>) + 'static,
-) -> Measured<P> {
+/// Transparently wraps this layout's placement. The wrapper receives
+/// the settled placement and the held-back child, and returns the
+/// combined output — placing the child exactly once, or not at all.
+pub fn around<Out>(
+    child: Measured<Out>,
+    place: impl FnOnce(Placement, PlaceInner<Out>) -> Out + 'static,
+) -> Measured<Out> {
     Measured {
         extent: child.extent,
         kind: Kind::Around {
@@ -190,30 +198,42 @@ pub fn around<P>(
     }
 }
 
-/// Run `place_before` while entering this layout, before its content
-/// and descendants.
-pub fn before<P>(
-    child: Measured<P>,
-    place_before: impl FnOnce(&mut P, Placement) + 'static,
-) -> Measured<P> {
-    around(child, move |ctx, placement, place_inner| {
-        place_before(ctx, placement);
-        place_inner.place(ctx);
+/// Contribute under this layout, before its content and descendants.
+pub fn before<Out: Output>(
+    child: Measured<Out>,
+    place_before: impl FnOnce(Placement) -> Out + 'static,
+) -> Measured<Out> {
+    around(child, move |placement, inner| {
+        place_before(placement).over(inner.place())
+    })
+}
+
+/// Contribute over this layout, on top of its content and descendants.
+pub fn after<Out: Output>(
+    child: Measured<Out>,
+    place_after: impl FnOnce(Placement) -> Out + 'static,
+) -> Measured<Out> {
+    around(child, move |placement, inner| {
+        inner.place().over(place_after(placement))
     })
 }
 
 /// The historical leading decoration operation, retained as the
 /// rectangle-only spelling of [`before`].
-pub fn decorate<P>(child: Measured<P>, draw: impl FnOnce(&mut P, Rect) + 'static) -> Measured<P> {
-    before(child, move |ctx, placement| draw(ctx, placement.rect))
+pub fn decorate<Out: Output>(
+    child: Measured<Out>,
+    draw: impl FnOnce(Rect) -> Out + 'static,
+) -> Measured<Out> {
+    before(child, move |placement| draw(placement.rect))
 }
 
-pub fn place<P>(layout: Measured<P>, ctx: &mut P, placement: Placement) {
+pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
     let extent = layout.extent;
     let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
     match layout.kind {
-        Kind::Leaf(f) => f(ctx, placement),
+        Kind::Leaf(f) => f(placement),
         Kind::Row { children, gap } => {
+            let mut out = Out::empty();
             let mut x = at.x;
             for child in children {
                 let advance = child.extent.width + gap;
@@ -223,11 +243,13 @@ pub fn place<P>(layout: Measured<P>, ctx: &mut P, placement: Placement) {
                     x + child.extent.width,
                     at.y + child.extent.descent,
                 );
-                place(child, ctx, child_placement(placement, rect));
+                out = out.over(place(child, child_placement(placement, rect)));
                 x += advance;
             }
+            out
         }
         Kind::Col { children, gap } => {
+            let mut out = Out::empty();
             let mut y = at.y - extent.ascent;
             for child in children {
                 let advance = child.extent.height() + gap;
@@ -238,9 +260,10 @@ pub fn place<P>(layout: Measured<P>, ctx: &mut P, placement: Placement) {
                     at.x + child.extent.width,
                     child_baseline + child.extent.descent,
                 );
-                place(child, ctx, child_placement(placement, rect));
+                out = out.over(place(child, child_placement(placement, rect)));
                 y += advance;
             }
+            out
         }
         Kind::Pad { child, insets } => {
             let child_at = Point::new(at.x + insets.x0, at.y);
@@ -250,207 +273,41 @@ pub fn place<P>(layout: Measured<P>, ctx: &mut P, placement: Placement) {
                 child_at.x + child.extent.width,
                 child_at.y + child.extent.descent,
             );
-            place(*child, ctx, child_placement(placement, rect));
+            place(*child, child_placement(placement, rect))
         }
-        Kind::Around { child, place: wrap } => {
-            wrap(
-                ctx,
+        Kind::Around { child, place: wrap } => wrap(
+            placement,
+            PlaceInner {
+                child: *child,
                 placement,
-                PlaceInner {
-                    child: *child,
-                    placement,
-                },
-            );
-        }
+            },
+        ),
     }
 }
 
 /// `at` is the top-left corner of the layout.
-pub fn place_top_left<P>(layout: Measured<P>, ctx: &mut P, at: Point) {
+pub fn place_top_left<Out: Output>(layout: Measured<Out>, at: Point) -> Out {
     let placement = Placement::root(layout.extent.rect_at(at));
-    place(layout, ctx, placement);
-}
-
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub fn on_primary_pointer_down<C: 'static, P: HasHandler<C>>(
-    layout: Measured<P>,
-    accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
-    action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-) -> Measured<P> {
-    before(layout, move |p, placement| {
-        puri::interact::on_primary_pointer_down(p, placement, accepts, action);
-    })
-}
-
-pub fn on_key<C: 'static, P: HasHandler<C>>(
-    layout: Measured<P>,
-    action: impl Fn(&mut C, &KeyboardEvent) -> bool + 'static,
-) -> Measured<P> {
-    before(layout, move |p, _| {
-        p.handler().on_key(action);
-    })
-}
-
-/// Place `child` shifted up-left by `offset` inside a clipped
-/// viewport. The caller owns and clamps the offset.
-pub fn place_scrolled<C: 'static, P: Canvas + HasHandler<C>>(
-    child: Measured<P>,
-    ctx: &mut P,
-    placement: Placement,
-    offset: Vec2,
-    on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> bool + 'static,
-) {
-    let rect = placement.rect;
-    if !placement.clipped_out() {
-        ctx.handler().on_scroll(move |state, event| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && on_scroll(state, event)
-        });
-    }
-    let child_rect = child
-        .extent
-        .rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
-    let child_placement = child_placement(clipped_placement(placement, rect), child_rect);
-    let child_handler = capture(ctx, |ctx| {
-        ctx.clip(rect, Affine::IDENTITY, |ctx| {
-            place(child, ctx, child_placement);
-        });
-    });
-    install_child(ctx.handler(), child_handler, placement);
-}
-
-fn install_child<C: 'static>(outer: &mut Handler<C>, child: Handler<C>, placement: Placement) {
-    let Handler {
-        pointer_down,
-        pointer_move,
-        pointer_up,
-        scroll,
-        key,
-        ime,
-    } = child;
-    if !placement.clipped_out() {
-        outer.on_pointer_down(move |ctx, event: &PointerButtonEvent| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && pointer_down(ctx, event)
-        });
-        outer.on_scroll(move |ctx, event| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && scroll(ctx, event)
-        });
-    }
-    outer.on_pointer_move(pointer_move);
-    outer.on_pointer_up(pointer_up);
-    outer.on_key(key);
-    outer.on_ime(ime);
+    place(layout, placement)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
-    use ui_events::ScrollDelta;
-    use ui_events::pointer::{
-        PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
-        PointerUpdate,
-    };
-    use kurbo::Stroke;
-    use peniko::Brush;
 
-    struct Frame<C> {
-        list: DrawList,
-        handler: Handler<C>,
-    }
-
-    impl<C> Canvas for Frame<C> {
-        fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
-            self.list.fill(shape, brush, transform);
+    impl Output for Vec<Placement> {
+        fn empty() -> Self {
+            Vec::new()
         }
 
-        fn stroke(
-            &mut self,
-            shape: impl Into<Shape>,
-            style: Stroke,
-            brush: impl Into<Brush>,
-            transform: Affine,
-        ) {
-            self.list.stroke(shape, style, brush, transform);
-        }
-
-        fn glyph_run(&mut self, run: GlyphRun) {
-            self.list.glyph_run(run);
-        }
-
-        fn clip(
-            &mut self,
-            shape: impl Into<Shape>,
-            transform: Affine,
-            content: impl FnOnce(&mut Self),
-        ) {
-            let shape = shape.into();
-            let mut child = Frame {
-                list: DrawList::new(),
-                handler: std::mem::take(&mut self.handler),
-            };
-            content(&mut child);
-            self.handler = child.handler;
-            self.list.0.push(DrawCmd::Clip {
-                shape,
-                transform,
-                children: child.list.0,
-            });
-        }
-    }
-
-    impl<C> HasHandler<C> for Frame<C> {
-        fn handler(&mut self) -> &mut Handler<C> {
-            &mut self.handler
-        }
-    }
-
-    fn pointer() -> PointerInfo {
-        PointerInfo {
-            pointer_id: Some(PointerId::PRIMARY),
-            persistent_device_id: None,
-            pointer_type: PointerType::Mouse,
-        }
-    }
-
-    fn state_at(x: f64, y: f64) -> PointerState {
-        let mut state = PointerState::default();
-        state.position.x = x;
-        state.position.y = y;
-        state
-    }
-
-    fn down_at(x: f64, y: f64) -> PointerButtonEvent {
-        PointerButtonEvent {
-            button: Some(PointerButton::Primary),
-            pointer: pointer(),
-            state: state_at(x, y),
-        }
-    }
-
-    fn move_at(x: f64, y: f64) -> PointerUpdate {
-        PointerUpdate {
-            pointer: pointer(),
-            current: state_at(x, y),
-            coalesced: Vec::new(),
-            predicted: Vec::new(),
-        }
-    }
-
-    fn scroll_at(x: f64, y: f64) -> PointerScrollEvent {
-        PointerScrollEvent {
-            pointer: pointer(),
-            delta: ScrollDelta::LineDelta(0.0, 1.0),
-            state: state_at(x, y),
+        fn over(mut self, above: Self) -> Self {
+            self.extend(above);
+            self
         }
     }
 
     fn probe(extent: Extent) -> Measured<Vec<Placement>> {
-        leaf(extent, move |placed: &mut Vec<Placement>, placement| {
-            placed.push(placement)
-        })
+        leaf(extent, move |placement| vec![placement])
     }
 
     fn ext(width: f64, ascent: f64, descent: f64) -> Extent {
@@ -482,12 +339,7 @@ mod tests {
         );
         assert_eq!(r.extent, ext(34.0, 12.0, 4.0));
 
-        let mut placed = Vec::new();
-        place(
-            r,
-            &mut placed,
-            Placement::root(Rect::new(0.0, 88.0, 34.0, 104.0)),
-        );
+        let placed = place(r, Placement::root(Rect::new(0.0, 88.0, 34.0, 104.0)));
         assert_eq!(
             placed.iter().map(|p| p.rect).collect::<Vec<_>>(),
             vec![
@@ -510,12 +362,7 @@ mod tests {
         );
         assert_eq!(c.extent, ext(10.0, 16.0, 12.0));
 
-        let mut placed = Vec::new();
-        place(
-            c,
-            &mut placed,
-            Placement::root(Rect::new(0.0, 84.0, 10.0, 112.0)),
-        );
+        let placed = place(c, Placement::root(Rect::new(0.0, 84.0, 10.0, 112.0)));
         assert_eq!(
             placed.iter().map(|p| p.rect).collect::<Vec<_>>(),
             vec![
@@ -531,12 +378,7 @@ mod tests {
         let p = pad(Insets::new(3.0, 5.0, 7.0, 1.0), probe(ext(10.0, 8.0, 2.0)));
         assert_eq!(p.extent, ext(20.0, 13.0, 3.0));
 
-        let mut placed = Vec::new();
-        place(
-            p,
-            &mut placed,
-            Placement::root(Rect::new(0.0, 87.0, 20.0, 103.0)),
-        );
+        let placed = place(p, Placement::root(Rect::new(0.0, 87.0, 20.0, 103.0)));
         assert_eq!(placed[0].rect, Rect::new(3.0, 92.0, 13.0, 102.0));
     }
 
@@ -544,8 +386,7 @@ mod tests {
     fn min_width_pads_narrow_children_and_leaves_wide_ones() {
         let narrow = min_width(25.0, probe(ext(10.0, 8.0, 2.0)));
         assert_eq!(narrow.extent, ext(25.0, 8.0, 2.0));
-        let mut placed = Vec::new();
-        place_top_left(narrow, &mut placed, Point::ZERO);
+        let placed = place_top_left(narrow, Point::ZERO);
         assert_eq!(placed[0].rect, Rect::new(0.0, 0.0, 10.0, 10.0));
 
         let wide = min_width(25.0, probe(ext(30.0, 8.0, 2.0)));
@@ -553,195 +394,71 @@ mod tests {
     }
 
     #[test]
-    fn decorate_receives_the_subtree_rect() {
-        struct Ctx {
-            rects: Vec<Rect>,
-            placed: Vec<Placement>,
-        }
-        let child = leaf(ext(10.0, 8.0, 2.0), |ctx: &mut Ctx, placement| {
-            ctx.placed.push(placement)
+    fn before_contributes_under_the_child_and_after_on_top() {
+        let child = probe(ext(10.0, 8.0, 2.0));
+        let marked = before(child, |placement| {
+            vec![Placement::root(placement.rect.inflate(1.0, 1.0))]
         });
-        let d = decorate(child, |ctx: &mut Ctx, rect| ctx.rects.push(rect));
+        let placed = place_top_left(marked, Point::ZERO);
+        assert_eq!(placed[0].rect, Rect::new(-1.0, -1.0, 11.0, 11.0));
+        assert_eq!(placed[1].rect, Rect::new(0.0, 0.0, 10.0, 10.0));
 
-        let mut ctx = Ctx {
-            rects: Vec::new(),
-            placed: Vec::new(),
-        };
-        place(
-            d,
-            &mut ctx,
-            Placement::root(Rect::new(5.0, 92.0, 15.0, 102.0)),
-        );
-        assert_eq!(ctx.rects, vec![Rect::new(5.0, 92.0, 15.0, 102.0)]);
-        assert_eq!(ctx.placed[0].rect, Rect::new(5.0, 92.0, 15.0, 102.0));
+        let child = probe(ext(10.0, 8.0, 2.0));
+        let covered = after(child, |placement| {
+            vec![Placement::root(placement.rect.inflate(1.0, 1.0))]
+        });
+        let placed = place_top_left(covered, Point::ZERO);
+        assert_eq!(placed[0].rect, Rect::new(0.0, 0.0, 10.0, 10.0));
+        assert_eq!(placed[1].rect, Rect::new(-1.0, -1.0, 11.0, 11.0));
     }
 
     #[test]
     fn around_controls_the_inner_placement_and_sees_the_clip_rect() {
-        struct Ctx {
-            events: Vec<&'static str>,
-        }
-        let child = leaf(ext(20.0, 10.0, 10.0), |ctx: &mut Ctx, _| {
-            ctx.events.push("inner");
-        });
-        let wrapped = around(child, |ctx: &mut Ctx, placement, place_inner| {
+        let child = leaf(ext(20.0, 10.0, 10.0), |_| vec!["inner"]);
+        let wrapped = around(child, |placement, place_inner| {
             assert_eq!(placement.rect, Rect::new(0.0, 0.0, 20.0, 20.0));
             assert_eq!(placement.clip_rect, Rect::new(5.0, -5.0, 25.0, 15.0));
-            ctx.events.push("before");
-            place_inner.place(ctx);
-            ctx.events.push("after");
+            let mut out = vec!["before"];
+            out.extend(place_inner.place());
+            out.push("after");
+            out
         });
-        let mut ctx = Ctx { events: Vec::new() };
-        place(
+        let placed = place(
             wrapped,
-            &mut ctx,
             Placement::new(
                 Rect::new(0.0, 0.0, 20.0, 20.0),
                 Rect::new(5.0, -5.0, 25.0, 15.0),
             ),
         );
-        assert_eq!(ctx.events, ["before", "inner", "after"]);
+        assert_eq!(placed, ["before", "inner", "after"]);
     }
 
     #[test]
     fn around_may_discard_the_inner_placement() {
-        struct Ctx {
-            placed: bool,
+        let child = leaf(ext(10.0, 5.0, 5.0), |_| vec![true]);
+        let wrapped = around(child, |_, _| Vec::new());
+        assert!(place_top_left(wrapped, Point::ZERO).is_empty());
+    }
+
+    impl Output for Vec<&'static str> {
+        fn empty() -> Self {
+            Vec::new()
         }
-        let child = leaf(ext(10.0, 5.0, 5.0), |ctx: &mut Ctx, _| ctx.placed = true);
-        let wrapped = around(child, |_: &mut Ctx, _, _| {});
-        let mut ctx = Ctx { placed: false };
-        place_top_left(wrapped, &mut ctx, Point::ZERO);
-        assert!(!ctx.placed);
+
+        fn over(mut self, above: Self) -> Self {
+            self.extend(above);
+            self
+        }
     }
 
-    #[test]
-    fn scrolled_content_shifts_inside_the_viewport_clip() {
-        let probe = leaf(
-            Extent {
-                width: 100.0,
-                ascent: 0.0,
-                descent: 300.0,
-            },
-            |frame: &mut Frame<()>, placement| {
-                assert_eq!(placement.clip_rect, Rect::new(10.0, 20.0, 90.0, 70.0));
-                frame.fill(
-                    Rect::new(
-                        placement.rect.x0,
-                        placement.rect.y0,
-                        placement.rect.x0 + 1.0,
-                        placement.rect.y0 + 1.0,
-                    ),
-                    peniko::Color::WHITE,
-                    Affine::IDENTITY,
-                );
-            },
-        );
-        let mut frame: Frame<()> = Frame {
-            list: DrawList::new(),
-            handler: Handler::new(),
-        };
-        place_scrolled(
-            probe,
-            &mut frame,
-            Placement::new(
-                Rect::new(10.0, 20.0, 90.0, 70.0),
-                Rect::new(0.0, 0.0, 100.0, 100.0),
-            ),
-            Vec2::new(5.0, 40.0),
-            |_, _| false,
-        );
-        let [
-            DrawCmd::Clip {
-                shape: Shape::Rect(clip),
-                children,
-                ..
-            },
-        ] = &frame.list.0[..]
-        else {
-            panic!("expected one clip");
-        };
-        assert_eq!(*clip, Rect::new(10.0, 20.0, 90.0, 70.0));
-        let [
-            DrawCmd::Fill {
-                shape: Shape::Rect(dot),
-                ..
-            },
-        ] = &children[..]
-        else {
-            panic!("expected the probe inside the clip");
-        };
-        assert_eq!((dot.x0, dot.y0), (5.0, -20.0));
-    }
+    impl Output for Vec<bool> {
+        fn empty() -> Self {
+            Vec::new()
+        }
 
-    #[test]
-    fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
-        let child = leaf(
-            Extent {
-                width: 30.0,
-                ascent: 0.0,
-                descent: 30.0,
-            },
-            |frame: &mut Frame<Vec<&'static str>>, _| {
-                frame.handler.on_pointer_down(|log, _| {
-                    log.push("down");
-                    true
-                });
-                frame.handler.on_pointer_move(|log, _| {
-                    log.push("move");
-                    true
-                });
-                frame.handler.on_pointer_up(|log, _| {
-                    log.push("up");
-                    true
-                });
-            },
-        );
-        let mut frame = Frame {
-            list: DrawList::new(),
-            handler: Handler::new(),
-        };
-        place_scrolled(
-            child,
-            &mut frame,
-            Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
-            Vec2::ZERO,
-            |log, _| {
-                log.push("scroll");
-                true
-            },
-        );
-        let mut log = Vec::new();
-        assert!(
-            !frame
-                .handler
-                .dispatch_pointer_down(&mut log, &down_at(20.0, 5.0))
-        );
-        assert!(
-            !frame
-                .handler
-                .dispatch_scroll(&mut log, &scroll_at(20.0, 5.0))
-        );
-        assert!(
-            frame
-                .handler
-                .dispatch_pointer_down(&mut log, &down_at(5.0, 5.0))
-        );
-        assert!(
-            frame
-                .handler
-                .dispatch_scroll(&mut log, &scroll_at(5.0, 5.0))
-        );
-        assert!(
-            frame
-                .handler
-                .dispatch_pointer_move(&mut log, &move_at(20.0, 5.0))
-        );
-        assert!(
-            frame
-                .handler
-                .dispatch_pointer_up(&mut log, &down_at(20.0, 5.0))
-        );
-        assert_eq!(log, ["down", "scroll", "move", "up"]);
+        fn over(mut self, above: Self) -> Self {
+            self.extend(above);
+            self
+        }
     }
 }

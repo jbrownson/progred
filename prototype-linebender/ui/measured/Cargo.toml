@@ -5,9 +5,4 @@ edition = "2024"
 
 [dependencies]
 kurbo = "0.13.1"
-puri = { path = "../puri" }
-ui-events = "0.3"
 uig = { path = "../uig" }
-
-[dev-dependencies]
-peniko = "0.6.1"

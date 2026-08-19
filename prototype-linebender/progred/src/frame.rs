@@ -1,12 +1,14 @@
-//! One read-only UI pass: place the document, resolve hover, emit dispatch.
+//! One staged pass: place the document, probe hover, mint dispatch.
+//! Ink stays latent in the returned frame; rendering it is the
+//! caller's choice, so a silent mint never draws.
 
 use crate::completion;
 use crate::graph_view;
 use crate::hover;
-use measured;
 use crate::menu;
 use crate::model::{Model, Selected, ViewFlags};
 use crate::navigate;
+use crate::placed::{self, Placed};
 use crate::projection;
 use crate::selection;
 use crate::sources;
@@ -17,7 +19,9 @@ use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditPointerDown};
 use puri::geometry::Placement;
-use puri::handler::{Handler, HasHandler};
+use measured::Output;
+use puri::handler::Handler;
+use puri::hover::Claim;
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
 use std::rc::Rc;
@@ -38,6 +42,13 @@ pub(crate) struct Dispatch {
     pub(crate) popup: Option<completion::Popup>,
 }
 
+/// One minted frame: the dispatch the shell retains, and the ink the
+/// pass deferred — run it into a [`Paint`] or drop it silently.
+pub(crate) struct Frame {
+    pub(crate) dispatch: Dispatch,
+    pub(crate) renders: Vec<placed::Render<Paint>>,
+}
+
 /// The app's one hover, the selection's shape: what the resting
 /// pointer claims in whichever pane it rests over.
 #[derive(Clone, Debug, PartialEq)]
@@ -48,152 +59,15 @@ pub(crate) enum Hovered {
     Menu(menu::Hover),
 }
 
-pub(crate) enum HoverHit {
-    Tree(hover::HoverClaim),
-    Graph(Option<graph_view::GraphNode>),
-    #[cfg(target_os = "linux")]
-    Menu(Option<menu::Hover>),
+/// The concrete canvas frame ink renders into: the vello scene,
+/// owned so deferred ink closures need no lifetime.
+pub(crate) struct Paint {
+    pub(crate) scene: Scene,
 }
 
-pub(crate) struct HoverResolver<'a> {
-    current: &'a mut Option<Hovered>,
-    pointer: Option<Point>,
-    pressed: bool,
-    reach: f64,
-    hit: Option<HoverHit>,
-}
-
-impl HoverResolver<'_> {
-    fn resolve(self) {
-        *self.current = resolved_hover(
-            self.current.as_ref(),
-            self.hit,
-            self.pointer,
-            self.pressed,
-            self.reach,
-        );
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum FrameVisibility {
-    Silent,
-    Visible,
-}
-
-pub(crate) struct FrameDescription<'a> {
-    model: &'a Model,
-    stack: &'a stack::Stack<App>,
-    view: ViewFlags,
-    menu: menu::State,
-    availability: menu::Availability,
-    hover: Option<Hovered>,
-    scale: f64,
-    viewport: Size,
-}
-
-pub(crate) struct FrameResources<'a> {
-    fonts: &'a mut FontContext,
-    layouts: &'a mut LayoutContext<Brush>,
-    text_cache: &'a mut puri::text::TextCache,
-}
-
-/// One read-only pass over the UI. Drawing is optional; every pass
-/// still produces transient dispatch data and resolves pointer hover.
-pub(crate) struct Frame<'a> {
-    scene: Option<&'a mut Scene>,
-    hover: HoverResolver<'a>,
-    handler: Handler<App>,
-    descends: Vec<navigate::Descend>,
-    /// How far the document can scroll given this frame's content and
-    /// viewport; dispatch clamps against it.
-    max_scroll: f64,
-    max_scroll_x: f64,
-    /// The pending row's completion popup, emitted during placement;
-    /// drawn after the body and committed from at dispatch.
-    popup: Option<completion::Popup>,
-}
-
-impl<'a> Frame<'a> {
-    pub(crate) fn new(scene: Option<&'a mut Scene>, hover: HoverResolver<'a>) -> Self {
-        Self {
-            scene,
-            hover,
-            handler: Handler::new(),
-            descends: Vec::new(),
-            max_scroll: 0.0,
-            max_scroll_x: 0.0,
-            popup: None,
-        }
-    }
-
-    pub(crate) fn finish(self, scale: f64) -> Dispatch {
-        self.hover.resolve();
-        Dispatch {
-            handler: self.handler,
-            descends: self.descends,
-            line: 14.0 * scale,
-            max_scroll: self.max_scroll,
-            max_scroll_x: self.max_scroll_x,
-            popup: self.popup,
-        }
-    }
-}
-
-impl hover::HasHover<hover::HoverClaim> for Frame<'_> {
-    fn pointer(&self) -> Option<Point> {
-        self.hover.pointer
-    }
-
-    fn claim_hover(&mut self, claim: hover::HoverClaim) {
-        self.hover.hit = Some(HoverHit::Tree(claim));
-    }
-}
-
-impl hover::HasHover<Option<graph_view::GraphNode>> for Frame<'_> {
-    fn pointer(&self) -> Option<Point> {
-        self.hover.pointer
-    }
-
-    fn claim_hover(&mut self, claim: Option<graph_view::GraphNode>) {
-        self.hover.hit = Some(HoverHit::Graph(claim));
-    }
-}
-
-#[cfg(target_os = "linux")]
-impl hover::HasHover<Option<menu::Hover>> for Frame<'_> {
-    fn pointer(&self) -> Option<Point> {
-        self.hover.pointer
-    }
-
-    fn claim_hover(&mut self, claim: Option<menu::Hover>) {
-        self.hover.hit = Some(HoverHit::Menu(claim));
-    }
-}
-
-impl completion::HasPopup for Frame<'_> {
-    fn popup(&mut self) -> &mut Option<completion::Popup> {
-        &mut self.popup
-    }
-}
-
-impl HasHandler<App> for Frame<'_> {
-    fn handler(&mut self) -> &mut Handler<App> {
-        &mut self.handler
-    }
-}
-
-impl navigate::HasDescends for Frame<'_> {
-    fn descends(&mut self) -> &mut Vec<navigate::Descend> {
-        &mut self.descends
-    }
-}
-
-impl Canvas for Frame<'_> {
+impl Canvas for Paint {
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).fill(shape, brush, transform);
-        }
+        VelloCanvas(&mut self.scene).fill(shape, brush, transform);
     }
 
     fn stroke(
@@ -203,15 +77,11 @@ impl Canvas for Frame<'_> {
         brush: impl Into<Brush>,
         transform: Affine,
     ) {
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).stroke(shape, style, brush, transform);
-        }
+        VelloCanvas(&mut self.scene).stroke(shape, style, brush, transform);
     }
 
     fn glyph_run(&mut self, run: GlyphRun) {
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).glyph_run(run);
-        }
+        VelloCanvas(&mut self.scene).glyph_run(run);
     }
 
     fn clip(
@@ -221,13 +91,9 @@ impl Canvas for Frame<'_> {
         content: impl FnOnce(&mut Self),
     ) {
         let shape = shape.into();
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).push_clip(&shape, transform);
-        }
+        VelloCanvas(&mut self.scene).push_clip(&shape, transform);
         content(self);
-        if let Some(scene) = self.scene.as_deref_mut() {
-            VelloCanvas(scene).pop_clip();
-        }
+        VelloCanvas(&mut self.scene).pop_clip();
     }
 }
 
@@ -251,9 +117,13 @@ pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> Fra
     }
 }
 
+/// The frame's hover, from this pass's settled geometry: pressed
+/// keeps the hover a gesture began with, a claim answers outright,
+/// and air within the little gap's reach of a tree footprint HOLDS —
+/// crossing a separator or the leading between rows never flickers.
 pub(crate) fn resolved_hover(
     current: Option<&Hovered>,
-    hit: Option<HoverHit>,
+    hit: Option<Claim<Hovered>>,
     pointer: Option<Point>,
     pressed: bool,
     reach: f64,
@@ -262,24 +132,41 @@ pub(crate) fn resolved_hover(
         (true, _) => current.cloned(),
         (false, None) => None,
         (false, Some(point)) => match hit {
-            Some(HoverHit::Tree(hover::HoverClaim::Direct(hovering))) => {
-                hovering.map(Hovered::Tree)
-            }
-            Some(HoverHit::Graph(node)) => node.map(Hovered::Graph),
-            #[cfg(target_os = "linux")]
-            Some(HoverHit::Menu(hover)) => hover.map(Hovered::Menu),
-            Some(HoverHit::Tree(hover::HoverClaim::Air)) | None => {
-                let tree = match current {
-                    Some(Hovered::Tree(hovering)) => Some(hovering),
-                    _ => None,
-                };
-                match hover::resolve_hover(hover::HoverClaim::Air, tree, point, reach) {
-                    Some(next) => next.map(Hovered::Tree),
-                    None => current.cloned(),
+            Some(Claim::Names(next)) => Some(next),
+            Some(Claim::Occludes) => None,
+            None => match current {
+                Some(Hovered::Tree(hovering))
+                    if hovering.rect.inflate(reach, reach).contains(point) =>
+                {
+                    current.cloned()
                 }
-            }
+                _ => None,
+            },
         },
     }
+}
+
+pub(crate) struct FrameDescription<'a> {
+    model: &'a Model,
+    stack: &'a stack::Stack<App>,
+    view: ViewFlags,
+    menu: menu::State,
+    availability: menu::Availability,
+    hover: Option<Hovered>,
+    scale: f64,
+    viewport: Size,
+}
+
+pub(crate) struct FrameResources<'a> {
+    fonts: &'a mut FontContext,
+    layouts: &'a mut LayoutContext<Brush>,
+    text_cache: &'a mut puri::text::TextCache,
+}
+
+struct Built {
+    placed: Placed<App, Paint>,
+    max_scroll: f64,
+    max_scroll_x: f64,
 }
 
 impl App {
@@ -393,19 +280,13 @@ impl App {
         self.model.view
     }
 
-    pub(crate) fn build_frame(
-        &mut self,
-        visibility: FrameVisibility,
-        scale: f64,
-        viewport: Size,
-    ) -> Dispatch {
+    /// One staged pass over the UI: place, probe the pointer against
+    /// the settled geometry, resolve hover, mint dispatch. Ink comes
+    /// back deferred; the caller renders it or drops it.
+    pub(crate) fn build_frame(&mut self, scale: f64, viewport: Size) -> Frame {
         let view = self.view_flags();
         let availability = self.menu_availability();
         let presented_hover = self.hover.clone();
-        let scene = match visibility {
-            FrameVisibility::Silent => None,
-            FrameVisibility::Visible => Some(&mut self.scene),
-        };
         let description = FrameDescription {
             model: &self.model,
             stack: &self.stack,
@@ -421,16 +302,33 @@ impl App {
             layouts: &mut self.layout_cx,
             text_cache: &mut self.text_cache,
         };
-        let hover = HoverResolver {
-            current: &mut self.hover,
-            pointer: self.pointer,
-            pressed: self.pressed,
-            reach: 8.0 * scale,
-            hit: None,
-        };
-        let mut frame = Frame::new(scene, hover);
-        run_frame(&mut frame, description, resources);
-        frame.finish(scale)
+        let built = run_frame(description, resources);
+        let hit = self.pointer.and_then(|point| built.placed.probe(point));
+        self.hover = resolved_hover(
+            self.hover.as_ref(),
+            hit,
+            self.pointer,
+            self.pressed,
+            8.0 * scale,
+        );
+        let Placed {
+            probes: _,
+            handler,
+            descends,
+            popup,
+            renders,
+        } = built.placed;
+        Frame {
+            dispatch: Dispatch {
+                handler: handler.unwrap_or_else(Handler::new),
+                descends,
+                line: 14.0 * scale,
+                max_scroll: built.max_scroll,
+                max_scroll_x: built.max_scroll_x,
+                popup,
+            },
+            renders,
+        }
     }
 
     /// Mint dispatch data from the final state of a transition. A
@@ -443,9 +341,9 @@ impl App {
         reveal_selection: bool,
     ) -> bool {
         let before = self.hover.clone();
-        let mut dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
+        let mut dispatch = self.build_frame(scale, viewport).dispatch;
         if reveal_selection && self.reveal_selection(&dispatch, scale, viewport) {
-            dispatch = self.build_frame(FrameVisibility::Silent, scale, viewport);
+            dispatch = self.build_frame(scale, viewport).dispatch;
         }
         let hover_changed = self.hover != before;
         self.last_descends = dispatch.descends.clone();
@@ -455,11 +353,7 @@ impl App {
     }
 }
 
-pub(crate) fn run_frame(
-    frame: &mut Frame<'_>,
-    description: FrameDescription<'_>,
-    resources: FrameResources<'_>,
-) {
+fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -> Built {
     let FrameDescription {
         model,
         stack,
@@ -478,13 +372,15 @@ pub(crate) fn run_frame(
     let viewport_width = viewport.width;
     #[cfg(target_os = "linux")]
     let viewport_height = viewport.height;
+    let mut placed: Placed<App, Paint> = measured::Output::empty();
     // Empty space deselects — the one slot, whichever pane filled it.
-    // Registered before the content places, so the descend handlers
-    // (registered as they place) take precedence, and only a press
-    // that claims no edge falls through to here.
-    frame.handler().on_pointer_down(|app: &mut App, event| {
-        event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
-    });
+    // The bottom of the stack, so every content claim answers first
+    // and only a press that claims no edge falls through to here.
+    placed
+        .handler_mut()
+        .on_pointer_down(|app: &mut App, event| {
+            event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
+        });
     // Mark-and-sweep by pass: entries the previous pass never used
     // are dropped here, everything else carries over — the steady
     // state is the visible text, shaped once.
@@ -522,14 +418,15 @@ pub(crate) fn run_frame(
     let _ = (menu, availability);
     let content_viewport = content_viewport(viewport, scale);
     #[cfg(target_os = "linux")]
-    measured::place(
-        application_menu.bar,
-        frame,
-        Placement::new(
-            Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
-            Rect::new(0.0, 0.0, viewport_width, viewport_height),
-        ),
-    );
+    {
+        placed = placed.over(measured::place(
+            application_menu.bar,
+            Placement::new(
+                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
+                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport_height),
+            ),
+        ));
+    }
     let (tree_hover, graph_hover) = match hover.as_ref() {
         Some(Hovered::Tree(hovering)) => (Some(&hovering.hover), None),
         Some(Hovered::Graph(node)) => (None, Some(node)),
@@ -683,21 +580,18 @@ pub(crate) fn run_frame(
     // scroll where even the block forms overflowed it — not the
     // window edge the viewport clips at.
     let content = measured::pad(vello::kurbo::Insets::uniform(margin), body);
-    frame.max_scroll = ((content.extent.height() - content_viewport.height()) / scale).max(0.0);
-    frame.max_scroll_x = ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
+    let max_scroll = ((content.extent.height() - content_viewport.height()) / scale).max(0.0);
+    let max_scroll_x = ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
     let offset = Vec2::new(
-        model.scroll_x.clamp(0.0, frame.max_scroll_x) * scale,
-        model.scroll.clamp(0.0, frame.max_scroll) * scale,
+        model.scroll_x.clamp(0.0, max_scroll_x) * scale,
+        model.scroll.clamp(0.0, max_scroll) * scale,
     );
-    let max_scroll = frame.max_scroll;
-    let max_scroll_x = frame.max_scroll_x;
     let graph_panel_rect = view.graph.then(|| graph_panel(viewport, scale));
-    measured::place_scrolled(
+    placed = placed.over(placed::place_scrolled(
         content,
-        frame,
         Placement::new(content_viewport, content_viewport),
         offset,
-        move |app, update| {
+        move |app: &mut App, update| {
             let point = Point::new(update.state.position.x, update.state.position.y);
             !graph_panel_rect.is_some_and(|panel| panel.contains(point))
                 && app.scroll_document(
@@ -708,7 +602,7 @@ pub(crate) fn run_frame(
                     max_scroll_x,
                 )
         },
-    );
+    ));
     // The graph pane draws over the document's right side; placed
     // after the body so its handlers win inside the panel.
     if view.graph {
@@ -760,12 +654,16 @@ pub(crate) fn run_frame(
             },
         );
         let rect = pane.extent.rect_at(Point::new(panel.x0, panel.y0));
-        measured::place(pane, frame, Placement::new(rect, content_viewport));
+        placed = placed.over(measured::place(
+            pane,
+            Placement::new(rect, content_viewport),
+        ));
     }
 
     // The pending row's popup draws after the body, so it overlays
-    // and its click targets win.
-    if let Some(popup) = frame.popup.take() {
+    // and its click targets win. Its anchor came from the body's
+    // placement; the stash rides the placed value, no side channel.
+    if let Some(popup) = placed.popup.take() {
         let hovered_entry = match tree_hover {
             Some(hover::Hover::Entry(index)) => Some(*index),
             _ => None,
@@ -797,38 +695,48 @@ pub(crate) fn run_frame(
                 below
             };
         let rect = card.extent.rect_at(Point::new(popup.anchor.x0, y));
-        measured::place(card, frame, Placement::new(rect, content_viewport));
-        frame.popup = Some(popup);
+        placed = placed.over(measured::place(
+            card,
+            Placement::new(rect, content_viewport),
+        ));
+        placed.popup = Some(popup);
     }
 
     #[cfg(target_os = "linux")]
     if let Some((x, popup)) = application_menu.popup {
         let rect = popup.extent.rect_at(Point::new(x, content_viewport.y0));
-        let headings = Rect::new(
+        let headings = vello::kurbo::Rect::new(
             0.0,
             0.0,
             application_menu.heading_width,
             content_viewport.y0,
         );
-        frame.handler().on_pointer_down(move |app, event| {
+        placed.handler_mut().on_pointer_down(move |app, event| {
             let point = Point::new(event.state.position.x, event.state.position.y);
             event.button == Some(PointerButton::Primary)
                 && !headings.contains(point)
                 && !rect.contains(point)
                 && app.menu.close()
         });
-        frame.handler().on_pointer_down(move |_, event| {
+        placed.handler_mut().on_pointer_down(move |_, event| {
             event.button == Some(PointerButton::Primary)
                 && rect.contains(Point::new(event.state.position.x, event.state.position.y))
         });
-        frame.handler().on_scroll(move |_, event| {
+        placed.handler_mut().on_scroll(move |_, event| {
             rect.contains(Point::new(event.state.position.x, event.state.position.y))
         });
-        measured::place(
+        placed = placed.over(measured::place(
             popup,
-            frame,
-            Placement::new(rect, Rect::new(0.0, 0.0, viewport_width, viewport_height)),
-        );
+            Placement::new(
+                rect,
+                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport_height),
+            ),
+        ));
+    }
+    Built {
+        placed,
+        max_scroll,
+        max_scroll_x,
     }
 }
 
@@ -901,7 +809,7 @@ mod frame_tests {
         assert_eq!(
             resolved_hover(
                 Some(&current),
-                Some(HoverHit::Graph(Some(graph_view::GraphNode::Root))),
+                Some(Claim::Names(Hovered::Graph(graph_view::GraphNode::Root))),
                 Some(Point::ZERO),
                 false,
                 8.0,
@@ -911,7 +819,7 @@ mod frame_tests {
         assert_eq!(
             resolved_hover(
                 Some(&current),
-                Some(HoverHit::Tree(hover::HoverClaim::Direct(None))),
+                Some(Claim::Occludes),
                 Some(Point::ZERO),
                 true,
                 8.0,
@@ -928,7 +836,7 @@ mod frame_tests {
         assert_eq!(
             resolved_hover(
                 None,
-                Some(HoverHit::Menu(Some(hover))),
+                Some(Claim::Names(Hovered::Menu(hover))),
                 Some(Point::new(20.0, 40.0)),
                 false,
                 8.0,
@@ -938,7 +846,7 @@ mod frame_tests {
         assert_eq!(
             resolved_hover(
                 Some(&Hovered::Menu(hover)),
-                Some(HoverHit::Menu(None)),
+                Some(Claim::Occludes),
                 Some(Point::new(20.0, 40.0)),
                 false,
                 8.0,

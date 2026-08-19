@@ -284,10 +284,11 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
 #[cfg(target_os = "linux")]
 mod view {
     use super::{Availability, Entry, Hover, Item, Kind, Platform, Selection, State, definition};
-    use crate::hover::HasHover;
+    use crate::frame::Hovered;
+    use crate::placed::{self, Placed};
     use measured::{self, Extent, Measured};
     use puri::draw::Canvas;
-    use puri::handler::HasHandler;
+    use puri::hover::Claim;
     use puri::text::{TextCtx, TextStyle};
     use std::rc::Rc;
     use vello::kurbo::{Affine, Insets, Rect, Stroke};
@@ -341,15 +342,20 @@ mod view {
         BAR_HEIGHT * scale
     }
 
-    fn hover_target<P: HasHover<Option<Hover>>>(hover: Hover, content: Measured<P>) -> Measured<P> {
-        measured::before(content, move |p, placement| {
-            if p.pointer().is_some_and(|point| placement.contains(point)) {
-                p.claim_hover(Some(hover));
-            }
+    fn hover_target<C: 'static, Cv: Canvas + 'static>(
+        hover: Hover,
+        content: Measured<Placed<C, Cv>>,
+    ) -> Measured<Placed<C, Cv>> {
+        placed::before(content, move |p, placement| {
+            p.claim(move |point| {
+                placement
+                    .contains(point)
+                    .then(|| Claim::Names(Hovered::Menu(hover)))
+            });
         })
     }
 
-    fn heading<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<Hover>>>(
+    fn heading<C: 'static, Cv: Canvas + 'static>(
         tcx: &mut TextCtx,
         style: &TextStyle,
         index: usize,
@@ -357,17 +363,17 @@ mod view {
         active: bool,
         scale: f64,
         toggle: Rc<dyn Fn(&mut C, usize)>,
-    ) -> Measured<P> {
+    ) -> Measured<Placed<C, Cv>> {
         let content = measured::pad(
             Insets::new(10.0 * scale, 4.0 * scale, 10.0 * scale, 4.0 * scale),
             crate::render::text(tcx, label, style),
         );
-        let content = measured::decorate(content, move |p: &mut P, rect| {
+        let content = placed::decorate(content, move |p, rect| {
             if active {
                 p.fill(rect, Color::new([0.82, 0.83, 0.86, 1.0]), Affine::IDENTITY);
             }
         });
-        measured::on_primary_pointer_down(
+        placed::on_primary_pointer_down(
             hover_target(Hover::Heading(index), content),
             |_| true,
             move |app, _| {
@@ -377,14 +383,17 @@ mod view {
         )
     }
 
-    fn separator<P: Canvas>(scale: f64, width: f64) -> Measured<P> {
-        measured::leaf(
+    fn separator<C: 'static, Cv: Canvas + 'static>(
+        scale: f64,
+        width: f64,
+    ) -> Measured<Placed<C, Cv>> {
+        placed::leaf(
             Extent {
                 width,
                 ascent: 4.0 * scale,
                 descent: 3.0 * scale,
             },
-            move |p: &mut P, placement| {
+            move |p, placement| {
                 let y = placement.rect.center().y;
                 p.fill(
                     Rect::new(
@@ -400,7 +409,7 @@ mod view {
         )
     }
 
-    fn item<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<Hover>>>(
+    fn item<C: 'static, Cv: Canvas + 'static>(
         tcx: &mut TextCtx,
         styles: &Styles,
         item: Item,
@@ -410,7 +419,7 @@ mod view {
         scale: f64,
         width: f64,
         select: Rc<dyn Fn(&mut C, Selection)>,
-    ) -> Measured<P> {
+    ) -> Measured<Placed<C, Cv>> {
         let selection = item.selection;
         let style = if enabled {
             &styles.text
@@ -434,13 +443,13 @@ mod view {
             Insets::new(12.0 * scale, 5.0 * scale, 12.0 * scale, 5.0 * scale),
             measured::row(gap, vec![label, shortcut]),
         );
-        let content = measured::decorate(content, move |p: &mut P, rect| {
+        let content = placed::decorate(content, move |p, rect| {
             if enabled && hovered {
                 p.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
             }
         });
         if enabled {
-            measured::on_primary_pointer_down(
+            placed::on_primary_pointer_down(
                 hover_target(Hover::Item(selection), content),
                 |_| true,
                 move |app, _| {
@@ -453,13 +462,13 @@ mod view {
         }
     }
 
-    fn popup<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<Hover>>>(
+    fn popup<C: 'static, Cv: Canvas + 'static>(
         tcx: &mut TextCtx,
         styles: &Styles,
         description: &Description,
         menu_entries: &[Entry],
         select: Rc<dyn Fn(&mut C, Selection)>,
-    ) -> Measured<P> {
+    ) -> Measured<Placed<C, Cv>> {
         let width = MENU_WIDTH * description.scale;
         let scale = description.scale;
         let entries = menu_entries
@@ -486,8 +495,8 @@ mod view {
                 Entry::About => unreachable!("About is only in the macOS application menu"),
             })
             .collect();
-        measured::before(
-            measured::decorate(measured::col(0, 0.0, entries), move |p: &mut P, rect| {
+        placed::before(
+            placed::decorate(measured::col(0, 0.0, entries), move |p, rect| {
                 p.fill(
                     rect,
                     Color::new([0.975, 0.975, 0.982, 1.0]),
@@ -501,18 +510,16 @@ mod view {
                 );
             }),
             |p, placement| {
-                if p.pointer().is_some_and(|point| placement.contains(point)) {
-                    p.claim_hover(None);
-                }
+                p.claim(move |point| placement.contains(point).then_some(Claim::Occludes));
             },
         )
     }
 
-    pub fn view<C: 'static, P: Canvas + HasHandler<C> + HasHover<Option<Hover>>>(
+    pub fn view<C: 'static, Cv: Canvas + 'static>(
         tcx: &mut TextCtx,
         description: Description,
         hooks: Hooks<C>,
-    ) -> View<P> {
+    ) -> View<Placed<C, Cv>> {
         let styles = styles();
         let definition = definition(Platform::Linux);
         let mut x = 0.0;
@@ -545,7 +552,7 @@ mod view {
                 .map(|menu| popup(tcx, &styles, &description, &menu.entries, hooks.select))
         });
         let height = bar_height(description.scale);
-        let bar = measured::decorate(
+        let bar = placed::decorate(
             measured::min_width(
                 description.width,
                 measured::row(
@@ -553,7 +560,7 @@ mod view {
                     // A zero-width baseline strut gives the bar its fixed height
                     // without shifting the headings; the box algebra has no
                     // minimum-ascent-and-descent wrapper yet.
-                    std::iter::once(measured::leaf(
+                    std::iter::once(placed::leaf(
                         Extent {
                             width: 0.0,
                             ascent: height * 0.7,
@@ -565,7 +572,7 @@ mod view {
                     .collect(),
                 ),
             ),
-            |p: &mut P, rect| {
+            |p, rect| {
                 p.fill(rect, Color::new([0.93, 0.93, 0.945, 1.0]), Affine::IDENTITY);
                 p.fill(
                     Rect::new(rect.x0, rect.y1 - 1.0, rect.x1, rect.y1),

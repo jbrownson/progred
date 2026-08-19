@@ -1,38 +1,42 @@
 //! Lower display leaves to measured Puri drawing and interaction.
 
-use measured::{self, Measured};
+use crate::placed::{self, Placed, metrics_extent};
 use crate::styles::Styles;
+use measured::Measured;
 pub use progred_display::LineEdit;
 use puri::draw::Canvas;
 use puri::edit::{EditCtx, LineEditDescription, LineEditState};
-use puri::handler::HasHandler;
 use puri::text::{TextCtx, TextStyle};
 
-pub fn text<P: Canvas>(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Measured<P> {
+pub fn text<C: 'static, Cv: Canvas + 'static>(
+    ctx: &mut TextCtx,
+    s: &str,
+    style: &TextStyle,
+) -> Measured<Placed<C, Cv>> {
     let text = puri::text::text(ctx, s, style);
-    measured::leaf(text.metrics().into(), move |canvas, placement| {
+    placed::leaf(metrics_extent(text.metrics()), move |canvas, placement| {
         text.place(canvas, placement)
     })
 }
 
-pub fn text_edit<C: 'static, P: Canvas + HasHandler<C>>(
+pub fn text_edit<C: 'static, Cv: Canvas + 'static>(
     description: LineEditDescription<'_>,
     tcx: &mut TextCtx,
     with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
-) -> Measured<P> {
+) -> Measured<Placed<C, Cv>> {
     let edit = puri::edit::text_edit(description, tcx);
-    measured::leaf(edit.metrics().into(), move |p, placement| {
+    placed::leaf(metrics_extent(edit.metrics()), move |p, placement| {
         edit.place(p, placement, with)
     })
 }
 
-pub fn line_edit<C: 'static, P: Canvas + HasHandler<C>>(
+pub fn line_edit<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
     line: &LineEdit,
     editing: Option<&LineEditState>,
     edit: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
-) -> Measured<P> {
+) -> Measured<Placed<C, Cv>> {
     match editing {
         Some(state) => text_edit(
             LineEditDescription {

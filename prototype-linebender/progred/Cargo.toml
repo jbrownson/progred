@@ -12,6 +12,7 @@ im = "15"
 measured = { path = "../ui/measured" }
 puri = { path = "../ui/puri" }
 puri-vello = { path = "../ui/puri-vello" }
+uig = { path = "../ui/uig" }
 vello = "0.9.0"
 parley = "0.9.0"
 winit = "0.30.13"
