@@ -307,7 +307,6 @@ mod view {
         pub availability: Availability,
         pub raw: bool,
         pub graph: bool,
-        pub hover: Option<Hover>,
         pub scale: f64,
         pub width: f64,
     }
@@ -369,9 +368,13 @@ mod view {
             crate::render::text(tcx, label, style),
         );
         let content = placed::decorate(content, move |p, rect| {
-            if active {
-                p.fill(rect, Color::new([0.82, 0.83, 0.86, 1.0]), Affine::IDENTITY);
-            }
+            p.ink(move |cv, ink| {
+                let hovered =
+                    matches!(ink.hovered, Some(Hovered::Menu(Hover::Heading(i))) if *i == index);
+                if active || hovered {
+                    cv.fill(rect, Color::new([0.82, 0.83, 0.86, 1.0]), Affine::IDENTITY);
+                }
+            });
         });
         placed::on_primary_pointer_down(
             hover_target(Hover::Heading(index), content),
@@ -415,7 +418,6 @@ mod view {
         item: Item,
         checked: bool,
         enabled: bool,
-        hovered: bool,
         scale: f64,
         width: f64,
         select: Rc<dyn Fn(&mut C, Selection)>,
@@ -444,9 +446,15 @@ mod view {
             measured::row(gap, vec![label, shortcut]),
         );
         let content = placed::decorate(content, move |p, rect| {
-            if enabled && hovered {
-                p.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
-            }
+            p.ink(move |cv, ink| {
+                let hovered = matches!(
+                    ink.hovered,
+                    Some(Hovered::Menu(Hover::Item(s))) if *s == selection
+                );
+                if enabled && hovered {
+                    cv.fill(rect, Color::new([0.86, 0.89, 0.96, 1.0]), Affine::IDENTITY);
+                }
+            });
         });
         if enabled {
             placed::on_primary_pointer_down(
@@ -487,7 +495,6 @@ mod view {
                             _ => false,
                         },
                     description.availability.enabled(menu_item.selection),
-                    description.hover == Some(Hover::Item(menu_item.selection)),
                     description.scale,
                     width,
                     select.clone(),
@@ -536,8 +543,7 @@ mod view {
                     &styles.text,
                     index,
                     menu.label,
-                    description.state.open() == Some(index)
-                        || description.hover == Some(Hover::Heading(index)),
+                    description.state.open() == Some(index),
                     description.scale,
                     hooks.toggle.clone(),
                 );

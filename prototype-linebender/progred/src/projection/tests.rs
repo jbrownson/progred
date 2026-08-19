@@ -1,4 +1,5 @@
 use super::*;
+use crate::hover::hover_value;
 use gid::Position;
 use progred_libraries::{f64, name, text};
 use ui_events::keyboard::{KeyState, Modifiers};

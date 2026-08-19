@@ -47,13 +47,16 @@ pub(crate) struct Dispatch {
 pub(crate) struct Frame {
     pub(crate) dispatch: Dispatch,
     pub(crate) renders: Vec<placed::Render<Paint>>,
+    /// The value the resolved hover refers to, for the render pass's
+    /// secondary marks.
+    pub(crate) hovered_value: Option<Value>,
 }
 
 /// The app's one hover, the selection's shape: what the resting
 /// pointer claims in whichever pane it rests over.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Hovered {
-    Tree(hover::Hovering),
+    Tree(hover::Hover),
     Graph(graph_view::GraphNode),
     #[cfg(target_os = "linux")]
     Menu(menu::Hover),
@@ -117,32 +120,25 @@ pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> Fra
     }
 }
 
-/// The frame's hover, from this pass's settled geometry: pressed
-/// keeps the hover a gesture began with, a claim answers outright,
-/// and air within the little gap's reach of a tree footprint HOLDS —
-/// crossing a separator or the leading between rows never flickers.
-pub(crate) fn resolved_hover(
-    current: Option<&Hovered>,
-    hit: Option<Claim<Hovered>>,
+/// The frame's hover, derived from this pass's settled geometry: a
+/// claim under the pointer answers outright (an occluder answers
+/// "nothing"), air defers to the ring's trailing center — the
+/// little-gap hold, as a filter on the pointer instead of remembered
+/// footprints — and a pressed gesture keeps the hover it began with.
+pub(crate) fn derive_hover<C: 'static, Cv>(
+    placed: &Placed<C, Cv>,
+    prior: Option<Hovered>,
     pointer: Option<Point>,
+    ring: Point,
     pressed: bool,
-    reach: f64,
 ) -> Option<Hovered> {
-    match (pressed, pointer) {
-        (true, _) => current.cloned(),
-        (false, None) => None,
-        (false, Some(point)) => match hit {
-            Some(Claim::Names(next)) => Some(next),
-            Some(Claim::Occludes) => None,
-            None => match current {
-                Some(Hovered::Tree(hovering))
-                    if hovering.rect.inflate(reach, reach).contains(point) =>
-                {
-                    current.cloned()
-                }
-                _ => None,
-            },
-        },
+    if pressed {
+        return prior;
+    }
+    let point = pointer?;
+    match placed.probe(point) {
+        Some(claim) => claim.names(),
+        None => placed.probe(ring).and_then(Claim::names),
     }
 }
 
@@ -152,7 +148,6 @@ pub(crate) struct FrameDescription<'a> {
     view: ViewFlags,
     menu: menu::State,
     availability: menu::Availability,
-    hover: Option<Hovered>,
     scale: f64,
     viewport: Size,
 }
@@ -286,14 +281,12 @@ impl App {
     pub(crate) fn build_frame(&mut self, scale: f64, viewport: Size) -> Frame {
         let view = self.view_flags();
         let availability = self.menu_availability();
-        let presented_hover = self.hover.clone();
         let description = FrameDescription {
             model: &self.model,
             stack: &self.stack,
             view,
             menu: self.menu,
             availability,
-            hover: presented_hover,
             scale,
             viewport,
         };
@@ -303,14 +296,29 @@ impl App {
             text_cache: &mut self.text_cache,
         };
         let built = run_frame(description, resources);
-        let hit = self.pointer.and_then(|point| built.placed.probe(point));
-        self.hover = resolved_hover(
-            self.hover.as_ref(),
-            hit,
+        self.hover = derive_hover(
+            &built.placed,
+            self.hover.take(),
             self.pointer,
+            self.ring.center,
             self.pressed,
-            8.0 * scale,
         );
+        let hovered_value = match &self.hover {
+            Some(Hovered::Tree(hover)) => hover::hover_value(
+                &sources::Sources {
+                    doc: &self.model.doc,
+                    library: &self.stack.library,
+                },
+                self.model.view.raw,
+                self.model.tree_selection(),
+                hover,
+            ),
+            Some(Hovered::Graph(node)) => graph_view::node_value(&self.model.doc, node)
+                .filter(|value| !matches!(value, Value::Record(_))),
+            #[cfg(target_os = "linux")]
+            Some(Hovered::Menu(_)) => None,
+            None => None,
+        };
         let Placed {
             probes: _,
             handler,
@@ -328,6 +336,7 @@ impl App {
                 popup,
             },
             renders,
+            hovered_value,
         }
     }
 
@@ -348,7 +357,6 @@ impl App {
         let hover_changed = self.hover != before;
         self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
-        self.hover_is_current = true;
         hover_changed
     }
 }
@@ -360,7 +368,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
         view,
         menu,
         availability,
-        hover,
         scale,
         viewport,
     } = description;
@@ -393,11 +400,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
     };
     let styles = crate::styles::editor(scale);
     #[cfg(target_os = "linux")]
-    let menu_hover = match hover.as_ref() {
-        Some(Hovered::Menu(hover)) => Some(*hover),
-        _ => None,
-    };
-    #[cfg(target_os = "linux")]
     let application_menu = menu::view(
         &mut tcx,
         menu::Description {
@@ -405,7 +407,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
             availability,
             raw: view.raw,
             graph: view.graph,
-            hover: menu_hover,
             scale,
             width: viewport_width,
         },
@@ -427,13 +428,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
             ),
         ));
     }
-    let (tree_hover, graph_hover) = match hover.as_ref() {
-        Some(Hovered::Tree(hovering)) => (Some(&hovering.hover), None),
-        Some(Hovered::Graph(node)) => (None, Some(node)),
-        #[cfg(target_os = "linux")]
-        Some(Hovered::Menu(_)) => (None, None),
-        None => (None, None),
-    };
     // The Raw view is ONE bit, threaded as itself: name lookups
     // derive from it downstream, no policy swapped here, and the
     // model's configured policy rides along untouched.
@@ -451,16 +445,11 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
     } else {
         viewport_width - 2.0 * margin
     };
-    let hover_node = graph_hover
-        .and_then(|node| graph_view::node_value(&model.doc, node))
-        .filter(|value| !matches!(value, Value::Record(_)));
     let body = projection::project(
         projection::ProjectDescription {
             sources,
             selection: model.tree_selection(),
             graph_node: graph_node.as_ref(),
-            hover: tree_hover,
-            hover_node: hover_node.as_ref(),
             collapse: &model.collapse,
             raw: view.raw,
             styles: &styles,
@@ -612,8 +601,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
             &model.graph,
             model.graph_selection(),
             model.tree_selection(),
-            graph_hover,
-            tree_hover,
             view.raw,
             &mut tcx,
             panel,
@@ -664,10 +651,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
     // and its click targets win. Its anchor came from the body's
     // placement; the stash rides the placed value, no side channel.
     if let Some(popup) = placed.popup.take() {
-        let hovered_entry = match tree_hover {
-            Some(hover::Hover::Entry(index)) => Some(*index),
-            _ => None,
-        };
         let commit =
             |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
                 Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
@@ -682,7 +665,7 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
                 }
                 selection => app.model.selection = selection,
             };
-        let card = projection::popup_view(&mut tcx, &styles, &popup, hovered_entry, commit);
+        let card = projection::popup_view(&mut tcx, &styles, &popup, commit);
         // Below the anchor, unless it would run off the bottom and
         // fits above — then flip on top, as the TypeScript prototype
         // did. The card's extent is known before placement.
@@ -790,66 +773,76 @@ mod frame_tests {
     }
 
     #[test]
-    fn hover_resolution_keeps_only_real_hysteresis_state() {
-        let hovering = hover::Hovering {
-            hover: hover::Hover::Value(Vec::new()),
-            rect: vello::kurbo::Rect::new(10.0, 10.0, 20.0, 20.0),
+    fn hover_derives_from_the_pointer_with_the_ring_as_air_fallback() {
+        let inside = |rect: vello::kurbo::Rect, claim: Claim<Hovered>| -> placed::Probe {
+            Box::new(move |point| rect.contains(point).then(|| claim.clone()))
         };
-        let current = Hovered::Tree(hovering.clone());
+        let target = || Hovered::Tree(hover::Hover::Value(Vec::new()));
+        let mut placed: Placed<App, Paint> = Placed::empty();
+        placed.probes.push(inside(
+            vello::kurbo::Rect::new(0.0, 0.0, 20.0, 20.0),
+            Claim::Names(target()),
+        ));
+        // A direct answer at the pointer wins, wherever the ring is.
         assert_eq!(
-            resolved_hover(
-                Some(&current),
+            derive_hover(
+                &placed,
                 None,
-                Some(Point::new(24.0, 15.0)),
+                Some(Point::new(5.0, 5.0)),
+                Point::new(50.0, 50.0),
                 false,
-                8.0,
             ),
-            Some(current.clone())
+            Some(target())
         );
+        // Air at the pointer defers to the ring's trailing center —
+        // the little-gap hold.
         assert_eq!(
-            resolved_hover(
-                Some(&current),
-                Some(Claim::Names(Hovered::Graph(graph_view::GraphNode::Root))),
-                Some(Point::ZERO),
+            derive_hover(
+                &placed,
+                None,
+                Some(Point::new(25.0, 5.0)),
+                Point::new(15.0, 5.0),
                 false,
-                8.0,
             ),
-            Some(Hovered::Graph(graph_view::GraphNode::Root))
+            Some(target())
         );
+        // Air over air clears; no pointer answers nothing.
         assert_eq!(
-            resolved_hover(
-                Some(&current),
-                Some(Claim::Occludes),
-                Some(Point::ZERO),
+            derive_hover(
+                &placed,
+                Some(target()),
+                Some(Point::new(40.0, 40.0)),
+                Point::new(40.0, 40.0),
+                false,
+            ),
+            None
+        );
+        assert_eq!(derive_hover(&placed, Some(target()), None, Point::ZERO, false), None);
+        // A pressed gesture keeps the hover it began with.
+        assert_eq!(
+            derive_hover(
+                &placed,
+                Some(target()),
+                Some(Point::new(40.0, 40.0)),
+                Point::ZERO,
                 true,
-                8.0,
             ),
-            Some(current)
+            Some(target())
         );
-        assert_eq!(resolved_hover(None, None, None, false, 8.0), None);
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn menu_hover_uses_the_ordinary_settled_resolver() {
-        let hover = menu::Hover::Item(menu::Selection::Save);
+        // An occluder answers "nothing" outright and blocks the
+        // fallback — an overlay's pointer never lights what sits
+        // beneath it.
+        placed.probes.push(inside(
+            vello::kurbo::Rect::new(0.0, 0.0, 40.0, 40.0),
+            Claim::Occludes,
+        ));
         assert_eq!(
-            resolved_hover(
+            derive_hover(
+                &placed,
                 None,
-                Some(Claim::Names(Hovered::Menu(hover))),
-                Some(Point::new(20.0, 40.0)),
+                Some(Point::new(25.0, 5.0)),
+                Point::new(15.0, 5.0),
                 false,
-                8.0,
-            ),
-            Some(Hovered::Menu(hover))
-        );
-        assert_eq!(
-            resolved_hover(
-                Some(&Hovered::Menu(hover)),
-                Some(Claim::Occludes),
-                Some(Point::new(20.0, 40.0)),
-                false,
-                8.0,
             ),
             None
         );

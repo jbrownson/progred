@@ -7,6 +7,7 @@
 
 use crate::completion::{HasPopup, Popup};
 use crate::frame::Hovered;
+use gid::Value;
 use crate::navigate::{Descend, HasDescends};
 use measured::{Extent, Measured, Output};
 use puri::draw::{Canvas, GlyphRun, Shape};
@@ -20,7 +21,17 @@ use vello::kurbo::{Affine, Point, Rect, Stroke, Vec2};
 use vello::peniko::Brush;
 
 pub type Probe = Box<dyn Fn(Point) -> Option<Claim<Hovered>>>;
-pub type Render<Cv> = Box<dyn FnOnce(&mut Cv)>;
+pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
+
+/// What ink may condition on: the frame's RESOLVED hover, decided
+/// from this same pass's geometry before any render runs.
+#[derive(Clone, Copy)]
+pub struct Ink<'a> {
+    pub hovered: Option<&'a Hovered>,
+    /// The value the hover refers to; its other projections carry
+    /// the faint secondary mark.
+    pub hovered_value: Option<&'a Value>,
+}
 
 pub struct Placed<C, Cv> {
     pub probes: Vec<Probe>,
@@ -67,10 +78,10 @@ impl<C: 'static, Cv> Placed<C, Cv> {
         self.handler.get_or_insert_with(Handler::new)
     }
 
-    /// Run the deferred ink into a canvas.
-    pub fn render(renders: Vec<Render<Cv>>, canvas: &mut Cv) {
+    /// Run the deferred ink into a canvas, with the resolved hover.
+    pub fn render(renders: Vec<Render<Cv>>, canvas: &mut Cv, ink: Ink<'_>) {
         for render in renders {
-            render(canvas);
+            render(canvas, ink);
         }
     }
 }
@@ -117,6 +128,12 @@ impl<C: 'static, Cv> Builder<C, Cv> {
     pub fn claim(&mut self, probe: impl Fn(Point) -> Option<Claim<Hovered>> + 'static) {
         self.placed.probes.push(Box::new(probe));
     }
+
+    /// Contribute ink that reads the resolved hover — the only paint
+    /// that may differ under the pointer.
+    pub fn ink(&mut self, render: impl for<'a> FnOnce(&mut Cv, Ink<'a>) + 'static) {
+        self.placed.renders.push(Box::new(render));
+    }
 }
 
 impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<C, Cv> {
@@ -124,7 +141,7 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<C, Cv> {
         let (shape, brush) = (shape.into(), brush.into());
         self.placed
             .renders
-            .push(Box::new(move |cv| cv.fill(shape, brush, transform)));
+            .push(Box::new(move |cv, _| cv.fill(shape, brush, transform)));
     }
 
     fn stroke(
@@ -137,13 +154,13 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<C, Cv> {
         let (shape, brush) = (shape.into(), brush.into());
         self.placed
             .renders
-            .push(Box::new(move |cv| cv.stroke(shape, style, brush, transform)));
+            .push(Box::new(move |cv, _| cv.stroke(shape, style, brush, transform)));
     }
 
     fn glyph_run(&mut self, run: GlyphRun) {
         self.placed
             .renders
-            .push(Box::new(move |cv| cv.glyph_run(run)));
+            .push(Box::new(move |cv, _| cv.glyph_run(run)));
     }
 
     fn clip(
@@ -157,8 +174,10 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<C, Cv> {
         content(&mut inner);
         let mut placed = inner.placed;
         let renders = std::mem::take(&mut placed.renders);
-        placed.renders.push(Box::new(move |cv: &mut Cv| {
-            cv.clip(shape, transform, |cv| Placed::<C, Cv>::render(renders, cv))
+        placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+            cv.clip(shape, transform, |cv| {
+                Placed::<C, Cv>::render(renders, cv, ink)
+            })
         }));
         let base = std::mem::replace(&mut self.placed, Placed::empty());
         self.placed = base.over(placed);
@@ -268,8 +287,10 @@ pub fn place_scrolled<C: 'static, Cv: Canvas + 'static>(
         measured::child_placement(measured::clipped_placement(placement, rect), child_rect);
     let mut placed = measured::place(child, child_placement);
     let renders = std::mem::take(&mut placed.renders);
-    placed.renders.push(Box::new(move |cv: &mut Cv| {
-        cv.clip(rect, Affine::IDENTITY, |cv| Placed::<C, Cv>::render(renders, cv))
+    placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+        cv.clip(rect, Affine::IDENTITY, |cv| {
+            Placed::<C, Cv>::render(renders, cv, ink)
+        })
     }));
     placed.handler = placed.handler.map(|handler| gate_starts(handler, placement));
     base.over(placed)

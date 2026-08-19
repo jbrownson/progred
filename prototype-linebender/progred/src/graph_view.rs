@@ -509,9 +509,6 @@ struct NodeView {
 #[derive(Clone, Copy, PartialEq)]
 enum Strength {
     None,
-    /// The pointer's claim, here or projected from the other pane —
-    /// the secondary mark at half voice.
-    Hover,
     Secondary,
     Primary,
 }
@@ -629,8 +626,6 @@ pub fn pane<C: 'static, Cv: Canvas + 'static>(
     view: &GraphView,
     selection: Option<&GraphSelection>,
     doc_selection: Option<&Selection>,
-    hover: Option<&GraphNode>,
-    doc_hover: Option<&crate::hover::Hover>,
     raw: bool,
     tcx: &mut TextCtx,
     panel: Rect,
@@ -659,11 +654,6 @@ pub fn pane<C: 'static, Cv: Canvas + 'static>(
             _ => None,
         })
         .and_then(|value| value.as_cell());
-    // The document's hover projects in the same way, at half voice.
-    let hover_cell = doc_hover
-        .and_then(|hover| crate::hover::hover_value(sources, raw, doc_selection, hover))
-        .and_then(|value| value.as_cell());
-
     let root_link = doc.root.as_ref().and_then(Value::as_cell);
     let node_views: Vec<NodeView> = snapshot
         .nodes
@@ -679,10 +669,6 @@ pub fn pane<C: 'static, Cv: Canvas + 'static>(
                 Strength::Primary
             } else if matches!(id, GraphNode::Cell(cell) if secondary_cell == Some(*cell)) {
                 Strength::Secondary
-            } else if hover == Some(id)
-                || matches!(id, GraphNode::Cell(cell) if hover_cell == Some(*cell))
-            {
-                Strength::Hover
             } else {
                 Strength::None
             };
@@ -818,13 +804,23 @@ pub fn pane<C: 'static, Cv: Canvas + 'static>(
                 if node.strength == Strength::Secondary {
                     p.fill(shape, Color::new(WASH), Affine::IDENTITY);
                 }
-                if node.strength == Strength::Hover {
-                    p.fill(shape, Color::new(HOVER_WASH), Affine::IDENTITY);
+                if node.strength == Strength::None {
+                    // The hover wash reads the RESOLVED hover: the
+                    // node itself, or a document hover of its value.
+                    let id = node.id;
+                    p.ink(move |cv: &mut Cv, ink| {
+                        let named = matches!(ink.hovered, Some(Hovered::Graph(hovered)) if *hovered == id);
+                        let value = matches!(id, GraphNode::Cell(cell)
+                            if ink.hovered_value.and_then(Value::as_cell) == Some(cell));
+                        if named || value {
+                            cv.fill(shape, Color::new(HOVER_WASH), Affine::IDENTITY);
+                        }
+                    });
                 }
                 let (color, width) = match node.strength {
                     Strength::Primary => (PRIMARY, 2.5),
                     Strength::Secondary => (SECONDARY_OUTLINE, 1.5),
-                    Strength::Hover | Strength::None => (BORDER, 1.2),
+                    Strength::None => (BORDER, 1.2),
                 };
                 let stroke = if node.bare {
                     Stroke::new(width * px).with_dashes(0.0, [4.0 * px, 3.0 * px])

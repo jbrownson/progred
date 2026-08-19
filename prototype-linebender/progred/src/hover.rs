@@ -1,12 +1,11 @@
-//! Pointer hover: the tree hover's identity, its footprint, and the
-//! value a hover refers to for secondary marks.
+//! Pointer hover: the tree hover's identity and the value it refers
+//! to for secondary marks.
 
 use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
 use gid::{Path, Step, Value};
 use progred_libraries::text;
-use vello::kurbo::Rect;
 
 /// What the pointer rests on: the claim a plain click at that point
 /// would fire. Values preview their selection; labels, toggles, and
@@ -30,14 +29,6 @@ pub enum Hover {
     /// typing under a parked pointer re-answers instead of marking a
     /// snapshot.
     Entry(usize),
-}
-
-/// What the pointer rests on plus the footprint it claimed — the
-/// identity for drawing, the rect for the little-gap hold.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Hovering {
-    pub hover: Hover,
-    pub rect: Rect,
 }
 
 /// The value a hover refers to — the hover's `secondary_of`, for

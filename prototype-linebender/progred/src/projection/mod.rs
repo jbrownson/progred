@@ -5,9 +5,8 @@
 use crate::completion::{Entry, resolve_entry, resolve_label};
 use crate::completion::{EntryAction, HasPopup, Popup, completion_entries};
 use crate::filter;
-#[cfg(test)]
 use crate::frame::Hovered;
-use crate::hover::{Hover, Hovering, hover_value};
+use crate::hover::Hover;
 use crate::identity::short_id;
 use crate::navigate::{Descend, HasDescends};
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
@@ -130,13 +129,8 @@ struct Cx<'a> {
     collapse: &'a Collapse,
     styles: &'a Styles,
     selection: Option<&'a Selection>,
-    /// The pointer's current claim, previewed by the target it names.
-    hover: Option<&'a Hover>,
     /// The value whose other projections carry the secondary mark.
     secondary: Option<Value>,
-    /// The value the hover refers to; its projections carry the faint
-    /// hover variant of the secondary mark.
-    secondary_hover: Option<Value>,
     source: Source<'a>,
     fuel: std::cell::Cell<usize>,
 }
@@ -391,21 +385,36 @@ fn realize_hover<C: 'static, Cv: Canvas + 'static>(
     hover: Option<Hover>,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    let active = hover.as_ref().is_some_and(|hover| cx.hover == Some(hover));
     let highlight = matches!(
         hover.as_ref(),
         Some(Hover::Label(_) | Hover::Toggle(_) | Hover::Insert(_))
     );
     let scale = cx.styles.scale;
     before(inner, move |p, placement| {
-        if active && highlight {
-            hover_highlight(scale, p, placement.rect);
-        }
         match hover {
-            Some(hover) => hover_claim(p, placement, hover),
+            Some(hover) => {
+                if highlight {
+                    let mine = hover.clone();
+                    p.ink(move |cv, ink| {
+                        if tree_hovered(ink) == Some(&mine) {
+                            hover_highlight(scale, cv, placement.rect);
+                        }
+                    });
+                }
+                hover_claim(p, placement, hover);
+            }
             None => hover_block(p, placement),
         }
     })
+}
+
+/// The resolved hover's tree identity, for ink that lights its own
+/// claim.
+fn tree_hovered<'a>(ink: placed::Ink<'a>) -> Option<&'a Hover> {
+    match ink.hovered {
+        Some(Hovered::Tree(hover)) => Some(hover),
+        _ => None,
+    }
 }
 
 fn leaf_display<
@@ -562,10 +571,6 @@ impl Cx<'_> {
             | Some(Selection::Pending { path: selected, .. }) => selected.as_slice() == path,
             _ => false,
         }
-    }
-
-    fn hovered_value(&self, path: &[Step]) -> bool {
-        matches!(self.hover, Some(Hover::Value(hovered)) if hovered.as_slice() == path)
     }
 
     /// The pending child step under `path`, when the selection is
@@ -824,12 +829,9 @@ fn hover_claim<C: 'static, Cv: 'static>(
     key: Hover,
 ) {
     p.claim(move |point| {
-        placement.contains(point).then(|| {
-            Claim::Names(Hovered::Tree(Hovering {
-                hover: key.clone(),
-                rect: placement.visible_rect(),
-            }))
-        })
+        placement
+            .contains(point)
+            .then(|| Claim::Names(Hovered::Tree(key.clone())))
     });
 }
 
@@ -887,16 +889,19 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
     };
     let scale = cx.styles.scale;
     let selected = cx.selected(&path);
-    let hovered = cx.hovered_value(&path);
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
     before(child, move |p, placement| {
         let rect = placement.rect;
-        if selected {
-            primary_highlight(scale, p, rect);
-        } else if hovered {
-            hover_highlight(scale, p, rect);
-        }
+        let highlight_path = path.clone();
+        p.ink(move |cv, ink| {
+            if selected {
+                primary_highlight(scale, cv, rect);
+            } else if matches!(tree_hovered(ink), Some(Hover::Value(hovered)) if *hovered == highlight_path)
+            {
+                hover_highlight(scale, cv, rect);
+            }
+        });
         if !transient {
             hover_claim(p, placement, Hover::Value(path.clone()));
         }
@@ -944,8 +949,6 @@ pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
     pub selection: Option<&'a Selection>,
     pub graph_node: Option<&'a Value>,
-    pub hover: Option<&'a Hover>,
-    pub hover_node: Option<&'a Value>,
     pub collapse: &'a Collapse,
     pub raw: bool,
     pub styles: &'a Styles,
@@ -966,8 +969,6 @@ pub fn project<
         sources,
         selection,
         graph_node,
-        hover,
-        hover_node,
         collapse,
         raw,
         styles,
@@ -982,16 +983,12 @@ pub fn project<
         collapse,
         styles,
         selection,
-        hover,
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
         // The graph view's selected cell is a secondary here too:
-        // its projections are the same value — and the graph view's
-        // HOVERED cell is a hover secondary the same way.
+        // its projections are the same value. The HOVERED value's
+        // faint marks come from the render pass's Ink instead.
         secondary: secondary_of(&sources, selection).or_else(|| graph_node.cloned()),
-        secondary_hover: hover
-            .and_then(|hover| hover_value(&sources, raw, selection, hover))
-            .or_else(|| hover_node.cloned()),
     };
     // An empty document is a selectable placeholder at the root path.
     project_location(
@@ -1023,14 +1020,17 @@ fn descend_landmark<C: 'static, Cv: Canvas + 'static>(
         return child;
     }
     let selected = cx.selected(&path);
-    let hovered = cx.hovered_value(&path);
     let scale = cx.styles.scale;
     let marked = decorate(child, move |p, rect| {
-        if selected {
-            primary_highlight(scale, p, rect);
-        } else if hovered {
-            hover_highlight(scale, p, rect);
-        }
+        let highlight_path = path.clone();
+        p.ink(move |cv, ink| {
+            if selected {
+                primary_highlight(scale, cv, rect);
+            } else if matches!(tree_hovered(ink), Some(Hover::Value(hovered)) if *hovered == highlight_path)
+            {
+                hover_highlight(scale, cv, rect);
+            }
+        });
         p.descends().push(Descend {
             path: path.clone(),
             rect,
@@ -1186,22 +1186,25 @@ fn ground<C: 'static, Cv: Canvas + 'static>(cx: &Cx, path: &[Step], value: &Valu
 /// strength, so the two read as one family.
 fn secondary_mark<C: 'static, Cv: Canvas + 'static>(cx: &Cx, value: &Value, content: Measured<Placed<C, Cv>>) -> Measured<Placed<C, Cv>> {
     let strong = cx.secondary.as_ref() == Some(value);
-    let faint = !strong && cx.secondary_hover.as_ref() == Some(value);
-    if !strong && !faint {
-        return content;
-    }
     let scale = cx.styles.scale;
+    let value = value.clone();
     decorate(content, move |p, rect| {
-        let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
-        // The hover variant is the same mark at half voice.
-        let (fill, line) = if strong { (0.10, 0.55) } else { (0.05, 0.25) };
-        p.fill(bg, Color::new([0.0, 0.48, 1.0, fill]), Affine::IDENTITY);
-        p.stroke(
-            bg,
-            Stroke::new(1.5 * scale),
-            Color::new([0.0, 0.48, 1.0, line]),
-            Affine::IDENTITY,
-        );
+        p.ink(move |cv, ink| {
+            // The hover variant is the same mark at half voice.
+            let faint = !strong && ink.hovered_value == Some(&value);
+            if !strong && !faint {
+                return;
+            }
+            let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
+            let (fill, line) = if strong { (0.10, 0.55) } else { (0.05, 0.25) };
+            cv.fill(bg, Color::new([0.0, 0.48, 1.0, fill]), Affine::IDENTITY);
+            cv.stroke(
+                bg,
+                Stroke::new(1.5 * scale),
+                Color::new([0.0, 0.48, 1.0, line]),
+                Affine::IDENTITY,
+            );
+        });
     })
 }
 
@@ -1240,9 +1243,7 @@ fn project_transient_root<
         collapse: cx.collapse,
         styles: cx.styles,
         selection: None,
-        hover: None,
         secondary: None,
-        secondary_hover: None,
         source: Source::Transient { owner: path },
         fuel: std::cell::Cell::new(fuel),
     };
@@ -1516,7 +1517,6 @@ pub fn popup_view<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
     popup: &Popup,
-    hovered: Option<usize>,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
@@ -1574,24 +1574,27 @@ pub fn popup_view<C: 'static, Cv: Canvas + 'static>(
                 row(8.0 * scale, cells),
             );
             let chosen = index == choice;
-            let lit = hovered == Some(index) && !chosen;
             let action = popup.entries[index].action.clone();
             let commit = commit.clone();
             before(content, move |p, placement| {
                 let rect = placement.rect;
-                if chosen {
-                    p.fill(
-                        RoundedRect::from_rect(rect, 4.0 * scale),
-                        Color::new([0.0, 0.48, 1.0, 0.14]),
-                        Affine::IDENTITY,
-                    );
-                } else if lit {
-                    p.fill(
-                        RoundedRect::from_rect(rect, 4.0 * scale),
-                        Color::new([0.0, 0.48, 1.0, 0.08]),
-                        Affine::IDENTITY,
-                    );
-                }
+                p.ink(move |cv, ink| {
+                    let lit = !chosen
+                        && matches!(tree_hovered(ink), Some(Hover::Entry(i)) if *i == index);
+                    if chosen {
+                        cv.fill(
+                            RoundedRect::from_rect(rect, 4.0 * scale),
+                            Color::new([0.0, 0.48, 1.0, 0.14]),
+                            Affine::IDENTITY,
+                        );
+                    } else if lit {
+                        cv.fill(
+                            RoundedRect::from_rect(rect, 4.0 * scale),
+                            Color::new([0.0, 0.48, 1.0, 0.08]),
+                            Affine::IDENTITY,
+                        );
+                    }
+                });
                 hover_claim(p, placement, Hover::Entry(index));
                 p.handler().on_pointer_down(move |ctx, event| {
                     event.button == Some(PointerButton::Primary)

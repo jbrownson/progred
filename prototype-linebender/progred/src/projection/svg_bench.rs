@@ -3,7 +3,6 @@
 /// editor frame, no window needed. `cargo test -p progred svg_bench`
 /// writes target/raw_projection.svg.
 use super::*;
-use crate::frame::resolved_hover;
 use progred_libraries::{name, text};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
@@ -32,8 +31,12 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
         descends,
         hit,
     };
+    let ink = crate::placed::Ink {
+        hovered: None,
+        hovered_value: None,
+    };
     for render in renders {
-        render(&mut bench);
+        render(&mut bench, ink);
     }
     bench
 }
@@ -241,8 +244,6 @@ fn place_with_inputs(
             sources,
             selection,
             graph_node: None,
-            hover: None,
-            hover_node: None,
             collapse: &collapse,
             raw: false,
             styles: &styles,
@@ -474,45 +475,6 @@ fn key(s: &str) -> Step {
 }
 
 #[test]
-fn air_holds_only_within_a_little_gap_of_the_hover() {
-    let current = Hovering {
-        hover: Hover::Value(vec![key("shape")]),
-        rect: Rect::new(10.0, 10.0, 30.0, 20.0),
-    };
-    let current = Hovered::Tree(current);
-    // An occluder clears unconditionally, however close.
-    assert_eq!(
-        resolved_hover(
-            Some(&current),
-            Some(Claim::Occludes),
-            Some(Point::new(11.0, 11.0)),
-            false,
-            8.0
-        ),
-        None
-    );
-    // Air just past the footprint holds; air beyond the reach
-    // clears — open space keeps no distant focus.
-    assert_eq!(
-        resolved_hover(Some(&current), None, Some(Point::new(36.0, 15.0)), false, 8.0),
-        Some(current.clone())
-    );
-    assert_eq!(
-        resolved_hover(Some(&current), None, Some(Point::new(25.0, 26.0)), false, 8.0),
-        Some(current.clone())
-    );
-    assert_eq!(
-        resolved_hover(Some(&current), None, Some(Point::new(60.0, 15.0)), false, 8.0),
-        None
-    );
-    // With nothing held, air is just air.
-    assert_eq!(
-        resolved_hover(None, None, Some(Point::new(11.0, 11.0)), false, 8.0),
-        None
-    );
-}
-
-#[test]
 fn placement_claims_the_hover_innermost_last() {
     let doc = sample_document();
     let (bench, _) = place(&doc, None, 560.0);
@@ -540,10 +502,7 @@ fn placement_claims_the_hover_innermost_last() {
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(string_rect.center()));
     assert!(matches!(
         &bench.hit,
-        Some(Claim::Names(Hovered::Tree(Hovering {
-            hover: Hover::Value(path),
-            ..
-        }))) if *path == string_path
+        Some(Claim::Names(Hovered::Tree(Hover::Value(path)))) if *path == string_path
     ));
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(Point::new(-10.0, -10.0)));
     assert!(bench.hit.is_none());
@@ -625,10 +584,7 @@ fn flat_separators_claim_the_insert_between() {
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(mid));
     assert!(matches!(
         &bench.hit,
-        Some(Claim::Names(Hovered::Tree(Hovering {
-            hover: Hover::Insert(path),
-            ..
-        }))) if *path == first.path
+        Some(Claim::Names(Hovered::Tree(Hover::Insert(path)))) if *path == first.path
     ));
 }
 
@@ -668,10 +624,7 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
     );
     assert!(matches!(
         &claimed.hit,
-        Some(Claim::Names(Hovered::Tree(Hovering {
-            hover: Hover::Value(path),
-            ..
-        }))) if *path == parent
+        Some(Claim::Names(Hovered::Tree(Hover::Value(path)))) if *path == parent
     ));
 }
 
@@ -711,7 +664,6 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
             &mut tcx,
             &crate::styles::editor(1.0),
             &popup,
-            None,
             |_, _| {},
         );
         let extent = card.extent;
@@ -728,7 +680,7 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
         .filter_map(|y| {
             let (bench, _) = place_card(Point::new(extent.width / 2.0, y as f64 + 0.5));
             match bench.hit {
-                Some(Claim::Names(Hovered::Tree(hovering))) => Some(hovering.hover),
+                Some(Claim::Names(Hovered::Tree(hover))) => Some(hover),
                 _ => None,
             }
         })

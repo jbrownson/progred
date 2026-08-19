@@ -144,7 +144,9 @@ pub(crate) struct App {
     pub(crate) pressed: bool,
     /// Whether settled geometry has resolved `hover` for the
     /// next draw. Geometry-changing redraw sources clear it.
-    pub(crate) hover_is_current: bool,
+    /// The little-gap ring: a dead-zone filter over the pointer whose
+    /// trailing center is the air fallback for hover probes.
+    pub(crate) ring: puri::hover::LazyPointer,
     /// The selection identity last scrolled into view — path AND
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
@@ -315,7 +317,6 @@ impl ApplicationHandler<UserEvent> for App {
                 Vec2::ZERO
             };
             self.model.graph.zoom_at(1.0 + delta, anchor, scale);
-            self.hover_is_current = false;
             window.request_redraw();
             return;
         }
@@ -393,8 +394,12 @@ impl ApplicationHandler<UserEvent> for App {
                             }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
-                        self.pointer =
-                            Some(Point::new(button.state.position.x, button.state.position.y));
+                        let position =
+                            Point::new(button.state.position.x, button.state.position.y);
+                        if self.pointer.is_none() {
+                            self.ring.center = position;
+                        }
+                        self.pointer = Some(position);
                         self.pressed = true;
                         dispatch.handler.dispatch_pointer_down(self, &button)
                     }
@@ -402,18 +407,28 @@ impl ApplicationHandler<UserEvent> for App {
                         // Pointer position is frame input. Unpressed
                         // motion remints even when no event handler
                         // consumes it; pressed gestures freeze hover
-                        // while their ordinary drag handlers run.
-                        self.pointer = Some(Point::new(
+                        // while their ordinary drag handlers run —
+                        // the ring only tracks between gestures.
+                        let position = Point::new(
                             update.current.position.x,
                             update.current.position.y,
-                        ));
+                        );
+                        if self.pointer.is_none() {
+                            self.ring.center = position;
+                        }
+                        self.pointer = Some(position);
+                        if !self.pressed {
+                            self.ring.track(position, 8.0 * scale);
+                        }
                         frame_input_changed = !self.pressed;
                         dispatch.handler.dispatch_pointer_move(self, &update)
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
-                        self.pointer =
-                            Some(Point::new(button.state.position.x, button.state.position.y));
+                        let position =
+                            Point::new(button.state.position.x, button.state.position.y);
+                        self.pointer = Some(position);
                         self.pressed = false;
+                        self.ring.track(position, 8.0 * scale);
                         frame_input_changed = true;
                         dispatch.handler.dispatch_pointer_up(self, &button)
                     }
@@ -485,14 +500,12 @@ impl ApplicationHandler<UserEvent> for App {
                     *valid_surface = valid;
                 }
                 if valid {
-                    self.hover_is_current = false;
-                    self.redraw();
+                            self.redraw();
                 }
             }
 
             WindowEvent::ScaleFactorChanged { .. } => {
-                self.hover_is_current = false;
-                window.request_redraw();
+                    window.request_redraw();
             }
 
             // The hover is the pointer RELATIVE TO CONTENT, and a
@@ -590,7 +603,7 @@ fn main() {
         pointer: None,
         hover: None,
         pressed: false,
-        hover_is_current: false,
+        ring: puri::hover::LazyPointer::new(Point::ZERO),
         revealed: None,
         dispatch: None,
         last_descends: Vec::new(),
@@ -667,7 +680,6 @@ impl App {
         if matches!(selection, menu::Selection::Raw | menu::Selection::Graph)
             && let RenderState::Active { window, .. } = &self.state
         {
-            self.hover_is_current = false;
             window.request_redraw();
         }
     }
@@ -910,25 +922,25 @@ impl App {
         let view = self.view_flags();
         if view.graph {
             self.model.graph.step(&self.model.doc);
-            self.hover_is_current = false;
         }
         let viewport = Size::new(width as f64, height as f64);
-        if !self.pressed && !self.hover_is_current {
-            self.build_frame(scale, viewport);
-        }
         self.scene.reset();
-        let before = self.hover.clone();
-        let Frame { dispatch, renders } = self.build_frame(scale, viewport);
-        // Recover from any geometry invalidation the shell failed to mark.
-        let hover_changed = self.hover != before;
+        let Frame {
+            dispatch,
+            renders,
+            hovered_value,
+        } = self.build_frame(scale, viewport);
         self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
-        self.hover_is_current = true;
+        let ink = placed::Ink {
+            hovered: self.hover.as_ref(),
+            hovered_value: hovered_value.as_ref(),
+        };
         let mut paint = Paint {
             scene: std::mem::replace(&mut self.scene, Scene::new()),
         };
         for render in renders {
-            render(&mut paint);
+            render(&mut paint, ink);
         }
         self.scene = paint.scene;
 
@@ -990,7 +1002,7 @@ impl App {
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
 
-        if hover_changed || (view.graph && self.model.graph.hot()) {
+        if view.graph && self.model.graph.hot() {
             window.request_redraw();
         }
     }
