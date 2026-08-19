@@ -100,6 +100,8 @@ mod tests {
             display::<(), ()>(ProjectionInput {
                 env: &Unused,
                 value: &value("hi"),
+                selection: None,
+                state: None,
                 select: std::rc::Rc::new(|_| false),
                 hover: (),
             }),

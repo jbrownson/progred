@@ -205,10 +205,18 @@ pub trait Env {
 /// Everything a partial projection receives for one value. The
 /// default selection callback and matching hover claim may be used,
 /// wrapped, ignored, or replaced; no central action vocabulary is
-/// involved.
+/// involved. Editor state arrives POSITIONALLY and as DATA: the
+/// selection's payload when this value's path is the selected one,
+/// and this path's annotation record — never an address, never a
+/// store.
 pub struct ProjectionInput<'a, World, Hover> {
     pub env: &'a dyn Env,
     pub value: &'a Value,
+    /// The selection payload — stage, query, choice — iff this
+    /// value's path is the selected one.
+    pub selection: Option<&'a Value>,
+    /// This path's annotation record (fold state and whatever joins it).
+    pub state: Option<&'a Value>,
     pub select: ClickHandler<World>,
     pub hover: Hover,
 }

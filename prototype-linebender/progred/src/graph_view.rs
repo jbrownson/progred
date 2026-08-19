@@ -645,7 +645,9 @@ pub fn pane<C: 'static, Cv: Canvas + 'static>(
     // The document selection projects into the graph through its
     // VALUE: the cell it links washes as a secondary.
     let doc_value = doc_selection.and_then(|selection| match selection {
-        Selection::Edge { path, .. } => sources.resolve(path).cloned(),
+        current if current.stage() == crate::selection::Stage::Edge => {
+            sources.resolve(current.path()).cloned()
+        }
         _ => None,
     });
     let secondary_cell = doc_value

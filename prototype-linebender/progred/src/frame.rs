@@ -214,7 +214,7 @@ impl App {
         let reveal = self
             .model
             .tree_selection()
-            .map(|s| (s.path().to_vec(), std::mem::discriminant(s)));
+            .map(|s| (s.path().to_vec(), s.stage()));
         if reveal == self.revealed {
             false
         } else {
@@ -461,8 +461,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 // real selection change (the pending row swallows its
                 // own clicks before they can reach here).
                 let fresh = match app.model.tree_selection() {
-                    Some(selection::Selection::PendingEdge { .. }) | None => true,
-                    Some(current) => current.path() != path,
+                    None => true,
+                    Some(current) => {
+                        current.stage() == selection::Stage::Label || current.path() != path
+                    }
                 };
                 if fresh {
                     let next = {
@@ -668,29 +670,28 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
     // placed, its click targets winning. The card is built while a
     // pending is engaged; its anchor is discovered at place time in
     // the stage's output, where the pending row stashed it.
-    let engaged = match model.tree_selection() {
-        Some(selection::Selection::Pending { query, choice, .. }) => Some((query, *choice, false)),
-        Some(selection::Selection::PendingEdge { query, choice, .. }) => {
-            Some((query, *choice, true))
-        }
-        _ => None,
-    };
+    let engaged = model.tree_selection().and_then(|current| match current.stage() {
+        selection::Stage::Pending => Some((current.edit()?, current.choice(), false)),
+        selection::Stage::Label => Some((current.edit()?, current.choice(), true)),
+        selection::Stage::Edge => None,
+    });
     if let Some((query, choice, labels)) = engaged {
         // The same inputs the pending row's stash reads: the drawn
         // rows and the keyboard commit must answer from one list.
         let entries = completion::completion_entries(&sources, flags.raw, labels, query.text());
         let commit =
             |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
-                Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                    app.commit_value(path, action);
-                }
-                Some(Selected::Tree(selection::Selection::PendingEdge {
-                    parent,
-                    replacing,
-                    ..
-                })) => {
-                    app.commit_label(parent, replacing, action);
-                }
+                Some(Selected::Tree(current)) => match current.stage() {
+                    selection::Stage::Pending => {
+                        app.commit_value(current.path().to_vec(), action);
+                    }
+                    selection::Stage::Label => {
+                        app.commit_label(current.path().to_vec(), current.replacing(), action);
+                    }
+                    selection::Stage::Edge => {
+                        app.model.selection = Some(Selected::Tree(current));
+                    }
+                },
                 selection => app.model.selection = selection,
             };
         let card = projection::popup_view(&mut tcx, &styles, &entries, choice, commit);

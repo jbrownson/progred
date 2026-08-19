@@ -118,6 +118,8 @@ mod tests {
         display(ProjectionInput {
             env,
             value,
+            selection: None,
+            state: None,
             select: std::rc::Rc::new(|_| false),
             hover: (),
         })

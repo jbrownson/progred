@@ -143,6 +143,8 @@ mod tests {
                     projection(ProjectionInput {
                         env: &NoEval,
                         value: &value,
+                        selection: None,
+                        state: None,
                         select: Rc::new(|_| false),
                         hover: (),
                     })

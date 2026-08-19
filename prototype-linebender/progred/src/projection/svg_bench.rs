@@ -400,11 +400,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             .expect("walk stops on placed descends")
             .rect
     };
-    let select = |path: &Path| Selection::Edge {
-        path: path.clone(),
-        edit: None,
-        recorded: false,
-    };
+    let select = |path: &Path| crate::selection::bare_edge(path.clone());
     let mut selection: Option<Selection> = None;
     let mut walk: Vec<Path> = Vec::new();
     while walk.len() < 200 {
@@ -718,11 +714,7 @@ fn svg_bench_renders_the_placeholder_notation() {
     // slot and committed as the string — glyphs should not move.
     render(
         &empty,
-        Some(&Selection::Pending {
-            path: Vec::new(),
-            query: line_edit("\"asdf\""),
-            choice: 0,
-        }),
+        Some(&crate::selection::pending_with_query(Vec::new(), "\"asdf\"")),
         320.0,
         "../target/raw_placeholder_typed.svg",
     );
@@ -731,11 +723,7 @@ fn svg_bench_renders_the_placeholder_notation() {
             root: Some(crate::test_values::text("asdf")),
             cells: Cells::new(),
         },
-        Some(&Selection::Edge {
-            path: Vec::new(),
-            edit: None,
-            recorded: false,
-        }),
+        Some(&crate::selection::bare_edge(Vec::new())),
         320.0,
         "../target/raw_placeholder_committed.svg",
     );
@@ -796,17 +784,7 @@ fn svg_bench_renders_a_pending_edge() {
         vec![Step::Key(crate::test_values::label("shape"))],
     )
     .unwrap();
-    let Selection::PendingEdge {
-        parent, replacing, ..
-    } = edge
-    else {
-        panic!("a pending edge pends");
-    };
-    let typing = Selection::PendingEdge {
-        parent,
-        query: line_edit("na"),
-        choice: 0,
-        replacing,
-    };
+    assert_eq!(edge.stage(), crate::selection::Stage::Label);
+    let typing = edge.with_query("na");
     render(&doc, Some(&typing), 560.0, "../target/raw_pending_edge.svg");
 }

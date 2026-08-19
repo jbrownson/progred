@@ -18,10 +18,10 @@ use crate::render::{self, text};
 #[cfg(test)]
 use crate::sample::{sample_document, sample_vocabulary};
 use crate::annotations::Annotations;
-use crate::selection::{Selection, last_follow};
+use crate::selection::{Selection, Stage, last_follow};
 #[cfg(test)]
 use crate::selection::{
-    break_edit_run, delete_edge, from_clipboard, from_structure, line_edit, pending_edge,
+    break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge,
     pending_follow, pending_insert, pending_into, pending_rename, pending_value, rename_field,
     resolve_query, set_collapse, set_value, to_clipboard, toggle_collapse, write_through,
 };
@@ -81,10 +81,13 @@ impl<World> Projection<World> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn apply(
         &self,
         env: &dyn progred_display::Env,
         value: &Value,
+        selection: Option<&Value>,
+        state: Option<&Value>,
         select: progred_display::ClickHandler<World>,
         hover: Hover,
     ) -> Option<progred_display::Layout<World, Hover>> {
@@ -92,6 +95,8 @@ impl<World> Projection<World> {
             partial(progred_display::ProjectionInput {
                 env,
                 value,
+                selection,
+                state,
                 select: select.clone(),
                 hover: hover.clone(),
             })
@@ -99,7 +104,7 @@ impl<World> Projection<World> {
     }
 
     pub fn line(&self, value: &Value) -> Option<render::LineEdit> {
-        self.apply(&NoEval, value, Rc::new(|_| false), Hover::Value(Vec::new()))
+        self.apply(&NoEval, value, None, None, Rc::new(|_| false), Hover::Value(Vec::new()))
         .and_then(|layout| progred_display::line_edit_of(&layout).cloned())
     }
 }
@@ -586,54 +591,43 @@ impl Cx<'_> {
     /// selected there, something is being authored inside; the
     /// pending row carries the highlight itself.
     fn selected(&self, path: &[Step]) -> bool {
-        match self.selection {
-            Some(Selection::Edge { path: selected, .. })
-            | Some(Selection::Pending { path: selected, .. }) => selected.as_slice() == path,
-            _ => false,
-        }
+        self.selection
+            .is_some_and(|current| current.stage() != Stage::Label && current.path() == path)
     }
 
     /// The pending child step under `path`, when the selection is
     /// authoring one there.
     fn pending_child_of(&self, path: &[Step]) -> Option<Step> {
-        match self.selection {
-            Some(Selection::Pending { path: pending, .. })
-                if pending
-                    .split_last()
-                    .is_some_and(|(_, parent)| parent == path) =>
-            {
-                pending.last().cloned()
-            }
-            _ => None,
-        }
+        let current = self.selection?;
+        (current.stage() == Stage::Pending
+            && current
+                .path()
+                .split_last()
+                .is_some_and(|(_, parent)| parent == path))
+        .then(|| current.path().last().cloned())
+        .flatten()
     }
 
     /// The label query of a new field being authored on the record at
     /// `path`.
     fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
-        match self.selection {
-            Some(Selection::PendingEdge {
-                parent,
-                query,
-                choice,
-                replacing: None,
-            }) if parent.as_slice() == path => Some((query, *choice)),
-            _ => None,
-        }
+        let current = self.selection?;
+        (current.stage() == Stage::Label
+            && current.replacing().is_none()
+            && current.path() == path)
+            .then(|| Some((current.edit()?, current.choice())))
+            .flatten()
     }
 
     /// The re-opened label of an existing field on the record at
     /// `path`, with the key it replaces.
-    fn pending_rename_under(&self, path: &[Step]) -> Option<(&CellId, &LineEditState, usize)> {
-        match self.selection {
-            Some(Selection::PendingEdge {
-                parent,
-                query,
-                choice,
-                replacing: Some(replacing),
-            }) if parent.as_slice() == path => Some((replacing, query, *choice)),
-            _ => None,
+    fn pending_rename_under(&self, path: &[Step]) -> Option<(CellId, &LineEditState, usize)> {
+        let current = self.selection?;
+        if current.stage() != Stage::Label || current.path() != path {
+            return None;
         }
+        let replacing = current.replacing()?;
+        Some((replacing, current.edit()?, current.choice()))
     }
 }
 
@@ -932,8 +926,8 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
 /// many places — never equal copies, so only cell values answer.
 fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Value> {
     match selection? {
-        Selection::Edge { path, .. } => sources
-            .resolve(path)
+        current if current.stage() == Stage::Edge => sources
+            .resolve(current.path())
             .filter(|value| value.as_cell().is_some())
             .cloned(),
         _ => None,
@@ -1386,9 +1380,17 @@ fn project_present_value<
 ) -> Measured<Placed<C, Cv>> {
     let projected = projection
         .and_then(|projection| {
+            // Editor state arrives positionally: the payload only at
+            // the selected path, the annotations only at this one.
+            let selection = cx
+                .selection
+                .filter(|current| current.path() == path)
+                .map(Selection::payload);
             projection.apply(
                 &ProjectEnv { cx },
                 value,
+                selection,
+                cx.annotations.at(path),
                 select_handler(path.to_vec(), hooks),
                 Hover::Value(path.to_vec()),
             )
@@ -1468,14 +1470,12 @@ fn pending_view<
     path: Path,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    let engaged = match cx.selection {
-        Some(Selection::Pending { path: pending, query, .. })
-            if pending.as_slice() == path.as_slice() =>
-        {
-            Some(query)
-        }
-        _ => None,
-    };
+    let engaged = cx
+        .selection
+        .filter(|current| {
+            current.stage() == Stage::Pending && current.path() == path.as_slice()
+        })
+        .and_then(Selection::edit);
     let content = placeholder(cx, tcx, engaged, false, hooks);
     // Engaged, the generic ring IS the slot's chrome: it draws
     // [`highlight_rect`] over the same frame the cold box strokes,

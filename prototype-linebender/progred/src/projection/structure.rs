@@ -201,7 +201,7 @@ fn record_layout<World: 'static>(
             flat.push(dim(", "));
         }
         let name = match cx.pending_rename_under(path) {
-            Some((replacing, _, _)) if replacing == key => query(),
+            Some((replacing, _, _)) if replacing == *key => query(),
             _ => field_label(*key),
         };
         flat.push(name);
@@ -241,7 +241,7 @@ fn field_head<World: 'static>(
     hooks: &Hooks<World>,
 ) -> View<World> {
     let label = match cx.pending_rename_under(path) {
-        Some((replacing, _, _)) if replacing == &key => query(),
+        Some((replacing, _, _)) if replacing == key => query(),
         _ => field_label(key),
     };
     let head = row(0.0, [label, dim(":")]);

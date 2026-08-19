@@ -58,11 +58,13 @@ pub fn hover_value(
             }
         }
         Hover::Entry(index) => {
-            let (query, labels) = match selection? {
-                Selection::Pending { query, .. } => (query, false),
-                Selection::PendingEdge { query, .. } => (query, true),
-                Selection::Edge { .. } => return None,
+            let current = selection?;
+            let labels = match current.stage() {
+                crate::selection::Stage::Pending => false,
+                crate::selection::Stage::Label => true,
+                crate::selection::Stage::Edge => return None,
             };
+            let query = current.edit()?;
             let entries = completion_entries(sources, raw, labels, query.text());
             match &entries.get(*index)?.action {
                 EntryAction::Value(value) if value.as_cell().is_some() => Some(value.clone()),

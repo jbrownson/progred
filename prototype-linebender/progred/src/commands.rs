@@ -65,13 +65,15 @@ impl App {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
-            Some(Selected::Tree(selection::Selection::Edge { path, recorded, .. })) => {
-                let path = path.clone();
+            Some(Selected::Tree(current))
+                if current.stage() == selection::Stage::Edge =>
+            {
+                let path = current.path().to_vec();
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge
                 // intact) already covers the deletion.
-                let covered = *recorded;
+                let covered = current.recorded();
                 let before = self.model.doc.clone();
                 selection::delete_edge(&mut self.model.doc, &self.stack.library, &path) && {
                     if !covered {
@@ -120,23 +122,34 @@ impl App {
     /// so the click falls through rather than spending the pending.
     pub(crate) fn pick_identity(&mut self, id: Value) -> bool {
         if matches!(
-            self.model.selection,
-            Some(Selected::Tree(selection::Selection::PendingEdge { .. }))
+            &self.model.selection,
+            Some(Selected::Tree(current)) if current.stage() == selection::Stage::Label
         ) && id.as_cell().is_none()
         {
             return false;
         }
         match self.model.selection.take() {
-            Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                self.commit_value(path, &completion::EntryAction::Value(id));
-                true
-            }
-            Some(Selected::Tree(selection::Selection::PendingEdge {
-                parent, replacing, ..
-            })) => {
-                self.commit_label(parent, replacing, &completion::EntryAction::Value(id));
-                true
-            }
+            Some(Selected::Tree(current)) => match current.stage() {
+                selection::Stage::Pending => {
+                    self.commit_value(
+                        current.path().to_vec(),
+                        &completion::EntryAction::Value(id),
+                    );
+                    true
+                }
+                selection::Stage::Label => {
+                    self.commit_label(
+                        current.path().to_vec(),
+                        current.replacing(),
+                        &completion::EntryAction::Value(id),
+                    );
+                    true
+                }
+                selection::Stage::Edge => {
+                    self.model.selection = Some(Selected::Tree(current));
+                    false
+                }
+            },
             selection => {
                 self.model.selection = selection;
                 false
@@ -312,10 +325,8 @@ impl App {
             return false;
         }
         if !matches!(
-            self.model.selection,
-            Some(Selected::Tree(
-                selection::Selection::Pending { .. } | selection::Selection::PendingEdge { .. }
-            ))
+            &self.model.selection,
+            Some(Selected::Tree(current)) if current.stage() != selection::Stage::Edge
         ) {
             return false;
         }
@@ -351,11 +362,13 @@ impl App {
         if self.pick_identity(value.clone()) {
             return true;
         }
-        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection
-        else {
+        let Some(Selected::Tree(current)) = &self.model.selection else {
             return false;
         };
-        let path = path.clone();
+        if current.stage() != selection::Stage::Edge {
+            return false;
+        }
+        let path = current.path().to_vec();
         // Idempotent pastes stay off the undo stack, as write_through
         // keeps no-op rewrites off it.
         if self.sources().resolve(&path) == Some(&value) {
@@ -404,38 +417,37 @@ impl App {
                     if !projection::command(&event.modifiers) =>
                 {
                     match &mut self.model.selection {
-                        Some(Selected::Tree(
-                            selection::Selection::Pending { choice, .. }
-                            | selection::Selection::PendingEdge { choice, .. },
-                        )) => {
+                        Some(Selected::Tree(current))
+                            if current.stage() != selection::Stage::Edge =>
+                        {
                             let len = popup.as_ref().map(|p| p.entries.len()).unwrap_or(0);
-                            *choice = match direction {
+                            let choice = current.choice();
+                            current.set_choice(match direction {
                                 NamedKey::ArrowUp => choice.saturating_sub(1),
-                                _ => (*choice + 1).min(len.saturating_sub(1)),
-                            };
+                                _ => (choice + 1).min(len.saturating_sub(1)),
+                            });
                             true
                         }
                         _ => false,
                     }
                 }
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(Selected::Tree(selection::Selection::Pending {
-                        path,
-                        query,
-                        choice,
-                    })) => {
-                        let action = Self::chosen_action(popup, &query, choice, false);
-                        self.commit_value(path, &action);
-                        true
-                    }
-                    Some(Selected::Tree(selection::Selection::PendingEdge {
-                        parent,
-                        query,
-                        choice,
-                        replacing,
-                    })) => {
-                        let action = Self::chosen_action(popup, &query, choice, true);
-                        self.commit_label(parent, replacing, &action);
+                    Some(Selected::Tree(current))
+                        if current.stage() != selection::Stage::Edge =>
+                    {
+                        let labels = current.stage() == selection::Stage::Label;
+                        let fallback = selection::line_edit("");
+                        let query = current.edit().unwrap_or(&fallback);
+                        let action = Self::chosen_action(popup, query, current.choice(), labels);
+                        if labels {
+                            self.commit_label(
+                                current.path().to_vec(),
+                                current.replacing(),
+                                &action,
+                            );
+                        } else {
+                            self.commit_value(current.path().to_vec(), &action);
+                        }
                         true
                     }
                     selection => {
@@ -464,8 +476,11 @@ impl App {
                 Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
-                        Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
-                            let back = navigate::selection_after_delete(descends, path);
+                        Some(Selected::Tree(current))
+                            if current.stage() == selection::Stage::Pending =>
+                        {
+                            let back =
+                                navigate::selection_after_delete(descends, current.path());
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
                             // would pend again.
@@ -479,16 +494,14 @@ impl App {
                                 });
                             true
                         }
-                        Some(Selected::Tree(selection::Selection::PendingEdge {
-                            parent,
-                            replacing,
-                            ..
-                        })) => {
+                        Some(Selected::Tree(current))
+                            if current.stage() == selection::Stage::Label =>
+                        {
                             // A cancelled rename returns to its field;
                             // a cancelled new field to the record.
-                            let mut back = parent.clone();
-                            if let Some(old) = replacing {
-                                back.push(Step::Key(*old));
+                            let mut back = current.path().to_vec();
+                            if let Some(old) = current.replacing() {
+                                back.push(Step::Key(old));
                             }
                             self.model.selection =
                                 Some(Selected::Tree(selection::Selection::edge(
@@ -514,8 +527,10 @@ impl App {
             && projection::command(&event.modifiers)
             && matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "l")
             && match &self.model.selection {
-                Some(Selected::Tree(selection::Selection::Edge { path, .. })) => {
-                    let path = path.clone();
+                Some(Selected::Tree(current))
+                    if current.stage() == selection::Stage::Edge =>
+                {
+                    let path = current.path().to_vec();
                     match selection::pending_rename(&self.sources(), &path) {
                         Some(pending) => {
                             self.model.selection = Some(Selected::Tree(pending));
@@ -542,11 +557,13 @@ impl App {
             Key::Named(NamedKey::ArrowDown) if projection::command(&event.modifiers) => Some(false),
             _ => return false,
         };
-        let Some(Selected::Tree(selection::Selection::Edge { path, .. })) = &self.model.selection
-        else {
+        let Some(Selected::Tree(current)) = &self.model.selection else {
             return false;
         };
-        let path = path.clone();
+        if current.stage() != selection::Stage::Edge {
+            return false;
+        }
+        let path = current.path().to_vec();
         let sources = sources::Sources {
             doc: &self.model.doc,
             library: &self.stack.library,

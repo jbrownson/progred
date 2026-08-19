@@ -152,7 +152,7 @@ pub(crate) struct App {
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
     /// scrolling.
-    pub(crate) revealed: Option<(gid::Path, std::mem::Discriminant<selection::Selection>)>,
+    pub(crate) revealed: Option<(gid::Path, selection::Stage)>,
     pub(crate) dispatch: Option<Dispatch>,
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
@@ -199,7 +199,9 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
 /// selections restore as nothing, being disposable.
 pub(crate) fn edge_path(selection: &Option<Selected>) -> Option<gid::Path> {
     match selection {
-        Some(Selected::Tree(selection::Selection::Edge { path, .. })) => Some(path.clone()),
+        Some(Selected::Tree(current)) if current.stage() == selection::Stage::Edge => {
+            Some(current.path().to_vec())
+        }
         _ => None,
     }
 }

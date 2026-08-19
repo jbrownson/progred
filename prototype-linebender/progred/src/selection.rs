@@ -12,49 +12,47 @@ use progred_libraries::{name, text};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
-pub(crate) struct LineEditing {
+/// Tier-2 editing state beside the selection: the live line editor
+/// (caret, anchor, IME preedit, drag — and the text in motion), plus
+/// the write-through wiring only edge editors have.
+pub(crate) struct Editor {
     pub(crate) line: LineEditState,
-    pub(crate) update: fn(&Value, &str) -> Option<Value>,
+    update: Option<fn(&Value, &str) -> Option<Value>>,
+    /// Whether this editor's write-through run has recorded its undo
+    /// step: the run is the editor's lifetime, so the first write
+    /// records and the rest coalesce by staying silent.
+    recorded: bool,
 }
 
-/// What is selected: the value at a path, or a nonexistent field
-/// being authored. A selected editable atom carries its live editor state —
-/// projected text and f64 values are text editors focused by selection, and the
-/// graph is written through as they edit. A pending selection carries the
-/// completion query instead; the query resolves to the value that
-/// commits, and until then the graph is untouched — deselecting
-/// discards the pending entirely.
-pub enum Selection {
-    Edge {
-        path: Path,
-        edit: Option<LineEditing>,
-        /// Whether this editor's write-through run has recorded its
-        /// undo step: the run is the editor's lifetime, so the first
-        /// write records and the rest coalesce by staying silent.
-        recorded: bool,
-    },
+/// What is selected, stored as data plus tier-2 editing state: the
+/// payload is a GID value — stage, query, choice, replacing; what a
+/// projection at the selected path receives — while the live editor
+/// stays Rust beside it, its text writing through to the payload at
+/// the same per-event point the document takes its writes. A pending
+/// stage's query resolves to the value that commits; until then the
+/// graph is untouched, and deselecting discards the pending entirely.
+pub struct Selection {
+    /// Where: the value's path for edge and pending stages, the
+    /// parent record's for a label stage.
+    path: Path,
+    payload: Value,
+    editor: Option<Editor>,
+}
+
+/// The payload's stage, decoded for matching. Junk stages read as a
+/// plain edge — the malformed rule.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stage {
+    Edge,
     /// A nonexistent location's value being authored (the root and a
     /// bare cell's value included).
-    Pending {
-        path: Path,
-        query: LineEditState,
-        /// Which completion entry commits; clamped against the
-        /// frame's recomputed entries at use.
-        choice: usize,
-    },
-    /// A new field on the record at `parent` whose label is being
-    /// authored; resolving the label advances to the value stage (or
-    /// selects the existing field if the label is taken). With
-    /// `replacing`, an EXISTING field's label re-opened: commit
-    /// re-keys the field whole, its value carried — values write
-    /// through, addresses stage (a label is a key in a shared map,
-    /// so intermediate spellings must never land).
-    PendingEdge {
-        parent: Path,
-        query: LineEditState,
-        choice: usize,
-        replacing: Option<CellId>,
-    },
+    Pending,
+    /// A field label being authored on the record at the path — new,
+    /// or, with `replacing`, an existing one re-opened: commit re-keys
+    /// the field whole, its value carried — values write through,
+    /// addresses stage (a label is a key in a shared map, so
+    /// intermediate spellings must never land).
+    Label,
 }
 
 impl Selection {
@@ -85,42 +83,89 @@ impl Selection {
                     .and_then(|value| projection.line(value))
             })
             .flatten();
-        Selection::Edge {
+        Selection {
             path,
-            edit: edit.map(line_editing),
-            recorded: false,
+            payload: payload::edge(),
+            editor: edit.map(line_editing),
         }
     }
 
     /// A click on an editable line: the projection already named the
     /// line, so the selection does not look the value up again.
     pub fn from_line(sources: &Sources, path: Path, line: &crate::render::LineEdit) -> Self {
-        let edit = writable_at(sources, &path).then(|| line_editing(line.clone()));
-        Selection::Edge {
+        let editor = writable_at(sources, &path).then(|| line_editing(line.clone()));
+        Selection {
             path,
-            edit,
-            recorded: false,
+            payload: payload::edge(),
+            editor,
         }
     }
 
     pub fn path(&self) -> &[Step] {
-        match self {
-            Selection::Edge { path, .. } | Selection::Pending { path, .. } => path,
-            Selection::PendingEdge { parent, .. } => parent,
+        &self.path
+    }
+
+    /// The selection as data — what a projection at this path receives.
+    pub fn payload(&self) -> &Value {
+        &self.payload
+    }
+
+    pub fn stage(&self) -> Stage {
+        match payload::stage(&self.payload) {
+            Some(stage) if stage == payload::vocabulary::PENDING => Stage::Pending,
+            Some(stage) if stage == payload::vocabulary::LABEL => Stage::Label,
+            _ => Stage::Edge,
         }
+    }
+
+    /// Which completion entry commits; clamped against the frame's
+    /// recomputed entries at use.
+    pub fn choice(&self) -> usize {
+        payload::choice(&self.payload).unwrap_or(0)
+    }
+
+    pub fn set_choice(&mut self, choice: usize) {
+        self.payload = payload::with_choice(&self.payload, choice);
+    }
+
+    pub fn replacing(&self) -> Option<CellId> {
+        payload::replacing(&self.payload)
+    }
+
+    /// Whether the mounted editor's write-through run has recorded
+    /// its undo step — deleting through the value is one gesture.
+    pub(crate) fn recorded(&self) -> bool {
+        self.editor.as_ref().is_some_and(|editor| editor.recorded)
     }
 
     pub fn edit(&self) -> Option<&LineEditState> {
-        match self {
-            Selection::Edge { edit, .. } => edit.as_ref().map(|edit| &edit.line),
-            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => Some(query),
-        }
+        self.editor.as_ref().map(|editor| &editor.line)
     }
 
     pub fn edit_mut(&mut self) -> Option<&mut LineEditState> {
-        match self {
-            Selection::Edge { edit, .. } => edit.as_mut().map(|edit| &mut edit.line),
-            Selection::Pending { query, .. } | Selection::PendingEdge { query, .. } => Some(query),
+        self.editor.as_mut().map(|editor| &mut editor.line)
+    }
+
+    /// Reseed a pending's query — the test paths.
+    #[cfg(test)]
+    pub(crate) fn with_query(mut self, text: &str) -> Selection {
+        if let Some(editor) = &mut self.editor {
+            editor.line = line_edit(text);
+        }
+        self.payload = payload::with_query(&self.payload, text);
+        self
+    }
+
+    /// The live editor's text, written through to the payload — the
+    /// same discipline, and the same per-event point, as the document
+    /// write below.
+    fn sync_payload(&mut self) {
+        if self.stage() == Stage::Edge {
+            return;
+        }
+        let Some(editor) = &self.editor else { return };
+        if payload::query(&self.payload) != Some(editor.line.text()) {
+            self.payload = payload::with_query(&self.payload, editor.line.text());
         }
     }
 }
@@ -134,10 +179,11 @@ pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
 }
 
-fn line_editing(line: crate::render::LineEdit) -> LineEditing {
-    LineEditing {
+fn line_editing(line: crate::render::LineEdit) -> Editor {
+    Editor {
         line: line_edit(&line.text),
-        update: line.update,
+        update: Some(line.update),
+        recorded: false,
     }
 }
 
@@ -250,10 +296,29 @@ pub fn delete_edge(doc: &mut Document, library: &Cells, path: &[Step]) -> bool {
 /// A value-stage pending: the location named by `path` does not
 /// exist, and its value is being authored.
 pub fn pending_value(path: Path) -> Selection {
-    Selection::Pending {
+    pending_with_query(path, "")
+}
+
+/// An edge with no editor mounted — the test paths' plain selection.
+#[cfg(test)]
+pub(crate) fn bare_edge(path: Path) -> Selection {
+    Selection {
         path,
-        query: line_edit(""),
-        choice: 0,
+        payload: payload::edge(),
+        editor: None,
+    }
+}
+
+/// A value pending with a seeded query — the clipboard and test paths.
+pub(crate) fn pending_with_query(path: Path, seed: &str) -> Selection {
+    Selection {
+        path,
+        payload: payload::pending(seed, 0),
+        editor: Some(Editor {
+            line: line_edit(seed),
+            update: None,
+            recorded: false,
+        }),
     }
 }
 
@@ -277,11 +342,14 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
         Value::Blob(_) | Value::List(_) => return None,
     };
     writable_at(sources, &parent).then_some(())?;
-    Some(Selection::PendingEdge {
-        parent,
-        query: line_edit(""),
-        choice: 0,
-        replacing: None,
+    Some(Selection {
+        path: parent,
+        payload: payload::label("", 0, None),
+        editor: Some(Editor {
+            line: line_edit(""),
+            update: None,
+            recorded: false,
+        }),
     })
 }
 
@@ -300,11 +368,14 @@ pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
         .and_then(name::read)
         .map(str::to_owned)
         .unwrap_or_else(|| short_id(*key));
-    Some(Selection::PendingEdge {
-        parent: parent.to_vec(),
-        query: line_edit(&seed),
-        choice: 0,
-        replacing: Some(*key),
+    Some(Selection {
+        path: parent.to_vec(),
+        payload: payload::label(&seed, 0, Some(*key)),
+        editor: Some(Editor {
+            line: line_edit(&seed),
+            update: None,
+            recorded: false,
+        }),
     })
 }
 
@@ -634,18 +705,15 @@ fn collapse_default<World>(
 /// exactly on the first write of the mounted editor's life, so a
 /// typing run is one step and history stays a dumb stack.
 pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Selection) -> bool {
-    let Selection::Edge {
-        path,
-        edit,
-        recorded,
-    } = selection
-    else {
+    selection.sync_payload();
+    let Selection { path, editor, .. } = selection;
+    let Some(editor) = editor else {
         return false;
     };
-    let Some(edit) = edit else {
+    let Some(update) = editor.update else {
         return false;
     };
-    let text = edit.line.text().to_string();
+    let text = editor.line.text().to_string();
     let wrote = {
         let (current, next) = {
             let sources = Sources {
@@ -653,7 +721,7 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
                 library,
             };
             let current = sources.resolve(path);
-            let next = current.and_then(|current| (edit.update)(current, &text));
+            let next = current.and_then(|current| update(current, &text));
             (current.cloned(), next)
         };
         match next {
@@ -662,8 +730,8 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
         }
     };
     if wrote {
-        let first = !*recorded;
-        *recorded = true;
+        let first = !editor.recorded;
+        editor.recorded = true;
         return first;
     }
     false
@@ -672,8 +740,8 @@ pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Select
 /// Breaks the open edit run: the next write records a fresh undo
 /// step. Called after a save, so a run never straddles the mark.
 pub fn break_edit_run(selection: Option<&mut Selection>) {
-    if let Some(Selection::Edge { recorded, .. }) = selection {
-        *recorded = false;
+    if let Some(editor) = selection.and_then(|selection| selection.editor.as_mut()) {
+        editor.recorded = false;
     }
 }
 
@@ -743,6 +811,19 @@ pub mod payload {
 
     pub fn replacing(payload: &Value) -> Option<CellId> {
         payload.as_record()?.get(&vocabulary::REPLACING)?.as_cell()
+    }
+
+    pub fn with_query(payload: &Value, query: &str) -> Value {
+        with_field(payload, vocabulary::QUERY, text::value(query))
+    }
+
+    pub fn with_choice(payload: &Value, choice: usize) -> Value {
+        with_field(payload, vocabulary::CHOICE, f64_convention::value(choice as f64))
+    }
+
+    fn with_field(payload: &Value, key: CellId, value: Value) -> Value {
+        let fields = payload.as_record().cloned().unwrap_or_default();
+        Value::Record(fields.update(key, value))
     }
 
     #[cfg(test)]

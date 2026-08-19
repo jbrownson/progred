@@ -37,10 +37,15 @@ Display leaves become blessed standard functions over boxes + vector
 ink, with phase-bound machinery (caret hit-testing, the popup channel,
 IME) remaining editor-owned hooks.
 
-Landed so far: `Annotations` replaced the collapse-only override map
-(2026-08-19). Next: the selection slot as (Path, Value) with editor
-internals staying Rust, then the positional read-only view in
-`ProjectionInput`.
+Landed so far (2026-08-19): `Annotations` replaced the collapse-only
+override map; the selection is stored as (Path, payload Value, tier-2
+editor) — stage/query/choice/replacing live in the payload, decoded
+through `Stage` for matching, with the live editor's text writing
+through to the payload at the same per-event point the document takes
+its writes; and `ProjectionInput` carries the positional view
+(`selection`, `state`), so partials see editor state as data. Next
+candidates: remaining slots (scroll, view flags as presence), the
+vector-ink leaf, widgets as blessed functions.
 
 
 ## Cell-Only Labels And Library Text (2026-08-09)

@@ -1,5 +1,6 @@
 use super::*;
 use crate::annotations::Annotations;
+use crate::selection::payload as selection_payload;
 use crate::hover::hover_value;
 use gid::Position;
 use progred_libraries::{f64, name, text};
@@ -88,11 +89,7 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
 }
 
 fn stepped(ds: &[Descend], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
-    let selection = from.map(|path| Selection::Edge {
-        path,
-        edit: None,
-        recorded: false,
-    });
+    let selection = from.map(crate::selection::bare_edge);
     step_selection(ds, selection.as_ref(), LINE, &arrow(named))
 }
 
@@ -965,14 +962,9 @@ fn pending_rename_seeds_the_current_spelling() {
     let tags = vec![key("shape"), Step::Follow, key("tags")];
     let pending = pending_rename(&sources, &tags).unwrap();
     assert_eq!(pending.edit().unwrap().text(), "tags");
-    let Selection::PendingEdge {
-        parent, replacing, ..
-    } = &pending
-    else {
-        panic!("a rename pends the edge");
-    };
-    assert_eq!(parent.as_slice(), &tags[..2]);
-    assert_eq!(replacing.as_ref(), Some(&crate::test_values::label("tags")));
+    assert_eq!(pending.stage(), crate::selection::Stage::Label);
+    assert_eq!(pending.path(), &tags[..2]);
+    assert_eq!(pending.replacing(), Some(crate::test_values::label("tags")));
     // A cell label seeds by NAME — a spelling, not the identity;
     // another cell sharing the name may rank first, accepted.
     let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
@@ -1006,11 +998,7 @@ fn entry_hover_marks_follow_the_live_query() {
     let doc = sample_document();
     let lib = crate::stack::load::<()>().library;
     let sources = src(&doc, &lib);
-    let pending = |text: &str| Selection::Pending {
-        path: Vec::new(),
-        query: line_edit(text),
-        choice: 0,
-    };
+    let pending = |text: &str| crate::selection::pending_with_query(Vec::new(), text);
     // A quoted query leads with its typed atom, but marks mean
     // IDENTITY: an equal text value is a copy, not the same cell,
     // so string entries mark nothing.
@@ -1213,34 +1201,33 @@ fn selecting_an_empty_value_slot_pends() {
     };
     // A writable valueless cell's Follow slot is already
     // authoring: selecting it (the rendered placeholder) pends.
-    assert!(matches!(
-        make_selection(&doc, &lib, vec![Step::Follow]),
-        Selection::Pending { .. }
-    ));
+    assert_eq!(
+        make_selection(&doc, &lib, vec![Step::Follow]).stage(),
+        crate::selection::Stage::Pending
+    );
     // Valued, it selects normally.
     doc.cells.set_value(bare, crate::test_values::text("v"));
-    assert!(matches!(
-        make_selection(&doc, &lib, vec![Step::Follow]),
-        Selection::Edge { .. }
-    ));
+    assert_eq!(
+        make_selection(&doc, &lib, vec![Step::Follow]).stage(),
+        crate::selection::Stage::Edge
+    );
     // An EXTERNAL cell has an ordinary value, so its Follow slot
     // selects normally and remains unwritable.
     let lib_cell = new_cell_id();
     lib.set_value(lib_cell, name::record("convention", []));
     doc.root = Some(Value::from(lib_cell));
-    assert!(matches!(
-        make_selection(&doc, &lib, vec![Step::Follow]),
-        Selection::Edge { edit: None, .. }
-    ));
+    let external = make_selection(&doc, &lib, vec![Step::Follow]);
+    assert_eq!(external.stage(), crate::selection::Stage::Edge);
+    assert!(external.edit().is_none());
     // The empty document's root is the same rule.
     let empty = Document {
         root: None,
         cells: Cells::new(),
     };
-    assert!(matches!(
-        make_selection(&empty, &lib, vec![]),
-        Selection::Pending { .. }
-    ));
+    assert_eq!(
+        make_selection(&empty, &lib, vec![]).stage(),
+        crate::selection::Stage::Pending
+    );
 }
 
 #[test]
@@ -1286,4 +1273,100 @@ fn a_simple_name_is_an_ordinary_editable_field() {
             .is_some_and(|fields| fields.contains_key(&crate::test_values::label("x")))
     );
     assert!(make_selection(&doc, &lib, path).edit().is_none());
+}
+
+#[test]
+fn partials_receive_selection_and_annotations_positionally() {
+    // The first library code ever to SEE editor state — as data,
+    // positionally: the payload only at the selected path, the
+    // annotation record only at its own.
+    fn probe(
+        input: progred_display::ProjectionInput<'_, (), Hover>,
+    ) -> Option<progred_display::Layout<(), Hover>> {
+        input.value.as_blob()?;
+        Some(progred_display::dim(
+            match (input.selection.is_some(), input.state.is_some()) {
+                (true, _) => "selected here",
+                (false, true) => "annotated here",
+                (false, false) => "cold",
+            },
+        ))
+    }
+    let doc = Document {
+        root: Some(Value::from(vec![7u8])),
+        cells: Cells::new(),
+    };
+    let lib = Cells::new();
+    let projection: Projection<()> =
+        Projection::new([probe as progred_display::Partial<(), Hover>]);
+    let foreign = grap::ForeignFunctions::default();
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut width = |selection: Option<&Selection>, annotations: &Annotations| {
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        project::<(), crate::frame::Paint>(
+            ProjectDescription {
+                sources: Sources {
+                    doc: &doc,
+                    library: &lib,
+                },
+                selection,
+                graph_node: None,
+                annotations,
+                raw: false,
+                styles: &styles,
+                width: 500.0,
+                projection: Some(&projection),
+                foreign: &foreign,
+            },
+            &mut tcx,
+            Hooks::<()> {
+                select: Rc::new(|_, _, _| {}),
+                toggle: Rc::new(|_, _| {}),
+                rename: Rc::new(|_, _, _| {}),
+                edit: Rc::new(|_| None),
+                pick: Rc::new(|_, _| false),
+                insert: Rc::new(|_, _| {}),
+                delete: Rc::new(|_| false),
+            },
+        )
+        .extent
+        .width
+    };
+    let empty = Annotations::default();
+    let cold = width(None, &empty);
+    let selected = width(Some(&crate::selection::bare_edge(Vec::new())), &empty);
+    let mut marked = Annotations::default();
+    marked.set_field(&[], crate::annotations::FOLD, Some(Value::from(vec![1u8])));
+    let annotated = width(None, &marked);
+    assert_ne!(cold, selected);
+    assert_ne!(cold, annotated);
+    assert_ne!(selected, annotated);
+}
+
+#[test]
+fn the_pending_query_writes_through_to_the_payload() {
+    let mut doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    let lib = Cells::new();
+    let mut pending = crate::selection::pending_with_query(Vec::new(), "");
+    pending
+        .edit_mut()
+        .unwrap()
+        .handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string()));
+    // The payload is stale only WITHIN the dispatch...
+    assert_eq!(selection_payload::query(pending.payload()), Some(""));
+    // ...and the per-event write-through syncs it, the same point the
+    // document takes its writes.
+    write_through(&mut doc, &lib, &mut pending);
+    assert_eq!(selection_payload::query(pending.payload()), Some("ab"));
 }
