@@ -28,9 +28,14 @@ A pure widget library: rendering and behavior, below the choice of state
 management.
 
 - A widget is an ephemeral description constructed from current inputs.
-  Placement consumes that description with settled geometry and produces
-  drawing, a transient handler, and any other outputs the application asks
-  its placement context to collect.
+  Placement consumes that description with settled geometry and RETURNS a
+  value (2026-08-18, the Halay shape restored): the layout engine folds
+  leaf contributions with a caller-defined monoid whose combine names its
+  asymmetry (`base.over(above)` — placed later, painted on top, asked
+  first), so the engine knows nothing of what placement produces.
+  Progred's instance carries hover probes, the composed handler,
+  keyboard geometry, the popup, and DEFERRED ink; rendering runs the ink
+  when the caller chooses, so a silent dispatch mint never draws.
 - State a widget must keep across frames — cursor/selection, scroll
   offset, drag state, focus — is defined by Puri as types and passed in
   by the caller. Puri holds nothing between frames.
@@ -57,19 +62,21 @@ management.
   mutation happens in dispatch, preserving one-event-one-transition
   and avoiding read-after-write order dependence within a pass.
   Handlers remain shell custody, never puri's.
-- Pointer position is ordinary frame input. Settled placement folds the
-  topmost hit into an internal hover resolver; the current hover is derived
-  from that geometry, the pointer, pressed state, and the prior air-hysteresis
-  footprint. It is not a frame output or part of the application model.
-  Unpressed motion therefore mints a silent resolve pass and a visible pass
-  when hover changes. That silent pass also mints
-  the next dispatch; hover is presentation-only, so changing it does not earn
-  another silent projection. Geometry-changing redraws (resize, zoom, and the
-  animating graph) resolve silently before drawing. Earlier hover callbacks
-  mutated the application while declining an event, then synthetic motion replay tried
-  to repair stale hover after other mints. Explicit pass data restores the
-  invariant that decline leaves dispatch context unchanged and makes the
-  first presented frame agree with current geometry.
+- Pointer position is ordinary frame input, and hover is DERIVED per
+  pass, never stored: placement's probes are asked what the pointer
+  rests on (`puri::hover::Claim` — a claim names a target or occludes,
+  the claim analog of an opaque fill; no answer is air), air defers to a
+  `LazyPointer` ring whose trailing center is the little-gap hold as a
+  dead-zone filter on the INPUT rather than remembered footprints, and a
+  pressed gesture keeps the hover it began with. Hover-conditioned paint
+  reads the resolved answer from the render pass's ink context, so the
+  frame is built hover-blind and the first presented frame agrees with
+  its own hover by construction — no silent resolve pre-pass, no
+  invalidation bookkeeping, no fixed-point redraw. History: hover
+  callbacks that mutated on decline, then synthetic motion replay, then
+  a stored hover resolved by a doubled pass per redraw — each fell to
+  the same lesson, that hover is a pure question of settled geometry
+  asked between placement and ink.
 - A `Handler` holds one composed function per event kind (typed
   channels: pointer down, key — extended as widgets need). The monoid
   is function composition, mirroring how rendering works: `on_*` wraps
