@@ -1,7 +1,7 @@
 //! Progred's sample GID document used by tests and render fixtures.
 
 use gid::{Cells, Document, Value, new_cell_id};
-use progred_libraries::{f64, geometry, name, text};
+use progred_libraries::{absent, control, f64, geometry, layout, name, text};
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub mod sample_vocabulary {
@@ -190,6 +190,94 @@ pub fn sample_document() -> Document {
                 ),
             ],
         ),
+    );
+
+    // The dogfood: a projection defined as document data. `at`
+    // records render as "row × col" through the display data form —
+    // no Rust partial involved.
+    let at_display = new_cell_id();
+    let bind = |cell| Value::record([(control::vocabulary::BIND, Value::from(cell))]);
+    let spliced_text = |binder| {
+        Value::record([(
+            layout::vocabulary::TEXT,
+            Value::record([
+                (
+                    layout::vocabulary::CONTENT,
+                    Value::record([(control::vocabulary::UNQUOTE, Value::from(binder))]),
+                ),
+                (
+                    layout::vocabulary::FACE,
+                    Value::from(layout::vocabulary::NAME_FACE),
+                ),
+            ]),
+        )])
+    };
+    cells.set_value(
+        at_display,
+        name::record(
+            "at display",
+            [
+                (
+                    grap::vocabulary::PARAMS,
+                    Value::list([Value::from(layout::vocabulary::VALUE)]),
+                ),
+                (
+                    grap::vocabulary::BODY,
+                    grap::call(
+                        Value::from(control::vocabulary::CASE),
+                        [
+                            (
+                                control::vocabulary::VALUE,
+                                Value::from(layout::vocabulary::VALUE),
+                            ),
+                            (
+                                control::vocabulary::ALTERNATIVES,
+                                Value::list([Value::record([
+                                    (
+                                        control::vocabulary::PATTERN,
+                                        Value::record([
+                                            (
+                                                sample_vocabulary::ROW,
+                                                bind(sample_vocabulary::ROW),
+                                            ),
+                                            (
+                                                sample_vocabulary::COL,
+                                                bind(sample_vocabulary::COL),
+                                            ),
+                                        ]),
+                                    ),
+                                    (
+                                        grap::vocabulary::EXPRESSION,
+                                        grap::call(
+                                            Value::from(control::vocabulary::QUOTE),
+                                            [(
+                                                grap::vocabulary::EXPRESSION,
+                                                layout::selectable(layout::row(
+                                                    4.0,
+                                                    [
+                                                        spliced_text(sample_vocabulary::ROW),
+                                                        layout::text_leaf(
+                                                            "×",
+                                                            layout::vocabulary::DIM_FACE,
+                                                        ),
+                                                        spliced_text(sample_vocabulary::COL),
+                                                    ],
+                                                )),
+                                            )],
+                                        ),
+                                    ),
+                                ])]),
+                            ),
+                            (control::vocabulary::DEFAULT, absent::value()),
+                        ],
+                    ),
+                ),
+            ],
+        ),
+    );
+    cells.set_value(
+        layout::vocabulary::PROJECTIONS,
+        Value::list([Value::from(at_display)]),
     );
 
     Document {
