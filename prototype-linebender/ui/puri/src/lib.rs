@@ -10,6 +10,7 @@ pub mod draw;
 pub mod edit;
 pub mod geometry;
 pub mod handler;
+pub mod hover;
 pub mod interact;
 pub mod text;
 

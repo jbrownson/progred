@@ -551,40 +551,45 @@ impl LineEdit {
         placement: Placement,
         with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
     ) {
-        let Self {
-            metrics,
-            scale,
-            ghost,
-            layout,
-            layout_baseline,
-            editor_baseline,
-            selection,
-            cursor,
-            selection_brush,
-            cursor_brush,
-            focused,
-            presentation,
-        } = self;
-        let at = Point::new(placement.rect.x0, placement.rect.y0 + metrics.ascent);
-        let transform = Affine::translate((at.x, at.y - layout_baseline));
-        for rect in &selection {
-            p.fill(*rect, selection_brush.clone(), transform);
+        self.draw(p, placement);
+        self.install(p, placement, with);
+    }
+
+    /// The paint half: selection, ghost, content, caret.
+    pub fn draw(&self, canvas: &mut impl Canvas, placement: Placement) {
+        let at = Point::new(placement.rect.x0, placement.rect.y0 + self.metrics.ascent);
+        let transform = Affine::translate((at.x, at.y - self.layout_baseline));
+        for rect in &self.selection {
+            canvas.fill(*rect, self.selection_brush.clone(), transform);
         }
-        if let Some(ghost) = &ghost {
-            draw_layout(p, ghost, transform);
+        if let Some(ghost) = &self.ghost {
+            draw_layout(canvas, ghost, transform);
         }
-        if let Some(layout) = &layout {
-            draw_layout(p, layout, transform);
+        if let Some(layout) = &self.layout {
+            draw_layout(canvas, layout, transform);
         }
-        if let Some(cursor) = cursor {
-            p.fill(
+        if let Some(cursor) = self.cursor {
+            canvas.fill(
                 cursor,
-                cursor_brush,
-                Affine::translate((at.x, at.y - editor_baseline)),
+                self.cursor_brush.clone(),
+                Affine::translate((at.x, at.y - self.editor_baseline)),
             );
         }
-        if focused {
-            let text_origin = Point::new(at.x, at.y - editor_baseline);
+    }
+
+    /// The dispatch half: while focused, register key, drag, release,
+    /// and IME against the settled placement.
+    pub fn install<C: 'static, P: HasHandler<C>>(
+        &self,
+        p: &mut P,
+        placement: Placement,
+        with: impl for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>> + Clone + 'static,
+    ) {
+        let scale = self.scale;
+        let presentation = self.presentation.clone();
+        let at = Point::new(placement.rect.x0, placement.rect.y0 + self.metrics.ascent);
+        if self.focused {
+            let text_origin = Point::new(at.x, at.y - self.editor_baseline);
             let with_key = with.clone();
             let key_presentation = presentation.clone();
             p.handler().on_key(move |ctx, event| {
