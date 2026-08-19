@@ -36,9 +36,12 @@ IME preedit, and the drag all live in the payload — the payload is
 CANONICAL at event boundaries, and the live `LineEditState` is its
 decoded working copy between them (a Rust value must exist for
 dispatch to borrow). Junk decodes to the nearest sane state (offsets
-clamp to char boundaries). The two things that stay Rust are exactly
-the unencodable and the bookkeeping: the write-through `update`
-function (CODE — until it is a grap function reference) and the
+clamp to char boundaries). The two things that stay Rust are the
+not-yet-encoded and the bookkeeping: the write-through `update`
+function — code is not a ceiling, it is grap's job; the data form is
+a grap function reference evaluated with the stack's foreign
+functions, declining via the absent convention, and any missing
+capability (float parsing, record overlay) is one FFI away — and the
 undo-run `recorded` bit. The hover ring and `pressed` remain input
 state. The layered widget story follows: once widget state inputs are
 data, today's Display leaves become blessed standard functions over
