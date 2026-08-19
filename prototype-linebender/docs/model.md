@@ -30,12 +30,20 @@ two refinements that bound the ambition:
   cover states, and a bare bool at rest says nothing. A boolean gets
   admitted when a case arrives that those genuinely serve worse.
 
-Gesture state stays Rust: IME preedit, drag anchors, the hover ring —
-state no projection could meaningfully render. The layered widget
-story follows later: once widget state inputs are data, today's
-Display leaves become blessed standard functions over boxes + vector
-ink, with phase-bound machinery (caret hit-testing, the popup channel,
-IME) remaining editor-owned hooks.
+The editor state itself encodes (2026-08-19, Jake pressing on an
+earlier "tier 2 stays Rust" fence): caret and selection offsets, the
+IME preedit, and the drag all live in the payload — the payload is
+CANONICAL at event boundaries, and the live `LineEditState` is its
+decoded working copy between them (a Rust value must exist for
+dispatch to borrow). Junk decodes to the nearest sane state (offsets
+clamp to char boundaries). The two things that stay Rust are exactly
+the unencodable and the bookkeeping: the write-through `update`
+function (CODE — until it is a grap function reference) and the
+undo-run `recorded` bit. The hover ring and `pressed` remain input
+state. The layered widget story follows: once widget state inputs are
+data, today's Display leaves become blessed standard functions over
+boxes + vector ink, with phase-bound machinery (caret hit-testing,
+the popup channel, IME delivery) remaining editor-owned hooks.
 
 Landed so far (2026-08-19): `Annotations` replaced the collapse-only
 override map; the selection is stored as (Path, payload Value, tier-2

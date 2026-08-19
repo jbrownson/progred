@@ -152,20 +152,19 @@ impl Selection {
         if let Some(editor) = &mut self.editor {
             editor.line = line_edit(text);
         }
-        self.payload = payload::with_query(&self.payload, text);
+        self.sync_payload();
         self
     }
 
-    /// The live editor's text, written through to the payload — the
+    /// The live editor, written through to the payload whole — the
     /// same discipline, and the same per-event point, as the document
-    /// write below.
+    /// write below. The payload is canonical at event boundaries; the
+    /// working copy is its decode between them.
     fn sync_payload(&mut self) {
-        if self.stage() == Stage::Edge {
-            return;
-        }
         let Some(editor) = &self.editor else { return };
-        if payload::query(&self.payload) != Some(editor.line.text()) {
-            self.payload = payload::with_query(&self.payload, editor.line.text());
+        let next = payload::with_editor(&self.payload, &editor.line, self.stage() != Stage::Edge);
+        if next != self.payload {
+            self.payload = next;
         }
     }
 }
@@ -311,11 +310,19 @@ pub(crate) fn bare_edge(path: Path) -> Selection {
 
 /// A value pending with a seeded query — the clipboard and test paths.
 pub(crate) fn pending_with_query(path: Path, seed: &str) -> Selection {
+    query_selection(path, payload::pending(seed, 0))
+}
+
+/// A pending selection from its payload: the working editor is the
+/// payload's decode, so the value is the state and the caret defaults
+/// to the end of the seed.
+fn query_selection(path: Path, payload: Value) -> Selection {
+    let line = payload::editor_line(&payload, payload::query(&payload).unwrap_or(""));
     Selection {
         path,
-        payload: payload::pending(seed, 0),
+        payload,
         editor: Some(Editor {
-            line: line_edit(seed),
+            line,
             update: None,
             recorded: false,
         }),
@@ -342,15 +349,7 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
         Value::Blob(_) | Value::List(_) => return None,
     };
     writable_at(sources, &parent).then_some(())?;
-    Some(Selection {
-        path: parent,
-        payload: payload::label("", 0, None),
-        editor: Some(Editor {
-            line: line_edit(""),
-            update: None,
-            recorded: false,
-        }),
-    })
+    Some(query_selection(parent, payload::label("", 0, None)))
 }
 
 /// An existing field's label re-opened as a pending edge, the query
@@ -368,15 +367,10 @@ pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
         .and_then(name::read)
         .map(str::to_owned)
         .unwrap_or_else(|| short_id(*key));
-    Some(Selection {
-        path: parent.to_vec(),
-        payload: payload::label(&seed, 0, Some(*key)),
-        editor: Some(Editor {
-            line: line_edit(&seed),
-            update: None,
-            recorded: false,
-        }),
-    })
+    Some(query_selection(
+        parent.to_vec(),
+        payload::label(&seed, 0, Some(*key)),
+    ))
 }
 
 /// A bare cell's value being authored: the within-gesture's meaning
@@ -754,6 +748,8 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 pub mod payload {
     use gid::{CellId, Value};
     use progred_libraries::{f64 as f64_convention, text};
+    use puri::edit::LineEditState;
+    use vello::kurbo::Point;
 
     pub mod vocabulary {
         use gid::CellId;
@@ -770,6 +766,20 @@ pub mod payload {
         /// A label pending on the record at the path: a new field's
         /// label, or with REPLACING, an existing one re-opened.
         pub const LABEL: CellId = CellId::from_u128(0x7be29f4680d1c5a3f2496e07b85d13c2);
+
+        /// Selection byte offsets; FOCUS may precede ANCHOR.
+        pub const ANCHOR: CellId = CellId::from_u128(0x5d38a1c7f24e9b60d15c7a02e83f46b9);
+        pub const FOCUS: CellId = CellId::from_u128(0xa906e35d21c84f7bc3d05e918b62fa47);
+        /// The in-flight IME composition: a text value with optional
+        /// START/END cursor fields overlaid.
+        pub const PREEDIT: CellId = CellId::from_u128(0x1c84f0b6d97325ea40d6b18c53e29f74);
+        pub const START: CellId = CellId::from_u128(0xf27b950e13a8d64c26f9e30a71d45b8c);
+        pub const END: CellId = CellId::from_u128(0x60d3e94a852f17bd39c2a45f08e61d73);
+        /// The in-progress drag-selection: window origin and click count.
+        pub const DRAG: CellId = CellId::from_u128(0xb49c26e1075df3a8e5017d29c46b83f5);
+        pub const X: CellId = CellId::from_u128(0x39e50d7ac1846f2b7a2384b06d95c1ef);
+        pub const Y: CellId = CellId::from_u128(0x8e17b3f4692a05dc90e5f6c2374a18db);
+        pub const COUNT: CellId = CellId::from_u128(0x4dab72e9508c31f6cb490271f8ea56d0);
     }
 
     pub fn edge() -> Value {
@@ -813,10 +823,6 @@ pub mod payload {
         payload.as_record()?.get(&vocabulary::REPLACING)?.as_cell()
     }
 
-    pub fn with_query(payload: &Value, query: &str) -> Value {
-        with_field(payload, vocabulary::QUERY, text::value(query))
-    }
-
     pub fn with_choice(payload: &Value, choice: usize) -> Value {
         with_field(payload, vocabulary::CHOICE, f64_convention::value(choice as f64))
     }
@@ -824,6 +830,87 @@ pub mod payload {
     fn with_field(payload: &Value, key: CellId, value: Value) -> Value {
         let fields = payload.as_record().cloned().unwrap_or_default();
         Value::Record(fields.update(key, value))
+    }
+
+    /// Encode the whole live editor into the payload: the query text
+    /// (pending stages own their text; an edge's text lives in the
+    /// document), the selection offsets, and any in-flight IME
+    /// composition or drag.
+    pub fn with_editor(payload: &Value, line: &LineEditState, own_text: bool) -> Value {
+        let mut fields = payload.as_record().cloned().unwrap_or_default();
+        if own_text {
+            fields.insert(vocabulary::QUERY, text::value(line.text()));
+        }
+        let (anchor, focus) = line.selection_offsets();
+        fields.insert(vocabulary::ANCHOR, f64_convention::value(anchor as f64));
+        fields.insert(vocabulary::FOCUS, f64_convention::value(focus as f64));
+        match line.preedit_parts() {
+            Some((preedit, cursor)) => {
+                let mut composed = text::value(preedit).as_record().cloned().unwrap_or_default();
+                if let Some((start, end)) = cursor {
+                    composed.insert(vocabulary::START, f64_convention::value(start as f64));
+                    composed.insert(vocabulary::END, f64_convention::value(end as f64));
+                }
+                fields.insert(vocabulary::PREEDIT, Value::Record(composed));
+            }
+            None => {
+                fields.remove(&vocabulary::PREEDIT);
+            }
+        }
+        match line.drag_parts() {
+            Some((origin, count)) => {
+                fields.insert(
+                    vocabulary::DRAG,
+                    Value::record([
+                        (vocabulary::X, f64_convention::value(origin.x)),
+                        (vocabulary::Y, f64_convention::value(origin.y)),
+                        (vocabulary::COUNT, f64_convention::value(f64::from(count))),
+                    ]),
+                );
+            }
+            None => {
+                fields.remove(&vocabulary::DRAG);
+            }
+        }
+        Value::Record(fields)
+    }
+
+    /// Decode the live editor from the payload over `text` — the
+    /// query for pending stages, the document's line for an edge.
+    /// Absent offsets land the caret at the end (the mount default);
+    /// junk clamps, per [`LineEditState::from_parts`].
+    pub fn editor_line(payload: &Value, text: &str) -> LineEditState {
+        let field_index = |key: CellId| {
+            let index = f64_convention::read(payload.as_record()?.get(&key)?)?;
+            (index >= 0.0 && index.fract() == 0.0).then_some(index as usize)
+        };
+        let anchor = field_index(vocabulary::ANCHOR).unwrap_or(text.len());
+        let focus = field_index(vocabulary::FOCUS).unwrap_or(text.len());
+        let preedit = payload
+            .as_record()
+            .and_then(|fields| fields.get(&vocabulary::PREEDIT))
+            .and_then(|composed| {
+                let cursor = composed.as_record().and_then(|fields| {
+                    let index = |key: CellId| {
+                        let index = f64_convention::read(fields.get(&key)?)?;
+                        (index >= 0.0 && index.fract() == 0.0).then_some(index as usize)
+                    };
+                    Some((index(vocabulary::START)?, index(vocabulary::END)?))
+                });
+                Some((text::read(composed)?.to_string(), cursor))
+            });
+        let drag = payload
+            .as_record()
+            .and_then(|fields| fields.get(&vocabulary::DRAG))
+            .and_then(Value::as_record)
+            .and_then(|drag| {
+                let coordinate = |key: CellId| f64_convention::read(drag.get(&key)?);
+                Some((
+                    Point::new(coordinate(vocabulary::X)?, coordinate(vocabulary::Y)?),
+                    coordinate(vocabulary::COUNT)? as u8,
+                ))
+            });
+        LineEditState::from_parts(text, anchor, focus, preedit, drag)
     }
 
     #[cfg(test)]
@@ -847,6 +934,32 @@ pub mod payload {
             assert_eq!(stage(&rename), Some(vocabulary::LABEL));
             assert_eq!(replacing(&rename), Some(key));
             assert_eq!(label("nm", 0, None).as_record().unwrap().len(), 3);
+        }
+
+        #[test]
+        fn the_whole_editor_round_trips_through_the_payload() {
+            let mut line = LineEditState::from_parts(
+                "hëllo",
+                2,
+                4,
+                Some(("ab".to_string(), Some((0, 2)))),
+                Some((Point::new(4.5, 6.0), 2)),
+            );
+            // 2 is inside ë (bytes 1..3): clamps back to its boundary.
+            assert_eq!(line.selection_offsets(), (1, 4));
+            let encoded = with_editor(&pending("", 0), &line, true);
+            let decoded = editor_line(&encoded, query(&encoded).unwrap_or(""));
+            assert_eq!(decoded.text(), "hëllo");
+            assert_eq!(decoded.selection_offsets(), line.selection_offsets());
+            assert_eq!(decoded.preedit_parts(), line.preedit_parts());
+            assert_eq!(decoded.drag_parts(), line.drag_parts());
+
+            // Ending the composition and drag removes their fields.
+            line = LineEditState::from_parts("hëllo", 1, 4, None, None);
+            let settled = with_editor(&encoded, &line, true);
+            let fields = settled.as_record().unwrap();
+            assert!(!fields.contains_key(&vocabulary::PREEDIT));
+            assert!(!fields.contains_key(&vocabulary::DRAG));
         }
 
         #[test]

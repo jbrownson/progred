@@ -184,6 +184,45 @@ impl LineEditState {
         &self.text
     }
 
+    /// The selection byte offsets — `focus` may precede `anchor` for
+    /// a backward selection. Serialization surface, with
+    /// [`LineEditState::from_parts`] as its inverse.
+    pub fn selection_offsets(&self) -> (usize, usize) {
+        (self.anchor, self.focus)
+    }
+
+    /// The in-flight IME composition: its text and cursor range.
+    pub fn preedit_parts(&self) -> Option<(&str, Option<(usize, usize)>)> {
+        self.preedit
+            .as_ref()
+            .map(|preedit| (preedit.text.as_str(), preedit.cursor))
+    }
+
+    /// The in-progress drag-selection: its origin and click count.
+    pub fn drag_parts(&self) -> Option<(Point, u8)> {
+        self.drag.map(|drag| (drag.origin, drag.count))
+    }
+
+    /// Rebuild editing state from serialized parts. Junk decodes to
+    /// the nearest sane state: offsets clamp to char boundaries at or
+    /// before themselves.
+    pub fn from_parts(
+        text: &str,
+        anchor: usize,
+        focus: usize,
+        preedit: Option<(String, Option<(usize, usize)>)>,
+        drag: Option<(Point, u8)>,
+    ) -> Self {
+        let mut state = Self::new(text);
+        state.cursor_to(anchor);
+        let anchor = state.anchor;
+        state.cursor_to(focus);
+        state.anchor = anchor;
+        state.preedit = preedit.map(|(text, cursor)| Preedit { text, cursor });
+        state.drag = drag.map(|(origin, count)| Drag { origin, count });
+        state
+    }
+
     /// Replace the text wholesale — the caller's re-mint for external
     /// writes — keeping the selection clamped to char boundaries.
     pub fn set_text(&mut self, text: &str) {
