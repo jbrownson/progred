@@ -48,6 +48,20 @@ data, today's Display leaves become blessed standard functions over
 boxes + vector ink, with phase-bound machinery (caret hit-testing,
 the popup channel, IME delivery) remaining editor-owned hooks.
 
+THE POINT of all of it (Jake, 2026-08-19): libraries for custom types
+must be expressible from WITHIN the editor — no Rust edits to add a
+projection. Rust is the substrate: FFI to it while bootstrapping, for
+core machinery, and where efficiency demands (the parked wasm
+experiment is the efficiency lane); the editor itself is not written
+in grap, but projections get great flexibility. Remaining bricks, in
+dependency order: (1) `update` as a grap function reference — the
+last fn pointer in the selection; (2) a Value encoding of the display
+Layout, with interaction encoded as attach-points for the PROVIDED
+intents (select, pick, hover) — arbitrary world-callbacks stay a
+Rust-partial privilege, deliberately; (3) document-loaded partials in
+`stack::load`, grap functions composing beside the Rust ones; (4) FFI
+curation as standing practice, one deliberate capability at a time.
+
 Landed so far (2026-08-19): `Annotations` replaced the collapse-only
 override map; the selection is stored as (Path, payload Value, tier-2
 editor) — stage/query/choice/replacing live in the payload, decoded
