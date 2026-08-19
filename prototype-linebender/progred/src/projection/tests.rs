@@ -1451,3 +1451,174 @@ fn a_projection_defined_as_data_realizes() {
 fn measured_rect(width: f64) -> vello::kurbo::Rect {
     vello::kurbo::Rect::new(0.0, 0.0, width, 100.0)
 }
+
+fn projected_extent(doc: &Document) -> Extent {
+    let stack = crate::stack::load::<()>();
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let empty = Annotations::default();
+    project::<(), crate::frame::Paint>(
+        ProjectDescription {
+            sources: Sources {
+                doc,
+                library: &stack.library,
+            },
+            selection: None,
+            graph_node: None,
+            annotations: &empty,
+            raw: false,
+            styles: &styles,
+            width: 500.0,
+            projection: Some(&stack.projection),
+            foreign: &stack.foreign,
+        },
+        &mut tcx,
+        Hooks::<()> {
+            select: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            rename: Rc::new(|_, _, _| {}),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+        },
+    )
+    .extent
+}
+
+#[test]
+fn a_document_defined_partial_projects_its_convention() {
+    use progred_libraries::{control, layout as data};
+
+    let row_field = new_cell_id();
+    let col_field = new_cell_id();
+    let partial = new_cell_id();
+    let bind = |cell: CellId| Value::record([(control::vocabulary::BIND, Value::from(cell))]);
+    let unquote = |cell: CellId| Value::record([(control::vocabulary::UNQUOTE, Value::from(cell))]);
+    let spliced_text = |binder: CellId| {
+        Value::record([(
+            data::vocabulary::TEXT,
+            Value::record([
+                (data::vocabulary::CONTENT, unquote(binder)),
+                (
+                    data::vocabulary::FACE,
+                    Value::from(data::vocabulary::NAME_FACE),
+                ),
+            ]),
+        )])
+    };
+    let mut cells = Cells::new();
+    cells.set_value(
+        partial,
+        grap::lambda(
+            [data::vocabulary::VALUE],
+            grap::call(
+                Value::from(control::vocabulary::CASE),
+                [
+                    (control::vocabulary::VALUE, Value::from(data::vocabulary::VALUE)),
+                    (
+                        control::vocabulary::ALTERNATIVES,
+                        Value::list([Value::record([
+                            (
+                                control::vocabulary::PATTERN,
+                                Value::record([
+                                    (row_field, bind(row_field)),
+                                    (col_field, bind(col_field)),
+                                ]),
+                            ),
+                            (
+                                grap::vocabulary::EXPRESSION,
+                                grap::call(
+                                    Value::from(control::vocabulary::QUOTE),
+                                    [(
+                                        grap::vocabulary::EXPRESSION,
+                                        data::selectable(data::row(
+                                            4.0,
+                                            [spliced_text(row_field), spliced_text(col_field)],
+                                        )),
+                                    )],
+                                ),
+                            ),
+                        ])]),
+                    ),
+                    (control::vocabulary::DEFAULT, absent::value()),
+                ],
+            ),
+        ),
+    );
+    cells.set_value(
+        data::vocabulary::PROJECTIONS,
+        Value::list([Value::from(partial)]),
+    );
+
+    let at = |row: &str, col: &str| {
+        Value::record([(row_field, text::value(row)), (col_field, text::value(col))])
+    };
+    let custom = projected_extent(&Document {
+        root: Some(at("top", "left")),
+        cells: cells.clone(),
+    });
+    let fallback = projected_extent(&Document {
+        root: Some(at("top", "left")),
+        cells: Cells::new(),
+    });
+    // Two spliced words beat the structural record rendering.
+    assert!(custom.width < fallback.width);
+
+    // The splice is genuine data flow: longer field text widens it.
+    let wider = projected_extent(&Document {
+        root: Some(at("topmost-corner", "left")),
+        cells: cells.clone(),
+    });
+    assert!(wider.width > custom.width);
+
+    // Values outside the convention fall through to the identical
+    // structural rendering.
+    let unmatched = Value::record([(new_cell_id(), text::value("other"))]);
+    let with_registry = projected_extent(&Document {
+        root: Some(unmatched.clone()),
+        cells,
+    });
+    let without = projected_extent(&Document {
+        root: Some(unmatched),
+        cells: Cells::new(),
+    });
+    assert_eq!(with_registry.width, without.width);
+    assert_eq!(with_registry.height(), without.height());
+}
+
+#[test]
+fn broken_document_partials_fall_through_whole() {
+    use progred_libraries::layout as data;
+
+    // One partial evaluates to junk the decoder refuses; one is a
+    // dangling reference that diagnoses. Neither disturbs the
+    // structural fallback.
+    let mut cells = Cells::new();
+    cells.set_value(
+        data::vocabulary::PROJECTIONS,
+        Value::list([
+            grap::lambda([], Value::record([(new_cell_id(), text::value("junk"))])),
+            Value::from(new_cell_id()),
+        ]),
+    );
+    let root = Value::record([(new_cell_id(), text::value("plain"))]);
+    let with_registry = projected_extent(&Document {
+        root: Some(root.clone()),
+        cells,
+    });
+    let without = projected_extent(&Document {
+        root: Some(root),
+        cells: Cells::new(),
+    });
+    assert_eq!(with_registry.width, without.width);
+    assert_eq!(with_registry.height(), without.height());
+}

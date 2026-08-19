@@ -76,6 +76,18 @@ pub mod vocabulary {
     /// A walk step following the value's link — the one step that is
     /// not a field key.
     pub const FOLLOW: CellId = CellId::from_u128(0xdc27a94e6b105f83b0562f8ea19d34c7);
+
+    // The document's partial registry and the partial call contract.
+    /// The document sets this cell's value to a list of Grap
+    /// callables; the editor tries each per value, before its own
+    /// partials, and any decline falls through whole.
+    pub const PROJECTIONS: CellId = CellId::from_u128(0xcdaff65dbbd2e37b0a7deafe862d8695);
+    /// Argument: the selection payload, absent-classified when this
+    /// value's path is not the selected one.
+    pub const SELECTION: CellId = CellId::from_u128(0x0fd3adb8df8a5b05905df9a88db337fd);
+    /// Argument: this path's annotation record, absent-classified
+    /// when there is none. The projected value arrives as [`VALUE`].
+    pub const STATE: CellId = CellId::from_u128(0x69760bdc4814129a9d31510f0f1c3123);
 }
 
 fn node(key: CellId, content: Value) -> Value {
@@ -414,6 +426,9 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::SQUARE, "square"),
         (vocabulary::CURLY, "curly"),
         (vocabulary::FOLLOW, "follow"),
+        (vocabulary::PROJECTIONS, "projections"),
+        (vocabulary::SELECTION, "selection"),
+        (vocabulary::STATE, "state"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }

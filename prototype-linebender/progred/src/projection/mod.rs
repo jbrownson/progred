@@ -27,7 +27,7 @@ use crate::selection::{
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
-use progred_libraries::{name, text};
+use progred_libraries::{absent, layout as layout_data, name, text};
 mod location;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
@@ -1378,22 +1378,20 @@ fn project_present_value<
     avail: f64,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    let projected = projection
-        .and_then(|projection| {
-            // Editor state arrives positionally: the payload only at
-            // the selected path, the annotations only at this one.
-            let selection = cx
-                .selection
-                .filter(|current| current.path() == path)
-                .map(Selection::payload);
-            projection.apply(
-                &ProjectEnv { cx },
-                value,
-                selection,
-                cx.annotations.at(path),
-                select_handler(path.to_vec(), hooks),
-                Hover::Value(path.to_vec()),
-            )
+    // Editor state arrives positionally: the payload only at
+    // the selected path, the annotations only at this one.
+    let selection = cx
+        .selection
+        .filter(|current| current.path() == path)
+        .map(Selection::payload);
+    let state = cx.annotations.at(path);
+    let select = select_handler(path.to_vec(), hooks);
+    let hover = Hover::Value(path.to_vec());
+    let projected = document_partial_layout(cx, value, selection, state, &select, &hover)
+        .or_else(|| {
+            projection.and_then(|projection| {
+                projection.apply(&ProjectEnv { cx }, value, selection, state, select, hover)
+            })
         })
         .map(|layout| {
             realize(
@@ -1422,6 +1420,55 @@ fn project_present_value<
     let placed = descend_landmark(cx, path.to_vec(), hooks, inner);
     let grounded = ground(cx, path, value, placed);
     pick_target(path.to_vec(), value.clone(), hooks, grounded)
+}
+
+/// The document's own partials, tried before the editor's: the
+/// registry is a document fact — a list of Grap callables on the
+/// [`PROJECTIONS`](layout_data::vocabulary::PROJECTIONS) cell — each
+/// applied to the value and its positional editor state, the result
+/// decoded from the display data form. Any diagnostic or undecodable
+/// result declines, falling through whole.
+fn document_partial_layout<C>(
+    cx: &Cx,
+    value: &Value,
+    selection: Option<&Value>,
+    state: Option<&Value>,
+    select: &progred_display::ClickHandler<C>,
+    hover: &Hover,
+) -> Option<progred_display::Layout<C, Hover>> {
+    let registry = cx
+        .sources
+        .doc
+        .cells
+        .value(layout_data::vocabulary::PROJECTIONS)?
+        .as_list()?;
+    registry.values().find_map(|partial| {
+        let fuel = if cx.source.transient() {
+            cx.fuel.get()
+        } else {
+            grap::DEFAULT_FUEL
+        };
+        let evaluation = grap::apply(
+            partial,
+            [
+                (layout_data::vocabulary::VALUE, value.clone()),
+                (
+                    layout_data::vocabulary::SELECTION,
+                    selection.cloned().unwrap_or_else(absent::value),
+                ),
+                (
+                    layout_data::vocabulary::STATE,
+                    state.cloned().unwrap_or_else(absent::value),
+                ),
+            ],
+            |cell| cx.sources.value(cell).cloned(),
+            cx.foreign,
+            fuel,
+        );
+        cx.fuel.set(evaluation.remaining_fuel);
+        evaluation.diagnostics.is_empty().then_some(())?;
+        layout_data::decode(&evaluation.result, select, hover)
+    })
 }
 
 /// Every projected value's command-click backstop: pick the value
