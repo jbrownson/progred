@@ -261,39 +261,41 @@ pub fn on_primary_pointer_down<C: 'static, Cv: 'static>(
     })
 }
 
-/// Place `child` shifted up-left by `offset` inside a clipped
-/// viewport. The caller owns and clamps the offset. Pointer-down and
-/// scroll gate on the viewport (starts stay inside it); motion,
-/// release, and keys pass unbounded so active gestures and the
-/// focused editor keep working outside.
-pub fn place_scrolled<C: 'static, Cv: Canvas + 'static>(
+/// A scroll viewport over `child`: placed at the viewport rect, it
+/// shifts the child up-left by `offset` inside a clip. The caller
+/// owns and clamps the offset. Pointer-down and scroll gate on the
+/// viewport (starts stay inside it); motion, release, and keys pass
+/// unbounded so active gestures and the focused editor keep working
+/// outside.
+pub fn scrolled<C: 'static, Cv: Canvas + 'static>(
     child: Measured<Placed<C, Cv>>,
-    placement: Placement,
     offset: Vec2,
     on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> bool + 'static,
-) -> Placed<C, Cv> {
-    let rect = placement.rect;
-    let mut base = Placed::empty();
-    if !placement.clipped_out() {
-        base.handler_mut().on_scroll(move |state, event| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && on_scroll(state, event)
-        });
-    }
-    let child_rect = child
-        .extent
-        .rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
-    let child_placement =
-        measured::child_placement(measured::clipped_placement(placement, rect), child_rect);
-    let mut placed = measured::place(child, child_placement);
-    let renders = std::mem::take(&mut placed.renders);
-    placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
-        cv.clip(rect, Affine::IDENTITY, |cv| {
-            Placed::<C, Cv>::render(renders, cv, ink)
-        })
-    }));
-    placed.handler = placed.handler.map(|handler| gate_starts(handler, placement));
-    base.over(placed)
+) -> Measured<Placed<C, Cv>> {
+    measured::around(child, move |placement, inner| {
+        let rect = placement.rect;
+        let mut base = Placed::empty();
+        if !placement.clipped_out() {
+            base.handler_mut().on_scroll(move |state, event| {
+                placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                    && on_scroll(state, event)
+            });
+        }
+        let child_rect = inner
+            .extent()
+            .rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
+        let child_placement =
+            measured::child_placement(measured::clipped_placement(placement, rect), child_rect);
+        let mut placed = inner.place_at(child_placement);
+        let renders = std::mem::take(&mut placed.renders);
+        placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+            cv.clip(rect, Affine::IDENTITY, |cv| {
+                Placed::<C, Cv>::render(renders, cv, ink)
+            })
+        }));
+        placed.handler = placed.handler.map(|handler| gate_starts(handler, placement));
+        base.over(placed)
+    })
 }
 
 fn gate_starts<C: 'static>(child: Handler<C>, placement: Placement) -> Handler<C> {
@@ -328,5 +330,196 @@ pub fn metrics_extent(metrics: TextMetrics) -> Extent {
         width: metrics.width,
         ascent: metrics.ascent,
         descent: metrics.descent,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use puri::draw::{DrawCmd, DrawList};
+    use ui_events::ScrollDelta;
+    use ui_events::pointer::{
+        PointerButton, PointerId, PointerInfo, PointerState, PointerType, PointerUpdate,
+    };
+    use vello::peniko::Color;
+
+    struct TestCanvas(DrawList);
+
+    impl Canvas for TestCanvas {
+        fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+            self.0.fill(shape, brush, transform);
+        }
+
+        fn stroke(
+            &mut self,
+            shape: impl Into<Shape>,
+            style: Stroke,
+            brush: impl Into<Brush>,
+            transform: Affine,
+        ) {
+            self.0.stroke(shape, style, brush, transform);
+        }
+
+        fn glyph_run(&mut self, run: GlyphRun) {
+            self.0.glyph_run(run);
+        }
+
+        fn clip(
+            &mut self,
+            shape: impl Into<Shape>,
+            transform: Affine,
+            content: impl FnOnce(&mut Self),
+        ) {
+            let shape = shape.into();
+            let mut inner = TestCanvas(DrawList::new());
+            content(&mut inner);
+            self.0.0.push(DrawCmd::Clip {
+                shape,
+                transform,
+                children: inner.0.0,
+            });
+        }
+    }
+
+    fn no_ink<'a>() -> Ink<'a> {
+        Ink {
+            hovered: None,
+            hovered_value: None,
+        }
+    }
+
+    fn pointer() -> PointerInfo {
+        PointerInfo {
+            pointer_id: Some(PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: PointerType::Mouse,
+        }
+    }
+
+    fn state_at(x: f64, y: f64) -> PointerState {
+        let mut state = PointerState::default();
+        state.position.x = x;
+        state.position.y = y;
+        state
+    }
+
+    fn down_at(x: f64, y: f64) -> PointerButtonEvent {
+        PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: pointer(),
+            state: state_at(x, y),
+        }
+    }
+
+    fn move_at(x: f64, y: f64) -> PointerUpdate {
+        PointerUpdate {
+            pointer: pointer(),
+            current: state_at(x, y),
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        }
+    }
+
+    fn scroll_at(x: f64, y: f64) -> PointerScrollEvent {
+        PointerScrollEvent {
+            pointer: pointer(),
+            delta: ScrollDelta::LineDelta(0.0, 1.0),
+            state: state_at(x, y),
+        }
+    }
+
+    #[test]
+    fn scrolled_content_shifts_inside_the_viewport_clip() {
+        let probe = leaf(
+            Extent {
+                width: 100.0,
+                ascent: 0.0,
+                descent: 300.0,
+            },
+            |p: &mut Builder<(), TestCanvas>, placement| {
+                assert_eq!(placement.clip_rect, Rect::new(10.0, 20.0, 90.0, 70.0));
+                p.fill(
+                    Rect::new(
+                        placement.rect.x0,
+                        placement.rect.y0,
+                        placement.rect.x0 + 1.0,
+                        placement.rect.y0 + 1.0,
+                    ),
+                    Color::WHITE,
+                    Affine::IDENTITY,
+                );
+            },
+        );
+        let placed = measured::place(
+            scrolled(probe, Vec2::new(5.0, 40.0), |_, _| false),
+            Placement::new(
+                Rect::new(10.0, 20.0, 90.0, 70.0),
+                Rect::new(0.0, 0.0, 100.0, 100.0),
+            ),
+        );
+        let mut canvas = TestCanvas(DrawList::new());
+        Placed::<(), TestCanvas>::render(placed.renders, &mut canvas, no_ink());
+        let [
+            DrawCmd::Clip {
+                shape: Shape::Rect(clip),
+                children,
+                ..
+            },
+        ] = &canvas.0.0[..]
+        else {
+            panic!("expected one clip");
+        };
+        assert_eq!(*clip, Rect::new(10.0, 20.0, 90.0, 70.0));
+        let [
+            DrawCmd::Fill {
+                shape: Shape::Rect(dot),
+                ..
+            },
+        ] = &children[..]
+        else {
+            panic!("expected the probe inside the clip");
+        };
+        assert_eq!((dot.x0, dot.y0), (5.0, -20.0));
+    }
+
+    #[test]
+    fn scroll_viewport_bounds_starts_and_not_active_motion_or_release() {
+        let child = leaf(
+            Extent {
+                width: 30.0,
+                ascent: 0.0,
+                descent: 30.0,
+            },
+            |p: &mut Builder<Vec<&'static str>, TestCanvas>, _| {
+                p.handler().on_pointer_down(|log, _| {
+                    log.push("down");
+                    true
+                });
+                p.handler().on_pointer_move(|log, _| {
+                    log.push("move");
+                    true
+                });
+                p.handler().on_pointer_up(|log, _| {
+                    log.push("up");
+                    true
+                });
+            },
+        );
+        let placed = measured::place(
+            scrolled(child, Vec2::ZERO, |log: &mut Vec<&'static str>, _| {
+                log.push("scroll");
+                true
+            }),
+            Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
+        );
+        let handler = placed.handler.expect("registrations");
+        let mut log = Vec::new();
+        assert!(!handler.dispatch_pointer_down(&mut log, &down_at(20.0, 5.0)));
+        assert!(!handler.dispatch_scroll(&mut log, &scroll_at(20.0, 5.0)));
+        assert!(handler.dispatch_pointer_down(&mut log, &down_at(5.0, 5.0)));
+        assert!(handler.dispatch_scroll(&mut log, &scroll_at(5.0, 5.0)));
+        assert!(handler.dispatch_pointer_move(&mut log, &move_at(20.0, 5.0)));
+        assert!(handler.dispatch_pointer_up(&mut log, &down_at(20.0, 5.0)));
+        assert_eq!(log, ["down", "scroll", "move", "up"]);
     }
 }

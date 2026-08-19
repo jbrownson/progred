@@ -19,8 +19,7 @@ use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::{EditCtx, LineEditPointerDown};
 use puri::geometry::Placement;
-use measured::Output;
-use puri::handler::Handler;
+use puri::handler::{Handler, HasHandler};
 use puri::hover::Claim;
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
@@ -158,8 +157,10 @@ pub(crate) struct FrameResources<'a> {
     text_cache: &'a mut puri::text::TextCache,
 }
 
-struct Built {
-    placed: Placed<App, Paint>,
+/// The frame as one measured value, plus the scroll maxima its
+/// measurement settled.
+struct AppView {
+    view: measured::Measured<Placed<App, Paint>>,
     max_scroll: f64,
     max_scroll_x: f64,
 }
@@ -295,9 +296,20 @@ impl App {
             layouts: &mut self.layout_cx,
             text_cache: &mut self.text_cache,
         };
-        let built = run_frame(description, resources);
+        let AppView {
+            view,
+            max_scroll,
+            max_scroll_x,
+        } = app_view(description, resources);
+        let placed = measured::place(
+            view,
+            Placement::root(vello::kurbo::Rect::from_origin_size(
+                vello::kurbo::Point::ZERO,
+                viewport,
+            )),
+        );
         self.hover = derive_hover(
-            &built.placed,
+            &placed,
             self.hover.take(),
             self.pointer,
             self.ring.center,
@@ -325,14 +337,14 @@ impl App {
             descends,
             popup,
             renders,
-        } = built.placed;
+        } = placed;
         Frame {
             dispatch: Dispatch {
                 handler: handler.unwrap_or_else(Handler::new),
                 descends,
                 line: 14.0 * scale,
-                max_scroll: built.max_scroll,
-                max_scroll_x: built.max_scroll_x,
+                max_scroll,
+                max_scroll_x,
                 popup,
             },
             renders,
@@ -361,11 +373,11 @@ impl App {
     }
 }
 
-fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -> Built {
+fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) -> AppView {
     let FrameDescription {
         model,
         stack,
-        view,
+        view: flags,
         menu,
         availability,
         scale,
@@ -379,15 +391,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
     let viewport_width = viewport.width;
     #[cfg(target_os = "linux")]
     let viewport_height = viewport.height;
-    let mut placed: Placed<App, Paint> = measured::Output::empty();
-    // Empty space deselects — the one slot, whichever pane filled it.
-    // The bottom of the stack, so every content claim answers first
-    // and only a press that claims no edge falls through to here.
-    placed
-        .handler_mut()
-        .on_pointer_down(|app: &mut App, event| {
-            event.button == Some(PointerButton::Primary) && app.model.selection.take().is_some()
-        });
     // Mark-and-sweep by pass: entries the previous pass never used
     // are dropped here, everything else carries over — the steady
     // state is the visible text, shaped once.
@@ -405,8 +408,8 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
         menu::Description {
             state: menu,
             availability,
-            raw: view.raw,
-            graph: view.graph,
+            raw: flags.raw,
+            graph: flags.graph,
             scale,
             width: viewport_width,
         },
@@ -418,16 +421,6 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
     #[cfg(not(target_os = "linux"))]
     let _ = (menu, availability);
     let content_viewport = content_viewport(viewport, scale);
-    #[cfg(target_os = "linux")]
-    {
-        placed = placed.over(measured::place(
-            application_menu.bar,
-            Placement::new(
-                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
-                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport_height),
-            ),
-        ));
-    }
     // The Raw view is ONE bit, threaded as itself: name lookups
     // derive from it downstream, no policy swapped here, and the
     // model's configured policy rides along untouched.
@@ -440,7 +433,7 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
     // The width layout answers to: the window, less the graph panel
     // when it is up — the panel overlays the right side, and content
     // should break rather than run beneath it.
-    let body_width = if view.graph {
+    let body_width = if flags.graph {
         graph_panel(viewport, scale).x0 - 2.0 * margin
     } else {
         viewport_width - 2.0 * margin
@@ -451,10 +444,10 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
             selection: model.tree_selection(),
             graph_node: graph_node.as_ref(),
             collapse: &model.collapse,
-            raw: view.raw,
+            raw: flags.raw,
             styles: &styles,
             width: body_width,
-            projection: (!view.raw).then_some(&stack.projection),
+            projection: (!flags.raw).then_some(&stack.projection),
             foreign: &stack.foreign,
         },
         &mut tcx,
@@ -575,12 +568,38 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
         model.scroll_x.clamp(0.0, max_scroll_x) * scale,
         model.scroll.clamp(0.0, max_scroll) * scale,
     );
-    let graph_panel_rect = view.graph.then(|| graph_panel(viewport, scale));
-    placed = placed.over(placed::place_scrolled(
-        content,
-        Placement::new(content_viewport, content_viewport),
-        offset,
-        move |app: &mut App, update| {
+    let graph_panel_rect = flags.graph.then(|| graph_panel(viewport, scale));
+    // The stage: one tree. A viewport-filling base carries the
+    // empty-space deselect — the bottom of the stack, so every
+    // content claim answers first and only a press that claims no
+    // edge falls through — and each pane floats over it, later
+    // layers on top.
+    let mut stage = placed::leaf(
+        measured::Extent {
+            width: viewport.width,
+            ascent: 0.0,
+            descent: viewport.height,
+        },
+        |p, _| {
+            p.handler().on_pointer_down(|app: &mut App, event| {
+                event.button == Some(PointerButton::Primary)
+                    && app.model.selection.take().is_some()
+            });
+        },
+    );
+    #[cfg(target_os = "linux")]
+    {
+        let bar_placement = Placement::new(
+            vello::kurbo::Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
+            vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport_height),
+        );
+        stage = measured::overlay(stage, application_menu.bar, move |_, _, _| {
+            Some(bar_placement)
+        });
+    }
+    stage = measured::overlay(
+        stage,
+        placed::scrolled(content, offset, move |app: &mut App, update| {
             let point = Point::new(update.state.position.x, update.state.position.y);
             !graph_panel_rect.is_some_and(|panel| panel.contains(point))
                 && app.scroll_document(
@@ -590,18 +609,19 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
                     max_scroll,
                     max_scroll_x,
                 )
-        },
-    ));
-    // The graph pane draws over the document's right side; placed
-    // after the body so its handlers win inside the panel.
-    if view.graph {
+        }),
+        move |_, _, _| Some(Placement::new(content_viewport, content_viewport)),
+    );
+    // The graph pane floats over the document's right side, above the
+    // body so its handlers win inside the panel.
+    if flags.graph {
         let panel = graph_panel(viewport, scale);
         let pane = graph_view::pane(
             &sources,
             &model.graph,
             model.graph_selection(),
             model.tree_selection(),
-            view.raw,
+            flags.raw,
             &mut tcx,
             panel,
             &graph_view::Hooks {
@@ -640,17 +660,29 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
                 pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             },
         );
-        let rect = pane.extent.rect_at(Point::new(panel.x0, panel.y0));
-        placed = placed.over(measured::place(
-            pane,
-            Placement::new(rect, content_viewport),
-        ));
+        stage = measured::overlay(stage, pane, move |_, extent, _| {
+            Some(Placement::new(
+                extent.rect_at(Point::new(panel.x0, panel.y0)),
+                content_viewport,
+            ))
+        });
     }
 
-    // The pending row's popup draws after the body, so it overlays
-    // and its click targets win. Its anchor came from the body's
-    // placement; the stash rides the placed value, no side channel.
-    if let Some(popup) = placed.popup.take() {
+    // The pending row's popup floats above everything the body
+    // placed, its click targets winning. The card is built while a
+    // pending is engaged; its anchor is discovered at place time in
+    // the stage's output, where the pending row stashed it.
+    let engaged = match model.tree_selection() {
+        Some(selection::Selection::Pending { query, choice, .. }) => Some((query, *choice, false)),
+        Some(selection::Selection::PendingEdge { query, choice, .. }) => {
+            Some((query, *choice, true))
+        }
+        _ => None,
+    };
+    if let Some((query, choice, labels)) = engaged {
+        // The same inputs the pending row's stash reads: the drawn
+        // rows and the keyboard commit must answer from one list.
+        let entries = completion::completion_entries(&sources, flags.raw, labels, query.text());
         let commit =
             |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
                 Some(Selected::Tree(selection::Selection::Pending { path, .. })) => {
@@ -665,59 +697,62 @@ fn run_frame(description: FrameDescription<'_>, resources: FrameResources<'_>) -
                 }
                 selection => app.model.selection = selection,
             };
-        let card = projection::popup_view(&mut tcx, &styles, &popup, commit);
-        // Below the anchor, unless it would run off the bottom and
-        // fits above — then flip on top, as the TypeScript prototype
-        // did. The card's extent is known before placement.
-        let below = popup.anchor.y1 + 4.0 * scale;
-        let above = popup.anchor.y0 - 4.0 * scale - card.extent.height();
-        let y =
-            if below + card.extent.height() > content_viewport.y1 && above >= content_viewport.y0 {
-                above
-            } else {
-                below
-            };
-        let rect = card.extent.rect_at(Point::new(popup.anchor.x0, y));
-        placed = placed.over(measured::place(
-            card,
-            Placement::new(rect, content_viewport),
-        ));
-        placed.popup = Some(popup);
+        let card = projection::popup_view(&mut tcx, &styles, &entries, choice, commit);
+        stage = measured::overlay(stage, card, move |_, extent, out: &Placed<App, Paint>| {
+            out.popup.as_ref().map(|popup| {
+                // Below the anchor, unless it would run off the
+                // bottom and fits above — then flip on top, as the
+                // TypeScript prototype did.
+                let below = popup.anchor.y1 + 4.0 * scale;
+                let above = popup.anchor.y0 - 4.0 * scale - extent.height();
+                let y = if below + extent.height() > content_viewport.y1
+                    && above >= content_viewport.y0
+                {
+                    above
+                } else {
+                    below
+                };
+                Placement::new(
+                    extent.rect_at(Point::new(popup.anchor.x0, y)),
+                    content_viewport,
+                )
+            })
+        });
     }
 
     #[cfg(target_os = "linux")]
     if let Some((x, popup)) = application_menu.popup {
-        let rect = popup.extent.rect_at(Point::new(x, content_viewport.y0));
-        let headings = vello::kurbo::Rect::new(
-            0.0,
-            0.0,
-            application_menu.heading_width,
-            content_viewport.y0,
-        );
-        placed.handler_mut().on_pointer_down(move |app, event| {
-            let point = Point::new(event.state.position.x, event.state.position.y);
-            event.button == Some(PointerButton::Primary)
-                && !headings.contains(point)
-                && !rect.contains(point)
-                && app.menu.close()
+        let heading_width = application_menu.heading_width;
+        // Close and swallow ride under the popup's own content:
+        // above every other pane, below the menu items.
+        let popup = placed::before(popup, move |p, placement| {
+            let rect = placement.rect;
+            let headings =
+                vello::kurbo::Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
+            p.handler().on_pointer_down(move |app: &mut App, event| {
+                let point = Point::new(event.state.position.x, event.state.position.y);
+                event.button == Some(PointerButton::Primary)
+                    && !headings.contains(point)
+                    && !rect.contains(point)
+                    && app.menu.close()
+            });
+            p.handler().on_pointer_down(move |_: &mut App, event| {
+                event.button == Some(PointerButton::Primary)
+                    && rect.contains(Point::new(event.state.position.x, event.state.position.y))
+            });
+            p.handler().on_scroll(move |_: &mut App, event| {
+                rect.contains(Point::new(event.state.position.x, event.state.position.y))
+            });
         });
-        placed.handler_mut().on_pointer_down(move |_, event| {
-            event.button == Some(PointerButton::Primary)
-                && rect.contains(Point::new(event.state.position.x, event.state.position.y))
-        });
-        placed.handler_mut().on_scroll(move |_, event| {
-            rect.contains(Point::new(event.state.position.x, event.state.position.y))
-        });
-        placed = placed.over(measured::place(
-            popup,
-            Placement::new(
-                rect,
+        stage = measured::overlay(stage, popup, move |_, extent, _| {
+            Some(Placement::new(
+                extent.rect_at(Point::new(x, content_viewport.y0)),
                 vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport_height),
-            ),
-        ));
+            ))
+        });
     }
-    Built {
-        placed,
+    AppView {
+        view: stage,
         max_scroll,
         max_scroll_x,
     }
@@ -748,6 +783,7 @@ pub(crate) fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
 #[cfg(test)]
 mod frame_tests {
     use super::*;
+    use measured::Output;
 
     #[test]
     fn only_transitions_and_changed_frame_inputs_remint() {

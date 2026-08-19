@@ -43,7 +43,6 @@ pub enum EntryAction {
 pub struct Popup {
     pub anchor: Rect,
     pub entries: Vec<Entry>,
-    pub choice: usize,
 }
 
 /// Placement contexts that carry the frame's popup.

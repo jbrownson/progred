@@ -198,6 +198,27 @@ pub fn around<Out>(
     }
 }
 
+/// Pin `layer` over `base` at a position of the caller's choosing.
+/// The layer is overhang: the node keeps the base's extent, so layout
+/// never pays for what floats. `position` sees the base's settled
+/// placement, the layer's extent, and the base's placed output — the
+/// hook for overlays anchored to something the base discovered while
+/// placing — and may decline, placing nothing.
+pub fn overlay<Out: Output + 'static>(
+    base: Measured<Out>,
+    layer: Measured<Out>,
+    position: impl FnOnce(Placement, Extent, &Out) -> Option<Placement> + 'static,
+) -> Measured<Out> {
+    let extent = layer.extent;
+    around(base, move |placement, inner| {
+        let out = inner.place();
+        match position(placement, extent, &out) {
+            Some(at) => out.over(place(layer, at)),
+            None => out,
+        }
+    })
+}
+
 /// Contribute under this layout, before its content and descendants.
 pub fn before<Out: Output>(
     child: Measured<Out>,
@@ -431,6 +452,27 @@ mod tests {
             ),
         );
         assert_eq!(placed, ["before", "inner", "after"]);
+    }
+
+    #[test]
+    fn overlay_floats_a_layer_positioned_from_the_base_output() {
+        let base = probe(ext(10.0, 8.0, 2.0));
+        let layer = probe(ext(4.0, 3.0, 1.0));
+        let floated = overlay(base, layer, |placement, extent, out: &Vec<Placement>| {
+            assert_eq!(out[0].rect, placement.rect);
+            Some(Placement::root(
+                extent.rect_at(Point::new(out[0].rect.x1, out[0].rect.y0)),
+            ))
+        });
+        // The layer is overhang: the node charges only the base.
+        assert_eq!(floated.extent, ext(10.0, 8.0, 2.0));
+        let placed = place_top_left(floated, Point::ZERO);
+        assert_eq!(placed[0].rect, Rect::new(0.0, 0.0, 10.0, 10.0));
+        assert_eq!(placed[1].rect, Rect::new(10.0, 0.0, 14.0, 4.0));
+
+        let base = probe(ext(10.0, 8.0, 2.0));
+        let declined = overlay(base, probe(ext(4.0, 3.0, 1.0)), |_, _, _| None);
+        assert_eq!(place_top_left(declined, Point::ZERO).len(), 1);
     }
 
     #[test]

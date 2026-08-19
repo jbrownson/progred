@@ -648,7 +648,6 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
                 action: EntryAction::NewList,
             },
         ],
-        choice: 0,
     };
     let place_card = |pointer| {
         let mut fonts = parley::FontContext::new();
@@ -663,7 +662,8 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
         let card = popup_view::<World, Bench>(
             &mut tcx,
             &crate::styles::editor(1.0),
-            &popup,
+            &popup.entries,
+            0,
             |_, _| {},
         );
         let extent = card.extent;

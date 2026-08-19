@@ -1,5 +1,6 @@
 //! Window shell: winit + Vello plumbing around pure frame drawing.
-//! `run_frame` writes to any puri `Canvas`; here it streams into vello.
+//! `app_view` renders to any puri `Canvas`; here its deferred ink
+//! streams into vello.
 
 mod commands;
 mod completion;

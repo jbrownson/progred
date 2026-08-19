@@ -2,8 +2,8 @@
 //! retain source provenance, and fall back to total structural display.
 
 #[cfg(test)]
-use crate::completion::{Entry, resolve_entry, resolve_label};
-use crate::completion::{EntryAction, HasPopup, Popup, completion_entries};
+use crate::completion::{resolve_entry, resolve_label};
+use crate::completion::{Entry, EntryAction, HasPopup, Popup, completion_entries};
 use crate::filter;
 use crate::frame::Hovered;
 use crate::hover::Hover;
@@ -448,21 +448,21 @@ fn leaf_display<
         progred_display::Display::Query { labels } => {
             let engaged = if labels {
                 cx.pending_rename_under(path)
-                    .map(|(_, query, choice)| (query, choice))
-                    .or_else(|| cx.pending_edge_under(path))
+                    .map(|(_, query, _)| query)
+                    .or_else(|| cx.pending_edge_under(path).map(|(query, _)| query))
             } else {
                 match cx.selection {
-                    Some(Selection::Pending {
-                        path: pending,
-                        query,
-                        choice,
-                    }) if pending.as_slice() == path => Some((query, *choice)),
+                    Some(Selection::Pending { path: pending, query, .. })
+                        if pending.as_slice() == path =>
+                    {
+                        Some(query)
+                    }
                     _ => None,
                 }
             };
             match engaged {
-                Some((query, choice)) if labels => label_query(cx, tcx, query, choice, hooks),
-                Some((query, choice)) => placeholder(cx, tcx, Some((query, choice)), false, hooks),
+                Some(query) if labels => label_query(cx, tcx, query, hooks),
+                Some(query) => placeholder(cx, tcx, Some(query), false, hooks),
                 None => render::text(tcx, "…", &cx.styles.dim),
             }
         }
@@ -1399,11 +1399,11 @@ fn pending_view<
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     let engaged = match cx.selection {
-        Some(Selection::Pending {
-            path: pending,
-            query,
-            choice,
-        }) if pending.as_slice() == path.as_slice() => Some((query, *choice)),
+        Some(Selection::Pending { path: pending, query, .. })
+            if pending.as_slice() == path.as_slice() =>
+        {
+            Some(query)
+        }
         _ => None,
     };
     let content = placeholder(cx, tcx, engaged, false, hooks);
@@ -1415,7 +1415,7 @@ fn pending_view<
 }
 
 /// The slot widget, in the Puri idiom: its one state input is the
-/// engaged pending's `(query, choice)`, and None IS the inactive
+/// engaged pending's query, and None IS the inactive
 /// pending — the cold [`placeholder_box`], whose width the engaged
 /// query's frame holds as its minimum, so the two forms are one
 /// widget in two states and the transition between them is pure
@@ -1427,12 +1427,12 @@ fn placeholder<
 >(
     cx: &Cx,
     tcx: &mut TextCtx,
-    engaged: Option<(&LineEditState, usize)>,
+    engaged: Option<&LineEditState>,
     labels: bool,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     match engaged {
-        Some((query, choice)) => query_content(cx, tcx, query, choice, labels, hooks),
+        Some(query) => query_content(cx, tcx, query, labels, hooks),
         None => placeholder_box(tcx, cx.styles),
     }
 }
@@ -1448,10 +1448,11 @@ fn query_content<
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
-    choice: usize,
     labels: bool,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
+    // The same inputs the shell's card view reads: the drawn rows
+    // and this stash's keyboard commit must answer from one list.
     let entries = completion_entries(&cx.sources, cx.raw, labels, query.text());
     let fallback = text(tcx, "…", &cx.styles.dim);
     let presentation = edit_presentation(&cx.styles.label);
@@ -1477,7 +1478,6 @@ fn query_content<
         *p.popup() = Some(Popup {
             anchor: rect,
             entries,
-            choice,
         });
         // Clicks in the query place the caret, straight through the
         // edit hook — the selection transition is never involved, so
@@ -1516,15 +1516,15 @@ fn query_content<
 pub fn popup_view<C: 'static, Cv: Canvas + 'static>(
     tcx: &mut TextCtx,
     styles: &Styles,
-    popup: &Popup,
+    entries: &[Entry],
+    choice: usize,
     commit: impl Fn(&mut C, &EntryAction) + Clone + 'static,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
-    let choice = popup.choice.min(popup.entries.len().saturating_sub(1));
+    let choice = choice.min(entries.len().saturating_sub(1));
     // Cells first, so rows can pad out to the widest and the chosen
     // highlight spans the card, not just its own content.
-    let cells: Vec<(Measured<Placed<C, Cv>>, Option<Measured<Placed<C, Cv>>>)> = popup
-        .entries
+    let cells: Vec<(Measured<Placed<C, Cv>>, Option<Measured<Placed<C, Cv>>>)> = entries
         .iter()
         .map(|entry| {
             let style = match &entry.action {
@@ -1574,7 +1574,7 @@ pub fn popup_view<C: 'static, Cv: Canvas + 'static>(
                 row(8.0 * scale, cells),
             );
             let chosen = index == choice;
-            let action = popup.entries[index].action.clone();
+            let action = entries[index].action.clone();
             let commit = commit.clone();
             before(content, move |p, placement| {
                 let rect = placement.rect;
@@ -1700,11 +1700,10 @@ fn label_query<
     cx: &Cx,
     tcx: &mut TextCtx,
     query: &LineEditState,
-    choice: usize,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
     let scale = cx.styles.scale;
-    let content = placeholder(cx, tcx, Some((query, choice)), true, hooks);
+    let content = placeholder(cx, tcx, Some(query), true, hooks);
     let ringed = decorate(content, move |p, rect| {
         primary_highlight(scale, p, rect);
     });
