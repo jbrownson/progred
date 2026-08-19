@@ -456,24 +456,16 @@ fn leaf_display<
             head_view(cx, tcx, path, cell, cx.name(cell), hooks)
         }
         progred_display::Display::Label { key } => label_view(cx, tcx, path, key, hooks),
-        progred_display::Display::Query { labels } => {
-            let engaged = if labels {
-                cx.pending_rename_under(path)
-                    .map(|(_, query, _)| query)
-                    .or_else(|| cx.pending_edge_under(path).map(|(query, _)| query))
-            } else {
-                match cx.selection {
-                    Some(Selection::Pending { path: pending, query, .. })
-                        if pending.as_slice() == path =>
-                    {
-                        Some(query)
-                    }
-                    _ => None,
-                }
-            };
+        progred_display::Display::Query => {
+            let engaged = cx
+                .pending_rename_under(path)
+                .map(|(_, query, _)| query)
+                .or_else(|| cx.pending_edge_under(path).map(|(query, _)| query));
             match engaged {
-                Some(query) if labels => label_query(cx, tcx, query, hooks),
-                Some(query) => placeholder(cx, tcx, Some(query), false, hooks),
+                Some(query) => label_query(cx, tcx, query, hooks),
+                // The projection only emits this leaf where it saw a
+                // matching pending; a mismatch is a malformed state,
+                // shown as elision rather than hidden.
                 None => render::text(tcx, "…", &cx.styles.dim),
             }
         }
@@ -930,16 +922,14 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-/// The value marked as the secondary selection: the one at the
-/// selected path. A value can project in many places — links, but
-/// equally text values, blobs, and equal lists — and the marks make that
-/// sameness visible. Inline records are structure, not identity: no
-/// marks.
+/// The cell marked as the secondary selection: the one at the
+/// selected path. Marks mean IDENTITY — the same cell projecting in
+/// many places — never equal copies, so only cell values answer.
 fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Value> {
     match selection? {
         Selection::Edge { path, .. } => sources
             .resolve(path)
-            .filter(|value| !matches!(value, Value::Record(_)) || text::read(value).is_some())
+            .filter(|value| value.as_cell().is_some())
             .cloned(),
         _ => None,
     }
@@ -1111,8 +1101,7 @@ fn head_view<
         cx.styles,
         hooks,
     );
-    let mark = text::value(name);
-    let target = mark.clone();
+    let target = text::value(name);
     if cx.selected(path) || cx.selected(&edge) {
         let content = cursor_target(
             edge.clone(),
@@ -1122,14 +1111,8 @@ fn head_view<
             None,
             content,
         );
-        let content = if cx.selected(&edge) {
-            content
-        } else {
-            secondary_mark(cx, &mark, content)
-        };
         source_target(cx, edge, Some(target), hooks, content)
     } else {
-        let content = secondary_mark(cx, &mark, content);
         if cx.source.transient() {
             content
         } else {

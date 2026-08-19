@@ -5,7 +5,6 @@ use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
 use gid::{Path, Step, Value};
-use progred_libraries::text;
 
 /// What the pointer rests on: the claim a plain click at that point
 /// would fire. Values preview their selection; labels, toggles, and
@@ -31,13 +30,12 @@ pub enum Hover {
     Entry(usize),
 }
 
-/// The value a hover refers to — the hover's `secondary_of`, for
-/// marking its other projections. Inline records are structure, not
-/// identity: no marks, except for a whole text convention because it
-/// projects as one leaf. An `Entry` hover re-derives from the LIVE
+/// The cell a hover refers to — the hover's `secondary_of`, for
+/// marking its other projections. Marks mean IDENTITY: the same
+/// cell, shared — never a copy that happens to be equal, so only
+/// cell values answer. An `Entry` hover re-derives from the LIVE
 /// completion offers of the open pending (recomputed here — the
-/// price of never marking a snapshot), so the marks follow the
-/// entries as the query is typed.
+/// price of never marking a snapshot).
 pub fn hover_value(
     sources: &Sources,
     raw: bool,
@@ -47,7 +45,7 @@ pub fn hover_value(
     match hover {
         Hover::Value(path) => sources
             .resolve(path)
-            .filter(|value| !matches!(value, Value::Record(_)) || text::read(value).is_some())
+            .filter(|value| value.as_cell().is_some())
             .cloned(),
         // A dead address answers nothing: the label must still be in
         // the document, or a rename under a parked pointer would keep
@@ -67,7 +65,7 @@ pub fn hover_value(
             };
             let entries = completion_entries(sources, raw, labels, query.text());
             match &entries.get(*index)?.action {
-                EntryAction::Value(value) => Some(value.clone()),
+                EntryAction::Value(value) if value.as_cell().is_some() => Some(value.clone()),
                 _ => None,
             }
         }

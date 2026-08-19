@@ -49,10 +49,11 @@ pub enum Display {
     Label {
         key: CellId,
     },
-    /// Engaged label or value query; the editor reads the live selection.
-    Query {
-        labels: bool,
-    },
+    /// The engaged label query — a new field's name or a rename. The
+    /// leaf is an address, not a widget: the editor reads the live
+    /// pending for its text and caret. Value pendings never pass
+    /// through a leaf; the editor builds them at absent locations.
+    Query,
     /// Cold empty slot.
     Slot,
 }
@@ -251,8 +252,8 @@ pub fn field_label<World, Hover>(key: CellId) -> Layout<World, Hover> {
     leaf(Display::Label { key })
 }
 
-pub fn query<World, Hover>(labels: bool) -> Layout<World, Hover> {
-    leaf(Display::Query { labels })
+pub fn query<World, Hover>() -> Layout<World, Hover> {
+    leaf(Display::Query)
 }
 
 pub fn slot<World, Hover>() -> Layout<World, Hover> {

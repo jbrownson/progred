@@ -1010,15 +1010,12 @@ fn entry_hover_marks_follow_the_live_query() {
         query: line_edit(text),
         choice: 0,
     };
-    // A quoted query leads with its atom, so entry zero IS the
-    // typed string — and re-derives as the query grows.
+    // A quoted query leads with its typed atom, but marks mean
+    // IDENTITY: an equal text value is a copy, not the same cell,
+    // so string entries mark nothing.
     assert_eq!(
         hover_value(&sources, false, Some(&pending("\"a\"")), &Hover::Entry(0)),
-        Some(crate::test_values::text("a"))
-    );
-    assert_eq!(
-        hover_value(&sources, false, Some(&pending("\"ab\"")), &Hover::Entry(0)),
-        Some(crate::test_values::text("ab"))
+        None
     );
     // Dead addresses answer nothing: a closed pending, a label
     // no longer in the document.

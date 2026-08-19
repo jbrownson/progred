@@ -226,7 +226,7 @@ fn record_layout<World: 'static>(
             flat.push(dim(", "));
         }
         let name = match cx.pending_rename_under(path) {
-            Some((replacing, _, _)) if replacing == key => query(true),
+            Some((replacing, _, _)) if replacing == key => query(),
             _ => field_label(*key),
         };
         flat.push(name);
@@ -267,7 +267,7 @@ fn field_head<World: 'static>(
     hooks: &Hooks<World>,
 ) -> View<World> {
     let label = match cx.pending_rename_under(path) {
-        Some((replacing, _, _)) if replacing == &key => query(true),
+        Some((replacing, _, _)) if replacing == &key => query(),
         _ => field_label(key),
     };
     let head = row(0.0, [label, dim(":")]);
@@ -353,7 +353,7 @@ fn insert<World: 'static>(
 
 fn pending_edge_layout<World: 'static>() -> View<World> {
     block_hover(on_click(
-        row(0.0, [query(true), dim(": "), slot()]),
+        row(0.0, [query(), dim(": "), slot()]),
         Rc::new(|_| true),
     ))
 }
