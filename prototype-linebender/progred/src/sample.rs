@@ -24,6 +24,83 @@ pub mod sample_vocabulary {
     pub const FAVORITE: CellId = CellId::from_u128(0xa83b16a0d85afeb98d46c3459f2e7e16);
 }
 
+/// The dogfood: a projection defined as document data. `at` records
+/// render as "row × col" through the display data form — no Rust
+/// partial involved.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn at_display_partial() -> Value {
+    let bind = |cell| Value::record([(control::vocabulary::BIND, Value::from(cell))]);
+    let spliced_text = |binder| {
+        Value::record([(
+            layout::vocabulary::TEXT,
+            Value::record([
+                (
+                    layout::vocabulary::CONTENT,
+                    Value::record([(control::vocabulary::UNQUOTE, Value::from(binder))]),
+                ),
+                (
+                    layout::vocabulary::FACE,
+                    Value::from(layout::vocabulary::NAME_FACE),
+                ),
+            ]),
+        )])
+    };
+    name::record(
+        "at display",
+        [
+            (
+                grap::vocabulary::PARAMS,
+                Value::list([Value::from(layout::vocabulary::VALUE)]),
+            ),
+            (
+                grap::vocabulary::BODY,
+                grap::call(
+                    Value::from(control::vocabulary::CASE),
+                    [
+                        (
+                            control::vocabulary::VALUE,
+                            Value::from(layout::vocabulary::VALUE),
+                        ),
+                        (
+                            control::vocabulary::ALTERNATIVES,
+                            Value::list([Value::record([
+                                (
+                                    control::vocabulary::PATTERN,
+                                    Value::record([
+                                        (sample_vocabulary::ROW, bind(sample_vocabulary::ROW)),
+                                        (sample_vocabulary::COL, bind(sample_vocabulary::COL)),
+                                    ]),
+                                ),
+                                (
+                                    grap::vocabulary::EXPRESSION,
+                                    grap::call(
+                                        Value::from(control::vocabulary::QUOTE),
+                                        [(
+                                            grap::vocabulary::EXPRESSION,
+                                            layout::selectable(layout::row(
+                                                4.0,
+                                                [
+                                                    spliced_text(sample_vocabulary::ROW),
+                                                    layout::text_leaf(
+                                                        "×",
+                                                        layout::vocabulary::DIM_FACE,
+                                                    ),
+                                                    spliced_text(sample_vocabulary::COL),
+                                                ],
+                                            )),
+                                        )],
+                                    ),
+                                ),
+                            ])]),
+                        ),
+                        (control::vocabulary::DEFAULT, absent::value()),
+                    ],
+                ),
+            ),
+        ],
+    )
+}
+
 /// A small document shaped like a real one. The root is an inline
 /// RECORD of roles — a document keys its parts by what they are to
 /// it, and needs no identity of its own to do so. Simple names are
@@ -192,89 +269,8 @@ pub fn sample_document() -> Document {
         ),
     );
 
-    // The dogfood: a projection defined as document data. `at`
-    // records render as "row × col" through the display data form —
-    // no Rust partial involved.
     let at_display = new_cell_id();
-    let bind = |cell| Value::record([(control::vocabulary::BIND, Value::from(cell))]);
-    let spliced_text = |binder| {
-        Value::record([(
-            layout::vocabulary::TEXT,
-            Value::record([
-                (
-                    layout::vocabulary::CONTENT,
-                    Value::record([(control::vocabulary::UNQUOTE, Value::from(binder))]),
-                ),
-                (
-                    layout::vocabulary::FACE,
-                    Value::from(layout::vocabulary::NAME_FACE),
-                ),
-            ]),
-        )])
-    };
-    cells.set_value(
-        at_display,
-        name::record(
-            "at display",
-            [
-                (
-                    grap::vocabulary::PARAMS,
-                    Value::list([Value::from(layout::vocabulary::VALUE)]),
-                ),
-                (
-                    grap::vocabulary::BODY,
-                    grap::call(
-                        Value::from(control::vocabulary::CASE),
-                        [
-                            (
-                                control::vocabulary::VALUE,
-                                Value::from(layout::vocabulary::VALUE),
-                            ),
-                            (
-                                control::vocabulary::ALTERNATIVES,
-                                Value::list([Value::record([
-                                    (
-                                        control::vocabulary::PATTERN,
-                                        Value::record([
-                                            (
-                                                sample_vocabulary::ROW,
-                                                bind(sample_vocabulary::ROW),
-                                            ),
-                                            (
-                                                sample_vocabulary::COL,
-                                                bind(sample_vocabulary::COL),
-                                            ),
-                                        ]),
-                                    ),
-                                    (
-                                        grap::vocabulary::EXPRESSION,
-                                        grap::call(
-                                            Value::from(control::vocabulary::QUOTE),
-                                            [(
-                                                grap::vocabulary::EXPRESSION,
-                                                layout::selectable(layout::row(
-                                                    4.0,
-                                                    [
-                                                        spliced_text(sample_vocabulary::ROW),
-                                                        layout::text_leaf(
-                                                            "×",
-                                                            layout::vocabulary::DIM_FACE,
-                                                        ),
-                                                        spliced_text(sample_vocabulary::COL),
-                                                    ],
-                                                )),
-                                            )],
-                                        ),
-                                    ),
-                                ])]),
-                            ),
-                            (control::vocabulary::DEFAULT, absent::value()),
-                        ],
-                    ),
-                ),
-            ],
-        ),
-    );
+    cells.set_value(at_display, at_display_partial());
     cells.set_value(
         layout::vocabulary::PROJECTIONS,
         Value::list([Value::from(at_display)]),
