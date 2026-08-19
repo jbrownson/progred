@@ -79,7 +79,9 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         handler: ClickHandler<World>,
     },
-    /// What a command-click here picks: an identity, not a callback.
+    /// The value a command-click here commits into an open pending —
+    /// any value, not only a cell; the editor narrows where a stage
+    /// demands (labels take cells). Data, not a callback.
     OnPick {
         child: Box<Layout<World, Hover>>,
         value: Value,
