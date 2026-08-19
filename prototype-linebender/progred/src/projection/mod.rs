@@ -39,9 +39,7 @@ use puri::edit::{
 };
 use puri::geometry::Placement;
 use puri::handler::HasHandler;
-use puri::text::{TextCtx, TextStyle};
-#[cfg(test)]
-use puri::text::{caret_index, line_layout};
+use puri::text::{TextCtx, TextStyle, caret_index, line_layout};
 use std::collections::HashSet;
 use std::rc::Rc;
 #[cfg(test)]
@@ -100,12 +98,7 @@ impl<World> Projection<World> {
     }
 
     pub fn line(&self, value: &Value) -> Option<render::LineEdit> {
-        self.apply(
-            &NoEval,
-            value,
-            Rc::new(|_, _| false),
-            Hover::Value(Vec::new()),
-        )
+        self.apply(&NoEval, value, Rc::new(|_| false), Hover::Value(Vec::new()))
         .and_then(|layout| progred_display::line_edit_of(&layout).cloned())
     }
 }
@@ -196,6 +189,12 @@ fn realize<
                 cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
             );
             realize_click(handler, inner)
+        }
+        progred_display::Layout::OnPick { child, value: picked } => {
+            let inner = realize(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            );
+            realize_pick(picked, hooks, inner)
         }
         progred_display::Layout::OnHover { child, hover } => {
             let inner = realize(
@@ -365,17 +364,28 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
     before(inner, move |p, placement| {
         p.handler().on_pointer_down(move |world, event| {
             event.button == Some(PointerButton::Primary)
+                && !command(&event.state.modifiers)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && handler(
-                    world,
-                    progred_display::PointerClick {
-                        x: event.state.position.x - placement.rect.x0,
-                        y: event.state.position.y - placement.rect.y0,
-                        shift: event.state.modifiers.shift(),
-                        command: command(&event.state.modifiers),
-                        count: event.state.count.max(1),
-                    },
-                )
+                && handler(world)
+        });
+    })
+}
+
+/// A command-click picks the named identity; anything else falls
+/// through. Declines on a failed pick too, so the value target's own
+/// pick-or-select backstop answers.
+fn realize_pick<C: 'static, Cv: Canvas + 'static>(
+    picked: Value,
+    hooks: &Hooks<C>,
+    inner: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    let pick = hooks.pick.clone();
+    before(inner, move |p, placement| {
+        p.handler().on_pointer_down(move |world, event| {
+            event.button == Some(PointerButton::Primary)
+                && command(&event.state.modifiers)
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && pick(world, picked.clone())
         });
     })
 }
@@ -445,6 +455,7 @@ fn leaf_display<
         progred_display::Display::Head { cell } => {
             head_view(cx, tcx, path, cell, cx.name(cell), hooks)
         }
+        progred_display::Display::Label { key } => label_view(cx, tcx, path, key, hooks),
         progred_display::Display::Query { labels } => {
             let engaged = if labels {
                 cx.pending_rename_under(path)
@@ -538,18 +549,10 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
     }
 }
 
-fn select_handler<C: 'static>(
-    path: Path,
-    value: Value,
-    hooks: &Hooks<C>,
-) -> progred_display::ClickHandler<C> {
+fn select_handler<C: 'static>(path: Path, hooks: &Hooks<C>) -> progred_display::ClickHandler<C> {
     let select = hooks.select.clone();
-    let pick = hooks.pick.clone();
-    Rc::new(move |world, click| {
-        let picked = click.command && pick(world, value.clone());
-        if !picked {
-            select(world, path.clone(), None);
-        }
+    Rc::new(move |world| {
+        select(world, path.clone(), None);
         true
     })
 }
@@ -1137,6 +1140,52 @@ fn head_view<
     }
 }
 
+/// A record field's label: its spelling, and — when the record is
+/// writable — the click that re-opens it as a rename with the caret
+/// hit-tested under the pointer, in the label's own face. Command
+/// declines, so the label's key pick and the value backstop answer.
+fn label_view<C: 'static, Cv: Canvas + 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    key: CellId,
+    hooks: &Hooks<C>,
+) -> Measured<Placed<C, Cv>> {
+    let (spelling, style) = label_spelling(cx, &key);
+    let content = render::text(tcx, &spelling, style);
+    if !crate::selection::writable_at(&cx.sources, path) || cx.source.transient() {
+        return content;
+    }
+    let mut target = path.to_vec();
+    target.push(Step::Key(key));
+    let layout = line_layout(tcx, &spelling, style);
+    let rename = hooks.rename.clone();
+    before(content, move |p, placement| {
+        hover_claim(p, placement, Hover::Label(target.clone()));
+        let rename = rename.clone();
+        let target = target.clone();
+        p.handler().on_pointer_down(move |world, event| {
+            event.button == Some(PointerButton::Primary)
+                && !command(&event.state.modifiers)
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && {
+                    rename(
+                        world,
+                        target.clone(),
+                        caret_index(
+                            &layout,
+                            Point::new(
+                                event.state.position.x - placement.rect.x0,
+                                event.state.position.y - placement.rect.y0,
+                            ),
+                        ),
+                    );
+                    true
+                }
+        });
+    })
+}
+
 /// The spelling and face a label draws with — one truth for the view
 /// and for hit-testing a click against what was actually drawn.
 fn label_spelling<'a>(cx: &'a Cx, key: &CellId) -> (String, &'a TextStyle) {
@@ -1352,7 +1401,7 @@ fn project_present_value<
             projection.apply(
                 &ProjectEnv { cx },
                 value,
-                select_handler(path.to_vec(), value.clone(), hooks),
+                select_handler(path.to_vec(), hooks),
                 Hover::Value(path.to_vec()),
             )
         })
@@ -1364,7 +1413,7 @@ fn project_present_value<
     let inner = match projected {
         Some(projected) => projected,
         None => {
-            let layout = structure::of(cx, tcx, path, ancestors, value, hooks);
+            let layout = structure::of(cx, path, ancestors, value, hooks);
             realize(
                 cx, projection, tcx, path, ancestors, hooks, value, layout, avail,
             )
@@ -1381,7 +1430,40 @@ fn project_present_value<
     // the full bounds, while clicks belong to the content each arm
     // claimed above — structural whitespace deselects.
     let placed = descend_landmark(cx, path.to_vec(), hooks, inner);
-    ground(cx, path, value, placed)
+    let grounded = ground(cx, path, value, placed);
+    pick_target(path.to_vec(), value.clone(), hooks, grounded)
+}
+
+/// Every projected value's command-click backstop: pick the value
+/// into an open pending, or — nothing pending — select it like a
+/// plain click, so a stray modifier never deadens the gesture.
+/// Content declines command-clicks, so inner [`realize_pick`] wrappers
+/// answer first and this catches what they refused.
+fn pick_target<C: 'static, Cv: Canvas + 'static>(
+    path: Path,
+    value: Value,
+    hooks: &Hooks<C>,
+    child: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    let pick = hooks.pick.clone();
+    let select = hooks.select.clone();
+    before(child, move |p, placement| {
+        let pick = pick.clone();
+        let select = select.clone();
+        let path = path.clone();
+        let value = value.clone();
+        p.handler().on_pointer_down(move |world, event| {
+            event.button == Some(PointerButton::Primary)
+                && command(&event.state.modifiers)
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && {
+                    if !pick(world, value.clone()) {
+                        select(world, path.clone(), None);
+                    }
+                    true
+                }
+        });
+    })
 }
 
 /// An EMPTY SLOT at `path`: the [`placeholder`] widget wired to this

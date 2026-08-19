@@ -143,7 +143,7 @@ mod tests {
                     projection(ProjectionInput {
                         env: &NoEval,
                         value: &value,
-                        select: Rc::new(|_, _| false),
+                        select: Rc::new(|_| false),
                         hover: (),
                     })
                     .and_then(|layout| match layout {

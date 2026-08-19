@@ -100,7 +100,7 @@ mod tests {
             display::<(), ()>(ProjectionInput {
                 env: &Unused,
                 value: &value("hi"),
-                select: std::rc::Rc::new(|_, _| false),
+                select: std::rc::Rc::new(|_| false),
                 hover: (),
             }),
             Some(Layout::Leaf(progred_display::Display::LineEdit(line))) if line.text == "hi"

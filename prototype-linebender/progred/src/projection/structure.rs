@@ -4,24 +4,20 @@
 
 use super::{Cx, Hooks, select_handler};
 use crate::hover::Hover;
-use crate::identity::short_id;
 use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
 use progred_display::{
-    Delim, Layout, PointerClick, block_hover, bracket, col, delim, descend, dim, group, head, hug,
-    id, label, on_click, on_hover, query, row, slot,
+    Delim, Layout, block_hover, bracket, col, delim, descend, dim, field_label, group, head, hug,
+    id, on_click, on_hover, pickable, query, row, slot,
 };
 use progred_libraries::{name, text};
-use puri::text::{TextCtx, caret_index, line_layout};
 use std::collections::HashSet;
 use std::rc::Rc;
-use vello::kurbo::Point;
 
 type View<World> = Layout<World, Hover>;
 
 pub fn of<World: 'static>(
     cx: &Cx,
-    tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &HashSet<CellId>,
     value: &Value,
@@ -31,7 +27,7 @@ pub fn of<World: 'static>(
         Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
         Value::Cell(cell) => cell_layout(cx, path, ancestors, *cell, hooks),
         Value::List(elements) => list_layout(cx, path, elements, hooks),
-        Value::Record(fields) => record_layout(cx, tcx, path, fields, hooks),
+        Value::Record(fields) => record_layout(cx, path, fields, hooks),
     }
 }
 
@@ -160,7 +156,6 @@ fn list_layout<World: 'static>(
 
 fn record_layout<World: 'static>(
     cx: &Cx,
-    tcx: &mut TextCtx,
     path: &[Step],
     fields: &im::OrdMap<CellId, Value>,
     hooks: &Hooks<World>,
@@ -232,7 +227,7 @@ fn record_layout<World: 'static>(
         }
         let name = match cx.pending_rename_under(path) {
             Some((replacing, _, _)) if replacing == key => query(true),
-            _ => field_label(cx, tcx, path, *key, hooks),
+            _ => field_label(*key),
         };
         flat.push(name);
         flat.push(dim(": "));
@@ -247,7 +242,7 @@ fn record_layout<World: 'static>(
     flat.push(delim(Delim::Brace, false));
     let mut rows: Vec<View<World>> = items
         .iter()
-        .map(|(key, present)| field_row(cx, tcx, path, *key, *present, hooks))
+        .map(|(key, present)| field_row(cx, path, *key, *present, hooks))
         .collect();
     if pending_edge {
         rows.push(pending_edge_layout());
@@ -266,7 +261,6 @@ fn record_layout<World: 'static>(
 
 fn field_head<World: 'static>(
     cx: &Cx,
-    tcx: &mut TextCtx,
     path: &[Step],
     key: CellId,
     present: bool,
@@ -274,7 +268,7 @@ fn field_head<World: 'static>(
 ) -> View<World> {
     let label = match cx.pending_rename_under(path) {
         Some((replacing, _, _)) if replacing == &key => query(true),
-        _ => field_label(cx, tcx, path, key, hooks),
+        _ => field_label(key),
     };
     let head = row(0.0, [label, dim(":")]);
     if present {
@@ -282,42 +276,23 @@ fn field_head<World: 'static>(
         child.push(Step::Key(key));
         selectable(head, &child, &Value::from(key), hooks, true)
     } else {
-        pick(head, key, hooks)
+        pickable(head, Value::Cell(key))
     }
 }
 
 fn field_row<World: 'static>(
     cx: &Cx,
-    tcx: &mut TextCtx,
     path: &[Step],
     key: CellId,
     present: bool,
     hooks: &Hooks<World>,
 ) -> View<World> {
     hug(
-        field_head(cx, tcx, path, key, present, hooks),
+        field_head(cx, path, key, present, hooks),
         descend(Step::Key(key)),
         6.0,
         20.0,
     )
-}
-
-fn field_label<World: 'static>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    key: CellId,
-    hooks: &Hooks<World>,
-) -> View<World> {
-    let shown = match cx.name(key) {
-        Some(name) => label(name),
-        None => id(short_id(key)),
-    };
-    if writable_at(&cx.sources, path) {
-        rename(cx, tcx, shown, path, key, hooks)
-    } else {
-        shown
-    }
 }
 
 fn selectable<World: 'static>(
@@ -328,7 +303,10 @@ fn selectable<World: 'static>(
     claim_hover: bool,
 ) -> View<World> {
     let path = path.to_vec();
-    let clicked = on_click(child, select_handler(path.clone(), value.clone(), hooks));
+    let clicked = on_click(
+        pickable(child, value.clone()),
+        select_handler(path.clone(), hooks),
+    );
     if claim_hover {
         on_hover(clicked, Hover::Value(path))
     } else {
@@ -342,7 +320,7 @@ fn toggle<World: 'static>(child: View<World>, path: &[Step], hooks: &Hooks<World
     on_hover(
         on_click(
             child,
-            Rc::new(move |world, _| {
+            Rc::new(move |world| {
                 toggle(world, target.clone());
                 true
             }),
@@ -364,7 +342,7 @@ fn insert<World: 'static>(
     on_hover(
         on_click(
             child,
-            Rc::new(move |world, _| {
+            Rc::new(move |world| {
                 insert(world, handler_target.clone());
                 true
             }),
@@ -373,50 +351,9 @@ fn insert<World: 'static>(
     )
 }
 
-fn pick<World: 'static>(child: View<World>, key: CellId, hooks: &Hooks<World>) -> View<World> {
-    let pick = hooks.pick.clone();
-    on_click(
-        child,
-        Rc::new(move |world, click: PointerClick| click.command && pick(world, Value::Cell(key))),
-    )
-}
-
-fn rename<World: 'static>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    child: View<World>,
-    path: &[Step],
-    key: CellId,
-    hooks: &Hooks<World>,
-) -> View<World> {
-    let mut target = path.to_vec();
-    target.push(Step::Key(key));
-    let (spelling, style) = super::label_spelling(cx, &key);
-    let layout = line_layout(tcx, &spelling, style);
-    let rename = hooks.rename.clone();
-    let handler_target = target.clone();
-    on_hover(
-        on_click(
-            child,
-            Rc::new(move |world, click: PointerClick| {
-                if click.command {
-                    return false;
-                }
-                rename(
-                    world,
-                    handler_target.clone(),
-                    caret_index(&layout, Point::new(click.x, click.y)),
-                );
-                true
-            }),
-        ),
-        Hover::Label(target),
-    )
-}
-
 fn pending_edge_layout<World: 'static>() -> View<World> {
     block_hover(on_click(
         row(0.0, [query(true), dim(": "), slot()]),
-        Rc::new(|_, _| true),
+        Rc::new(|_| true),
     ))
 }

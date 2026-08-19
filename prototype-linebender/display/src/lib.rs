@@ -43,6 +43,12 @@ pub enum Display {
     Head {
         cell: CellId,
     },
+    /// A record field's label: its conventional name or short id. The
+    /// editor owns the spelling and the click-to-rename gesture,
+    /// including landing the caret under the pointer.
+    Label {
+        key: CellId,
+    },
     /// Engaged label or value query; the editor reads the live selection.
     Query {
         labels: bool,
@@ -58,19 +64,12 @@ pub enum Delim {
     Brace,
 }
 
-/// A primary click relative to the subtree which handled it. The
-/// runtime supplies geometry and modifiers; the callback supplies
-/// behavior by receiving the live application world at dispatch.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PointerClick {
-    pub x: f64,
-    pub y: f64,
-    pub shift: bool,
-    pub command: bool,
-    pub count: u8,
-}
-
-pub type ClickHandler<World> = Rc<dyn Fn(&mut World, PointerClick) -> bool>;
+/// A plain primary click on the subtree that owns the handler. The
+/// language carries no geometry or modifiers: the editor decides what
+/// holding the command key means (a pick, not a click), and leaves
+/// whose interaction needs coordinates are [`Display`] variants the
+/// editor renders itself.
+pub type ClickHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
 /// Unevaluated layout: grouping, walk, and leaves. Distinct from
 /// Progred's measured boxes (those have extents and place closures).
@@ -79,6 +78,11 @@ pub enum Layout<World, Hover> {
     OnClick {
         child: Box<Layout<World, Hover>>,
         handler: ClickHandler<World>,
+    },
+    /// What a command-click here picks: an identity, not a callback.
+    OnPick {
+        child: Box<Layout<World, Hover>>,
+        value: Value,
     },
     OnHover {
         child: Box<Layout<World, Hover>>,
@@ -133,6 +137,10 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::OnClick { child, handler } => Self::OnClick {
                 child: child.clone(),
                 handler: handler.clone(),
+            },
+            Self::OnPick { child, value } => Self::OnPick {
+                child: child.clone(),
+                value: value.clone(),
             },
             Self::OnHover { child, hover } => Self::OnHover {
                 child: child.clone(),
@@ -237,6 +245,10 @@ pub fn head<World, Hover>(cell: CellId) -> Layout<World, Hover> {
     leaf(Display::Head { cell })
 }
 
+pub fn field_label<World, Hover>(key: CellId) -> Layout<World, Hover> {
+    leaf(Display::Label { key })
+}
+
 pub fn query<World, Hover>(labels: bool) -> Layout<World, Hover> {
     leaf(Display::Query { labels })
 }
@@ -259,6 +271,13 @@ pub fn on_click<World, Hover>(
     }
 }
 
+pub fn pickable<World, Hover>(child: Layout<World, Hover>, value: Value) -> Layout<World, Hover> {
+    Layout::OnPick {
+        child: Box::new(child),
+        value,
+    }
+}
+
 pub fn on_hover<World, Hover>(child: Layout<World, Hover>, hover: Hover) -> Layout<World, Hover> {
     Layout::OnHover {
         child: Box::new(child),
@@ -277,7 +296,9 @@ pub fn block_hover<World, Hover>(child: Layout<World, Hover>) -> Layout<World, H
 /// [`editable_line`] (or a key wrapper around one).
 pub fn line_edit_of<World, Hover>(layout: &Layout<World, Hover>) -> Option<&LineEdit> {
     match layout {
-        Layout::OnClick { child, .. } | Layout::OnHover { child, .. } => line_edit_of(child),
+        Layout::OnClick { child, .. }
+        | Layout::OnPick { child, .. }
+        | Layout::OnHover { child, .. } => line_edit_of(child),
         Layout::Group { flat, broken } => line_edit_of(flat).or_else(|| line_edit_of(broken)),
         Layout::Pad { child, .. } | Layout::Bracket { child, .. } => line_edit_of(child),
         Layout::Leaf(Display::LineEdit(line)) => Some(line),
@@ -405,8 +426,8 @@ mod tests {
 
         let layout: Layout<World, ()> = on_click(
             text("click me"),
-            Rc::new(|world, click| {
-                world.clicks += usize::from(click.count);
+            Rc::new(|world| {
+                world.clicks += 1;
                 true
             }),
         );
@@ -414,16 +435,7 @@ mod tests {
             panic!("on_click builds an interaction node");
         };
         let mut world = World::default();
-        assert!(handler(
-            &mut world,
-            PointerClick {
-                x: 3.0,
-                y: 4.0,
-                shift: false,
-                command: false,
-                count: 2,
-            },
-        ));
-        assert_eq!(world.clicks, 2);
+        assert!(handler(&mut world));
+        assert_eq!(world.clicks, 1);
     }
 }
