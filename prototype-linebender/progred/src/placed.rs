@@ -250,7 +250,6 @@ pub fn on_key<C: 'static, Cv: 'static>(
     })
 }
 
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn on_primary_pointer_down<C: 'static, Cv: 'static>(
     child: Measured<Placed<C, Cv>>,
     accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,

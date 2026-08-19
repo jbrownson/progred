@@ -57,7 +57,6 @@ pub(crate) struct Frame {
 pub(crate) enum Hovered {
     Tree(hover::Hover),
     Graph(graph_view::GraphNode),
-    #[cfg(target_os = "linux")]
     Menu(menu::Hover),
 }
 
@@ -327,7 +326,6 @@ impl App {
             ),
             Some(Hovered::Graph(node)) => graph_view::node_value(&self.model.doc, node)
                 .filter(|value| !matches!(value, Value::Record(_))),
-            #[cfg(target_os = "linux")]
             Some(Hovered::Menu(_)) => None,
             None => None,
         };
@@ -389,8 +387,6 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         text_cache,
     } = resources;
     let viewport_width = viewport.width;
-    #[cfg(target_os = "linux")]
-    let viewport_height = viewport.height;
     // Mark-and-sweep by pass: entries the previous pass never used
     // are dropped here, everything else carries over — the steady
     // state is the visible text, shaped once.
@@ -402,24 +398,27 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         cache: text_cache,
     };
     let styles = crate::styles::editor(scale);
-    #[cfg(target_os = "linux")]
-    let application_menu = menu::view(
-        &mut tcx,
-        menu::Description {
-            state: menu,
-            availability,
-            raw: flags.raw,
-            graph: flags.graph,
-            scale,
-            width: viewport_width,
-        },
-        menu::Hooks {
-            toggle: Rc::new(|app: &mut App, section| app.menu.toggle(section)),
-            select: Rc::new(|app: &mut App, selection| app.choose_menu(selection)),
-        },
-    );
-    #[cfg(not(target_os = "linux"))]
-    let _ = (menu, availability);
+    let application_menu = menu::DRAWN.then(|| {
+        menu::view(
+            &mut tcx,
+            menu::Description {
+                state: menu,
+                availability,
+                raw: flags.raw,
+                graph: flags.graph,
+                scale,
+                width: viewport_width,
+            },
+            menu::Hooks {
+                toggle: Rc::new(|app: &mut App, section| app.menu.toggle(section)),
+                select: Rc::new(|app: &mut App, selection| app.choose_menu(selection)),
+            },
+        )
+    });
+    let (menu_bar, menu_popup, menu_heading_width) = match application_menu {
+        Some(menu) => (Some(menu.bar), menu.popup, menu.heading_width),
+        None => (None, None, 0.0),
+    };
     let content_viewport = content_viewport(viewport, scale);
     // The Raw view is ONE bit, threaded as itself: name lookups
     // derive from it downstream, no policy swapped here, and the
@@ -587,15 +586,12 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
             });
         },
     );
-    #[cfg(target_os = "linux")]
-    {
+    if let Some(bar) = menu_bar {
         let bar_placement = Placement::new(
             vello::kurbo::Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
-            vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport_height),
+            vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport.height),
         );
-        stage = measured::overlay(stage, application_menu.bar, move |_, _, _| {
-            Some(bar_placement)
-        });
+        stage = measured::overlay(stage, bar, move |_, _, _| Some(bar_placement));
     }
     stage = measured::overlay(
         stage,
@@ -720,9 +716,8 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         });
     }
 
-    #[cfg(target_os = "linux")]
-    if let Some((x, popup)) = application_menu.popup {
-        let heading_width = application_menu.heading_width;
+    if let Some((x, popup)) = menu_popup {
+        let heading_width = menu_heading_width;
         // Close and swallow ride under the popup's own content:
         // above every other pane, below the menu items.
         let popup = placed::before(popup, move |p, placement| {
@@ -747,7 +742,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         stage = measured::overlay(stage, popup, move |_, extent, _| {
             Some(Placement::new(
                 extent.rect_at(Point::new(x, content_viewport.y0)),
-                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport_height),
+                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport.height),
             ))
         });
     }

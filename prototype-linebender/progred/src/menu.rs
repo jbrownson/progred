@@ -1,12 +1,16 @@
-//! Platform-neutral menu state and selections, plus Linux's Progred-drawn view.
+//! Platform-neutral menu state and selections, plus the Progred-drawn
+//! view for platforms without a native application menu.
 
-#[cfg(any(test, target_os = "linux"))]
 use ui_events::keyboard::{Key, KeyboardEvent};
+
+/// The one platform switch: the app draws its own menu bar and popups
+/// wherever there is no native application menu; macOS speaks to its
+/// own through `macos_menu`.
+pub const DRAWN: bool = cfg!(not(target_os = "macos"));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Platform {
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-    Linux,
+    Drawn,
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     MacOs,
 }
@@ -45,8 +49,7 @@ impl Shortcut {
         Self { key, shift: true }
     }
 
-    #[cfg(target_os = "linux")]
-    fn linux_label(self) -> String {
+    fn drawn_label(self) -> String {
         format!(
             "Ctrl+{}{}",
             if self.shift { "Shift+" } else { "" },
@@ -67,7 +70,6 @@ pub enum ShortcutKey {
 }
 
 impl ShortcutKey {
-    #[cfg(any(test, target_os = "linux"))]
     pub const fn label(self) -> &'static str {
         match self {
             Self::G => "G",
@@ -185,7 +187,7 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
         ]
         .into_iter()
         .chain(
-            (platform == Platform::Linux)
+            (platform == Platform::Drawn)
                 .then_some([Entry::Separator, Entry::Item(quit)])
                 .into_iter()
                 .flatten(),
@@ -212,7 +214,6 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
         .collect()
 }
 
-#[cfg(target_os = "linux")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hover {
     Heading(usize),
@@ -225,22 +226,18 @@ pub struct State {
 }
 
 impl State {
-    #[cfg(any(test, target_os = "linux"))]
     pub fn open(&self) -> Option<usize> {
         self.open
     }
 
-    #[cfg(any(test, target_os = "linux"))]
     pub fn toggle(&mut self, menu: usize) {
         self.open = (self.open != Some(menu)).then_some(menu);
     }
 
-    #[cfg(any(test, target_os = "linux"))]
     pub fn close(&mut self) -> bool {
         self.open.take().is_some()
     }
 
-    #[cfg(any(test, target_os = "linux"))]
     pub fn captures_key(&self, event: &KeyboardEvent) -> bool {
         self.open.is_some() && event.state.is_down()
     }
@@ -264,14 +261,13 @@ impl Availability {
     }
 }
 
-#[cfg(any(test, target_os = "linux"))]
 pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
     let modifiers = &event.modifiers;
     if !event.state.is_down() || !modifiers.ctrl() || modifiers.meta() || modifiers.alt() {
         return None;
     }
     match &event.key {
-        Key::Character(key) => items(&definition(Platform::Linux))
+        Key::Character(key) => items(&definition(Platform::Drawn))
             .find(|item| {
                 item.shortcut.shift == modifiers.shift()
                     && key.as_str().eq_ignore_ascii_case(item.shortcut.key.label())
@@ -281,7 +277,6 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
     }
 }
 
-#[cfg(target_os = "linux")]
 mod view {
     use super::{Availability, Entry, Hover, Item, Kind, Platform, Selection, State, definition};
     use crate::frame::Hovered;
@@ -368,7 +363,7 @@ mod view {
             crate::render::text(tcx, label, style),
         );
         let content = placed::decorate(content, move |p, rect| {
-            p.ink(move |cv, ink| {
+            p.ink(move |cv: &mut Cv, ink| {
                 let hovered =
                     matches!(ink.hovered, Some(Hovered::Menu(Hover::Heading(i))) if *i == index);
                 if active || hovered {
@@ -438,7 +433,7 @@ mod view {
             &format!("{}  {}", if checked { "✓" } else { " " }, item.label),
             style,
         );
-        let shortcut = crate::render::text(tcx, &item.shortcut.linux_label(), shortcut_style);
+        let shortcut = crate::render::text(tcx, &item.shortcut.drawn_label(), shortcut_style);
         let gap =
             (width - 24.0 * scale - label.extent.width - shortcut.extent.width).max(12.0 * scale);
         let content = measured::pad(
@@ -446,7 +441,7 @@ mod view {
             measured::row(gap, vec![label, shortcut]),
         );
         let content = placed::decorate(content, move |p, rect| {
-            p.ink(move |cv, ink| {
+            p.ink(move |cv: &mut Cv, ink| {
                 let hovered = matches!(
                     ink.hovered,
                     Some(Hovered::Menu(Hover::Item(s))) if *s == selection
@@ -528,7 +523,7 @@ mod view {
         hooks: Hooks<C>,
     ) -> View<Placed<C, Cv>> {
         let styles = styles();
-        let definition = definition(Platform::Linux);
+        let definition = definition(Platform::Drawn);
         let mut x = 0.0;
         let mut popup_x = 0.0;
         let headings = definition
@@ -595,7 +590,6 @@ mod view {
     }
 }
 
-#[cfg(target_os = "linux")]
 pub use view::{Description, Hooks, bar_height, view};
 
 #[cfg(test)]
@@ -654,7 +648,7 @@ mod tests {
 
     #[test]
     fn the_shared_tree_lists_every_selection_once() {
-        for platform in [Platform::Linux, Platform::MacOs] {
+        for platform in [Platform::Drawn, Platform::MacOs] {
             let definition = definition(platform);
             let items = items(&definition).collect::<Vec<_>>();
             assert_eq!(items.len(), 9);
@@ -686,7 +680,7 @@ mod tests {
                 }),
             ]
         );
-        let linux = definition(Platform::Linux);
+        let linux = definition(Platform::Drawn);
         assert_eq!(
             linux.iter().map(|menu| menu.label).collect::<Vec<_>>(),
             vec!["File", "Edit", "View"]
@@ -707,7 +701,7 @@ mod tests {
 
     #[test]
     fn shared_shortcuts_are_unique() {
-        let definition = definition(Platform::Linux);
+        let definition = definition(Platform::Drawn);
         let items = items(&definition).collect::<Vec<_>>();
         for (index, item) in items.iter().enumerate() {
             assert!(

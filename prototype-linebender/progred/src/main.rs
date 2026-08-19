@@ -40,7 +40,7 @@ use std::sync::Arc;
 use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
-use ui_events::keyboard::KeyboardEvent;
+use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerEvent;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::kurbo::{Point, Rect, Size, Vec2};
@@ -58,7 +58,6 @@ use winit::window::{Window, WindowId};
 pub(crate) enum UserEvent {
     #[cfg(target_os = "macos")]
     MacMenu(macos_menu::Event),
-    #[cfg(target_os = "linux")]
     Menu(menu::Selection),
     Discard(bool),
 }
@@ -165,15 +164,7 @@ pub(crate) struct App {
 }
 
 pub(crate) fn menu_height(scale: f64) -> f64 {
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = scale;
-        0.0
-    }
-    #[cfg(target_os = "linux")]
-    {
-        menu::bar_height(scale)
-    }
+    if menu::DRAWN { menu::bar_height(scale) } else { 0.0 }
 }
 
 pub(crate) fn content_viewport(viewport: Size, scale: f64) -> Rect {
@@ -233,7 +224,6 @@ impl ApplicationHandler<UserEvent> for App {
                     self.handle_menu_selection(event_loop, selection);
                 }
             }
-            #[cfg(target_os = "linux")]
             UserEvent::Menu(selection) => self.handle_menu_selection(event_loop, selection),
             UserEvent::Discard(accepted) => {
                 let pending = self.pending_discard.take();
@@ -685,36 +675,32 @@ impl App {
         }
     }
 
-    #[cfg(target_os = "linux")]
     pub(crate) fn choose_menu(&mut self, selection: menu::Selection) {
         self.menu.close();
         let _ = self.proxy.send_event(UserEvent::Menu(selection));
     }
 
     pub(crate) fn menu_key(&mut self, event: &KeyboardEvent) -> bool {
-        #[cfg(not(target_os = "linux"))]
-        {
-            let _ = event;
-            false
+        // The native menu owns its own shortcuts; only the drawn
+        // menu routes keys here.
+        if !menu::DRAWN {
+            return false;
         }
-        #[cfg(target_os = "linux")]
+        let open = self.menu.open().is_some();
+        if open
+            && event.state.is_down()
+            && plain(event)
+            && matches!(event.key, Key::Named(NamedKey::Escape))
         {
-            let open = self.menu.open().is_some();
-            if open
-                && event.state.is_down()
-                && plain(event)
-                && matches!(event.key, Key::Named(NamedKey::Escape))
-            {
-                self.menu.close()
-            } else {
-                menu::shortcut(event)
-                    .filter(|selection| self.menu_availability().enabled(*selection))
-                    .is_some_and(|selection| {
-                        self.choose_menu(selection);
-                        true
-                    })
-                    || self.menu.captures_key(event)
-            }
+            self.menu.close()
+        } else {
+            menu::shortcut(event)
+                .filter(|selection| self.menu_availability().enabled(*selection))
+                .is_some_and(|selection| {
+                    self.choose_menu(selection);
+                    true
+                })
+                || self.menu.captures_key(event)
         }
     }
 
