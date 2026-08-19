@@ -676,3 +676,106 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
         *recorded = false;
     }
 }
+
+/// The selection as data: the payload projections receive when their
+/// path is the selected one. Stage is a named cell; the query rides
+/// the text convention and the choice the f64 convention. Editor
+/// gesture internals (caret, anchor, preedit, drag) are tier-2 Rust
+/// and never encode; the live editor text writes through to the
+/// payload at the same per-event point the document does.
+pub mod payload {
+    use gid::{CellId, Value};
+    use progred_libraries::{f64 as f64_convention, text};
+
+    pub mod vocabulary {
+        use gid::CellId;
+
+        pub const STAGE: CellId = CellId::from_u128(0x6a1fd3082b9c47e5f60d21a8c45e9b37);
+        pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
+        pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
+        pub const REPLACING: CellId = CellId::from_u128(0xe3906b5d78a2c4f10b358d96a1f42c7d);
+
+        /// A value's edge is selected; editing state, if any, is tier-2.
+        pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
+        /// A value pending: the query authors the value at the path.
+        pub const PENDING: CellId = CellId::from_u128(0x91d5e60b3a8f27c4058b39f6d2c471ea);
+        /// A label pending on the record at the path: a new field's
+        /// label, or with REPLACING, an existing one re-opened.
+        pub const LABEL: CellId = CellId::from_u128(0x7be29f4680d1c5a3f2496e07b85d13c2);
+    }
+
+    pub fn edge() -> Value {
+        Value::record([(vocabulary::STAGE, Value::Cell(vocabulary::EDGE))])
+    }
+
+    pub fn pending(query: &str, choice: usize) -> Value {
+        Value::record([
+            (vocabulary::STAGE, Value::Cell(vocabulary::PENDING)),
+            (vocabulary::QUERY, text::value(query)),
+            (vocabulary::CHOICE, f64_convention::value(choice as f64)),
+        ])
+    }
+
+    pub fn label(query: &str, choice: usize, replacing: Option<CellId>) -> Value {
+        let mut fields = vec![
+            (vocabulary::STAGE, Value::Cell(vocabulary::LABEL)),
+            (vocabulary::QUERY, text::value(query)),
+            (vocabulary::CHOICE, f64_convention::value(choice as f64)),
+        ];
+        if let Some(replacing) = replacing {
+            fields.push((vocabulary::REPLACING, Value::Cell(replacing)));
+        }
+        Value::record(fields)
+    }
+
+    pub fn stage(payload: &Value) -> Option<CellId> {
+        payload.as_record()?.get(&vocabulary::STAGE)?.as_cell()
+    }
+
+    pub fn query(payload: &Value) -> Option<&str> {
+        text::read(payload.as_record()?.get(&vocabulary::QUERY)?)
+    }
+
+    pub fn choice(payload: &Value) -> Option<usize> {
+        let choice = f64_convention::read(payload.as_record()?.get(&vocabulary::CHOICE)?)?;
+        (choice >= 0.0 && choice.fract() == 0.0).then_some(choice as usize)
+    }
+
+    pub fn replacing(payload: &Value) -> Option<CellId> {
+        payload.as_record()?.get(&vocabulary::REPLACING)?.as_cell()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn payloads_round_trip_by_stage() {
+            let edge = edge();
+            assert_eq!(stage(&edge), Some(vocabulary::EDGE));
+            assert_eq!(query(&edge), None);
+
+            let pending = pending("asd", 2);
+            assert_eq!(stage(&pending), Some(vocabulary::PENDING));
+            assert_eq!(query(&pending), Some("asd"));
+            assert_eq!(choice(&pending), Some(2));
+            assert_eq!(replacing(&pending), None);
+
+            let key = gid::new_cell_id();
+            let rename = label("nm", 0, Some(key));
+            assert_eq!(stage(&rename), Some(vocabulary::LABEL));
+            assert_eq!(replacing(&rename), Some(key));
+            assert_eq!(label("nm", 0, None).as_record().unwrap().len(), 3);
+        }
+
+        #[test]
+        fn junk_reads_none() {
+            assert_eq!(stage(&Value::record([])), None);
+            let junk = Value::record([(
+                vocabulary::CHOICE,
+                super::f64_convention::value(-1.5),
+            )]);
+            assert_eq!(choice(&junk), None);
+        }
+    }
+}
