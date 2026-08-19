@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 /// The fold override at a path: one of two NAMED STATES, absent
 /// meaning the default (collapsed inside a cycle). Named cells, not a
-/// boolean — GID deliberately has no bool; presence covers toggles
-/// and named states cover the rest.
+/// boolean — GID has no bool until a case beats presence for toggles
+/// and named states for the rest.
 pub const FOLD: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
 pub const FOLDED: CellId = CellId::from_u128(0x84c07f3b9ad2561e02c6b4d81f7a39e5);
 pub const EXPANDED: CellId = CellId::from_u128(0x1d5b0c47e8f6a923d7405c9128b3fae6);
