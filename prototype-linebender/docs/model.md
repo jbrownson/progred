@@ -72,8 +72,24 @@ record conventions never descend by element, and computed list
 views go through Transient). Ordinals-resolved-at-realize is the
 shelf design if a real per-element library need ever appears, every vocabulary cell a named library cell so authors see the
 language inside the editor, and junk decoding to None so a malformed
-layout falls through whole; (3) document-loaded partials in
-`stack::load`, grap functions composing beside the Rust ones; (4) FFI
+layout falls through whole; (3) DONE 2026-08-19: documents contribute
+projection partials — the registry is a DOCUMENT FACT, a list of
+grap callables on the `layout` library's PROJECTIONS cell, tried
+before the editor's own partials (the author installed them in THIS
+document; a decline falls through, so overriding is intent, never an
+accident) and silenced by the raw view exactly as the Rust ones are.
+Each callable is applied to the VALUE/SELECTION/STATE contract
+(absent-classified when missing, so partials may declare any subset)
+through `grap::apply`, the values-in application boundary added for
+this: arguments BIND AS DATA, where `call` + `evaluate` would
+misevaluate a code-shaped value (a stored lambda or call record) as
+an expression — `write_through` switched to it for the same reason.
+Declines are any diagnostic or an undecodable result, falling
+through whole. No new FFIs were needed: `case` is the facet match
+and field binder, `quote`/`unquote` the record builder — the proof
+is checked in as the sample's `at display` cell, a projection
+authored purely as document data that renders `at` records as
+"row × col" in sample.gid and every bench render; (4) FFI
 curation as standing practice, one deliberate capability at a time.
 
 Landed so far (2026-08-19): `Annotations` replaced the collapse-only
@@ -82,9 +98,15 @@ editor) — stage/query/choice/replacing live in the payload, decoded
 through `Stage` for matching, with the live editor's text writing
 through to the payload at the same per-event point the document takes
 its writes; and `ProjectionInput` carries the positional view
-(`selection`, `state`), so partials see editor state as data. Next
-candidates: remaining slots (scroll, view flags as presence), the
-vector-ink leaf, widgets as blessed functions.
+(`selection`, `state`), so partials see editor state as data. Known
+seams, deliberate: `Projection::line` projects with `NoEval` and
+never consults document partials, so a data-defined line edit works
+in the tree but not in line previews; one registry cell means
+last-writer-wins if multi-document library loading ever merges cell
+tables; and an FFI registry target still evaluates its call fields
+itself, keeping the code-shaped edge `apply` removes for closures.
+Next candidates: remaining slots (scroll, view flags as presence),
+the vector-ink leaf, widgets as blessed functions.
 
 
 ## Cell-Only Labels And Library Text (2026-08-09)
