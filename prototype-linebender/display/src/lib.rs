@@ -102,7 +102,13 @@ pub enum Layout<World, Hover> {
         bottom: f64,
         child: Box<Layout<World, Hover>>,
     },
-    /// Measure `child`, then draw tall delimiters from its extent.
+    /// The one decorated container: arrangement plus chrome. The
+    /// editor measures `child` and stretches the delimiter pair over
+    /// its extent — a leaf could never see a sibling's height, so
+    /// stretching is inherently the wrapper's job. It charges layout
+    /// only the flat advance; growth is typographic overhang. The
+    /// delimiters are the container's handles, so this is interaction
+    /// as much as ink.
     Bracket {
         delim: Delim,
         child: Box<Layout<World, Hover>>,
