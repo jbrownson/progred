@@ -7,7 +7,7 @@ use gid::{Cells, Step, Value};
 use grap_runtime::vocabulary::GRAP;
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Layout, ProjectionInput, col, dim, group, nest, on_click, on_hover, row, transient,
+    Layout, ProjectionInput, alternatives, col, dim, nest, on_click, on_hover, row, transient,
 };
 
 pub fn display<World, Hover: Clone>(
@@ -18,10 +18,10 @@ pub fn display<World, Hover: Clone>(
     let expression = nest(Step::Key(GRAP), expression);
     let shaft = on_hover(on_click(dim("→"), input.select), input.hover);
     let result = transient(&result, fuel);
-    Some(group(
+    Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
         col(0, 2.0, [expression, row(6.0, [shaft, result])]),
-    ))
+    ]))
 }
 
 fn evaluate_foreign(
@@ -124,11 +124,11 @@ mod tests {
     }
 
     fn arms(layout: &Layout<(), ()>) -> (&Layout<(), ()>, &Layout<(), ()>) {
-        let Layout::Group { flat, .. } = layout else {
-            panic!("expected a group");
+        let Layout::Alternatives(options) = layout else {
+            panic!("expected alternatives");
         };
-        let Layout::Row { children, .. } = flat.as_ref() else {
-            panic!("expected a row");
+        let Some(Layout::Row { children, .. }) = options.first() else {
+            panic!("expected a row first");
         };
         assert_eq!(children.len(), 3);
         (&children[0], &children[2])
@@ -160,7 +160,7 @@ mod tests {
                     [(new_cell_id(), Value::from(vec![2]))]
                 ),
             ),
-            Some(Layout::Group { .. })
+            Some(Layout::Alternatives(_))
         ));
     }
 

@@ -280,13 +280,47 @@ fn realize<
             value: computed,
             fuel,
         } => project_transient_root(cx, projection, tcx, path, computed, fuel, avail, hooks),
-        progred_display::Layout::Group { flat, broken } => {
+        progred_display::Layout::Alternatives(mut options) => {
+            let Some(accommodating) = options.pop() else {
+                return row(0.0, Vec::new());
+            };
             if avail <= 0.0 {
                 return realize(
-                    cx, projection, tcx, path, ancestors, hooks, value, *broken, avail,
+                    cx,
+                    projection,
+                    tcx,
+                    path,
+                    ancestors,
+                    hooks,
+                    value,
+                    accommodating,
+                    avail,
                 );
             }
-            let candidate = realize(
+            // Order is preference: options before the last realize in
+            // their natural, unbounded form — nested alternatives pick
+            // their own firsts — and the first whose width fits wins.
+            // The last accommodates the real width. When nothing fits,
+            // the narrowest wins; earlier options win ties.
+            let mut tried = Vec::new();
+            for option in options {
+                let candidate = realize(
+                    cx,
+                    projection,
+                    tcx,
+                    path,
+                    ancestors,
+                    hooks,
+                    value,
+                    option,
+                    f64::INFINITY,
+                );
+                if candidate.extent.width <= avail {
+                    return candidate;
+                }
+                tried.push(candidate);
+            }
+            let mut best = realize(
                 cx,
                 projection,
                 tcx,
@@ -294,21 +328,15 @@ fn realize<
                 ancestors,
                 hooks,
                 value,
-                *flat,
-                f64::INFINITY,
+                accommodating,
+                avail,
             );
-            let fits = one_line(candidate.extent, scale) && candidate.extent.width <= avail;
-            if fits {
-                return candidate;
+            for candidate in tried.into_iter().rev() {
+                if candidate.extent.width <= best.extent.width {
+                    best = candidate;
+                }
             }
-            let broken = realize(
-                cx, projection, tcx, path, ancestors, hooks, value, *broken, avail,
-            );
-            if one_line(candidate.extent, scale) && candidate.extent.width <= broken.extent.width {
-                candidate
-            } else {
-                broken
-            }
+            best
         }
     }
 }
@@ -638,13 +666,6 @@ fn delim_style(styles: &Styles) -> DelimStyle {
 /// may exceed its advance; layout never pays for growth.
 fn delim_advance(styles: &Styles, delim: Delim) -> f64 {
     delim_style(styles).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * styles.scale
-}
-
-/// Whether a candidate stayed one line tall — the flat forms' second
-/// gate beside width: a literal whose child broke inside is not flat,
-/// however narrow it came out.
-fn one_line(extent: Extent, scale: f64) -> bool {
-    extent.height() <= 20.0 * scale
 }
 
 /// A drawn delimiter leaf: `extent` is what layout sees (the FLAT

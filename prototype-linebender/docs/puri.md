@@ -156,7 +156,9 @@ Progred currently uses three layers, smallest sufficient model:
   list row) are vertical boxes with a chosen baseline — the founding
   case of the model, not a corner case. This also retires the egui-era
   block-in-inline problem by construction.
-- A Wadler-style grouping pass above decides flat-versus-broken, needing
+- A Wadler-flavored pass above chooses among ordered layout
+  alternatives — first form whose natural width fits, the last
+  accommodating the real width — needing
   only a fits-in-width oracle from the box layer.
 - App chrome (panels, toolbars) is a few hand-coded flex-ish containers.
 

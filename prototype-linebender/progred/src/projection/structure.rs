@@ -7,7 +7,7 @@ use crate::hover::Hover;
 use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
 use progred_display::{
-    Delim, Layout, block_hover, bracket, col, delim, descend, dim, field_label, group, head, hug,
+    Delim, Layout, block_hover, bracket, col, delim, descend, dim, field_label, alternatives, head, hug,
     id, on_click, on_hover, pickable, query, row, slot,
 };
 use progred_libraries::{name, text};
@@ -142,7 +142,7 @@ fn list_layout<World: 'static>(
         .iter()
         .map(|(position, _)| descend(Step::Element(position.clone())))
         .collect();
-    group(
+    alternatives([
         selectable(
             row(0.0, flat),
             path,
@@ -151,7 +151,7 @@ fn list_layout<World: 'static>(
             false,
         ),
         bracket(Delim::Bracket, col(0, 4.0, rows)),
-    )
+    ])
 }
 
 fn record_layout<World: 'static>(
@@ -247,7 +247,7 @@ fn record_layout<World: 'static>(
     if pending_edge {
         rows.push(pending_edge_layout());
     }
-    group(
+    alternatives([
         selectable(
             row(0.0, flat),
             path,
@@ -256,7 +256,7 @@ fn record_layout<World: 'static>(
             false,
         ),
         bracket(Delim::Brace, col(0, 4.0, rows)),
-    )
+    ])
 }
 
 fn field_head<World: 'static>(

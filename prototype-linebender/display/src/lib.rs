@@ -125,12 +125,13 @@ pub enum Layout<World, Hover> {
         value: Value,
         fuel: usize,
     },
-    /// Try `flat` at unbounded width; if it is not one line or does
-    /// not fit, use `broken`. If neither fits, keep the narrower.
-    Group {
-        flat: Box<Layout<World, Hover>>,
-        broken: Box<Layout<World, Hover>>,
-    },
+    /// Ordered forms of the same content. Order is preference: each
+    /// option before the last is offered in its natural, unbounded
+    /// width — nested alternatives inside it pick their own firsts —
+    /// and the first whose width fits wins. The last option is the
+    /// accommodating form, laid out against the real width. When
+    /// nothing fits, the narrowest wins; earlier options win ties.
+    Alternatives(Vec<Layout<World, Hover>>),
 }
 
 impl<World, Hover: Clone> Clone for Layout<World, Hover> {
@@ -188,10 +189,7 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 value: value.clone(),
                 fuel: *fuel,
             },
-            Self::Group { flat, broken } => Self::Group {
-                flat: flat.clone(),
-                broken: broken.clone(),
-            },
+            Self::Alternatives(options) => Self::Alternatives(options.clone()),
         }
     }
 }
@@ -302,7 +300,7 @@ pub fn line_edit_of<World, Hover>(layout: &Layout<World, Hover>) -> Option<&Line
         Layout::OnClick { child, .. }
         | Layout::OnPick { child, .. }
         | Layout::OnHover { child, .. } => line_edit_of(child),
-        Layout::Group { flat, broken } => line_edit_of(flat).or_else(|| line_edit_of(broken)),
+        Layout::Alternatives(options) => options.iter().find_map(line_edit_of),
         Layout::Pad { child, .. } | Layout::Bracket { child, .. } => line_edit_of(child),
         Layout::Leaf(Display::LineEdit(line)) => Some(line),
         _ => None,
@@ -361,10 +359,10 @@ pub fn hug<World, Hover: Clone>(
     gap: f64,
     tab: f64,
 ) -> Layout<World, Hover> {
-    group(
+    alternatives([
         row(gap, [head.clone(), child.clone()]),
         col(0, 2.0, [head, pad(tab, child)]),
-    )
+    ])
 }
 
 pub fn nest<World, Hover>(step: Step, value: &Value) -> Layout<World, Hover> {
@@ -393,14 +391,10 @@ pub fn transient<World, Hover>(value: &Value, fuel: usize) -> Layout<World, Hove
     }
 }
 
-pub fn group<World, Hover>(
-    flat: Layout<World, Hover>,
-    broken: Layout<World, Hover>,
+pub fn alternatives<World, Hover>(
+    options: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
-    Layout::Group {
-        flat: Box::new(flat),
-        broken: Box::new(broken),
-    }
+    Layout::Alternatives(options.into_iter().collect())
 }
 
 /// If both values are records, `patch` fields win on shared keys.
