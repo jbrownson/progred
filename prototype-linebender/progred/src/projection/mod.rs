@@ -1378,18 +1378,19 @@ fn project_present_value<
     avail: f64,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
-    // Editor state arrives positionally: the payload only at
-    // the selected path, the annotations only at this one.
-    let selection = cx
-        .selection
-        .filter(|current| current.path() == path)
-        .map(Selection::payload);
-    let state = cx.annotations.at(path);
-    let select = select_handler(path.to_vec(), hooks);
-    let hover = Hover::Value(path.to_vec());
-    let projected = document_partial_layout(cx, value, selection, state, &select, &hover)
-        .or_else(|| {
-            projection.and_then(|projection| {
+    let projected = projection
+        .and_then(|projection| {
+            // Editor state arrives positionally: the payload only at
+            // the selected path, the annotations only at this one.
+            // The document's own partials answer first.
+            let selection = cx
+                .selection
+                .filter(|current| current.path() == path)
+                .map(Selection::payload);
+            let state = cx.annotations.at(path);
+            let select = select_handler(path.to_vec(), hooks);
+            let hover = Hover::Value(path.to_vec());
+            document_partial_layout(cx, value, selection, state, &select, &hover).or_else(|| {
                 projection.apply(&ProjectEnv { cx }, value, selection, state, select, hover)
             })
         })
