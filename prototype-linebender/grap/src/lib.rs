@@ -186,16 +186,18 @@ pub struct Context<'a> {
 }
 
 impl Context<'_> {
-    fn run(mut self, expression: &Value) -> Evaluation {
-        let result = self
-            .eval(expression, &Environment::default())
-            .unwrap_or_else(|Halt(result)| result);
+    fn conclude(mut self, run: impl FnOnce(&mut Self) -> Result<Value, Halt>) -> Evaluation {
+        let result = run(&mut self).unwrap_or_else(|Halt(result)| result);
         Evaluation {
             result,
             diagnostics: self.diagnostics,
             dependencies: self.dependencies,
             remaining_fuel: self.remaining_fuel,
         }
+    }
+
+    fn run(self, expression: &Value) -> Evaluation {
+        self.conclude(|context| context.eval(expression, &Environment::default()))
     }
 
     pub fn eval(&mut self, expression: &Value, environment: &Environment) -> Result<Value, Halt> {
@@ -317,14 +319,42 @@ impl Context<'_> {
             Some((params, body, closure_environment)) => {
                 self.eval_grap_call(params, body, closure_environment, call, environment)
             }
-            None => match callable
-                .as_record()
-                .and_then(|fields| fields.get(&vocabulary::FFI))
-                .and_then(Value::as_cell)
-                .and_then(|cell| self.foreign.get(cell))
-                .cloned()
-            {
+            None => match self.foreign_target(&callable) {
                 Some(function) => (function.call)(self, call, environment),
+                None => Ok(self.absent(Diagnostic::NotCallable(callable), absent::NOT_CALLABLE)),
+            },
+        }
+    }
+
+    fn foreign_target(&self, callable: &Value) -> Option<ForeignFunction> {
+        callable
+            .as_record()?
+            .get(&vocabulary::FFI)?
+            .as_cell()
+            .and_then(|cell| self.foreign.get(cell))
+            .cloned()
+    }
+
+    fn apply_values(
+        &mut self,
+        function: &Value,
+        arguments: Vec<(CellId, Value)>,
+    ) -> Result<Value, Halt> {
+        let environment = Environment::default();
+        let callable = self.eval(function, &environment)?;
+        match closure_target(&callable) {
+            Some((params, body, closure_environment)) => {
+                let mut bound = Vec::with_capacity(params.len());
+                for parameter in params {
+                    match arguments.iter().find(|(cell, _)| *cell == parameter) {
+                        Some(argument) => bound.push(argument.clone()),
+                        None => return Ok(self.missing_argument(parameter)),
+                    }
+                }
+                self.eval(&body, &closure_environment.extended(bound))
+            }
+            None => match self.foreign_target(&callable) {
+                Some(function) => (function.call)(self, &call(callable, arguments), &environment),
                 None => Ok(self.absent(Diagnostic::NotCallable(callable), absent::NOT_CALLABLE)),
             },
         }
@@ -403,6 +433,30 @@ pub fn evaluate(
         resolving: Vec::new(),
     }
     .run(expression)
+}
+
+/// Apply a callable to already-evaluated argument VALUES. This is the
+/// host boundary: a code-shaped value (a stored lambda or call
+/// record) binds as data, where `call` + [`evaluate`] would evaluate
+/// it as an expression. A foreign target still receives the
+/// arguments as call fields and evaluates them itself; every value
+/// but a code-shaped one self-quotes through that.
+pub fn apply(
+    function: &Value,
+    arguments: impl IntoIterator<Item = (CellId, Value)>,
+    resolve: impl Fn(CellId) -> Option<Value>,
+    foreign: &ForeignFunctions,
+    fuel: usize,
+) -> Evaluation {
+    Context {
+        resolve: &resolve,
+        foreign,
+        remaining_fuel: fuel,
+        diagnostics: Vec::new(),
+        dependencies: BTreeSet::new(),
+        resolving: Vec::new(),
+    }
+    .conclude(|context| context.apply_values(function, arguments.into_iter().collect()))
 }
 
 #[cfg(test)]
@@ -916,5 +970,94 @@ mod tests {
             .result,
             blob("right")
         );
+    }
+
+    #[test]
+    fn apply_binds_code_shaped_arguments_as_data() {
+        let parameter = new_cell_id();
+        let identity = lambda([parameter], Value::from(parameter));
+        let code_shaped = lambda([new_cell_id()], blob("body"));
+        // `call` + `evaluate` closes over the argument; `apply`
+        // hands it through untouched.
+        assert!(
+            evaluate(
+                &call(identity.clone(), [(parameter, code_shaped.clone())]),
+                |_| None,
+                &ForeignFunctions::default(),
+                20,
+            )
+            .result
+                != code_shaped
+        );
+        let applied = apply(
+            &identity,
+            [(parameter, code_shaped.clone())],
+            |_| None,
+            &ForeignFunctions::default(),
+            20,
+        );
+        assert_eq!(applied.result, code_shaped);
+        assert!(applied.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn apply_resolves_a_cell_to_its_stored_function() {
+        let function = new_cell_id();
+        let parameter = new_cell_id();
+        let stored = lambda([parameter], Value::from(parameter));
+        let applied = apply(
+            &Value::from(function),
+            [(parameter, blob("argument"))],
+            |cell| (cell == function).then(|| stored.clone()),
+            &ForeignFunctions::default(),
+            20,
+        );
+        assert_eq!(applied.result, blob("argument"));
+        assert_eq!(applied.dependencies, BTreeSet::from([function]));
+    }
+
+    #[test]
+    fn apply_reaches_foreign_targets_with_the_arguments_as_fields() {
+        let function = new_cell_id();
+        let foreign = ForeignFunctions::default().register(
+            function,
+            ForeignFunction {
+                call: |context, call, environment| {
+                    let argument = context.field(call, CellId::from_u128(7)).unwrap().clone();
+                    context.eval(&argument, environment)
+                },
+            },
+        );
+        let applied = apply(
+            &ffi(function),
+            [(CellId::from_u128(7), blob("passed"))],
+            |_| None,
+            &foreign,
+            20,
+        );
+        assert_eq!(applied.result, blob("passed"));
+    }
+
+    #[test]
+    fn apply_classifies_missing_arguments_and_uncallable_targets() {
+        let parameter = new_cell_id();
+        let missing = apply(
+            &lambda([parameter], Value::from(parameter)),
+            [],
+            |_| None,
+            &ForeignFunctions::default(),
+            20,
+        );
+        assert_eq!(missing.result, Value::from(absent::MISSING_ARGUMENT));
+        assert!(!missing.diagnostics.is_empty());
+
+        let uncallable = apply(
+            &blob("not a function"),
+            [],
+            |_| None,
+            &ForeignFunctions::default(),
+            20,
+        );
+        assert_eq!(uncallable.result, Value::from(absent::NOT_CALLABLE));
     }
 }

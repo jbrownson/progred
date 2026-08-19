@@ -730,15 +730,14 @@ pub fn write_through(
             };
             let current = sources.resolve(path).cloned();
             let next = current.as_ref().and_then(|current| {
-                let call = grap::call(
-                    update,
+                // `apply`, not `call` + `evaluate`: the current value
+                // is data even when it is code-shaped.
+                let evaluation = grap::apply(
+                    &update,
                     [
                         (progred_display::line_update::CURRENT, current.clone()),
                         (progred_display::line_update::INPUT, text::value(&typed)),
                     ],
-                );
-                let evaluation = grap::evaluate(
-                    &call,
                     |cell| sources.value(cell).cloned(),
                     foreign,
                     grap::DEFAULT_FUEL,
