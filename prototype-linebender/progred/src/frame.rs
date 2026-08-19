@@ -3,7 +3,7 @@
 use crate::completion;
 use crate::graph_view;
 use crate::hover;
-use crate::measured;
+use measured;
 use crate::menu;
 use crate::model::{Model, Selected, ViewFlags};
 use crate::navigate;

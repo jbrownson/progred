@@ -278,7 +278,7 @@ fn place_with_inputs(
         hover_claims: Vec::new(),
     };
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
-    crate::measured::place(
+    measured::place(
         node,
         &mut bench,
         match viewport {
@@ -743,7 +743,7 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
             pointer: Some(pointer),
             hover_claims: Vec::new(),
         };
-        crate::measured::place_top_left(card, &mut bench, Point::ZERO);
+        measured::place_top_left(card, &mut bench, Point::ZERO);
         (bench, extent)
     };
     // The card's own padding claims-and-clears: an overlay's

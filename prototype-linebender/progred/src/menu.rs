@@ -285,7 +285,7 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
 mod view {
     use super::{Availability, Entry, Hover, Item, Kind, Platform, Selection, State, definition};
     use crate::hover::HasHover;
-    use crate::measured::{self, Extent, Measured};
+    use measured::{self, Extent, Measured};
     use puri::draw::Canvas;
     use puri::handler::HasHandler;
     use puri::text::{TextCtx, TextStyle};

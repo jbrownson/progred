@@ -1,14 +1,13 @@
 [package]
-name = "puri"
+name = "measured"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 kurbo = "0.13.1"
-parley = "0.9.0"
-peniko = "0.6.1"
+puri = { path = "../puri" }
 ui-events = "0.3"
 uig = { path = "../uig" }
 
 [dev-dependencies]
-skrifa = "0.42.1"
+peniko = "0.6.1"

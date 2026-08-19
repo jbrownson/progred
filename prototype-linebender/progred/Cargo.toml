@@ -9,6 +9,7 @@ progred-libraries = { path = "../libraries" }
 progred-display = { path = "../display" }
 gid = { path = "../gid" }
 im = "15"
+measured = { path = "../ui/measured" }
 puri = { path = "../ui/puri" }
 puri-vello = { path = "../ui/puri-vello" }
 vello = "0.9.0"

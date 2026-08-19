@@ -1,6 +1,6 @@
 //! Lower display leaves to measured Puri drawing and interaction.
 
-use crate::measured::{self, Measured};
+use measured::{self, Measured};
 use crate::styles::Styles;
 pub use progred_display::LineEdit;
 use puri::draw::Canvas;

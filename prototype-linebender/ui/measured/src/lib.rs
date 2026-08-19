@@ -7,13 +7,13 @@
 //! effects so alternative layouts can be built and discarded, and
 //! placement is the single traversal that touches the context `P`.
 
+use kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
 use puri::draw::Canvas;
-use puri::geometry::Placement;
 use puri::handler::{Handler, HasHandler, capture};
 use puri::text::TextMetrics;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
-use vello::kurbo::{Affine, Insets, Point, Rect, Size, Vec2};
+use uig::Placement;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Extent {
@@ -266,7 +266,6 @@ pub fn place<P>(layout: Measured<P>, ctx: &mut P, placement: Placement) {
 }
 
 /// `at` is the top-left corner of the layout.
-#[cfg(test)]
 pub fn place_top_left<P>(layout: Measured<P>, ctx: &mut P, at: Point) {
     let placement = Placement::root(layout.extent.rect_at(at));
     place(layout, ctx, placement);
@@ -354,8 +353,8 @@ mod tests {
         PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
         PointerUpdate,
     };
-    use vello::kurbo::Stroke;
-    use vello::peniko::Brush;
+    use kurbo::Stroke;
+    use peniko::Brush;
 
     struct Frame<C> {
         list: DrawList,
@@ -633,7 +632,7 @@ mod tests {
                         placement.rect.x0 + 1.0,
                         placement.rect.y0 + 1.0,
                     ),
-                    vello::peniko::Color::WHITE,
+                    peniko::Color::WHITE,
                     Affine::IDENTITY,
                 );
             },

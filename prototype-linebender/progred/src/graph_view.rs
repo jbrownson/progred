@@ -14,7 +14,7 @@
 
 use crate::hover::HasHover;
 use crate::identity::short_id;
-use crate::measured::{self, Extent, leaf};
+use measured::{self, Extent, leaf};
 use crate::projection::command;
 use crate::selection::Selection;
 use crate::sources::Sources;

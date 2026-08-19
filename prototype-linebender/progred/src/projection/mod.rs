@@ -9,7 +9,7 @@ use crate::filter;
 use crate::hover::resolve_hover;
 use crate::hover::{HasHover, Hover, HoverClaim, Hovering, hover_value};
 use crate::identity::short_id;
-use crate::measured::{
+use measured::{
     Extent, Measured, around, before, col, decorate, leaf, min_width, on_key, pad, row,
 };
 use crate::navigate::{Descend, HasDescends};

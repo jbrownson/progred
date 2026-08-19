@@ -14,7 +14,6 @@ mod hover;
 mod identity;
 #[cfg(target_os = "macos")]
 mod macos_menu;
-mod measured;
 mod menu;
 mod model;
 mod navigate;
