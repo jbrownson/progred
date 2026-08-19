@@ -29,5 +29,5 @@ by the temporary text bridge.
 import/export notation. It exists for hand authoring, Git, debugging,
 LLM tooling, and other text-bound systems while Progred's own authoring
 matures. Its binders, parser leniencies, and textual layout are not GID
-semantics. Checked-in `*.gid.txt` files are fixtures for that bridge;
+semantics. Checked-in `*.gid` files are fixtures for that bridge;
 `.gid` is reserved for the future native representation.

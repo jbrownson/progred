@@ -359,7 +359,7 @@ library data rather than an evaluator feature.
 For a record with a `grap` field, the default projection shows
 the stored expression, an arrow, and its recursively projected
 result—an f64 as text, and arbitrary GID data structurally.
-`grap-demo.gid.txt` is
+`grap-demo.gid` is
 the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, the registered `evaluate` function
 with an explicit empty environment, Grap-defined functions, a circle,
@@ -372,7 +372,7 @@ results. The demo projects one Grap expression cell both directly and
 by reference under `grap`, making their shared identity visible through
 hover while the latter also carries its computed result.
 
-The broader checked-in `sample.gid.txt` carries the same evaluation path
+The broader checked-in `sample.gid` carries the same evaluation path
 inside the raw editor's structural examples:
 
 - `pitch` is a cell containing f64 `2.5`.

@@ -39,7 +39,7 @@ pub mod sample_vocabulary {
 /// and pitch flows through a small Grap function to a projected
 /// computed result.
 /// The app starts EMPTY now; this is the test fixture, and its
-/// text-bridge form is checked in as sample.gid.txt.
+/// text-bridge form is checked in as sample.gid.
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn sample_document() -> Document {
     let mut cells = Cells::new();

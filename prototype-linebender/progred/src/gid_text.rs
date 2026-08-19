@@ -725,7 +725,7 @@ mod checked_in_files {
     /// it back is the identity — the printer's golden fixture.
     #[test]
     fn the_sample_file_is_a_fixed_point() {
-        let text = include_str!("../../sample.gid.txt");
+        let text = include_str!("../../sample.gid");
         let (doc, binders) = parse(text).expect("the sample parses");
         assert!(doc.root.is_some());
         assert_eq!(print(&doc, &binders), text);
@@ -733,7 +733,7 @@ mod checked_in_files {
 
     #[test]
     fn the_grap_demo_is_a_fixed_point() {
-        let text = include_str!("../../grap-demo.gid.txt");
+        let text = include_str!("../../grap-demo.gid");
         let (doc, binders) = parse(text).expect("the Grap demo parses");
         assert_eq!(print(&doc, &binders), text);
     }

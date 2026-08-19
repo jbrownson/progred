@@ -304,7 +304,7 @@ fn svg_bench_renders_the_sample_projection() {
 
 #[test]
 fn svg_bench_renders_the_grap_demo() {
-    let (doc, _) = crate::gid_text::parse(include_str!("../../../grap-demo.gid.txt"))
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../grap-demo.gid"))
         .expect("the Grap demo parses");
     render(&doc, None, 900.0, "../target/grap_demo.svg");
     render(&doc, None, 560.0, "../target/grap_demo_narrow.svg");
@@ -345,7 +345,7 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
 
 #[test]
 fn expression_children_are_real() {
-    let (doc, binders) = crate::gid_text::parse(include_str!("../../../grap-demo.gid.txt"))
+    let (doc, binders) = crate::gid_text::parse(include_str!("../../../grap-demo.gid"))
         .expect("the Grap demo parses");
     let label = binders["inert_data"];
     let position = doc

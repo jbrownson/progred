@@ -220,7 +220,7 @@ pub(crate) fn plain(event: &KeyboardEvent) -> bool {
 }
 
 pub(crate) fn text_dialog() -> rfd::FileDialog {
-    rfd::FileDialog::new().add_filter("GID text", &["txt"])
+    rfd::FileDialog::new().add_filter("GID", &["gid"])
 }
 
 impl ApplicationHandler<UserEvent> for App {
@@ -550,7 +550,7 @@ fn main() {
             eprintln!("failed to load {}: {error}", path.display());
             std::process::exit(1);
         }),
-        // No path starts EMPTY — the sample lives in sample.gid.txt now,
+        // No path starts EMPTY — the sample lives in sample.gid now,
         // opened like any document.
         _ => (
             gid::Document {
@@ -833,7 +833,7 @@ impl App {
     pub(crate) fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target =
-            in_place.or_else(|| text_dialog().set_file_name("untitled.gid.txt").save_file());
+            in_place.or_else(|| text_dialog().set_file_name("untitled.gid").save_file());
         if let Some(path) = target {
             match text_store::save(&path, &self.model.doc, &self.text_binders) {
                 Ok(()) => {

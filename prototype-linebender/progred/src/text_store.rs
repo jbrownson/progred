@@ -27,7 +27,7 @@ mod tests {
     fn documents_round_trip_through_disk() {
         let doc = crate::sample::sample_document();
         let path =
-            std::env::temp_dir().join(format!("progred-store-test-{}.gid.txt", std::process::id()));
+            std::env::temp_dir().join(format!("progred-store-test-{}.gid", std::process::id()));
         save(&path, &doc, &Binders::new()).unwrap();
         let (loaded, binders) = load(&path).unwrap();
         assert_eq!(loaded.root, doc.root);
@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn damaged_files_refuse() {
         let path =
-            std::env::temp_dir().join(format!("progred-store-bad-{}.gid.txt", std::process::id()));
+            std::env::temp_dir().join(format!("progred-store-bad-{}.gid", std::process::id()));
         std::fs::write(&path, "{\"root\": ").unwrap();
         assert!(load(&path).is_err());
         std::fs::remove_file(&path).ok();
