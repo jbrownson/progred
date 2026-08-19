@@ -290,14 +290,14 @@ fn edits_write_through_to_the_field() {
     let path = vec![Step::Follow, key("name")];
     let mut selection = make_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
-    write_through(&mut doc, &lib, &mut selection);
+    write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection);
     assert_eq!(
         src(&doc, &lib).resolve(&path),
         Some(&crate::test_values::text("new"))
     );
     // A selection without an editor writes nothing.
     let mut plain = make_selection(&doc, &lib, vec![Step::Follow, key("missing")]);
-    assert!(!write_through(&mut doc, &lib, &mut plain));
+    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut plain));
     assert_eq!(
         src(&doc, &lib).resolve(&path),
         Some(&crate::test_values::text("new"))
@@ -318,14 +318,14 @@ fn compact_f64_values_edit_as_decimal_text() {
     let mut selection = make_selection(&doc, &lib, path.clone());
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
     selection.edit_mut().unwrap().set_text("7.25");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     assert_eq!(
         src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(7.25)
     );
 
     selection.edit_mut().unwrap().set_text("not a number");
-    assert!(!write_through(&mut doc, &lib, &mut selection));
+    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     assert_eq!(
         src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(7.25)
@@ -347,7 +347,7 @@ fn a_line_click_mounts_the_projected_line() {
     let mut selection = Selection::from_line(&src(&doc, &lib), path.clone(), &line);
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
     selection.edit_mut().unwrap().set_text("4");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     assert_eq!(
         src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(4.0)
@@ -377,7 +377,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
     let path = vec![Step::Follow];
     let mut selection = make_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("8");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     let value = src(&doc, &lib).resolve(&path).unwrap();
     assert_eq!(f64::read(value), Some(8.0));
     assert_eq!(
@@ -404,7 +404,7 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
     // owning cell; the sibling keeps its position and value.
     let mut selection = make_selection(&doc, &lib, element.clone());
     selection.edit_mut().unwrap().set_text("9");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     assert_eq!(
         src(&doc, &lib).resolve(&element),
         Some(&crate::test_values::text("9"))
@@ -600,20 +600,20 @@ fn write_through_opens_one_step_per_editor_life() {
     // First write opens the step; the rest of the run is silent,
     // as are no-op rewrites.
     selection.edit_mut().unwrap().set_text("ab");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     selection.edit_mut().unwrap().set_text("abc");
-    assert!(!write_through(&mut doc, &lib, &mut selection));
-    assert!(!write_through(&mut doc, &lib, &mut selection));
+    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
+    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
 
     // Breaking the run (a save) makes the next write a new step.
     break_edit_run(Some(&mut selection));
     selection.edit_mut().unwrap().set_text("abcd");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
 
     // A re-minted editor is a new run by construction.
     let mut fresh = make_selection(&doc, &lib, vec![Step::Follow, key("name")]);
     fresh.edit_mut().unwrap().set_text("x");
-    assert!(write_through(&mut doc, &lib, &mut fresh));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut fresh));
 }
 
 #[test]
@@ -1244,14 +1244,14 @@ fn a_simple_name_is_an_ordinary_editable_field() {
 
     let mut selection = make_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
-    assert!(write_through(&mut doc, &lib, &mut selection));
+    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some("new"));
-    assert!(!write_through(&mut doc, &lib, &mut selection));
+    assert!(!write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
 
     // Empty is an ordinary text value, not a hidden spelling of
     // field absence.
     selection.edit_mut().unwrap().set_text("");
-    write_through(&mut doc, &lib, &mut selection);
+    write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection);
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some(""));
     assert_eq!(
         doc.cells
@@ -1367,6 +1367,6 @@ fn the_pending_query_writes_through_to_the_payload() {
     assert_eq!(selection_payload::query(pending.payload()), Some(""));
     // ...and the per-event write-through syncs it, the same point the
     // document takes its writes.
-    write_through(&mut doc, &lib, &mut pending);
+    write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut pending);
     assert_eq!(selection_payload::query(pending.payload()), Some("ab"));
 }

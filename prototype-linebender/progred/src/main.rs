@@ -439,12 +439,13 @@ impl ApplicationHandler<UserEvent> for App {
                 };
                 if handled {
                     let library = &self.stack.library;
+                    let foreign = &self.stack.foreign;
                     let model = &mut self.model;
                     if let Some(Selected::Tree(selection)) = &mut model.selection {
                         let before = model.doc.clone();
                         // True on the first write of the editor's
                         // life: the run's one step opens here.
-                        if selection::write_through(&mut model.doc, library, selection) {
+                        if selection::write_through(&mut model.doc, library, foreign, selection) {
                             let path = selection.path().to_vec();
                             model.history.record(before, Some(path));
                             self.refresh_title();

@@ -375,6 +375,11 @@ pub fn lambda(params: impl IntoIterator<Item = CellId>, body: Value) -> Value {
     ])
 }
 
+/// A callable naming a foreign function — the FFI bridge as a value.
+pub fn ffi(cell: CellId) -> Value {
+    Value::record([(vocabulary::FFI, Value::from(cell))])
+}
+
 pub fn call(function: Value, arguments: impl IntoIterator<Item = (CellId, Value)>) -> Value {
     Value::record(
         [(vocabulary::FUNCTION, function)]

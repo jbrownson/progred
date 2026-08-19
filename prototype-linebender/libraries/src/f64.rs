@@ -7,7 +7,7 @@ use gid::{Cells, Value};
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
-use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, overlay};
+use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, line_update, overlay};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -17,6 +17,9 @@ pub mod vocabulary {
     pub const MULTIPLY: CellId = CellId::from_u128(0xd6f384c439d9d69996d545df422efd79);
     pub const LEFT: CellId = CellId::from_u128(0x764f6afe17ba14e81f5ab61204be0bec);
     pub const RIGHT: CellId = CellId::from_u128(0x4f53ff25390f58472d31a6142644dec2);
+    /// The f64 line's write-back rule: parse the typed spelling,
+    /// other fields carried; unparseable input declines.
+    pub const UPDATE: CellId = CellId::from_u128(0x6b95d2e04c7a1f38b1a08e57d24c96fb);
     pub const LEFT_NOT_F64: CellId = CellId::from_u128(0x50c0d2fd8fe0325a8e0e41f79ce86eff);
     pub const RIGHT_NOT_F64: CellId = CellId::from_u128(0xcab77cffe8c38745dd8e748ece331409);
 }
@@ -34,14 +37,10 @@ pub fn read(value: &Value) -> Option<f64> {
         .map(f64::from_le_bytes)
 }
 
-fn update(current: &Value, text: &str) -> Option<Value> {
-    text.parse::<f64>().ok().map(|n| overlay(current, value(n)))
-}
-
 pub fn line(value: &Value) -> Option<LineEdit> {
     read(value).map(|number| LineEdit {
         text: number.to_string(),
-        update,
+        update: grap_runtime::ffi(vocabulary::UPDATE),
         prefix: String::new(),
         suffix: String::new(),
     })
@@ -55,6 +54,25 @@ pub fn display<World, Hover>(
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
+        .register(
+            vocabulary::UPDATE,
+            ForeignFunction {
+                call: |context, call, environment| {
+                    let Some(current) = context.field(call, line_update::CURRENT) else {
+                        return Ok(context.missing_argument(line_update::CURRENT));
+                    };
+                    let Some(input) = context.field(call, line_update::INPUT) else {
+                        return Ok(context.missing_argument(line_update::INPUT));
+                    };
+                    let current = context.eval(current, environment)?;
+                    let input = context.eval(input, environment)?;
+                    Ok(crate::text::read(&input)
+                        .and_then(|text| text.trim().parse::<f64>().ok())
+                        .map(|number| overlay(&current, value(number)))
+                        .unwrap_or_else(crate::absent::value))
+                },
+            },
+        )
         .register(
             vocabulary::ADD,
             ForeignFunction {
@@ -98,6 +116,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::F64, "f64"),
+        (vocabulary::UPDATE, "f64 update"),
         (vocabulary::ADD, "add"),
         (vocabulary::MULTIPLY, "multiply"),
         (vocabulary::LEFT, "left"),
@@ -145,15 +164,36 @@ mod tests {
         );
         assert_eq!(read(&with_extra), Some(2.5));
         assert_eq!(line(&with_extra).map(|edit| edit.text), Some("2.5".into()));
+        let update = |input: &str| {
+            grap::evaluate(
+                &grap::call(
+                    line(&with_extra).unwrap().update,
+                    [
+                        (line_update::CURRENT, with_extra.clone()),
+                        (line_update::INPUT, crate::text::value(input)),
+                    ],
+                ),
+                |_| None,
+                &functions(),
+                100,
+            )
+            .result
+        };
+        // Unparseable input declines as an absent — the editor drops
+        // the write whole.
         assert_eq!(
-            (line(&with_extra).unwrap().update)(&with_extra, "3"),
-            Some(Value::record(
+            crate::isa::read(&update("junk")),
+            Some(crate::absent::vocabulary::ABSENT)
+        );
+        assert_eq!(
+            update("3"),
+            Value::record(
                 value(3.0)
                     .as_record()
                     .unwrap()
                     .clone()
                     .update(extra, Value::from(b"degrees".to_vec())),
-            ))
+            )
         );
     }
 

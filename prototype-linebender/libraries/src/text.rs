@@ -3,12 +3,16 @@
 
 use crate::{Library, name};
 use gid::{Cells, Value};
-use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, overlay};
+use grap_runtime::{ForeignFunction, ForeignFunctions};
+use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, line_update, overlay};
 
 pub mod vocabulary {
     use gid::CellId;
 
     pub const UTF8: CellId = CellId::from_u128(0x332529b8ea83a7ba10fd7f6d942e5016);
+    /// The text line's write-back rule: overlay the typed spelling
+    /// onto the current record, other fields carried.
+    pub const UPDATE: CellId = CellId::from_u128(0x27c58b96e1f4d03a8d17b62c94e05fa3);
 }
 
 pub fn value(text: impl Into<String>) -> Value {
@@ -23,14 +27,32 @@ pub fn read(value: &Value) -> Option<&str> {
         .and_then(|bytes| std::str::from_utf8(bytes).ok())
 }
 
-fn update(current: &Value, text: &str) -> Option<Value> {
-    Some(overlay(current, value(text)))
+pub fn functions() -> ForeignFunctions {
+    ForeignFunctions::default().register(
+        vocabulary::UPDATE,
+        ForeignFunction {
+            call: |context, call, environment| {
+                let Some(current) = context.field(call, line_update::CURRENT) else {
+                    return Ok(context.missing_argument(line_update::CURRENT));
+                };
+                let Some(input) = context.field(call, line_update::INPUT) else {
+                    return Ok(context.missing_argument(line_update::INPUT));
+                };
+                let current = context.eval(current, environment)?;
+                let input = context.eval(input, environment)?;
+                Ok(match read(&input) {
+                    Some(text) => overlay(&current, value(text)),
+                    None => crate::absent::value(),
+                })
+            },
+        },
+    )
 }
 
 pub fn line(value: &Value) -> Option<LineEdit> {
     read(value).map(|text| LineEdit {
         text: text.to_string(),
-        update,
+        update: grap_runtime::ffi(vocabulary::UPDATE),
         prefix: "\"".into(),
         suffix: "\"".into(),
     })
@@ -45,10 +67,11 @@ pub fn display<World, Hover>(
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
+    cells.set_value(vocabulary::UPDATE, name::record("text update", []));
     Library {
         cells,
+        functions: functions(),
         projections: vec![display::<World, Hover>],
-        ..Library::default()
     }
 }
 
@@ -74,15 +97,28 @@ mod tests {
         let edit = line(&enriched).unwrap();
         assert_eq!(edit.text, "hello");
         assert_eq!(edit.prefix, "\"");
+        let written = grap_runtime::evaluate(
+            &grap_runtime::call(
+                edit.update,
+                [
+                    (line_update::CURRENT, enriched.clone()),
+                    (line_update::INPUT, value("hi")),
+                ],
+            ),
+            |_| None,
+            &functions(),
+            100,
+        );
+        assert!(written.diagnostics.is_empty());
         assert_eq!(
-            (edit.update)(&enriched, "hi"),
-            Some(Value::record(
+            written.result,
+            Value::record(
                 value("hi")
                     .as_record()
                     .unwrap()
                     .clone()
                     .update(extra, Value::from(vec![1])),
-            ))
+            )
         );
     }
 

@@ -54,8 +54,13 @@ projection. Rust is the substrate: FFI to it while bootstrapping, for
 core machinery, and where efficiency demands (the parked wasm
 experiment is the efficiency lane); the editor itself is not written
 in grap, but projections get great flexibility. Remaining bricks, in
-dependency order: (1) `update` as a grap function reference — the
-last fn pointer in the selection; (2) a Value encoding of the display
+dependency order: (1) DONE 2026-08-19: `update` is a grap callable —
+`display::LineEdit.update: Value`, evaluated in `write_through` with
+the stack's foreign functions under the `line_update` CURRENT/INPUT
+contract; text and f64 register their write-back FFIs; declines are
+absent-classified results or any evaluator diagnostic; the payload
+carries UPDATE, so the selection is data down to the undo bit;
+(2) a Value encoding of the display
 Layout, with interaction encoded as attach-points for the PROVIDED
 intents (select, pick, hover) — arbitrary world-callbacks stay a
 Rust-partial privilege, deliberately; (3) document-loaded partials in

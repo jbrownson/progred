@@ -11,9 +11,23 @@ use std::rc::Rc;
 #[derive(Clone)]
 pub struct LineEdit {
     pub text: String,
-    pub update: fn(&Value, &str) -> Option<Value>,
+    /// The write-back rule as DATA: a grap callable the editor
+    /// evaluates with [`line_update`]'s argument fields — behavior a
+    /// library authors without touching Rust, FFI-backed while
+    /// bootstrapping. An absent-classified result (or any evaluator
+    /// diagnostic) declines the write.
+    pub update: Value,
     pub prefix: String,
     pub suffix: String,
+}
+
+/// The editable-line update call's argument fields: the editor calls
+/// `update` with the CURRENT value and the typed INPUT (a text value).
+pub mod line_update {
+    use gid::CellId;
+
+    pub const CURRENT: CellId = CellId::from_u128(0x0e6a49d1c78325bfa9231c05e84d67fb);
+    pub const INPUT: CellId = CellId::from_u128(0xd58c17f3402b96ea6f0e4a2b91c738d5);
 }
 
 /// Editor-mapped face a text leaf asks for. Libraries pick a role,

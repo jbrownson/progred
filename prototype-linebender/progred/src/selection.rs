@@ -4,6 +4,7 @@
 
 use crate::annotations::{self, Annotations};
 use crate::identity::short_id;
+use progred_libraries::{absent, isa};
 use crate::projection::Projection;
 use crate::sources::Sources;
 use crate::spine;
@@ -17,7 +18,9 @@ use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 /// the write-through wiring only edge editors have.
 pub(crate) struct Editor {
     pub(crate) line: LineEditState,
-    update: Option<fn(&Value, &str) -> Option<Value>>,
+    /// The write-back rule as data: a grap callable, evaluated with
+    /// the stack's foreign functions at the write-through point.
+    update: Option<Value>,
     /// Whether this editor's write-through run has recorded its undo
     /// step: the run is the editor's lifetime, so the first write
     /// records and the rest coalesce by staying silent.
@@ -83,22 +86,14 @@ impl Selection {
                     .and_then(|value| projection.line(value))
             })
             .flatten();
-        Selection {
-            path,
-            payload: payload::edge(),
-            editor: edit.map(line_editing),
-        }
+        edge_selection(path, edit.map(line_editing))
     }
 
     /// A click on an editable line: the projection already named the
     /// line, so the selection does not look the value up again.
     pub fn from_line(sources: &Sources, path: Path, line: &crate::render::LineEdit) -> Self {
         let editor = writable_at(sources, &path).then(|| line_editing(line.clone()));
-        Selection {
-            path,
-            payload: payload::edge(),
-            editor,
-        }
+        edge_selection(path, editor)
     }
 
     pub fn path(&self) -> &[Step] {
@@ -166,6 +161,20 @@ impl Selection {
         if next != self.payload {
             self.payload = next;
         }
+    }
+}
+
+/// An edge selection with its editor's write-back rule encoded into
+/// the payload — the selection is data down to the update.
+fn edge_selection(path: Path, editor: Option<Editor>) -> Selection {
+    let payload = match editor.as_ref().and_then(|editor| editor.update.as_ref()) {
+        Some(update) => payload::with_update(&payload::edge(), update),
+        None => payload::edge(),
+    };
+    Selection {
+        path,
+        payload,
+        editor,
     }
 }
 
@@ -698,25 +707,49 @@ fn collapse_default<World>(
 /// boundary. Returns whether this write OPENED an undo step: true
 /// exactly on the first write of the mounted editor's life, so a
 /// typing run is one step and history stays a dumb stack.
-pub fn write_through(doc: &mut Document, library: &Cells, selection: &mut Selection) -> bool {
+pub fn write_through(
+    doc: &mut Document,
+    library: &Cells,
+    foreign: &grap::ForeignFunctions,
+    selection: &mut Selection,
+) -> bool {
     selection.sync_payload();
     let Selection { path, editor, .. } = selection;
     let Some(editor) = editor else {
         return false;
     };
-    let Some(update) = editor.update else {
+    let Some(update) = editor.update.clone() else {
         return false;
     };
-    let text = editor.line.text().to_string();
+    let typed = editor.line.text().to_string();
     let wrote = {
         let (current, next) = {
             let sources = Sources {
                 doc: &*doc,
                 library,
             };
-            let current = sources.resolve(path);
-            let next = current.and_then(|current| update(current, &text));
-            (current.cloned(), next)
+            let current = sources.resolve(path).cloned();
+            let next = current.as_ref().and_then(|current| {
+                let call = grap::call(
+                    update,
+                    [
+                        (progred_display::line_update::CURRENT, current.clone()),
+                        (progred_display::line_update::INPUT, text::value(&typed)),
+                    ],
+                );
+                let evaluation = grap::evaluate(
+                    &call,
+                    |cell| sources.value(cell).cloned(),
+                    foreign,
+                    grap::DEFAULT_FUEL,
+                );
+                // Any diagnostic or an absent-classified result
+                // declines the write whole — the update's "no".
+                (evaluation.diagnostics.is_empty()
+                    && isa::read(&evaluation.result) != Some(absent::vocabulary::ABSENT))
+                .then_some(evaluation.result)
+            });
+            (current, next)
         };
         match next {
             Some(next) => current.as_ref() != Some(&next) && set_value(doc, library, path, next),
@@ -775,6 +808,8 @@ pub mod payload {
         pub const PREEDIT: CellId = CellId::from_u128(0x1c84f0b6d97325ea40d6b18c53e29f74);
         pub const START: CellId = CellId::from_u128(0xf27b950e13a8d64c26f9e30a71d45b8c);
         pub const END: CellId = CellId::from_u128(0x60d3e94a852f17bd39c2a45f08e61d73);
+        /// The edge editor's write-back rule: a grap callable.
+        pub const UPDATE: CellId = CellId::from_u128(0xcd06f18e4a72359bd6084c3f92e17ab4);
         /// The in-progress drag-selection: window origin and click count.
         pub const DRAG: CellId = CellId::from_u128(0xb49c26e1075df3a8e5017d29c46b83f5);
         pub const X: CellId = CellId::from_u128(0x39e50d7ac1846f2b7a2384b06d95c1ef);
@@ -821,6 +856,10 @@ pub mod payload {
 
     pub fn replacing(payload: &Value) -> Option<CellId> {
         payload.as_record()?.get(&vocabulary::REPLACING)?.as_cell()
+    }
+
+    pub fn with_update(payload: &Value, update: &Value) -> Value {
+        with_field(payload, vocabulary::UPDATE, update.clone())
     }
 
     pub fn with_choice(payload: &Value, choice: usize) -> Value {
