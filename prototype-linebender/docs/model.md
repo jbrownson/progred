@@ -65,8 +65,12 @@ display language's data form — one marker key per node, strings on
 the text convention and numbers on f64, interaction as attach-points
 for the PROVIDED intents (selectable/pickable/hoverable/hover block;
 arbitrary world-callbacks stay a Rust-partial privilege), walk steps
-as key cells plus a FOLLOW marker (list positions have no data form
-yet), every vocabulary cell a named library cell so authors see the
+as key cells plus a FOLLOW marker — and that is the WHOLE step
+vocabulary by design: element walks stay with the structural
+fallback (positions are session-only and "cannot occur in data";
+record conventions never descend by element, and computed list
+views go through Transient). Ordinals-resolved-at-realize is the
+shelf design if a real per-element library need ever appears, every vocabulary cell a named library cell so authors see the
 language inside the editor, and junk decoding to None so a malformed
 layout falls through whole; (3) document-loaded partials in
 `stack::load`, grap functions composing beside the Rust ones; (4) FFI
