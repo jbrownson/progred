@@ -258,8 +258,15 @@ fn realize<
                 ),
             )
         }
-        progred_display::Layout::Bracket { delim, child } => {
-            let reserved = 2.0 * (delim_advance(cx.styles, display_delim(delim)) + 2.0 * scale);
+        progred_display::Layout::Surround {
+            left,
+            child,
+            right,
+        } => {
+            let gap = 2.0 * scale;
+            let reserved = side_advance(cx.styles, &left)
+                + side_advance(cx.styles, &right)
+                + 2.0 * gap;
             let inner = realize(
                 cx,
                 projection,
@@ -271,7 +278,7 @@ fn realize<
                 *child,
                 (avail - reserved).max(0.0),
             );
-            bracketed(cx, display_delim(delim), path, value, hooks, inner)
+            surround_sides(cx, tcx, path, value, hooks, left, inner, right)
         }
         progred_display::Layout::Descend { step } => descend(
             cx, projection, tcx, path, ancestors, value, step, avail, hooks,
@@ -500,6 +507,19 @@ fn leaf_display<
             }
         }
         progred_display::Display::Slot => placeholder(cx, tcx, None, false, hooks),
+        progred_display::Display::Delim { delim, side } => {
+            let em = 14.0 * cx.styles.scale;
+            tall_delim(
+                cx.styles,
+                display_delim(delim),
+                matches!(side, progred_display::Side::Open),
+                Extent {
+                    width: 0.0,
+                    ascent: GLYPH_ASC_EM * em,
+                    descent: GLYPH_DESC_EM * em,
+                },
+            )
+        }
         progred_display::Display::LineEdit(line) => {
             let editing = cx
                 .selection
@@ -659,6 +679,15 @@ fn delim_advance(styles: &Styles, delim: Delim) -> f64 {
     delim_style(styles).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * styles.scale
 }
 
+fn side_advance(styles: &Styles, display: &progred_display::Display) -> f64 {
+    match display {
+        progred_display::Display::Delim { delim, .. } => {
+            delim_advance(styles, display_delim(*delim))
+        }
+        _ => delim_advance(styles, Delim::Paren),
+    }
+}
+
 /// A drawn delimiter leaf: `extent` is what layout sees (the FLAT
 /// advance, the span it must cover) while the ink inside spans
 /// `ink_top..ink_bottom` relative to the baseline, stroked in the dim
@@ -722,24 +751,20 @@ fn tall_delim<C: 'static, Cv: Canvas + 'static>(
     delim_leaf(styles, delim, open, content, ink_top, ink_bottom)
 }
 
-/// Wraps `content` in the stretched delimiter pair claiming
-/// `path`/`target`: the delimiters are the container's handles —
-/// their ink selects it (command-picks it) — and they grow with the
-/// content, so a tall value gets tall delimiters instead of a
-/// floating closer.
-fn bracketed<C: 'static, Cv: Canvas + 'static>(
+/// Place `left` and `right` in the side columns of `content`: same
+/// height as the child, width the flat advance. The display nodes
+/// paint; this only allocates and keeps the sides as handles.
+fn surround_sides<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    delim: Delim,
+    tcx: &mut TextCtx,
     path: &[Step],
     target: &Value,
     hooks: &Hooks<C>,
+    left: progred_display::Display,
     content: Measured<Placed<C, Cv>>,
+    right: progred_display::Display,
 ) -> Measured<Placed<C, Cv>> {
     let extent = content.extent;
-    // The air between delimiter and content rides INSIDE the
-    // delimiter's claim — identical pixels, and the handle's thin
-    // hit zone gains the gap: hovering the air is hovering the
-    // bracket.
     let gap = 2.0 * cx.styles.scale;
     row(
         0.0,
@@ -750,7 +775,7 @@ fn bracketed<C: 'static, Cv: Canvas + 'static>(
                 hooks,
                 pad(
                     Insets::new(0.0, 0.0, gap, 0.0),
-                    tall_delim(cx.styles, delim, true, extent),
+                    paint_side(cx, tcx, path, hooks, target, left, extent),
                 ),
             ),
             content,
@@ -760,11 +785,31 @@ fn bracketed<C: 'static, Cv: Canvas + 'static>(
                 hooks,
                 pad(
                     Insets::new(gap, 0.0, 0.0, 0.0),
-                    tall_delim(cx.styles, delim, false, extent),
+                    paint_side(cx, tcx, path, hooks, target, right, extent),
                 ),
             ),
         ],
     )
+}
+
+fn paint_side<C: 'static, Cv: Canvas + 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    hooks: &Hooks<C>,
+    value: &Value,
+    display: progred_display::Display,
+    extent: Extent,
+) -> Measured<Placed<C, Cv>> {
+    match display {
+        progred_display::Display::Delim { delim, side } => tall_delim(
+            cx.styles,
+            display_delim(delim),
+            matches!(side, progred_display::Side::Open),
+            extent,
+        ),
+        other => leaf_display(cx, tcx, path, hooks, value, other),
+    }
 }
 
 /// The one width every slot state shares: the cold box IS this wide,

@@ -482,8 +482,19 @@ mod tests {
             &children[1],
             Layout::Descend { step: Step::Key(key) } if *key == vocabulary::GAP
         ));
-        let Layout::Bracket { delim: Delim::Brace, child } = &forms[1] else {
-            panic!("bracket decodes its delimiter");
+        let Layout::Surround {
+            left: Display::Delim {
+                delim: Delim::Brace,
+                side: progred_display::Side::Open,
+            },
+            child,
+            right: Display::Delim {
+                delim: Delim::Brace,
+                side: progred_display::Side::Close,
+            },
+        } = &forms[1]
+        else {
+            panic!("bracket decodes to a surround of delim leaves");
         };
         let Layout::Col { children, .. } = child.as_ref() else {
             panic!("col inside");

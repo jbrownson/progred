@@ -65,6 +65,10 @@ pub enum Display {
     Query,
     /// Cold empty slot.
     Slot,
+    /// A delimiter painted into the box it was given. In a
+    /// [`Layout::Surround`] side that box is the child's height by
+    /// the flat advance; as an ordinary leaf it is one glyph tall.
+    Delim { delim: Delim, side: Side },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -72,6 +76,12 @@ pub enum Delim {
     Paren,
     Bracket,
     Brace,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Open,
+    Close,
 }
 
 /// A plain primary click on the subtree that owns the handler. The
@@ -116,16 +126,13 @@ pub enum Layout<World, Hover> {
         bottom: f64,
         child: Box<Layout<World, Hover>>,
     },
-    /// The one decorated container: arrangement plus chrome. The
-    /// editor measures `child` and stretches the delimiter pair over
-    /// its extent — a leaf could never see a sibling's height, so
-    /// stretching is inherently the wrapper's job. It charges layout
-    /// only the flat advance; growth is typographic overhang. The
-    /// delimiters are the container's handles, so this is interaction
-    /// as much as ink.
-    Bracket {
-        delim: Delim,
+    /// Measure `child`, then give `left` and `right` the side
+    /// columns: flat advance by the child's height. Layout does not
+    /// paint them. Growth is typographic overhang.
+    Surround {
+        left: Display,
         child: Box<Layout<World, Hover>>,
+        right: Display,
     },
     /// Look up this step on the value being projected.
     Descend {
@@ -191,9 +198,14 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 bottom: *bottom,
                 child: child.clone(),
             },
-            Self::Bracket { delim, child } => Self::Bracket {
-                delim: *delim,
+            Self::Surround {
+                left,
+                child,
+                right,
+            } => Self::Surround {
+                left: left.clone(),
                 child: child.clone(),
+                right: right.clone(),
             },
             Self::Descend { step } => Self::Descend { step: step.clone() },
             Self::At { steps, value } => Self::At {
@@ -320,7 +332,7 @@ pub fn line_edit_of<World, Hover>(layout: &Layout<World, Hover>) -> Option<&Line
         | Layout::OnPick { child, .. }
         | Layout::OnHover { child, .. } => line_edit_of(child),
         Layout::Alternatives(options) => options.iter().find_map(line_edit_of),
-        Layout::Pad { child, .. } | Layout::Bracket { child, .. } => line_edit_of(child),
+        Layout::Pad { child, .. } | Layout::Surround { child, .. } => line_edit_of(child),
         Layout::Leaf(Display::LineEdit(line)) => Some(line),
         _ => None,
     }
@@ -365,11 +377,30 @@ pub fn pad<World, Hover>(left: f64, child: Layout<World, Hover>) -> Layout<World
     }
 }
 
-pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layout<World, Hover> {
-    Layout::Bracket {
-        delim,
+pub fn surround<World, Hover>(
+    left: Display,
+    child: Layout<World, Hover>,
+    right: Display,
+) -> Layout<World, Hover> {
+    Layout::Surround {
+        left,
         child: Box::new(child),
+        right,
     }
+}
+
+pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layout<World, Hover> {
+    surround(
+        Display::Delim {
+            delim,
+            side: Side::Open,
+        },
+        child,
+        Display::Delim {
+            delim,
+            side: Side::Close,
+        },
+    )
 }
 
 pub fn hug<World, Hover: Clone>(

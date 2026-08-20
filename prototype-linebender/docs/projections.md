@@ -58,7 +58,7 @@ A partial returns a `Layout<World, Hover>`: boxes, display leaves
 the live application world. Text and f64 share `editable_line`; its
 library-supplied value update is wired to focus, selection, and caret
 interaction by the editor runtime. `grap` is grouping (`at`, `descend`,
-`group`, `bracket`, `hug`). The live interpreter measures that layout;
+`alternatives`, `surround`, `hug`). The live interpreter measures that layout;
 callbacks become Puri handlers. There is no projection-action enum or
 central reducer: a callback receives `&mut World` when it fires. The
 structural walk is the total fallback and owns GID paths, editing,
