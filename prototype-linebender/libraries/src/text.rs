@@ -30,22 +30,20 @@ pub fn read(value: &Value) -> Option<&str> {
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
-        ForeignFunction {
-            call: |context, call, environment| {
-                let Some(current) = context.field(call, line_update::CURRENT) else {
-                    return Ok(context.missing_argument(line_update::CURRENT));
-                };
-                let Some(input) = context.field(call, line_update::INPUT) else {
-                    return Ok(context.missing_argument(line_update::INPUT));
-                };
-                let current = context.eval(current, environment)?;
-                let input = context.eval(input, environment)?;
-                Ok(match read(&input) {
-                    Some(text) => overlay(&current, value(text)),
-                    None => crate::absent::value(),
-                })
-            },
-        },
+        ForeignFunction::new(|context, call, environment| {
+            let Some(current) = context.field(call, line_update::CURRENT) else {
+                return Ok(context.missing_argument(line_update::CURRENT));
+            };
+            let Some(input) = context.field(call, line_update::INPUT) else {
+                return Ok(context.missing_argument(line_update::INPUT));
+            };
+            let current = context.eval(current, environment)?;
+            let input = context.eval(input, environment)?;
+            Ok(match read(&input) {
+                Some(text) => overlay(&current, value(text)),
+                None => crate::absent::value(),
+            })
+        }),
     )
 }
 

@@ -45,9 +45,7 @@ fn evaluate_foreign(
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         grap_runtime::vocabulary::EVALUATE,
-        ForeignFunction {
-            call: evaluate_foreign,
-        },
+        ForeignFunction::new(evaluate_foreign),
     )
 }
 

@@ -232,6 +232,7 @@ fn place_with_inputs(
         pick: Rc::new(|_, _| false),
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_| false),
+        apply: Rc::new(|_, _, _| false),
     };
     // Timed as the layout perf canary: a projection is a
     // per-keystroke cost, and the fallback-heavy narrow widths

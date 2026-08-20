@@ -106,6 +106,12 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         value: Value,
     },
+    /// Apply this Grap callable on a primary click. Data, not a
+    /// World callback — the editor supplies the site overlay.
+    OnApply {
+        child: Box<Layout<World, Hover>>,
+        function: Value,
+    },
     OnHover {
         child: Box<Layout<World, Hover>>,
         hover: Option<Hover>,
@@ -167,6 +173,10 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::OnPick { child, value } => Self::OnPick {
                 child: child.clone(),
                 value: value.clone(),
+            },
+            Self::OnApply { child, function } => Self::OnApply {
+                child: child.clone(),
+                function: function.clone(),
             },
             Self::OnHover { child, hover } => Self::OnHover {
                 child: child.clone(),
@@ -310,6 +320,16 @@ pub fn pickable<World, Hover>(child: Layout<World, Hover>, value: Value) -> Layo
     }
 }
 
+pub fn on_apply<World, Hover>(
+    child: Layout<World, Hover>,
+    function: Value,
+) -> Layout<World, Hover> {
+    Layout::OnApply {
+        child: Box::new(child),
+        function,
+    }
+}
+
 pub fn on_hover<World, Hover>(child: Layout<World, Hover>, hover: Hover) -> Layout<World, Hover> {
     Layout::OnHover {
         child: Box::new(child),
@@ -330,6 +350,7 @@ pub fn line_edit_of<World, Hover>(layout: &Layout<World, Hover>) -> Option<&Line
     match layout {
         Layout::OnClick { child, .. }
         | Layout::OnPick { child, .. }
+        | Layout::OnApply { child, .. }
         | Layout::OnHover { child, .. } => line_edit_of(child),
         Layout::Alternatives(options) => options.iter().find_map(line_edit_of),
         Layout::Pad { child, .. } | Layout::Surround { child, .. } => line_edit_of(child),

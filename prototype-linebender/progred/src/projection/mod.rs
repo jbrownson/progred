@@ -202,6 +202,15 @@ fn realize<
             );
             realize_pick(picked, hooks, inner)
         }
+        progred_display::Layout::OnApply {
+            child,
+            function,
+        } => {
+            let inner = realize(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            );
+            realize_apply(path.to_vec(), function, hooks, inner)
+        }
         progred_display::Layout::OnHover { child, hover } => {
             let inner = realize(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
@@ -412,6 +421,23 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
+fn realize_apply<C: 'static, Cv: Canvas + 'static>(
+    path: Path,
+    function: Value,
+    hooks: &Hooks<C>,
+    inner: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    let apply = hooks.apply.clone();
+    before(inner, move |p, placement| {
+        p.handler().on_pointer_down(move |world, event| {
+            event.button == Some(PointerButton::Primary)
+                && !command(&event.state.modifiers)
+                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
+                && apply(world, path.clone(), function.clone())
+        });
+    })
+}
+
 /// A command-click picks the named identity; anything else falls
 /// through. Declines on a failed pick too, so the value target's own
 /// pick-or-select backstop answers.
@@ -580,6 +606,8 @@ pub struct Hooks<C> {
     /// Delete the selected edge. Installed on the selected descend
     /// so Raw and library projections share one handler.
     pub delete: Rc<dyn Fn(&mut C) -> bool>,
+    /// Apply a Grap callable at `path` with the site overlay.
+    pub apply: Rc<dyn Fn(&mut C, Path, Value) -> bool>,
 }
 
 /// The platform command modifier, for pointer gestures.
@@ -1311,6 +1339,7 @@ fn project_transient_root<
         pick: hooks.pick.clone(),
         insert: Rc::new(|_, _| {}),
         delete: Rc::new(|_| false),
+        apply: hooks.apply.clone(),
     };
     let result_cx = Cx {
         sources: cx.sources,

@@ -56,38 +56,32 @@ pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::UPDATE,
-            ForeignFunction {
-                call: |context, call, environment| {
-                    let Some(current) = context.field(call, line_update::CURRENT) else {
-                        return Ok(context.missing_argument(line_update::CURRENT));
-                    };
-                    let Some(input) = context.field(call, line_update::INPUT) else {
-                        return Ok(context.missing_argument(line_update::INPUT));
-                    };
-                    let current = context.eval(current, environment)?;
-                    let input = context.eval(input, environment)?;
-                    Ok(crate::text::read(&input)
-                        .and_then(|text| text.trim().parse::<f64>().ok())
-                        .map(|number| overlay(&current, value(number)))
-                        .unwrap_or_else(crate::absent::value))
-                },
-            },
+            ForeignFunction::new(|context, call, environment| {
+                let Some(current) = context.field(call, line_update::CURRENT) else {
+                    return Ok(context.missing_argument(line_update::CURRENT));
+                };
+                let Some(input) = context.field(call, line_update::INPUT) else {
+                    return Ok(context.missing_argument(line_update::INPUT));
+                };
+                let current = context.eval(current, environment)?;
+                let input = context.eval(input, environment)?;
+                Ok(crate::text::read(&input)
+                    .and_then(|text| text.trim().parse::<f64>().ok())
+                    .map(|number| overlay(&current, value(number)))
+                    .unwrap_or_else(crate::absent::value))
+            }),
         )
         .register(
             vocabulary::ADD,
-            ForeignFunction {
-                call: |context, call, environment| {
-                    binary(context, call, environment, |left, right| left + right)
-                },
-            },
+            ForeignFunction::new(|context, call, environment| {
+                binary(context, call, environment, |left, right| left + right)
+            }),
         )
         .register(
             vocabulary::MULTIPLY,
-            ForeignFunction {
-                call: |context, call, environment| {
-                    binary(context, call, environment, |left, right| left * right)
-                },
-            },
+            ForeignFunction::new(|context, call, environment| {
+                binary(context, call, environment, |left, right| left * right)
+            }),
         )
 }
 

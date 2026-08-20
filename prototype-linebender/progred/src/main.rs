@@ -25,6 +25,7 @@ mod render;
 #[cfg(test)]
 mod sample;
 mod selection;
+mod site;
 mod sources;
 mod spine;
 mod stack;

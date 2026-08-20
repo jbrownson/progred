@@ -12,7 +12,7 @@ use crate::{Library, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
     ClickHandler, Delim, Display, Face, Layout, LineEdit, alternatives, block_hover, bracket,
-    editable_line, leaf, on_click, on_hover, pickable,
+    editable_line, leaf, on_apply, on_click, on_hover, pickable,
 };
 
 pub mod vocabulary {
@@ -41,6 +41,8 @@ pub mod vocabulary {
     pub const PICKABLE: CellId = CellId::from_u128(0xf8261c05d94eb7a3072c48e6b3f19d58);
     pub const HOVERABLE: CellId = CellId::from_u128(0x1d7c40a396f58e2b95e1a2c7048d63bf);
     pub const HOVER_BLOCK: CellId = CellId::from_u128(0x83f0d5b7264a19ce4c07f3921ea6b85d);
+    pub const CLICK: CellId = CellId::from_u128(0x9aca0ca4a2ff8be290f48b2335105747);
+    pub const HANDLER: CellId = CellId::from_u128(0x3e5d38e4658b1895e38307ad12862061);
 
     // Fields.
     pub const GAP: CellId = CellId::from_u128(0xa4917e2c60d3f8b5310b6d8f2c74ae95);
@@ -217,6 +219,16 @@ pub fn hover_block(child: Value) -> Value {
     node(vocabulary::HOVER_BLOCK, child)
 }
 
+pub fn click(child: Value, handler: Value) -> Value {
+    node(
+        vocabulary::CLICK,
+        Value::record([
+            (vocabulary::CHILD, child),
+            (vocabulary::HANDLER, handler),
+        ]),
+    )
+}
+
 /// Decode a layout value into the display language, attaching the
 /// PROVIDED intents where the data marks their spots. `None` on any
 /// junk, so a malformed layout falls through whole.
@@ -350,6 +362,13 @@ pub fn decode<World, Hover: Clone>(
     if let Some(content) = fields.get(&vocabulary::HOVER_BLOCK) {
         return Some(block_hover(decode(content, select, hover)?));
     }
+    if let Some(content) = fields.get(&vocabulary::CLICK) {
+        let content = content.as_record()?;
+        return Some(on_apply(
+            decode(content.get(&vocabulary::CHILD)?, select, hover)?,
+            content.get(&vocabulary::HANDLER)?.clone(),
+        ));
+    }
     None
 }
 
@@ -400,6 +419,8 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::PICKABLE, "pickable"),
         (vocabulary::HOVERABLE, "hoverable"),
         (vocabulary::HOVER_BLOCK, "hover block"),
+        (vocabulary::CLICK, "click"),
+        (vocabulary::HANDLER, "handler"),
         (vocabulary::GAP, "gap"),
         (vocabulary::BASELINE, "baseline"),
         (vocabulary::CHILDREN, "children"),
@@ -524,6 +545,11 @@ mod tests {
             decoded(&line),
             Some(Layout::Leaf(Display::LineEdit(edit)))
                 if edit.text == "2.5" && edit.suffix == "°"
+        ));
+        let handler = Value::Cell(vocabulary::HANDLER);
+        assert!(matches!(
+            decoded(&click(text_leaf("go", vocabulary::NAME_FACE), handler.clone())),
+            Some(Layout::OnApply { function, .. }) if function == handler
         ));
     }
 

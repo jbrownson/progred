@@ -7,6 +7,7 @@ use gid::{CellId, Value};
 use im::{HashMap, OrdMap};
 use std::collections::BTreeSet;
 use std::fmt;
+use std::rc::Rc;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -40,7 +41,15 @@ pub const DEFAULT_FUEL: usize = 1_024;
 
 #[derive(Clone)]
 pub struct ForeignFunction {
-    pub call: fn(&mut Context, &Value, &Environment) -> Result<Value, Halt>,
+    pub call: Rc<dyn Fn(&mut Context, &Value, &Environment) -> Result<Value, Halt>>,
+}
+
+impl ForeignFunction {
+    pub fn new(
+        call: impl Fn(&mut Context, &Value, &Environment) -> Result<Value, Halt> + 'static,
+    ) -> Self {
+        Self { call: Rc::new(call) }
+    }
 }
 
 pub struct Halt(Value);
@@ -335,6 +344,16 @@ impl Context<'_> {
             .cloned()
     }
 
+    /// Apply a callable to already-evaluated argument values inside
+    /// this evaluation — the in-context form of [`apply`].
+    pub fn apply(
+        &mut self,
+        function: &Value,
+        arguments: impl IntoIterator<Item = (CellId, Value)>,
+    ) -> Result<Value, Halt> {
+        self.apply_values(function, arguments.into_iter().collect())
+    }
+
     fn apply_values(
         &mut self,
         function: &Value,
@@ -582,12 +601,10 @@ mod tests {
         let held = call(Value::from(hold), [(input, call_shaped_data.clone())]);
         let foreign = ForeignFunctions::default().register(
             hold,
-            ForeignFunction {
-                call: |context, call, _| match context.field(call, INPUT) {
+            ForeignFunction::new(|context, call, _| match context.field(call, INPUT) {
                     Some(value) => Ok(value.clone()),
                     None => Ok(context.missing_argument(INPUT)),
-                },
-            },
+                }),
         );
         let graph = lambda([input], Value::from(input));
         assert_eq!(
@@ -609,12 +626,10 @@ mod tests {
         let input = INPUT;
         let foreign = ForeignFunctions::default().register(
             echo,
-            ForeignFunction {
-                call: |context, call, environment| match context.field(call, INPUT) {
+            ForeignFunction::new(|context, call, environment| match context.field(call, INPUT) {
                     Some(value) => context.eval(value, environment),
                     None => Ok(context.missing_argument(INPUT)),
-                },
-            },
+                }),
         );
 
         let evaluation = evaluate(
@@ -646,12 +661,10 @@ mod tests {
         let input = INPUT;
         let foreign = ForeignFunctions::default().register(
             echo,
-            ForeignFunction {
-                call: |context, call, environment| match context.field(call, INPUT) {
+            ForeignFunction::new(|context, call, environment| match context.field(call, INPUT) {
                     Some(value) => context.eval(value, environment),
                     None => Ok(context.missing_argument(INPUT)),
-                },
-            },
+                }),
         );
         let apply = lambda(
             [callable, input],
@@ -683,8 +696,7 @@ mod tests {
         let missing = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             choose,
-            ForeignFunction {
-                call: |context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                     let Some(condition) = context.field(call, CONDITION) else {
                         return Ok(context.missing_argument(CONDITION));
                     };
@@ -699,8 +711,7 @@ mod tests {
                     } else {
                         context.eval(no, environment)
                     }
-                },
-            },
+                }),
         );
         let select_parameter = lambda(
             [parameter],
@@ -729,9 +740,7 @@ mod tests {
         let parameter = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             inspect,
-            ForeignFunction {
-                call: |_, _, environment| Ok(Value::from(environment)),
-            },
+            ForeignFunction::new(|_, _, environment| Ok(Value::from(environment))),
         );
         let inspect_from_body = lambda([parameter], call(Value::from(inspect), []));
         let evaluation = evaluate(
@@ -759,8 +768,7 @@ mod tests {
         let body = BODY;
         let foreign = ForeignFunctions::default().register(
             bind,
-            ForeignFunction {
-                call: |context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                     let Some(value) = context.field(call, VALUE) else {
                         return Ok(context.missing_argument(VALUE));
                     };
@@ -769,8 +777,7 @@ mod tests {
                     };
                     let value = context.eval(value, environment)?;
                     context.eval(body, &environment.extended([(BINDING, value)]))
-                },
-            },
+                }),
         );
         let evaluation = evaluate(
             &call(
@@ -920,8 +927,7 @@ mod tests {
         let parameter = PARAMETER;
         let foreign = ForeignFunctions::default().register(
             function,
-            ForeignFunction {
-                call: |context, call, _| {
+            ForeignFunction::new(|context, call, _| {
                     let Some(function) = context.field(call, vocabulary::FUNCTION) else {
                         return Ok(context.missing_argument(vocabulary::FUNCTION));
                     };
@@ -930,8 +936,7 @@ mod tests {
                     };
                     assert!(function.as_cell().is_some());
                     Ok(value.clone())
-                },
-            },
+                }),
         );
         assert_eq!(
             evaluate(
@@ -950,15 +955,11 @@ mod tests {
         let function = new_cell_id();
         let left = ForeignFunctions::default().register(
             function,
-            ForeignFunction {
-                call: |_, _, _| Ok(blob("left")),
-            },
+            ForeignFunction::new(|_, _, _| Ok(blob("left"))),
         );
         let right = ForeignFunctions::default().register(
             function,
-            ForeignFunction {
-                call: |_, _, _| Ok(blob("right")),
-            },
+            ForeignFunction::new(|_, _, _| Ok(blob("right"))),
         );
         assert_eq!(
             evaluate(
@@ -1021,12 +1022,10 @@ mod tests {
         let function = new_cell_id();
         let foreign = ForeignFunctions::default().register(
             function,
-            ForeignFunction {
-                call: |context, call, environment| {
+            ForeignFunction::new(|context, call, environment| {
                     let argument = context.field(call, CellId::from_u128(7)).unwrap().clone();
                     context.eval(&argument, environment)
-                },
-            },
+                }),
         );
         let applied = apply(
             &ffi(function),

@@ -13,6 +13,7 @@ pub mod grap;
 pub mod isa;
 pub mod layout;
 pub mod name;
+pub mod site;
 pub mod text;
 
 pub struct Library<World, Hover> {
@@ -103,9 +104,7 @@ mod tests {
                 cells: left_cells,
                 functions: ForeignFunctions::default().register(
                     SHARED_FUNCTION,
-                    ForeignFunction {
-                        call: left_function,
-                    },
+                    ForeignFunction::new(left_function),
                 ),
                 projections: vec![left_projection],
             },
@@ -113,9 +112,7 @@ mod tests {
                 cells: right_cells,
                 functions: ForeignFunctions::default().register(
                     SHARED_FUNCTION,
-                    ForeignFunction {
-                        call: right_function,
-                    },
+                    ForeignFunction::new(right_function),
                 ),
                 projections: vec![right_projection],
             },

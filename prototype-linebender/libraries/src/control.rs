@@ -28,13 +28,8 @@ pub mod vocabulary {
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .register(vocabulary::CASE, ForeignFunction { call: case_foreign })
-        .register(
-            vocabulary::QUOTE,
-            ForeignFunction {
-                call: quote_foreign,
-            },
-        )
+        .register(vocabulary::CASE, ForeignFunction::new(case_foreign))
+        .register(vocabulary::QUOTE, ForeignFunction::new(quote_foreign))
 }
 
 fn quote_foreign(
@@ -378,12 +373,10 @@ mod tests {
         let subject = new_cell_id();
         let foreign = functions().register(
             subject,
-            ForeignFunction {
-                call: |_, _, _| {
-                    SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);
-                    Ok(blob("subject"))
-                },
-            },
+            ForeignFunction::new(|_, _, _| {
+                SUBJECT_EVALUATIONS.fetch_add(1, Ordering::SeqCst);
+                Ok(blob("subject"))
+            }),
         );
         SUBJECT_EVALUATIONS.store(0, Ordering::SeqCst);
 

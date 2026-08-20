@@ -7,13 +7,9 @@
 use gid::{CellId, Step, Value};
 use std::collections::HashMap;
 
-/// The fold override at a path: one of two NAMED STATES, absent
-/// meaning the default (collapsed inside a cycle). Named cells, not a
-/// boolean — GID has no bool until a case beats presence for toggles
-/// and named states for the rest.
-pub const FOLD: CellId = CellId::from_u128(0x3fa8d15e60b7c2941d8ea05b47f2c6d3);
-pub const FOLDED: CellId = CellId::from_u128(0x84c07f3b9ad2561e02c6b4d81f7a39e5);
-pub const EXPANDED: CellId = CellId::from_u128(0x1d5b0c47e8f6a923d7405c9128b3fae6);
+/// Fold override: one of two named states, absent meaning the default
+/// (collapsed inside a cycle).
+pub use progred_libraries::site::vocabulary::{EXPANDED, FOLD, FOLDED};
 
 #[derive(Default)]
 pub struct Annotations {
@@ -30,6 +26,21 @@ impl Annotations {
     /// One convention field at a path.
     pub fn field(&self, path: &[Step], key: CellId) -> Option<&Value> {
         self.at(path)?.as_record()?.get(&key)
+    }
+
+    /// Replace or clear the whole value at a path. Empty records prune.
+    pub fn set(&mut self, path: &[Step], value: Option<Value>) {
+        match value {
+            Some(Value::Record(fields)) if fields.is_empty() => {
+                self.values.remove(path);
+            }
+            Some(value) => {
+                self.values.insert(path.to_vec(), value);
+            }
+            None => {
+                self.values.remove(path);
+            }
+        }
     }
 
     /// Set or clear one convention field. Empty node records prune,
@@ -49,11 +60,10 @@ impl Annotations {
                 fields.remove(&key);
             }
         }
-        if fields.is_empty() {
-            self.values.remove(path);
-        } else {
-            self.values.insert(path.to_vec(), Value::Record(fields));
-        }
+        self.set(
+            path,
+            (!fields.is_empty()).then_some(Value::Record(fields)),
+        );
     }
 }
 

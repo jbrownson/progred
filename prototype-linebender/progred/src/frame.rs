@@ -554,6 +554,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 let descends = app.last_descends.clone();
                 app.delete_selected_edge(&descends)
             }),
+            apply: Rc::new(|app: &mut App, path, function| {
+                let _ = crate::site::apply(app, path, function);
+                true
+            }),
         },
     );
     // The body rides Progred's scroll container: margins pad into the
