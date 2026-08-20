@@ -48,9 +48,7 @@ use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{Key, NamedKey};
 use ui_events::pointer::PointerButton;
 use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
-#[cfg(test)]
-use vello::peniko::Brush;
-use vello::peniko::Color;
+use vello::peniko::{Brush, Color};
 
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
@@ -421,6 +419,9 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
+/// A command-click picks the named identity; anything else falls
+/// through. Declines on a failed pick too, so the value target's own
+/// pick-or-select backstop answers.
 fn realize_apply<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     function: Value,
@@ -438,9 +439,6 @@ fn realize_apply<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-/// A command-click picks the named identity; anything else falls
-/// through. Declines on a failed pick too, so the value target's own
-/// pick-or-select backstop answers.
 fn realize_pick<C: 'static, Cv: Canvas + 'static>(
     picked: Value,
     hooks: &Hooks<C>,
@@ -471,18 +469,30 @@ fn realize_hover<C: 'static, Cv: Canvas + 'static>(
         match hover {
             Some(hover) => {
                 if highlight {
-                    let mine = hover.clone();
-                    p.ink(move |cv, ink| {
-                        if tree_hovered(ink) == Some(&mine) {
-                            hover_highlight(scale, cv, placement.rect);
-                        }
-                    });
+                    light_hover(p, placement, hover, scale);
+                } else {
+                    hover_claim(p, placement, hover);
                 }
-                hover_claim(p, placement, hover);
             }
             None => hover_block(p, placement),
         }
     })
+}
+
+/// Claim `hover` and, when it is the resolved hover, wash the box.
+fn light_hover<C: 'static, Cv: Canvas + 'static>(
+    p: &mut placed::Builder<C, Cv>,
+    placement: Placement,
+    hover: Hover,
+    scale: f64,
+) {
+    let mine = hover.clone();
+    p.ink(move |cv, ink| {
+        if tree_hovered(ink) == Some(&mine) {
+            hover_highlight(scale, cv, placement.rect);
+        }
+    });
+    hover_claim(p, placement, hover);
 }
 
 /// The resolved hover's tree identity, for ink that lights its own
@@ -507,13 +517,7 @@ fn leaf_display<
 ) -> Measured<Placed<C, Cv>> {
     match content {
         progred_display::Display::Text { text, face } => {
-            let style = match face {
-                progred_display::Face::Name => &cx.styles.name,
-                progred_display::Face::Dim => &cx.styles.dim,
-                progred_display::Face::Label => &cx.styles.label,
-                progred_display::Face::Id => &cx.styles.id,
-            };
-            render::text(tcx, &text, style)
+            render::text(tcx, &text, face_style(cx.styles, face))
         }
         progred_display::Display::Head { cell } => {
             head_view(cx, tcx, path, cell, cx.name(cell), hooks)
@@ -532,19 +536,8 @@ fn leaf_display<
                 None => render::text(tcx, "…", &cx.styles.dim),
             }
         }
-        progred_display::Display::Slot => placeholder(cx, tcx, None, false, hooks),
-        progred_display::Display::Delim { delim, side } => {
-            let em = 14.0 * cx.styles.scale;
-            tall_delim(
-                cx.styles,
-                display_delim(delim),
-                matches!(side, progred_display::Side::Open),
-                Extent {
-                    width: 0.0,
-                    ascent: GLYPH_ASC_EM * em,
-                    descent: GLYPH_DESC_EM * em,
-                },
-            )
+        progred_display::Display::Ink { ink, face } => {
+            ink_leaf(cx, tcx, ink, face, None)
         }
         progred_display::Display::LineEdit(line) => {
             let editing = cx
@@ -709,9 +702,14 @@ fn delim_advance(styles: &Styles, delim: Delim) -> f64 {
 
 fn side_advance(styles: &Styles, display: &progred_display::Display) -> f64 {
     match display {
-        progred_display::Display::Delim { delim, .. } => {
-            delim_advance(styles, display_delim(*delim))
-        }
+        progred_display::Display::Ink {
+            ink: progred_display::Ink::Delim { delim, .. },
+            ..
+        } => delim_advance(styles, display_delim(*delim)),
+        progred_display::Display::Ink {
+            ink: progred_display::Ink::Frame,
+            ..
+        } => slot_width(styles),
         _ => delim_advance(styles, Delim::Paren),
     }
 }
@@ -731,10 +729,10 @@ fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
     extent: Extent,
     ink_top: f64,
     ink_bottom: f64,
+    brush: Brush,
 ) -> Measured<Placed<C, Cv>> {
     let style = delim_style(styles);
     let bearing = SIDE_BEARING_EM * 14.0 * styles.scale;
-    let brush = styles.dim.brush.clone();
     let path = if open {
         delim::open(delim, &style, ink_top, ink_bottom)
     } else {
@@ -767,6 +765,7 @@ fn tall_delim<C: 'static, Cv: Canvas + 'static>(
     delim: Delim,
     open: bool,
     content: Extent,
+    brush: Brush,
 ) -> Measured<Placed<C, Cv>> {
     let em = 14.0 * styles.scale;
     let content = Extent {
@@ -776,7 +775,66 @@ fn tall_delim<C: 'static, Cv: Canvas + 'static>(
     };
     let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
     let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
-    delim_leaf(styles, delim, open, content, ink_top, ink_bottom)
+    delim_leaf(styles, delim, open, content, ink_top, ink_bottom, brush)
+}
+
+fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
+    match face {
+        progred_display::Face::Name => &styles.name,
+        progred_display::Face::Dim => &styles.dim,
+        progred_display::Face::Label => &styles.label,
+        progred_display::Face::Id => &styles.id,
+    }
+}
+
+fn glyph_extent(styles: &Styles) -> Extent {
+    let em = 14.0 * styles.scale;
+    Extent {
+        width: 0.0,
+        ascent: GLYPH_ASC_EM * em,
+        descent: GLYPH_DESC_EM * em,
+    }
+}
+
+fn ink_leaf<C: 'static, Cv: Canvas + 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    ink: progred_display::Ink,
+    face: progred_display::Face,
+    stretch: Option<Extent>,
+) -> Measured<Placed<C, Cv>> {
+    let brush = face_style(cx.styles, face).brush.clone();
+    match ink {
+        progred_display::Ink::Delim { delim, side } => tall_delim(
+            cx.styles,
+            display_delim(delim),
+            matches!(side, progred_display::Side::Open),
+            stretch.unwrap_or_else(|| glyph_extent(cx.styles)),
+            brush,
+        ),
+        progred_display::Ink::Frame => {
+            let extent = stretch.unwrap_or_else(|| Extent {
+                width: slot_width(cx.styles),
+                ..text::<C, Cv>(tcx, "", &cx.styles.name).extent
+            });
+            frame_leaf(cx.styles.scale, brush, extent)
+        }
+    }
+}
+
+fn frame_leaf<C: 'static, Cv: Canvas + 'static>(
+    scale: f64,
+    brush: Brush,
+    extent: Extent,
+) -> Measured<Placed<C, Cv>> {
+    leaf(extent, move |p, placement| {
+        p.stroke(
+            highlight_rect(scale, placement.rect),
+            Stroke::new(scale),
+            brush,
+            Affine::IDENTITY,
+        );
+    })
 }
 
 /// Place `left` and `right` in the side columns of `content`: same
@@ -830,12 +888,9 @@ fn paint_side<C: 'static, Cv: Canvas + 'static>(
     extent: Extent,
 ) -> Measured<Placed<C, Cv>> {
     match display {
-        progred_display::Display::Delim { delim, side } => tall_delim(
-            cx.styles,
-            display_delim(delim),
-            matches!(side, progred_display::Side::Open),
-            extent,
-        ),
+        progred_display::Display::Ink { ink, face } => {
+            ink_leaf(cx, tcx, ink, face, Some(extent))
+        }
         other => leaf_display(cx, tcx, path, hooks, value, other),
     }
 }
@@ -857,22 +912,11 @@ fn slot_width(styles: &Styles) -> f64 {
 /// empty line SHAPED, the same runtime metrics the engaged editor's
 /// frame takes — no measured constants, one source.
 fn placeholder_box<C: 'static, Cv: Canvas + 'static>(tcx: &mut TextCtx, styles: &Styles) -> Measured<Placed<C, Cv>> {
-    let line = text::<C, Cv>(tcx, "", &styles.name).extent;
     let extent = Extent {
         width: slot_width(styles),
-        ..line
+        ..text::<C, Cv>(tcx, "", &styles.name).extent
     };
-    let scale = styles.scale;
-    let brush = styles.dim.brush.clone();
-    leaf(extent, move |p, placement| {
-        let rect = placement.rect;
-        p.stroke(
-            highlight_rect(scale, rect),
-            Stroke::new(scale),
-            brush,
-            Affine::IDENTITY,
-        );
-    })
+    frame_leaf(styles.scale, styles.dim.brush.clone(), extent)
 }
 
 /// THE box: the one geometry every box around content takes — the
@@ -1215,8 +1259,9 @@ fn label_view<C: 'static, Cv: Canvas + 'static>(
     target.push(Step::Key(key));
     let layout = line_layout(tcx, &spelling, style);
     let rename = hooks.rename.clone();
+    let scale = cx.styles.scale;
     before(content, move |p, placement| {
-        hover_claim(p, placement, Hover::Label(target.clone()));
+        light_hover(p, placement, Hover::Label(target.clone()), scale);
         let rename = rename.clone();
         let target = target.clone();
         p.handler().on_pointer_down(move |world, event| {

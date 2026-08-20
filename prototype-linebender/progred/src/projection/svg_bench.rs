@@ -23,6 +23,10 @@ struct Bench {
 /// Probe with the pointer, then render and unpack the placed frame.
 fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
     let hit = pointer.and_then(|point| placed.probe(point));
+    let hovered = match &hit {
+        Some(Claim::Names(hover)) => Some(hover.clone()),
+        _ => None,
+    };
     let Placed {
         descends, renders, ..
     } = placed;
@@ -32,7 +36,7 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
         hit,
     };
     let ink = crate::placed::Ink {
-        hovered: None,
+        hovered: hovered.as_ref(),
         hovered_value: None,
     };
     for render in renders {
@@ -519,6 +523,52 @@ fn placement_claims_the_hover_innermost_last() {
     )
     .0;
     assert!(clipped.hit.is_none());
+}
+
+#[test]
+fn hovering_a_field_label_paints_the_hover_wash() {
+    let key = crate::test_values::label("title");
+    let doc = Document {
+        root: Some(Value::record([(key, text::value("hi"))])),
+        cells: Cells::new(),
+    };
+    let (cold, _) = place(&doc, None, 400.0);
+    let value = cold
+        .descends
+        .iter()
+        .find(|descend| descend.path.last() == Some(&Step::Key(key)))
+        .expect("the field value");
+    let y = value.rect.y0 + value.rect.height() / 2.0;
+    let mut x = value.rect.x0;
+    let mut found = None;
+    while x > 0.0 {
+        x -= 2.0;
+        let (bench, _) = place_with_pointer(&doc, None, 400.0, Some(Point::new(x, y)));
+        if matches!(
+            &bench.hit,
+            Some(Claim::Names(Hovered::Tree(Hover::Label(path))))
+                if path.last() == Some(&Step::Key(key))
+        ) {
+            found = Some(bench);
+            break;
+        }
+    }
+    let bench = found.expect("a label claim left of the value");
+    assert!(
+        bench.list.0.iter().any(is_hover_wash),
+        "the label's hover wash should paint"
+    );
+}
+
+fn is_hover_wash(cmd: &DrawCmd) -> bool {
+    match cmd {
+        DrawCmd::Fill {
+            brush: Brush::Solid(color),
+            ..
+        } => (color.components[3] - 0.08).abs() < 1e-5,
+        DrawCmd::Clip { children, .. } => children.iter().any(is_hover_wash),
+        _ => false,
+    }
 }
 
 /// Two flat elements and two block rows, deterministically: the

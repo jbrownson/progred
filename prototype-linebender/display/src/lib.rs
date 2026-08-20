@@ -40,7 +40,9 @@ pub enum Face {
     Id,
 }
 
-/// What a layout leaf shows.
+/// What a layout leaf shows: glyphs, a stock line, or ink in the
+/// box layout allocated. Editor nouns (head, label, query) remain
+/// where spelling or a caret is still realize-time.
 #[derive(Clone)]
 pub enum Display {
     Text {
@@ -49,6 +51,8 @@ pub enum Display {
     },
     LineEdit(LineEdit),
     /// Cell head: conventional name without string quotes, or the short id.
+    /// Deferred [`Text`]: the editor resolves the spelling and the
+    /// name-edge wrap (caret family of [`Display::Label`]).
     Head {
         cell: CellId,
     },
@@ -63,12 +67,18 @@ pub enum Display {
     /// pending for its text and caret. Value pendings never pass
     /// through a leaf; the editor builds them at absent locations.
     Query,
-    /// Cold empty slot.
-    Slot,
-    /// A delimiter painted into the box it was given. In a
-    /// [`Layout::Surround`] side that box is the child's height by
-    /// the flat advance; as an ordinary leaf it is one glyph tall.
+    /// Paint in the box layout gave it. As a leaf, the mark claims a
+    /// natural size first; in a [`Layout::Surround`] side the box is
+    /// already the child's height by the mark's advance.
+    Ink { ink: Ink, face: Face },
+}
+
+/// A picture in a box. Not a canvas: two marks, the delimiter family
+/// and a rounded hairline frame.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Ink {
     Delim { delim: Delim, side: Side },
+    Frame,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -296,7 +306,20 @@ pub fn query<World, Hover>() -> Layout<World, Hover> {
 }
 
 pub fn slot<World, Hover>() -> Layout<World, Hover> {
-    leaf(Display::Slot)
+    frame()
+}
+
+pub fn ink<World, Hover>(ink: Ink, face: Face) -> Layout<World, Hover> {
+    leaf(Display::Ink { ink, face })
+}
+
+/// Cold empty slot: a dim rounded frame.
+pub fn frame<World, Hover>() -> Layout<World, Hover> {
+    ink(Ink::Frame, Face::Dim)
+}
+
+pub fn delim_ink<World, Hover>(delim: Delim, side: Side) -> Layout<World, Hover> {
+    ink(Ink::Delim { delim, side }, Face::Dim)
 }
 
 pub fn leaf<World, Hover>(display: Display) -> Layout<World, Hover> {
@@ -412,14 +435,20 @@ pub fn surround<World, Hover>(
 
 pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layout<World, Hover> {
     surround(
-        Display::Delim {
-            delim,
-            side: Side::Open,
+        Display::Ink {
+            ink: Ink::Delim {
+                delim,
+                side: Side::Open,
+            },
+            face: Face::Dim,
         },
         child,
-        Display::Delim {
-            delim,
-            side: Side::Close,
+        Display::Ink {
+            ink: Ink::Delim {
+                delim,
+                side: Side::Close,
+            },
+            face: Face::Dim,
         },
     )
 }

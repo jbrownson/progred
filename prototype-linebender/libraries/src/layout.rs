@@ -12,7 +12,7 @@ use crate::{Library, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
     ClickHandler, Delim, Display, Face, Layout, LineEdit, alternatives, block_hover, bracket,
-    editable_line, leaf, on_apply, on_click, on_hover, pickable,
+    editable_line, frame, leaf, on_apply, on_click, on_hover, pickable,
 };
 
 pub mod vocabulary {
@@ -344,7 +344,7 @@ pub fn decode<World, Hover: Clone>(
         return Some(leaf(Display::Query));
     }
     if fields.get(&vocabulary::SLOT).is_some() {
-        return Some(leaf(Display::Slot));
+        return Some(frame());
     }
     if let Some(content) = fields.get(&vocabulary::SELECTABLE) {
         return Some(on_click(decode(content, select, hover)?, select.clone()));
@@ -504,18 +504,24 @@ mod tests {
             Layout::Descend { step: Step::Key(key) } if *key == vocabulary::GAP
         ));
         let Layout::Surround {
-            left: Display::Delim {
-                delim: Delim::Brace,
-                side: progred_display::Side::Open,
+            left: Display::Ink {
+                ink: progred_display::Ink::Delim {
+                    delim: Delim::Brace,
+                    side: progred_display::Side::Open,
+                },
+                face: Face::Dim,
             },
             child,
-            right: Display::Delim {
-                delim: Delim::Brace,
-                side: progred_display::Side::Close,
+            right: Display::Ink {
+                ink: progred_display::Ink::Delim {
+                    delim: Delim::Brace,
+                    side: progred_display::Side::Close,
+                },
+                face: Face::Dim,
             },
         } = &forms[1]
         else {
-            panic!("bracket decodes to a surround of delim leaves");
+            panic!("bracket decodes to a surround of delim ink");
         };
         let Layout::Col { children, .. } = child.as_ref() else {
             panic!("col inside");
