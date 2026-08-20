@@ -31,7 +31,6 @@ pub mod vocabulary {
     // Leaves.
     pub const TEXT: CellId = CellId::from_u128(0x08e64d1f3a92c5b7b7f0d38a165e29c4);
     pub const LINE_EDIT: CellId = CellId::from_u128(0xba52708ec4d1963f491ce6053a8b7d2e);
-    pub const HEAD: CellId = CellId::from_u128(0x5f19e3c6a08d47b2260a95f8e1d73c4b);
     pub const LABEL: CellId = CellId::from_u128(0xd3a648f709b5e12c8d5f31b04a96c7e0);
     pub const QUERY: CellId = CellId::from_u128(0x2c85b1e94f60d3a71e69c40b8d25f3a6);
     pub const SLOT: CellId = CellId::from_u128(0x96e07d2a58c4b1f3f3b18e57d0c2946a);
@@ -330,11 +329,6 @@ pub fn decode<World, Hover: Clone>(
             suffix: text::read(content.get(&vocabulary::SUFFIX)?)?.to_string(),
         }));
     }
-    if let Some(content) = fields.get(&vocabulary::HEAD) {
-        return Some(leaf(Display::Head {
-            cell: content.as_cell()?,
-        }));
-    }
     if let Some(content) = fields.get(&vocabulary::LABEL) {
         return Some(leaf(Display::Label {
             key: content.as_cell()?,
@@ -411,7 +405,6 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::TRANSIENT, "transient"),
         (vocabulary::TEXT, "text"),
         (vocabulary::LINE_EDIT, "line edit"),
-        (vocabulary::HEAD, "head"),
         (vocabulary::LABEL, "label"),
         (vocabulary::QUERY, "query"),
         (vocabulary::SLOT, "slot"),

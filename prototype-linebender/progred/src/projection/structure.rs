@@ -6,9 +6,10 @@ use super::{Cx, Hooks, select_handler};
 use crate::hover::Hover;
 use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
+use crate::identity::short_id;
 use progred_display::{
-    Delim, Layout, alternatives, block_hover, bracket, col, descend, dim, field_label, head, hug,
-    id, on_click, on_hover, pickable, query, row, slot,
+    Delim, Layout, alternatives, at, block_hover, bracket, col, descend, dim, field_label, hug, id,
+    on_click, on_hover, pickable, query, row, slot,
 };
 use progred_libraries::{name, text};
 use std::collections::HashSet;
@@ -64,12 +65,27 @@ fn cell_layout<World: 'static>(
             true,
         );
     }
-    let head = selectable(head(cell), path, &Value::from(cell), hooks, true);
+    let head = selectable(cell_head(cx, cell), path, &Value::from(cell), hooks, true);
     let inner = match value {
         None if !cx.sources.writable(cell) => head,
         None | Some(_) => hug(head, descend(Step::Follow), 4.0, 20.0),
     };
     bracket(Delim::Paren, inner)
+}
+
+fn cell_head<World>(cx: &Cx, cell: CellId) -> View<World> {
+    match cx
+        .sources
+        .value(cell)
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&name::vocabulary::NAME))
+    {
+        Some(name) => at(
+            [Step::Follow, Step::Key(name::vocabulary::NAME)],
+            name,
+        ),
+        None => id(short_id(cell)),
+    }
 }
 
 fn list_layout<World: 'static>(

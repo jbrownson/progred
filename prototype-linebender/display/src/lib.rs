@@ -41,8 +41,8 @@ pub enum Face {
 }
 
 /// What a layout leaf shows: glyphs, a stock line, or ink in the
-/// box layout allocated. Editor nouns (head, label, query) remain
-/// where spelling or a caret is still realize-time.
+/// box layout allocated. Editor nouns (label, query) remain where a
+/// caret is still realize-time.
 #[derive(Clone)]
 pub enum Display {
     Text {
@@ -50,12 +50,6 @@ pub enum Display {
         face: Face,
     },
     LineEdit(LineEdit),
-    /// Cell head: conventional name without string quotes, or the short id.
-    /// Deferred [`Text`]: the editor resolves the spelling and the
-    /// name-edge wrap (caret family of [`Display::Label`]).
-    Head {
-        cell: CellId,
-    },
     /// A record field's label: its conventional name or short id. The
     /// editor owns the spelling and the click-to-rename gesture,
     /// including landing the caret under the pointer.
@@ -291,10 +285,6 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
         text: text.into(),
         face,
     })
-}
-
-pub fn head<World, Hover>(cell: CellId) -> Layout<World, Hover> {
-    leaf(Display::Head { cell })
 }
 
 pub fn field_label<World, Hover>(key: CellId) -> Layout<World, Hover> {

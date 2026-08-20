@@ -27,7 +27,7 @@ use crate::selection::{
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
-use progred_libraries::{absent, layout as layout_data, name, text};
+use progred_libraries::{absent, layout as layout_data, text};
 mod location;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
@@ -518,9 +518,6 @@ fn leaf_display<
     match content {
         progred_display::Display::Text { text, face } => {
             render::text(tcx, &text, face_style(cx.styles, face))
-        }
-        progred_display::Display::Head { cell } => {
-            head_view(cx, tcx, path, cell, cx.name(cell), hooks)
         }
         progred_display::Display::Label { key } => label_view(cx, tcx, path, key, hooks),
         progred_display::Display::Query => {
@@ -1170,73 +1167,6 @@ fn bind_delete<C: 'static, Cv: Canvas + 'static>(
             && event.state.is_down()
             && delete(ctx)
     })
-}
-
-/// A cell's head: an ordinary simple-name field projected as header
-/// text, or the short id when no naming convention answers. A shown
-/// name remains the same selectable and editable text field; the
-/// header is a projection of data rather than another storage path.
-///
-/// The head text stands for the CELL until the cell is selected: a
-/// cold click falls through to the block's own target and selects the
-/// cell, and only then does the text engage as a target. The pass
-/// decides from current state; single-shot dispatch means the second
-/// click always sees the engaged successor. Cold, the head stays
-/// keyboard-reachable (and markable, when named), just not a pointer
-/// target.
-fn head_view<
-    C: 'static,
-    Cv: Canvas + 'static,
->(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    cell: CellId,
-    name: Option<&str>,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
-    let short = short_id(cell);
-    let Some(name) = name else {
-        return text(tcx, &short, &cx.styles.id);
-    };
-    let mut edge = path.to_vec();
-    edge.push(Step::Follow);
-    edge.push(Step::Key(name::vocabulary::NAME));
-    let editing = cx
-        .selection
-        .filter(|selection| selection.path() == edge.as_slice())
-        .and_then(Selection::edit);
-    let fallback = text(tcx, name, &cx.styles.name);
-    let presentation = edit_presentation(&cx.styles.name);
-    let content = atom_content(
-        editing,
-        fallback,
-        presentation.clone(),
-        None,
-        tcx,
-        cx.styles,
-        hooks,
-    );
-    let target = text::value(name);
-    if cx.selected(path) || cx.selected(&edge) {
-        let content = cursor_target(
-            edge.clone(),
-            target.clone(),
-            presentation,
-            hooks,
-            None,
-            content,
-        );
-        source_target(cx, edge, Some(target), hooks, content)
-    } else {
-        if cx.source.transient() {
-            content
-        } else {
-            decorate(content, move |p, rect| {
-                p.descends().push(Descend { path: edge, rect });
-            })
-        }
-    }
 }
 
 /// A record field's label: its spelling, and — when the record is
