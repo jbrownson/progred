@@ -8,6 +8,9 @@
 use gid::{CellId, Step, Value};
 use std::cmp::Ordering;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+static NEXT_SHARED_LAYOUT: AtomicUsize = AtomicUsize::new(0);
 
 /// Editor-mapped face a text leaf asks for. Libraries pick a role,
 /// not a color.
@@ -174,12 +177,19 @@ pub enum Layout<World, Hover> {
         value: Value,
         fuel: usize,
     },
-    /// Ordered forms of the same content. Order is preference: each
-    /// option before the last is offered in its natural, unbounded
-    /// width — nested alternatives inside it pick their own firsts —
-    /// and the first whose width fits wins. The last option is the
-    /// accommodating form, laid out against the real width. When
-    /// nothing fits, the narrowest wins; earlier options win ties.
+    /// One projected child used by mutually exclusive layout forms.
+    /// The editor measures the shared child once and the selected
+    /// form consumes it once. This is local layout sharing, not value
+    /// identity and not a cross-frame cache.
+    Shared {
+        id: usize,
+        child: Rc<Layout<World, Hover>>,
+    },
+    /// Ordered forms of the same content. Non-final forms use their
+    /// natural preferred widths; the first that fits wins. Otherwise
+    /// the final accommodating form receives the real allocation.
+    /// When nothing fits, the narrowest form wins; earlier forms win
+    /// ties.
     Alternatives(Vec<Layout<World, Hover>>),
 }
 
@@ -260,6 +270,10 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             Self::Transient { value, fuel } => Self::Transient {
                 value: value.clone(),
                 fuel: *fuel,
+            },
+            Self::Shared { id, child } => Self::Shared {
+                id: *id,
+                child: child.clone(),
             },
             Self::Alternatives(options) => Self::Alternatives(options.clone()),
         }
@@ -484,7 +498,13 @@ pub fn record<'a, World, Hover: Clone>(
     fields.sort_by(|(left, _), (right, _)| order(left, right));
     let fields = fields
         .into_iter()
-        .map(|(key, value)| field(key, value))
+        .map(|(key, value)| {
+            let field = field(key, value);
+            RecordField {
+                label: shared(field.label),
+                value: shared(field.value),
+            }
+        })
         .collect::<Vec<_>>();
     let mut flat = Vec::new();
     for (index, field) in fields.iter().enumerate() {
@@ -516,10 +536,23 @@ pub fn hug<World, Hover: Clone>(
     gap: f64,
     tab: f64,
 ) -> Layout<World, Hover> {
+    let head = shared(head);
+    let child = shared(child);
     alternatives([
         row(gap, [head.clone(), child.clone()]),
         col(0, 2.0, [head, pad(tab, child)]),
     ])
+}
+
+/// Share one projected child between mutually exclusive alternatives.
+/// This describes an explicit edge in the layout DAG, not a cache:
+/// the child is projected and measured once per frame. A selected
+/// concrete form must contain at most one use.
+pub fn shared<World, Hover>(child: Layout<World, Hover>) -> Layout<World, Hover> {
+    Layout::Shared {
+        id: NEXT_SHARED_LAYOUT.fetch_add(1, AtomicOrdering::Relaxed),
+        child: Rc::new(child),
+    }
 }
 
 pub fn nest<World, Hover>(step: Step, value: &Value) -> Layout<World, Hover> {
@@ -584,6 +617,13 @@ pub fn overlay_value(current: &Value, patch: Value) -> Value {
 mod tests {
     use super::*;
 
+    fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
+        while let Layout::Shared { child, .. } = layout {
+            layout = child.as_ref();
+        }
+        layout
+    }
+
     #[test]
     fn click_handlers_receive_the_live_world() {
         #[derive(Default)]
@@ -634,14 +674,14 @@ mod tests {
             panic!("a flat field keeps its label and value together");
         };
         assert!(matches!(
-            &first[2],
+            unshared(&first[2]),
             Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
         let Layout::Row { children: second, .. } = &children[2] else {
             panic!("a flat field keeps its label and value together");
         };
         assert!(matches!(
-            &second[2],
+            unshared(&second[2]),
             Layout::At { steps, .. } if *steps == [Step::Key(FIRST)]
         ));
         let Layout::Col { children, .. } = &forms[1] else {
@@ -654,7 +694,7 @@ mod tests {
             panic!("a field first stays inline");
         };
         assert!(matches!(
-            &inline[1],
+            unshared(&inline[1]),
             Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
         let Layout::Col { children: broken, .. } = &first[1] else {
@@ -664,7 +704,7 @@ mod tests {
             panic!("a broken value is indented");
         };
         assert!(matches!(
-            child.as_ref(),
+            unshared(child),
             Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
     }

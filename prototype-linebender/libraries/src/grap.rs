@@ -8,7 +8,7 @@ use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Delim, Face, Layout, ProjectionInput, alternatives, at_with_projection, bracket, col, dim,
-    faced, hug, on_click, on_hover, record, row, transient, RecordField,
+    faced, hug, on_click, on_hover, record, row, shared, transient, RecordField,
 };
 
 fn short_id(cell: CellId) -> String {
@@ -189,9 +189,9 @@ pub fn display<World, Hover: Clone>(
 ) -> Option<Layout<World, Hover>> {
     let expression = input.value.as_record()?.get(&GRAP)?;
     let (result, fuel) = input.env.evaluate(expression);
-    let expression = at([Step::Key(GRAP)], expression);
-    let shaft = on_hover(on_click(dim("→"), input.select), input.hover);
-    let result = transient(&result, fuel);
+    let expression = shared(at([Step::Key(GRAP)], expression));
+    let shaft = shared(on_hover(on_click(dim("→"), input.select), input.hover));
+    let result = shared(transient(&result, fuel));
     Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
         col(0, 2.0, [expression, row(6.0, [shaft, result])]),
@@ -304,6 +304,13 @@ mod tests {
         })
     }
 
+    fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
+        while let Layout::Shared { child, .. } = layout {
+            layout = child.as_ref();
+        }
+        layout
+    }
+
     fn arms(layout: &Layout<(), ()>) -> (&Layout<(), ()>, &Layout<(), ()>) {
         let Layout::Alternatives(options) = layout else {
             panic!("expected alternatives");
@@ -312,7 +319,7 @@ mod tests {
             panic!("expected a row first");
         };
         assert_eq!(children.len(), 3);
-        (&children[0], &children[2])
+        (unshared(&children[0]), unshared(&children[2]))
     }
 
     fn argument_order(layout: &Layout<(), ()>) -> Vec<CellId> {
@@ -322,7 +329,7 @@ mod tests {
         let Layout::Row { children, .. } = &call_options[0] else {
             panic!("flat call first");
         };
-        let Layout::Surround { child, .. } = &children[1] else {
+        let Layout::Surround { child, .. } = unshared(&children[1]) else {
             panic!("arguments are parenthesized");
         };
         let Layout::Alternatives(argument_options) = child.as_ref() else {
@@ -338,7 +345,7 @@ mod tests {
                 let Layout::Row { children, .. } = argument else {
                     panic!("argument has a label and value");
                 };
-                let Layout::At { steps, .. } = &children[2] else {
+                let Layout::At { steps, .. } = unshared(&children[2]) else {
                     panic!("argument value retains its path");
                 };
                 let [Step::Key(field)] = steps.as_slice() else {
@@ -427,7 +434,7 @@ mod tests {
             panic!("flat call first");
         };
         assert!(matches!(
-            &children[0],
+            unshared(&children[0]),
             Layout::At {
                 steps,
                 value,
@@ -546,7 +553,7 @@ mod tests {
             panic!("flat lambda first");
         };
         assert!(matches!(
-            &children[1],
+            unshared(&children[1]),
             Layout::At {
                 steps,
                 value,

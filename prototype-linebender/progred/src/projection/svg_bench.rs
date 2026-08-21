@@ -622,13 +622,16 @@ fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Descend, Descend) {
 #[test]
 fn flat_separators_claim_the_insert_between() {
     let doc = gap_document();
-    let (bench, _) = place(&doc, None, 560.0);
+    // Keep the surrounding record and this list in their preferred
+    // flat forms; the block-layout behavior is covered below.
+    let width = 900.0;
+    let (bench, _) = place(&doc, None, width);
     let (first, second) = elements_of(&bench, "tags", false);
     let mid = Point::new(
         (first.rect.x1 + second.rect.x0) / 2.0,
         first.rect.center().y,
     );
-    let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(mid));
+    let (bench, _) = place_with_pointer(&doc, None, width, Some(mid));
     assert!(matches!(
         &bench.hit,
         Some(Claim::Names(Hovered::Tree(Hover::Insert(path)))) if *path == first.path
@@ -665,7 +668,7 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
         None,
         560.0,
         Some(Point::new(
-            list.rect.x0 + delim_advance(&styles, Delim::Bracket) + 1.0,
+            list.rect.x0 + delim_advance(styles.scale, Delim::Bracket) + 1.0,
             gap_y,
         )),
     );
@@ -838,4 +841,18 @@ fn svg_bench_renders_a_pending_edge() {
     assert_eq!(edge.stage(), crate::selection::Stage::Label);
     let typing = edge.with_query("na");
     render(&doc, Some(&typing), 560.0, "../target/raw_pending_edge.svg");
+}
+
+/// The LineEdit definition is the largest choice-heavy projection we
+/// routinely open as data. Keep it as a no-threshold canary: run with
+/// `PROGRED_LAYOUT_TRACE=1` to inspect the resolver's search.
+#[test]
+fn line_edit_definition_layout_canary() {
+    let doc = Document {
+        root: Some(Value::from(progred_libraries::line_edit::vocabulary::LINE_EDIT)),
+        cells: Cells::new(),
+    };
+    for width in [900.0, 1_200.0, 1_600.0] {
+        let _ = place(&doc, None, width);
+    }
 }

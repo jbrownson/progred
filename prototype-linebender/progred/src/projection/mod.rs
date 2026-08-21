@@ -44,7 +44,7 @@ use puri::handler::{HasHandler, ImeEvent};
 use puri::text::{TextCtx, TextStyle};
 #[cfg(test)]
 use puri::text::{caret_index, line_layout};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{Key, KeyState, NamedKey};
@@ -167,10 +167,566 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
     }
 }
 
+#[derive(Clone, Copy)]
+struct Widths {
+    preferred: f64,
+    minimum: f64,
+    maximum: f64,
+}
+
+impl Widths {
+    fn fixed(width: f64) -> Self {
+        Self {
+            preferred: width,
+            minimum: width,
+            maximum: width,
+        }
+    }
+
+    fn plus(self, width: f64) -> Self {
+        Self {
+            preferred: self.preferred + width,
+            minimum: self.minimum + width,
+            maximum: self.maximum + width,
+        }
+    }
+}
+
+/// A measured layout whose responsive choices have not been settled.
+/// Fixed leaves already own their placement continuations; selecting
+/// forms therefore combines widths only and never remeasures text
+/// or reruns a projection.
+struct ChoiceLayout<Out> {
+    widths: Widths,
+    kind: ChoiceKind<Out>,
+}
+
+type MeasureMap<Out> = Box<dyn FnOnce(Measured<Out>) -> Measured<Out>>;
+
+enum ChoiceKind<Out> {
+    Fixed(Measured<Out>),
+    Use(usize),
+    Map {
+        child: Box<ChoiceLayout<Out>>,
+        map: MeasureMap<Out>,
+        width_add: f64,
+    },
+    Row {
+        gap: f64,
+        children: Vec<ChoiceLayout<Out>>,
+    },
+    Col {
+        baseline: usize,
+        gap: f64,
+        children: Vec<ChoiceLayout<Out>>,
+    },
+    Overlay {
+        children: Vec<ChoiceLayout<Out>>,
+    },
+    Pad {
+        insets: Insets,
+        child: Box<ChoiceLayout<Out>>,
+    },
+    Alternatives {
+        id: usize,
+        options: Vec<ChoiceLayout<Out>>,
+    },
+}
+
+struct ChoiceBuild<Out> {
+    next_choice: usize,
+    shared_ids: HashMap<usize, usize>,
+    shared: Vec<Option<ChoiceLayout<Out>>>,
+}
+
+impl<Out> Default for ChoiceBuild<Out> {
+    fn default() -> Self {
+        Self {
+            next_choice: 0,
+            shared_ids: HashMap::new(),
+            shared: Vec::new(),
+        }
+    }
+}
+
+struct ChoiceGraph<Out> {
+    root: ChoiceLayout<Out>,
+    shared: Vec<Option<ChoiceLayout<Out>>>,
+    choice_count: usize,
+}
+
+#[derive(Default)]
+struct LayoutTrace {
+    nodes: usize,
+    alternatives: usize,
+    multiway_alternatives: usize,
+    wider_backups: usize,
+    maximum_depth: usize,
+    selected_fallbacks: usize,
+    deepest_selected_fallback: usize,
+}
+
+impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
+    fn fixed(measured: Measured<Out>) -> Self {
+        Self {
+            widths: Widths::fixed(measured.extent.width),
+            kind: ChoiceKind::Fixed(measured),
+        }
+    }
+
+    fn used(id: usize, widths: Widths) -> Self {
+        Self {
+            widths,
+            kind: ChoiceKind::Use(id),
+        }
+    }
+
+    fn map(
+        child: Self,
+        width_add: f64,
+        map: impl FnOnce(Measured<Out>) -> Measured<Out> + 'static,
+    ) -> Self {
+        Self {
+            widths: child.widths.plus(width_add),
+            kind: ChoiceKind::Map {
+                child: Box::new(child),
+                map: Box::new(map),
+                width_add,
+            },
+        }
+    }
+
+    fn row(gap: f64, children: Vec<Self>) -> Self {
+        let gaps = gap * children.len().saturating_sub(1) as f64;
+        let widths = Widths {
+            preferred: children.iter().map(|child| child.widths.preferred).sum::<f64>() + gaps,
+            minimum: children.iter().map(|child| child.widths.minimum).sum::<f64>() + gaps,
+            maximum: children.iter().map(|child| child.widths.maximum).sum::<f64>() + gaps,
+        };
+        Self {
+            widths,
+            kind: ChoiceKind::Row { gap, children },
+        }
+    }
+
+    fn col(baseline: usize, gap: f64, children: Vec<Self>) -> Self {
+        let widths = Widths {
+            preferred: children
+                .iter()
+                .map(|child| child.widths.preferred)
+                .fold(0.0_f64, f64::max),
+            minimum: children
+                .iter()
+                .map(|child| child.widths.minimum)
+                .fold(0.0_f64, f64::max),
+            maximum: children
+                .iter()
+                .map(|child| child.widths.maximum)
+                .fold(0.0_f64, f64::max),
+        };
+        Self {
+            widths,
+            kind: ChoiceKind::Col {
+                baseline,
+                gap,
+                children,
+            },
+        }
+    }
+
+    fn overlay(children: Vec<Self>) -> Self {
+        let widths = Widths {
+            preferred: children
+                .iter()
+                .map(|child| child.widths.preferred)
+                .fold(0.0_f64, f64::max),
+            minimum: children
+                .iter()
+                .map(|child| child.widths.minimum)
+                .fold(0.0_f64, f64::max),
+            maximum: children
+                .iter()
+                .map(|child| child.widths.maximum)
+                .fold(0.0_f64, f64::max),
+        };
+        Self {
+            widths,
+            kind: ChoiceKind::Overlay { children },
+        }
+    }
+
+    fn pad(insets: Insets, child: Self) -> Self {
+        let widths = child.widths.plus(insets.x0 + insets.x1);
+        Self {
+            widths,
+            kind: ChoiceKind::Pad {
+                insets,
+                child: Box::new(child),
+            },
+        }
+    }
+
+    fn alternatives(id: usize, options: Vec<Self>) -> Self {
+        let widths = match options.first() {
+            Some(first) => Widths {
+                preferred: first.widths.preferred,
+                minimum: options
+                    .iter()
+                    .map(|option| option.widths.minimum)
+                    .fold(f64::INFINITY, f64::min),
+                maximum: options
+                    .iter()
+                    .map(|option| option.widths.maximum)
+                    .fold(0.0_f64, f64::max),
+            },
+            None => Widths::fixed(0.0),
+        };
+        Self {
+            widths,
+            kind: ChoiceKind::Alternatives { id, options },
+        }
+    }
+
+    fn select(
+        &self,
+        choices: &mut [usize],
+        shared: &[Option<Self>],
+        available: f64,
+    ) -> f64 {
+        match &self.kind {
+            ChoiceKind::Fixed(measured) => measured.extent.width,
+            ChoiceKind::Use(id) => shared[*id]
+                .as_ref()
+                .map_or(0.0, |child| child.select(choices, shared, available)),
+            ChoiceKind::Map {
+                child, width_add, ..
+            } => child.select(choices, shared, (available - width_add).max(0.0)) + width_add,
+            ChoiceKind::Row { gap, children } => {
+                let gaps = gap * children.len().saturating_sub(1) as f64;
+                let mut slack = (available - self.widths.minimum).max(0.0);
+                children
+                    .iter()
+                    .map(|child| {
+                        let budget = child.widths.minimum + slack;
+                        let width = child.select(choices, shared, budget);
+                        slack = (budget - width).max(0.0);
+                        width
+                    })
+                    .sum::<f64>()
+                    + gaps
+            }
+            ChoiceKind::Col { children, .. } | ChoiceKind::Overlay { children } => children
+                .iter()
+                .map(|child| child.select(choices, shared, available))
+                .fold(0.0_f64, f64::max),
+            ChoiceKind::Pad { insets, child } => {
+                let horizontal = insets.x0 + insets.x1;
+                child.select(choices, shared, (available - horizontal).max(0.0)) + horizontal
+            }
+            ChoiceKind::Alternatives { id, options } => match options.split_last() {
+                None => 0.0,
+                Some((accommodating, preferred)) if available <= 0.0 => {
+                    choices[*id] = preferred.len();
+                    accommodating.select(choices, shared, available)
+                }
+                Some((accommodating, preferred)) => {
+                    match preferred
+                        .iter()
+                        .enumerate()
+                        .find(|(_, option)| option.widths.preferred <= available)
+                    {
+                        Some((index, option)) => {
+                            choices[*id] = index;
+                            option.widths.preferred
+                        }
+                        None => {
+                            choices[*id] = preferred.len();
+                            let accommodating_width =
+                                accommodating.select(choices, shared, available);
+                            preferred.iter().enumerate().rev().fold(
+                                accommodating_width,
+                                |best_width, (index, option)| {
+                                    if option.widths.preferred <= best_width {
+                                        choices[*id] = index;
+                                        option.widths.preferred
+                                    } else {
+                                        best_width
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    fn inspect(&self, depth: usize, trace: &mut LayoutTrace) {
+        trace.nodes += 1;
+        trace.maximum_depth = trace.maximum_depth.max(depth);
+        match &self.kind {
+            ChoiceKind::Fixed(_) | ChoiceKind::Use(_) => {}
+            ChoiceKind::Map { child, .. } | ChoiceKind::Pad { child, .. } => {
+                child.inspect(depth + 1, trace)
+            }
+            ChoiceKind::Row { children, .. }
+            | ChoiceKind::Col { children, .. }
+            | ChoiceKind::Overlay { children } => {
+                for child in children {
+                    child.inspect(depth + 1, trace);
+                }
+            }
+            ChoiceKind::Alternatives { options, .. } => {
+                trace.alternatives += 1;
+                trace.multiway_alternatives += usize::from(options.len() > 2);
+                trace.wider_backups += options
+                    .windows(2)
+                    .filter(|pair| pair[1].widths.preferred > pair[0].widths.preferred)
+                    .count();
+                for option in options {
+                    option.inspect(depth + 1, trace);
+                }
+            }
+        }
+    }
+
+    fn inspect_selection(
+        &self,
+        choices: &[usize],
+        shared: &[Option<Self>],
+        depth: usize,
+        trace: &mut LayoutTrace,
+    ) {
+        match &self.kind {
+            ChoiceKind::Fixed(_) => {}
+            ChoiceKind::Use(id) => {
+                if let Some(child) = shared[*id].as_ref() {
+                    child.inspect_selection(choices, shared, depth + 1, trace);
+                }
+            }
+            ChoiceKind::Map { child, .. } | ChoiceKind::Pad { child, .. } => {
+                child.inspect_selection(choices, shared, depth + 1, trace)
+            }
+            ChoiceKind::Row { children, .. }
+            | ChoiceKind::Col { children, .. }
+            | ChoiceKind::Overlay { children } => {
+                for child in children {
+                    child.inspect_selection(choices, shared, depth + 1, trace);
+                }
+            }
+            ChoiceKind::Alternatives { id, options } => {
+                let selected = choices[*id];
+                if selected > 0 {
+                    trace.selected_fallbacks += 1;
+                    trace.deepest_selected_fallback = trace.deepest_selected_fallback.max(depth);
+                }
+                if let Some(option) = options.get(selected) {
+                    option.inspect_selection(choices, shared, depth + 1, trace);
+                }
+            }
+        }
+    }
+
+    fn settle(self, choices: &[usize], shared: &mut [Option<Self>]) -> Measured<Out> {
+        match self.kind {
+            ChoiceKind::Fixed(measured) => measured,
+            ChoiceKind::Use(id) => shared[id]
+                .take()
+                .expect("a shared layout is consumed by only one selected form")
+                .settle(choices, shared),
+            ChoiceKind::Map { child, map, .. } => map(child.settle(choices, shared)),
+            ChoiceKind::Row { gap, children } => row(
+                gap,
+                children
+                    .into_iter()
+                    .map(|child| child.settle(choices, shared))
+                    .collect(),
+            ),
+            ChoiceKind::Col {
+                baseline,
+                gap,
+                children,
+            } => col(
+                baseline,
+                gap,
+                children
+                    .into_iter()
+                    .map(|child| child.settle(choices, shared))
+                    .collect(),
+            ),
+            ChoiceKind::Overlay { children } => layers(
+                children
+                    .into_iter()
+                    .map(|child| child.settle(choices, shared))
+                    .collect(),
+            ),
+            ChoiceKind::Pad { insets, child } => pad(insets, child.settle(choices, shared)),
+            ChoiceKind::Alternatives { id, options } => options
+                .into_iter()
+                .nth(choices[id])
+                .map_or_else(
+                    || row(0.0, Vec::new()),
+                    |option| option.settle(choices, shared),
+                ),
+        }
+    }
+}
+
+fn resolve_choices<Out: measured::Output + 'static>(
+    graph: ChoiceGraph<Out>,
+    available: f64,
+) -> Measured<Out> {
+    let ChoiceGraph {
+        root: layout,
+        mut shared,
+        choice_count,
+    } = graph;
+    let tracing = std::env::var_os("PROGRED_LAYOUT_TRACE").is_some();
+    let mut trace = LayoutTrace::default();
+    if tracing {
+        layout.inspect(0, &mut trace);
+        for child in shared.iter().flatten() {
+            child.inspect(0, &mut trace);
+        }
+    }
+    let preferred = layout.widths.preferred;
+    let minimum = layout.widths.minimum;
+    let maximum = layout.widths.maximum;
+    if tracing {
+        eprintln!(
+            "layout analysis: nodes={} alternatives={} wider_backups={} preferred={preferred:.1} minimum={minimum:.1} maximum={maximum:.1} available={available:.1}",
+            trace.nodes, trace.alternatives, trace.wider_backups,
+        );
+    }
+    let mut choices = vec![0; choice_count];
+    let selected = layout.select(&mut choices, &shared, available);
+    if tracing {
+        layout.inspect_selection(&choices, &shared, 0, &mut trace);
+        eprintln!(
+            "layout: nodes={} alternatives={} multiway={} wider_backups={} preferred={preferred:.1} minimum={minimum:.1} selected={selected:.1} available={available:.1} fallbacks={} deepest_fallback={}",
+            trace.nodes,
+            trace.alternatives,
+            trace.multiway_alternatives,
+            trace.wider_backups,
+            trace.selected_fallbacks,
+            trace.deepest_selected_fallback,
+        );
+    }
+    layout.settle(&choices, &mut shared)
+}
+
+#[cfg(test)]
+mod choice_tests {
+    use super::*;
+
+    #[derive(Clone, Copy)]
+    struct Output;
+
+    impl measured::Output for Output {
+        fn empty() -> Self {
+            Self
+        }
+
+        fn over(self, _: Self) -> Self {
+            self
+        }
+    }
+
+    fn fixed(width: f64) -> ChoiceLayout<Output> {
+        ChoiceLayout::fixed(measured::leaf(
+            Extent {
+                width,
+                ascent: 1.0,
+                descent: 0.0,
+            },
+            |_| Output,
+        ))
+    }
+
+    fn select(
+        layout: &ChoiceLayout<Output>,
+        count: usize,
+        available: f64,
+    ) -> (f64, Vec<usize>) {
+        let mut choices = vec![0; count];
+        let width = layout.select(&mut choices, &[], available);
+        (width, choices)
+    }
+
+    #[test]
+    fn preferred_form_wins_when_its_natural_width_fits() {
+        let layout = ChoiceLayout::alternatives(0, vec![fixed(100.0), fixed(70.0)]);
+
+        let (width, choices) = select(&layout, 1, 100.0);
+
+        assert_eq!(width, 100.0);
+        assert_eq!(choices, vec![0]);
+    }
+
+    #[test]
+    fn outer_accommodation_precedes_nested_accommodation() {
+        let nested = ChoiceLayout::alternatives(1, vec![fixed(100.0), fixed(60.0)]);
+        let layout = ChoiceLayout::alternatives(0, vec![nested, fixed(80.0)]);
+
+        let (width, choices) = select(&layout, 2, 80.0);
+
+        assert_eq!(width, 80.0);
+        assert_eq!(choices, vec![1, 0]);
+    }
+
+    #[test]
+    fn accommodating_form_receives_the_real_allocation() {
+        let nested = ChoiceLayout::alternatives(1, vec![fixed(60.0), fixed(20.0)]);
+        let accommodating = ChoiceLayout::row(0.0, vec![nested, fixed(40.0)]);
+        let layout =
+            ChoiceLayout::alternatives(0, vec![fixed(120.0), accommodating]);
+
+        let (width, choices) = select(&layout, 2, 70.0);
+
+        assert_eq!(width, 60.0);
+        assert_eq!(choices, vec![1, 1]);
+    }
+
+    #[test]
+    fn a_row_reserves_its_siblings_minimum_widths() {
+        let choice = ChoiceLayout::alternatives(0, vec![fixed(90.0), fixed(50.0)]);
+        let layout = ChoiceLayout::row(0.0, vec![choice, fixed(40.0)]);
+
+        let (width, choices) = select(&layout, 1, 100.0);
+
+        assert_eq!(width, 90.0);
+        assert_eq!(choices, vec![1]);
+    }
+
+    #[test]
+    fn a_wider_backup_does_not_hide_a_later_fit() {
+        let layout = ChoiceLayout::alternatives(
+            0,
+            vec![fixed(100.0), fixed(120.0), fixed(70.0)],
+        );
+
+        let (width, choices) = select(&layout, 1, 80.0);
+
+        assert_eq!(width, 70.0);
+        assert_eq!(choices, vec![2]);
+    }
+
+    #[test]
+    fn one_overwide_column_does_not_expand_its_siblings_budget() {
+        let choice = ChoiceLayout::alternatives(0, vec![fixed(105.0), fixed(70.0)]);
+        let layout = ChoiceLayout::col(0, 0.0, vec![fixed(110.0), choice]);
+
+        let (width, choices) = select(&layout, 1, 100.0);
+
+        assert_eq!(width, 110.0);
+        assert_eq!(choices, vec![1]);
+    }
+}
+
 /// Lower a projection layout to measured boxes. Display leaves
 /// become place-continuations; [`OnClick`] becomes a Puri handler.
 #[allow(clippy::too_many_arguments)]
-fn realize<
+fn prepare<
     C: 'static,
     Cv: Canvas + 'static,
 >(
@@ -182,61 +738,74 @@ fn realize<
     hooks: &Hooks<C>,
     value: &Value,
     layout: progred_display::Layout<C, Hover>,
-    avail: f64,
-) -> Measured<Placed<C, Cv>> {
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
     let scale = cx.styles.scale;
     match layout {
         progred_display::Layout::Leaf(content) => {
-            leaf_display(cx.styles, tcx, content)
+            ChoiceLayout::fixed(leaf_display(cx.styles, tcx, content))
         }
         progred_display::Layout::Query => {
             let engaged = cx
                 .pending_rename_under(path)
                 .map(|(_, query, _)| query)
                 .or_else(|| cx.pending_edge_under(path).map(|(query, _)| query));
-            match engaged {
+            ChoiceLayout::fixed(match engaged {
                 Some(query) => label_query(cx, tcx, query, hooks),
                 None => render::text(tcx, "…", &cx.styles.dim),
-            }
+            })
         }
         progred_display::Layout::OnClick { child, handler } => {
-            let inner = realize(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
-            realize_click(handler, inner)
+            ChoiceLayout::map(inner, 0.0, move |inner| realize_click(handler, inner))
         }
         progred_display::Layout::OnPick { child, value: picked } => {
-            let inner = realize(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
-            realize_pick(picked, hooks, inner)
+            let pick = hooks.pick.clone();
+            ChoiceLayout::map(inner, 0.0, move |inner| realize_pick_with(picked, pick, inner))
         }
         progred_display::Layout::OnEvent {
             child,
             kind,
             handler,
         } => {
-            let inner = realize(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
-            realize_event(path.to_vec(), kind, handler, hooks, scale, inner)
+            let apply = hooks.apply.clone();
+            let path = path.to_vec();
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                realize_event_with(path, kind, handler, apply, scale, inner)
+            })
         }
         progred_display::Layout::OnHover { child, hover } => {
-            let inner = realize(
-                cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
-            realize_hover(cx, hover, inner)
+            ChoiceLayout::map(inner, 0.0, move |inner| realize_hover(scale, hover, inner))
         }
         progred_display::Layout::Row { gap, children } => {
             let children = children
                 .into_iter()
                 .map(|child| {
-                    realize(
-                        cx, projection, tcx, path, ancestors, hooks, value, child, avail,
+                    prepare(
+                        cx,
+                        projection,
+                        tcx,
+                        path,
+                        ancestors,
+                        hooks,
+                        value,
+                        child,
+                        build,
                     )
                 })
                 .collect();
-            row(gap * scale, children)
+            ChoiceLayout::row(gap * scale, children)
         }
         progred_display::Layout::Col {
             baseline,
@@ -246,23 +815,39 @@ fn realize<
             let children = children
                 .into_iter()
                 .map(|child| {
-                    realize(
-                        cx, projection, tcx, path, ancestors, hooks, value, child, avail,
+                    prepare(
+                        cx,
+                        projection,
+                        tcx,
+                        path,
+                        ancestors,
+                        hooks,
+                        value,
+                        child,
+                        build,
                     )
                 })
                 .collect();
-            col(baseline, gap * scale, children)
+            ChoiceLayout::col(baseline, gap * scale, children)
         }
-        progred_display::Layout::Overlay { children } => layers(
-            children
+        progred_display::Layout::Overlay { children } => {
+            ChoiceLayout::overlay(children
                 .into_iter()
                 .map(|child| {
-                    realize(
-                        cx, projection, tcx, path, ancestors, hooks, value, child, avail,
+                    prepare(
+                        cx,
+                        projection,
+                        tcx,
+                        path,
+                        ancestors,
+                        hooks,
+                        value,
+                        child,
+                        build,
                     )
                 })
-                .collect(),
-        ),
+                .collect())
+        }
         progred_display::Layout::Pad {
             left,
             top,
@@ -270,11 +855,15 @@ fn realize<
             bottom,
             child,
         } => {
-            let left = left * scale;
-            let right = right * scale;
-            pad(
-                Insets::new(left, top * scale, right, bottom * scale),
-                realize(
+            let insets = Insets::new(
+                left * scale,
+                top * scale,
+                right * scale,
+                bottom * scale,
+            );
+            ChoiceLayout::pad(
+                insets,
+                prepare(
                     cx,
                     projection,
                     tcx,
@@ -283,7 +872,7 @@ fn realize<
                     hooks,
                     value,
                     *child,
-                    (avail - left - right).max(0.0),
+                    build,
                 ),
             )
         }
@@ -293,10 +882,8 @@ fn realize<
             right,
         } => {
             let gap = 2.0 * scale;
-            let reserved = side_advance(cx.styles, &left)
-                + side_advance(cx.styles, &right)
-                + 2.0 * gap;
-            let inner = realize(
+            let reserved = side_advance(scale, &left) + side_advance(scale, &right) + 2.0 * gap;
+            let inner = prepare(
                 cx,
                 projection,
                 tcx,
@@ -305,18 +892,35 @@ fn realize<
                 hooks,
                 value,
                 *child,
-                (avail - reserved).max(0.0),
+                build,
             );
-            surround_sides(cx, tcx, path, value, hooks, left, inner, right)
+            let path = path.to_vec();
+            let target = value.clone();
+            let dim = cx.styles.dim.brush.clone();
+            let select = hooks.select.clone();
+            let pick = hooks.pick.clone();
+            ChoiceLayout::map(inner, reserved, move |inner| {
+                surround_sides(
+                    scale, dim, path, target, select, pick, left, inner, right,
+                )
+            })
         }
-        progred_display::Layout::Descend { step } => descend(
-            cx, projection, tcx, path, ancestors, value, step, avail, hooks,
+        progred_display::Layout::Descend { step } => prepare_descend(
+            cx,
+            projection,
+            tcx,
+            path,
+            ancestors,
+            value,
+            step,
+            hooks,
+            build,
         ),
         progred_display::Layout::At {
             steps,
             value: nested,
             projection: override_partials,
-        } => realize_at(
+        } => prepare_at(
             cx,
             projection,
             tcx,
@@ -325,19 +929,31 @@ fn realize<
             steps,
             nested,
             override_partials,
-            avail,
             hooks,
+            build,
         ),
         progred_display::Layout::Transient {
             value: computed,
             fuel,
-        } => project_transient_root(cx, projection, tcx, path, computed, fuel, avail, hooks),
-        progred_display::Layout::Alternatives(mut options) => {
-            let Some(accommodating) = options.pop() else {
-                return row(0.0, Vec::new());
-            };
-            if avail <= 0.0 {
-                return realize(
+        } => prepare_transient_root(
+            cx,
+            projection,
+            tcx,
+            path,
+            computed,
+            fuel,
+            hooks,
+            build,
+        ),
+        progred_display::Layout::Shared { id: key, child } => {
+            if let Some(id) = build.shared_ids.get(&key).copied() {
+                let widths = build.shared[id]
+                    .as_ref()
+                    .expect("a shared layout is prepared before reuse")
+                    .widths;
+                ChoiceLayout::used(id, widths)
+            } else {
+                let prepared = prepare(
                     cx,
                     projection,
                     tcx,
@@ -345,50 +961,38 @@ fn realize<
                     ancestors,
                     hooks,
                     value,
-                    accommodating,
-                    avail,
+                    child.as_ref().clone(),
+                    build,
                 );
+                let id = build.shared.len();
+                let widths = prepared.widths;
+                build.shared.push(Some(prepared));
+                build.shared_ids.insert(key, id);
+                ChoiceLayout::used(id, widths)
             }
-            // Order is preference: options before the last realize in
-            // their natural, unbounded form — nested alternatives pick
-            // their own firsts — and the first whose width fits wins.
-            // The last accommodates the real width. When nothing fits,
-            // the narrowest wins; earlier options win ties.
-            let mut tried = Vec::new();
-            for option in options {
-                let candidate = realize(
-                    cx,
-                    projection,
-                    tcx,
-                    path,
-                    ancestors,
-                    hooks,
-                    value,
-                    option,
-                    f64::INFINITY,
-                );
-                if candidate.extent.width <= avail {
-                    return candidate;
-                }
-                tried.push(candidate);
-            }
-            let mut best = realize(
-                cx,
-                projection,
-                tcx,
-                path,
-                ancestors,
-                hooks,
-                value,
-                accommodating,
-                avail,
-            );
-            for candidate in tried.into_iter().rev() {
-                if candidate.extent.width <= best.extent.width {
-                    best = candidate;
-                }
-            }
-            best
+        }
+        progred_display::Layout::Alternatives(options) => {
+            let id = build.next_choice;
+            build.next_choice += 1;
+            ChoiceLayout::alternatives(
+                id,
+                options
+                    .into_iter()
+                    .map(|option| {
+                        prepare(
+                            cx,
+                            projection,
+                            tcx,
+                            path,
+                            ancestors,
+                            hooks,
+                            value,
+                            option,
+                            build,
+                        )
+                    })
+                    .collect(),
+            )
         }
     }
 }
@@ -401,7 +1005,7 @@ fn display_delim(delim: progred_display::Delim) -> Delim {
     }
 }
 
-fn realize_at<
+fn prepare_at<
     C: 'static,
     Cv: Canvas + 'static,
 >(
@@ -413,9 +1017,9 @@ fn realize_at<
     steps: Vec<Step>,
     nested: Value,
     override_partials: Option<Vec<progred_display::Partial<C, Hover>>>,
-    avail: f64,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
     let mut path = path.to_vec();
     let mut follow_ancestors = ancestors.clone();
     for step in &steps {
@@ -435,15 +1039,15 @@ fn realize_at<
             ),
         )
     });
-    project_present_value(
+    prepare_present_value(
         cx,
         override_projection.as_ref().or(projection),
         tcx,
         &path,
         &follow_ancestors,
         &nested,
-        avail,
         hooks,
+        build,
     )
 }
 
@@ -461,15 +1065,14 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-fn realize_event<C: 'static, Cv: Canvas + 'static>(
+fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     kind: progred_display::EventKind,
     function: Value,
-    hooks: &Hooks<C>,
+    apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
     scale: f64,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    let apply = hooks.apply.clone();
     before(inner, move |p, placement| {
         match kind {
             progred_display::EventKind::PointerDown => {
@@ -718,12 +1321,11 @@ fn ime_value(event: &ImeEvent) -> Value {
     event_value(layout_data::vocabulary::IME, fields)
 }
 
-fn realize_pick<C: 'static, Cv: Canvas + 'static>(
+fn realize_pick_with<C: 'static, Cv: Canvas + 'static>(
     picked: Value,
-    hooks: &Hooks<C>,
+    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    let pick = hooks.pick.clone();
     before(inner, move |p, placement| {
         p.handler().on_pointer_down(move |world, event| {
             event.button == Some(PointerButton::Primary)
@@ -735,7 +1337,7 @@ fn realize_pick<C: 'static, Cv: Canvas + 'static>(
 }
 
 fn realize_hover<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
+    scale: f64,
     hover: Option<Hover>,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
@@ -743,7 +1345,6 @@ fn realize_hover<C: 'static, Cv: Canvas + 'static>(
         hover.as_ref(),
         Some(Hover::Label(_) | Hover::Toggle(_) | Hover::Insert(_))
     );
-    let scale = cx.styles.scale;
     before(inner, move |p, placement| {
         match hover {
             Some(hover) => {
@@ -980,22 +1581,22 @@ const TOP_TRIM_EM: f64 = 0.929 - GLYPH_ASC_EM;
 const BOTTOM_TRIM_EM: f64 = 0.249 - GLYPH_DESC_EM;
 const SIDE_BEARING_EM: f64 = 0.05;
 
-fn delim_style(styles: &Styles) -> DelimStyle {
-    DelimStyle::for_text_size(14.0 * styles.scale)
+fn delim_style(scale: f64) -> DelimStyle {
+    DelimStyle::for_text_size(14.0 * scale)
 }
 
 /// A delimiter's advance: the FLAT ink plus both side bearings —
 /// what layout charges at any height. A grown tall delimiter
 /// OVERHANGS its advance on the outward side, the way a glyph's ink
 /// may exceed its advance; layout never pays for growth.
-fn delim_advance(styles: &Styles, delim: Delim) -> f64 {
-    delim_style(styles).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * styles.scale
+fn delim_advance(scale: f64, delim: Delim) -> f64 {
+    delim_style(scale).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * scale
 }
 
-fn side_advance(styles: &Styles, ink: &progred_display::Ink) -> f64 {
+fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {
     match ink {
         progred_display::Ink::Delim { delim, .. } => {
-            delim_advance(styles, display_delim(*delim))
+            delim_advance(scale, display_delim(*delim))
         }
     }
 }
@@ -1009,7 +1610,7 @@ fn side_advance(styles: &Styles, ink: &progred_display::Ink) -> f64 {
 /// costs layout nothing and nested delimiters bow into each other's
 /// empty sides.
 fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
-    styles: &Styles,
+    scale: f64,
     delim: Delim,
     open: bool,
     extent: Extent,
@@ -1017,8 +1618,8 @@ fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
     ink_bottom: f64,
     brush: Brush,
 ) -> Measured<Placed<C, Cv>> {
-    let style = delim_style(styles);
-    let bearing = SIDE_BEARING_EM * 14.0 * styles.scale;
+    let style = delim_style(scale);
+    let bearing = SIDE_BEARING_EM * 14.0 * scale;
     let path = if open {
         delim::open(delim, &style, ink_top, ink_bottom)
     } else {
@@ -1047,13 +1648,13 @@ fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
 /// shrinks below the glyph's own, so an empty pair still stands a
 /// glyph tall — and one-line content gets exactly the flat form.
 fn tall_delim<C: 'static, Cv: Canvas + 'static>(
-    styles: &Styles,
+    scale: f64,
     delim: Delim,
     open: bool,
     content: Extent,
     brush: Brush,
 ) -> Measured<Placed<C, Cv>> {
-    let em = 14.0 * styles.scale;
+    let em = 14.0 * scale;
     let content = Extent {
         width: content.width,
         ascent: content.ascent.max(GLYPH_ASC_EM * em),
@@ -1061,7 +1662,7 @@ fn tall_delim<C: 'static, Cv: Canvas + 'static>(
     };
     let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
     let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
-    delim_leaf(styles, delim, open, content, ink_top, ink_bottom, brush)
+    delim_leaf(scale, delim, open, content, ink_top, ink_bottom, brush)
 }
 
 fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
@@ -1076,8 +1677,8 @@ fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
     }
 }
 
-fn glyph_extent(styles: &Styles) -> Extent {
-    let em = 14.0 * styles.scale;
+fn glyph_extent(scale: f64) -> Extent {
+    let em = 14.0 * scale;
     Extent {
         width: 0.0,
         ascent: GLYPH_ASC_EM * em,
@@ -1086,17 +1687,17 @@ fn glyph_extent(styles: &Styles) -> Extent {
 }
 
 fn ink_leaf<C: 'static, Cv: Canvas + 'static>(
-    styles: &Styles,
+    scale: f64,
+    brush: Brush,
     ink: progred_display::Ink,
     stretch: Option<Extent>,
 ) -> Measured<Placed<C, Cv>> {
-    let brush = styles.dim.brush.clone();
     match ink {
         progred_display::Ink::Delim { delim, side } => tall_delim(
-            styles,
+            scale,
             display_delim(delim),
             matches!(side, progred_display::Side::Open),
-            stretch.unwrap_or_else(|| glyph_extent(styles)),
+            stretch.unwrap_or_else(|| glyph_extent(scale)),
             brush,
         ),
     }
@@ -1121,52 +1722,44 @@ fn frame_leaf<C: 'static, Cv: Canvas + 'static>(
 /// height as the child, width the flat advance. The display nodes
 /// paint; this only allocates and keeps the sides as handles.
 fn surround_sides<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    target: &Value,
-    hooks: &Hooks<C>,
+    scale: f64,
+    brush: Brush,
+    path: Path,
+    target: Value,
+    select: Rc<dyn Fn(&mut C, Path)>,
+    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     left: progred_display::Ink,
     content: Measured<Placed<C, Cv>>,
     right: progred_display::Ink,
 ) -> Measured<Placed<C, Cv>> {
     let extent = content.extent;
-    let gap = 2.0 * cx.styles.scale;
+    let gap = 2.0 * scale;
     row(
         0.0,
         vec![
-            select_target(
-                path.to_vec(),
+            select_target_with(
+                path.clone(),
                 target.clone(),
-                hooks,
+                select.clone(),
+                pick.clone(),
                 pad(
                     Insets::new(0.0, 0.0, gap, 0.0),
-                    paint_side(cx, tcx, path, hooks, left, extent),
+                    ink_leaf(scale, brush.clone(), left, Some(extent)),
                 ),
             ),
             content,
-            select_target(
-                path.to_vec(),
-                target.clone(),
-                hooks,
+            select_target_with(
+                path,
+                target,
+                select,
+                pick,
                 pad(
                     Insets::new(gap, 0.0, 0.0, 0.0),
-                    paint_side(cx, tcx, path, hooks, right, extent),
+                    ink_leaf(scale, brush, right, Some(extent)),
                 ),
             ),
         ],
     )
-}
-
-fn paint_side<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    _tcx: &mut TextCtx,
-    _path: &[Step],
-    _hooks: &Hooks<C>,
-    ink: progred_display::Ink,
-    extent: Extent,
-) -> Measured<Placed<C, Cv>> {
-    ink_leaf(cx.styles, ink, Some(extent))
 }
 
 /// The one width every slot state shares: the cold box IS this wide,
@@ -1326,8 +1919,7 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
 }
 
 /// The explicit-state boundary: everything a projection pass reads.
-/// `width` is the space the projection may fill; containers choose
-/// flat or broken forms greedily from the root down.
+/// `width` is the space the projection may fill.
 pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
     pub selection: Option<&'a Selection>,
@@ -1374,15 +1966,24 @@ pub fn project<
         secondary: secondary_of(&sources, selection).or_else(|| graph_node.cloned()),
     };
     // An empty document is a selectable placeholder at the root path.
-    project_location(
+    let mut build = ChoiceBuild::default();
+    let layout = prepare_location(
         &cx,
         projection,
         tcx,
         &[],
         &HashSet::new(),
         Location::Root(sources.root()),
-        width,
         &hooks,
+        &mut build,
+    );
+    resolve_choices(
+        ChoiceGraph {
+            root: layout,
+            shared: build.shared,
+            choice_count: build.next_choice,
+        },
+        width,
     )
 }
 
@@ -1393,17 +1994,17 @@ pub fn project<
 /// rows — so clicks on structural whitespace (gutters, inter-row
 /// gaps, the dead space inside a bounding box) fall through to the
 /// background's deselect.
-fn descend_landmark<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
+fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
+    transient: bool,
+    selected: bool,
+    scale: f64,
     path: Path,
-    hooks: &Hooks<C>,
+    delete: Rc<dyn Fn(&mut C) -> bool>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    if cx.source.transient() {
+    if transient {
         return child;
     }
-    let selected = cx.selected(&path);
-    let scale = cx.styles.scale;
     let marked = decorate(child, move |p, rect| {
         let highlight_path = path.clone();
         p.ink(move |cv, ink| {
@@ -1420,21 +2021,16 @@ fn descend_landmark<C: 'static, Cv: Canvas + 'static>(
         });
     });
     if selected {
-        bind_delete(cx, hooks, marked)
+        bind_delete_with(delete, marked)
     } else {
         marked
     }
 }
 
-fn bind_delete<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    hooks: &Hooks<C>,
+fn bind_delete_with<C: 'static, Cv: Canvas + 'static>(
+    delete: Rc<dyn Fn(&mut C) -> bool>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    if cx.source.transient() {
-        return child;
-    }
-    let delete = hooks.delete.clone();
     on_key(child, move |ctx, event| {
         crate::plain(event)
             && matches!(
@@ -1456,9 +2052,9 @@ fn bind_delete<C: 'static, Cv: Canvas + 'static>(
 /// cell at the path's last Follow, so a cell inside a list carries
 /// its list's owner as context. Wraps outside the descend so the
 /// cell's own selection highlight draws over its ground.
-fn ground<C: 'static, Cv: Canvas + 'static>(cx: &Cx, path: &[Step], value: &Value, content: Measured<Placed<C, Cv>>) -> Measured<Placed<C, Cv>> {
+fn ground_decoration(cx: &Cx, path: &[Step], value: &Value) -> Option<(f64, Color)> {
     let Some(cell) = value.as_cell() else {
-        return content;
+        return None;
     };
     let external = cx.sources.external(cell);
     let parent_external = last_follow(path)
@@ -1466,7 +2062,7 @@ fn ground<C: 'static, Cv: Canvas + 'static>(cx: &Cx, path: &[Step], value: &Valu
         .and_then(Value::as_cell)
         .is_some_and(|cell| cx.sources.external(cell));
     if external == parent_external {
-        return content;
+        return None;
     }
     let scale = cx.styles.scale;
     let color = if external {
@@ -1474,6 +2070,14 @@ fn ground<C: 'static, Cv: Canvas + 'static>(cx: &Cx, path: &[Step], value: &Valu
     } else {
         Color::new([0.965, 0.965, 0.972, 1.0])
     };
+    Some((scale, color))
+}
+
+fn ground_with<C: 'static, Cv: Canvas + 'static>(
+    scale: f64,
+    color: Color,
+    content: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
     decorate(content, move |p, rect| {
         let bg = RoundedRect::from_rect(rect.inset(3.0 * scale), 5.0 * scale);
         p.fill(bg, color, Affine::IDENTITY);
@@ -1484,10 +2088,12 @@ fn ground<C: 'static, Cv: Canvas + 'static>(cx: &Cx, path: &[Step], value: &Valu
 /// projection of the selected value — an expanded block, a collapsed
 /// handle, or a label. The primary selection's geometry at lower
 /// strength, so the two read as one family.
-fn secondary_mark<C: 'static, Cv: Canvas + 'static>(cx: &Cx, value: &Value, content: Measured<Placed<C, Cv>>) -> Measured<Placed<C, Cv>> {
-    let strong = cx.secondary.as_ref() == Some(value);
-    let scale = cx.styles.scale;
-    let value = value.clone();
+fn secondary_mark_with<C: 'static, Cv: Canvas + 'static>(
+    strong: bool,
+    scale: f64,
+    value: Value,
+    content: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
     decorate(content, move |p, rect| {
         p.ink(move |cv, ink| {
             // The hover variant is the same mark at half voice.
@@ -1511,7 +2117,7 @@ fn secondary_mark<C: 'static, Cv: Canvas + 'static>(cx: &Cx, value: &Value, cont
 /// Starts the ordinary projection at a value with no document source.
 /// Interaction attributes the transient tree to `owner`, while its
 /// children remain read-only and have no document paths of their own.
-fn project_transient_root<
+fn prepare_transient_root<
     C: 'static,
     Cv: Canvas + 'static,
 >(
@@ -1521,9 +2127,9 @@ fn project_transient_root<
     path: &[Step],
     result: Value,
     fuel: usize,
-    avail: f64,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
     let origin = path.to_vec();
     let select = hooks.select.clone();
     let select_origin = origin.clone();
@@ -1548,20 +2154,22 @@ fn project_transient_root<
         source: Source::Transient { owner: path },
         fuel: std::cell::Cell::new(fuel),
     };
-    let projected = project_location(
+    let projected = prepare_location(
         &result_cx,
         projection,
         tcx,
         path,
         &HashSet::new(),
         Location::Root(Some(&result)),
-        avail,
         &result_hooks,
+        build,
     );
     // The transient result is not another projection of the stored
     // source value. Its inner views may install ordinary hover claims while
     // rendering, so cover them across this whole arm.
-    placed::after(projected, |p, placement| hover_block(p, placement))
+    ChoiceLayout::map(projected, 0.0, |projected| {
+        placed::after(projected, |p, placement| hover_block(p, placement))
+    })
 }
 
 /// Adds one GID step to the active source and invokes the supplied
@@ -1569,7 +2177,7 @@ fn project_transient_root<
 /// a missing child therefore reaches the same total fallback as an
 /// empty root.
 #[allow(clippy::too_many_arguments)]
-fn descend<
+fn prepare_descend<
     C: 'static,
     Cv: Canvas + 'static,
 >(
@@ -1580,40 +2188,40 @@ fn descend<
     ancestors: &HashSet<CellId>,
     parent: &Value,
     step: Step,
-    avail: f64,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
     if step == Step::Follow {
         let mut ancestors = ancestors.clone();
         ancestors.extend(parent.as_cell());
-        project_location(
+        prepare_location(
             cx,
             projection,
             tcx,
             &path,
             &ancestors,
             Location::Child { parent, step },
-            avail,
             hooks,
+            build,
         )
     } else {
-        project_location(
+        prepare_location(
             cx,
             projection,
             tcx,
             &path,
             ancestors,
             Location::Child { parent, step },
-            avail,
             hooks,
+            build,
         )
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn project_location<
+fn prepare_location<
     C: 'static,
     Cv: Canvas + 'static,
 >(
@@ -1623,19 +2231,26 @@ fn project_location<
     path: &[Step],
     ancestors: &HashSet<CellId>,
     location: Location<'_>,
-    avail: f64,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
     match location.value(|cell| cx.sources.value(cell)) {
-        Some(value) => {
-            project_present_value(cx, projection, tcx, path, ancestors, value, avail, hooks)
-        }
-        None => pending_view(cx, tcx, path.to_vec(), hooks),
+        Some(value) => prepare_present_value(
+            cx,
+            projection,
+            tcx,
+            path,
+            ancestors,
+            value,
+            hooks,
+            build,
+        ),
+        None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), hooks)),
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn project_present_value<
+fn prepare_present_value<
     C: 'static,
     Cv: Canvas + 'static,
 >(
@@ -1645,10 +2260,68 @@ fn project_present_value<
     path: &[Step],
     ancestors: &HashSet<CellId>,
     value: &Value,
-    avail: f64,
     hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
-    let projected = projection
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
+    let layout = present_layout(cx, projection, path, ancestors, value, hooks);
+    let inner = prepare(
+        cx,
+        projection,
+        tcx,
+        path,
+        ancestors,
+        hooks,
+        value,
+        layout,
+        build,
+    );
+    // Other projections of the selected value carry the secondary
+    // mark; the selected one has the primary highlight.
+    let inner = if cx.selected(path) {
+        inner
+    } else {
+        let strong = cx.secondary.as_ref() == Some(value);
+        let scale = cx.styles.scale;
+        let value = value.clone();
+        ChoiceLayout::map(inner, 0.0, move |inner| {
+            secondary_mark_with(strong, scale, value, inner)
+        })
+    };
+    // A landmark, not a target: highlight and keyboard reach span
+    // the full bounds, while clicks belong to the content each arm
+    // claimed above — structural whitespace deselects.
+    let transient = cx.source.transient();
+    let selected = cx.selected(path);
+    let scale = cx.styles.scale;
+    let landmark_path = path.to_vec();
+    let delete = hooks.delete.clone();
+    let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
+        descend_landmark_with(transient, selected, scale, landmark_path, delete, inner)
+    });
+    let grounded = match ground_decoration(cx, path, value) {
+        Some((scale, color)) => {
+            ChoiceLayout::map(placed, 0.0, move |placed| ground_with(scale, color, placed))
+        }
+        None => placed,
+    };
+    let target_path = path.to_vec();
+    let target_value = value.clone();
+    let pick = hooks.pick.clone();
+    let select = hooks.select.clone();
+    ChoiceLayout::map(grounded, 0.0, move |grounded| {
+        pick_target_with(target_path, target_value, pick, select, grounded)
+    })
+}
+
+fn present_layout<C: 'static>(
+    cx: &Cx,
+    projection: Option<&Projection<C>>,
+    path: &[Step],
+    ancestors: &HashSet<CellId>,
+    value: &Value,
+    hooks: &Hooks<C>,
+) -> progred_display::Layout<C, Hover> {
+    let project_layout = || projection
         .and_then(|projection| {
             // Editor state arrives positionally: the payload only at
             // the selected path, the annotations only at this one.
@@ -1664,33 +2337,8 @@ fn project_present_value<
                 projection.apply(&ProjectEnv { cx }, value, selection, state, select, hover)
             })
         })
-        .map(|layout| {
-            realize(
-                cx, projection, tcx, path, ancestors, hooks, value, layout, avail,
-            )
-        });
-    let inner = match projected {
-        Some(projected) => projected,
-        None => {
-            let layout = structure::of(cx, path, ancestors, value, hooks);
-            realize(
-                cx, projection, tcx, path, ancestors, hooks, value, layout, avail,
-            )
-        }
-    };
-    // Other projections of the selected value carry the secondary
-    // mark; the selected one has the primary highlight.
-    let inner = if cx.selected(path) {
-        inner
-    } else {
-        secondary_mark(cx, value, inner)
-    };
-    // A landmark, not a target: highlight and keyboard reach span
-    // the full bounds, while clicks belong to the content each arm
-    // claimed above — structural whitespace deselects.
-    let placed = descend_landmark(cx, path.to_vec(), hooks, inner);
-    let grounded = ground(cx, path, value, placed);
-    pick_target(path.to_vec(), value.clone(), hooks, grounded)
+        .unwrap_or_else(|| structure::of(cx, path, ancestors, value, hooks));
+    project_layout()
 }
 
 /// The document's own partials, tried before the editor's: the
@@ -1747,14 +2395,13 @@ fn document_partial_layout<C>(
 /// plain click, so a stray modifier never deadens the gesture.
 /// Content declines command-clicks, so inner [`realize_pick`] wrappers
 /// answer first and this catches what they refused.
-fn pick_target<C: 'static, Cv: Canvas + 'static>(
+fn pick_target_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     value: Value,
-    hooks: &Hooks<C>,
+    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
+    select: Rc<dyn Fn(&mut C, Path)>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    let pick = hooks.pick.clone();
-    let select = hooks.select.clone();
     before(child, move |p, placement| {
         let pick = pick.clone();
         let select = select.clone();
@@ -2104,14 +2751,15 @@ fn label_query<
 /// and the cell star that select without carrying an editor click.
 /// With the command modifier and a pending open, picks `value` — the
 /// identity the part displays — into it instead.
-fn select_target<C: 'static, Cv: Canvas + 'static>(
+fn select_target_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     value: Value,
-    hooks: &Hooks<C>,
+    select: Rc<dyn Fn(&mut C, Path)>,
+    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     content: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     let claimed = hover_target(path.clone(), content);
-    quiet_select_target(path, value, hooks, claimed)
+    quiet_select_target_with(path, value, select, pick, claimed)
 }
 
 /// Name the value at `path` for the pointer over this ink, adding no
@@ -2127,14 +2775,13 @@ fn hover_target<C: 'static, Cv: Canvas + 'static>(path: Path, content: Measured<
 /// one-line literal, whose interior air belongs to the landmark's
 /// hold and whose delimiter ink names the container through
 /// [`hover_target`].
-fn quiet_select_target<C: 'static, Cv: Canvas + 'static>(
+fn quiet_select_target_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     value: Value,
-    hooks: &Hooks<C>,
+    select: Rc<dyn Fn(&mut C, Path)>,
+    pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     content: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    let select = hooks.select.clone();
-    let pick = hooks.pick.clone();
     before(content, move |p, placement| {
         let select = select.clone();
         let pick = pick.clone();

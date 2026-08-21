@@ -567,7 +567,11 @@ mod tests {
         let Layout::Row { children, .. } = &options[0] else {
             panic!("flat case first");
         };
-        let Layout::Surround { child, .. } = &children[1] else {
+        let mut arms = &children[1];
+        while let Layout::Shared { child, .. } = arms {
+            arms = child.as_ref();
+        }
+        let Layout::Surround { child, .. } = arms else {
             panic!("case arms are braced");
         };
         let Layout::Col { children, .. } = child.as_ref() else {

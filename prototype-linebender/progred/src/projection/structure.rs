@@ -9,7 +9,7 @@ use gid::{CellId, Step, Value, hex_string};
 use crate::identity::short_id;
 use progred_display::{
     Delim, Face, Layout, alternatives, at, block_hover, bracket, col, descend, dim, faced, hug, id,
-    on_click, on_hover, pickable, query, row, slot,
+    on_click, on_hover, pickable, query, row, shared, slot,
 };
 use progred_libraries::{name, text};
 use std::collections::HashSet;
@@ -124,8 +124,12 @@ fn list_layout<World: 'static>(
         );
     }
     let writable = writable_at(&cx.sources, path);
+    let children: Vec<View<World>> = items
+        .iter()
+        .map(|(position, _)| shared(descend(Step::Element(position.clone()))))
+        .collect();
     let mut flat = Vec::new();
-    for (index, (position, _)) in items.iter().enumerate() {
+    for (index, _) in items.iter().enumerate() {
         if index > 0 {
             let separator = dim(", ");
             flat.push(if writable {
@@ -134,12 +138,8 @@ fn list_layout<World: 'static>(
                 separator
             });
         }
-        flat.push(descend(Step::Element(position.clone())));
+        flat.push(children[index].clone());
     }
-    let rows: Vec<View<World>> = items
-        .iter()
-        .map(|(position, _)| descend(Step::Element(position.clone())))
-        .collect();
     alternatives([
         selectable(
             bracket(Delim::Bracket, row(0.0, flat)),
@@ -148,7 +148,7 @@ fn list_layout<World: 'static>(
             hooks,
             false,
         ),
-        bracket(Delim::Bracket, col(0, 4.0, rows)),
+        bracket(Delim::Bracket, col(0, 4.0, children)),
     ])
 }
 
@@ -211,6 +211,10 @@ fn record_layout<World: 'static>(
             false,
         );
     }
+    let children: Vec<View<World>> = items
+        .iter()
+        .map(|(key, _)| shared(descend(Step::Key(*key))))
+        .collect();
     let mut flat = Vec::new();
     for (index, (key, _)) in items.iter().enumerate() {
         if index > 0 {
@@ -222,7 +226,7 @@ fn record_layout<World: 'static>(
         };
         flat.push(name);
         flat.push(dim(": "));
-        flat.push(descend(Step::Key(*key)));
+        flat.push(children[index].clone());
     }
     if pending_edge {
         if !items.is_empty() {
@@ -232,7 +236,8 @@ fn record_layout<World: 'static>(
     }
     let mut rows: Vec<View<World>> = items
         .iter()
-        .map(|(key, present)| field_row(cx, path, *key, *present, hooks))
+        .zip(children)
+        .map(|((key, present), child)| field_row(cx, path, *key, *present, child, hooks))
         .collect();
     if pending_edge {
         rows.push(pending_edge_layout());
@@ -307,11 +312,12 @@ fn field_row<World: 'static>(
     path: &[Step],
     key: CellId,
     present: bool,
+    child: View<World>,
     hooks: &Hooks<World>,
 ) -> View<World> {
     hug(
         field_head(cx, path, key, present, hooks),
-        descend(Step::Key(key)),
+        child,
         6.0,
         20.0,
     )
