@@ -238,11 +238,11 @@ fn place_with_inputs(
         delete: Rc::new(|_| false),
         apply: Rc::new(|_, _, _, _| false),
     };
-    // Timed as the layout perf canary: a projection is a
-    // per-keystroke cost, and the fallback-heavy narrow widths
-    // are where accidental exponentials have surfaced twice.
-    // Numbers only, no assert (user call) — read them when the
-    // bench runs; single-digit milliseconds is healthy.
+    // Timed as the frame perf canary: projection is reported
+    // separately, while the total also includes placement, hover,
+    // and render-continuation settlement. Fallback-heavy narrow
+    // widths are where accidental exponentials have surfaced twice.
+    // Numbers only, no assert (user call).
     let start = std::time::Instant::now();
     let node = project::<World, Bench>(
         ProjectDescription {
@@ -259,8 +259,7 @@ fn place_with_inputs(
         &mut tcx,
         hooks,
     );
-    let elapsed = start.elapsed();
-    eprintln!("project at {width:.0}px: {elapsed:.1?}");
+    let project_elapsed = start.elapsed();
     let extent = node.extent;
     let rect = node.extent.rect_at(Point::new(24.0, 24.0));
     let placed = measured::place(
@@ -270,7 +269,13 @@ fn place_with_inputs(
             None => Placement::root(rect),
         },
     );
-    (settle(placed, pointer), extent)
+    let settled = settle(placed, pointer);
+    eprintln!(
+        "frame at {width:.0}px: {:.1?} (project {:.1?})",
+        start.elapsed(),
+        project_elapsed,
+    );
+    (settled, extent)
 }
 
 fn place(doc: &Document, selection: Option<&Selection>, width: f64) -> (Bench, Extent) {

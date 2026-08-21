@@ -29,6 +29,25 @@ enum Transition {
     Ime,
 }
 
+pub(crate) const EVENT_FUNCTIONS: [CellId; 5] = [
+    line_edit::vocabulary::POINTER_DOWN,
+    line_edit::vocabulary::POINTER_MOVE,
+    line_edit::vocabulary::POINTER_UP,
+    line_edit::vocabulary::KEY,
+    line_edit::vocabulary::IME,
+];
+
+fn transition(function: CellId) -> Option<Transition> {
+    match function {
+        function if function == line_edit::vocabulary::POINTER_DOWN => Some(Transition::PointerDown),
+        function if function == line_edit::vocabulary::POINTER_MOVE => Some(Transition::PointerMove),
+        function if function == line_edit::vocabulary::POINTER_UP => Some(Transition::PointerUp),
+        function if function == line_edit::vocabulary::KEY => Some(Transition::Key),
+        function if function == line_edit::vocabulary::IME => Some(Transition::Ime),
+        _ => None,
+    }
+}
+
 pub(crate) fn drawing_functions() -> ForeignFunctions {
     let fonts = Rc::new(RefCell::new(FontContext::new()));
     let layouts = Rc::new(RefCell::new(LayoutContext::<Brush>::new()));
@@ -157,49 +176,96 @@ fn geometry(
     ]))
 }
 
+#[cfg(test)]
 pub(crate) fn functions(
     fonts: Rc<RefCell<FontContext>>,
     layouts: Rc<RefCell<LayoutContext<Brush>>>,
 ) -> ForeignFunctions {
-    [
-        (line_edit::vocabulary::POINTER_DOWN, Transition::PointerDown),
-        (line_edit::vocabulary::POINTER_MOVE, Transition::PointerMove),
-        (line_edit::vocabulary::POINTER_UP, Transition::PointerUp),
-        (line_edit::vocabulary::KEY, Transition::Key),
-        (line_edit::vocabulary::IME, Transition::Ime),
-    ]
-    .into_iter()
-    .fold(ForeignFunctions::default(), |functions, (cell, transition)| {
-        let fonts = fonts.clone();
-        let layouts = layouts.clone();
-        functions.register(
-            cell,
-            ForeignFunction::new(move |context, call, environment| {
-                apply(
-                    transition,
-                    context,
-                    call,
-                    environment,
-                    &fonts,
-                    &layouts,
-                )
-            }),
-        )
-    })
+    EVENT_FUNCTIONS
+        .into_iter()
+        .fold(ForeignFunctions::default(), |functions, cell| {
+            let fonts = fonts.clone();
+            let layouts = layouts.clone();
+            functions.register(
+                cell,
+                ForeignFunction::new(move |context, call, environment| {
+                    let Some(transition) = transition(cell) else {
+                        return Ok(absent::value());
+                    };
+                    let mut fonts = fonts.borrow_mut();
+                    let mut layouts = layouts.borrow_mut();
+                    apply(
+                        transition,
+                        context,
+                        call,
+                        environment,
+                        &mut fonts,
+                        &mut layouts,
+                    )
+                }),
+            )
+        })
 }
 
+pub(crate) fn apply_scoped(
+    function: CellId,
+    context: &mut Context,
+    call: &Value,
+    environment: &Environment,
+    fonts: &RefCell<&mut FontContext>,
+    layouts: &RefCell<&mut LayoutContext<Brush>>,
+) -> Option<Result<Value, Halt>> {
+    let transition = transition(function)?;
+    Some((|| {
+        let arguments = match transition_arguments(context, call, environment)? {
+            Ok(arguments) => arguments,
+            Err(result) => return Ok(result),
+        };
+        let mut fonts = fonts.borrow_mut();
+        let mut layouts = layouts.borrow_mut();
+        Ok(run_transition(
+            transition,
+            arguments,
+            &mut fonts,
+            &mut layouts,
+        ))
+    })())
+}
+
+#[cfg(test)]
 fn apply(
     transition: Transition,
     context: &mut Context,
     call: &Value,
     environment: &Environment,
-    fonts: &Rc<RefCell<FontContext>>,
-    layouts: &Rc<RefCell<LayoutContext<Brush>>>,
+    fonts: &mut FontContext,
+    layouts: &mut LayoutContext<Brush>,
 ) -> Result<Value, Halt> {
+    let arguments = match transition_arguments(context, call, environment)? {
+        Ok(arguments) => arguments,
+        Err(result) => return Ok(result),
+    };
+    Ok(run_transition(transition, arguments, fonts, layouts))
+}
+
+struct TransitionArguments {
+    event: Value,
+    content: Value,
+    prefix: Value,
+    suffix: Value,
+    update: Value,
+    selected: Value,
+}
+
+fn transition_arguments(
+    context: &mut Context,
+    call: &Value,
+    environment: &Environment,
+) -> Result<Result<TransitionArguments, Value>, Halt> {
     macro_rules! argument {
         ($field:expr) => {{
             let Some(expression) = context.field(call, $field) else {
-                return Ok(context.missing_argument($field));
+                return Ok(Err(context.missing_argument($field)));
             };
             context.eval(expression, environment)?
         }};
@@ -212,18 +278,49 @@ fn apply(
     let update = argument!(line_edit::vocabulary::UPDATE);
     let selected = argument!(layout::vocabulary::SELECTION);
 
-    let Some(content) = text::read(&content) else {
-        return Ok(absent::value());
-    };
-    let Some(prefix) = text::read(&prefix) else {
-        return Ok(absent::value());
-    };
-    let Some(suffix) = text::read(&suffix) else {
-        return Ok(absent::value());
+    if text::read(&content).is_none() {
+        return Ok(Err(absent::value()));
+    }
+    if text::read(&prefix).is_none() {
+        return Ok(Err(absent::value()));
+    }
+    if text::read(&suffix).is_none() {
+        return Ok(Err(absent::value()));
+    }
+    Ok(Ok(TransitionArguments {
+        event,
+        content,
+        prefix,
+        suffix,
+        update,
+        selected,
+    }))
+}
+
+fn run_transition(
+    transition: Transition,
+    arguments: TransitionArguments,
+    fonts: &mut FontContext,
+    layouts: &mut LayoutContext<Brush>,
+) -> Value {
+    let TransitionArguments {
+        event,
+        content,
+        prefix,
+        suffix,
+        update,
+        selected,
+    } = arguments;
+    let (Some(content), Some(prefix), Some(suffix)) = (
+        text::read(&content),
+        text::read(&prefix),
+        text::read(&suffix),
+    ) else {
+        return absent::value();
     };
     let active = !absent::is_absent(&selected);
     if transition != Transition::PointerDown && !active {
-        return Ok(absent::value());
+        return absent::value();
     }
 
     let mut selected = if active { selected } else { payload::edge() };
@@ -238,16 +335,16 @@ fn apply(
     let handled = match transition {
         Transition::PointerDown => {
             let Some(fields) = event.as_record() else {
-                return Ok(absent::value());
+                return absent::value();
             };
             if fields.get(&layout::vocabulary::BUTTON).and_then(Value::as_cell)
                 != Some(layout::vocabulary::PRIMARY)
                 || has_modifier(&event, layout::vocabulary::COMMAND)
             {
-                return Ok(absent::value());
+                return absent::value();
             }
             let Some(point) = point(&event) else {
-                return Ok(absent::value());
+                return absent::value();
             };
             let scale = number(&event, layout::vocabulary::SCALE).unwrap_or(1.0) as f32;
             let count = if active {
@@ -259,8 +356,8 @@ fn apply(
             };
             state.pointer_down(
                 &presentation,
-                &mut fonts.borrow_mut(),
-                &mut layouts.borrow_mut(),
+                fonts,
+                layouts,
                 scale,
                 LineEditPointerDown {
                     point,
@@ -277,16 +374,16 @@ fn apply(
                 .and_then(Value::as_cell)
                 != Some(layout::vocabulary::PRIMARY)
             {
-                return Ok(absent::value());
+                return absent::value();
             }
             let Some(point) = point(&event) else {
-                return Ok(absent::value());
+                return absent::value();
             };
             let scale = number(&event, layout::vocabulary::SCALE).unwrap_or(1.0) as f32;
             state.pointer_move(
                 &presentation,
-                &mut fonts.borrow_mut(),
-                &mut layouts.borrow_mut(),
+                fonts,
+                layouts,
                 scale,
                 point,
             )
@@ -294,28 +391,28 @@ fn apply(
         Transition::PointerUp => state.pointer_up(),
         Transition::Key => {
             let Some(event) = keyboard_event(&event) else {
-                return Ok(absent::value());
+                return absent::value();
             };
             state.handle_key(
                 &presentation,
-                &mut fonts.borrow_mut(),
-                &mut layouts.borrow_mut(),
+                fonts,
+                layouts,
                 &mut SystemTextClipboard,
                 &event,
             )
         }
         Transition::Ime => {
             let Some(event) = ime_event(&event) else {
-                return Ok(absent::value());
+                return absent::value();
             };
             state.handle_ime(&event)
         }
     };
     if !handled {
-        return Ok(absent::value());
+        return absent::value();
     }
     let own_text = payload::stage(&selected).is_some_and(|stage| stage != payload::vocabulary::EDGE);
-    Ok(payload::with_editor(&selected, &state, own_text))
+    payload::with_editor(&selected, &state, own_text)
 }
 
 fn number(value: &Value, field: CellId) -> Option<f64> {
@@ -508,19 +605,16 @@ mod tests {
             .cloned()
             .expect("inactive line editor has a pointer handler");
 
-        let selected = Rc::new(RefCell::new(None));
-        let selection_functions = selection_capability::at(
-            {
-                let selected = selected.clone();
-                move || selected.borrow().clone()
-            },
-            {
-                let selected = selected.clone();
-                move |value| *selected.borrow_mut() = value
-            },
-        );
-        let (fonts, layouts) = resources();
+        let selected = RefCell::new(None);
+        let mut fonts = FontContext::new();
+        let mut layouts = LayoutContext::new();
+        let fonts = RefCell::new(&mut fonts);
+        let layouts = RefCell::new(&mut layouts);
         let event = Value::record([
+            (
+                layout::vocabulary::EVENT_KIND,
+                Value::from(layout::vocabulary::POINTER_DOWN),
+            ),
             (
                 layout::vocabulary::BUTTON,
                 Value::from(layout::vocabulary::PRIMARY),
@@ -531,14 +625,53 @@ mod tests {
             (layout::vocabulary::COUNT, f64::value(1.0)),
             (layout::vocabulary::MODIFIERS, Value::list([])),
         ]);
-        let evaluation = grap::apply(
+        let functions = [
+            selection_capability::vocabulary::GET,
+            selection_capability::vocabulary::SET,
+            EVENT_FUNCTIONS[0],
+            EVENT_FUNCTIONS[1],
+            EVENT_FUNCTIONS[2],
+            EVENT_FUNCTIONS[3],
+            EVENT_FUNCTIONS[4],
+        ];
+        let call = |
+            function,
+            context: &mut Context<'_>,
+            call: &Value,
+            environment: &Environment,
+        | {
+            if function == selection_capability::vocabulary::GET {
+                return Ok(selected.borrow().clone().unwrap_or_else(absent::value));
+            }
+            if function == selection_capability::vocabulary::SET {
+                let Some(expression) = context.field(call, selection_capability::vocabulary::VALUE)
+                else {
+                    return Ok(context.missing_argument(
+                        selection_capability::vocabulary::VALUE,
+                    ));
+                };
+                let value = context.eval(expression, environment)?;
+                *selected.borrow_mut() =
+                    (!absent::is_absent(&value)).then_some(value.clone());
+                return Ok(value);
+            }
+            apply_scoped(
+                function,
+                context,
+                call,
+                environment,
+                &fonts,
+                &layouts,
+            )
+            .unwrap_or_else(|| Ok(absent::value()))
+        };
+        let overlay = grap::ForeignOverlay::new(&functions, &call);
+        let evaluation = grap::apply_scoped(
             &handler,
             [(layout::vocabulary::EVENT, event)],
             |cell| stack.library.value(cell).cloned(),
-            &stack
-                .foreign
-                .merge(functions(fonts, layouts))
-                .merge(selection_functions),
+            &stack.foreign,
+            &overlay,
             500,
         );
         assert!(evaluation.diagnostics.is_empty(), "{:?}", evaluation.diagnostics);

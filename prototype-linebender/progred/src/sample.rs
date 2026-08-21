@@ -63,6 +63,10 @@ pub fn at_display_partial() -> Value {
                             control::vocabulary::PATTERN,
                             Value::record([
                                 (
+                                    layout::vocabulary::EVENT_KIND,
+                                    Value::from(layout::vocabulary::POINTER_DOWN),
+                                ),
+                                (
                                     layout::vocabulary::BUTTON,
                                     Value::from(layout::vocabulary::PRIMARY),
                                 ),
@@ -143,7 +147,6 @@ pub fn at_display_partial() -> Value {
                                                         spliced_text(sample_vocabulary::COL),
                                                     ],
                                                 ),
-                                                layout::vocabulary::POINTER_DOWN,
                                                 select_here.clone(),
                                             ),
                                         )],

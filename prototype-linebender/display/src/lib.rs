@@ -90,16 +90,6 @@ pub enum Side {
 /// interactions use [`Layout::OnEvent`].
 pub type ClickHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EventKind {
-    PointerDown,
-    PointerMove,
-    PointerUp,
-    Scroll,
-    Key,
-    Ime,
-}
-
 /// Unevaluated layout: grouping, walk, and leaves. Distinct from
 /// Progred's measured boxes (those have extents and place closures).
 pub enum Layout<World, Hover> {
@@ -119,12 +109,11 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         value: Value,
     },
-    /// Apply a Grap callable when this event reaches the subtree.
+    /// Apply a Grap callable when an event reaches the subtree.
     /// The editor supplies the event value and a capability overlay
     /// closed over the current projection site.
     OnEvent {
         child: Box<Layout<World, Hover>>,
-        kind: EventKind,
         handler: Value,
     },
     OnHover {
@@ -208,11 +197,9 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             },
             Self::OnEvent {
                 child,
-                kind,
                 handler,
             } => Self::OnEvent {
                 child: child.clone(),
-                kind: *kind,
                 handler: handler.clone(),
             },
             Self::OnHover { child, hover } => Self::OnHover {
@@ -389,12 +376,10 @@ pub fn pickable<World, Hover>(child: Layout<World, Hover>, value: Value) -> Layo
 
 pub fn on_event<World, Hover>(
     child: Layout<World, Hover>,
-    kind: EventKind,
     handler: Value,
 ) -> Layout<World, Hover> {
     Layout::OnEvent {
         child: Box::new(child),
-        kind,
         handler,
     }
 }

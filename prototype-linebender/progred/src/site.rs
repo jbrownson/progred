@@ -9,15 +9,38 @@ use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::App;
 use gid::{Path, Value};
-use progred_libraries::{absent, layout, selection as selection_capability, site};
+use progred_libraries::{
+    absent, layout, line_edit as line_edit_library,
+    selection as selection_capability, site,
+};
 use parley::{FontContext, LayoutContext};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+#[cfg(test)]
 use std::rc::Rc;
 use vello::peniko::Brush;
 
-/// Apply one event handler transactionally with capabilities closed
-/// over its projection site. An absent or diagnostic result declines
-/// without committing any staged annotation or selection change.
+struct PendingChanges {
+    annotation: Option<Value>,
+    annotation_changed: bool,
+    selection: Option<Value>,
+    selection_changed: bool,
+}
+
+const EVENT_FUNCTIONS: [gid::CellId; 9] = [
+    site::vocabulary::GET,
+    site::vocabulary::SET,
+    selection_capability::vocabulary::GET,
+    selection_capability::vocabulary::SET,
+    line_edit_library::vocabulary::POINTER_DOWN,
+    line_edit_library::vocabulary::POINTER_MOVE,
+    line_edit_library::vocabulary::POINTER_UP,
+    line_edit_library::vocabulary::KEY,
+    line_edit_library::vocabulary::IME,
+];
+
+/// Apply one event handler with its get/set functions bound to this
+/// projection site. An absent or diagnostic result declines without
+/// committing any pending annotation or selection change.
 pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> bool {
     let recorded = app
         .model
@@ -29,79 +52,55 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
         .tree_selection()
         .filter(|selection| selection.path() == path)
         .map(|selection| selection.payload().clone());
-    let annotation = Rc::new(RefCell::new(app.model.annotations.at(&path).cloned()));
-    let annotation_changed = Rc::new(Cell::new(false));
-    let selection = Rc::new(RefCell::new(current));
-    let selection_changed = Rc::new(Cell::new(false));
-    // Foreign functions are owned and therefore `'static`. Move the
-    // app's caches into shared owners for this synchronous evaluation,
-    // then put the same caches back when it concludes.
-    let fonts = Rc::new(RefCell::new(std::mem::replace(
-        &mut app.font_cx,
-        FontContext::new(),
-    )));
-    let layouts = Rc::new(RefCell::new(std::mem::replace(
-        &mut app.layout_cx,
-        LayoutContext::<Brush>::new(),
-    )));
+    let staged = RefCell::new(PendingChanges {
+        annotation: app.model.annotations.at(&path).cloned(),
+        annotation_changed: false,
+        selection: current,
+        selection_changed: false,
+    });
+    let fonts = RefCell::new(&mut app.font_cx);
+    let layouts = RefCell::new(&mut app.layout_cx);
     let evaluation = {
-        let site = site::at(
-            {
-                let annotation = annotation.clone();
-                move || annotation.borrow().clone()
-            },
-            {
-                let annotation = annotation.clone();
-                let annotation_changed = annotation_changed.clone();
-                move |value| {
-                    *annotation.borrow_mut() = value;
-                    annotation_changed.set(true);
-                }
-            },
-        );
-        let selected = selection_capability::at(
-            {
-                let selection = selection.clone();
-                move || selection.borrow().clone()
-            },
-            {
-                let selection = selection.clone();
-                let selection_changed = selection_changed.clone();
-                move |value| {
-                    *selection.borrow_mut() = value;
-                    selection_changed.set(true);
-                }
-            },
-        );
-        grap::apply(
+        let call = |
+            function,
+            context: &mut grap::Context<'_>,
+            call: &Value,
+            environment: &grap::Environment,
+        | {
+            event_foreign(
+                function,
+                context,
+                call,
+                environment,
+                &staged,
+                &fonts,
+                &layouts,
+            )
+        };
+        let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
+        let sources = crate::sources::Sources {
+            doc: &app.model.doc,
+            library: &app.stack.library,
+        };
+        grap::apply_scoped(
             &function,
             [(layout::vocabulary::EVENT, event)],
-            |cell| app.sources().value(cell).cloned(),
-            &app
-                .stack
-                .foreign
-                .clone()
-                .merge(site)
-                .merge(selected)
-                .merge(crate::line_edit::functions(fonts.clone(), layouts.clone())),
+            |cell| sources.value(cell).cloned(),
+            &app.stack.foreign,
+            &overlay,
             grap::DEFAULT_FUEL,
         )
     };
-    app.font_cx = Rc::try_unwrap(fonts)
-        .unwrap_or_else(|_| panic!("line-edit font capability escaped dispatch"))
-        .into_inner();
-    app.layout_cx = Rc::try_unwrap(layouts)
-        .unwrap_or_else(|_| panic!("line-edit layout capability escaped dispatch"))
-        .into_inner();
+    drop(fonts);
+    drop(layouts);
+    let staged = staged.into_inner();
     let handled = evaluation.diagnostics.is_empty() && !absent::is_absent(&evaluation.result);
     if handled {
-        if annotation_changed.get() {
-            app.model
-                .annotations
-                .set(&path, annotation.borrow().clone());
+        if staged.annotation_changed {
+            app.model.annotations.set(&path, staged.annotation);
         }
-        if selection_changed.get() {
-            match selection.borrow().clone() {
+        if staged.selection_changed {
+            match staged.selection {
                 Some(payload) => {
                     let mut next = Selection::from_payload(
                         &app.sources(),
@@ -125,6 +124,59 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
         }
     }
     handled
+}
+
+fn event_foreign(
+    function: gid::CellId,
+    context: &mut grap::Context,
+    call: &Value,
+    environment: &grap::Environment,
+    staged: &RefCell<PendingChanges>,
+    fonts: &RefCell<&mut FontContext>,
+    layouts: &RefCell<&mut LayoutContext<Brush>>,
+) -> Result<Value, grap::Halt> {
+    if function == site::vocabulary::GET {
+        return Ok(staged
+            .borrow()
+            .annotation
+            .clone()
+            .unwrap_or_else(absent::value));
+    }
+    if function == selection_capability::vocabulary::GET {
+        return Ok(staged
+            .borrow()
+            .selection
+            .clone()
+            .unwrap_or_else(absent::value));
+    }
+    if function == site::vocabulary::SET
+        || function == selection_capability::vocabulary::SET
+    {
+        let Some(expression) = context.field(call, site::vocabulary::VALUE) else {
+            return Ok(context.missing_argument(site::vocabulary::VALUE));
+        };
+        let value = context.eval(expression, environment)?;
+        let value = (!absent::is_absent(&value)).then_some(value.clone());
+        let result = value.clone().unwrap_or_else(absent::value);
+        let mut staged = staged.borrow_mut();
+        if function == site::vocabulary::SET {
+            staged.annotation = value;
+            staged.annotation_changed = true;
+        } else {
+            staged.selection = value;
+            staged.selection_changed = true;
+        }
+        return Ok(result);
+    }
+    crate::line_edit::apply_scoped(
+        function,
+        context,
+        call,
+        environment,
+        fonts,
+        layouts,
+    )
+    .unwrap_or_else(|| Ok(absent::value()))
 }
 
 #[cfg(test)]

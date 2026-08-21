@@ -724,7 +724,7 @@ mod choice_tests {
 }
 
 /// Lower a projection layout to measured boxes. Display leaves
-/// become place-continuations; [`OnClick`] becomes a Puri handler.
+/// become place-continuations; interaction nodes become Puri handlers.
 #[allow(clippy::too_many_arguments)]
 fn prepare<
     C: 'static,
@@ -770,7 +770,6 @@ fn prepare<
         }
         progred_display::Layout::OnEvent {
             child,
-            kind,
             handler,
         } => {
             let inner = prepare(
@@ -779,7 +778,7 @@ fn prepare<
             let apply = hooks.apply.clone();
             let path = path.to_vec();
             ChoiceLayout::map(inner, 0.0, move |inner| {
-                realize_event_with(path, kind, handler, apply, scale, inner)
+                realize_event_with(path, handler, apply, scale, inner)
             })
         }
         progred_display::Layout::OnHover { child, hover } => {
@@ -1067,90 +1066,102 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
 
 fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
-    kind: progred_display::EventKind,
     function: Value,
     apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
     scale: f64,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     before(inner, move |p, placement| {
-        match kind {
-            progred_display::EventKind::PointerDown => {
-                p.handler().on_pointer_down(move |world, event| {
-                    placement.contains(Point::new(
-                        event.state.position.x,
-                        event.state.position.y,
-                    )) && apply(
-                        world,
-                        path.clone(),
-                        function.clone(),
-                        pointer_button_value(
-                            layout_data::vocabulary::POINTER_DOWN,
-                            placement,
-                            scale,
-                            event,
-                        ),
-                    )
-                });
-            }
-            progred_display::EventKind::PointerMove => {
-                p.handler().on_pointer_move(move |world, event| {
-                    apply(
-                        world,
-                        path.clone(),
-                        function.clone(),
-                        pointer_move_value(placement, scale, event),
-                    )
-                });
-            }
-            progred_display::EventKind::PointerUp => {
-                p.handler().on_pointer_up(move |world, event| {
-                    apply(
-                        world,
-                        path.clone(),
-                        function.clone(),
-                        pointer_button_value(
-                            layout_data::vocabulary::POINTER_UP,
-                            placement,
-                            scale,
-                            event,
-                        ),
-                    )
-                });
-            }
-            progred_display::EventKind::Scroll => {
-                p.handler().on_scroll(move |world, event| {
-                    placement.contains(Point::new(
-                        event.state.position.x,
-                        event.state.position.y,
-                    )) && apply(
-                        world,
-                        path.clone(),
-                        function.clone(),
-                        scroll_value(placement, scale, event),
-                    )
-                });
-            }
-            progred_display::EventKind::Key => {
-                p.handler().on_key(move |world, event| {
-                    apply(
-                        world,
-                        path.clone(),
-                        function.clone(),
-                        key_value(event),
-                    )
-                });
-            }
-            progred_display::EventKind::Ime => {
-                p.handler().on_ime(move |world, event| {
-                    apply(
-                        world,
-                        path.clone(),
-                        function.clone(),
-                        ime_value(event),
-                    )
-                });
-            }
+        {
+            let path = path.clone();
+            let function = function.clone();
+            let apply = apply.clone();
+            p.handler().on_pointer_down(move |world, event| {
+                placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                )) && apply(
+                    world,
+                    path.clone(),
+                    function.clone(),
+                    pointer_button_value(
+                        layout_data::vocabulary::POINTER_DOWN,
+                        placement,
+                        scale,
+                        event,
+                    ),
+                )
+            });
+        }
+        {
+            let path = path.clone();
+            let function = function.clone();
+            let apply = apply.clone();
+            p.handler().on_pointer_move(move |world, event| {
+                apply(
+                    world,
+                    path.clone(),
+                    function.clone(),
+                    pointer_move_value(placement, scale, event),
+                )
+            });
+        }
+        {
+            let path = path.clone();
+            let function = function.clone();
+            let apply = apply.clone();
+            p.handler().on_pointer_up(move |world, event| {
+                apply(
+                    world,
+                    path.clone(),
+                    function.clone(),
+                    pointer_button_value(
+                        layout_data::vocabulary::POINTER_UP,
+                        placement,
+                        scale,
+                        event,
+                    ),
+                )
+            });
+        }
+        {
+            let path = path.clone();
+            let function = function.clone();
+            let apply = apply.clone();
+            p.handler().on_scroll(move |world, event| {
+                placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                )) && apply(
+                    world,
+                    path.clone(),
+                    function.clone(),
+                    scroll_value(placement, scale, event),
+                )
+            });
+        }
+        {
+            let path = path.clone();
+            let function = function.clone();
+            let apply = apply.clone();
+            p.handler().on_key(move |world, event| {
+                apply(
+                    world,
+                    path.clone(),
+                    function.clone(),
+                    key_value(event),
+                )
+            });
+        }
+        {
+            p.handler().on_ime(move |world, event| {
+                apply(
+                    world,
+                    path.clone(),
+                    function.clone(),
+                    ime_value(event),
+                )
+            });
         }
     })
 }

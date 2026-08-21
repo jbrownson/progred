@@ -136,6 +136,41 @@ impl ForeignFunctions {
     }
 }
 
+type ScopedCall<'a> = dyn for<'context> Fn(
+    CellId,
+    &mut Context<'context>,
+    &Value,
+    &Environment,
+) -> Result<Value, Halt>
+    + 'a;
+
+/// A synchronous, borrowed layer of foreign functions. It lets a host
+/// expose state that is valid only for one evaluation without putting
+/// that state in `'static` closures or rebuilding the permanent table.
+pub struct ForeignOverlay<'a> {
+    functions: &'a [CellId],
+    call: &'a ScopedCall<'a>,
+}
+
+impl<'a> ForeignOverlay<'a> {
+    pub fn new(
+        functions: &'a [CellId],
+        call: &'a (impl for<'context> Fn(
+            CellId,
+            &mut Context<'context>,
+            &Value,
+            &Environment,
+        ) -> Result<Value, Halt>
+            + 'a),
+    ) -> Self {
+        Self { functions, call }
+    }
+
+    fn handles(&self, function: CellId) -> bool {
+        self.functions.contains(&function)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Diagnostic {
     FuelExhausted,
@@ -188,13 +223,19 @@ pub struct Evaluation {
 pub struct Context<'a> {
     resolve: &'a dyn Fn(CellId) -> Option<Value>,
     foreign: &'a ForeignFunctions,
+    overlay: Option<&'a ForeignOverlay<'a>>,
     remaining_fuel: usize,
     diagnostics: Vec<Diagnostic>,
     dependencies: BTreeSet<CellId>,
     resolving: Vec<CellId>,
 }
 
-impl Context<'_> {
+enum ForeignTarget<'a> {
+    Permanent(ForeignFunction),
+    Scoped(CellId, &'a ScopedCall<'a>),
+}
+
+impl<'a> Context<'a> {
     fn conclude(mut self, run: impl FnOnce(&mut Self) -> Result<Value, Halt>) -> Evaluation {
         let result = run(&mut self).unwrap_or_else(|Halt(result)| result);
         Evaluation {
@@ -246,7 +287,7 @@ impl Context<'_> {
         }
     }
 
-    pub fn field<'a>(&self, call: &'a Value, label: CellId) -> Option<&'a Value> {
+    pub fn field<'value>(&self, call: &'value Value, label: CellId) -> Option<&'value Value> {
         call.as_record()?.get(&label)
     }
 
@@ -262,7 +303,11 @@ impl Context<'_> {
     fn eval_cell(&mut self, cell: CellId, environment: &Environment) -> Result<Value, Halt> {
         if let Some(value) = environment.get(cell) {
             Ok(value.clone())
-        } else if self.foreign.get(cell).is_some() {
+        } else if self
+            .overlay
+            .is_some_and(|overlay| overlay.handles(cell))
+            || self.foreign.get(cell).is_some()
+        {
             Ok(Value::record([(vocabulary::FFI, Value::from(cell))]))
         } else if let Some(first) = self
             .resolving
@@ -329,19 +374,30 @@ impl Context<'_> {
                 self.eval_grap_call(params, body, closure_environment, call, environment)
             }
             None => match self.foreign_target(&callable) {
-                Some(function) => (function.call)(self, call, environment),
+                Some(ForeignTarget::Permanent(function)) => {
+                    (function.call)(self, call, environment)
+                }
+                Some(ForeignTarget::Scoped(cell, function)) => {
+                    function(cell, self, call, environment)
+                }
                 None => Ok(self.absent(Diagnostic::NotCallable(callable), absent::NOT_CALLABLE)),
             },
         }
     }
 
-    fn foreign_target(&self, callable: &Value) -> Option<ForeignFunction> {
-        callable
+    fn foreign_target(&self, callable: &Value) -> Option<ForeignTarget<'a>> {
+        let cell = callable
             .as_record()?
             .get(&vocabulary::FFI)?
-            .as_cell()
-            .and_then(|cell| self.foreign.get(cell))
-            .cloned()
+            .as_cell()?;
+        if let Some(overlay) = self.overlay.filter(|overlay| overlay.handles(cell)) {
+            Some(ForeignTarget::Scoped(cell, overlay.call))
+        } else {
+            self.foreign
+                .get(cell)
+                .cloned()
+                .map(ForeignTarget::Permanent)
+        }
     }
 
     /// Apply a callable to already-evaluated argument values inside
@@ -373,7 +429,12 @@ impl Context<'_> {
                 self.eval(&body, &closure_environment.extended(bound))
             }
             None => match self.foreign_target(&callable) {
-                Some(function) => (function.call)(self, &call(callable, arguments), &environment),
+                Some(ForeignTarget::Permanent(function)) => {
+                    (function.call)(self, &call(callable, arguments), &environment)
+                }
+                Some(ForeignTarget::Scoped(cell, function)) => {
+                    function(cell, self, &call(callable, arguments), &environment)
+                }
                 None => Ok(self.absent(Diagnostic::NotCallable(callable), absent::NOT_CALLABLE)),
             },
         }
@@ -446,6 +507,7 @@ pub fn evaluate(
     Context {
         resolve: &resolve,
         foreign,
+        overlay: None,
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -470,6 +532,29 @@ pub fn apply(
     Context {
         resolve: &resolve,
         foreign,
+        overlay: None,
+        remaining_fuel: fuel,
+        diagnostics: Vec::new(),
+        dependencies: BTreeSet::new(),
+        resolving: Vec::new(),
+    }
+    .conclude(|context| context.apply_values(function, arguments.into_iter().collect()))
+}
+
+/// Apply with a borrowed foreign-function layer that exists only for
+/// this synchronous evaluation.
+pub fn apply_scoped<'a>(
+    function: &Value,
+    arguments: impl IntoIterator<Item = (CellId, Value)>,
+    resolve: impl Fn(CellId) -> Option<Value>,
+    foreign: &'a ForeignFunctions,
+    overlay: &'a ForeignOverlay<'a>,
+    fuel: usize,
+) -> Evaluation {
+    Context {
+        resolve: &resolve,
+        foreign,
+        overlay: Some(overlay),
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1035,6 +1120,38 @@ mod tests {
             20,
         );
         assert_eq!(applied.result, blob("passed"));
+    }
+
+    #[test]
+    fn a_scoped_foreign_layer_borrows_state_and_remains_reentrant() {
+        let outer = new_cell_id();
+        let inner = new_cell_id();
+        let calls = std::cell::Cell::new(0);
+        let functions = [outer, inner];
+        let scoped = |
+            function,
+            context: &mut Context<'_>,
+            _: &Value,
+            environment: &Environment,
+        | {
+            calls.set(calls.get() + 1);
+            if function == outer {
+                context.eval(&call(Value::from(inner), []), environment)
+            } else {
+                Ok(blob("scoped"))
+            }
+        };
+        let overlay = ForeignOverlay::new(&functions, &scoped);
+        let applied = apply_scoped(
+            &Value::from(outer),
+            [],
+            |_| None,
+            &ForeignFunctions::default(),
+            &overlay,
+            20,
+        );
+        assert_eq!(applied.result, blob("scoped"));
+        assert_eq!(calls.get(), 2);
     }
 
     #[test]

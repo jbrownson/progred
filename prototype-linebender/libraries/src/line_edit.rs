@@ -97,10 +97,7 @@ fn transition(function: CellId) -> Value {
     )
 }
 
-/// One generic event handler: ask the host transition for the next
-/// payload, decline whole when it is absent, otherwise install it at
-/// the current projection site.
-fn handler(function: CellId) -> Value {
+fn handle(function: CellId) -> Value {
     let next = grap_runtime::call(
         Value::from(selection::vocabulary::SET),
         [(selection::vocabulary::VALUE, Value::from(vocabulary::NEXT))],
@@ -119,7 +116,43 @@ fn handler(function: CellId) -> Value {
             (control::vocabulary::DEFAULT, absent::value()),
         ],
     );
-    grap_runtime::lambda([layout::vocabulary::EVENT], choose)
+    choose
+}
+
+/// One generic event handler dispatching the event data to a host
+/// transition, then installing its returned selection payload.
+fn handler(handlers: impl IntoIterator<Item = (CellId, CellId)>) -> Value {
+    let alternatives = handlers.into_iter().map(|(kind, function)| {
+        alternative(
+            Value::record([(layout::vocabulary::EVENT_KIND, Value::from(kind))]),
+            handle(function),
+        )
+    });
+    grap_runtime::lambda(
+        [layout::vocabulary::EVENT],
+        grap_runtime::call(
+            Value::from(control::vocabulary::CASE),
+            [
+                (
+                    control::vocabulary::VALUE,
+                    Value::from(layout::vocabulary::EVENT),
+                ),
+                (
+                    control::vocabulary::ALTERNATIVES,
+                    Value::list(alternatives),
+                ),
+                (control::vocabulary::DEFAULT, absent::value()),
+            ],
+        ),
+    )
+}
+
+fn on_events(
+    child: Value,
+    handlers: impl IntoIterator<Item = (CellId, CellId)>,
+) -> Value {
+    let handlers = handlers.into_iter().collect::<Vec<_>>();
+    layout::on(child, unquote(handler(handlers)))
 }
 
 fn definition() -> Value {
@@ -220,22 +253,23 @@ fn definition() -> Value {
     );
 
     let drawing = layout::hoverable(unquote(drawing));
-    let inactive = layout::on(
+    let inactive = on_events(
         drawing.clone(),
-        layout::vocabulary::POINTER_DOWN,
-        unquote(handler(vocabulary::POINTER_DOWN)),
+        [(
+            layout::vocabulary::POINTER_DOWN,
+            vocabulary::POINTER_DOWN,
+        )],
     );
-    let active = [
-        (layout::vocabulary::POINTER_DOWN, vocabulary::POINTER_DOWN),
-        (layout::vocabulary::POINTER_MOVE, vocabulary::POINTER_MOVE),
-        (layout::vocabulary::POINTER_UP, vocabulary::POINTER_UP),
-        (layout::vocabulary::KEY, vocabulary::KEY),
-        (layout::vocabulary::IME, vocabulary::IME),
-    ]
-    .into_iter()
-    .fold(drawing, |child, (kind, transition)| {
-        layout::on(child, kind, unquote(handler(transition)))
-    });
+    let active = on_events(
+        drawing,
+        [
+            (layout::vocabulary::POINTER_DOWN, vocabulary::POINTER_DOWN),
+            (layout::vocabulary::POINTER_MOVE, vocabulary::POINTER_MOVE),
+            (layout::vocabulary::POINTER_UP, vocabulary::POINTER_UP),
+            (layout::vocabulary::KEY, vocabulary::KEY),
+            (layout::vocabulary::IME, vocabulary::IME),
+        ],
+    );
 
     let quote = |display| {
         grap_runtime::call(
@@ -368,8 +402,31 @@ mod tests {
     use super::*;
     use crate::{control, layout, selection, text};
 
+    fn event_kinds(handler: &Value) -> Vec<CellId> {
+        handler
+            .as_record()
+            .and_then(|fields| fields.get(&grap_runtime::vocabulary::CLOSURE))
+            .and_then(Value::as_record)
+            .and_then(|fields| fields.get(&grap_runtime::vocabulary::BODY))
+            .and_then(Value::as_record)
+            .and_then(|fields| fields.get(&control::vocabulary::ALTERNATIVES))
+            .and_then(Value::as_list)
+            .expect("event handler case alternatives")
+            .values()
+            .map(|alternative| {
+                alternative
+                    .as_record()
+                    .and_then(|fields| fields.get(&control::vocabulary::PATTERN))
+                    .and_then(Value::as_record)
+                    .and_then(|fields| fields.get(&layout::vocabulary::EVENT_KIND))
+                    .and_then(Value::as_cell)
+                    .expect("event-kind pattern")
+            })
+            .collect()
+    }
+
     #[test]
-    fn grap_builds_generic_text_with_five_handlers() {
+    fn grap_builds_generic_text_with_one_five_way_event_handler() {
         let library = Library::<(), ()>::merge_all([
             name::library(),
             text::library(),
@@ -393,34 +450,28 @@ mod tests {
         );
         assert!(evaluation.diagnostics.is_empty(), "{:?}", evaluation.diagnostics);
 
-        let mut value = &evaluation.result;
-        let mut kinds = Vec::new();
-        for _ in 0..5 {
-            let content = value
-                .as_record()
-                .and_then(|fields| fields.get(&layout::vocabulary::ON_EVENT))
-                .and_then(Value::as_record)
-                .expect("on-event wrapper");
-            kinds.push(
-                content
-                    .get(&layout::vocabulary::EVENT_KIND)
-                    .and_then(Value::as_cell)
-                    .unwrap(),
-            );
-            assert!(content.get(&layout::vocabulary::HANDLER).is_some());
-            value = content.get(&layout::vocabulary::CHILD).unwrap();
-        }
+        let content = evaluation
+            .result
+            .as_record()
+            .and_then(|fields| fields.get(&layout::vocabulary::ON_EVENT))
+            .and_then(Value::as_record)
+            .expect("on-event wrapper");
+        let handler = content
+            .get(&layout::vocabulary::HANDLER)
+            .expect("event handler");
         assert_eq!(
-            kinds,
+            event_kinds(handler),
             [
-                layout::vocabulary::IME,
-                layout::vocabulary::KEY,
-                layout::vocabulary::POINTER_UP,
-                layout::vocabulary::POINTER_MOVE,
                 layout::vocabulary::POINTER_DOWN,
+                layout::vocabulary::POINTER_MOVE,
+                layout::vocabulary::POINTER_UP,
+                layout::vocabulary::KEY,
+                layout::vocabulary::IME,
             ]
         );
-        let value = value
+        let value = content
+            .get(&layout::vocabulary::CHILD)
+            .unwrap()
             .as_record()
             .and_then(|fields| fields.get(&layout::vocabulary::HOVERABLE))
             .unwrap();
@@ -443,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn an_inactive_editor_only_installs_its_pointer_down_handler() {
+    fn an_inactive_editor_has_one_pointer_down_event_dispatch() {
         let library = Library::<(), ()>::merge_all([
             name::library(),
             text::library(),
@@ -471,10 +522,8 @@ mod tests {
             .and_then(Value::as_record)
             .unwrap();
         assert_eq!(
-            wrapper
-                .get(&layout::vocabulary::EVENT_KIND)
-                .and_then(Value::as_cell),
-            Some(layout::vocabulary::POINTER_DOWN)
+            event_kinds(wrapper.get(&layout::vocabulary::HANDLER).unwrap()),
+            [layout::vocabulary::POINTER_DOWN]
         );
         assert!(
             wrapper

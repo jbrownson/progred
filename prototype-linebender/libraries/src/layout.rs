@@ -2,8 +2,8 @@
 //! projection defined in a document can RETURN one. Each node is a
 //! record under a single marker key, strings ride the text convention
 //! and numbers the f64 convention. Interaction either attaches
-//! host-provided editor intents or a Grap handler to a generic event
-//! kind. Event dispatch supplies a capability overlay closed over the
+//! host-provided editor intents or a Grap handler to generic event
+//! data. Event dispatch supplies a capability overlay closed over the
 //! projection site, so document paths never enter layout data.
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
@@ -11,7 +11,7 @@
 use crate::{Library, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
-    ClickHandler, Delim, Display, EventKind, Face, Layout, Vector, VectorCommand, alternatives,
+    ClickHandler, Delim, Display, Face, Layout, Vector, VectorCommand, alternatives,
     block_hover, bracket, leaf, on_click, on_event, on_hover, overlay as layout_overlay, pickable,
     slot,
 };
@@ -336,19 +336,14 @@ pub fn hover_block(child: Value) -> Value {
     node(vocabulary::HOVER_BLOCK, child)
 }
 
-pub fn on(child: Value, kind: CellId, handler: Value) -> Value {
+pub fn on(child: Value, handler: Value) -> Value {
     node(
         vocabulary::ON_EVENT,
         Value::record([
             (vocabulary::CHILD, child),
-            (vocabulary::EVENT_KIND, Value::Cell(kind)),
             (vocabulary::HANDLER, handler),
         ]),
     )
-}
-
-pub fn click(child: Value, handler: Value) -> Value {
-    on(child, vocabulary::POINTER_DOWN, handler)
 }
 
 /// Decode a layout value into the display language, attaching the
@@ -491,7 +486,6 @@ pub fn decode<World, Hover: Clone>(
         let content = content.as_record()?;
         return Some(on_event(
             decode(content.get(&vocabulary::CHILD)?, select, hover)?,
-            read_event_kind(content.get(&vocabulary::EVENT_KIND)?)?,
             content.get(&vocabulary::HANDLER)?.clone(),
         ));
     }
@@ -568,18 +562,6 @@ fn read_vector_command(value: &Value) -> Option<VectorCommand> {
         })
     } else {
         None
-    }
-}
-
-fn read_event_kind(value: &Value) -> Option<EventKind> {
-    match value.as_cell()? {
-        cell if cell == vocabulary::POINTER_DOWN => Some(EventKind::PointerDown),
-        cell if cell == vocabulary::POINTER_MOVE => Some(EventKind::PointerMove),
-        cell if cell == vocabulary::POINTER_UP => Some(EventKind::PointerUp),
-        cell if cell == vocabulary::SCROLL => Some(EventKind::Scroll),
-        cell if cell == vocabulary::KEY => Some(EventKind::Key),
-        cell if cell == vocabulary::IME => Some(EventKind::Ime),
-        _ => None,
     }
 }
 
@@ -774,9 +756,11 @@ mod tests {
         ));
         let handler = Value::Cell(vocabulary::HANDLER);
         assert!(matches!(
-            decoded(&click(text_leaf("go", vocabulary::NAME_FACE), handler.clone())),
+            decoded(&on(
+                text_leaf("go", vocabulary::NAME_FACE),
+                handler.clone(),
+            )),
             Some(Layout::OnEvent {
-                kind: EventKind::PointerDown,
                 handler: decoded,
                 ..
             }) if decoded == handler

@@ -7,8 +7,10 @@ use gid::Position;
 use progred_libraries::{f64, name, text};
 use ui_events::keyboard::{KeyState, Modifiers};
 use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
+    PointerType, PointerUpdate,
 };
+use ui_events::ScrollDelta;
 
 struct EmptyClipboard;
 
@@ -1451,14 +1453,14 @@ fn a_projection_defined_as_data_realizes() {
 }
 
 #[test]
-fn a_data_click_realizes_the_apply_hook() {
+fn a_data_event_realizes_the_apply_hook() {
     fn probe(
         input: progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
     ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hover>> {
         use progred_libraries::layout as data;
         input.value.as_blob()?;
         data::decode(
-            &data::click(
+            &data::on(
                 data::text_leaf("go", data::vocabulary::NAME_FACE),
                 Value::from(data::vocabulary::HANDLER),
             ),
@@ -1535,7 +1537,7 @@ fn a_data_click_realizes_the_apply_hook() {
                 persistent_device_id: None,
                 pointer_type: PointerType::Mouse,
             },
-            state,
+            state: state.clone(),
         },
     ));
     let [(path, function, event)] = &events[..] else {
@@ -1549,6 +1551,47 @@ fn a_data_click_realizes_the_apply_hook() {
             .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
             .and_then(Value::as_cell),
         Some(progred_libraries::layout::vocabulary::POINTER_DOWN),
+    );
+    assert!(handler.dispatch_pointer_move(
+        &mut events,
+        &PointerUpdate {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            current: state.clone(),
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        },
+    ));
+    assert_eq!(
+        events[1]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::POINTER_MOVE),
+    );
+    assert!(handler.dispatch_scroll(
+        &mut events,
+        &PointerScrollEvent {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            delta: ScrollDelta::LineDelta(0.0, 1.0),
+            state,
+        },
+    ));
+    assert_eq!(
+        events[2]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::SCROLL),
     );
 }
 
