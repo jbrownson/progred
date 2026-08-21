@@ -31,8 +31,8 @@ two refinements that bound the ambition:
   admitted when a case arrives that those genuinely serve worse.
 
 The editor state itself encodes (2026-08-19, Jake pressing on an
-earlier "tier 2 stays Rust" fence): caret and selection offsets, the
-IME preedit, and the drag all live in the payload — the payload is
+earlier "tier 2 stays Rust" fence): in-motion text, caret and selection
+offsets, the IME preedit, and the drag all live in the payload — the payload is
 CANONICAL at event boundaries, and the live `LineEditState` is its
 decoded working copy between them (a Rust value must exist for
 dispatch to borrow). Junk decodes to the nearest sane state (offsets
@@ -54,8 +54,8 @@ projection. Rust is the substrate: FFI to it while bootstrapping, for
 core machinery, and where efficiency demands (the parked wasm
 experiment is the efficiency lane); the editor itself is not written
 in grap, but projections get great flexibility. Remaining bricks, in
-dependency order: (1) DONE 2026-08-19: `update` is a grap callable —
-`display::LineEdit.update: Value`, evaluated in `write_through` with
+dependency order: (1) DONE 2026-08-19: `update` is a grap callable in
+the selection payload, evaluated in `write_through` with
 the stack's foreign functions under the `line_update` CURRENT/INPUT
 contract; text and f64 register their write-back FFIs; declines are
 absent-classified results or any evaluator diagnostic; the payload
@@ -90,23 +90,34 @@ and field binder, `quote`/`unquote` the record builder — the proof
 is checked in as the sample's `at display` cell, a projection
 authored purely as document data that renders `at` records as
 "row × col" in sample.gid and every bench render; (4) FFI
-curation as standing practice, one deliberate capability at a time.
+curation as standing practice, one deliberate capability at a time;
+(5) DONE 2026-08-20: Grap-authored layouts can draw a small vector
+command list and attach Grap handlers to generic pointer, scroll, key,
+and IME event kinds. Events arrive as GID records. Site annotations
+and selection are temporary get/set capabilities closed over the
+current projection path, never serialized addresses; handler writes
+commit transactionally only when the handler accepts the event.
+(6) DONE 2026-08-20: the stock line editor is a Grap library function.
+Puri returns shaped text geometry as ordinary GID data; Grap builds an
+overlay of vector selection ink, plain text, and vector caret ink, then
+adds hover and event wrappers. Pointer/key/IME transitions are scoped
+FFIs, and Grap installs the returned selection payload. No line-edit
+display/layout tag, text metadata, or recognition pass remains.
 
-Landed so far (2026-08-19): `Annotations` replaced the collapse-only
+Landed so far (2026-08-20): `Annotations` replaced the collapse-only
 override map; the selection is stored as (Path, payload Value, tier-2
 editor) — stage/query/choice/replacing live in the payload, decoded
 through `Stage` for matching, with the live editor's text writing
 through to the payload at the same per-event point the document takes
 its writes; and `ProjectionInput` carries the positional view
-(`selection`, `state`), so partials see editor state as data. Known
-seams, deliberate: `Projection::line` projects with `NoEval` and
-never consults document partials, so a data-defined line edit works
-in the tree but not in line previews; one registry cell means
+(`selection`, `state`), so partials see editor state as data. The loaded
+An edge selection begins editing through the projected Grap event path;
+the selection layer no longer inspects a projection to discover a line.
+Known seams, deliberate: one registry cell means
 last-writer-wins if multi-document library loading ever merges cell
 tables; and an FFI registry target still evaluates its call fields
 itself, keeping the code-shaped edge `apply` removes for closures.
-Next candidates: remaining slots (scroll, view flags as presence),
-the vector-ink leaf, widgets as blessed functions.
+Next candidates: view flags as presence and editor APIs for label/query.
 
 
 ## Cell-Only Labels And Library Text (2026-08-09)
@@ -120,9 +131,9 @@ subset independently.
 
 UTF-8 text is the first library convention: `{utf8: <blob>}`. Its
 reader is open to unrelated fields, like the f64 reader, so text may
-carry provenance, history, or other facets. The normal projection uses
-the compact quoted editor only for the exact one-field representation;
-an enriched text record stays structural so no metadata is hidden.
+carry provenance, history, or other facets. The normal text projection
+recognizes that positive facet even when unrelated fields are present;
+Raw remains available when the complete structure matters.
 Quoted values in the GID text bridge are surface sugar for this convention, not a core
 value variant.
 

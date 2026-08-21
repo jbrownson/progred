@@ -4,7 +4,7 @@
 
 use crate::annotations::{self, Annotations};
 use crate::identity::short_id;
-use progred_libraries::{absent, isa};
+use progred_libraries::{absent, f64 as f64_convention, isa};
 use crate::projection::Projection;
 use crate::sources::Sources;
 use crate::spine;
@@ -59,13 +59,51 @@ pub enum Stage {
 }
 
 impl Selection {
+    /// Reify a payload at a host-owned path. This is the mutation
+    /// boundary used by current-site Grap capabilities: the address
+    /// never enters the payload, and any line editor is only a Rust
+    /// working copy of the payload's editing fields.
+    pub(crate) fn from_payload<World>(
+        sources: &Sources,
+        _projection: &Projection<World>,
+        path: Path,
+        payload: Value,
+    ) -> Self {
+        match payload::stage(&payload) {
+            Some(stage) if stage == payload::vocabulary::PENDING => {
+                query_selection(path, payload)
+            }
+            Some(stage) if stage == payload::vocabulary::LABEL => query_selection(path, payload),
+            _ => {
+                let editor = payload
+                    .as_record()
+                    .and_then(|fields| fields.get(&payload::vocabulary::UPDATE))
+                    .cloned()
+                    .filter(|_| writable_at(sources, &path))
+                    .and_then(|update| {
+                        let fallback = payload::editor_text(&payload)?.to_owned();
+                        Some(Editor {
+                            line: payload::editor_line(&payload, &fallback),
+                            update: Some(update),
+                            recorded: false,
+                        })
+                    });
+                Self {
+                    path,
+                    payload,
+                    editor,
+                }
+            }
+        }
+    }
+
     /// Select the value at `path`; a compact text value brings a focused editor (the root included —
     /// its commits target the document's root field). Selecting an
     /// EMPTY VALUE SLOT is already authoring it — there is nothing
     /// there to select, only something to begin, so it pends
     /// immediately: the empty document's root, and a valueless
     /// writable cell's Follow slot (its rendered placeholder).
-    pub fn edge<World>(sources: &Sources, projection: &Projection<World>, path: Path) -> Self {
+    pub fn edge<World>(sources: &Sources, _projection: &Projection<World>, path: Path) -> Self {
         let empty_slot = match path.split_last() {
             None => sources.root().is_none(),
             Some((Step::Follow, parent)) => sources
@@ -77,23 +115,7 @@ impl Selection {
         if empty_slot {
             return pending_value(path);
         }
-        // An editor mounts only where write-through can land: the
-        // owning cell must not be external.
-        let edit = writable_at(sources, &path)
-            .then(|| {
-                sources
-                    .resolve(&path)
-                    .and_then(|value| projection.line(value))
-            })
-            .flatten();
-        edge_selection(path, edit.map(line_editing))
-    }
-
-    /// A click on an editable line: the projection already named the
-    /// line, so the selection does not look the value up again.
-    pub fn from_line(sources: &Sources, path: Path, line: &crate::render::LineEdit) -> Self {
-        let editor = writable_at(sources, &path).then(|| line_editing(line.clone()));
-        edge_selection(path, editor)
+        edge_selection(path, None)
     }
 
     pub fn path(&self) -> &[Step] {
@@ -131,6 +153,14 @@ impl Selection {
     /// its undo step — deleting through the value is one gesture.
     pub(crate) fn recorded(&self) -> bool {
         self.editor.as_ref().is_some_and(|editor| editor.recorded)
+    }
+
+    /// Carry an open write-through run across a data-driven selection
+    /// payload replacement at the same path.
+    pub(crate) fn preserve_recorded(&mut self, recorded: bool) {
+        if let Some(editor) = &mut self.editor {
+            editor.recorded = recorded;
+        }
     }
 
     pub fn edit(&self) -> Option<&LineEditState> {
@@ -187,14 +217,6 @@ pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
 }
 
-fn line_editing(line: crate::render::LineEdit) -> Editor {
-    Editor {
-        line: line_edit(&line.text),
-        update: Some(line.update),
-        recorded: false,
-    }
-}
-
 /// The selection an arrow step lands on: the caret seeds the side the
 /// travel direction exits from, so the next same-direction press
 /// crosses projected text in one press. The end-seeded default already IS
@@ -208,9 +230,8 @@ pub fn selected_by_arrow<World>(
 ) -> Selection {
     let mut selection = Selection::edge(sources, projection, path);
     if matches!(&event.key, Key::Named(NamedKey::ArrowLeft))
-        && let Some(edit) = selection.edit_mut()
     {
-        edit.cursor_to_start();
+        selection.payload = payload::with_offsets(&selection.payload, 0, 0);
     }
     selection
 }
@@ -676,14 +697,12 @@ pub fn set_collapse<World>(
 /// collapse.
 fn collapse_default<World>(
     sources: &Sources,
-    projection: &Projection<World>,
+    _projection: &Projection<World>,
     path: &[Step],
 ) -> Option<bool> {
     sources
         .resolve(path)
-        // Compact atom projections are leaves. Once another field
-        // enriches either convention, the visible record is collapsible.
-        .filter(|value| projection.line(value).is_none())
+        .filter(|value| text::read(value).is_none() && f64_convention::read(value).is_none())
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
             Value::Blob(_) => false,
@@ -735,8 +754,8 @@ pub fn write_through(
                 let evaluation = grap::apply(
                     &update,
                     [
-                        (progred_display::line_update::CURRENT, current.clone()),
-                        (progred_display::line_update::INPUT, text::value(&typed)),
+                        (progred_libraries::line_edit::vocabulary::CURRENT, current.clone()),
+                        (progred_libraries::line_edit::vocabulary::INPUT, text::value(&typed)),
                     ],
                     |cell| sources.value(cell).cloned(),
                     foreign,
@@ -774,9 +793,9 @@ pub fn break_edit_run(selection: Option<&mut Selection>) {
 /// The selection as data: the payload projections receive when their
 /// path is the selected one. Stage is a named cell; the query rides
 /// the text convention and the choice the f64 convention. Editor
-/// gesture internals (caret, anchor, preedit, drag) are tier-2 Rust
-/// and never encode; the live editor text writes through to the
-/// payload at the same per-event point the document does.
+/// gesture internals (text in motion, caret, anchor, preedit, drag)
+/// encode while editing; the live Rust editor is a decode between
+/// event boundaries.
 pub mod payload {
     use gid::{CellId, Value};
     use progred_libraries::{f64 as f64_convention, text};
@@ -809,6 +828,10 @@ pub mod payload {
         pub const END: CellId = CellId::from_u128(0x60d3e94a852f17bd39c2a45f08e61d73);
         /// The edge editor's write-back rule: a grap callable.
         pub const UPDATE: CellId = CellId::from_u128(0xcd06f18e4a72359bd6084c3f92e17ab4);
+        /// The editor's in-motion text. For a pending this mirrors
+        /// QUERY; for an edge it preserves text until write-through.
+        pub const EDITOR_TEXT: CellId =
+            CellId::from_u128(0x3b3544bd8a2fc3a83a08edb6766fad4a);
         /// The in-progress drag-selection: window origin and click count.
         pub const DRAG: CellId = CellId::from_u128(0xb49c26e1075df3a8e5017d29c46b83f5);
         pub const X: CellId = CellId::from_u128(0x39e50d7ac1846f2b7a2384b06d95c1ef);
@@ -865,17 +888,26 @@ pub mod payload {
         with_field(payload, vocabulary::CHOICE, f64_convention::value(choice as f64))
     }
 
+    pub fn with_offsets(payload: &Value, anchor: usize, focus: usize) -> Value {
+        let fields = payload.as_record().cloned().unwrap_or_default();
+        Value::Record(
+            fields
+                .update(vocabulary::ANCHOR, f64_convention::value(anchor as f64))
+                .update(vocabulary::FOCUS, f64_convention::value(focus as f64)),
+        )
+    }
+
     fn with_field(payload: &Value, key: CellId, value: Value) -> Value {
         let fields = payload.as_record().cloned().unwrap_or_default();
         Value::Record(fields.update(key, value))
     }
 
-    /// Encode the whole live editor into the payload: the query text
-    /// (pending stages own their text; an edge's text lives in the
-    /// document), the selection offsets, and any in-flight IME
-    /// composition or drag.
+    /// Encode the whole live editor into the payload: its in-motion
+    /// text, the query text when the stage owns it, selection offsets,
+    /// and any in-flight IME composition or drag.
     pub fn with_editor(payload: &Value, line: &LineEditState, own_text: bool) -> Value {
         let mut fields = payload.as_record().cloned().unwrap_or_default();
+        fields.insert(vocabulary::EDITOR_TEXT, text::value(line.text()));
         if own_text {
             fields.insert(vocabulary::QUERY, text::value(line.text()));
         }
@@ -913,11 +945,16 @@ pub mod payload {
         Value::Record(fields)
     }
 
-    /// Decode the live editor from the payload over `text` — the
-    /// query for pending stages, the document's line for an edge.
+    pub fn editor_text(payload: &Value) -> Option<&str> {
+        text::read(payload.as_record()?.get(&vocabulary::EDITOR_TEXT)?)
+    }
+
+    /// Decode the live editor from the payload over fallback `text`.
+    /// An encoded in-motion spelling wins when present.
     /// Absent offsets land the caret at the end (the mount default);
     /// junk clamps, per [`LineEditState::from_parts`].
     pub fn editor_line(payload: &Value, text: &str) -> LineEditState {
+        let text = editor_text(payload).unwrap_or(text);
         let field_index = |key: CellId| {
             let index = f64_convention::read(payload.as_record()?.get(&key)?)?;
             (index >= 0.0 && index.fract() == 0.0).then_some(index as usize)

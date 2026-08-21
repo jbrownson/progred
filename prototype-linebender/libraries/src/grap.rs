@@ -3,19 +3,217 @@
 //! projection never sees it.
 
 use crate::{Library, absent, name};
-use gid::{Cells, Step, Value};
-use grap_runtime::vocabulary::GRAP;
+use gid::{CellId, Cells, Step, Value};
+use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Layout, ProjectionInput, alternatives, col, dim, nest, on_click, on_hover, row, transient,
+    Delim, Face, Layout, ProjectionInput, alternatives, at_with_projection, bracket, col, dim,
+    faced, hug, on_click, on_hover, row, transient,
 };
+
+fn short_id(cell: CellId) -> String {
+    let hex = cell.simple().to_string();
+    format!("…{}", &hex[hex.len() - 5..])
+}
+
+fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
+    match env.name(cell) {
+        Some(name) => (name, Face::Name),
+        None => (short_id(cell), Face::Id),
+    }
+}
+
+/// A cell as a reference, not as an invitation to inspect its value.
+/// Contextual projections use this for binders and callable names.
+fn shallow_cell<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let cell = input.value.as_cell()?;
+    let (spelling, face) = spelling(input.env, cell);
+    Some(on_hover(
+        on_click(faced(spelling, face), input.select),
+        input.hover,
+    ))
+}
+
+pub(crate) fn shallow_at<World, Hover: Clone>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+) -> Layout<World, Hover> {
+    at_with_projection(
+        steps,
+        value,
+        [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
+    )
+}
+
+pub(crate) fn at<World, Hover: Clone>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+) -> Layout<World, Hover> {
+    at_with_projection(
+        steps,
+        value,
+        [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
+    )
+}
+
+fn field_spelling(env: &dyn progred_display::Env, field: CellId) -> (String, Face) {
+    match env.name(field) {
+        Some(name) => (name, Face::Label),
+        None => (short_id(field), Face::Id),
+    }
+}
+
+fn parameters(value: &Value) -> Option<Vec<CellId>> {
+    let fields = value.as_record()?;
+    let fields = match fields.get(&grap_runtime::vocabulary::CLOSURE) {
+        Some(closure) => closure.as_record()?,
+        None => fields,
+    };
+    fields.get(&BODY)?;
+    fields
+        .get(&PARAMS)?
+        .as_list()?
+        .values()
+        .map(Value::as_cell)
+        .collect()
+}
+
+/// Parameter order is source metadata, not an evaluation. Follow
+/// transparent cell references to a stored lambda or closure; a
+/// computed callable has no order available to the projection.
+fn function_parameters(
+    env: &dyn progred_display::Env,
+    function: &Value,
+) -> Option<Vec<CellId>> {
+    let mut function = function;
+    let mut followed = std::collections::BTreeSet::new();
+    while let Some(cell) = function.as_cell() {
+        if !followed.insert(cell) {
+            return None;
+        }
+        function = env.cell_value(cell)?;
+    }
+    parameters(function)
+}
+
+fn arguments<World, Hover: Clone>(
+    env: &dyn progred_display::Env,
+    fields: &im::OrdMap<CellId, Value>,
+    parameters: Option<&[CellId]>,
+) -> Layout<World, Hover> {
+    let mut remaining: Vec<(CellId, &Value, Option<String>)> = fields
+        .iter()
+        .filter(|(field, _)| **field != FUNCTION)
+        .map(|(field, value)| (*field, value, env.name(*field)))
+        .collect();
+    remaining.sort_by(|(left, _, left_name), (right, _, right_name)| {
+        match (left_name, right_name) {
+            (Some(left_name), Some(right_name)) => {
+                left_name.cmp(right_name).then(left.cmp(right))
+            }
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => left.cmp(right),
+        }
+    });
+    let mut arguments = Vec::with_capacity(remaining.len());
+    if let Some(parameters) = parameters {
+        for parameter in parameters {
+            if let Some(index) = remaining
+                .iter()
+                .position(|(field, _, _)| field == parameter)
+            {
+                arguments.push(remaining.remove(index));
+            }
+        }
+    }
+    arguments.extend(remaining);
+    let argument = |field, value: &Value| {
+        let (spelling, face) = field_spelling(env, field);
+        row(
+            0.0,
+            [
+                faced(spelling, face),
+                dim(": "),
+                at([Step::Key(field)], value),
+            ],
+        )
+    };
+    let mut flat = Vec::new();
+    for (index, (field, value, _)) in arguments.iter().enumerate() {
+        if index > 0 {
+            flat.push(dim(", "));
+        }
+        flat.push(argument(*field, value));
+    }
+    let rows = arguments
+        .into_iter()
+        .map(|(field, value, _)| argument(field, value))
+        .collect::<Vec<_>>();
+    alternatives([row(0.0, flat), col(0, 2.0, rows)])
+}
+
+/// Calls read as calls. Their function position is a shallow
+/// reference when it is a cell; arguments retain Grap's contextual
+/// projection.
+pub fn call_display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let fields = input.value.as_record()?;
+    let function = fields.get(&FUNCTION)?;
+    let parameters = function_parameters(input.env, function);
+    let function = match function {
+        Value::Cell(_) => shallow_at([Step::Key(FUNCTION)], function),
+        _ => at([Step::Key(FUNCTION)], function),
+    };
+    let arguments = bracket(
+        Delim::Paren,
+        arguments(input.env, fields, parameters.as_deref()),
+    );
+    Some(hug(function, arguments, 0.0, 20.0))
+}
+
+/// A stored lambda exposes its parameter references shallowly and
+/// continues Grap's contextual projection through its body.
+pub fn lambda_display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let fields = input.value.as_record()?;
+    let params = fields.get(&PARAMS)?.as_list()?;
+    let body = fields.get(&BODY)?;
+    let params = params
+        .iter()
+        .map(|(position, param)| {
+            param.as_cell()?;
+            Some(shallow_at(
+                [Step::Key(PARAMS), Step::Element(position.clone())],
+                param,
+            ))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let params = bracket(Delim::Paren, row(4.0, params));
+    let head = row(3.0, [dim("λ"), params, dim("→")]);
+    Some(hug(head, at([Step::Key(BODY)], body), 6.0, 20.0))
+}
+
+/// Foreignness is an evaluator implementation detail. In source, an
+/// FFI callable projects exactly like the cell it names.
+pub fn ffi_display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let ffi = input.value.as_record()?.get(&FFI)?;
+    ffi.as_cell()?;
+    Some(shallow_at([Step::Key(FFI)], ffi))
+}
 
 pub fn display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let expression = input.value.as_record()?.get(&GRAP)?;
     let (result, fuel) = input.env.evaluate(expression);
-    let expression = nest(Step::Key(GRAP), expression);
+    let expression = at([Step::Key(GRAP)], expression);
     let shaft = on_hover(on_click(dim("→"), input.select), input.hover);
     let result = transient(&result, fuel);
     Some(alternatives([
@@ -82,7 +280,14 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     Library {
         cells,
         functions: functions(),
-        projections: vec![display::<World, Hover>],
+        // Projection order mirrors evaluator precedence: the explicit
+        // Grap-result wrapper, calls, lambdas, then FFI values.
+        projections: vec![
+            display::<World, Hover>,
+            call_display::<World, Hover>,
+            lambda_display::<World, Hover>,
+            ffi_display::<World, Hover>,
+        ],
     }
 }
 
@@ -118,7 +323,7 @@ mod tests {
             value,
             selection: None,
             state: None,
-            select: std::rc::Rc::new(|_| false),
+            select: std::rc::Rc::new(|_: &mut ()| false),
             hover: (),
         })
     }
@@ -134,6 +339,40 @@ mod tests {
         (&children[0], &children[2])
     }
 
+    fn argument_order(layout: &Layout<(), ()>) -> Vec<CellId> {
+        let Layout::Alternatives(call_options) = layout else {
+            panic!("call has responsive forms");
+        };
+        let Layout::Row { children, .. } = &call_options[0] else {
+            panic!("flat call first");
+        };
+        let Layout::Surround { child, .. } = &children[1] else {
+            panic!("arguments are parenthesized");
+        };
+        let Layout::Alternatives(argument_options) = child.as_ref() else {
+            panic!("arguments have responsive forms");
+        };
+        let Layout::Row { children, .. } = &argument_options[0] else {
+            panic!("flat arguments first");
+        };
+        children
+            .iter()
+            .step_by(2)
+            .map(|argument| {
+                let Layout::Row { children, .. } = argument else {
+                    panic!("argument has a label and value");
+                };
+                let Layout::At { steps, .. } = &children[2] else {
+                    panic!("argument value retains its path");
+                };
+                let [Step::Key(field)] = steps.as_slice() else {
+                    panic!("argument path is its field");
+                };
+                *field
+            })
+            .collect()
+    }
+
     #[test]
     fn a_record_with_the_field_is_expression_then_result() {
         let expression = Value::from(vec![0]);
@@ -141,7 +380,7 @@ mod tests {
         let (shown, result) = arms(&layout);
         assert!(matches!(
             shown,
-            Layout::At { steps, value }
+            Layout::At { steps, value, .. }
                 if *steps == [Step::Key(GRAP)] && *value == expression
         ));
         assert!(matches!(
@@ -184,8 +423,161 @@ mod tests {
         let (nested, _) = arms(&layout);
         assert!(matches!(
             nested,
-            Layout::At { steps, value }
+            Layout::At { steps, value, .. }
                 if *steps == [Step::Key(GRAP)] && *value == inner
+        ));
+    }
+
+    #[test]
+    fn a_call_projects_its_function_cell_shallowly() {
+        let function = new_cell_id();
+        let argument = new_cell_id();
+        let layout = call_display(ProjectionInput {
+            env: &env(),
+            value: &grap_runtime::call(
+                Value::from(function),
+                [(argument, Value::from(vec![1]))],
+            ),
+            selection: None,
+            state: None,
+            select: std::rc::Rc::new(|_: &mut ()| false),
+            hover: (),
+        })
+        .unwrap();
+        let Layout::Alternatives(options) = layout else {
+            panic!("call has responsive forms");
+        };
+        let Layout::Row { children, .. } = &options[0] else {
+            panic!("flat call first");
+        };
+        assert!(matches!(
+            &children[0],
+            Layout::At {
+                steps,
+                value,
+                projection: Some(projection),
+            } if *steps == [Step::Key(FUNCTION)]
+                && *value == Value::from(function)
+                && projection.len() == 1
+        ));
+    }
+
+    #[test]
+    fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
+        const FUNCTION_CELL: CellId = CellId::from_u128(10);
+        const FIRST_PARAMETER: CellId = CellId::from_u128(30);
+        const SECOND_PARAMETER: CellId = CellId::from_u128(20);
+        const FIRST_EXTRA: CellId = CellId::from_u128(40);
+        const SECOND_EXTRA: CellId = CellId::from_u128(50);
+
+        struct DefinitionEnv {
+            definition: Value,
+        }
+
+        impl Env for DefinitionEnv {
+            fn evaluate(&self, _: &Value) -> (Value, usize) {
+                (Value::record([]), 0)
+            }
+
+            fn cell_value(&self, cell: CellId) -> Option<&Value> {
+                (cell == FUNCTION_CELL).then_some(&self.definition)
+            }
+        }
+
+        let env = DefinitionEnv {
+            definition: grap_runtime::lambda(
+                [FIRST_PARAMETER, SECOND_PARAMETER],
+                Value::from(FIRST_PARAMETER),
+            ),
+        };
+        let call = grap_runtime::call(
+            Value::from(FUNCTION_CELL),
+            [
+                (SECOND_EXTRA, Value::from(vec![5])),
+                (SECOND_PARAMETER, Value::from(vec![2])),
+                (FIRST_EXTRA, Value::from(vec![4])),
+                (FIRST_PARAMETER, Value::from(vec![3])),
+            ],
+        );
+        let layout = call_display(ProjectionInput {
+            env: &env,
+            value: &call,
+            selection: None,
+            state: None,
+            select: std::rc::Rc::new(|_: &mut ()| false),
+            hover: (),
+        })
+        .unwrap();
+
+        assert_eq!(
+            argument_order(&layout),
+            [
+                FIRST_PARAMETER,
+                SECOND_PARAMETER,
+                FIRST_EXTRA,
+                SECOND_EXTRA,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_call_uses_an_inline_lambdas_parameter_order() {
+        const FIRST_PARAMETER: CellId = CellId::from_u128(2);
+        const SECOND_PARAMETER: CellId = CellId::from_u128(1);
+        let call = grap_runtime::call(
+            grap_runtime::lambda(
+                [FIRST_PARAMETER, SECOND_PARAMETER],
+                Value::from(FIRST_PARAMETER),
+            ),
+            [
+                (SECOND_PARAMETER, Value::from(vec![1])),
+                (FIRST_PARAMETER, Value::from(vec![2])),
+            ],
+        );
+        let layout = call_display(ProjectionInput {
+            env: &env(),
+            value: &call,
+            selection: None,
+            state: None,
+            select: std::rc::Rc::new(|_: &mut ()| false),
+            hover: (),
+        })
+        .unwrap();
+
+        assert_eq!(
+            argument_order(&layout),
+            [FIRST_PARAMETER, SECOND_PARAMETER]
+        );
+    }
+
+    #[test]
+    fn a_lambda_projects_parameter_cells_shallowly_and_projects_its_body_as_grap() {
+        let parameter = new_cell_id();
+        let definition = grap_runtime::lambda([parameter], Value::from(parameter));
+        let layout = lambda_display(ProjectionInput {
+            env: &env(),
+            value: &definition,
+            selection: None,
+            state: None,
+            select: std::rc::Rc::new(|_: &mut ()| false),
+            hover: (),
+        })
+        .unwrap();
+        let Layout::Alternatives(options) = layout else {
+            panic!("lambda has responsive forms");
+        };
+        let Layout::Row { children, .. } = &options[0] else {
+            panic!("flat lambda first");
+        };
+        assert!(matches!(
+            &children[1],
+            Layout::At {
+                steps,
+                value,
+                projection: Some(projection),
+            } if *steps == [Step::Key(BODY)]
+                && *value == Value::from(parameter)
+                && projection.len() == 1
         ));
     }
 
@@ -205,7 +597,7 @@ mod tests {
                 .value(grap_runtime::absent::MISSING_CELL)
                 .unwrap()
         ));
-        assert_eq!(library.projections.len(), 1);
+        assert_eq!(library.projections.len(), 4);
 
         let input = gid::new_cell_id();
         let expression = grap_runtime::call(

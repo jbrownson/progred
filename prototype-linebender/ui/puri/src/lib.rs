@@ -17,7 +17,7 @@ pub mod text;
 pub use delim::{Delim, DelimStyle};
 pub use draw::{Canvas, DrawCmd, DrawList, Glyph, GlyphRun, Shape, replay};
 pub use edit::{
-    EditCtx, EditStyle, LineEdit, LineEditDescription, LineEditPointerDown,
+    EditCtx, EditStyle, LineEdit, LineEditDescription, LineEditGeometry, LineEditPointerDown,
     LineEditPresentation, LineEditState, TextClipboard, text_edit,
 };
 pub use geometry::Placement;

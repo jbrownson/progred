@@ -8,7 +8,7 @@ use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
 use crate::identity::short_id;
 use progred_display::{
-    Delim, Layout, alternatives, at, block_hover, bracket, col, descend, dim, field_label, hug, id,
+    Delim, Face, Layout, alternatives, at, block_hover, bracket, col, descend, dim, faced, hug, id,
     on_click, on_hover, pickable, query, row, slot,
 };
 use progred_libraries::{name, text};
@@ -218,7 +218,7 @@ fn record_layout<World: 'static>(
         }
         let name = match cx.pending_rename_under(path) {
             Some((replacing, _, _)) if replacing == *key => query(),
-            _ => field_label(*key),
+            _ => field_label(cx, path, *key, hooks),
         };
         flat.push(name);
         flat.push(dim(": "));
@@ -258,7 +258,7 @@ fn field_head<World: 'static>(
 ) -> View<World> {
     let label = match cx.pending_rename_under(path) {
         Some((replacing, _, _)) if replacing == key => query(),
-        _ => field_label(key),
+        _ => field_label(cx, path, key, hooks),
     };
     let head = row(0.0, [label, dim(":")]);
     if present {
@@ -267,6 +267,38 @@ fn field_head<World: 'static>(
         selectable(head, &child, &Value::from(key), hooks, true)
     } else {
         pickable(head, Value::Cell(key))
+    }
+}
+
+fn field_label<World: 'static>(
+    cx: &Cx,
+    path: &[Step],
+    key: CellId,
+    hooks: &Hooks<World>,
+) -> View<World> {
+    let (spelling, face) = match cx.name(key) {
+        Some(name) => (name.to_string(), Face::Label),
+        None => (short_id(key), Face::Id),
+    };
+    let label = faced(spelling.clone(), face);
+    if !writable_at(&cx.sources, path) || cx.source.transient() {
+        label
+    } else {
+        let mut target = path.to_vec();
+        target.push(Step::Key(key));
+        let handler_target = target.clone();
+        let rename = hooks.rename.clone();
+        let caret = spelling.len();
+        on_hover(
+            on_click(
+                label,
+                Rc::new(move |world| {
+                    rename(world, handler_target.clone(), caret);
+                    true
+                }),
+            ),
+            Hover::Label(target),
+        )
     }
 }
 

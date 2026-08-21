@@ -12,7 +12,9 @@ pub mod geometry;
 pub mod grap;
 pub mod isa;
 pub mod layout;
+pub mod line_edit;
 pub mod name;
+pub mod selection;
 pub mod site;
 pub mod text;
 

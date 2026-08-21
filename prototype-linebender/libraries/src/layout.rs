@@ -1,18 +1,19 @@
 //! The display language's data form: layouts as GID values, so a
 //! projection defined in a document can RETURN one. Each node is a
 //! record under a single marker key, strings ride the text convention
-//! and numbers the f64 convention. Interaction encodes as
-//! attach-points for the intents the editor PROVIDES — the select
-//! handler and hover claim from `ProjectionInput` — never as code:
-//! arbitrary world-callbacks remain a Rust-partial privilege.
+//! and numbers the f64 convention. Interaction either attaches
+//! host-provided editor intents or a Grap handler to a generic event
+//! kind. Event dispatch supplies a capability overlay closed over the
+//! projection site, so document paths never enter layout data.
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
-
+//!
 use crate::{Library, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
-    ClickHandler, Delim, Display, Face, Layout, LineEdit, alternatives, block_hover, bracket,
-    editable_line, frame, leaf, on_apply, on_click, on_hover, pickable,
+    ClickHandler, Delim, Display, EventKind, Face, Layout, Vector, VectorCommand, alternatives,
+    block_hover, bracket, leaf, on_click, on_event, on_hover, overlay as layout_overlay, pickable,
+    slot,
 };
 
 pub mod vocabulary {
@@ -22,6 +23,7 @@ pub mod vocabulary {
     pub const ROW: CellId = CellId::from_u128(0x1af52c96e380b7d40c9e1f6a2d5b83e7);
     pub const COL: CellId = CellId::from_u128(0x9d04b6e1783f2ca5f17d09c4e6a2358b);
     pub const PAD: CellId = CellId::from_u128(0x4e8a17d0952cb6f3a30c5e92b7d1f648);
+    pub const OVERLAY: CellId = CellId::from_u128(0x95de46726d377f70f4f8b6f88893aa52);
     pub const BRACKET: CellId = CellId::from_u128(0xc71e0f4b2d8a6395e6b34a08d15c97f2);
     pub const ALTERNATIVES: CellId = CellId::from_u128(0x62d9b3f0a47e158c37b60d2c81f5e94a);
     pub const DESCEND: CellId = CellId::from_u128(0x35c7a8e2f10d49b6d2f8016c4b9ea375);
@@ -30,18 +32,28 @@ pub mod vocabulary {
 
     // Leaves.
     pub const TEXT: CellId = CellId::from_u128(0x08e64d1f3a92c5b7b7f0d38a165e29c4);
-    pub const LINE_EDIT: CellId = CellId::from_u128(0xba52708ec4d1963f491ce6053a8b7d2e);
-    pub const LABEL: CellId = CellId::from_u128(0xd3a648f709b5e12c8d5f31b04a96c7e0);
-    pub const QUERY: CellId = CellId::from_u128(0x2c85b1e94f60d3a71e69c40b8d25f3a6);
     pub const SLOT: CellId = CellId::from_u128(0x96e07d2a58c4b1f3f3b18e57d0c2946a);
+
+    // Generic display and event nodes.
+    pub const VECTOR: CellId = CellId::from_u128(0x1c2b3ed21cc83b14e73f02aa5067423e);
+    pub const ON_EVENT: CellId = CellId::from_u128(0x1b87f7de18e7c46c5fbfadea1f18aea4);
 
     // Interaction attach-points.
     pub const SELECTABLE: CellId = CellId::from_u128(0x40b93f6e17d5a28c6a2df1905e83b7c4);
     pub const PICKABLE: CellId = CellId::from_u128(0xf8261c05d94eb7a3072c48e6b3f19d58);
     pub const HOVERABLE: CellId = CellId::from_u128(0x1d7c40a396f58e2b95e1a2c7048d63bf);
     pub const HOVER_BLOCK: CellId = CellId::from_u128(0x83f0d5b7264a19ce4c07f3921ea6b85d);
-    pub const CLICK: CellId = CellId::from_u128(0x9aca0ca4a2ff8be290f48b2335105747);
     pub const HANDLER: CellId = CellId::from_u128(0x3e5d38e4658b1895e38307ad12862061);
+
+    // Event kinds and the handler call's argument.
+    pub const EVENT: CellId = CellId::from_u128(0xbd232b5fb4450b52e088470776ed2a01);
+    pub const EVENT_KIND: CellId = CellId::from_u128(0x9cacae824e9661b167f3ed2b8e187ee0);
+    pub const POINTER_DOWN: CellId = CellId::from_u128(0x67a9a626caff2f3568224eafcb338428);
+    pub const POINTER_MOVE: CellId = CellId::from_u128(0xbf54bd5b9cd29a7c32fc496d6d59e4ca);
+    pub const POINTER_UP: CellId = CellId::from_u128(0x5c2173cf26dfc305ebd89e3cf1d62890);
+    pub const SCROLL: CellId = CellId::from_u128(0x7b0de6ea9b052da4b40e5f97438d537c);
+    pub const KEY: CellId = CellId::from_u128(0xbabfda8d94c4a003ae22faf4a4a2fd01);
+    pub const IME: CellId = CellId::from_u128(0x33b7ee93c08863b54d3106802a28d110);
 
     // Fields.
     pub const GAP: CellId = CellId::from_u128(0xa4917e2c60d3f8b5310b6d8f2c74ae95);
@@ -59,15 +71,48 @@ pub mod vocabulary {
     pub const STEPS: CellId = CellId::from_u128(0x1298c6f4a7053edb09b64d2e8371fa5c);
     pub const VALUE: CellId = CellId::from_u128(0x85e3b0d729c4165ffa1e0c5d49b3872e);
     pub const FUEL: CellId = CellId::from_u128(0x4a0f68c1d3952b7ec5d7f2a1806e3b49);
-    pub const UPDATE: CellId = CellId::from_u128(0xd6293e85f0b7c41a374b8f0e29d1a6c5);
-    pub const PREFIX: CellId = CellId::from_u128(0x30c581b6e9f2d74a92a5c3f7e14608bd);
-    pub const SUFFIX: CellId = CellId::from_u128(0xac47f2d90b6e83156e93a1b4d5270c8f);
+    pub const WIDTH: CellId = CellId::from_u128(0xf33c672fef9d0d4561102410fd64129f);
+    pub const HEIGHT: CellId = CellId::from_u128(0xcc32dd050a9351804e7a704b4d59e7ac);
+    pub const ASCENT: CellId = CellId::from_u128(0x7e1d0997f09e8231cabdd246ec1888f9);
+    pub const DESCENT: CellId = CellId::from_u128(0x2ed0b9294782093c08695dd5137df21a);
+    pub const COMMANDS: CellId = CellId::from_u128(0xb3604c47bef05aa4c7ef0b2d5794da14);
+    pub const X: CellId = CellId::from_u128(0x415def0fa0a9ac40dfba5fca4d0f8876);
+    pub const Y: CellId = CellId::from_u128(0x4e2dcde5b1ab1480a2f126176dd148c7);
+    pub const BUTTON: CellId = CellId::from_u128(0x0ec32df180178e9fbc958d3d061481d7);
+    pub const PRIMARY: CellId = CellId::from_u128(0x09f73c1a02464b762ae34adc9ec17baa);
+    pub const SHIFT: CellId = CellId::from_u128(0x3766462666e33f13096d6afd581de3be);
+    pub const COMMAND: CellId = CellId::from_u128(0xfaf6451fbf89c75cf7b6a906f27590e2);
+    pub const MODIFIERS: CellId = CellId::from_u128(0x36dc2e12ccce7f3cd48713123170714a);
+    pub const COUNT: CellId = CellId::from_u128(0xc6b90219f3e63bbbc14b7ebefd1bd443);
+    pub const SCALE: CellId = CellId::from_u128(0xa370331d2ba2325f05fe6d621b885bef);
+    pub const DELTA_X: CellId = CellId::from_u128(0x798ade16a1f9f7beeb7009c1e183b3c7);
+    pub const DELTA_Y: CellId = CellId::from_u128(0x1336f899599217d2535819a51a4c981c);
+    pub const EVENT_STATE: CellId = CellId::from_u128(0x15ab408f66b4286b33f35d95a651b20a);
+    pub const DOWN: CellId = CellId::from_u128(0x96a441425ba7048c7fbb1722922e5ffb);
+    pub const UP: CellId = CellId::from_u128(0xe47d794f06d1f6fc6166c401aeb17c82);
+    pub const REPEAT: CellId = CellId::from_u128(0x5636109fec98530f178de15f65b07372);
+    pub const IME_ENABLED: CellId = CellId::from_u128(0xb773d2a984a80a30dec3d0877ff05895);
+    pub const IME_DISABLED: CellId = CellId::from_u128(0xa6122f0fea5b0bda9f9a20b44a3e12db);
+    pub const IME_PREEDIT: CellId = CellId::from_u128(0xa8dd99527060e9d38b0637fbe842abe4);
+    pub const IME_COMMIT: CellId = CellId::from_u128(0xff48152d0c492add92f179b2d719f745);
+    pub const START: CellId = CellId::from_u128(0xc68a36ea81944cdbc8e7897ffda5a36c);
+    pub const END: CellId = CellId::from_u128(0xabbfd273a978cb520a145eb65568f224);
+    pub const RADIUS: CellId = CellId::from_u128(0x6423c35e07d7a4ff536127d1f1d8eb53);
+    pub const LINE_WIDTH: CellId = CellId::from_u128(0xa8e4d1cb2cd9f070eb428e013fecc5ef);
+    pub const FILL_ROUNDED_RECT: CellId =
+        CellId::from_u128(0xd63668dc14d562633833bb7677c97df4);
+    pub const STROKE_ROUNDED_RECT: CellId =
+        CellId::from_u128(0x9e3e40a6c5b11699b89c182266f53e0a);
 
     // Faces.
     pub const NAME_FACE: CellId = CellId::from_u128(0x520e9b3c7ad6f18409cf25a7d8631be0);
+    pub const STRING_FACE: CellId = CellId::from_u128(0x81c5bf325b9be5e1923e4317371b0eab);
     pub const DIM_FACE: CellId = CellId::from_u128(0xf14b6a08d29c53e7bd0561f8a3c2497e);
     pub const LABEL_FACE: CellId = CellId::from_u128(0x7d90c4e5f1382ab6270d94c1e5a8f36b);
     pub const ID_FACE: CellId = CellId::from_u128(0xb38a1d67e02f49c5c9e8073a6b5d21f4);
+    pub const ACCENT_WASH_FACE: CellId =
+        CellId::from_u128(0x1ec921b1240171ceb6dcae8d15889ef4);
+    pub const INK_FACE: CellId = CellId::from_u128(0xe553afe01621dbdfe528b1f5fcd69e21);
 
     // Delimiters.
     pub const PAREN: CellId = CellId::from_u128(0x0af59c27b1e4d68318f4a06c9d7325eb);
@@ -100,7 +145,7 @@ fn number(value: f64) -> Value {
 }
 
 // Builders: the data form's construction helpers, mirroring the Rust
-// language's, for tests and the authoring FFIs to come.
+// language's, for tests and quoted Grap projections.
 
 pub fn row(gap: f64, children: impl IntoIterator<Item = Value>) -> Value {
     node(
@@ -121,6 +166,10 @@ pub fn col(baseline: usize, gap: f64, children: impl IntoIterator<Item = Value>)
             (vocabulary::CHILDREN, Value::list(children)),
         ]),
     )
+}
+
+pub fn overlay(children: impl IntoIterator<Item = Value>) -> Value {
+    node(vocabulary::OVERLAY, Value::list(children))
 }
 
 pub fn pad(left: f64, top: f64, right: f64, bottom: f64, child: Value) -> Value {
@@ -184,16 +233,85 @@ pub fn text_leaf(content: &str, face: CellId) -> Value {
     )
 }
 
-pub fn line_edit_leaf(content: &str, update: Value, prefix: &str, suffix: &str) -> Value {
+pub fn vector(
+    width: f64,
+    ascent: f64,
+    descent: f64,
+    commands: impl IntoIterator<Item = Value>,
+) -> Value {
     node(
-        vocabulary::LINE_EDIT,
+        vocabulary::VECTOR,
         Value::record([
-            (vocabulary::CONTENT, text::value(content)),
-            (vocabulary::UPDATE, update),
-            (vocabulary::PREFIX, text::value(prefix)),
-            (vocabulary::SUFFIX, text::value(suffix)),
+            (vocabulary::WIDTH, number(width)),
+            (vocabulary::ASCENT, number(ascent)),
+            (vocabulary::DESCENT, number(descent)),
+            (vocabulary::COMMANDS, Value::list(commands)),
         ]),
     )
+}
+
+pub fn fill_rounded_rect(
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    radius: f64,
+    face: CellId,
+) -> Value {
+    vector_command(
+        vocabulary::FILL_ROUNDED_RECT,
+        x,
+        y,
+        width,
+        height,
+        radius,
+        None,
+        face,
+    )
+}
+
+pub fn stroke_rounded_rect(
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    radius: f64,
+    line_width: f64,
+    face: CellId,
+) -> Value {
+    vector_command(
+        vocabulary::STROKE_ROUNDED_RECT,
+        x,
+        y,
+        width,
+        height,
+        radius,
+        Some(line_width),
+        face,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn vector_command(
+    kind: CellId,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    radius: f64,
+    line_width: Option<f64>,
+    face: CellId,
+) -> Value {
+    let fields = [
+        Some((vocabulary::X, number(x))),
+        Some((vocabulary::Y, number(y))),
+        Some((vocabulary::WIDTH, number(width))),
+        Some((vocabulary::HEIGHT, number(height))),
+        Some((vocabulary::RADIUS, number(radius))),
+        line_width.map(|width| (vocabulary::LINE_WIDTH, number(width))),
+        Some((vocabulary::FACE, Value::Cell(face))),
+    ];
+    node(kind, Value::record(fields.into_iter().flatten()))
 }
 
 pub fn selectable(child: Value) -> Value {
@@ -218,14 +336,19 @@ pub fn hover_block(child: Value) -> Value {
     node(vocabulary::HOVER_BLOCK, child)
 }
 
-pub fn click(child: Value, handler: Value) -> Value {
+pub fn on(child: Value, kind: CellId, handler: Value) -> Value {
     node(
-        vocabulary::CLICK,
+        vocabulary::ON_EVENT,
         Value::record([
             (vocabulary::CHILD, child),
+            (vocabulary::EVENT_KIND, Value::Cell(kind)),
             (vocabulary::HANDLER, handler),
         ]),
     )
+}
+
+pub fn click(child: Value, handler: Value) -> Value {
+    on(child, vocabulary::POINTER_DOWN, handler)
 }
 
 /// Decode a layout value into the display language, attaching the
@@ -253,6 +376,9 @@ pub fn decode<World, Hover: Clone>(
             gap: read_number(content.get(&vocabulary::GAP)?)?,
             children: children(content.get(&vocabulary::CHILDREN)?, select, hover)?,
         });
+    }
+    if let Some(content) = fields.get(&vocabulary::OVERLAY) {
+        return Some(layout_overlay(children(content, select, hover)?));
     }
     if let Some(content) = fields.get(&vocabulary::PAD) {
         let content = content.as_record()?;
@@ -295,6 +421,7 @@ pub fn decode<World, Hover: Clone>(
         return Some(Layout::At {
             steps,
             value: content.get(&vocabulary::VALUE)?.clone(),
+            projection: None,
         });
     }
     if let Some(content) = fields.get(&vocabulary::TRANSIENT) {
@@ -310,9 +437,12 @@ pub fn decode<World, Hover: Clone>(
         let content = content.as_record()?;
         let face = match content.get(&vocabulary::FACE)?.as_cell()? {
             cell if cell == vocabulary::NAME_FACE => Face::Name,
+            cell if cell == vocabulary::STRING_FACE => Face::String,
             cell if cell == vocabulary::DIM_FACE => Face::Dim,
             cell if cell == vocabulary::LABEL_FACE => Face::Label,
             cell if cell == vocabulary::ID_FACE => Face::Id,
+            cell if cell == vocabulary::ACCENT_WASH_FACE => Face::AccentWash,
+            cell if cell == vocabulary::INK_FACE => Face::Ink,
             _ => return None,
         };
         return Some(leaf(Display::Text {
@@ -320,25 +450,26 @@ pub fn decode<World, Hover: Clone>(
             face,
         }));
     }
-    if let Some(content) = fields.get(&vocabulary::LINE_EDIT) {
+    if let Some(content) = fields.get(&vocabulary::VECTOR) {
         let content = content.as_record()?;
-        return Some(editable_line(LineEdit {
-            text: text::read(content.get(&vocabulary::CONTENT)?)?.to_string(),
-            update: content.get(&vocabulary::UPDATE)?.clone(),
-            prefix: text::read(content.get(&vocabulary::PREFIX)?)?.to_string(),
-            suffix: text::read(content.get(&vocabulary::SUFFIX)?)?.to_string(),
-        }));
-    }
-    if let Some(content) = fields.get(&vocabulary::LABEL) {
-        return Some(leaf(Display::Label {
-            key: content.as_cell()?,
-        }));
-    }
-    if fields.get(&vocabulary::QUERY).is_some() {
-        return Some(leaf(Display::Query));
+        let width = read_nonnegative(content.get(&vocabulary::WIDTH)?)?;
+        let ascent = read_nonnegative(content.get(&vocabulary::ASCENT)?)?;
+        let descent = read_nonnegative(content.get(&vocabulary::DESCENT)?)?;
+        let commands = content
+            .get(&vocabulary::COMMANDS)?
+            .as_list()?
+            .values()
+            .map(read_vector_command)
+            .collect::<Option<Vec<_>>>()?;
+        return Some(leaf(Display::Vector(Vector {
+            width,
+            ascent,
+            descent,
+            commands,
+        })));
     }
     if fields.get(&vocabulary::SLOT).is_some() {
-        return Some(frame());
+        return Some(slot());
     }
     if let Some(content) = fields.get(&vocabulary::SELECTABLE) {
         return Some(on_click(decode(content, select, hover)?, select.clone()));
@@ -356,10 +487,11 @@ pub fn decode<World, Hover: Clone>(
     if let Some(content) = fields.get(&vocabulary::HOVER_BLOCK) {
         return Some(block_hover(decode(content, select, hover)?));
     }
-    if let Some(content) = fields.get(&vocabulary::CLICK) {
+    if let Some(content) = fields.get(&vocabulary::ON_EVENT) {
         let content = content.as_record()?;
-        return Some(on_apply(
+        return Some(on_event(
             decode(content.get(&vocabulary::CHILD)?, select, hover)?,
+            read_event_kind(content.get(&vocabulary::EVENT_KIND)?)?,
             content.get(&vocabulary::HANDLER)?.clone(),
         ));
     }
@@ -381,6 +513,76 @@ fn read_number(value: &Value) -> Option<f64> {
     f64_convention::read(value).filter(|number| number.is_finite())
 }
 
+fn read_nonnegative(value: &Value) -> Option<f64> {
+    read_number(value).filter(|number| *number >= 0.0)
+}
+
+fn read_face(value: &Value) -> Option<Face> {
+    match value.as_cell()? {
+        cell if cell == vocabulary::NAME_FACE => Some(Face::Name),
+        cell if cell == vocabulary::STRING_FACE => Some(Face::String),
+        cell if cell == vocabulary::DIM_FACE => Some(Face::Dim),
+        cell if cell == vocabulary::LABEL_FACE => Some(Face::Label),
+        cell if cell == vocabulary::ID_FACE => Some(Face::Id),
+        cell if cell == vocabulary::ACCENT_WASH_FACE => Some(Face::AccentWash),
+        cell if cell == vocabulary::INK_FACE => Some(Face::Ink),
+        _ => None,
+    }
+}
+
+fn read_vector_command(value: &Value) -> Option<VectorCommand> {
+    let fields = value.as_record()?;
+    let command = |content: &Value| {
+        let content = content.as_record()?;
+        Some((
+            read_number(content.get(&vocabulary::X)?)?,
+            read_number(content.get(&vocabulary::Y)?)?,
+            read_nonnegative(content.get(&vocabulary::WIDTH)?)?,
+            read_nonnegative(content.get(&vocabulary::HEIGHT)?)?,
+            read_nonnegative(content.get(&vocabulary::RADIUS)?)?,
+            read_face(content.get(&vocabulary::FACE)?)?,
+        ))
+    };
+    if let Some(content) = fields.get(&vocabulary::FILL_ROUNDED_RECT) {
+        let (x, y, width, height, radius, face) = command(content)?;
+        Some(VectorCommand::FillRoundedRect {
+            x,
+            y,
+            width,
+            height,
+            radius,
+            face,
+        })
+    } else if let Some(content) = fields.get(&vocabulary::STROKE_ROUNDED_RECT) {
+        let (x, y, width, height, radius, face) = command(content)?;
+        Some(VectorCommand::StrokeRoundedRect {
+            x,
+            y,
+            width,
+            height,
+            radius,
+            line_width: read_nonnegative(
+                content.as_record()?.get(&vocabulary::LINE_WIDTH)?,
+            )?,
+            face,
+        })
+    } else {
+        None
+    }
+}
+
+fn read_event_kind(value: &Value) -> Option<EventKind> {
+    match value.as_cell()? {
+        cell if cell == vocabulary::POINTER_DOWN => Some(EventKind::PointerDown),
+        cell if cell == vocabulary::POINTER_MOVE => Some(EventKind::PointerMove),
+        cell if cell == vocabulary::POINTER_UP => Some(EventKind::PointerUp),
+        cell if cell == vocabulary::SCROLL => Some(EventKind::Scroll),
+        cell if cell == vocabulary::KEY => Some(EventKind::Key),
+        cell if cell == vocabulary::IME => Some(EventKind::Ime),
+        _ => None,
+    }
+}
+
 /// A walk step: the FOLLOW marker, or a field key's cell. List
 /// positions have no data form yet; element walks stay Rust.
 fn read_step(value: &Value) -> Option<Step> {
@@ -398,22 +600,29 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::ROW, "row"),
         (vocabulary::COL, "col"),
         (vocabulary::PAD, "pad"),
+        (vocabulary::OVERLAY, "overlay"),
         (vocabulary::BRACKET, "bracket"),
         (vocabulary::ALTERNATIVES, "alternatives"),
         (vocabulary::DESCEND, "descend"),
         (vocabulary::AT, "at"),
         (vocabulary::TRANSIENT, "transient"),
         (vocabulary::TEXT, "text"),
-        (vocabulary::LINE_EDIT, "line edit"),
-        (vocabulary::LABEL, "label"),
-        (vocabulary::QUERY, "query"),
+        (vocabulary::VECTOR, "vector"),
         (vocabulary::SLOT, "slot"),
         (vocabulary::SELECTABLE, "selectable"),
         (vocabulary::PICKABLE, "pickable"),
         (vocabulary::HOVERABLE, "hoverable"),
         (vocabulary::HOVER_BLOCK, "hover block"),
-        (vocabulary::CLICK, "click"),
+        (vocabulary::ON_EVENT, "on event"),
         (vocabulary::HANDLER, "handler"),
+        (vocabulary::EVENT, "event"),
+        (vocabulary::EVENT_KIND, "event kind"),
+        (vocabulary::POINTER_DOWN, "pointer down"),
+        (vocabulary::POINTER_MOVE, "pointer move"),
+        (vocabulary::POINTER_UP, "pointer up"),
+        (vocabulary::SCROLL, "scroll"),
+        (vocabulary::KEY, "key"),
+        (vocabulary::IME, "ime"),
         (vocabulary::GAP, "gap"),
         (vocabulary::BASELINE, "baseline"),
         (vocabulary::CHILDREN, "children"),
@@ -429,13 +638,43 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::STEPS, "steps"),
         (vocabulary::VALUE, "value"),
         (vocabulary::FUEL, "fuel"),
-        (vocabulary::UPDATE, "update"),
-        (vocabulary::PREFIX, "prefix"),
-        (vocabulary::SUFFIX, "suffix"),
+        (vocabulary::WIDTH, "width"),
+        (vocabulary::HEIGHT, "height"),
+        (vocabulary::ASCENT, "ascent"),
+        (vocabulary::DESCENT, "descent"),
+        (vocabulary::COMMANDS, "commands"),
+        (vocabulary::X, "x"),
+        (vocabulary::Y, "y"),
+        (vocabulary::BUTTON, "button"),
+        (vocabulary::PRIMARY, "primary"),
+        (vocabulary::SHIFT, "shift"),
+        (vocabulary::COMMAND, "command"),
+        (vocabulary::MODIFIERS, "modifiers"),
+        (vocabulary::COUNT, "count"),
+        (vocabulary::SCALE, "scale"),
+        (vocabulary::DELTA_X, "delta x"),
+        (vocabulary::DELTA_Y, "delta y"),
+        (vocabulary::EVENT_STATE, "event state"),
+        (vocabulary::DOWN, "down"),
+        (vocabulary::UP, "up"),
+        (vocabulary::REPEAT, "repeat"),
+        (vocabulary::IME_ENABLED, "ime enabled"),
+        (vocabulary::IME_DISABLED, "ime disabled"),
+        (vocabulary::IME_PREEDIT, "ime preedit"),
+        (vocabulary::IME_COMMIT, "ime commit"),
+        (vocabulary::START, "start"),
+        (vocabulary::END, "end"),
+        (vocabulary::RADIUS, "radius"),
+        (vocabulary::LINE_WIDTH, "line width"),
+        (vocabulary::FILL_ROUNDED_RECT, "fill rounded rect"),
+        (vocabulary::STROKE_ROUNDED_RECT, "stroke rounded rect"),
         (vocabulary::NAME_FACE, "name face"),
+        (vocabulary::STRING_FACE, "string face"),
         (vocabulary::DIM_FACE, "dim face"),
         (vocabulary::LABEL_FACE, "label face"),
         (vocabulary::ID_FACE, "id face"),
+        (vocabulary::ACCENT_WASH_FACE, "accent wash face"),
+        (vocabulary::INK_FACE, "ink face"),
         (vocabulary::PAREN, "paren"),
         (vocabulary::SQUARE, "square"),
         (vocabulary::CURLY, "curly"),
@@ -490,27 +729,21 @@ mod tests {
         assert_eq!(*gap, 4.0);
         assert!(matches!(
             &children[0],
-            Layout::Leaf(Display::Text { text, face: Face::Name }) if text == "shape"
+            Layout::Leaf(Display::Text { text, face: Face::Name, .. }) if text == "shape"
         ));
         assert!(matches!(
             &children[1],
             Layout::Descend { step: Step::Key(key) } if *key == vocabulary::GAP
         ));
         let Layout::Surround {
-            left: Display::Ink {
-                ink: progred_display::Ink::Delim {
-                    delim: Delim::Brace,
-                    side: progred_display::Side::Open,
-                },
-                face: Face::Dim,
+            left: progred_display::Ink::Delim {
+                delim: Delim::Brace,
+                side: progred_display::Side::Open,
             },
             child,
-            right: Display::Ink {
-                ink: progred_display::Ink::Delim {
-                    delim: Delim::Brace,
-                    side: progred_display::Side::Close,
-                },
-                face: Face::Dim,
+            right: progred_display::Ink::Delim {
+                delim: Delim::Brace,
+                side: progred_display::Side::Close,
             },
         } = &forms[1]
         else {
@@ -539,16 +772,44 @@ mod tests {
             decoded(&hover_block(node(vocabulary::SLOT, Value::record([])))),
             Some(Layout::OnHover { hover: None, .. })
         ));
-        let line = line_edit_leaf("2.5", Value::Cell(vocabulary::UPDATE), "", "°");
-        assert!(matches!(
-            decoded(&line),
-            Some(Layout::Leaf(Display::LineEdit(edit)))
-                if edit.text == "2.5" && edit.suffix == "°"
-        ));
         let handler = Value::Cell(vocabulary::HANDLER);
         assert!(matches!(
             decoded(&click(text_leaf("go", vocabulary::NAME_FACE), handler.clone())),
-            Some(Layout::OnApply { function, .. }) if function == handler
+            Some(Layout::OnEvent {
+                kind: EventKind::PointerDown,
+                handler: decoded,
+                ..
+            }) if decoded == handler
+        ));
+    }
+
+    #[test]
+    fn vector_commands_are_ordinary_display_data() {
+        let display = vector(
+            20.0,
+            8.0,
+            2.0,
+            [
+                fill_rounded_rect(0.0, 0.0, 20.0, 10.0, 2.0, vocabulary::DIM_FACE),
+                stroke_rounded_rect(
+                    0.5,
+                    0.5,
+                    19.0,
+                    9.0,
+                    2.0,
+                    1.0,
+                    vocabulary::NAME_FACE,
+                ),
+            ],
+        );
+        let Some(Layout::Leaf(Display::Vector(vector))) = decoded(&display) else {
+            panic!("vector leaf");
+        };
+        assert_eq!((vector.width, vector.ascent, vector.descent), (20.0, 8.0, 2.0));
+        assert_eq!(vector.commands.len(), 2);
+        assert!(matches!(
+            vector.commands[1],
+            VectorCommand::StrokeRoundedRect { line_width: 1.0, .. }
         ));
     }
 
@@ -556,10 +817,8 @@ mod tests {
     fn junk_falls_through_whole() {
         assert!(decoded(&Value::record([])).is_none());
         assert!(decoded(&text::value("plain text is not a layout")).is_none());
-        // One junk child sinks its whole subtree.
         let broken = row(1.0, [text_leaf("ok", vocabulary::NAME_FACE), Value::record([])]);
         assert!(decoded(&broken).is_none());
-        // A junk face is junk.
         let bad_face = node(
             vocabulary::TEXT,
             Value::record([

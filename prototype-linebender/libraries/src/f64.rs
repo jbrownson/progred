@@ -2,12 +2,12 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use crate::{Library, absent, name};
+use crate::{Library, absent, layout, line_edit, name, text};
 use gid::{Cells, Value};
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
-use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, line_update, overlay};
+use progred_display::{Layout, ProjectionInput, overlay_value};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -37,19 +37,19 @@ pub fn read(value: &Value) -> Option<f64> {
         .map(f64::from_le_bytes)
 }
 
-pub fn line(value: &Value) -> Option<LineEdit> {
-    read(value).map(|number| LineEdit {
-        text: number.to_string(),
-        update: grap_runtime::ffi(vocabulary::UPDATE),
-        prefix: String::new(),
-        suffix: String::new(),
-    })
-}
-
-pub fn display<World, Hover>(
+pub fn display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    line(input.value).map(editable_line)
+    let content = read(input.value)?.to_string();
+    let expression = line_edit::call(
+        text::value(content),
+        grap_runtime::ffi(vocabulary::UPDATE),
+        text::value(""),
+        text::value(""),
+        input.selection.cloned().unwrap_or_else(absent::value),
+    );
+    let (display, _) = input.env.evaluate(&expression);
+    layout::decode(&display, &input.select, &input.hover)
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -57,17 +57,17 @@ pub fn functions() -> ForeignFunctions {
         .register(
             vocabulary::UPDATE,
             ForeignFunction::new(|context, call, environment| {
-                let Some(current) = context.field(call, line_update::CURRENT) else {
-                    return Ok(context.missing_argument(line_update::CURRENT));
-                };
-                let Some(input) = context.field(call, line_update::INPUT) else {
-                    return Ok(context.missing_argument(line_update::INPUT));
+            let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
+                return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
+            };
+            let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
+                return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
                 };
                 let current = context.eval(current, environment)?;
                 let input = context.eval(input, environment)?;
                 Ok(crate::text::read(&input)
                     .and_then(|text| text.trim().parse::<f64>().ok())
-                    .map(|number| overlay(&current, value(number)))
+                    .map(|number| overlay_value(&current, value(number)))
                     .unwrap_or_else(crate::absent::value))
             }),
         )
@@ -106,7 +106,7 @@ fn binary(
     })
 }
 
-pub fn library<World, Hover>() -> Library<World, Hover> {
+pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::F64, "f64"),
@@ -157,14 +157,13 @@ mod tests {
                 .update(extra, Value::from(b"degrees".to_vec())),
         );
         assert_eq!(read(&with_extra), Some(2.5));
-        assert_eq!(line(&with_extra).map(|edit| edit.text), Some("2.5".into()));
         let update = |input: &str| {
             grap::evaluate(
                 &grap::call(
-                    line(&with_extra).unwrap().update,
+                    grap::ffi(vocabulary::UPDATE),
                     [
-                        (line_update::CURRENT, with_extra.clone()),
-                        (line_update::INPUT, crate::text::value(input)),
+                        (line_edit::vocabulary::CURRENT, with_extra.clone()),
+                        (line_edit::vocabulary::INPUT, crate::text::value(input)),
                     ],
                 ),
                 |_| None,

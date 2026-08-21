@@ -8,9 +8,10 @@ longer on the application's live f64 projection path.
 ## The Decision
 
 Bootstrap Progred with Grap, a small language embedded directly in the
-existing GID data. Grap-defined functions are strict and pure, while
-registered Rust functions receive raw operands and control recursive
-evaluation. Grap is not another syntax tree and adds
+existing GID data. Grap-defined functions are strict; effects enter
+through registered Rust functions and explicitly scoped capabilities.
+Rust functions receive raw operands and control recursive evaluation.
+Grap is not another syntax tree and adds
 nothing to `Value`: records, lists, blobs, and cell references remain
 the whole data model. A fixed library gives a few cell identities meaning,
 and the evaluator interprets records using those identities. Numeric,
@@ -43,8 +44,18 @@ recursion; it is not hidden in display context.
 stored source provenance, and invokes the supplied projection on that
 unresolved location. The projection performs lookup, which lets its total
 fallback project a missing field or element as the ordinary pending state.
-A domain projection may replace only the structure it fully accounts for.
+A contextual `at` may prepend another composition of partials for one
+subtree while retaining its real source path; the current projection remains
+behind it. Grap uses this to keep code-shaped descendants in the Grap
+projection without losing text, f64, or the total fallback.
+A domain projection should specialize only the structure it fully accounts for.
 Raw is the same total projection with its partial layers disabled.
+The Grap call projection uses the host's read-only cell lookup to inspect a
+stored lambda definition and presents existing arguments in its declared
+parameter order, followed by extra fields in the ordinary stable order. This
+is deliberately not evaluation: inline and stored lambdas supply useful
+source metadata, while computed callables and foreign functions fall back to
+the ordinary field order.
 
 Computed values do not use another projection operation. They start the same
 projection at a transient root with fresh source provenance. Stored provenance
@@ -54,10 +65,22 @@ the stored expression which produced it. Source/editability and
 projection choice remain separate inputs.
 
 A partial returns a `Layout<World, Hover>`: boxes, display leaves
-(`Text`, `LineEdit`), generic hover claims, and owned callbacks over
-the live application world. Text and f64 share `editable_line`; its
-library-supplied value update is wired to focus, selection, and caret
-interaction by the editor runtime. `grap` is grouping (`at`, `descend`,
+(`Text` and `Vector`), generic hover
+claims, and event wrappers. A generic event wrapper holds a Grap
+callable; realize turns platform events into GID records and invokes
+the callable with capabilities closed over the wrapper's projection
+site. The path stays in Rust. Site annotations and the current
+selection are get/set capabilities in that temporary overlay, and
+their writes commit only when the handler returns a non-absent result
+without diagnostics. Text and f64 invoke the Grap-defined stock line
+editor. A pure Puri geometry operation returns dressed text, baseline
+metrics, and ordinary rectangle commands. Grap destructures that record
+into an `Overlay` of selection vector ink, a plain `Text` leaf, and
+caret vector ink, then adds hover and `OnEvent` nodes. Pointer/key/IME
+transitions are scoped host capabilities; Grap composes them and
+replaces the current selection payload. There is no line-edit display
+or layout form, no editor metadata on `Text`, and no host recognition
+pass. `grap` is grouping (`at`, `descend`,
 `alternatives`, `surround`, `hug`). The live interpreter measures that layout;
 callbacks become Puri handlers. There is no projection-action enum or
 central reducer: a callback receives `&mut World` when it fires. The
@@ -103,7 +126,17 @@ registered call rather than evaluator syntax. Core Grap has no number or
 geometry type and no arithmetic or geometry operation.
 
 The built-in Grap library offers a `grap` value partial alongside the
-runtime evaluator.
+runtime evaluator. It also projects calls and lambdas as code: function,
+parameter, and bare binding cells are shallow named references rather than
+requests to recursively inspect their definitions; call arguments and lambda
+bodies recursively retain the Grap projection. FFI values use the same
+reference presentation, because foreignness is not caller syntax. Argument
+labels retain the normal named-first alphabetical order.
+The control library composes ahead of that general call projection: a
+well-formed `case` call displays its subject followed by ordered
+`pattern → expression` arms and `else → default`; binding patterns remain
+visibly distinct as `bind name`. Malformed case-shaped data declines this
+projection whole and falls through to the ordinary call or structural view.
 A record with a `grap` field is replaced by the stored
 expression (nested under that field so editing stays on
 `…+Key(grap)`), then `→`, then the returned `Value` recursively
@@ -326,9 +359,9 @@ argument, converts the resulting record to an environment, then asks the
 same evaluator to interpret its raw expression argument there. It is an
 ordinary foreign call, not another form recognized by `eval`.
 
-Grap-defined functions deliberately have less authority: their
-arguments are evaluated before binding and their bodies are pure over
-those values and the captured lexical environment. Rust currently owns
+Grap-defined functions deliberately have less direct host authority:
+their arguments are evaluated before binding, while effects are calls
+to explicit FFI values and scoped capabilities. Rust currently owns
 evaluation-control operations such as conditionals and matching. A
 separate Grap-defined macro representation can be added later if a
 concrete need justifies it; every Grap function does not need to become

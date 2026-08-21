@@ -5,21 +5,29 @@
     "absent": d9c0a7145a38859a245640d3469cbcd4,
     "alternatives": a9aadcb44755963498c743fa114f0f00,
     "amount": 4a99abd61aa7dfe64f93de9561124845,
+    "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
     "at": 4c2cb3268f1911bd26a0eb74622ba097,
     "at_display": 31554fd72b1717254695c5d14a6944f9,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "button": 0ec32df180178e9fbc958d3d061481d7,
     "case": b3f6a62e4926889bcfcd338025f4a6f9,
+    "child": 59a6f0c2e8b1d4738f6e04a9d21c57b3,
     "children": e10b73d5482f96ca7d3852c0f16b49ea,
     "circle": eba2ca3d6a0fba957bd96bfb138c7a5b,
     "col": 64bad273f94f32f9957b99a6e4d14d39,
     "color": 897fc1c794c08a0506590276aa72a3d7,
+    "commands": b3604c47bef05aa4c7ef0b2d5794da14,
     "content": 3e6b91d4a25f70c8815d29f6c4a30e7b,
     "corner": 12606ebd874c8c81cb938f4a119baed5,
     "default": 3ad1a352453c8b21da757b48913b2c9f,
+    "descent": 2ed0b9294782093c08695dd5137df21a,
     "dim_face": f14b6a08d29c53e7bd0561f8a3c2497e,
     "double": 1588cd2c81f1c6563cfe843f32e760df,
     "double_pitch": e69c085ed00f5270f24a895cca9cd7d6,
+    "edge": 2f74c8a1936e05bd4c17e2b98d60a5f4,
+    "event": bd232b5fb4450b52e088470776ed2a01,
+    "event_kind": 9cacae824e9661b167f3ed2b8e187ee0,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "face": cb04728f5e6a1d93a6790238b5f1ce4d,
@@ -28,20 +36,28 @@
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "gap": a4917e2c60d3f8b5310b6d8f2c74ae95,
     "grap": ac807d20d964e141d44c1b2eb98e5ca9,
+    "handler": 3e5d38e4658b1895e38307ad12862061,
+    "height": cc32dd050a9351804e7a704b4d59e7ac,
     "isa": dcedb3a466c3a3e2c6b2826153e82e78,
+    "layout_radius": 6423c35e07d7a4ff536127d1f1d8eb53,
     "layout_row": 1af52c96e380b7d40c9e1f6a2d5b83e7,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "line_width": a8e4d1cb2cd9f070eb428e013fecc5ef,
     "material": c7c1197574183c44d7e038cb52d78760,
+    "modifiers": 36dc2e12ccce7f3cd48713123170714a,
     "multiply": d6f384c439d9d69996d545df422efd79,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
     "name_face": 520e9b3c7ad6f18409cf25a7d8631be0,
     "of": 4544b0db160b6330f20a69dd3ce34e2d,
+    "on_event": 1b87f7de18e7c46c5fbfadea1f18aea4,
     "origin": 065c608bbd1f53075b5c831cc4c5abd6,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pitch": 563079b77defe2a26abcdccfa47655ed,
     "pitch_value": 76c66b416993d623709779e49815d0b6,
+    "pointer_down": 67a9a626caff2f3568224eafcb338428,
     "points": e92356b75104edae387062fcf8a859e0,
+    "primary": 09f73c1a02464b762ae34adc9ec17baa,
     "profile": 3624cc3724556440847e7da953d398fc,
     "projections": cdaff65dbbd2e37b0a7deafe862d8695,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
@@ -49,9 +65,12 @@
     "right": 4f53ff25390f58472d31a6142644dec2,
     "roof": 06068f483e95e24492a0835caa2751cb,
     "row": a791e4873aa95e21bc925dacbbbf6ea5,
-    "selectable": 40b93f6e17d5a28c6a2df1905e83b7c4,
+    "selection_set": a12f30681dc2a8465da7673a7e2da9a8,
+    "selection_value": 544d3b52ea73cd263c435ecddfe5e8bf,
     "shape": b5db29c46198e28df0c26ac4aa5a411a,
+    "stage": 6a1fd3082b9c47e5f60d21a8c45e9b37,
     "stroke": 083e083f1549e362245fe6fb27135193,
+    "stroke_rounded_rect": 9e3e40a6c5b11699b89c182266f53e0a,
     "style": 2b9652d2cb8cb5c9d633b34d827048b1,
     "subject": 00dafdc01c7e014edd857e174c6c8b6f,
     "swatch": f2aadbb9e548ea30aceb7fed5773ea8a,
@@ -59,6 +78,10 @@
     "text": 08e64d1f3a92c5b7b7f0d38a165e29c4,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "value": 85e3b0d729c4165ffa1e0c5d49b3872e,
+    "vector": 1c2b3ed21cc83b14e73f02aa5067423e,
+    "width": f33c672fef9d0d4561102410fd64129f,
+    "x": 415def0fa0a9ac40dfba5fca4d0f8876,
+    "y": 4e2dcde5b1ab1480a2f126176dd148c7,
   },
   "cells": {
     amount: {
@@ -91,36 +114,103 @@
             expression: {
               function: quote,
               expression: {
-                selectable: {
-                  layout_row: {
-                    gap: {
-                      f64: 0x0000000000001040,
-                    },
-                    children: [
-                      {
-                        text: {
-                          content: {
-                            unquote: row,
-                          },
-                          face: name_face,
-                        },
-                      },
-                      {
-                        text: {
-                          content: "×",
-                          face: dim_face,
-                        },
-                      },
-                      {
-                        text: {
-                          content: {
-                            unquote: col,
-                          },
-                          face: name_face,
-                        },
-                      },
+                on_event: {
+                  handler: {
+                    params: [
+                      event,
                     ],
+                    body: {
+                      subject: event,
+                      default: {
+                        isa: absent,
+                      },
+                      function: case,
+                      alternatives: [
+                        {
+                          pattern: {
+                            button: primary,
+                            modifiers: [],
+                          },
+                          expression: {
+                            selection_value: {
+                              stage: edge,
+                            },
+                            function: selection_set,
+                          },
+                        },
+                      ],
+                    },
                   },
+                  child: {
+                    layout_row: {
+                      gap: {
+                        f64: 0x0000000000001040,
+                      },
+                      children: [
+                        {
+                          vector: {
+                            descent: {
+                              f64: 0x0000000000000040,
+                            },
+                            ascent: {
+                              f64: 0x0000000000002040,
+                            },
+                            commands: [
+                              {
+                                stroke_rounded_rect: {
+                                  x: {
+                                    f64: 0x000000000000e03f,
+                                  },
+                                  y: {
+                                    f64: 0x000000000000e03f,
+                                  },
+                                  layout_radius: {
+                                    f64: 0x0000000000000040,
+                                  },
+                                  line_width: {
+                                    f64: 0x000000000000f03f,
+                                  },
+                                  face: dim_face,
+                                  height: {
+                                    f64: 0x0000000000002240,
+                                  },
+                                  width: {
+                                    f64: 0x0000000000002240,
+                                  },
+                                },
+                              },
+                            ],
+                            width: {
+                              f64: 0x0000000000002440,
+                            },
+                          },
+                        },
+                        {
+                          text: {
+                            content: {
+                              unquote: row,
+                            },
+                            face: name_face,
+                          },
+                        },
+                        {
+                          text: {
+                            content: "×",
+                            face: dim_face,
+                          },
+                        },
+                        {
+                          text: {
+                            content: {
+                              unquote: col,
+                            },
+                            face: name_face,
+                          },
+                        },
+                      ],
+                    },
+                  },
+                  event_kind: pointer_down,
                 },
               },
             },

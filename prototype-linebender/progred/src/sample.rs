@@ -1,7 +1,9 @@
 //! Progred's sample GID document used by tests and render fixtures.
 
 use gid::{Cells, Document, Value, new_cell_id};
-use progred_libraries::{absent, control, f64, geometry, layout, name, text};
+use progred_libraries::{
+    absent, control, f64, geometry, layout, name, selection as selection_capability, site, text,
+};
 
 #[cfg_attr(not(test), allow(dead_code))]
 pub mod sample_vocabulary {
@@ -45,6 +47,44 @@ pub fn at_display_partial() -> Value {
             ]),
         )])
     };
+    let select_here = grap::lambda(
+        [layout::vocabulary::EVENT],
+        grap::call(
+            Value::from(control::vocabulary::CASE),
+            [
+                (
+                    control::vocabulary::VALUE,
+                    Value::from(layout::vocabulary::EVENT),
+                ),
+                (
+                    control::vocabulary::ALTERNATIVES,
+                    Value::list([Value::record([
+                        (
+                            control::vocabulary::PATTERN,
+                            Value::record([
+                                (
+                                    layout::vocabulary::BUTTON,
+                                    Value::from(layout::vocabulary::PRIMARY),
+                                ),
+                                (layout::vocabulary::MODIFIERS, Value::list([])),
+                            ]),
+                        ),
+                        (
+                            grap::vocabulary::EXPRESSION,
+                            grap::call(
+                                Value::from(selection_capability::vocabulary::SET),
+                                [(
+                                    site::vocabulary::VALUE,
+                                    crate::selection::payload::edge(),
+                                )],
+                            ),
+                        ),
+                    ])]),
+                ),
+                (control::vocabulary::DEFAULT, absent::value()),
+            ],
+        ),
+    );
     name::record(
         "at display",
         [
@@ -77,17 +117,35 @@ pub fn at_display_partial() -> Value {
                                         Value::from(control::vocabulary::QUOTE),
                                         [(
                                             grap::vocabulary::EXPRESSION,
-                                            layout::selectable(layout::row(
-                                                4.0,
-                                                [
-                                                    spliced_text(sample_vocabulary::ROW),
-                                                    layout::text_leaf(
-                                                        "×",
-                                                        layout::vocabulary::DIM_FACE,
-                                                    ),
-                                                    spliced_text(sample_vocabulary::COL),
-                                                ],
-                                            )),
+                                            layout::on(
+                                                layout::row(
+                                                    4.0,
+                                                    [
+                                                        layout::vector(
+                                                            10.0,
+                                                            8.0,
+                                                            2.0,
+                                                            [layout::stroke_rounded_rect(
+                                                                0.5,
+                                                                0.5,
+                                                                9.0,
+                                                                9.0,
+                                                                2.0,
+                                                                1.0,
+                                                                layout::vocabulary::DIM_FACE,
+                                                            )],
+                                                        ),
+                                                        spliced_text(sample_vocabulary::ROW),
+                                                        layout::text_leaf(
+                                                            "×",
+                                                            layout::vocabulary::DIM_FACE,
+                                                        ),
+                                                        spliced_text(sample_vocabulary::COL),
+                                                    ],
+                                                ),
+                                                layout::vocabulary::POINTER_DOWN,
+                                                select_here.clone(),
+                                            ),
                                         )],
                                     ),
                                 ),

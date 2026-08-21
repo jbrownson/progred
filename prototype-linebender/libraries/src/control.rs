@@ -3,10 +3,13 @@
 //! constructs data while evaluating explicit unquotes.
 
 use crate::{Library, absent, name};
-use gid::{CellId, Cells, Value};
+use gid::{CellId, Cells, Step, Value};
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use progred_display::{
+    Delim, Layout, ProjectionInput, bracket, col, dim, hug, row,
+};
 use std::collections::BTreeMap;
 
 pub mod vocabulary {
@@ -202,7 +205,90 @@ fn matches_pattern(
     }
 }
 
-pub fn library<World, Hover>() -> Library<World, Hover> {
+/// Case is a control form in projection even though evaluation sees
+/// an ordinary call to the Rust implementation.
+pub fn case_display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let fields = input.value.as_record()?;
+    let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
+    (function.as_cell()? == vocabulary::CASE).then_some(())?;
+    let subject = fields.get(&vocabulary::VALUE)?;
+    let alternatives = fields.get(&vocabulary::ALTERNATIVES)?.as_list()?;
+    let default = fields.get(&vocabulary::DEFAULT)?;
+
+    let mut arms = alternatives
+        .iter()
+        .map(|(position, alternative)| {
+            let alternative = alternative.as_record()?;
+            let pattern = alternative.get(&vocabulary::PATTERN)?;
+            let expression = alternative.get(&grap_runtime::vocabulary::EXPRESSION)?;
+            let pattern = crate::grap::at(
+                [
+                    Step::Key(vocabulary::ALTERNATIVES),
+                    Step::Element(position.clone()),
+                    Step::Key(vocabulary::PATTERN),
+                ],
+                pattern,
+            );
+            let expression = crate::grap::at(
+                [
+                    Step::Key(vocabulary::ALTERNATIVES),
+                    Step::Element(position.clone()),
+                    Step::Key(grap_runtime::vocabulary::EXPRESSION),
+                ],
+                expression,
+            );
+            Some(hug(
+                row(6.0, [pattern, dim("→")]),
+                expression,
+                6.0,
+                20.0,
+            ))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    arms.push(hug(
+        row(6.0, [dim("else"), dim("→")]),
+        crate::grap::at([Step::Key(vocabulary::DEFAULT)], default),
+        6.0,
+        20.0,
+    ));
+
+    let head = row(
+        4.0,
+        [
+            crate::grap::shallow_at(
+                [Step::Key(grap_runtime::vocabulary::FUNCTION)],
+                function,
+            ),
+            crate::grap::at([Step::Key(vocabulary::VALUE)], subject),
+        ],
+    );
+    Some(hug(
+        head,
+        bracket(Delim::Brace, col(0, 4.0, arms)),
+        4.0,
+        20.0,
+    ))
+}
+
+/// A binding pattern must remain visibly distinct from a literal cell
+/// pattern, while its binder is still the real selectable cell value.
+pub fn bind_display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let binder = input.value.as_record()?.get(&vocabulary::BIND)?;
+    binder.as_cell()?;
+    Some(row(
+        4.0,
+        [
+            dim("bind"),
+            crate::grap::shallow_at([Step::Key(vocabulary::BIND)], binder),
+        ],
+    ))
+}
+
+pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
         (vocabulary::CASE, "case"),
@@ -226,7 +312,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     Library {
         cells,
         functions: functions(),
-        ..Library::default()
+        projections: vec![case_display::<World, Hover>, bind_display::<World, Hover>],
     }
 }
 
@@ -234,7 +320,27 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
 mod tests {
     use super::*;
     use gid::new_cell_id;
+    use progred_display::Env;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct NoEval;
+
+    impl Env for NoEval {
+        fn evaluate(&self, expression: &Value) -> (Value, usize) {
+            (expression.clone(), 0)
+        }
+    }
+
+    fn projection_input(value: &Value) -> ProjectionInput<'_, (), ()> {
+        ProjectionInput {
+            env: &NoEval,
+            value,
+            selection: None,
+            state: None,
+            select: std::rc::Rc::new(|_: &mut ()| false),
+            hover: (),
+        }
+    }
 
     fn blob(text: &str) -> Value {
         Value::from(text.as_bytes().to_vec())
@@ -444,6 +550,39 @@ mod tests {
     }
 
     #[test]
+    fn case_projects_ordered_pattern_expression_arms_and_a_default() {
+        let binder = new_cell_id();
+        let expression = case_call(
+            blob("subject"),
+            [
+                alternative(blob("first"), blob("one")),
+                alternative(binding(binder), Value::from(binder)),
+            ],
+            blob("default"),
+        );
+        let layout = case_display(projection_input(&expression)).unwrap();
+        let Layout::Alternatives(options) = layout else {
+            panic!("case has responsive forms");
+        };
+        let Layout::Row { children, .. } = &options[0] else {
+            panic!("flat case first");
+        };
+        let Layout::Surround { child, .. } = &children[1] else {
+            panic!("case arms are braced");
+        };
+        let Layout::Col { children, .. } = child.as_ref() else {
+            panic!("case arms are ordered vertically");
+        };
+        assert_eq!(children.len(), 3);
+    }
+
+    #[test]
+    fn malformed_case_data_falls_through_to_the_generic_call_projection() {
+        let malformed = case_call(blob("subject"), [blob("not an arm")], blob("default"));
+        assert!(case_display(projection_input(&malformed)).is_none());
+    }
+
+    #[test]
     fn malformed_case_data_returns_library_absents() {
         let invalid_alternatives = grap::call(
             Value::from(vocabulary::CASE),
@@ -485,6 +624,7 @@ mod tests {
     #[test]
     fn library_describes_quote_and_classifies_absences() {
         let library = library::<(), ()>();
+        assert_eq!(library.projections.len(), 2);
         assert_eq!(
             library.cells.value(vocabulary::QUOTE).and_then(name::read),
             Some("quote")

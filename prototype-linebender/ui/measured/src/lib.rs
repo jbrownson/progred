@@ -90,6 +90,9 @@ enum Kind<Out> {
         children: Vec<Measured<Out>>,
         gap: f64,
     },
+    Overlay {
+        children: Vec<Measured<Out>>,
+    },
     Pad {
         child: Box<Measured<Out>>,
         insets: Insets,
@@ -156,6 +159,29 @@ pub fn col<Out>(baseline: usize, gap: f64, children: Vec<Measured<Out>>) -> Meas
     Measured {
         extent,
         kind: Kind::Col { children, gap },
+    }
+}
+
+/// Place children on the same origin and baseline in back-to-front
+/// order. The overlay is large enough for every child.
+pub fn layers<Out>(children: Vec<Measured<Out>>) -> Measured<Out> {
+    let extent = Extent {
+        width: children
+            .iter()
+            .map(|child| child.extent.width)
+            .fold(0.0_f64, f64::max),
+        ascent: children
+            .iter()
+            .map(|child| child.extent.ascent)
+            .fold(0.0_f64, f64::max),
+        descent: children
+            .iter()
+            .map(|child| child.extent.descent)
+            .fold(0.0_f64, f64::max),
+    };
+    Measured {
+        extent,
+        kind: Kind::Overlay { children },
     }
 }
 
@@ -286,6 +312,15 @@ pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
             }
             out
         }
+        Kind::Overlay { children } => children.into_iter().fold(Out::empty(), |out, child| {
+            let rect = Rect::new(
+                at.x,
+                at.y - child.extent.ascent,
+                at.x + child.extent.width,
+                at.y + child.extent.descent,
+            );
+            out.over(place(child, child_placement(placement, rect)))
+        }),
         Kind::Pad { child, insets } => {
             let child_at = Point::new(at.x + insets.x0, at.y);
             let rect = Rect::new(
@@ -392,6 +427,19 @@ mod tests {
                 Rect::new(0.0, 102.0, 10.0, 112.0),
             ]
         );
+    }
+
+    #[test]
+    fn layers_share_an_origin_and_baseline_in_paint_order() {
+        let stacked = layers(vec![
+            probe(ext(10.0, 8.0, 2.0)),
+            probe(ext(20.0, 12.0, 4.0)),
+        ]);
+        assert_eq!(stacked.extent, ext(20.0, 12.0, 4.0));
+        let placements = place_top_left(stacked, Point::new(5.0, 7.0));
+        assert_eq!(placements.len(), 2);
+        assert_eq!(placements[0].rect, Rect::new(5.0, 11.0, 15.0, 21.0));
+        assert_eq!(placements[1].rect, Rect::new(5.0, 7.0, 25.0, 23.0));
     }
 
     #[test]

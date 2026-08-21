@@ -14,6 +14,7 @@ mod graph_view;
 mod history;
 mod hover;
 mod identity;
+mod line_edit;
 #[cfg(target_os = "macos")]
 mod macos_menu;
 mod menu;

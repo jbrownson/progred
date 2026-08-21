@@ -1,10 +1,14 @@
 use super::*;
 use crate::annotations::Annotations;
 use crate::selection::payload as selection_payload;
+use crate::selection::line_edit;
 use crate::hover::hover_value;
 use gid::Position;
 use progred_libraries::{f64, name, text};
 use ui_events::keyboard::{KeyState, Modifiers};
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+};
 
 struct EmptyClipboard;
 
@@ -25,6 +29,24 @@ fn make_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
         &src(doc, library),
         &crate::stack::load::<()>().projection,
         path,
+    )
+}
+
+fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
+    let sources = src(doc, library);
+    let value = sources.resolve(&path).expect("editable value");
+    let (spelling, update) = match (text::read(value), f64::read(value)) {
+        (Some(text), _) => (text.to_string(), grap::ffi(text::vocabulary::UPDATE)),
+        (_, Some(number)) => (number.to_string(), grap::ffi(f64::vocabulary::UPDATE)),
+        _ => panic!("test value is not line editable"),
+    };
+    let payload = selection_payload::with_update(&selection_payload::edge(), &update);
+    let payload = selection_payload::with_editor(&payload, &line_edit(&spelling), false);
+    Selection::from_payload(
+        &sources,
+        &crate::stack::load::<()>().projection,
+        path,
+        payload,
     )
 }
 
@@ -241,7 +263,7 @@ fn set_collapse_is_directional_and_stays_sparse() {
 }
 
 #[test]
-fn selecting_text_brings_an_editor() {
+fn selecting_text_leaves_editing_to_the_projection_event() {
     let lib = Cells::new();
     let (mut doc, cell) = doc_of(vec![
         (
@@ -254,8 +276,8 @@ fn selecting_text_brings_an_editor() {
         ),
     ]);
     let at = |doc: &Document, path: Vec<Step>| make_selection(doc, &lib, path);
-    assert!(at(&doc, vec![Step::Follow, key("name")]).edit().is_some());
-    assert!(at(&doc, vec![Step::Follow, key("x")]).edit().is_some());
+    assert!(at(&doc, vec![Step::Follow, key("name")]).edit().is_none());
+    assert!(at(&doc, vec![Step::Follow, key("x")]).edit().is_none());
     // Missing fields, links, and blobs carry no editor.
     assert!(
         at(&doc, vec![Step::Follow, key("missing")])
@@ -270,13 +292,13 @@ fn selecting_text_brings_an_editor() {
     assert!(at(&doc, vec![Step::Follow, key("b")]).edit().is_none());
     // A cell holding text edits at its Follow path.
     doc.cells.set_value(cell, crate::test_values::text("held"));
-    assert!(at(&doc, vec![Step::Follow]).edit().is_some());
+    assert!(at(&doc, vec![Step::Follow]).edit().is_none());
     // A simple name convention is just another text field.
     doc.cells.set_value(cell, name::record("roof", []));
     assert!(
         at(&doc, vec![Step::Follow, Step::Key(name::vocabulary::NAME),],)
             .edit()
-            .is_some()
+            .is_none()
     );
 }
 
@@ -288,7 +310,7 @@ fn edits_write_through_to_the_field() {
         crate::test_values::text("old"),
     )]);
     let path = vec![Step::Follow, key("name")];
-    let mut selection = make_selection(&doc, &lib, path.clone());
+    let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
     write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection);
     assert_eq!(
@@ -315,7 +337,7 @@ fn compact_f64_values_edit_as_decimal_text() {
         cells,
     };
     let path = vec![Step::Follow];
-    let mut selection = make_selection(&doc, &lib, path.clone());
+    let mut selection = make_editing_selection(&doc, &lib, path.clone());
     assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
     selection.edit_mut().unwrap().set_text("7.25");
     assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
@@ -329,28 +351,6 @@ fn compact_f64_values_edit_as_decimal_text() {
     assert_eq!(
         src(&doc, &lib).resolve(&path).and_then(f64::read),
         Some(7.25)
-    );
-}
-
-#[test]
-fn a_line_click_mounts_the_projected_line() {
-    let lib = Cells::new();
-    let cell = new_cell_id();
-    let mut cells = Cells::new();
-    cells.set_value(cell, f64::value(2.5));
-    let mut doc = Document {
-        root: Some(Value::from(cell)),
-        cells,
-    };
-    let path = vec![Step::Follow];
-    let line = f64::line(&f64::value(2.5)).unwrap();
-    let mut selection = Selection::from_line(&src(&doc, &lib), path.clone(), &line);
-    assert_eq!(selection.edit().map(LineEditState::text), Some("2.5"));
-    selection.edit_mut().unwrap().set_text("4");
-    assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
-    assert_eq!(
-        src(&doc, &lib).resolve(&path).and_then(f64::read),
-        Some(4.0)
     );
 }
 
@@ -375,7 +375,7 @@ fn editing_an_f64_keeps_unrelated_fields() {
         cells,
     };
     let path = vec![Step::Follow];
-    let mut selection = make_selection(&doc, &lib, path.clone());
+    let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("8");
     assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     let value = src(&doc, &lib).resolve(&path).unwrap();
@@ -402,7 +402,7 @@ fn element_edits_rebuild_the_list_at_the_owning_cell() {
 
     // Editing an element writes the whole rebuilt list at the
     // owning cell; the sibling keeps its position and value.
-    let mut selection = make_selection(&doc, &lib, element.clone());
+    let mut selection = make_editing_selection(&doc, &lib, element.clone());
     selection.edit_mut().unwrap().set_text("9");
     assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     assert_eq!(
@@ -595,7 +595,7 @@ fn write_through_opens_one_step_per_editor_life() {
         crate::test_values::text("a"),
     )]);
     let path = vec![Step::Follow, key("name")];
-    let mut selection = make_selection(&doc, &lib, path);
+    let mut selection = make_editing_selection(&doc, &lib, path);
 
     // First write opens the step; the rest of the run is silent,
     // as are no-op rewrites.
@@ -611,7 +611,7 @@ fn write_through_opens_one_step_per_editor_life() {
     assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
 
     // A re-minted editor is a new run by construction.
-    let mut fresh = make_selection(&doc, &lib, vec![Step::Follow, key("name")]);
+    let mut fresh = make_editing_selection(&doc, &lib, vec![Step::Follow, key("name")]);
     fresh.edit_mut().unwrap().set_text("x");
     assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut fresh));
 }
@@ -814,7 +814,7 @@ fn completion_offers_follow_the_stage() {
     // constructors, and the mint.
     let value_stage = displays(false, "");
     assert!(value_stage.iter().any(|d| d == "roof"));
-    assert!(value_stage.iter().any(|d| d == "new list"));
+    assert!(value_stage.iter().any(|d| d == "new list"), "{value_stage:?}");
     assert!(value_stage.iter().any(|d| d == "new record"));
     assert!(value_stage.iter().any(|d| d == "new cell"));
 
@@ -1242,7 +1242,7 @@ fn a_simple_name_is_an_ordinary_editable_field() {
     ]);
     let path = vec![Step::Follow, Step::Key(name::vocabulary::NAME)];
 
-    let mut selection = make_selection(&doc, &lib, path.clone());
+    let mut selection = make_editing_selection(&doc, &lib, path.clone());
     selection.edit_mut().unwrap().set_text("new");
     assert!(write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut selection));
     assert_eq!(doc.cells.value(cell).and_then(name::read), Some("new"));
@@ -1328,14 +1328,14 @@ fn partials_receive_selection_and_annotations_positionally() {
             },
             &mut tcx,
             Hooks::<()> {
-                select: Rc::new(|_, _, _| {}),
+                select: Rc::new(|_, _| {}),
                 toggle: Rc::new(|_, _| {}),
                 rename: Rc::new(|_, _, _| {}),
                 edit: Rc::new(|_| None),
                 pick: Rc::new(|_, _| false),
                 insert: Rc::new(|_, _| {}),
                 delete: Rc::new(|_| false),
-                apply: Rc::new(|_, _, _| false),
+                apply: Rc::new(|_, _, _, _| false),
             },
         )
         .extent
@@ -1431,14 +1431,14 @@ fn a_projection_defined_as_data_realizes() {
         },
         &mut tcx,
         Hooks::<()> {
-            select: Rc::new(|_, _, _| {}),
+            select: Rc::new(|_, _| {}),
             toggle: Rc::new(|_, _| {}),
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_| false),
-            apply: Rc::new(|_, _, _| false),
+            apply: Rc::new(|_, _, _, _| false),
         },
     );
     assert!(measured.extent.width > 0.0);
@@ -1453,8 +1453,8 @@ fn a_projection_defined_as_data_realizes() {
 #[test]
 fn a_data_click_realizes_the_apply_hook() {
     fn probe(
-        input: progred_display::ProjectionInput<'_, (), Hover>,
-    ) -> Option<progred_display::Layout<(), Hover>> {
+        input: progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
+    ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hover>> {
         use progred_libraries::layout as data;
         input.value.as_blob()?;
         data::decode(
@@ -1471,8 +1471,9 @@ fn a_data_click_realizes_the_apply_hook() {
         cells: Cells::new(),
     };
     let lib = Cells::new();
-    let projection: Projection<()> =
-        Projection::new([probe as progred_display::Partial<(), Hover>]);
+    let projection: Projection<Vec<(Path, Value, Value)>> = Projection::new([
+        probe as progred_display::Partial<Vec<(Path, Value, Value)>, Hover>,
+    ]);
     let foreign = grap::ForeignFunctions::default();
     let styles = crate::styles::editor(1.0);
     let mut fonts = parley::FontContext::new();
@@ -1485,7 +1486,7 @@ fn a_data_click_realizes_the_apply_hook() {
         cache: &mut cache,
     };
     let empty = Annotations::default();
-    let measured = project::<(), crate::frame::Paint>(
+    let measured = project::<Vec<(Path, Value, Value)>, crate::frame::Paint>(
         ProjectDescription {
             sources: Sources {
                 doc: &doc,
@@ -1501,15 +1502,18 @@ fn a_data_click_realizes_the_apply_hook() {
             foreign: &foreign,
         },
         &mut tcx,
-        Hooks::<()> {
-            select: Rc::new(|_, _, _| {}),
+        Hooks::<Vec<(Path, Value, Value)>> {
+            select: Rc::new(|_, _| {}),
             toggle: Rc::new(|_, _| {}),
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_| false),
-            apply: Rc::new(|_, _, _| true),
+            apply: Rc::new(|events, path, handler, event| {
+                events.push((path, handler, event));
+                true
+            }),
         },
     );
     assert!(measured.extent.width > 0.0);
@@ -1517,7 +1521,35 @@ fn a_data_click_realizes_the_apply_hook() {
         measured,
         puri::geometry::Placement::root(measured_rect(500.0)),
     );
-    assert!(placed.handler.is_some());
+    let handler = placed.handler.expect("event handler");
+    let mut state = PointerState::default();
+    state.position.x = 1.0;
+    state.position.y = 1.0;
+    let mut events = Vec::new();
+    assert!(handler.dispatch_pointer_down(
+        &mut events,
+        &PointerButtonEvent {
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            state,
+        },
+    ));
+    let [(path, function, event)] = &events[..] else {
+        panic!("one event");
+    };
+    assert!(path.is_empty());
+    assert_eq!(function, &Value::from(progred_libraries::layout::vocabulary::HANDLER));
+    assert_eq!(
+        event
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::POINTER_DOWN),
+    );
 }
 
 fn measured_rect(width: f64) -> vello::kurbo::Rect {
@@ -1554,14 +1586,14 @@ fn projected_extent(doc: &Document) -> Extent {
         },
         &mut tcx,
         Hooks::<()> {
-            select: Rc::new(|_, _, _| {}),
+            select: Rc::new(|_, _| {}),
             toggle: Rc::new(|_, _| {}),
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
             delete: Rc::new(|_| false),
-            apply: Rc::new(|_, _, _| false),
+            apply: Rc::new(|_, _, _, _| false),
         },
     )
     .extent

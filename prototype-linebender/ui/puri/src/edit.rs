@@ -562,6 +562,7 @@ impl LineEditState {
 /// placement and invokes [`LineEdit::place`]; no layout strategy is
 /// built into Puri.
 pub struct LineEdit {
+    text: String,
     metrics: TextMetrics,
     scale: f32,
     ghost: Option<Layout<Brush>>,
@@ -576,9 +577,38 @@ pub struct LineEdit {
     presentation: LineEditPresentation,
 }
 
+/// Drawing inputs for composing an editor from ordinary text and
+/// vector primitives. Rectangles use the line box's top-left origin.
+#[derive(Clone)]
+pub struct LineEditGeometry {
+    pub text: String,
+    pub metrics: TextMetrics,
+    pub selection: Vec<Rect>,
+    pub cursor: Option<Rect>,
+}
+
 impl LineEdit {
     pub fn metrics(&self) -> TextMetrics {
         self.metrics
+    }
+
+    pub fn geometry(&self) -> LineEditGeometry {
+        let selection_y = self.metrics.ascent - self.layout_baseline;
+        let cursor_y = self.metrics.ascent - self.editor_baseline;
+        let translate = |rect: Rect, y: f64| {
+            Rect::new(rect.x0, rect.y0 + y, rect.x1, rect.y1 + y)
+        };
+        LineEditGeometry {
+            text: self.text.clone(),
+            metrics: self.metrics,
+            selection: self
+                .selection
+                .iter()
+                .copied()
+                .map(|rect| translate(rect, selection_y))
+                .collect(),
+            cursor: self.cursor.map(|rect| translate(rect, cursor_y)),
+        }
     }
 
     /// Draw and register this description at its caller-supplied
@@ -699,6 +729,23 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
         .filter(|_| state.text.is_empty() && !state.is_composing() && !presentation.dressed())
         .map(|(text, style)| build_layout(tcx, text, style, None, None));
     let editor = state.editor(&presentation, tcx.fonts, tcx.layouts, scale);
+    let text = match &state.preedit {
+        Some(preedit) => {
+            let (start, end) = (state.anchor.min(state.focus), state.anchor.max(state.focus));
+            format!(
+                "{}{}{}{}{}",
+                presentation.prefix,
+                &state.text[..start],
+                preedit.text,
+                &state.text[end..],
+                presentation.suffix,
+            )
+        }
+        None => format!(
+            "{}{}{}",
+            presentation.prefix, state.text, presentation.suffix
+        ),
+    };
     let layout = editor.try_layout().cloned();
     let metrics_of = |layout: &Layout<Brush>| {
         let metrics = *layout.lines().next()?.metrics();
@@ -752,6 +799,7 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
         })
         .flatten();
     LineEdit {
+        text,
         metrics,
         scale,
         ghost,
@@ -1331,6 +1379,42 @@ mod tests {
         assert!(selection.width() > caret.width());
         assert_eq!(caret.width(), 1.5);
         assert!(caret.height() > 0.0);
+    }
+
+    #[test]
+    fn geometry_exposes_the_composed_text_for_plain_text_drawing() {
+        let (mut fonts, mut layouts) = contexts();
+        let mut cache = crate::text::TextCache::default();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let state = LineEditState::from_parts(
+            "ab",
+            1,
+            1,
+            Some(("XY".to_string(), Some((2, 2)))),
+            None,
+        );
+        let style = EditStyle {
+            selection: Brush::default(),
+            cursor: Brush::default(),
+        };
+        let geometry = text_edit(
+            LineEditDescription {
+                state: &state,
+                focused: true,
+                presentation: presentation().with_affixes("[", "]"),
+                style: &style,
+                placeholder: None,
+            },
+            &mut tcx,
+        )
+        .geometry();
+        assert_eq!(geometry.text, "[aXYb]");
+        assert!(geometry.cursor.is_some());
     }
 
     #[test]

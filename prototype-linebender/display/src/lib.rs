@@ -1,78 +1,70 @@
-//! Layout a projection can return: boxes, leaves, and walk.
-//! A leaf's [`Display`] is what it shows. [`on_click`] is how it
-//! interacts. The editor measures boxes and turns leaves into place
-//! continuations; libraries never see a UI runtime. Interaction is
-//! an owned callback over the caller's `World`, not a reified action
-//! interpreted by the editor.
+//! Layout a projection can return: boxes, leaves, walk, and event
+//! attachment. A leaf's [`Display`] is what it shows. The editor
+//! measures boxes and turns leaves into place continuations;
+//! libraries never see a UI runtime. Host intents are owned callbacks
+//! over the caller's `World`; Grap handlers are data carried by
+//! [`Layout::OnEvent`], not a central enum of editor actions.
 
 use gid::{CellId, Step, Value};
 use std::rc::Rc;
-
-#[derive(Clone)]
-pub struct LineEdit {
-    pub text: String,
-    /// The write-back rule as DATA: a grap callable the editor
-    /// evaluates with [`line_update`]'s argument fields — behavior a
-    /// library authors without touching Rust, FFI-backed while
-    /// bootstrapping. An absent-classified result (or any evaluator
-    /// diagnostic) declines the write.
-    pub update: Value,
-    pub prefix: String,
-    pub suffix: String,
-}
-
-/// The editable-line update call's argument fields: the editor calls
-/// `update` with the CURRENT value and the typed INPUT (a text value).
-pub mod line_update {
-    use gid::CellId;
-
-    pub const CURRENT: CellId = CellId::from_u128(0x0e6a49d1c78325bfa9231c05e84d67fb);
-    pub const INPUT: CellId = CellId::from_u128(0xd58c17f3402b96ea6f0e4a2b91c738d5);
-}
 
 /// Editor-mapped face a text leaf asks for. Libraries pick a role,
 /// not a color.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Face {
     Name,
+    String,
     Dim,
     Label,
     Id,
+    AccentWash,
+    Ink,
 }
 
-/// What a layout leaf shows: glyphs, a stock line, or ink in the
-/// box layout allocated. Editor nouns (label, query) remain where a
-/// caret is still realize-time.
+/// Drawing only. Nothing here knows about GID locations, selection,
+/// editing, labels, queries, or events.
 #[derive(Clone)]
 pub enum Display {
-    Text {
-        text: String,
-        face: Face,
-    },
-    LineEdit(LineEdit),
-    /// A record field's label: its conventional name or short id. The
-    /// editor owns the spelling and the click-to-rename gesture,
-    /// including landing the caret under the pointer.
-    Label {
-        key: CellId,
-    },
-    /// The engaged label query — a new field's name or a rename. The
-    /// leaf is an address, not a widget: the editor reads the live
-    /// pending for its text and caret. Value pendings never pass
-    /// through a leaf; the editor builds them at absent locations.
-    Query,
-    /// Paint in the box layout gave it. As a leaf, the mark claims a
-    /// natural size first; in a [`Layout::Surround`] side the box is
-    /// already the child's height by the mark's advance.
-    Ink { ink: Ink, face: Face },
+    Text { text: String, face: Face },
+    /// Vector commands in a box with explicit baseline metrics. The
+    /// coordinates are logical and local to the box's top-left.
+    Vector(Vector),
 }
 
-/// A picture in a box. Not a canvas: two marks, the delimiter family
-/// and a rounded hairline frame.
+#[derive(Clone)]
+pub struct Vector {
+    pub width: f64,
+    pub ascent: f64,
+    pub descent: f64,
+    pub commands: Vec<VectorCommand>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum VectorCommand {
+    FillRoundedRect {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        radius: f64,
+        face: Face,
+    },
+    StrokeRoundedRect {
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+        radius: f64,
+        line_width: f64,
+        face: Face,
+    },
+}
+
+/// A layout-owned decoration whose geometry depends on the box it
+/// surrounds. It is deliberately not a display leaf.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Ink {
     Delim { delim: Delim, side: Side },
-    Frame,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -90,15 +82,28 @@ pub enum Side {
 
 /// A plain primary click on the subtree that owns the handler. The
 /// language carries no geometry or modifiers: the editor decides what
-/// holding the command key means (a pick, not a click), and leaves
-/// whose interaction needs coordinates are [`Display`] variants the
-/// editor renders itself.
+/// holding the command key means (a pick, not a click). Coordinate-aware
+/// interactions use [`Layout::OnEvent`].
 pub type ClickHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EventKind {
+    PointerDown,
+    PointerMove,
+    PointerUp,
+    Scroll,
+    Key,
+    Ime,
+}
 
 /// Unevaluated layout: grouping, walk, and leaves. Distinct from
 /// Progred's measured boxes (those have extents and place closures).
 pub enum Layout<World, Hover> {
     Leaf(Display),
+    /// Progred's still-host-owned completion query. This is explicit
+    /// layout composition debt, not a drawing primitive disguised as
+    /// one.
+    Query,
     OnClick {
         child: Box<Layout<World, Hover>>,
         handler: ClickHandler<World>,
@@ -110,11 +115,13 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         value: Value,
     },
-    /// Apply this Grap callable on a primary click. Data, not a
-    /// World callback — the editor supplies the site overlay.
-    OnApply {
+    /// Apply a Grap callable when this event reaches the subtree.
+    /// The editor supplies the event value and a capability overlay
+    /// closed over the current projection site.
+    OnEvent {
         child: Box<Layout<World, Hover>>,
-        function: Value,
+        kind: EventKind,
+        handler: Value,
     },
     OnHover {
         child: Box<Layout<World, Hover>>,
@@ -129,6 +136,11 @@ pub enum Layout<World, Hover> {
         gap: f64,
         children: Vec<Layout<World, Hover>>,
     },
+    /// Children share a top-left and baseline, in back-to-front
+    /// order. Its extent is the component-wise maximum.
+    Overlay {
+        children: Vec<Layout<World, Hover>>,
+    },
     Pad {
         left: f64,
         top: f64,
@@ -140,9 +152,9 @@ pub enum Layout<World, Hover> {
     /// columns: flat advance by the child's height. Layout does not
     /// paint them. Growth is typographic overhang.
     Surround {
-        left: Display,
+        left: Ink,
         child: Box<Layout<World, Hover>>,
-        right: Display,
+        right: Ink,
     },
     /// Look up this step on the value being projected.
     Descend {
@@ -152,6 +164,10 @@ pub enum Layout<World, Hover> {
     At {
         steps: Vec<Step>,
         value: Value,
+        /// Prepend contextual partial projections for this subtree.
+        /// They compose in front of the current projection; the total
+        /// structural projection remains the root.
+        projection: Option<Vec<Partial<World, Hover>>>,
     },
     Transient {
         value: Value,
@@ -170,6 +186,7 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
     fn clone(&self) -> Self {
         match self {
             Self::Leaf(display) => Self::Leaf(display.clone()),
+            Self::Query => Self::Query,
             Self::OnClick { child, handler } => Self::OnClick {
                 child: child.clone(),
                 handler: handler.clone(),
@@ -178,9 +195,14 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 child: child.clone(),
                 value: value.clone(),
             },
-            Self::OnApply { child, function } => Self::OnApply {
+            Self::OnEvent {
+                child,
+                kind,
+                handler,
+            } => Self::OnEvent {
                 child: child.clone(),
-                function: function.clone(),
+                kind: *kind,
+                handler: handler.clone(),
             },
             Self::OnHover { child, hover } => Self::OnHover {
                 child: child.clone(),
@@ -197,6 +219,9 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             } => Self::Col {
                 baseline: *baseline,
                 gap: *gap,
+                children: children.clone(),
+            },
+            Self::Overlay { children } => Self::Overlay {
                 children: children.clone(),
             },
             Self::Pad {
@@ -222,9 +247,14 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 right: right.clone(),
             },
             Self::Descend { step } => Self::Descend { step: step.clone() },
-            Self::At { steps, value } => Self::At {
+            Self::At {
+                steps,
+                value,
+                projection,
+            } => Self::At {
                 steps: steps.clone(),
                 value: value.clone(),
+                projection: projection.clone(),
             },
             Self::Transient { value, fuel } => Self::Transient {
                 value: value.clone(),
@@ -240,6 +270,19 @@ pub trait Env {
     /// Remaining fuel is the evaluator budget left after this call,
     /// so a grap-shaped result can continue the same allowance.
     fn evaluate(&self, expression: &Value) -> (Value, usize);
+
+    /// Conventional human name for a cell, when this host has one.
+    /// A projection remains responsible for its unnamed fallback.
+    fn name(&self, _cell: CellId) -> Option<String> {
+        None
+    }
+
+    /// The stored value of a cell, without evaluating it. Contextual
+    /// projections may inspect definitions to choose a presentation;
+    /// absent and computed values remain opaque.
+    fn cell_value(&self, _cell: CellId) -> Option<&Value> {
+        None
+    }
 }
 
 /// Everything a partial projection receives for one value. The
@@ -287,29 +330,25 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
     })
 }
 
-pub fn field_label<World, Hover>(key: CellId) -> Layout<World, Hover> {
-    leaf(Display::Label { key })
-}
-
 pub fn query<World, Hover>() -> Layout<World, Hover> {
-    leaf(Display::Query)
+    Layout::Query
 }
 
 pub fn slot<World, Hover>() -> Layout<World, Hover> {
-    frame()
-}
-
-pub fn ink<World, Hover>(ink: Ink, face: Face) -> Layout<World, Hover> {
-    leaf(Display::Ink { ink, face })
-}
-
-/// Cold empty slot: a dim rounded frame.
-pub fn frame<World, Hover>() -> Layout<World, Hover> {
-    ink(Ink::Frame, Face::Dim)
-}
-
-pub fn delim_ink<World, Hover>(delim: Delim, side: Side) -> Layout<World, Hover> {
-    ink(Ink::Delim { delim, side }, Face::Dim)
+    leaf(Display::Vector(Vector {
+        width: 21.0,
+        ascent: 11.0,
+        descent: 4.0,
+        commands: vec![VectorCommand::StrokeRoundedRect {
+            x: 0.5,
+            y: 0.5,
+            width: 20.0,
+            height: 14.0,
+            radius: 3.0,
+            line_width: 1.0,
+            face: Face::Dim,
+        }],
+    }))
 }
 
 pub fn leaf<World, Hover>(display: Display) -> Layout<World, Hover> {
@@ -333,13 +372,15 @@ pub fn pickable<World, Hover>(child: Layout<World, Hover>, value: Value) -> Layo
     }
 }
 
-pub fn on_apply<World, Hover>(
+pub fn on_event<World, Hover>(
     child: Layout<World, Hover>,
-    function: Value,
+    kind: EventKind,
+    handler: Value,
 ) -> Layout<World, Hover> {
-    Layout::OnApply {
+    Layout::OnEvent {
         child: Box::new(child),
-        function,
+        kind,
+        handler,
     }
 }
 
@@ -355,28 +396,6 @@ pub fn block_hover<World, Hover>(child: Layout<World, Hover>) -> Layout<World, H
         child: Box::new(child),
         hover: None,
     }
-}
-
-/// The `LineEdit` a layout mounts, if the whole thing is an
-/// [`editable_line`] (or a key wrapper around one).
-pub fn line_edit_of<World, Hover>(layout: &Layout<World, Hover>) -> Option<&LineEdit> {
-    match layout {
-        Layout::OnClick { child, .. }
-        | Layout::OnPick { child, .. }
-        | Layout::OnApply { child, .. }
-        | Layout::OnHover { child, .. } => line_edit_of(child),
-        Layout::Alternatives(options) => options.iter().find_map(line_edit_of),
-        Layout::Pad { child, .. } | Layout::Surround { child, .. } => line_edit_of(child),
-        Layout::Leaf(Display::LineEdit(line)) => Some(line),
-        _ => None,
-    }
-}
-
-/// A line-editing leaf. Its value update is library-supplied; the
-/// editor runtime supplies focus, selection, and caret interaction.
-/// Shared by text, f64, and later line projections.
-pub fn editable_line<World, Hover>(line: LineEdit) -> Layout<World, Hover> {
-    leaf(Display::LineEdit(line))
 }
 
 pub fn row<World, Hover>(
@@ -401,6 +420,14 @@ pub fn col<World, Hover>(
     }
 }
 
+pub fn overlay<World, Hover>(
+    children: impl IntoIterator<Item = Layout<World, Hover>>,
+) -> Layout<World, Hover> {
+    Layout::Overlay {
+        children: children.into_iter().collect(),
+    }
+}
+
 pub fn pad<World, Hover>(left: f64, child: Layout<World, Hover>) -> Layout<World, Hover> {
     Layout::Pad {
         left,
@@ -412,9 +439,9 @@ pub fn pad<World, Hover>(left: f64, child: Layout<World, Hover>) -> Layout<World
 }
 
 pub fn surround<World, Hover>(
-    left: Display,
+    left: Ink,
     child: Layout<World, Hover>,
-    right: Display,
+    right: Ink,
 ) -> Layout<World, Hover> {
     Layout::Surround {
         left,
@@ -425,20 +452,14 @@ pub fn surround<World, Hover>(
 
 pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layout<World, Hover> {
     surround(
-        Display::Ink {
-            ink: Ink::Delim {
-                delim,
-                side: Side::Open,
-            },
-            face: Face::Dim,
+        Ink::Delim {
+            delim,
+            side: Side::Open,
         },
         child,
-        Display::Ink {
-            ink: Ink::Delim {
-                delim,
-                side: Side::Close,
-            },
-            face: Face::Dim,
+        Ink::Delim {
+            delim,
+            side: Side::Close,
         },
     )
 }
@@ -467,6 +488,19 @@ pub fn at<World, Hover>(steps: impl Into<Vec<Step>>, value: &Value) -> Layout<Wo
     Layout::At {
         steps: steps.into(),
         value: value.clone(),
+        projection: None,
+    }
+}
+
+pub fn at_with_projection<World, Hover>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+    projection: impl IntoIterator<Item = Partial<World, Hover>>,
+) -> Layout<World, Hover> {
+    Layout::At {
+        steps: steps.into(),
+        value: value.clone(),
+        projection: Some(projection.into_iter().collect()),
     }
 }
 
@@ -489,7 +523,7 @@ pub fn alternatives<World, Hover>(
 
 /// If both values are records, `patch` fields win on shared keys.
 /// Otherwise `patch`.
-pub fn overlay(current: &Value, patch: Value) -> Value {
+pub fn overlay_value(current: &Value, patch: Value) -> Value {
     match (current.as_record(), patch.as_record()) {
         (Some(current), Some(patch)) => Value::record(
             current

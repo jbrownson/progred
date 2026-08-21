@@ -7,13 +7,14 @@ use crate::completion::{Entry, EntryAction, HasPopup, Popup, completion_entries}
 use crate::filter;
 use crate::frame::Hovered;
 use crate::hover::Hover;
-use crate::identity::short_id;
 use crate::navigate::{Descend, HasDescends};
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
-use measured::{Extent, Measured, col, min_width, pad, row};
+use measured::{Extent, Measured, col, layers, min_width, pad, row};
 use puri::hover::Claim;
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
+#[cfg(test)]
+use crate::identity::short_id;
 use crate::render::{self, text};
 #[cfg(test)]
 use crate::sample::{sample_document, sample_vocabulary};
@@ -27,7 +28,7 @@ use crate::selection::{
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
-use progred_libraries::{absent, layout as layout_data, text};
+use progred_libraries::{absent, f64 as f64_convention, layout as layout_data, text};
 mod location;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
@@ -39,14 +40,18 @@ use puri::edit::{
     EditCtx, LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState,
 };
 use puri::geometry::Placement;
-use puri::handler::HasHandler;
-use puri::text::{TextCtx, TextStyle, caret_index, line_layout};
+use puri::handler::{HasHandler, ImeEvent};
+use puri::text::{TextCtx, TextStyle};
+#[cfg(test)]
+use puri::text::{caret_index, line_layout};
 use std::collections::HashSet;
 use std::rc::Rc;
-#[cfg(test)]
 use ui_events::keyboard::KeyboardEvent;
-use ui_events::keyboard::{Key, NamedKey};
-use ui_events::pointer::PointerButton;
+use ui_events::keyboard::{Key, KeyState, NamedKey};
+use ui_events::pointer::{
+    PointerButton, PointerButtonEvent, PointerScrollEvent, PointerUpdate,
+};
+use ui_events::ScrollDelta;
 use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
 
@@ -101,18 +106,6 @@ impl<World> Projection<World> {
         })
     }
 
-    pub fn line(&self, value: &Value) -> Option<render::LineEdit> {
-        self.apply(&NoEval, value, None, None, Rc::new(|_| false), Hover::Value(Vec::new()))
-        .and_then(|layout| progred_display::line_edit_of(&layout).cloned())
-    }
-}
-
-struct NoEval;
-
-impl progred_display::Env for NoEval {
-    fn evaluate(&self, _: &Value) -> (Value, usize) {
-        (Value::record([]), 0)
-    }
 }
 
 /// Read-only projection context threaded through every view.
@@ -164,6 +157,14 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         self.cx.fuel.set(evaluation.remaining_fuel);
         (evaluation.result, evaluation.remaining_fuel)
     }
+
+    fn name(&self, cell: CellId) -> Option<String> {
+        self.cx.name(cell).map(str::to_owned)
+    }
+
+    fn cell_value(&self, cell: CellId) -> Option<&Value> {
+        self.cx.sources.value(cell)
+    }
 }
 
 /// Lower a projection layout to measured boxes. Display leaves
@@ -186,7 +187,17 @@ fn realize<
     let scale = cx.styles.scale;
     match layout {
         progred_display::Layout::Leaf(content) => {
-            leaf_display(cx, tcx, path, hooks, value, content)
+            leaf_display(cx.styles, tcx, content)
+        }
+        progred_display::Layout::Query => {
+            let engaged = cx
+                .pending_rename_under(path)
+                .map(|(_, query, _)| query)
+                .or_else(|| cx.pending_edge_under(path).map(|(query, _)| query));
+            match engaged {
+                Some(query) => label_query(cx, tcx, query, hooks),
+                None => render::text(tcx, "…", &cx.styles.dim),
+            }
         }
         progred_display::Layout::OnClick { child, handler } => {
             let inner = realize(
@@ -200,14 +211,15 @@ fn realize<
             );
             realize_pick(picked, hooks, inner)
         }
-        progred_display::Layout::OnApply {
+        progred_display::Layout::OnEvent {
             child,
-            function,
+            kind,
+            handler,
         } => {
             let inner = realize(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, avail,
             );
-            realize_apply(path.to_vec(), function, hooks, inner)
+            realize_event(path.to_vec(), kind, handler, hooks, scale, inner)
         }
         progred_display::Layout::OnHover { child, hover } => {
             let inner = realize(
@@ -241,6 +253,16 @@ fn realize<
                 .collect();
             col(baseline, gap * scale, children)
         }
+        progred_display::Layout::Overlay { children } => layers(
+            children
+                .into_iter()
+                .map(|child| {
+                    realize(
+                        cx, projection, tcx, path, ancestors, hooks, value, child, avail,
+                    )
+                })
+                .collect(),
+        ),
         progred_display::Layout::Pad {
             left,
             top,
@@ -293,8 +315,18 @@ fn realize<
         progred_display::Layout::At {
             steps,
             value: nested,
+            projection: override_partials,
         } => realize_at(
-            cx, projection, tcx, path, ancestors, steps, nested, avail, hooks,
+            cx,
+            projection,
+            tcx,
+            path,
+            ancestors,
+            steps,
+            nested,
+            override_partials,
+            avail,
+            hooks,
         ),
         progred_display::Layout::Transient {
             value: computed,
@@ -380,6 +412,7 @@ fn realize_at<
     ancestors: &HashSet<CellId>,
     steps: Vec<Step>,
     nested: Value,
+    override_partials: Option<Vec<progred_display::Partial<C, Hover>>>,
     avail: f64,
     hooks: &Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
@@ -393,9 +426,18 @@ fn realize_at<
         }
         path.push(step.clone());
     }
+    let override_projection = override_partials.map(|partials| {
+        Projection::new(
+            partials.into_iter().chain(
+                projection
+                    .into_iter()
+                    .flat_map(|projection| projection.partials.iter().copied()),
+            ),
+        )
+    });
     project_present_value(
         cx,
-        projection,
+        override_projection.as_ref().or(projection),
         tcx,
         &path,
         &follow_ancestors,
@@ -419,24 +461,261 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-/// A command-click picks the named identity; anything else falls
-/// through. Declines on a failed pick too, so the value target's own
-/// pick-or-select backstop answers.
-fn realize_apply<C: 'static, Cv: Canvas + 'static>(
+fn realize_event<C: 'static, Cv: Canvas + 'static>(
     path: Path,
+    kind: progred_display::EventKind,
     function: Value,
     hooks: &Hooks<C>,
+    scale: f64,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     let apply = hooks.apply.clone();
     before(inner, move |p, placement| {
-        p.handler().on_pointer_down(move |world, event| {
-            event.button == Some(PointerButton::Primary)
-                && !command(&event.state.modifiers)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && apply(world, path.clone(), function.clone())
-        });
+        match kind {
+            progred_display::EventKind::PointerDown => {
+                p.handler().on_pointer_down(move |world, event| {
+                    placement.contains(Point::new(
+                        event.state.position.x,
+                        event.state.position.y,
+                    )) && apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        pointer_button_value(
+                            layout_data::vocabulary::POINTER_DOWN,
+                            placement,
+                            scale,
+                            event,
+                        ),
+                    )
+                });
+            }
+            progred_display::EventKind::PointerMove => {
+                p.handler().on_pointer_move(move |world, event| {
+                    apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        pointer_move_value(placement, scale, event),
+                    )
+                });
+            }
+            progred_display::EventKind::PointerUp => {
+                p.handler().on_pointer_up(move |world, event| {
+                    apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        pointer_button_value(
+                            layout_data::vocabulary::POINTER_UP,
+                            placement,
+                            scale,
+                            event,
+                        ),
+                    )
+                });
+            }
+            progred_display::EventKind::Scroll => {
+                p.handler().on_scroll(move |world, event| {
+                    placement.contains(Point::new(
+                        event.state.position.x,
+                        event.state.position.y,
+                    )) && apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        scroll_value(placement, scale, event),
+                    )
+                });
+            }
+            progred_display::EventKind::Key => {
+                p.handler().on_key(move |world, event| {
+                    apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        key_value(event),
+                    )
+                });
+            }
+            progred_display::EventKind::Ime => {
+                p.handler().on_ime(move |world, event| {
+                    apply(
+                        world,
+                        path.clone(),
+                        function.clone(),
+                        ime_value(event),
+                    )
+                });
+            }
+        }
     })
+}
+
+fn event_value(
+    kind: CellId,
+    fields: impl IntoIterator<Item = (CellId, Value)>,
+) -> Value {
+    Value::record(
+        [(layout_data::vocabulary::EVENT_KIND, Value::Cell(kind))]
+            .into_iter()
+            .chain(fields),
+    )
+}
+
+fn marker() -> Value {
+    Value::record([])
+}
+
+fn pointer_fields(
+    placement: Placement,
+    scale: f64,
+    state: &ui_events::pointer::PointerState,
+) -> Vec<(CellId, Value)> {
+    let mut fields = vec![
+        (
+            layout_data::vocabulary::X,
+            f64_convention::value(state.position.x - placement.rect.x0),
+        ),
+        (
+            layout_data::vocabulary::Y,
+            f64_convention::value(state.position.y - placement.rect.y0),
+        ),
+        (
+            layout_data::vocabulary::COUNT,
+            f64_convention::value(f64::from(state.count)),
+        ),
+        (
+            layout_data::vocabulary::SCALE,
+            f64_convention::value(scale),
+        ),
+    ];
+    fields.push((
+        layout_data::vocabulary::MODIFIERS,
+        Value::list(
+            [
+                state
+                    .modifiers
+                    .shift()
+                    .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
+                command(&state.modifiers)
+                    .then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
+            ]
+            .into_iter()
+            .flatten(),
+        ),
+    ));
+    fields
+}
+
+fn pointer_button_value(
+    kind: CellId,
+    placement: Placement,
+    scale: f64,
+    event: &PointerButtonEvent,
+) -> Value {
+    let mut fields = pointer_fields(placement, scale, &event.state);
+    if event.button == Some(PointerButton::Primary) {
+        fields.push((
+            layout_data::vocabulary::BUTTON,
+            Value::Cell(layout_data::vocabulary::PRIMARY),
+        ));
+    }
+    event_value(kind, fields)
+}
+
+fn pointer_move_value(placement: Placement, scale: f64, event: &PointerUpdate) -> Value {
+    let mut fields = pointer_fields(placement, scale, &event.current);
+    if event.current.buttons.contains(PointerButton::Primary) {
+        fields.push((
+            layout_data::vocabulary::BUTTON,
+            Value::Cell(layout_data::vocabulary::PRIMARY),
+        ));
+    }
+    event_value(layout_data::vocabulary::POINTER_MOVE, fields)
+}
+
+fn scroll_value(placement: Placement, scale: f64, event: &PointerScrollEvent) -> Value {
+    let mut fields = pointer_fields(placement, scale, &event.state);
+    let (x, y) = match event.delta {
+        ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => {
+            (f64::from(x), f64::from(y))
+        }
+        ScrollDelta::PixelDelta(delta) => (delta.x, delta.y),
+    };
+    fields.extend([
+        (layout_data::vocabulary::DELTA_X, f64_convention::value(x)),
+        (layout_data::vocabulary::DELTA_Y, f64_convention::value(y)),
+    ]);
+    event_value(layout_data::vocabulary::SCROLL, fields)
+}
+
+fn key_value(event: &KeyboardEvent) -> Value {
+    let mut fields = vec![
+        (
+            layout_data::vocabulary::EVENT_STATE,
+            Value::Cell(match event.state {
+                KeyState::Down => layout_data::vocabulary::DOWN,
+                KeyState::Up => layout_data::vocabulary::UP,
+            }),
+        ),
+        (
+            layout_data::vocabulary::CONTENT,
+            text::value(event.key.to_string()),
+        ),
+    ];
+    if event.repeat {
+        fields.push((layout_data::vocabulary::REPEAT, marker()));
+    }
+    fields.push((
+        layout_data::vocabulary::MODIFIERS,
+        Value::list(
+            [
+                event
+                    .modifiers
+                    .shift()
+                    .then_some(Value::Cell(layout_data::vocabulary::SHIFT)),
+                command(&event.modifiers)
+                    .then_some(Value::Cell(layout_data::vocabulary::COMMAND)),
+            ]
+            .into_iter()
+            .flatten(),
+        ),
+    ));
+    event_value(layout_data::vocabulary::KEY, fields)
+}
+
+fn ime_value(event: &ImeEvent) -> Value {
+    let mut fields = Vec::new();
+    let state = match event {
+        ImeEvent::Enabled => layout_data::vocabulary::IME_ENABLED,
+        ImeEvent::Disabled => layout_data::vocabulary::IME_DISABLED,
+        ImeEvent::Preedit(content, cursor) => {
+            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
+            if let Some((start, end)) = cursor {
+                fields.extend([
+                    (
+                        layout_data::vocabulary::START,
+                        f64_convention::value(*start as f64),
+                    ),
+                    (
+                        layout_data::vocabulary::END,
+                        f64_convention::value(*end as f64),
+                    ),
+                ]);
+            }
+            layout_data::vocabulary::IME_PREEDIT
+        }
+        ImeEvent::Commit(content) => {
+            fields.push((layout_data::vocabulary::CONTENT, text::value(content)));
+            layout_data::vocabulary::IME_COMMIT
+        }
+    };
+    fields.push((
+        layout_data::vocabulary::EVENT_STATE,
+        Value::Cell(state),
+    ));
+    event_value(layout_data::vocabulary::IME, fields)
 }
 
 fn realize_pick<C: 'static, Cv: Canvas + 'static>(
@@ -508,74 +787,89 @@ fn leaf_display<
     C: 'static,
     Cv: Canvas + 'static,
 >(
-    cx: &Cx,
+    styles: &Styles,
     tcx: &mut TextCtx,
-    path: &[Step],
-    hooks: &Hooks<C>,
-    value: &Value,
     content: progred_display::Display,
 ) -> Measured<Placed<C, Cv>> {
     match content {
         progred_display::Display::Text { text, face } => {
-            render::text(tcx, &text, face_style(cx.styles, face))
+            render::text(tcx, &text, face_style(styles, face))
         }
-        progred_display::Display::Label { key } => label_view(cx, tcx, path, key, hooks),
-        progred_display::Display::Query => {
-            let engaged = cx
-                .pending_rename_under(path)
-                .map(|(_, query, _)| query)
-                .or_else(|| cx.pending_edge_under(path).map(|(query, _)| query));
-            match engaged {
-                Some(query) => label_query(cx, tcx, query, hooks),
-                // The projection only emits this leaf where it saw a
-                // matching pending; a mismatch is a malformed state,
-                // shown as elision rather than hidden.
-                None => render::text(tcx, "…", &cx.styles.dim),
-            }
-        }
-        progred_display::Display::Ink { ink, face } => {
-            ink_leaf(cx, tcx, ink, face, None)
-        }
-        progred_display::Display::LineEdit(line) => {
-            let editing = cx
-                .selection
-                .filter(|selection| selection.path() == path)
-                .and_then(Selection::edit);
-            let edit = hooks.edit.clone();
-            let content = render::line_edit(tcx, cx.styles, &line, editing, move |c| edit(c));
-            cursor_target(
-                path.to_vec(),
-                value.clone(),
-                cx.styles.line_presentation(&line.prefix, &line.suffix),
-                hooks,
-                Some(line),
-                content,
-            )
-        }
+        progred_display::Display::Vector(vector) => vector_leaf(styles, vector),
     }
 }
 
-/// A reported click on projected text, in text-local coordinates.
-/// The shell's selection transition consumes it to seed or advance
-/// the editor state — focus and caret placement are one event, as in
-/// the Haskell LineEdit's focus-with-initial-selection callback. The
-/// count carries double/triple clicks (word and line selection).
-pub struct TextClick {
-    pub point: Point,
-    pub shift: bool,
-    pub count: u8,
-    pub presentation: LineEditPresentation,
-    /// Set when the click is on an [`editable_line`]; the selection
-    /// mounts that line instead of looking the value up again.
-    pub line: Option<render::LineEdit>,
+fn vector_leaf<C: 'static, Cv: Canvas + 'static>(
+    styles: &Styles,
+    vector: progred_display::Vector,
+) -> Measured<Placed<C, Cv>> {
+    let scale = styles.scale;
+    let commands = vector
+        .commands
+        .into_iter()
+        .map(|command| match command {
+            progred_display::VectorCommand::FillRoundedRect {
+                x,
+                y,
+                width,
+                height,
+                radius,
+                face,
+            } => (
+                false,
+                Rect::new(x, y, x + width, y + height),
+                radius,
+                0.0,
+                face_style(styles, face).brush.clone(),
+            ),
+            progred_display::VectorCommand::StrokeRoundedRect {
+                x,
+                y,
+                width,
+                height,
+                radius,
+                line_width,
+                face,
+            } => (
+                true,
+                Rect::new(x, y, x + width, y + height),
+                radius,
+                line_width,
+                face_style(styles, face).brush.clone(),
+            ),
+        })
+        .collect::<Vec<_>>();
+    leaf(
+        Extent {
+            width: vector.width * scale,
+            ascent: vector.ascent * scale,
+            descent: vector.descent * scale,
+        },
+        move |p, placement| {
+            let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
+                * Affine::scale(scale);
+            for (stroke, rect, radius, line_width, brush) in commands {
+                let shape = RoundedRect::from_rect(rect, radius);
+                if stroke {
+                    p.stroke(
+                        shape,
+                        Stroke::new(line_width),
+                        brush,
+                        transform,
+                    );
+                } else {
+                    p.fill(shape, brush, transform);
+                }
+            }
+        },
+    )
 }
 
 /// Dispatch-time callbacks the shell injects: what selecting a path
-/// (optionally with a text click) does, what toggling a collapse
-/// does, and how a dispatch reaches the selection's editor state and
-/// measurement caches.
+/// does, what toggling a collapse does, and how a dispatch reaches
+/// the remaining host-owned editor state and measurement caches.
 pub struct Hooks<C> {
-    pub select: Rc<dyn Fn(&mut C, Path, Option<TextClick>)>,
+    pub select: Rc<dyn Fn(&mut C, Path)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
     /// Re-open the label of the field at `path` (a Key path) as its
     /// seeded query — the click gesture on a writable field's label.
@@ -596,8 +890,9 @@ pub struct Hooks<C> {
     /// Delete the selected edge. Installed on the selected descend
     /// so Raw and library projections share one handler.
     pub delete: Rc<dyn Fn(&mut C) -> bool>,
-    /// Apply a Grap callable at `path` with the site overlay.
-    pub apply: Rc<dyn Fn(&mut C, Path, Value) -> bool>,
+    /// Apply a Grap event handler at `path` with the event as data and
+    /// capabilities closed over that site.
+    pub apply: Rc<dyn Fn(&mut C, Path, Value, Value) -> bool>,
 }
 
 /// The platform command modifier, for pointer gestures.
@@ -612,7 +907,7 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
 fn select_handler<C: 'static>(path: Path, hooks: &Hooks<C>) -> progred_display::ClickHandler<C> {
     let select = hooks.select.clone();
     Rc::new(move |world| {
-        select(world, path.clone(), None);
+        select(world, path.clone());
         true
     })
 }
@@ -697,17 +992,11 @@ fn delim_advance(styles: &Styles, delim: Delim) -> f64 {
     delim_style(styles).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * styles.scale
 }
 
-fn side_advance(styles: &Styles, display: &progred_display::Display) -> f64 {
-    match display {
-        progred_display::Display::Ink {
-            ink: progred_display::Ink::Delim { delim, .. },
-            ..
-        } => delim_advance(styles, display_delim(*delim)),
-        progred_display::Display::Ink {
-            ink: progred_display::Ink::Frame,
-            ..
-        } => slot_width(styles),
-        _ => delim_advance(styles, Delim::Paren),
+fn side_advance(styles: &Styles, ink: &progred_display::Ink) -> f64 {
+    match ink {
+        progred_display::Ink::Delim { delim, .. } => {
+            delim_advance(styles, display_delim(*delim))
+        }
     }
 }
 
@@ -778,9 +1067,12 @@ fn tall_delim<C: 'static, Cv: Canvas + 'static>(
 fn face_style(styles: &Styles, face: progred_display::Face) -> &TextStyle {
     match face {
         progred_display::Face::Name => &styles.name,
+        progred_display::Face::String => &styles.string,
         progred_display::Face::Dim => &styles.dim,
         progred_display::Face::Label => &styles.label,
         progred_display::Face::Id => &styles.id,
+        progred_display::Face::AccentWash => &styles.accent_wash,
+        progred_display::Face::Ink => &styles.ink,
     }
 }
 
@@ -794,28 +1086,19 @@ fn glyph_extent(styles: &Styles) -> Extent {
 }
 
 fn ink_leaf<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
+    styles: &Styles,
     ink: progred_display::Ink,
-    face: progred_display::Face,
     stretch: Option<Extent>,
 ) -> Measured<Placed<C, Cv>> {
-    let brush = face_style(cx.styles, face).brush.clone();
+    let brush = styles.dim.brush.clone();
     match ink {
         progred_display::Ink::Delim { delim, side } => tall_delim(
-            cx.styles,
+            styles,
             display_delim(delim),
             matches!(side, progred_display::Side::Open),
-            stretch.unwrap_or_else(|| glyph_extent(cx.styles)),
+            stretch.unwrap_or_else(|| glyph_extent(styles)),
             brush,
         ),
-        progred_display::Ink::Frame => {
-            let extent = stretch.unwrap_or_else(|| Extent {
-                width: slot_width(cx.styles),
-                ..text::<C, Cv>(tcx, "", &cx.styles.name).extent
-            });
-            frame_leaf(cx.styles.scale, brush, extent)
-        }
     }
 }
 
@@ -843,9 +1126,9 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
     path: &[Step],
     target: &Value,
     hooks: &Hooks<C>,
-    left: progred_display::Display,
+    left: progred_display::Ink,
     content: Measured<Placed<C, Cv>>,
-    right: progred_display::Display,
+    right: progred_display::Ink,
 ) -> Measured<Placed<C, Cv>> {
     let extent = content.extent;
     let gap = 2.0 * cx.styles.scale;
@@ -858,7 +1141,7 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
                 hooks,
                 pad(
                     Insets::new(0.0, 0.0, gap, 0.0),
-                    paint_side(cx, tcx, path, hooks, target, left, extent),
+                    paint_side(cx, tcx, path, hooks, left, extent),
                 ),
             ),
             content,
@@ -868,7 +1151,7 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
                 hooks,
                 pad(
                     Insets::new(gap, 0.0, 0.0, 0.0),
-                    paint_side(cx, tcx, path, hooks, target, right, extent),
+                    paint_side(cx, tcx, path, hooks, right, extent),
                 ),
             ),
         ],
@@ -877,19 +1160,13 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
 
 fn paint_side<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    hooks: &Hooks<C>,
-    value: &Value,
-    display: progred_display::Display,
+    _tcx: &mut TextCtx,
+    _path: &[Step],
+    _hooks: &Hooks<C>,
+    ink: progred_display::Ink,
     extent: Extent,
 ) -> Measured<Placed<C, Cv>> {
-    match display {
-        progred_display::Display::Ink { ink, face } => {
-            ink_leaf(cx, tcx, ink, face, Some(extent))
-        }
-        other => leaf_display(cx, tcx, path, hooks, value, other),
-    }
+    ink_leaf(cx.styles, ink, Some(extent))
 }
 
 /// The one width every slot state shares: the cold box IS this wide,
@@ -1024,7 +1301,7 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
                     let picked = command(&event.state.modifiers)
                         && value.as_ref().is_some_and(|value| pick(ctx, value.clone()));
                     if !picked {
-                        select(ctx, target.clone(), None);
+                        select(ctx, target.clone());
                     }
                     true
                 }
@@ -1169,62 +1446,6 @@ fn bind_delete<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-/// A record field's label: its spelling, and — when the record is
-/// writable — the click that re-opens it as a rename with the caret
-/// hit-tested under the pointer, in the label's own face. Command
-/// declines, so the label's key pick and the value backstop answer.
-fn label_view<C: 'static, Cv: Canvas + 'static>(
-    cx: &Cx,
-    tcx: &mut TextCtx,
-    path: &[Step],
-    key: CellId,
-    hooks: &Hooks<C>,
-) -> Measured<Placed<C, Cv>> {
-    let (spelling, style) = label_spelling(cx, &key);
-    let content = render::text(tcx, &spelling, style);
-    if !crate::selection::writable_at(&cx.sources, path) || cx.source.transient() {
-        return content;
-    }
-    let mut target = path.to_vec();
-    target.push(Step::Key(key));
-    let layout = line_layout(tcx, &spelling, style);
-    let rename = hooks.rename.clone();
-    let scale = cx.styles.scale;
-    before(content, move |p, placement| {
-        light_hover(p, placement, Hover::Label(target.clone()), scale);
-        let rename = rename.clone();
-        let target = target.clone();
-        p.handler().on_pointer_down(move |world, event| {
-            event.button == Some(PointerButton::Primary)
-                && !command(&event.state.modifiers)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    rename(
-                        world,
-                        target.clone(),
-                        caret_index(
-                            &layout,
-                            Point::new(
-                                event.state.position.x - placement.rect.x0,
-                                event.state.position.y - placement.rect.y0,
-                            ),
-                        ),
-                    );
-                    true
-                }
-        });
-    })
-}
-
-/// The spelling and face a label draws with — one truth for the view
-/// and for hit-testing a click against what was actually drawn.
-fn label_spelling<'a>(cx: &'a Cx, key: &CellId) -> (String, &'a TextStyle) {
-    match cx.name(*key) {
-        Some(name) => (name.to_string(), &cx.styles.label),
-        None => (short_id(*key), &cx.styles.id),
-    }
-}
-
 /// A cell projection's ground, painted only at authority
 /// TRANSITIONS: an external cell under document authority takes the
 /// dark tint — no lock, just "from elsewhere" — and a
@@ -1307,7 +1528,7 @@ fn project_transient_root<
     let select = hooks.select.clone();
     let select_origin = origin.clone();
     let result_hooks = Hooks {
-        select: Rc::new(move |ctx, _, _| select(ctx, select_origin.clone(), None)),
+        select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
         toggle: Rc::new(|_, _| {}),
         rename: Rc::new(|_, _, _| {}),
         edit: Rc::new(|_| None),
@@ -1545,7 +1766,7 @@ fn pick_target<C: 'static, Cv: Canvas + 'static>(
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && {
                     if !pick(world, value.clone()) {
-                        select(world, path.clone(), None);
+                        select(world, path.clone());
                     }
                     true
                 }
@@ -1925,52 +2146,8 @@ fn quiet_select_target<C: 'static, Cv: Canvas + 'static>(
                 && {
                     let picked = command(&event.state.modifiers) && pick(ctx, value.clone());
                     if !picked {
-                        select(ctx, target.clone(), None);
+                        select(ctx, target.clone());
                     }
-                    true
-                }
-        });
-    })
-}
-
-/// A click on projected text reports what happened — this path, this
-/// text-local position — and nothing more; the shell's selection
-/// transition decides what it means. One report serves the first
-/// click and every one after. With the command modifier and a pending
-/// open, picks the atom's value into it instead.
-fn cursor_target<C: 'static, Cv: Canvas + 'static>(
-    path: Path,
-    value: Value,
-    presentation: LineEditPresentation,
-    hooks: &Hooks<C>,
-    line: Option<render::LineEdit>,
-    content: Measured<Placed<C, Cv>>,
-) -> Measured<Placed<C, Cv>> {
-    let select = hooks.select.clone();
-    let pick = hooks.pick.clone();
-    before(content, move |p, placement| {
-        let rect = placement.rect;
-        hover_claim(p, placement, Hover::Value(path.clone()));
-        let pick = pick.clone();
-        let value = value.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    if command(&event.state.modifiers) && pick(ctx, value.clone()) {
-                        return true;
-                    }
-                    let click = TextClick {
-                        point: Point::new(
-                            event.state.position.x - rect.x0,
-                            event.state.position.y - rect.y0,
-                        ),
-                        shift: event.state.modifiers.shift(),
-                        count: event.state.count.max(1),
-                        presentation: presentation.clone(),
-                        line: line.clone(),
-                    };
-                    select(ctx, path.clone(), Some(click));
                     true
                 }
         });

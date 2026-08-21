@@ -17,7 +17,7 @@ use crate::{App, content_viewport, graph_panel};
 use gid::Value;
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::edit::{EditCtx, LineEditPointerDown};
+use puri::edit::EditCtx;
 use puri::geometry::Placement;
 use puri::handler::{Handler, HasHandler};
 use puri::hover::Claim;
@@ -451,15 +451,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         },
         &mut tcx,
         projection::Hooks {
-            // The selection transition: re-selecting the same path
-            // keeps its editor state, and a reported text click seeds
-            // or advances the editor's caret — focus and cursor
-            // placement are one event.
-            select: Rc::new(move |app: &mut App, path, click| {
-                // A label pending has no path of its own — path()
-                // names its PARENT — so a reported click is always a
-                // real selection change (the pending row swallows its
-                // own clicks before they can reach here).
+            // The host's ordinary structural selection transition.
+            // Editable text handles its coordinate-sensitive pointer
+            // transition through the Grap event capability instead.
+            select: Rc::new(move |app: &mut App, path| {
                 let fresh = match app.model.tree_selection() {
                     None => true,
                     Some(current) => {
@@ -467,57 +462,18 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                     }
                 };
                 if fresh {
-                    let next = {
-                        let sources = app.sources();
-                        match click.as_ref() {
-                            Some(click) => match &click.line {
-                                Some(line) => selection::Selection::from_line(&sources, path, line),
-                                None => selection::Selection::edge(
-                                    &sources,
-                                    &app.stack.projection,
-                                    path,
-                                ),
-                            },
-                            None => {
-                                selection::Selection::edge(&sources, &app.stack.projection, path)
-                            }
-                        }
-                    };
-                    app.model.selection = Some(Selected::Tree(next));
-                } else if click.is_none()
-                    && let Some(line) = app
-                        .model
-                        .tree_selection_mut()
-                        .and_then(selection::Selection::edit_mut)
-                {
-                    // Re-selecting without a text click lands the
-                    // caret at the end, same as a fresh mount.
-                    line.cursor_to_end();
-                }
-                if let Some(click) = click
-                    && let Some(line) = app
-                        .model
-                        .tree_selection_mut()
-                        .and_then(selection::Selection::edit_mut)
-                {
-                    // A tap sequence never spans targets: the click
-                    // that mounts an editor is its first, whatever
-                    // the physical count says — selecting the cell
-                    // was stage one, not half a double-click, and a
-                    // quick click on a neighboring atom is not a
-                    // double-click in this one.
-                    let count = if fresh { 1 } else { click.count };
-                    line.pointer_down(
-                        &click.presentation,
-                        &mut app.font_cx,
-                        &mut app.layout_cx,
-                        scale as f32,
-                        LineEditPointerDown {
-                            point: click.point,
-                            shift: click.shift,
-                            count,
-                        },
+                    let next = selection::Selection::edge(
+                        &app.sources(),
+                        &app.stack.projection,
+                        path,
                     );
+                    app.model.selection = Some(Selected::Tree(next));
+                } else if let Some(line) = app
+                        .model
+                        .tree_selection_mut()
+                        .and_then(selection::Selection::edit_mut)
+                {
+                    line.cursor_to_end();
                 }
             }),
             toggle: Rc::new(|app: &mut App, path| {
@@ -554,10 +510,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 let descends = app.last_descends.clone();
                 app.delete_selected_edge(&descends)
             }),
-            apply: Rc::new(|app: &mut App, path, function| {
-                let _ = crate::site::apply(app, path, function);
-                true
-            }),
+            apply: Rc::new(crate::site::apply_event),
         },
     );
     // The body rides Progred's scroll container: margins pad into the

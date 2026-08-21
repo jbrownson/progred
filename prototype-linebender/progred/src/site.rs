@@ -1,31 +1,134 @@
 //! Apply a Grap callable at a document path with GET/SET closed over
 //! that place. The path stays in Rust.
 
+#[cfg(test)]
 use crate::annotations::Annotations;
+use crate::model::Selected;
+use crate::selection::Selection;
+#[cfg(test)]
 use crate::sources::Sources;
 use crate::App;
 use gid::{Path, Value};
-use progred_libraries::site;
-use std::cell::RefCell;
+use progred_libraries::{absent, layout, selection as selection_capability, site};
+use parley::{FontContext, LayoutContext};
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use vello::peniko::Brush;
 
-pub fn apply(app: &mut App, path: Path, function: Value) -> grap::Evaluation {
-    let mut annotations = std::mem::take(&mut app.model.annotations);
-    let evaluation = apply_at(
-        &path,
-        &mut annotations,
-        &function,
-        &Sources {
-            doc: &app.model.doc,
-            library: &app.stack.library,
-        },
-        &app.stack.foreign,
-    );
-    app.model.annotations = annotations;
-    evaluation
+/// Apply one event handler transactionally with capabilities closed
+/// over its projection site. An absent or diagnostic result declines
+/// without committing any staged annotation or selection change.
+pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> bool {
+    let recorded = app
+        .model
+        .tree_selection()
+        .filter(|selection| selection.path() == path)
+        .is_some_and(Selection::recorded);
+    let current = app
+        .model
+        .tree_selection()
+        .filter(|selection| selection.path() == path)
+        .map(|selection| selection.payload().clone());
+    let annotation = Rc::new(RefCell::new(app.model.annotations.at(&path).cloned()));
+    let annotation_changed = Rc::new(Cell::new(false));
+    let selection = Rc::new(RefCell::new(current));
+    let selection_changed = Rc::new(Cell::new(false));
+    // Foreign functions are owned and therefore `'static`. Move the
+    // app's caches into shared owners for this synchronous evaluation,
+    // then put the same caches back when it concludes.
+    let fonts = Rc::new(RefCell::new(std::mem::replace(
+        &mut app.font_cx,
+        FontContext::new(),
+    )));
+    let layouts = Rc::new(RefCell::new(std::mem::replace(
+        &mut app.layout_cx,
+        LayoutContext::<Brush>::new(),
+    )));
+    let evaluation = {
+        let site = site::at(
+            {
+                let annotation = annotation.clone();
+                move || annotation.borrow().clone()
+            },
+            {
+                let annotation = annotation.clone();
+                let annotation_changed = annotation_changed.clone();
+                move |value| {
+                    *annotation.borrow_mut() = value;
+                    annotation_changed.set(true);
+                }
+            },
+        );
+        let selected = selection_capability::at(
+            {
+                let selection = selection.clone();
+                move || selection.borrow().clone()
+            },
+            {
+                let selection = selection.clone();
+                let selection_changed = selection_changed.clone();
+                move |value| {
+                    *selection.borrow_mut() = value;
+                    selection_changed.set(true);
+                }
+            },
+        );
+        grap::apply(
+            &function,
+            [(layout::vocabulary::EVENT, event)],
+            |cell| app.sources().value(cell).cloned(),
+            &app
+                .stack
+                .foreign
+                .clone()
+                .merge(site)
+                .merge(selected)
+                .merge(crate::line_edit::functions(fonts.clone(), layouts.clone())),
+            grap::DEFAULT_FUEL,
+        )
+    };
+    app.font_cx = Rc::try_unwrap(fonts)
+        .unwrap_or_else(|_| panic!("line-edit font capability escaped dispatch"))
+        .into_inner();
+    app.layout_cx = Rc::try_unwrap(layouts)
+        .unwrap_or_else(|_| panic!("line-edit layout capability escaped dispatch"))
+        .into_inner();
+    let handled = evaluation.diagnostics.is_empty() && !absent::is_absent(&evaluation.result);
+    if handled {
+        if annotation_changed.get() {
+            app.model
+                .annotations
+                .set(&path, annotation.borrow().clone());
+        }
+        if selection_changed.get() {
+            match selection.borrow().clone() {
+                Some(payload) => {
+                    let mut next = Selection::from_payload(
+                        &app.sources(),
+                        &app.stack.projection,
+                        path,
+                        payload,
+                    );
+                    next.preserve_recorded(recorded);
+                    app.model.selection = Some(Selected::Tree(next));
+                }
+                None
+                    if app
+                        .model
+                        .tree_selection()
+                        .is_some_and(|selection| selection.path() == path) =>
+                {
+                    app.model.selection = None;
+                }
+                None => {}
+            }
+        }
+    }
+    handled
 }
 
-pub fn apply_at(
+#[cfg(test)]
+fn apply_at(
     path: &[gid::Step],
     annotations: &mut Annotations,
     function: &Value,

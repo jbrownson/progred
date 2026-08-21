@@ -1,10 +1,10 @@
 //! A UTF-8 text convention over ordinary GID data. Text is a
 //! positively recognized record facet, not a GID-core atom.
 
-use crate::{Library, name};
+use crate::{Library, absent, layout, line_edit, name};
 use gid::{Cells, Value};
 use grap_runtime::{ForeignFunction, ForeignFunctions};
-use progred_display::{Layout, LineEdit, ProjectionInput, editable_line, line_update, overlay};
+use progred_display::{Layout, ProjectionInput, overlay_value};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -31,38 +31,38 @@ pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
         ForeignFunction::new(|context, call, environment| {
-            let Some(current) = context.field(call, line_update::CURRENT) else {
-                return Ok(context.missing_argument(line_update::CURRENT));
+            let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
+                return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
             };
-            let Some(input) = context.field(call, line_update::INPUT) else {
-                return Ok(context.missing_argument(line_update::INPUT));
+            let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
+                return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
             };
             let current = context.eval(current, environment)?;
             let input = context.eval(input, environment)?;
             Ok(match read(&input) {
-                Some(text) => overlay(&current, value(text)),
+                Some(text) => overlay_value(&current, value(text)),
                 None => crate::absent::value(),
             })
         }),
     )
 }
 
-pub fn line(value: &Value) -> Option<LineEdit> {
-    read(value).map(|text| LineEdit {
-        text: text.to_string(),
-        update: grap_runtime::ffi(vocabulary::UPDATE),
-        prefix: "\"".into(),
-        suffix: "\"".into(),
-    })
-}
-
-pub fn display<World, Hover>(
+pub fn display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    line(input.value).map(editable_line)
+    let content = read(input.value)?;
+    let expression = line_edit::call(
+        value(content),
+        grap_runtime::ffi(vocabulary::UPDATE),
+        value("\""),
+        value("\""),
+        input.selection.cloned().unwrap_or_else(absent::value),
+    );
+    let (display, _) = input.env.evaluate(&expression);
+    layout::decode(&display, &input.select, &input.hover)
 }
 
-pub fn library<World, Hover>() -> Library<World, Hover> {
+pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::UTF8, name::record("utf8", []));
     cells.set_value(vocabulary::UPDATE, name::record("text update", []));
@@ -92,15 +92,12 @@ mod tests {
                 .update(extra, Value::from(vec![1])),
         );
         assert_eq!(read(&enriched), Some("hello"));
-        let edit = line(&enriched).unwrap();
-        assert_eq!(edit.text, "hello");
-        assert_eq!(edit.prefix, "\"");
         let written = grap_runtime::evaluate(
             &grap_runtime::call(
-                edit.update,
+                grap_runtime::ffi(vocabulary::UPDATE),
                 [
-                    (line_update::CURRENT, enriched.clone()),
-                    (line_update::INPUT, value("hi")),
+                    (line_edit::vocabulary::CURRENT, enriched.clone()),
+                    (line_edit::vocabulary::INPUT, value("hi")),
                 ],
             ),
             |_| None,
@@ -120,27 +117,57 @@ mod tests {
         );
     }
 
-    struct Unused;
+    struct TestEnv {
+        cells: Cells,
+        functions: ForeignFunctions,
+    }
 
-    impl progred_display::Env for Unused {
-        fn evaluate(&self, _: &Value) -> (Value, usize) {
-            (Value::record([]), 0)
+    impl progred_display::Env for TestEnv {
+        fn evaluate(&self, expression: &Value) -> (Value, usize) {
+            let evaluation = grap_runtime::evaluate(
+                expression,
+                |cell| self.cells.value(cell).cloned(),
+                &self.functions,
+                500,
+            );
+            (evaluation.result, evaluation.remaining_fuel)
+        }
+    }
+
+    fn env() -> TestEnv {
+        let library = Library::<(), ()>::merge_all([
+            name::library(),
+            crate::control::library(),
+            crate::selection::library(),
+            crate::layout::library(),
+            crate::line_edit::library(),
+        ]);
+        TestEnv {
+            cells: library.cells,
+            functions: library
+                .functions
+                .merge(crate::line_edit::test_geometry_functions()),
         }
     }
 
     #[test]
     fn display_is_an_editable_line() {
-        assert!(matches!(
-            display::<(), ()>(ProjectionInput {
-                env: &Unused,
+        let display = display::<(), ()>(ProjectionInput {
+                env: &env(),
                 value: &value("hi"),
                 selection: None,
                 state: None,
                 select: std::rc::Rc::new(|_| false),
                 hover: (),
-            }),
-            Some(Layout::Leaf(progred_display::Display::LineEdit(line))) if line.text == "hi"
-        ));
+            })
+            .expect("text projection");
+        let Layout::OnEvent { child, .. } = display else {
+            panic!("inactive editor installs pointer-down");
+        };
+        let Layout::OnHover { child, .. } = *child else {
+            panic!("line editor claims hover");
+        };
+        assert!(matches!(*child, Layout::Overlay { .. }));
     }
 
     #[test]
