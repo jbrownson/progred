@@ -116,6 +116,33 @@ pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> Fra
     }
 }
 
+/// Returns the vertical scroll needed to reveal `target`. A visible
+/// top edge is already a useful orientation anchor, even when the
+/// target extends below the viewport, so it is left undisturbed.
+fn reveal_vertical_scroll(
+    current: f64,
+    maximum: f64,
+    target: vello::kurbo::Rect,
+    viewport: vello::kurbo::Rect,
+    pad: f64,
+    scale: f64,
+) -> f64 {
+    if (viewport.y0..=viewport.y1).contains(&target.y0) {
+        return current;
+    }
+    let mut scroll = current;
+    if target.y1 > viewport.y1 {
+        scroll += (target.y1 + pad - viewport.y1) / scale;
+    }
+    // Checked against the adjusted position, so a target taller than
+    // the viewport lands with its top visible.
+    let top = target.y0 - (scroll - current) * scale;
+    if top < viewport.y0 {
+        scroll += (top - pad - viewport.y0) / scale;
+    }
+    scroll.clamp(0.0, maximum)
+}
+
 /// The frame's hover, derived from this pass's settled geometry: a
 /// claim under the pointer answers outright (an occluder answers
 /// "nothing"), air defers to the ring's trailing center — the
@@ -235,20 +262,14 @@ impl App {
                 let before = (self.model.scroll, self.model.scroll_x);
                 let pad = 12.0 * scale;
                 let content = content_viewport(viewport, scale);
-                let mut scroll = self.model.scroll;
-                // The pad is the landing margin, not the trigger: fully
-                // visible rects are left alone, so a click near an edge
-                // doesn't nudge.
-                if rect.y1 > content.y1 {
-                    scroll += (rect.y1 + pad - content.y1) / scale;
-                }
-                // Checked against the adjusted position, so when the rect
-                // is taller than the viewport the top wins.
-                let top = rect.y0 - (scroll - self.model.scroll) * scale;
-                if top < content.y0 {
-                    scroll += (top - pad - content.y0) / scale;
-                }
-                self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
+                self.model.scroll = reveal_vertical_scroll(
+                    self.model.scroll,
+                    dispatch.max_scroll,
+                    rect,
+                    content,
+                    pad,
+                    scale,
+                );
                 // The same chase horizontally, against the viewport.
                 let visible = viewport.width;
                 let mut scroll_x = self.model.scroll_x;
@@ -682,6 +703,28 @@ mod frame_tests {
             FrameDisposition::Remint {
                 reveal_selection: true,
             }
+        );
+    }
+
+    #[test]
+    fn an_oversized_target_with_a_visible_top_does_not_scroll() {
+        let viewport = vello::kurbo::Rect::new(0.0, 30.0, 400.0, 200.0);
+        let target = vello::kurbo::Rect::new(20.0, 80.0, 380.0, 500.0);
+
+        assert_eq!(
+            reveal_vertical_scroll(120.0, 1_000.0, target, viewport, 12.0, 1.0),
+            120.0
+        );
+    }
+
+    #[test]
+    fn a_target_starting_below_the_viewport_is_still_revealed() {
+        let viewport = vello::kurbo::Rect::new(0.0, 30.0, 400.0, 200.0);
+        let target = vello::kurbo::Rect::new(20.0, 220.0, 380.0, 260.0);
+
+        assert_eq!(
+            reveal_vertical_scroll(120.0, 1_000.0, target, viewport, 12.0, 1.0),
+            192.0
         );
     }
 
