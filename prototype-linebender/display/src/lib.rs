@@ -6,6 +6,7 @@
 //! [`Layout::OnEvent`], not a central enum of editor actions.
 
 use gid::{CellId, Step, Value};
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 /// Editor-mapped face a text leaf asks for. Libraries pick a role,
@@ -464,6 +465,35 @@ pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layou
     )
 }
 
+/// Project record-shaped fields in a caller-supplied order. The
+/// caller owns each field's meaning — label behavior, child
+/// projection, and edit policy — while this combinator owns the
+/// delimited flat and column forms.
+pub fn record<'a, World, Hover: Clone>(
+    delim: Delim,
+    fields: impl IntoIterator<Item = (CellId, &'a Value)>,
+    mut order: impl FnMut(&CellId, &CellId) -> Ordering,
+    mut field: impl FnMut(CellId, &'a Value) -> Layout<World, Hover>,
+) -> Layout<World, Hover> {
+    let mut fields = fields.into_iter().collect::<Vec<_>>();
+    fields.sort_by(|(left, _), (right, _)| order(left, right));
+    let fields = fields
+        .into_iter()
+        .map(|(key, value)| field(key, value))
+        .collect::<Vec<_>>();
+    let mut flat = Vec::new();
+    for (index, field) in fields.iter().enumerate() {
+        if index > 0 {
+            flat.push(dim(", "));
+        }
+        flat.push(field.clone());
+    }
+    bracket(
+        delim,
+        alternatives([row(0.0, flat), col(0, 2.0, fields)]),
+    )
+}
+
 pub fn hug<World, Hover: Clone>(
     head: Layout<World, Hover>,
     child: Layout<World, Hover>,
@@ -558,5 +588,47 @@ mod tests {
         let mut world = World::default();
         assert!(handler(&mut world));
         assert_eq!(world.clicks, 1);
+    }
+
+    #[test]
+    fn record_uses_the_supplied_order_in_both_responsive_forms() {
+        const FIRST: CellId = CellId::from_u128(1);
+        const SECOND: CellId = CellId::from_u128(2);
+        let first = Value::from(vec![1]);
+        let second = Value::from(vec![2]);
+        let layout: Layout<(), ()> = record(
+            Delim::Brace,
+            [(FIRST, &first), (SECOND, &second)],
+            |left, right| right.cmp(left),
+            |key, value| at([Step::Key(key)], value),
+        );
+        let Layout::Surround { child, .. } = layout else {
+            panic!("a record is delimited");
+        };
+        let Layout::Alternatives(forms) = child.as_ref() else {
+            panic!("a record has responsive forms");
+        };
+        let Layout::Row { children, .. } = &forms[0] else {
+            panic!("the first form is flat");
+        };
+        assert!(matches!(
+            &children[0],
+            Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
+        ));
+        assert!(matches!(
+            &children[2],
+            Layout::At { steps, .. } if *steps == [Step::Key(FIRST)]
+        ));
+        let Layout::Col { children, .. } = &forms[1] else {
+            panic!("the second form is a column");
+        };
+        assert!(matches!(
+            &children[0],
+            Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
+        ));
+        assert!(matches!(
+            &children[1],
+            Layout::At { steps, .. } if *steps == [Step::Key(FIRST)]
+        ));
     }
 }

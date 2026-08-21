@@ -8,7 +8,7 @@ use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Delim, Face, Layout, ProjectionInput, alternatives, at_with_projection, bracket, col, dim,
-    faced, hug, on_click, on_hover, row, transient,
+    faced, hug, on_click, on_hover, record, row, transient,
 };
 
 fn short_id(cell: CellId) -> String {
@@ -98,61 +98,17 @@ fn function_parameters(
     parameters(function)
 }
 
-fn arguments<World, Hover: Clone>(
+fn standard_field_order(
     env: &dyn progred_display::Env,
-    fields: &im::OrdMap<CellId, Value>,
-    parameters: Option<&[CellId]>,
-) -> Layout<World, Hover> {
-    let mut remaining: Vec<(CellId, &Value, Option<String>)> = fields
-        .iter()
-        .filter(|(field, _)| **field != FUNCTION)
-        .map(|(field, value)| (*field, value, env.name(*field)))
-        .collect();
-    remaining.sort_by(|(left, _, left_name), (right, _, right_name)| {
-        match (left_name, right_name) {
-            (Some(left_name), Some(right_name)) => {
-                left_name.cmp(right_name).then(left.cmp(right))
-            }
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => left.cmp(right),
-        }
-    });
-    let mut arguments = Vec::with_capacity(remaining.len());
-    if let Some(parameters) = parameters {
-        for parameter in parameters {
-            if let Some(index) = remaining
-                .iter()
-                .position(|(field, _, _)| field == parameter)
-            {
-                arguments.push(remaining.remove(index));
-            }
-        }
+    left: &CellId,
+    right: &CellId,
+) -> std::cmp::Ordering {
+    match (env.name(*left), env.name(*right)) {
+        (Some(left_name), Some(right_name)) => left_name.cmp(&right_name).then(left.cmp(right)),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => left.cmp(right),
     }
-    arguments.extend(remaining);
-    let argument = |field, value: &Value| {
-        let (spelling, face) = field_spelling(env, field);
-        row(
-            0.0,
-            [
-                faced(spelling, face),
-                dim(": "),
-                at([Step::Key(field)], value),
-            ],
-        )
-    };
-    let mut flat = Vec::new();
-    for (index, (field, value, _)) in arguments.iter().enumerate() {
-        if index > 0 {
-            flat.push(dim(", "));
-        }
-        flat.push(argument(*field, value));
-    }
-    let rows = arguments
-        .into_iter()
-        .map(|(field, value, _)| argument(field, value))
-        .collect::<Vec<_>>();
-    alternatives([row(0.0, flat), col(0, 2.0, rows)])
 }
 
 /// Calls read as calls. Their function position is a shallow
@@ -164,13 +120,37 @@ pub fn call_display<World, Hover: Clone>(
     let fields = input.value.as_record()?;
     let function = fields.get(&FUNCTION)?;
     let parameters = function_parameters(input.env, function);
+    let mut parameter_positions = std::collections::BTreeMap::new();
+    for (position, parameter) in parameters.iter().flatten().enumerate() {
+        parameter_positions.entry(*parameter).or_insert(position);
+    }
     let function = match function {
         Value::Cell(_) => shallow_at([Step::Key(FUNCTION)], function),
         _ => at([Step::Key(FUNCTION)], function),
     };
-    let arguments = bracket(
+    let arguments = record(
         Delim::Paren,
-        arguments(input.env, fields, parameters.as_deref()),
+        fields
+            .iter()
+            .filter(|(field, _)| **field != FUNCTION)
+            .map(|(field, value)| (*field, value)),
+        |left, right| match (parameter_positions.get(left), parameter_positions.get(right)) {
+            (Some(left), Some(right)) => left.cmp(right),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => standard_field_order(input.env, left, right),
+        },
+        |field, value| {
+            let (spelling, face) = field_spelling(input.env, field);
+            row(
+                0.0,
+                [
+                    faced(spelling, face),
+                    dim(": "),
+                    at([Step::Key(field)], value),
+                ],
+            )
+        },
     );
     Some(hug(function, arguments, 0.0, 20.0))
 }

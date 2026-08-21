@@ -55,7 +55,9 @@ stored lambda definition and presents existing arguments in its declared
 parameter order, followed by extra fields in the ordinary stable order. This
 is deliberately not evaluation: inline and stored lambdas supply useful
 source metadata, while computed callables and foreign functions fall back to
-the ordinary field order.
+the ordinary field order. It supplies that order and its contextual field
+projection to the display layer's generic record combinator; the combinator
+alone owns delimiters, separators, and responsive flat/column layout.
 
 Computed values do not use another projection operation. They start the same
 projection at a transient root with fresh source provenance. Stored provenance
