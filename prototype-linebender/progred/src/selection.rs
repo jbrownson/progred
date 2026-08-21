@@ -658,13 +658,12 @@ pub fn rename_field(
 /// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
-pub fn toggle_collapse<World>(
+pub fn toggle_collapse(
     sources: &Sources,
-    projection: &Projection<World>,
     annotations: &mut Annotations,
     path: &[Step],
 ) -> bool {
-    match collapse_default(sources, projection, path) {
+    match collapse_default(sources, path) {
         Some(default) => {
             let next = !annotations::collapsed(annotations, path, default);
             annotations::set_collapsed(annotations, path, default, next);
@@ -676,14 +675,13 @@ pub fn toggle_collapse<World>(
 
 /// The directional twin: close or open the value at `path` — the fold
 /// axis of keyboard navigation. Returns whether the state changed.
-pub fn set_collapse<World>(
+pub fn set_collapse(
     sources: &Sources,
-    projection: &Projection<World>,
     annotations: &mut Annotations,
     path: &[Step],
     closed: bool,
 ) -> bool {
-    match collapse_default(sources, projection, path) {
+    match collapse_default(sources, path) {
         Some(default) if annotations::collapsed(annotations, path, default) != closed => {
             annotations::set_collapsed(annotations, path, default, closed);
             true
@@ -695,11 +693,7 @@ pub fn set_collapse<World>(
 /// The default collapse for the value at `path` — collapsed inside a
 /// cycle, expanded otherwise — or `None` when there is nothing to
 /// collapse.
-fn collapse_default<World>(
-    sources: &Sources,
-    _projection: &Projection<World>,
-    path: &[Step],
-) -> Option<bool> {
+pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
     sources
         .resolve(path)
         .filter(|value| text::read(value).is_none() && f64_convention::read(value).is_none())

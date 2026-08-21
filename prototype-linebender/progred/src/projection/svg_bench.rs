@@ -212,13 +212,30 @@ fn place_with_inputs(
     pointer: Option<Point>,
     viewport: Option<Rect>,
 ) -> (Bench, Extent) {
+    place_with_annotations(
+        doc,
+        selection,
+        &Annotations::default(),
+        width,
+        pointer,
+        viewport,
+    )
+}
+
+fn place_with_annotations(
+    doc: &Document,
+    selection: Option<&Selection>,
+    annotations: &Annotations,
+    width: f64,
+    pointer: Option<Point>,
+    viewport: Option<Rect>,
+) -> (Bench, Extent) {
     let stack = crate::stack::load::<World>();
     let sources = Sources {
         doc,
         library: &stack.library,
     };
     let styles = crate::styles::editor(1.0);
-    let collapse = Annotations::default();
     let mut fonts = parley::FontContext::new();
     let mut layouts = parley::LayoutContext::new();
     let mut cache = puri::text::TextCache::default();
@@ -249,7 +266,7 @@ fn place_with_inputs(
             sources,
             selection,
             graph_node: None,
-            annotations: &collapse,
+            annotations,
             raw: false,
             styles: &styles,
             width: width - 48.0,
@@ -318,6 +335,49 @@ fn svg_bench_renders_the_grap_demo() {
         .expect("the Grap demo parses");
     render(&doc, None, 900.0, "../target/grap_demo.svg");
     render(&doc, None, 560.0, "../target/grap_demo_narrow.svg");
+}
+
+#[test]
+fn custom_case_projection_uses_the_editor_fold() {
+    let arm = Value::record([
+        (
+            progred_libraries::control::vocabulary::PATTERN,
+            Value::from(vec![1]),
+        ),
+        (
+            grap::vocabulary::EXPRESSION,
+            Value::from(vec![2]),
+        ),
+    ]);
+    let case = grap::call(
+        Value::from(progred_libraries::control::vocabulary::CASE),
+        [
+            (
+                progred_libraries::control::vocabulary::VALUE,
+                Value::from(vec![1]),
+            ),
+            (
+                progred_libraries::control::vocabulary::ALTERNATIVES,
+                Value::list([arm]),
+            ),
+            (
+                progred_libraries::control::vocabulary::DEFAULT,
+                Value::from(vec![3]),
+            ),
+        ],
+    );
+    let doc = Document {
+        root: Some(case),
+        cells: Cells::new(),
+    };
+    let (expanded, expanded_extent) = place(&doc, None, 900.0);
+    let mut annotations = Annotations::default();
+    crate::annotations::set_collapsed(&mut annotations, &[], false, true);
+    let (folded, folded_extent) =
+        place_with_annotations(&doc, None, &annotations, 900.0, None, None);
+
+    assert!(folded.descends.len() < expanded.descends.len());
+    assert!(folded_extent.width < expanded_extent.width);
 }
 
 #[test]

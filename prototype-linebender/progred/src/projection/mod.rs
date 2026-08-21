@@ -2274,7 +2274,7 @@ fn prepare_present_value<
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
-    let layout = present_layout(cx, projection, path, ancestors, value, hooks);
+    let layout = present_layout(cx, projection, path, value, hooks);
     let inner = prepare(
         cx,
         projection,
@@ -2328,10 +2328,15 @@ fn present_layout<C: 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
     value: &Value,
     hooks: &Hooks<C>,
 ) -> progred_display::Layout<C, Hover> {
+    if crate::selection::collapse_default(&cx.sources, path)
+        .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
+        && let Some(collapsed) = structure::collapsed_layout(cx, path, value, hooks)
+    {
+        return collapsed;
+    }
     let project_layout = || projection
         .and_then(|projection| {
             // Editor state arrives positionally: the payload only at
@@ -2348,7 +2353,7 @@ fn present_layout<C: 'static>(
                 projection.apply(&ProjectEnv { cx }, value, selection, state, select, hover)
             })
         })
-        .unwrap_or_else(|| structure::of(cx, path, ancestors, value, hooks));
+        .unwrap_or_else(|| structure::of(cx, path, value, hooks));
     project_layout()
 }
 

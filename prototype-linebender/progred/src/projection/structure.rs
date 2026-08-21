@@ -12,7 +12,6 @@ use progred_display::{
     on_click, on_hover, pickable, query, row, shared, slot,
 };
 use progred_libraries::{name, text};
-use std::collections::HashSet;
 use std::rc::Rc;
 
 type View<World> = Layout<World, Hover>;
@@ -20,13 +19,12 @@ type View<World> = Layout<World, Hover>;
 pub fn of<World: 'static>(
     cx: &Cx,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
     value: &Value,
     hooks: &Hooks<World>,
 ) -> View<World> {
     match value {
         Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
-        Value::Cell(cell) => cell_layout(cx, path, ancestors, *cell, hooks),
+        Value::Cell(cell) => cell_layout(cx, path, *cell, hooks),
         Value::List(elements) => list_layout(cx, path, elements, hooks),
         Value::Record(fields) => record_layout(cx, path, fields, hooks),
     }
@@ -40,31 +38,54 @@ fn blob_text(bytes: &[u8]) -> String {
     }
 }
 
+/// The editor-owned folded form shared by raw and custom projections.
+/// Active structural editors keep their containing value open.
+pub(super) fn collapsed_layout<World: 'static>(
+    cx: &Cx,
+    path: &[Step],
+    value: &Value,
+    hooks: &Hooks<World>,
+) -> Option<View<World>> {
+    let delim = match value {
+        Value::Cell(cell) if cx.sources.value(*cell).is_some() => {
+            let mut followed = path.to_vec();
+            followed.push(Step::Follow);
+            let pending_inside = cx.pending_child_of(&followed).is_some()
+                || cx.pending_edge_under(&followed).is_some()
+                || cx.pending_rename_under(&followed).is_some();
+            (!pending_inside).then_some(Delim::Paren)?
+        }
+        Value::List(elements)
+            if !elements.is_empty() && cx.pending_child_of(path).is_none() =>
+        {
+            Delim::Bracket
+        }
+        Value::Record(fields)
+            if !fields.is_empty()
+                && cx.pending_child_of(path).is_none()
+                && cx.pending_edge_under(path).is_none()
+                && cx.pending_rename_under(path).is_none() =>
+        {
+            Delim::Brace
+        }
+        _ => return None,
+    };
+    Some(selectable(
+        bracket(delim, toggle(dim("…"), path, hooks)),
+        path,
+        value,
+        hooks,
+        true,
+    ))
+}
+
 fn cell_layout<World: 'static>(
     cx: &Cx,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
     cell: CellId,
     hooks: &Hooks<World>,
 ) -> View<World> {
-    let mut followed = path.to_vec();
-    followed.push(Step::Follow);
     let value = cx.sources.value(cell);
-    let pending_inside = cx.pending_child_of(&followed).is_some()
-        || cx.pending_edge_under(&followed).is_some()
-        || cx.pending_rename_under(&followed).is_some();
-    let elided = value.is_some()
-        && !pending_inside
-        && crate::annotations::collapsed(cx.annotations, path, ancestors.contains(&cell));
-    if elided {
-        return selectable(
-            bracket(Delim::Paren, toggle(dim("…"), path, hooks)),
-            path,
-            &Value::from(cell),
-            hooks,
-            true,
-        );
-    }
     let head = selectable(cell_head(cx, cell), path, &Value::from(cell), hooks, true);
     let inner = match value {
         None if !cx.sources.writable(cell) => head,
@@ -101,18 +122,6 @@ fn list_layout<World: 'static>(
     if let Some(Step::Element(position)) = cx.pending_child_of(path) {
         items.push((position, false));
         items.sort_by(|a, b| a.0.cmp(&b.0));
-    }
-    let collapsed = !items.is_empty()
-        && items.iter().all(|(_, present)| *present)
-        && crate::annotations::collapsed(cx.annotations, path, false);
-    if collapsed {
-        return selectable(
-            bracket(Delim::Bracket, toggle(dim("…"), path, hooks)),
-            path,
-            &Value::List(elements.clone()),
-            hooks,
-            true,
-        );
     }
     if items.is_empty() {
         return selectable(
@@ -187,21 +196,6 @@ fn record_layout<World: 'static>(
         },
     );
     let pending_edge = cx.pending_edge_under(path).is_some();
-    let renaming = cx.pending_rename_under(path);
-    let collapsed = !items.is_empty()
-        && !pending_edge
-        && renaming.is_none()
-        && items.iter().all(|(_, present)| *present)
-        && crate::annotations::collapsed(cx.annotations, path, false);
-    if collapsed {
-        return selectable(
-            bracket(Delim::Brace, toggle(dim("…"), path, hooks)),
-            path,
-            &Value::Record(fields.clone()),
-            hooks,
-            true,
-        );
-    }
     if items.is_empty() && !pending_edge {
         return selectable(
             bracket(Delim::Brace, row(0.0, Vec::new())),

@@ -482,7 +482,6 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                         doc: &app.model.doc,
                         library: &app.stack.library,
                     },
-                    &app.stack.projection,
                     &mut app.model.annotations,
                     &path,
                 );

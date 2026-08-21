@@ -53,22 +53,11 @@ fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Select
 }
 
 fn toggle_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step]) -> bool {
-    toggle_collapse(
-        sources,
-        &crate::stack::load::<()>().projection,
-        collapse,
-        path,
-    )
+    toggle_collapse(sources, collapse, path)
 }
 
 fn set_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step], closed: bool) -> bool {
-    set_collapse(
-        sources,
-        &crate::stack::load::<()>().projection,
-        collapse,
-        path,
-        closed,
-    )
+    set_collapse(sources, collapse, path, closed)
 }
 
 fn key(s: &str) -> Step {

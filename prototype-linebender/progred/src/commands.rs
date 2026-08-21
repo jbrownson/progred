@@ -571,13 +571,11 @@ impl App {
         match set {
             None => selection::toggle_collapse(
                 &sources,
-                &self.stack.projection,
                 &mut self.model.annotations,
                 &path,
             ),
             Some(closed) => selection::set_collapse(
                 &sources,
-                &self.stack.projection,
                 &mut self.model.annotations,
                 &path,
                 closed,

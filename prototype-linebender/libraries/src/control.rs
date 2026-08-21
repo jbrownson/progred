@@ -8,7 +8,8 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime as grap;
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Delim, Layout, ProjectionInput, bracket, col, dim, hug, row,
+    Delim, Layout, ProjectionInput, at_with_projection, bracket, col, dim, hug, on_click,
+    on_hover, row,
 };
 use std::collections::BTreeMap;
 
@@ -272,6 +273,42 @@ pub fn case_display<World, Hover: Clone>(
     ))
 }
 
+fn quote_marker<World, Hover>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    (input.value.as_cell()? == vocabulary::QUOTE).then(|| {
+        on_hover(on_click(dim("\""), input.select), input.hover)
+    })
+}
+
+/// Quote reads as a small structural marker followed by its template,
+/// rather than as a generic call with a redundant `expression` label.
+/// Decorated calls fall through so this compact form never hides data.
+pub fn quote_display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let fields = input.value.as_record()?;
+    (fields.len() == 2).then_some(())?;
+    let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
+    (function.as_cell()? == vocabulary::QUOTE).then_some(())?;
+    let expression = fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
+    let marker = at_with_projection(
+        [Step::Key(grap_runtime::vocabulary::FUNCTION)],
+        function,
+        [quote_marker::<World, Hover> as progred_display::Partial<World, Hover>],
+    );
+    Some(row(
+        2.0,
+        [
+            marker,
+            crate::grap::at(
+                [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
+                expression,
+            ),
+        ],
+    ))
+}
+
 /// A binding pattern must remain visibly distinct from a literal cell
 /// pattern, while its binder is still the real selectable cell value.
 pub fn bind_display<World, Hover: Clone>(
@@ -312,7 +349,11 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     Library {
         cells,
         functions: functions(),
-        projections: vec![case_display::<World, Hover>, bind_display::<World, Hover>],
+        projections: vec![
+            case_display::<World, Hover>,
+            quote_display::<World, Hover>,
+            bind_display::<World, Hover>,
+        ],
     }
 }
 
@@ -390,6 +431,61 @@ mod tests {
         let evaluation = evaluate(&quote_call(expression.clone()));
         assert_eq!(evaluation.result, expression);
         assert!(evaluation.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn quote_projects_a_selectable_marker_and_its_expression() {
+        let expression = blob("body");
+        let quoted = quote_call(expression.clone());
+        let layout = quote_display(projection_input(&quoted)).unwrap();
+        let Layout::Row { children, .. } = &layout else {
+            panic!("quote is an inline prefix");
+        };
+        let [marker, body] = children.as_slice() else {
+            panic!("quote has a marker and expression");
+        };
+        let Layout::At {
+            steps,
+            projection: Some(projection),
+            ..
+        } = marker
+        else {
+            panic!("the marker retains the function-field location");
+        };
+        assert_eq!(steps, &[Step::Key(grap::vocabulary::FUNCTION)]);
+        assert_eq!(projection.len(), 1);
+
+        let Layout::At { steps, value, .. } = body else {
+            panic!("the expression retains its field location");
+        };
+        assert_eq!(steps, &[Step::Key(grap::vocabulary::EXPRESSION)]);
+        assert_eq!(value, &expression);
+
+        let marker = quote_marker(projection_input(&Value::from(vocabulary::QUOTE))).unwrap();
+        let Layout::OnHover { child, .. } = marker else {
+            panic!("the marker claims hover");
+        };
+        let Layout::OnClick { child, .. } = *child else {
+            panic!("the marker remains selectable");
+        };
+        let Layout::Leaf(progred_display::Display::Text { text, face }) = *child else {
+            panic!("the marker is text");
+        };
+        assert_eq!(text, "\"");
+        assert!(face == progred_display::Face::Dim);
+    }
+
+    #[test]
+    fn decorated_quotes_fall_through_instead_of_hiding_fields() {
+        let extra = new_cell_id();
+        let quote = grap::call(
+            Value::from(vocabulary::QUOTE),
+            [
+                (grap::vocabulary::EXPRESSION, blob("body")),
+                (extra, blob("visible")),
+            ],
+        );
+        assert!(quote_display(projection_input(&quote)).is_none());
     }
 
     #[test]
@@ -628,7 +724,7 @@ mod tests {
     #[test]
     fn library_describes_quote_and_classifies_absences() {
         let library = library::<(), ()>();
-        assert_eq!(library.projections.len(), 2);
+        assert_eq!(library.projections.len(), 3);
         assert_eq!(
             library.cells.value(vocabulary::QUOTE).and_then(name::read),
             Some("quote")
