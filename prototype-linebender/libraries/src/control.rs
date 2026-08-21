@@ -9,8 +9,8 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime as grap;
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Delim, Layout, ProjectionInput, alternatives, at_with_projection, bracket, centered_row, col,
-    dim, hug, on_click, on_hover, row, shared,
+    Layout, ProjectionInput, alternatives, at_with_projection, centered_row, col, dim, hug,
+    on_click, on_hover, row, shared,
 };
 use std::collections::BTreeMap;
 
@@ -129,17 +129,29 @@ fn bindings_foreign(
         let Some(fields) = binding.as_record() else {
             return Ok(Value::from(vocabulary::INVALID_BINDING));
         };
-        let (Some(pattern), Some(value)) = (
-            fields.get(&vocabulary::PATTERN),
-            fields.get(&vocabulary::VALUE),
-        ) else {
+        let Some(value) = fields.get(&vocabulary::VALUE) else {
             return Ok(Value::from(vocabulary::INVALID_BINDING));
         };
+        let (binder, pattern) = match (
+            fields.get(&vocabulary::BIND),
+            fields.get(&vocabulary::PATTERN),
+        ) {
+            (Some(binder), None) => match binder.as_cell() {
+                Some(binder) => (Some(binder), None),
+                None => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+            },
+            (None, Some(pattern)) => (None, Some(pattern)),
+            _ => return Ok(Value::from(vocabulary::INVALID_BINDING)),
+        };
         let value = context.eval(value, &environment)?;
-        match destructure(pattern, &value) {
-            Ok(Some(bindings)) => environment = environment.extended(bindings),
-            Ok(None) => return Ok(absent::value()),
-            Err(InvalidBinder) => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+        if let Some(binder) = binder {
+            environment = environment.extended([(binder, value)]);
+        } else if let Some(pattern) = pattern {
+            match destructure(pattern, &value) {
+                Ok(Some(bindings)) => environment = environment.extended(bindings),
+                Ok(None) => return Ok(absent::value()),
+                Err(InvalidBinder) => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+            }
         }
     }
     context.eval(expression, &environment)
@@ -255,23 +267,8 @@ pub fn match_display<World, Hover: Clone>(
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
     (function.as_cell()? == vocabulary::MATCH).then_some(())?;
     let subject = fields.get(&vocabulary::VALUE)?;
-    let cases = fields.get(&vocabulary::CASES)?.as_list()?;
-    let arms = cases
-        .iter()
-        .map(|(position, case)| {
-            let fields = case.as_record()?;
-            fields.get(&vocabulary::PATTERN)?;
-            fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
-            Some(at_with_projection(
-                [
-                    Step::Key(vocabulary::CASES),
-                    Step::Element(position.clone()),
-                ],
-                case,
-                [case_display::<World, Hover> as progred_display::Partial<World, Hover>],
-            ))
-        })
-        .collect::<Option<Vec<_>>>()?;
+    let cases = fields.get(&vocabulary::CASES)?;
+    cases.as_list()?;
     let head = row(
         4.0,
         [
@@ -284,7 +281,11 @@ pub fn match_display<World, Hover: Clone>(
     );
     Some(hug(
         head,
-        bracket(Delim::Brace, col(0, 4.0, arms)),
+        at_with_projection(
+            [Step::Key(vocabulary::CASES)],
+            cases,
+            [case_display::<World, Hover> as progred_display::Partial<World, Hover>],
+        ),
         4.0,
         20.0,
     ))
@@ -293,9 +294,7 @@ pub fn match_display<World, Hover: Clone>(
 fn case_display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let fields = input.value.as_record()?;
-    let pattern = fields.get(&vocabulary::PATTERN)?;
-    let expression = fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
+    let (pattern, expression) = case_parts(input.value)?;
     let expression_target = input
         .targets
         .at([Step::Key(grap_runtime::vocabulary::EXPRESSION)]);
@@ -317,6 +316,14 @@ fn case_display<World, Hover: Clone>(
         ),
         6.0,
         20.0,
+    ))
+}
+
+fn case_parts(case: &Value) -> Option<(&Value, &Value)> {
+    let fields = case.as_record()?;
+    Some((
+        fields.get(&vocabulary::PATTERN)?,
+        fields.get(&grap_runtime::vocabulary::EXPRESSION)?,
     ))
 }
 
@@ -345,7 +352,16 @@ pub fn bindings_display<World, Hover: Clone>(
         .iter()
         .map(|(position, binding)| {
             let fields = binding.as_record()?;
-            fields.get(&vocabulary::PATTERN)?;
+            match (
+                fields.get(&vocabulary::BIND),
+                fields.get(&vocabulary::PATTERN),
+            ) {
+                (Some(binder), None) => {
+                    binder.as_cell()?;
+                }
+                (None, Some(_)) => {}
+                _ => return None,
+            }
             fields.get(&vocabulary::VALUE)?;
             Some(shared(at_with_projection(
                 [
@@ -419,7 +435,17 @@ fn binding_display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
-    let pattern = fields.get(&vocabulary::PATTERN)?;
+    let left = match (
+        fields.get(&vocabulary::BIND),
+        fields.get(&vocabulary::PATTERN),
+    ) {
+        (Some(binder), None) => {
+            binder.as_cell()?;
+            crate::grap::shallow_at([Step::Key(vocabulary::BIND)], binder)
+        }
+        (None, Some(pattern)) => crate::grap::at([Step::Key(vocabulary::PATTERN)], pattern),
+        _ => return None,
+    };
     let value = fields.get(&vocabulary::VALUE)?;
     let value_target = input.targets.at([Step::Key(vocabulary::VALUE)]);
     let equals = on_hover(
@@ -430,7 +456,7 @@ fn binding_display<World, Hover: Clone>(
         centered_row(
             6.0,
             [
-                crate::grap::at([Step::Key(vocabulary::PATTERN)], pattern),
+                left,
                 equals,
             ],
         ),
@@ -476,22 +502,6 @@ pub fn quote_display<World, Hover: Clone>(
     ))
 }
 
-/// A binding pattern must remain visibly distinct from a literal cell
-/// pattern, while its binder is still the real selectable cell value.
-pub fn bind_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
-) -> Option<Layout<World, Hover>> {
-    let binder = input.value.as_record()?.get(&vocabulary::BIND)?;
-    binder.as_cell()?;
-    Some(row(
-        4.0,
-        [
-            dim("bind"),
-            crate::grap::shallow_at([Step::Key(vocabulary::BIND)], binder),
-        ],
-    ))
-}
-
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
@@ -524,7 +534,6 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
             match_display::<World, Hover>,
             bindings_display::<World, Hover>,
             quote_display::<World, Hover>,
-            bind_display::<World, Hover>,
         ],
     }
 }
@@ -594,6 +603,13 @@ mod tests {
     fn binding_clause(pattern: Value, value: Value) -> Value {
         Value::record([
             (vocabulary::PATTERN, pattern),
+            (vocabulary::VALUE, value),
+        ])
+    }
+
+    fn bind_clause(binder: CellId, value: Value) -> Value {
+        Value::record([
+            (vocabulary::BIND, Value::from(binder)),
             (vocabulary::VALUE, value),
         ])
     }
@@ -857,8 +873,8 @@ mod tests {
         let second = new_cell_id();
         let bindings = || {
             [
-                binding_clause(binding(first), blob("bound")),
-                binding_clause(binding(second), Value::from(first)),
+                bind_clause(first, blob("bound")),
+                bind_clause(second, Value::from(first)),
             ]
         };
         for function in [vocabulary::LET, vocabulary::WHERE] {
@@ -894,7 +910,7 @@ mod tests {
     #[test]
     fn let_and_where_share_a_structure_but_project_in_opposite_orders() {
         let binder = new_cell_id();
-        let clauses = || [binding_clause(binding(binder), blob("value"))];
+        let clauses = || [bind_clause(binder, blob("value"))];
         let body = blob("body");
         let let_call = bindings_call(vocabulary::LET, clauses(), body.clone());
         let where_call = bindings_call(vocabulary::WHERE, clauses(), body.clone());
@@ -963,9 +979,9 @@ mod tests {
     }
 
     #[test]
-    fn binding_equals_is_centered_beside_its_pattern() {
+    fn direct_binding_is_shallow_and_centered_beside_its_equals() {
         let binder = new_cell_id();
-        let binding = binding_clause(binding(binder), blob("value"));
+        let binding = bind_clause(binder, blob("value"));
         let layout = binding_display(relative_projection_input(&binding)).unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("a binding has responsive forms");
@@ -976,17 +992,22 @@ mod tests {
         let Layout::Shared { child, .. } = &children[0] else {
             panic!("a binding shares its pattern and equals");
         };
+        let Layout::Row {
+            alignment: progred_display::RowAlignment::Center,
+            children,
+            ..
+        } = child.as_ref()
+        else {
+            panic!("a binding head is vertically centered");
+        };
         assert!(matches!(
-            child.as_ref(),
-            Layout::Row {
-                alignment: progred_display::RowAlignment::Center,
-                ..
-            }
+            &children[0],
+            Layout::At { steps, .. } if *steps == [Step::Key(vocabulary::BIND)]
         ));
     }
 
     #[test]
-    fn match_projects_only_its_ordered_pattern_expression_cases() {
+    fn match_augments_its_standard_cases_list_with_the_case_projection() {
         let binder = new_cell_id();
         let expression = match_call(
             blob("subject"),
@@ -1006,29 +1027,23 @@ mod tests {
         while let Layout::Shared { child, .. } = arms {
             arms = child.as_ref();
         }
-        let Layout::Surround { child, .. } = arms else {
-            panic!("match cases are braced");
-        };
-        let Layout::Col { children, .. } = child.as_ref() else {
-            panic!("match cases are ordered vertically");
-        };
-        assert_eq!(children.len(), 2);
-
         let Layout::At {
             steps,
             projection: Some(projection),
-            value: case,
+            value: cases,
             ..
-        } = &children[0]
+        } = arms
         else {
-            panic!("the whole case retains its location");
+            panic!("match descends to its cases list");
         };
-        assert!(matches!(
-            steps.as_slice(),
-            [Step::Key(key), Step::Element(_)] if *key == vocabulary::CASES
-        ));
+        assert_eq!(steps, &[Step::Key(vocabulary::CASES)]);
         assert_eq!(projection.len(), 1);
 
+        assert!(case_display(relative_projection_input(cases)).is_none());
+        let case = cases
+            .as_list()
+            .and_then(|cases| cases.values().next())
+            .expect("the standard list contains its cases");
         let case = case_display(relative_projection_input(case)).unwrap();
         let Layout::Alternatives(options) = case else {
             panic!("a case has responsive forms");
@@ -1053,9 +1068,16 @@ mod tests {
     }
 
     #[test]
-    fn malformed_match_data_falls_through_to_the_generic_call_projection() {
+    fn non_case_elements_use_the_standard_projection_inside_match() {
         let malformed = match_call(blob("subject"), [blob("not a case")]);
-        assert!(match_display(projection_input(&malformed)).is_none());
+        assert!(match_display(projection_input(&malformed)).is_some());
+        let case = malformed
+            .as_record()
+            .and_then(|fields| fields.get(&vocabulary::CASES))
+            .and_then(Value::as_list)
+            .and_then(|cases| cases.values().next())
+            .unwrap();
+        assert!(case_display(projection_input(case)).is_none());
     }
 
     #[test]
@@ -1117,12 +1139,39 @@ mod tests {
             evaluate(&invalid_binding).result,
             Value::from(vocabulary::INVALID_BINDING)
         );
+
+        let ambiguous = bindings_call(
+            vocabulary::LET,
+            [Value::record([
+                (vocabulary::BIND, Value::from(new_cell_id())),
+                (vocabulary::PATTERN, blob("pattern")),
+                (vocabulary::VALUE, blob("value")),
+            ])],
+            blob("body"),
+        );
+        assert_eq!(
+            evaluate(&ambiguous).result,
+            Value::from(vocabulary::INVALID_BINDING)
+        );
+
+        let invalid_binder = bindings_call(
+            vocabulary::LET,
+            [Value::record([
+                (vocabulary::BIND, blob("not a cell")),
+                (vocabulary::VALUE, blob("value")),
+            ])],
+            blob("body"),
+        );
+        assert_eq!(
+            evaluate(&invalid_binder).result,
+            Value::from(vocabulary::INVALID_BINDER)
+        );
     }
 
     #[test]
     fn library_describes_quote_and_classifies_absences() {
         let library = library::<(), ()>();
-        assert_eq!(library.projections.len(), 4);
+        assert_eq!(library.projections.len(), 3);
         assert_eq!(
             library.cells.value(vocabulary::QUOTE).and_then(name::read),
             Some("quote")

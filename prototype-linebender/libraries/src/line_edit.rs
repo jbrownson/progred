@@ -38,6 +38,14 @@ pub mod vocabulary {
         CellId::from_u128(0x59d3f77d6669394ee9cb500a1f94a979);
     pub const DRAW_CURSOR: CellId = CellId::from_u128(0x5ed6b931c9cdd4ca8bf9a1d3ddd82f1e);
 
+    // Private binders used to share the assembled display and event
+    // machinery within the Grap definition.
+    pub const DRAWING: CellId = CellId::from_u128(0x050d6e3623c3f2b968aed25e8c48c7d6);
+    pub const HANDLE: CellId = CellId::from_u128(0xcdcac778dc140a2ae6be2471ed602293);
+    pub const TRANSITION: CellId = CellId::from_u128(0x6b767d676f18dba8b8ebbe85cfb39562);
+    pub const EVENT_HANDLER: CellId =
+        CellId::from_u128(0x946122b955b985b0519b250229fc6dd8);
+
     /// Host capabilities implementing one Puri line-edit transition.
     /// They exist only during dispatch at a concrete projection site.
     pub const POINTER_DOWN: CellId =
@@ -82,6 +90,13 @@ fn binding_clause(pattern: Value, value: Value) -> Value {
     ])
 }
 
+fn bind_clause(binder: CellId, value: Value) -> Value {
+    Value::record([
+        (control::vocabulary::BIND, Value::from(binder)),
+        (control::vocabulary::VALUE, value),
+    ])
+}
+
 fn let_expression(
     bindings: impl IntoIterator<Item = Value>,
     expression: Value,
@@ -98,9 +113,9 @@ fn let_expression(
     )
 }
 
-fn transition(function: CellId) -> Value {
+fn transition(function: Value) -> Value {
     grap_runtime::call(
-        Value::from(function),
+        function,
         [
             (layout::vocabulary::EVENT, Value::from(layout::vocabulary::EVENT)),
             (
@@ -127,7 +142,7 @@ fn transition(function: CellId) -> Value {
     )
 }
 
-fn handle(function: CellId) -> Value {
+fn handle_definition() -> Value {
     let next = grap_runtime::call(
         Value::from(selection::vocabulary::SET),
         [(selection::vocabulary::VALUE, Value::from(vocabulary::NEXT))],
@@ -135,7 +150,10 @@ fn handle(function: CellId) -> Value {
     let choose = grap_runtime::call(
         Value::from(control::vocabulary::MATCH),
         [
-            (control::vocabulary::VALUE, transition(function)),
+            (
+                control::vocabulary::VALUE,
+                transition(Value::from(vocabulary::TRANSITION)),
+            ),
             (
                 control::vocabulary::CASES,
                 Value::list([
@@ -145,7 +163,23 @@ fn handle(function: CellId) -> Value {
             ),
         ],
     );
-    choose
+    grap_runtime::lambda(
+        [vocabulary::TRANSITION, layout::vocabulary::EVENT],
+        choose,
+    )
+}
+
+fn handle(function: CellId) -> Value {
+    grap_runtime::call(
+        Value::from(vocabulary::HANDLE),
+        [
+            (vocabulary::TRANSITION, Value::from(function)),
+            (
+                layout::vocabulary::EVENT,
+                Value::from(layout::vocabulary::EVENT),
+            ),
+        ],
+    )
 }
 
 /// One generic event handler dispatching the event data to a host
@@ -173,14 +207,6 @@ fn handler(handlers: impl IntoIterator<Item = (CellId, CellId)>) -> Value {
             ],
         ),
     )
-}
-
-fn on_events(
-    child: Value,
-    handlers: impl IntoIterator<Item = (CellId, CellId)>,
-) -> Value {
-    let handlers = handlers.into_iter().collect::<Vec<_>>();
-    layout::on(child, unquote(handler(handlers)))
 }
 
 fn definition() -> Value {
@@ -267,16 +293,14 @@ fn definition() -> Value {
         quote(drawing),
     );
 
-    let drawing = layout::hoverable(unquote(drawing));
-    let inactive = on_events(
-        drawing.clone(),
+    let drawing = quote(layout::hoverable(unquote(drawing)));
+    let inactive_handler = handler(
         [(
             layout::vocabulary::POINTER_DOWN,
             vocabulary::POINTER_DOWN,
         )],
     );
-    let active = on_events(
-        drawing,
+    let active_handler = handler(
         [
             (layout::vocabulary::POINTER_DOWN, vocabulary::POINTER_DOWN),
             (layout::vocabulary::POINTER_MOVE, vocabulary::POINTER_MOVE),
@@ -286,7 +310,7 @@ fn definition() -> Value {
         ],
     );
 
-    let body = grap_runtime::call(
+    let event_handler = grap_runtime::call(
         Value::from(control::vocabulary::MATCH),
         [
             (
@@ -296,11 +320,22 @@ fn definition() -> Value {
             (
                 control::vocabulary::CASES,
                 Value::list([
-                    case_arm(absent::value(), quote(inactive)),
-                    case_arm(bind(vocabulary::NEXT), quote(active)),
+                    case_arm(absent::value(), inactive_handler),
+                    case_arm(bind(vocabulary::NEXT), active_handler),
                 ]),
             ),
         ],
+    );
+    let body = let_expression(
+        [
+            bind_clause(vocabulary::HANDLE, handle_definition()),
+            bind_clause(vocabulary::EVENT_HANDLER, event_handler),
+            bind_clause(vocabulary::DRAWING, drawing),
+        ],
+        quote(layout::on(
+            unquote(Value::from(vocabulary::DRAWING)),
+            unquote(Value::from(vocabulary::EVENT_HANDLER)),
+        )),
     );
     name::record(
         "line edit",
@@ -363,6 +398,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::DRAW_DESCENT, "line edit draw descent"),
         (vocabulary::DRAW_SELECTION, "line edit draw selection"),
         (vocabulary::DRAW_CURSOR, "line edit draw cursor"),
+        (vocabulary::DRAWING, "line edit drawing"),
+        (vocabulary::HANDLE, "handle line edit transition"),
+        (vocabulary::TRANSITION, "line edit transition"),
+        (vocabulary::EVENT_HANDLER, "line edit event handler"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }

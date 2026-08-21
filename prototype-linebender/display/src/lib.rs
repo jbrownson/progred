@@ -537,14 +537,13 @@ pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layou
 /// Project record-shaped fields in a caller-supplied order. The
 /// caller owns each field's meaning — label behavior, child
 /// projection, and edit policy — while this combinator owns the
-/// delimited flat and column forms.
+/// braced flat and column forms.
 pub struct RecordField<World, Hover> {
     pub label: Layout<World, Hover>,
     pub value: Layout<World, Hover>,
 }
 
 pub fn record<'a, World, Hover: Clone>(
-    delim: Delim,
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     mut order: impl FnMut(&CellId, &CellId) -> Ordering,
     mut field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
@@ -580,7 +579,7 @@ pub fn record<'a, World, Hover: Clone>(
         )
     });
     bracket(
-        delim,
+        Delim::Brace,
         alternatives([row(0.0, flat), col(0, 2.0, rows)]),
     )
 }
@@ -708,7 +707,6 @@ mod tests {
         let first = Value::from(vec![1]);
         let second = Value::from(vec![2]);
         let layout: Layout<(), ()> = record(
-            Delim::Brace,
             [(FIRST, &first), (SECOND, &second)],
             |left, right| right.cmp(left),
             |key, value| RecordField {

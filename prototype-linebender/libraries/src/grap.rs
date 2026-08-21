@@ -7,8 +7,8 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Delim, Face, Layout, ProjectionInput, RecordField, alternatives, at_with_projection, col, dim,
-    faced, hug, on_click, on_hover, record, row, shared, transient,
+    Face, Layout, ProjectionInput, RecordField, alternatives, at_with_projection, col, dim, faced,
+    hug, on_click, on_hover, record, row, shared, transient,
 };
 
 fn short_id(cell: CellId) -> String {
@@ -129,7 +129,6 @@ pub fn call_display<World, Hover: Clone>(
         _ => at([Step::Key(FUNCTION)], function),
     };
     let arguments = record(
-        Delim::Paren,
         fields
             .iter()
             .filter(|(field, _)| **field != FUNCTION)
@@ -365,7 +364,7 @@ mod tests {
             panic!("flat call first");
         };
         let Layout::Surround { child, .. } = unshared(&children[1]) else {
-            panic!("arguments are parenthesized");
+            panic!("arguments are record-delimited");
         };
         let Layout::Alternatives(argument_options) = child.as_ref() else {
             panic!("arguments have responsive forms");
@@ -491,9 +490,23 @@ mod tests {
         let Layout::Row { children, .. } = &call_options[0] else {
             panic!("flat call first");
         };
-        let Layout::Surround { child, .. } = unshared(&children[1]) else {
-            panic!("arguments are parenthesized");
+        let Layout::Surround { left, child, right } = unshared(&children[1]) else {
+            panic!("arguments are record-delimited");
         };
+        assert!(matches!(
+            left,
+            progred_display::Ink::Delim {
+                delim: progred_display::Delim::Brace,
+                side: progred_display::Side::Open,
+            }
+        ));
+        assert!(matches!(
+            right,
+            progred_display::Ink::Delim {
+                delim: progred_display::Delim::Brace,
+                side: progred_display::Side::Close,
+            }
+        ));
         let Layout::Alternatives(argument_options) = child.as_ref() else {
             panic!("arguments have responsive forms");
         };
