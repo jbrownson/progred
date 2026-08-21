@@ -84,6 +84,12 @@ pub enum Side {
     Close,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum RowAlignment {
+    Baseline,
+    Center,
+}
+
 /// A plain primary click on the subtree that owns the handler. The
 /// language carries no geometry or modifiers: the editor decides what
 /// holding the command key means (a pick, not a click). Coordinate-aware
@@ -164,6 +170,7 @@ pub enum Layout<World, Hover> {
         hover: Option<Hover>,
     },
     Row {
+        alignment: RowAlignment,
         gap: f64,
         children: Vec<Layout<World, Hover>>,
     },
@@ -249,7 +256,12 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 child: child.clone(),
                 hover: hover.clone(),
             },
-            Self::Row { gap, children } => Self::Row {
+            Self::Row {
+                alignment,
+                gap,
+                children,
+            } => Self::Row {
+                alignment: *alignment,
                 gap: *gap,
                 children: children.clone(),
             },
@@ -449,6 +461,18 @@ pub fn row<World, Hover>(
     children: impl IntoIterator<Item = Layout<World, Hover>>,
 ) -> Layout<World, Hover> {
     Layout::Row {
+        alignment: RowAlignment::Baseline,
+        gap,
+        children: children.into_iter().collect(),
+    }
+}
+
+pub fn centered_row<World, Hover>(
+    gap: f64,
+    children: impl IntoIterator<Item = Layout<World, Hover>>,
+) -> Layout<World, Hover> {
+    Layout::Row {
+        alignment: RowAlignment::Center,
         gap,
         children: children.into_iter().collect(),
     }

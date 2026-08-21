@@ -7,8 +7,8 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Delim, Face, Layout, ProjectionInput, alternatives, at_with_projection, bracket, col, dim,
-    faced, hug, on_click, on_hover, record, row, shared, transient, RecordField,
+    Delim, Face, Layout, ProjectionInput, RecordField, alternatives, at_with_projection, col, dim,
+    faced, hug, on_click, on_hover, record, row, shared, transient,
 };
 
 fn short_id(cell: CellId) -> String {
@@ -170,7 +170,7 @@ pub fn lambda_display<World, Hover: Clone>(
             ))
         })
         .collect::<Option<Vec<_>>>()?;
-    let params = bracket(Delim::Paren, row(4.0, params));
+    let params = row(4.0, params);
     let body_target = input.targets.at([Step::Key(BODY)]);
     let lambda = on_hover(on_click(dim("λ"), input.select), input.hover);
     let arrow = on_hover(
@@ -605,6 +605,7 @@ mod tests {
         };
         assert_eq!(hover.as_deref(), Some(&[][..]));
         assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
+        assert!(matches!(&head[1], Layout::Row { .. }));
         let Layout::OnHover { child, hover } = &head[2] else {
             panic!("lambda arrow targets its body");
         };

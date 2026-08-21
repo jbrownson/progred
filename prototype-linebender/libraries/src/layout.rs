@@ -11,7 +11,7 @@
 use crate::{Library, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
-    ClickHandler, Delim, Display, Face, Layout, Vector, VectorCommand, alternatives,
+    ClickHandler, Delim, Display, Face, Layout, RowAlignment, Vector, VectorCommand, alternatives,
     block_hover, bracket, leaf, on_click, on_event, on_hover, overlay as layout_overlay, pickable,
     slot,
 };
@@ -358,6 +358,7 @@ pub fn decode<World, Hover: Clone>(
     if let Some(content) = fields.get(&vocabulary::ROW) {
         let content = content.as_record()?;
         return Some(Layout::Row {
+            alignment: RowAlignment::Baseline,
             gap: read_number(content.get(&vocabulary::GAP)?)?,
             children: children(content.get(&vocabulary::CHILDREN)?, select, hover)?,
         });
@@ -705,7 +706,7 @@ mod tests {
         let Layout::OnClick { child, .. } = &forms[0] else {
             panic!("selectable attaches the provided select");
         };
-        let Layout::Row { gap, children } = child.as_ref() else {
+        let Layout::Row { gap, children, .. } = child.as_ref() else {
             panic!("row inside");
         };
         assert_eq!(*gap, 4.0);

@@ -85,6 +85,7 @@ enum Kind<Out> {
     Row {
         children: Vec<Measured<Out>>,
         gap: f64,
+        centered: bool,
     },
     Col {
         children: Vec<Measured<Out>>,
@@ -112,23 +113,58 @@ pub fn leaf<Out>(extent: Extent, place: impl FnOnce(Placement) -> Out + 'static)
 
 /// Children on one baseline: ascent and descent are the maxima.
 pub fn row<Out>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+    row_aligned(gap, children, false)
+}
+
+/// Children centered vertically in the tallest child's line box. The
+/// tallest child supplies the resulting baseline, so the row remains
+/// typographic when composed into a larger layout.
+pub fn centered_row<Out>(gap: f64, children: Vec<Measured<Out>>) -> Measured<Out> {
+    row_aligned(gap, children, true)
+}
+
+fn row_aligned<Out>(
+    gap: f64,
+    children: Vec<Measured<Out>>,
+    centered: bool,
+) -> Measured<Out> {
     let width = children.iter().map(|c| c.extent.width).sum::<f64>()
         + gap * children.len().saturating_sub(1) as f64;
-    let ascent = children
-        .iter()
-        .map(|c| c.extent.ascent)
-        .fold(0.0_f64, f64::max);
-    let descent = children
-        .iter()
-        .map(|c| c.extent.descent)
-        .fold(0.0_f64, f64::max);
+    let (ascent, descent) = if centered {
+        children
+            .iter()
+            .reduce(|tallest, child| {
+                if child.extent.height() > tallest.extent.height() {
+                    child
+                } else {
+                    tallest
+                }
+            })
+            .map(|child| (child.extent.ascent, child.extent.descent))
+            .unwrap_or_default()
+    } else {
+        (
+            children
+                .iter()
+                .map(|c| c.extent.ascent)
+                .fold(0.0_f64, f64::max),
+            children
+                .iter()
+                .map(|c| c.extent.descent)
+                .fold(0.0_f64, f64::max),
+        )
+    };
     Measured {
         extent: Extent {
             width,
             ascent,
             descent,
         },
-        kind: Kind::Row { children, gap },
+        kind: Kind::Row {
+            children,
+            gap,
+            centered,
+        },
     }
 }
 
@@ -279,16 +315,26 @@ pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
     let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
     match layout.kind {
         Kind::Leaf(f) => f(placement),
-        Kind::Row { children, gap } => {
+        Kind::Row {
+            children,
+            gap,
+            centered,
+        } => {
             let mut out = Out::empty();
             let mut x = at.x;
+            let top = at.y - extent.ascent;
             for child in children {
                 let advance = child.extent.width + gap;
+                let y = if centered {
+                    top + (extent.height() - child.extent.height()) / 2.0
+                } else {
+                    at.y - child.extent.ascent
+                };
                 let rect = Rect::new(
                     x,
-                    at.y - child.extent.ascent,
+                    y,
                     x + child.extent.width,
-                    at.y + child.extent.descent,
+                    y + child.extent.height(),
                 );
                 out = out.over(place(child, child_placement(placement, rect)));
                 x += advance;
@@ -401,6 +447,24 @@ mod tests {
             vec![
                 Rect::new(0.0, 92.0, 10.0, 102.0),
                 Rect::new(14.0, 88.0, 34.0, 104.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn centered_row_centers_short_children_in_the_tallest_line_box() {
+        let r = centered_row(
+            4.0,
+            vec![probe(ext(10.0, 8.0, 2.0)), probe(ext(20.0, 12.0, 8.0))],
+        );
+        assert_eq!(r.extent, ext(34.0, 12.0, 8.0));
+
+        let placed = place(r, Placement::root(Rect::new(0.0, 88.0, 34.0, 108.0)));
+        assert_eq!(
+            placed.iter().map(|p| p.rect).collect::<Vec<_>>(),
+            vec![
+                Rect::new(0.0, 93.0, 10.0, 103.0),
+                Rect::new(14.0, 88.0, 34.0, 108.0),
             ]
         );
     }

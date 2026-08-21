@@ -9,7 +9,7 @@ use crate::frame::Hovered;
 use crate::hover::Hover;
 use crate::navigate::{Descend, HasDescends};
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
-use measured::{Extent, Measured, col, layers, min_width, pad, row};
+use measured::{Extent, Measured, centered_row, col, layers, min_width, pad, row};
 use puri::hover::Claim;
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
@@ -214,6 +214,7 @@ enum ChoiceKind<Out> {
         width_add: f64,
     },
     Row {
+        alignment: progred_display::RowAlignment,
         gap: f64,
         children: Vec<ChoiceLayout<Out>>,
     },
@@ -298,7 +299,11 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         }
     }
 
-    fn row(gap: f64, children: Vec<Self>) -> Self {
+    fn aligned_row(
+        alignment: progred_display::RowAlignment,
+        gap: f64,
+        children: Vec<Self>,
+    ) -> Self {
         let gaps = gap * children.len().saturating_sub(1) as f64;
         let widths = Widths {
             preferred: children.iter().map(|child| child.widths.preferred).sum::<f64>() + gaps,
@@ -307,7 +312,11 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
         };
         Self {
             widths,
-            kind: ChoiceKind::Row { gap, children },
+            kind: ChoiceKind::Row {
+                alignment,
+                gap,
+                children,
+            },
         }
     }
 
@@ -403,7 +412,7 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
             ChoiceKind::Map {
                 child, width_add, ..
             } => child.select(choices, shared, (available - width_add).max(0.0)) + width_add,
-            ChoiceKind::Row { gap, children } => {
+            ChoiceKind::Row { gap, children, .. } => {
                 let gaps = gap * children.len().saturating_sub(1) as f64;
                 let mut slack = (available - self.widths.minimum).max(0.0);
                 children
@@ -537,13 +546,20 @@ impl<Out: measured::Output + 'static> ChoiceLayout<Out> {
                 .expect("a shared layout is consumed by only one selected form")
                 .settle(choices, shared),
             ChoiceKind::Map { child, map, .. } => map(child.settle(choices, shared)),
-            ChoiceKind::Row { gap, children } => row(
+            ChoiceKind::Row {
+                alignment,
                 gap,
-                children
+                children,
+            } => {
+                let children = children
                     .into_iter()
                     .map(|child| child.settle(choices, shared))
-                    .collect(),
-            ),
+                    .collect();
+                match alignment {
+                    progred_display::RowAlignment::Baseline => row(gap, children),
+                    progred_display::RowAlignment::Center => centered_row(gap, children),
+                }
+            }
             ChoiceKind::Col {
                 baseline,
                 gap,
@@ -679,7 +695,11 @@ mod choice_tests {
     #[test]
     fn accommodating_form_receives_the_real_allocation() {
         let nested = ChoiceLayout::alternatives(1, vec![fixed(60.0), fixed(20.0)]);
-        let accommodating = ChoiceLayout::row(0.0, vec![nested, fixed(40.0)]);
+        let accommodating = ChoiceLayout::aligned_row(
+            progred_display::RowAlignment::Baseline,
+            0.0,
+            vec![nested, fixed(40.0)],
+        );
         let layout =
             ChoiceLayout::alternatives(0, vec![fixed(120.0), accommodating]);
 
@@ -692,7 +712,11 @@ mod choice_tests {
     #[test]
     fn a_row_reserves_its_siblings_minimum_widths() {
         let choice = ChoiceLayout::alternatives(0, vec![fixed(90.0), fixed(50.0)]);
-        let layout = ChoiceLayout::row(0.0, vec![choice, fixed(40.0)]);
+        let layout = ChoiceLayout::aligned_row(
+            progred_display::RowAlignment::Baseline,
+            0.0,
+            vec![choice, fixed(40.0)],
+        );
 
         let (width, choices) = select(&layout, 1, 100.0);
 
@@ -789,7 +813,11 @@ fn prepare<
             );
             ChoiceLayout::map(inner, 0.0, move |inner| realize_hover(scale, hover, inner))
         }
-        progred_display::Layout::Row { gap, children } => {
+        progred_display::Layout::Row {
+            alignment,
+            gap,
+            children,
+        } => {
             let children = children
                 .into_iter()
                 .map(|child| {
@@ -806,7 +834,7 @@ fn prepare<
                     )
                 })
                 .collect();
-            ChoiceLayout::row(gap * scale, children)
+            ChoiceLayout::aligned_row(alignment, gap * scale, children)
         }
         progred_display::Layout::Col {
             baseline,

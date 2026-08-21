@@ -57,6 +57,13 @@ fn unquote(expression: Value) -> Value {
     Value::record([(control::vocabulary::UNQUOTE, expression)])
 }
 
+fn quote(expression: Value) -> Value {
+    grap_runtime::call(
+        Value::from(control::vocabulary::QUOTE),
+        [(grap_runtime::vocabulary::EXPRESSION, expression)],
+    )
+}
+
 fn bind(cell: CellId) -> Value {
     Value::record([(control::vocabulary::BIND, Value::from(cell))])
 }
@@ -66,6 +73,29 @@ fn case_arm(pattern: Value, expression: Value) -> Value {
         (control::vocabulary::PATTERN, pattern),
         (grap_runtime::vocabulary::EXPRESSION, expression),
     ])
+}
+
+fn binding_clause(pattern: Value, value: Value) -> Value {
+    Value::record([
+        (control::vocabulary::PATTERN, pattern),
+        (control::vocabulary::VALUE, value),
+    ])
+}
+
+fn let_expression(
+    bindings: impl IntoIterator<Item = Value>,
+    expression: Value,
+) -> Value {
+    grap_runtime::call(
+        Value::from(control::vocabulary::LET),
+        [
+            (
+                control::vocabulary::BINDINGS,
+                Value::list(bindings),
+            ),
+            (grap_runtime::vocabulary::EXPRESSION, expression),
+        ],
+    )
 }
 
 fn transition(function: CellId) -> Value {
@@ -232,21 +262,9 @@ fn definition() -> Value {
         )]),
         vector(vocabulary::DRAW_CURSOR),
     ]);
-    let drawing = grap_runtime::call(
-        Value::from(control::vocabulary::MATCH),
-        [
-            (control::vocabulary::VALUE, geometry),
-            (
-                control::vocabulary::CASES,
-                Value::list([case_arm(
-                    geometry_pattern,
-                    grap_runtime::call(
-                        Value::from(control::vocabulary::QUOTE),
-                        [(grap_runtime::vocabulary::EXPRESSION, drawing)],
-                    ),
-                )]),
-            ),
-        ],
+    let drawing = let_expression(
+        [binding_clause(geometry_pattern, geometry)],
+        quote(drawing),
     );
 
     let drawing = layout::hoverable(unquote(drawing));
@@ -268,12 +286,6 @@ fn definition() -> Value {
         ],
     );
 
-    let quote = |display| {
-        grap_runtime::call(
-            Value::from(control::vocabulary::QUOTE),
-            [(grap_runtime::vocabulary::EXPRESSION, display)],
-        )
-    };
     let body = grap_runtime::call(
         Value::from(control::vocabulary::MATCH),
         [
