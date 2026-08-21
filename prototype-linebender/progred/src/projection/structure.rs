@@ -210,16 +210,12 @@ fn record_layout<World: 'static>(
         .map(|(key, _)| shared(descend(Step::Key(*key))))
         .collect();
     let mut flat = Vec::new();
-    for (index, (key, _)) in items.iter().enumerate() {
+    for (index, (key, present)) in items.iter().enumerate() {
         if index > 0 {
             flat.push(dim(", "));
         }
-        let name = match cx.pending_rename_under(path) {
-            Some((replacing, _, _)) if replacing == *key => query(),
-            _ => field_label(cx, path, *key, hooks),
-        };
-        flat.push(name);
-        flat.push(dim(": "));
+        flat.push(field_head(cx, path, *key, *present, hooks));
+        flat.push(dim(" "));
         flat.push(children[index].clone());
     }
     if pending_edge {

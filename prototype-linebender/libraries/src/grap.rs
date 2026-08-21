@@ -142,8 +142,9 @@ pub fn call_display<World, Hover: Clone>(
         },
         |field, value| {
             let (spelling, face) = field_spelling(input.env, field);
+            let target = input.targets.at([Step::Key(field)]);
             RecordField {
-                label: faced(spelling, face),
+                label: on_hover(on_click(faced(spelling, face), target.select), target.hover),
                 value: at([Step::Key(field)], value),
             }
         },
@@ -170,7 +171,13 @@ pub fn lambda_display<World, Hover: Clone>(
         })
         .collect::<Option<Vec<_>>>()?;
     let params = bracket(Delim::Paren, row(4.0, params));
-    let head = row(3.0, [dim("λ"), params, dim("→")]);
+    let body_target = input.targets.at([Step::Key(BODY)]);
+    let lambda = on_hover(on_click(dim("λ"), input.select), input.hover);
+    let arrow = on_hover(
+        on_click(dim("→"), body_target.select),
+        body_target.hover,
+    );
+    let head = row(3.0, [lambda, params, arrow]);
     Some(hug(head, at([Step::Key(BODY)], body), 6.0, 20.0))
 }
 
@@ -303,6 +310,28 @@ mod tests {
             select: select.clone(),
             hover: (),
             targets: progred_display::ProjectionTargets::fixed(select, ()),
+        }
+    }
+
+    fn relative_input<'a>(
+        env: &'a dyn Env,
+        value: &'a Value,
+    ) -> ProjectionInput<'a, (), Vec<Step>> {
+        let select = std::rc::Rc::new(|_: &mut ()| false);
+        let target_select = select.clone();
+        ProjectionInput {
+            env,
+            value,
+            selection: None,
+            state: None,
+            select,
+            hover: Vec::new(),
+            targets: progred_display::ProjectionTargets::new(move |steps| {
+                progred_display::ProjectionTarget {
+                    select: target_select.clone(),
+                    hover: steps,
+                }
+            }),
         }
     }
 
@@ -448,6 +477,40 @@ mod tests {
     }
 
     #[test]
+    fn a_call_argument_label_targets_its_value() {
+        let function = new_cell_id();
+        let argument = new_cell_id();
+        let call = grap_runtime::call(
+            Value::from(function),
+            [(argument, Value::from(vec![1]))],
+        );
+        let layout = call_display(relative_input(&env(), &call)).unwrap();
+        let Layout::Alternatives(call_options) = layout else {
+            panic!("call has responsive forms");
+        };
+        let Layout::Row { children, .. } = &call_options[0] else {
+            panic!("flat call first");
+        };
+        let Layout::Surround { child, .. } = unshared(&children[1]) else {
+            panic!("arguments are parenthesized");
+        };
+        let Layout::Alternatives(argument_options) = child.as_ref() else {
+            panic!("arguments have responsive forms");
+        };
+        let Layout::Row { children, .. } = &argument_options[0] else {
+            panic!("flat arguments first");
+        };
+        let Layout::Row { children, .. } = &children[0] else {
+            panic!("argument has a label and value");
+        };
+        let Layout::OnHover { child, hover } = unshared(&children[0]) else {
+            panic!("the label targets its argument");
+        };
+        assert_eq!(hover.as_deref(), Some(&[Step::Key(argument)][..]));
+        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
+    }
+
+    #[test]
     fn a_call_uses_its_stored_lambdas_parameter_order_then_stable_extras() {
         const FUNCTION_CELL: CellId = CellId::from_u128(10);
         const FIRST_PARAMETER: CellId = CellId::from_u128(30);
@@ -512,8 +575,7 @@ mod tests {
                 (FIRST_PARAMETER, Value::from(vec![2])),
             ],
         );
-        let layout = call_display(input(&env(), &call))
-        .unwrap();
+        let layout = call_display(input(&env(), &call)).unwrap();
 
         assert_eq!(
             argument_order(&layout),
@@ -522,17 +584,32 @@ mod tests {
     }
 
     #[test]
-    fn a_lambda_projects_parameter_cells_shallowly_and_projects_its_body_as_grap() {
+    fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
         let parameter = new_cell_id();
         let definition = grap_runtime::lambda([parameter], Value::from(parameter));
-        let layout = lambda_display(input(&env(), &definition))
-        .unwrap();
+        let layout = lambda_display(relative_input(&env(), &definition)).unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("lambda has responsive forms");
         };
         let Layout::Row { children, .. } = &options[0] else {
             panic!("flat lambda first");
         };
+        let Layout::Row {
+            children: head, ..
+        } = unshared(&children[0])
+        else {
+            panic!("lambda has a syntax head");
+        };
+        let Layout::OnHover { child, hover } = &head[0] else {
+            panic!("lambda marker targets the whole function");
+        };
+        assert_eq!(hover.as_deref(), Some(&[][..]));
+        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
+        let Layout::OnHover { child, hover } = &head[2] else {
+            panic!("lambda arrow targets its body");
+        };
+        assert_eq!(hover.as_deref(), Some(&[Step::Key(BODY)][..]));
+        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
         assert!(matches!(
             unshared(&children[1]),
             Layout::At {
