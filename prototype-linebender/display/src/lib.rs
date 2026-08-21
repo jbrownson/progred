@@ -469,11 +469,16 @@ pub fn bracket<World, Hover>(delim: Delim, child: Layout<World, Hover>) -> Layou
 /// caller owns each field's meaning — label behavior, child
 /// projection, and edit policy — while this combinator owns the
 /// delimited flat and column forms.
+pub struct RecordField<World, Hover> {
+    pub label: Layout<World, Hover>,
+    pub value: Layout<World, Hover>,
+}
+
 pub fn record<'a, World, Hover: Clone>(
     delim: Delim,
     fields: impl IntoIterator<Item = (CellId, &'a Value)>,
     mut order: impl FnMut(&CellId, &CellId) -> Ordering,
-    mut field: impl FnMut(CellId, &'a Value) -> Layout<World, Hover>,
+    mut field: impl FnMut(CellId, &'a Value) -> RecordField<World, Hover>,
 ) -> Layout<World, Hover> {
     let mut fields = fields.into_iter().collect::<Vec<_>>();
     fields.sort_by(|(left, _), (right, _)| order(left, right));
@@ -486,11 +491,22 @@ pub fn record<'a, World, Hover: Clone>(
         if index > 0 {
             flat.push(dim(", "));
         }
-        flat.push(field.clone());
+        flat.push(row(
+            0.0,
+            [field.label.clone(), dim(": "), field.value.clone()],
+        ));
     }
+    let rows = fields.into_iter().map(|field| {
+        hug(
+            row(0.0, [field.label, dim(":")]),
+            field.value,
+            6.0,
+            20.0,
+        )
+    });
     bracket(
         delim,
-        alternatives([row(0.0, flat), col(0, 2.0, fields)]),
+        alternatives([row(0.0, flat), col(0, 2.0, rows)]),
     )
 }
 
@@ -600,7 +616,10 @@ mod tests {
             Delim::Brace,
             [(FIRST, &first), (SECOND, &second)],
             |left, right| right.cmp(left),
-            |key, value| at([Step::Key(key)], value),
+            |key, value| RecordField {
+                label: dim("field"),
+                value: at([Step::Key(key)], value),
+            },
         );
         let Layout::Surround { child, .. } = layout else {
             panic!("a record is delimited");
@@ -611,24 +630,42 @@ mod tests {
         let Layout::Row { children, .. } = &forms[0] else {
             panic!("the first form is flat");
         };
+        let Layout::Row { children: first, .. } = &children[0] else {
+            panic!("a flat field keeps its label and value together");
+        };
         assert!(matches!(
-            &children[0],
+            &first[2],
             Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
+        let Layout::Row { children: second, .. } = &children[2] else {
+            panic!("a flat field keeps its label and value together");
+        };
         assert!(matches!(
-            &children[2],
+            &second[2],
             Layout::At { steps, .. } if *steps == [Step::Key(FIRST)]
         ));
         let Layout::Col { children, .. } = &forms[1] else {
             panic!("the second form is a column");
         };
+        let Layout::Alternatives(first) = &children[0] else {
+            panic!("a column field may break after its label");
+        };
+        let Layout::Row { children: inline, .. } = &first[0] else {
+            panic!("a field first stays inline");
+        };
         assert!(matches!(
-            &children[0],
+            &inline[1],
             Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
+        let Layout::Col { children: broken, .. } = &first[1] else {
+            panic!("a field may put its value below its label");
+        };
+        let Layout::Pad { child, .. } = &broken[1] else {
+            panic!("a broken value is indented");
+        };
         assert!(matches!(
-            &children[1],
-            Layout::At { steps, .. } if *steps == [Step::Key(FIRST)]
+            child.as_ref(),
+            Layout::At { steps, .. } if *steps == [Step::Key(SECOND)]
         ));
     }
 }

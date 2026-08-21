@@ -57,7 +57,8 @@ is deliberately not evaluation: inline and stored lambdas supply useful
 source metadata, while computed callables and foreign functions fall back to
 the ordinary field order. It supplies that order and its contextual field
 projection to the display layer's generic record combinator; the combinator
-alone owns delimiters, separators, and responsive flat/column layout.
+alone owns delimiters, separators, responsive flat/column layout, and the
+choice to break an individual field between its label and value.
 
 Computed values do not use another projection operation. They start the same
 projection at a transient root with fresh source provenance. Stored provenance

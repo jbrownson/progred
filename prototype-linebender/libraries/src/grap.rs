@@ -8,7 +8,7 @@ use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Delim, Face, Layout, ProjectionInput, alternatives, at_with_projection, bracket, col, dim,
-    faced, hug, on_click, on_hover, record, row, transient,
+    faced, hug, on_click, on_hover, record, row, transient, RecordField,
 };
 
 fn short_id(cell: CellId) -> String {
@@ -142,14 +142,10 @@ pub fn call_display<World, Hover: Clone>(
         },
         |field, value| {
             let (spelling, face) = field_spelling(input.env, field);
-            row(
-                0.0,
-                [
-                    faced(spelling, face),
-                    dim(": "),
-                    at([Step::Key(field)], value),
-                ],
-            )
+            RecordField {
+                label: faced(spelling, face),
+                value: at([Step::Key(field)], value),
+            }
         },
     );
     Some(hug(function, arguments, 0.0, 20.0))
