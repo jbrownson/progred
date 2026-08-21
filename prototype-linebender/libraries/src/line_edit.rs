@@ -61,7 +61,7 @@ fn bind(cell: CellId) -> Value {
     Value::record([(control::vocabulary::BIND, Value::from(cell))])
 }
 
-fn alternative(pattern: Value, expression: Value) -> Value {
+fn case_arm(pattern: Value, expression: Value) -> Value {
     Value::record([
         (control::vocabulary::PATTERN, pattern),
         (grap_runtime::vocabulary::EXPRESSION, expression),
@@ -103,17 +103,16 @@ fn handle(function: CellId) -> Value {
         [(selection::vocabulary::VALUE, Value::from(vocabulary::NEXT))],
     );
     let choose = grap_runtime::call(
-        Value::from(control::vocabulary::CASE),
+        Value::from(control::vocabulary::MATCH),
         [
             (control::vocabulary::VALUE, transition(function)),
             (
-                control::vocabulary::ALTERNATIVES,
+                control::vocabulary::CASES,
                 Value::list([
-                    alternative(absent::value(), absent::value()),
-                    alternative(bind(vocabulary::NEXT), next),
+                    case_arm(absent::value(), absent::value()),
+                    case_arm(bind(vocabulary::NEXT), next),
                 ]),
             ),
-            (control::vocabulary::DEFAULT, absent::value()),
         ],
     );
     choose
@@ -122,8 +121,8 @@ fn handle(function: CellId) -> Value {
 /// One generic event handler dispatching the event data to a host
 /// transition, then installing its returned selection payload.
 fn handler(handlers: impl IntoIterator<Item = (CellId, CellId)>) -> Value {
-    let alternatives = handlers.into_iter().map(|(kind, function)| {
-        alternative(
+    let cases = handlers.into_iter().map(|(kind, function)| {
+        case_arm(
             Value::record([(layout::vocabulary::EVENT_KIND, Value::from(kind))]),
             handle(function),
         )
@@ -131,17 +130,16 @@ fn handler(handlers: impl IntoIterator<Item = (CellId, CellId)>) -> Value {
     grap_runtime::lambda(
         [layout::vocabulary::EVENT],
         grap_runtime::call(
-            Value::from(control::vocabulary::CASE),
+            Value::from(control::vocabulary::MATCH),
             [
                 (
                     control::vocabulary::VALUE,
                     Value::from(layout::vocabulary::EVENT),
                 ),
                 (
-                    control::vocabulary::ALTERNATIVES,
-                    Value::list(alternatives),
+                    control::vocabulary::CASES,
+                    Value::list(cases),
                 ),
-                (control::vocabulary::DEFAULT, absent::value()),
             ],
         ),
     )
@@ -235,12 +233,12 @@ fn definition() -> Value {
         vector(vocabulary::DRAW_CURSOR),
     ]);
     let drawing = grap_runtime::call(
-        Value::from(control::vocabulary::CASE),
+        Value::from(control::vocabulary::MATCH),
         [
             (control::vocabulary::VALUE, geometry),
             (
-                control::vocabulary::ALTERNATIVES,
-                Value::list([alternative(
+                control::vocabulary::CASES,
+                Value::list([case_arm(
                     geometry_pattern,
                     grap_runtime::call(
                         Value::from(control::vocabulary::QUOTE),
@@ -248,7 +246,6 @@ fn definition() -> Value {
                     ),
                 )]),
             ),
-            (control::vocabulary::DEFAULT, absent::value()),
         ],
     );
 
@@ -278,20 +275,19 @@ fn definition() -> Value {
         )
     };
     let body = grap_runtime::call(
-        Value::from(control::vocabulary::CASE),
+        Value::from(control::vocabulary::MATCH),
         [
             (
                 control::vocabulary::VALUE,
                 Value::from(layout::vocabulary::SELECTION),
             ),
             (
-                control::vocabulary::ALTERNATIVES,
+                control::vocabulary::CASES,
                 Value::list([
-                    alternative(absent::value(), quote(inactive)),
-                    alternative(bind(vocabulary::NEXT), quote(active.clone())),
+                    case_arm(absent::value(), quote(inactive)),
+                    case_arm(bind(vocabulary::NEXT), quote(active)),
                 ]),
             ),
-            (control::vocabulary::DEFAULT, quote(active)),
         ],
     );
     name::record(
@@ -346,15 +342,15 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::POINTER_UP, "line edit pointer up"),
         (vocabulary::KEY, "line edit key"),
         (vocabulary::IME, "line edit IME"),
-        (vocabulary::NEXT, "_next line edit selection"),
+        (vocabulary::NEXT, "next line edit selection"),
         (vocabulary::SELECTION_COMMANDS, "selection commands"),
         (vocabulary::CURSOR_COMMANDS, "cursor commands"),
-        (vocabulary::DRAW_TEXT, "_line edit draw text"),
-        (vocabulary::DRAW_WIDTH, "_line edit draw width"),
-        (vocabulary::DRAW_ASCENT, "_line edit draw ascent"),
-        (vocabulary::DRAW_DESCENT, "_line edit draw descent"),
-        (vocabulary::DRAW_SELECTION, "_line edit draw selection"),
-        (vocabulary::DRAW_CURSOR, "_line edit draw cursor"),
+        (vocabulary::DRAW_TEXT, "line edit draw text"),
+        (vocabulary::DRAW_WIDTH, "line edit draw width"),
+        (vocabulary::DRAW_ASCENT, "line edit draw ascent"),
+        (vocabulary::DRAW_DESCENT, "line edit draw descent"),
+        (vocabulary::DRAW_SELECTION, "line edit draw selection"),
+        (vocabulary::DRAW_CURSOR, "line edit draw cursor"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
@@ -409,9 +405,9 @@ mod tests {
             .and_then(Value::as_record)
             .and_then(|fields| fields.get(&grap_runtime::vocabulary::BODY))
             .and_then(Value::as_record)
-            .and_then(|fields| fields.get(&control::vocabulary::ALTERNATIVES))
+            .and_then(|fields| fields.get(&control::vocabulary::CASES))
             .and_then(Value::as_list)
-            .expect("event handler case alternatives")
+            .expect("event handler match cases")
             .values()
             .map(|alternative| {
                 alternative

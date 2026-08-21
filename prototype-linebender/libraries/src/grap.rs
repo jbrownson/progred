@@ -293,15 +293,21 @@ mod tests {
         }
     }
 
-    fn projected(env: &dyn Env, value: &Value) -> Option<Layout<(), ()>> {
-        display(ProjectionInput {
+    fn input<'a>(env: &'a dyn Env, value: &'a Value) -> ProjectionInput<'a, (), ()> {
+        let select = std::rc::Rc::new(|_: &mut ()| false);
+        ProjectionInput {
             env,
             value,
             selection: None,
             state: None,
-            select: std::rc::Rc::new(|_: &mut ()| false),
+            select: select.clone(),
             hover: (),
-        })
+            targets: progred_display::ProjectionTargets::fixed(select, ()),
+        }
+    }
+
+    fn projected(env: &dyn Env, value: &Value) -> Option<Layout<(), ()>> {
+        display(input(env, value))
     }
 
     fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
@@ -415,17 +421,13 @@ mod tests {
     fn a_call_projects_its_function_cell_shallowly() {
         let function = new_cell_id();
         let argument = new_cell_id();
-        let layout = call_display(ProjectionInput {
-            env: &env(),
-            value: &grap_runtime::call(
+        let layout = call_display(input(
+            &env(),
+            &grap_runtime::call(
                 Value::from(function),
                 [(argument, Value::from(vec![1]))],
             ),
-            selection: None,
-            state: None,
-            select: std::rc::Rc::new(|_: &mut ()| false),
-            hover: (),
-        })
+        ))
         .unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("call has responsive forms");
@@ -482,14 +484,7 @@ mod tests {
                 (FIRST_PARAMETER, Value::from(vec![3])),
             ],
         );
-        let layout = call_display(ProjectionInput {
-            env: &env,
-            value: &call,
-            selection: None,
-            state: None,
-            select: std::rc::Rc::new(|_: &mut ()| false),
-            hover: (),
-        })
+        let layout = call_display(input(&env, &call))
         .unwrap();
 
         assert_eq!(
@@ -517,14 +512,7 @@ mod tests {
                 (FIRST_PARAMETER, Value::from(vec![2])),
             ],
         );
-        let layout = call_display(ProjectionInput {
-            env: &env(),
-            value: &call,
-            selection: None,
-            state: None,
-            select: std::rc::Rc::new(|_: &mut ()| false),
-            hover: (),
-        })
+        let layout = call_display(input(&env(), &call))
         .unwrap();
 
         assert_eq!(
@@ -537,14 +525,7 @@ mod tests {
     fn a_lambda_projects_parameter_cells_shallowly_and_projects_its_body_as_grap() {
         let parameter = new_cell_id();
         let definition = grap_runtime::lambda([parameter], Value::from(parameter));
-        let layout = lambda_display(ProjectionInput {
-            env: &env(),
-            value: &definition,
-            selection: None,
-            state: None,
-            select: std::rc::Rc::new(|_: &mut ()| false),
-            hover: (),
-        })
+        let layout = lambda_display(input(&env(), &definition))
         .unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("lambda has responsive forms");

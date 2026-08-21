@@ -3,16 +3,13 @@
     "a_value": 2f18db9829ab562571641b9b6e25b9b2,
     "add": 201af445eb7e2c270bb5ead10b781fc1,
     "add_result": 1b49f9da65e4093654db337e6e0c477a,
-    "alternatives": a9aadcb44755963498c743fa114f0f00,
     "b_value": 9194b2ed0a54573b7cb33495cc930043,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
-    "case": b3f6a62e4926889bcfcd338025f4a6f9,
-    "case_result": c1444b3f64296e7a995b42218598ab0a,
+    "cases": a9aadcb44755963498c743fa114f0f00,
     "circle": eba2ca3d6a0fba957bd96bfb138c7a5b,
     "circle_result": d3c65193be0a6f2a79d7d159252bab8d,
     "contains_call": 32994f52e9af60be47619b6f15366ac7,
-    "default": 3ad1a352453c8b21da757b48913b2c9f,
     "demo": 91af60b2a8d1d93fe4de7551004fe50c,
     "environment": e910025c710c25c43d0a5b296378f374,
     "evaluate": acfc5e50881292518dab3cec77cf43ee,
@@ -29,7 +26,9 @@
     "input_b": f0599427844678cc902efa15f63f9af8,
     "lambda": 2ef86729dbd93e2bf8e39dd7b07546bb,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
-    "make_alternatives": 081f58d511f442082309dea10e264d6a,
+    "make_cases": 081f58d511f442082309dea10e264d6a,
+    "match": b3f6a62e4926889bcfcd338025f4a6f9,
+    "match_result": c1444b3f64296e7a995b42218598ab0a,
     "matched_radius": e84540a266d157054aa08db2a2590d01,
     "metadata_call": 593532224a22c20bbac82ab13f97175b,
     "missing_argument": c33ce0dfb1fd77c4a7ae99c754d89cc4,
@@ -42,7 +41,7 @@
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "quote_generator": b4d0601d7c58b203646a3bf8e7d5681d,
-    "quoted_case_result": c1f6c6ab6c929a0a0dcf08cf6ce9aab6,
+    "quoted_match_result": c1f6c6ab6c929a0a0dcf08cf6ce9aab6,
     "radius": e2321b78d65f87918c64b7875408051a,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "scale": ccba1404490345dcf33d8a19ddaa5bd1,
@@ -59,9 +58,6 @@
   "cells": {
     metadata_call: {
       name: "call with metadata",
-    },
-    case_result: {
-      name: "case result",
     },
     circle_result: {
       name: "circle result",
@@ -99,8 +95,8 @@
     lambda: {
       name: "lambda",
     },
-    make_alternatives: {
-      name: "make alternatives",
+    make_cases: {
+      name: "make cases",
       params: [
         generated_value,
       ],
@@ -115,6 +111,9 @@
           },
         ],
       },
+    },
+    match_result: {
+      name: "match result",
     },
     matched_radius: {
       name: "matched radius",
@@ -134,8 +133,8 @@
     quote_generator: {
       name: "quote generator",
     },
-    quoted_case_result: {
-      name: "quoted case result",
+    quoted_match_result: {
+      name: "quoted match result",
     },
     scale: {
       name: "scale",
@@ -238,7 +237,7 @@
       lambda: scale_and_add,
     },
     {
-      quote_generator: make_alternatives,
+      quote_generator: make_cases,
     },
     {
       graph_expression: scale_and_add_expression,
@@ -262,15 +261,14 @@
       },
     },
     {
-      case_result: {
+      match_result: {
         grap: {
           value: {
             function: circle,
             radius: a_value,
           },
-          default: "not a circle",
-          function: case,
-          alternatives: [
+          function: match,
+          cases: [
             {
               pattern: {
                 circle: {
@@ -286,14 +284,13 @@
       },
     },
     {
-      quoted_case_result: {
+      quoted_match_result: {
         grap: {
           value: "subject",
-          default: "default",
-          function: case,
-          alternatives: {
+          function: match,
+          cases: {
             generated_value: a_value,
-            function: make_alternatives,
+            function: make_cases,
           },
         },
       },

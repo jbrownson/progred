@@ -338,7 +338,7 @@ fn svg_bench_renders_the_grap_demo() {
 }
 
 #[test]
-fn custom_case_projection_uses_the_editor_fold() {
+fn custom_match_projection_uses_the_editor_fold() {
     let arm = Value::record([
         (
             progred_libraries::control::vocabulary::PATTERN,
@@ -349,25 +349,21 @@ fn custom_case_projection_uses_the_editor_fold() {
             Value::from(vec![2]),
         ),
     ]);
-    let case = grap::call(
-        Value::from(progred_libraries::control::vocabulary::CASE),
+    let match_expression = grap::call(
+        Value::from(progred_libraries::control::vocabulary::MATCH),
         [
             (
                 progred_libraries::control::vocabulary::VALUE,
                 Value::from(vec![1]),
             ),
             (
-                progred_libraries::control::vocabulary::ALTERNATIVES,
+                progred_libraries::control::vocabulary::CASES,
                 Value::list([arm]),
-            ),
-            (
-                progred_libraries::control::vocabulary::DEFAULT,
-                Value::from(vec![3]),
             ),
         ],
     );
     let doc = Document {
-        root: Some(case),
+        root: Some(match_expression),
         cells: Cells::new(),
     };
     let (expanded, expanded_extent) = place(&doc, None, 900.0);

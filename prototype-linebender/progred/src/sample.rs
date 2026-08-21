@@ -2,7 +2,7 @@
 
 use gid::{Cells, Document, Value, new_cell_id};
 use progred_libraries::{
-    absent, control, f64, geometry, layout, name, selection as selection_capability, site, text,
+    control, f64, geometry, layout, name, selection as selection_capability, site, text,
 };
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -50,14 +50,14 @@ pub fn at_display_partial() -> Value {
     let select_here = grap::lambda(
         [layout::vocabulary::EVENT],
         grap::call(
-            Value::from(control::vocabulary::CASE),
+            Value::from(control::vocabulary::MATCH),
             [
                 (
                     control::vocabulary::VALUE,
                     Value::from(layout::vocabulary::EVENT),
                 ),
                 (
-                    control::vocabulary::ALTERNATIVES,
+                    control::vocabulary::CASES,
                     Value::list([Value::record([
                         (
                             control::vocabulary::PATTERN,
@@ -85,7 +85,6 @@ pub fn at_display_partial() -> Value {
                         ),
                     ])]),
                 ),
-                (control::vocabulary::DEFAULT, absent::value()),
             ],
         ),
     );
@@ -99,14 +98,14 @@ pub fn at_display_partial() -> Value {
             (
                 grap::vocabulary::BODY,
                 grap::call(
-                    Value::from(control::vocabulary::CASE),
+                    Value::from(control::vocabulary::MATCH),
                     [
                         (
                             control::vocabulary::VALUE,
                             Value::from(layout::vocabulary::VALUE),
                         ),
                         (
-                            control::vocabulary::ALTERNATIVES,
+                            control::vocabulary::CASES,
                             Value::list([Value::record([
                                 (
                                     control::vocabulary::PATTERN,
@@ -154,7 +153,6 @@ pub fn at_display_partial() -> Value {
                                 ),
                             ])]),
                         ),
-                        (control::vocabulary::DEFAULT, absent::value()),
                     ],
                 ),
             ),

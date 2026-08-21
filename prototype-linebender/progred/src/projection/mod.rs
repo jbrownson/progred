@@ -93,6 +93,7 @@ impl<World> Projection<World> {
         state: Option<&Value>,
         select: progred_display::ClickHandler<World>,
         hover: Hover,
+        targets: progred_display::ProjectionTargets<World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
         self.partials.iter().find_map(|partial| {
             partial(progred_display::ProjectionInput {
@@ -102,6 +103,7 @@ impl<World> Projection<World> {
                 state,
                 select: select.clone(),
                 hover: hover.clone(),
+                targets: targets.clone(),
             })
         })
     }
@@ -1524,6 +1526,26 @@ fn select_handler<C: 'static>(path: Path, hooks: &Hooks<C>) -> progred_display::
     })
 }
 
+fn projection_targets<C: 'static>(
+    path: &[Step],
+    hooks: &Hooks<C>,
+) -> progred_display::ProjectionTargets<C, Hover> {
+    let base = path.to_vec();
+    let select = hooks.select.clone();
+    progred_display::ProjectionTargets::new(move |steps| {
+        let path = base.iter().cloned().chain(steps).collect::<Path>();
+        let selected = path.clone();
+        let select = select.clone();
+        progred_display::ProjectionTarget {
+            select: Rc::new(move |world| {
+                select(world, selected.clone());
+                true
+            }),
+            hover: Hover::Value(path),
+        }
+    })
+}
+
 impl Cx<'_> {
     /// The display name at this projection. Raw interprets no naming
     /// convention and therefore falls back to the short id.
@@ -2349,8 +2371,17 @@ fn present_layout<C: 'static>(
             let state = cx.annotations.at(path);
             let select = select_handler(path.to_vec(), hooks);
             let hover = Hover::Value(path.to_vec());
+            let targets = projection_targets(path, hooks);
             document_partial_layout(cx, value, selection, state, &select, &hover).or_else(|| {
-                projection.apply(&ProjectEnv { cx }, value, selection, state, select, hover)
+                projection.apply(
+                    &ProjectEnv { cx },
+                    value,
+                    selection,
+                    state,
+                    select,
+                    hover,
+                    targets,
+                )
             })
         })
         .unwrap_or_else(|| structure::of(cx, path, value, hooks));

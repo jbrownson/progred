@@ -1,5 +1,5 @@
-//! Grap evaluation control supplied by Rust functions. `case`
-//! selects one expression through structural matching; `quote`
+//! Grap evaluation control supplied by Rust functions. `match`
+//! selects one case through structural matching; `quote`
 //! constructs data while evaluating explicit unquotes.
 
 use crate::{Library, absent, name};
@@ -16,23 +16,22 @@ use std::collections::BTreeMap;
 pub mod vocabulary {
     use gid::CellId;
 
-    pub const CASE: CellId = CellId::from_u128(0xb3f6a62e4926889bcfcd338025f4a6f9);
+    pub const MATCH: CellId = CellId::from_u128(0xb3f6a62e4926889bcfcd338025f4a6f9);
     pub const VALUE: CellId = CellId::from_u128(0x00dafdc01c7e014edd857e174c6c8b6f);
-    pub const ALTERNATIVES: CellId = CellId::from_u128(0xa9aadcb44755963498c743fa114f0f00);
-    pub const DEFAULT: CellId = CellId::from_u128(0x3ad1a352453c8b21da757b48913b2c9f);
+    pub const CASES: CellId = CellId::from_u128(0xa9aadcb44755963498c743fa114f0f00);
     pub const PATTERN: CellId = CellId::from_u128(0xb9dc97198709bc6f7bae4c7afc7d424f);
     pub const BIND: CellId = CellId::from_u128(0x5e46d12705690e8a377eb0f16ad9dba6);
     pub const QUOTE: CellId = CellId::from_u128(0x7f81d4812ceb33d4222e9e5cb9c82497);
     pub const UNQUOTE: CellId = CellId::from_u128(0xda48703c290e3b35d7353c38110bc953);
 
-    pub const INVALID_ALTERNATIVES: CellId = CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
-    pub const INVALID_ALTERNATIVE: CellId = CellId::from_u128(0xaa627ebeb1091e8359f7a8eea45a6ccd);
+    pub const INVALID_CASES: CellId = CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
+    pub const INVALID_CASE: CellId = CellId::from_u128(0xaa627ebeb1091e8359f7a8eea45a6ccd);
     pub const INVALID_BINDER: CellId = CellId::from_u128(0x59ad0fb67728f245dce57b0cee360969);
 }
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .register(vocabulary::CASE, ForeignFunction::new(case_foreign))
+        .register(vocabulary::MATCH, ForeignFunction::new(match_foreign))
         .register(vocabulary::QUOTE, ForeignFunction::new(quote_foreign))
 }
 
@@ -79,7 +78,7 @@ fn replace_unquotes(
     }
 }
 
-fn case_foreign(
+fn match_foreign(
     context: &mut Context,
     call: &Value,
     environment: &Environment,
@@ -87,20 +86,17 @@ fn case_foreign(
     let Some(value) = context.field(call, vocabulary::VALUE) else {
         return Ok(context.missing_argument(vocabulary::VALUE));
     };
-    let Some(alternatives) = context.field(call, vocabulary::ALTERNATIVES) else {
-        return Ok(context.missing_argument(vocabulary::ALTERNATIVES));
-    };
-    let Some(default) = context.field(call, vocabulary::DEFAULT) else {
-        return Ok(context.missing_argument(vocabulary::DEFAULT));
+    let Some(cases) = context.field(call, vocabulary::CASES) else {
+        return Ok(context.missing_argument(vocabulary::CASES));
     };
     let value = context.eval(value, environment)?;
-    let alternatives = context.eval(alternatives, environment)?;
-    match select(&value, &alternatives) {
+    let cases = context.eval(cases, environment)?;
+    match select(&value, &cases) {
         Selection::Expression {
             expression,
             bindings,
         } => context.eval(expression, &environment.extended(bindings)),
-        Selection::Default => context.eval(default, environment),
+        Selection::NoMatch => Ok(absent::value()),
         Selection::Invalid(cell) => Ok(Value::from(cell)),
     }
 }
@@ -110,23 +106,23 @@ enum Selection<'a> {
         expression: &'a Value,
         bindings: BTreeMap<CellId, Value>,
     },
-    Default,
+    NoMatch,
     Invalid(CellId),
 }
 
-fn select<'a>(value: &Value, alternatives: &'a Value) -> Selection<'a> {
-    let Some(alternatives) = alternatives.as_list() else {
-        return Selection::Invalid(vocabulary::INVALID_ALTERNATIVES);
+fn select<'a>(value: &Value, cases: &'a Value) -> Selection<'a> {
+    let Some(cases) = cases.as_list() else {
+        return Selection::Invalid(vocabulary::INVALID_CASES);
     };
-    for alternative in alternatives.values() {
-        let Some(fields) = alternative.as_record() else {
-            return Selection::Invalid(vocabulary::INVALID_ALTERNATIVE);
+    for case in cases.values() {
+        let Some(fields) = case.as_record() else {
+            return Selection::Invalid(vocabulary::INVALID_CASE);
         };
         let (Some(pattern), Some(expression)) = (
             fields.get(&vocabulary::PATTERN),
             fields.get(&grap_runtime::vocabulary::EXPRESSION),
         ) else {
-            return Selection::Invalid(vocabulary::INVALID_ALTERNATIVE);
+            return Selection::Invalid(vocabulary::INVALID_CASE);
         };
         match destructure(pattern, value) {
             Ok(Some(bindings)) => {
@@ -141,7 +137,7 @@ fn select<'a>(value: &Value, alternatives: &'a Value) -> Selection<'a> {
             }
         }
     }
-    Selection::Default
+    Selection::NoMatch
 }
 
 struct InvalidBinder;
@@ -206,55 +202,32 @@ fn matches_pattern(
     }
 }
 
-/// Case is a control form in projection even though evaluation sees
+/// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
-pub fn case_display<World, Hover: Clone>(
+pub fn match_display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
-    (function.as_cell()? == vocabulary::CASE).then_some(())?;
+    (function.as_cell()? == vocabulary::MATCH).then_some(())?;
     let subject = fields.get(&vocabulary::VALUE)?;
-    let alternatives = fields.get(&vocabulary::ALTERNATIVES)?.as_list()?;
-    let default = fields.get(&vocabulary::DEFAULT)?;
-
-    let mut arms = alternatives
+    let cases = fields.get(&vocabulary::CASES)?.as_list()?;
+    let arms = cases
         .iter()
-        .map(|(position, alternative)| {
-            let alternative = alternative.as_record()?;
-            let pattern = alternative.get(&vocabulary::PATTERN)?;
-            let expression = alternative.get(&grap_runtime::vocabulary::EXPRESSION)?;
-            let pattern = crate::grap::at(
+        .map(|(position, case)| {
+            let fields = case.as_record()?;
+            fields.get(&vocabulary::PATTERN)?;
+            fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
+            Some(at_with_projection(
                 [
-                    Step::Key(vocabulary::ALTERNATIVES),
+                    Step::Key(vocabulary::CASES),
                     Step::Element(position.clone()),
-                    Step::Key(vocabulary::PATTERN),
                 ],
-                pattern,
-            );
-            let expression = crate::grap::at(
-                [
-                    Step::Key(vocabulary::ALTERNATIVES),
-                    Step::Element(position.clone()),
-                    Step::Key(grap_runtime::vocabulary::EXPRESSION),
-                ],
-                expression,
-            );
-            Some(hug(
-                row(6.0, [pattern, dim("→")]),
-                expression,
-                6.0,
-                20.0,
+                case,
+                [case_display::<World, Hover> as progred_display::Partial<World, Hover>],
             ))
         })
         .collect::<Option<Vec<_>>>()?;
-    arms.push(hug(
-        row(6.0, [dim("else"), dim("→")]),
-        crate::grap::at([Step::Key(vocabulary::DEFAULT)], default),
-        6.0,
-        20.0,
-    ));
-
     let head = row(
         4.0,
         [
@@ -269,6 +242,36 @@ pub fn case_display<World, Hover: Clone>(
         head,
         bracket(Delim::Brace, col(0, 4.0, arms)),
         4.0,
+        20.0,
+    ))
+}
+
+fn case_display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let fields = input.value.as_record()?;
+    let pattern = fields.get(&vocabulary::PATTERN)?;
+    let expression = fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
+    let expression_target = input
+        .targets
+        .at([Step::Key(grap_runtime::vocabulary::EXPRESSION)]);
+    let arrow = on_hover(
+        on_click(dim("→"), expression_target.select),
+        expression_target.hover,
+    );
+    Some(hug(
+        row(
+            6.0,
+            [
+                crate::grap::at([Step::Key(vocabulary::PATTERN)], pattern),
+                arrow,
+            ],
+        ),
+        crate::grap::at(
+            [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
+            expression,
+        ),
+        6.0,
         20.0,
     ))
 }
@@ -328,10 +331,9 @@ pub fn bind_display<World, Hover: Clone>(
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
-        (vocabulary::CASE, "case"),
+        (vocabulary::MATCH, "match"),
         (vocabulary::VALUE, "value"),
-        (vocabulary::ALTERNATIVES, "alternatives"),
-        (vocabulary::DEFAULT, "default"),
+        (vocabulary::CASES, "cases"),
         (vocabulary::PATTERN, "pattern"),
         (vocabulary::BIND, "bind"),
         (vocabulary::QUOTE, "quote"),
@@ -340,8 +342,8 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         cells.set_value(cell, name::record(name, []));
     }
     for (cell, name) in [
-        (vocabulary::INVALID_ALTERNATIVES, "invalid alternatives"),
-        (vocabulary::INVALID_ALTERNATIVE, "invalid alternative"),
+        (vocabulary::INVALID_CASES, "invalid cases"),
+        (vocabulary::INVALID_CASE, "invalid case"),
         (vocabulary::INVALID_BINDER, "invalid binder"),
     ] {
         cells.set_value(cell, absent::named(name));
@@ -350,7 +352,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         cells,
         functions: functions(),
         projections: vec![
-            case_display::<World, Hover>,
+            match_display::<World, Hover>,
             quote_display::<World, Hover>,
             bind_display::<World, Hover>,
         ],
@@ -373,13 +375,34 @@ mod tests {
     }
 
     fn projection_input(value: &Value) -> ProjectionInput<'_, (), ()> {
+        let select = std::rc::Rc::new(|_: &mut ()| false);
         ProjectionInput {
             env: &NoEval,
             value,
             selection: None,
             state: None,
-            select: std::rc::Rc::new(|_: &mut ()| false),
+            select: select.clone(),
             hover: (),
+            targets: progred_display::ProjectionTargets::fixed(select, ()),
+        }
+    }
+
+    fn relative_projection_input(value: &Value) -> ProjectionInput<'_, (), Vec<Step>> {
+        let select = std::rc::Rc::new(|_: &mut ()| false);
+        let target_select = select.clone();
+        ProjectionInput {
+            env: &NoEval,
+            value,
+            selection: None,
+            state: None,
+            select,
+            hover: Vec::new(),
+            targets: progred_display::ProjectionTargets::new(move |steps| {
+                progred_display::ProjectionTarget {
+                    select: target_select.clone(),
+                    hover: steps,
+                }
+            }),
         }
     }
 
@@ -391,24 +414,22 @@ mod tests {
         Value::record([(vocabulary::BIND, Value::from(cell))])
     }
 
-    fn alternative(pattern: Value, expression: Value) -> Value {
+    fn case_arm(pattern: Value, expression: Value) -> Value {
         Value::record([
             (vocabulary::PATTERN, pattern),
             (grap::vocabulary::EXPRESSION, expression),
         ])
     }
 
-    fn case_call(
+    fn match_call(
         value: Value,
-        alternatives: impl IntoIterator<Item = Value>,
-        default: Value,
+        cases: impl IntoIterator<Item = Value>,
     ) -> Value {
         grap::call(
-            Value::from(vocabulary::CASE),
+            Value::from(vocabulary::MATCH),
             [
                 (vocabulary::VALUE, value),
-                (vocabulary::ALTERNATIVES, Value::list(alternatives)),
-                (vocabulary::DEFAULT, default),
+                (vocabulary::CASES, Value::list(cases)),
             ],
         )
     }
@@ -545,23 +566,22 @@ mod tests {
     }
 
     #[test]
-    fn case_evaluates_the_first_matching_expression_with_open_record_bindings() {
+    fn match_evaluates_the_first_matching_case_with_open_record_bindings() {
         let first = new_cell_id();
         let last = new_cell_id();
         let metadata = new_cell_id();
         let name = new_cell_id();
         let never = new_cell_id();
-        let expression = case_call(
+        let expression = match_call(
             Value::record([
                 (first, blob("Ada")),
                 (last, blob("Lovelace")),
                 (metadata, blob("extra")),
             ]),
             [
-                alternative(Value::record([(first, blob("Grace"))]), Value::from(never)),
-                alternative(Value::record([(first, binding(name))]), Value::from(name)),
+                case_arm(Value::record([(first, blob("Grace"))]), Value::from(never)),
+                case_arm(Value::record([(first, binding(name))]), Value::from(name)),
             ],
-            Value::from(never),
         );
         let evaluation = evaluate(&expression);
         assert_eq!(evaluation.result, blob("Ada"));
@@ -569,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn case_evaluates_its_subject_once_across_all_alternatives() {
+    fn match_evaluates_its_subject_once_across_all_cases() {
         static SUBJECT_EVALUATIONS: AtomicUsize = AtomicUsize::new(0);
 
         let subject = new_cell_id();
@@ -582,62 +602,57 @@ mod tests {
         );
         SUBJECT_EVALUATIONS.store(0, Ordering::SeqCst);
 
-        let expression = case_call(
+        let expression = match_call(
             grap::call(Value::from(subject), []),
             [
-                alternative(blob("first"), blob("first result")),
-                alternative(blob("second"), blob("second result")),
+                case_arm(blob("first"), blob("first result")),
+                case_arm(blob("second"), blob("second result")),
             ],
-            blob("default"),
         );
-        assert_eq!(
-            grap::evaluate(&expression, |_| None, &foreign, 100).result,
-            blob("default")
-        );
+        let evaluation = grap::evaluate(&expression, |_| None, &foreign, 100);
+        assert_eq!(evaluation.result, absent::value());
+        assert!(evaluation.diagnostics.is_empty());
         assert_eq!(SUBJECT_EVALUATIONS.load(Ordering::SeqCst), 1);
     }
 
     #[test]
-    fn case_patterns_match_exact_lists_and_repeated_binders_must_agree() {
+    fn match_patterns_match_exact_lists_and_repeated_binders_must_agree() {
         let element = new_cell_id();
         let other = new_cell_id();
-        let expression = case_call(
+        let expression = match_call(
             Value::list([blob("left"), blob("right")]),
             [
-                alternative(
+                case_arm(
                     Value::list([binding(element), binding(element)]),
                     blob("repeated"),
                 ),
-                alternative(
+                case_arm(
                     Value::list([binding(element), binding(other)]),
                     Value::from(other),
                 ),
             ],
-            blob("default"),
         );
         assert_eq!(evaluate(&expression).result, blob("right"));
 
-        let too_short = case_call(
+        let too_short = match_call(
             Value::list([blob("only")]),
-            [alternative(
+            [case_arm(
                 Value::list([binding(element), binding(other)]),
                 blob("matched"),
             )],
-            blob("default"),
         );
-        assert_eq!(evaluate(&too_short).result, blob("default"));
+        assert_eq!(evaluate(&too_short).result, absent::value());
     }
 
     #[test]
     fn first_pattern_wins_even_when_its_expression_returns_an_absent() {
         let missing = new_cell_id();
-        let expression = case_call(
+        let expression = match_call(
             Value::record([]),
             [
-                alternative(Value::record([]), Value::from(missing)),
-                alternative(Value::record([]), blob("second")),
+                case_arm(Value::record([]), Value::from(missing)),
+                case_arm(Value::record([]), blob("second")),
             ],
-            blob("default"),
         );
         assert_eq!(
             evaluate(&expression).result,
@@ -646,74 +661,107 @@ mod tests {
     }
 
     #[test]
-    fn case_projects_ordered_pattern_expression_arms_and_a_default() {
+    fn match_projects_only_its_ordered_pattern_expression_cases() {
         let binder = new_cell_id();
-        let expression = case_call(
+        let expression = match_call(
             blob("subject"),
             [
-                alternative(blob("first"), blob("one")),
-                alternative(binding(binder), Value::from(binder)),
+                case_arm(blob("first"), blob("one")),
+                case_arm(binding(binder), Value::from(binder)),
             ],
-            blob("default"),
         );
-        let layout = case_display(projection_input(&expression)).unwrap();
+        let layout = match_display(projection_input(&expression)).unwrap();
         let Layout::Alternatives(options) = layout else {
-            panic!("case has responsive forms");
+            panic!("match has responsive forms");
         };
         let Layout::Row { children, .. } = &options[0] else {
-            panic!("flat case first");
+            panic!("flat match first");
         };
         let mut arms = &children[1];
         while let Layout::Shared { child, .. } = arms {
             arms = child.as_ref();
         }
         let Layout::Surround { child, .. } = arms else {
-            panic!("case arms are braced");
+            panic!("match cases are braced");
         };
         let Layout::Col { children, .. } = child.as_ref() else {
-            panic!("case arms are ordered vertically");
+            panic!("match cases are ordered vertically");
         };
-        assert_eq!(children.len(), 3);
+        assert_eq!(children.len(), 2);
+
+        let Layout::At {
+            steps,
+            projection: Some(projection),
+            value: case,
+            ..
+        } = &children[0]
+        else {
+            panic!("the whole case retains its location");
+        };
+        assert!(matches!(
+            steps.as_slice(),
+            [Step::Key(key), Step::Element(_)] if *key == vocabulary::CASES
+        ));
+        assert_eq!(projection.len(), 1);
+
+        let case = case_display(relative_projection_input(case)).unwrap();
+        let Layout::Alternatives(options) = case else {
+            panic!("a case has responsive forms");
+        };
+        let Layout::Row { children, .. } = &options[0] else {
+            panic!("a flat case is a row");
+        };
+        let Layout::Shared { child, .. } = &children[0] else {
+            panic!("a case shares its head");
+        };
+        let Layout::Row { children, .. } = child.as_ref() else {
+            panic!("a case head contains its pattern and arrow");
+        };
+        let Layout::OnHover { child, hover } = &children[1] else {
+            panic!("the arrow claims the case hover");
+        };
+        assert_eq!(
+            hover.as_deref(),
+            Some(&[Step::Key(grap::vocabulary::EXPRESSION)][..])
+        );
+        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
     }
 
     #[test]
-    fn malformed_case_data_falls_through_to_the_generic_call_projection() {
-        let malformed = case_call(blob("subject"), [blob("not an arm")], blob("default"));
-        assert!(case_display(projection_input(&malformed)).is_none());
+    fn malformed_match_data_falls_through_to_the_generic_call_projection() {
+        let malformed = match_call(blob("subject"), [blob("not a case")]);
+        assert!(match_display(projection_input(&malformed)).is_none());
     }
 
     #[test]
-    fn malformed_case_data_returns_library_absents() {
-        let invalid_alternatives = grap::call(
-            Value::from(vocabulary::CASE),
+    fn malformed_match_data_returns_library_absents() {
+        let invalid_cases = grap::call(
+            Value::from(vocabulary::MATCH),
             [
                 (vocabulary::VALUE, blob("subject")),
-                (vocabulary::ALTERNATIVES, blob("not a list")),
-                (vocabulary::DEFAULT, blob("default")),
+                (vocabulary::CASES, blob("not a list")),
             ],
         );
         assert_eq!(
-            evaluate(&invalid_alternatives).result,
-            Value::from(vocabulary::INVALID_ALTERNATIVES)
+            evaluate(&invalid_cases).result,
+            Value::from(vocabulary::INVALID_CASES)
         );
 
-        let invalid_alternative = case_call(
+        let invalid_case = match_call(
             blob("subject"),
-            [blob("not an alternative")],
-            blob("default"),
+            [blob("not a case")],
         );
         assert_eq!(
-            evaluate(&invalid_alternative).result,
-            Value::from(vocabulary::INVALID_ALTERNATIVE)
+            evaluate(&invalid_case).result,
+            Value::from(vocabulary::INVALID_CASE)
         );
 
-        let invalid_binder = case_call(
+        let invalid_binder = match_call(
             blob("subject"),
-            [alternative(
+            [case_arm(
                 Value::record([(vocabulary::BIND, blob("not a cell"))]),
                 blob("matched"),
             )],
-            blob("default"),
         );
         assert_eq!(
             evaluate(&invalid_binder).result,
@@ -737,8 +785,8 @@ mod tests {
             Some("unquote")
         );
         for cell in [
-            vocabulary::INVALID_ALTERNATIVES,
-            vocabulary::INVALID_ALTERNATIVE,
+            vocabulary::INVALID_CASES,
+            vocabulary::INVALID_CASE,
             vocabulary::INVALID_BINDER,
         ] {
             assert!(absent::is_absent(library.cells.value(cell).unwrap()));

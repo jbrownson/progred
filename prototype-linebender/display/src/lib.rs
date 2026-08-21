@@ -90,6 +90,49 @@ pub enum Side {
 /// interactions use [`Layout::OnEvent`].
 pub type ClickHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
+/// Selection and hover behavior for a location relative to the value
+/// currently being projected. The host resolves the relative steps;
+/// libraries never receive its absolute document path.
+pub struct ProjectionTarget<World, Hover> {
+    pub select: ClickHandler<World>,
+    pub hover: Hover,
+}
+
+pub struct ProjectionTargets<World, Hover> {
+    at: Rc<dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>>,
+}
+
+impl<World, Hover> Clone for ProjectionTargets<World, Hover> {
+    fn clone(&self) -> Self {
+        Self {
+            at: self.at.clone(),
+        }
+    }
+}
+
+impl<World, Hover> ProjectionTargets<World, Hover> {
+    pub fn new(
+        at: impl Fn(Vec<Step>) -> ProjectionTarget<World, Hover> + 'static,
+    ) -> Self {
+        Self { at: Rc::new(at) }
+    }
+
+    pub fn at(&self, steps: impl Into<Vec<Step>>) -> ProjectionTarget<World, Hover> {
+        (self.at)(steps.into())
+    }
+}
+
+impl<World: 'static, Hover: Clone + 'static> ProjectionTargets<World, Hover> {
+    /// A host with no relative locations may map every request back
+    /// to the current target.
+    pub fn fixed(select: ClickHandler<World>, hover: Hover) -> Self {
+        Self::new(move |_| ProjectionTarget {
+            select: select.clone(),
+            hover: hover.clone(),
+        })
+    }
+}
+
 /// Unevaluated layout: grouping, walk, and leaves. Distinct from
 /// Progred's measured boxes (those have extents and place closures).
 pub enum Layout<World, Hover> {
@@ -304,6 +347,9 @@ pub struct ProjectionInput<'a, World, Hover> {
     pub state: Option<&'a Value>,
     pub select: ClickHandler<World>,
     pub hover: Hover,
+    /// Derive an interaction target below this value without
+    /// projecting that descendant or exposing the host's full path.
+    pub targets: ProjectionTargets<World, Hover>,
 }
 
 pub type Partial<World, Hover> =

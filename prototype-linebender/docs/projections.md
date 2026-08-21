@@ -136,10 +136,12 @@ bodies recursively retain the Grap projection. FFI values use the same
 reference presentation, because foreignness is not caller syntax. Argument
 labels retain the normal named-first alphabetical order.
 The control library composes ahead of that general call projection: a
-well-formed `case` call displays its subject followed by ordered
-`pattern → expression` arms and `else → default`; binding patterns remain
-visibly distinct as `bind name`. Malformed case-shaped data declines this
+well-formed `match` call displays its subject followed by ordered
+`pattern → expression` cases; binding patterns remain
+visibly distinct as `bind name`. Malformed match-shaped data declines this
 projection whole and falls through to the ordinary call or structural view.
+The synthesized arrow targets the case's expression, like a field head
+targets its value; the whole case remains a structural navigation landmark.
 A record with a `grap` field is replaced by the stored
 expression (nested under that field so editing stays on
 `…+Key(grap)`), then `→`, then the returned `Value` recursively
@@ -269,32 +271,33 @@ the calling environment. Rust arithmetic uses the same interface but
 immediately evaluates every operand. This keeps one surface call shape
 without adding strict/raw modes to Grap parameters.
 
-The control library supplies one such operation, `case`:
+The control library supplies one such operation, `match`:
 
 ```text
 {
-  function: case,
+  function: match,
   value: subject,
-  alternatives: [
+  cases: [
     {pattern: pattern1, expression: expression1},
     {pattern: pattern2, expression: expression2},
   ],
-  default: default-expression,
 }
 ```
 
-`case` evaluates its subject exactly once, then tries the patterns in
+`match` evaluates its subject exactly once, then tries the cases in
 list order. Record patterns are open, list patterns are exact and
 ordered, and blobs and bare cell references match literally. A pattern
 record containing `{bind: binder-cell}` captures the corresponding
 subject value; another occurrence of that binder must capture an equal
-value. The first matching alternative extends the calling environment
-with its captures and evaluates its expression. If none match, only the
-default is evaluated. An absent returned by the selected expression is
-still its result and does not fall through to another alternative.
-`case` keeps the subject as an ordinary host value while matching; it
+value. The first matching case extends the calling environment
+with its captures and evaluates its expression. If none match, `match`
+returns an ordinary absent without a diagnostic. A final binder pattern
+is the uniform catch-all when one is wanted. An absent returned by the
+selected expression is still its result and does not fall through to
+another case.
+`match` keeps the subject as an ordinary host value while matching; it
 does not create a hidden graph binding or make patterns depend on an
-enclosing case.
+enclosing match.
 
 There is no evaluator-level quote or literal form. At the Rust boundary
 an operand is already an inert expression; returning its expression
@@ -399,9 +402,9 @@ result—an f64 as text, and arbitrary GID data structurally.
 the focused interactive playground: three editable f64 cells feed
 direct foreign calls, nested calls, the registered `evaluate` function
 with an explicit empty environment, Grap-defined functions, a circle,
-a `case` which destructures that circle and binds its radius, and a
-function which uses quote/unquote to generate alternatives for another
-case; it also keeps extra call metadata in Raw, demonstrates inert
+a `match` which destructures that circle and binds its radius, and a
+function which uses quote/unquote to generate cases for another
+match; it also keeps extra call metadata in Raw, demonstrates inert
 returned data, and shows stable type,
 missing-argument, and not-callable absents as ordinary projected
 results. The demo projects one Grap expression cell both directly and
@@ -446,7 +449,7 @@ construction, not by filling out a language checklist:
   while keeping Raw as the escape hatch.
 
 The next language work should be forced by manipulating this example:
-use `case` when the construction needs conditional structure, refine
+use `match` when the construction needs conditional structure, refine
 patterns from concrete editing experience, and make a thunk or cell
 evaluation projection only when the interaction needs one.
 Grap-defined macros and general code generation remain out of scope
@@ -461,7 +464,7 @@ when a construction or editing problem forces the change.
   the rest unevaluated. A sibling `literal` that copies the same way
   but treats `{unquote: …}` as data would complete the pair. Both are
   ordinary Rust library functions, not evaluator forms.
-- An absent from a selected `case` branch is that branch's result, not
+- An absent from a selected `match` case is that case's result, not
   fallthrough. Matching *on* an absent subject is separate and already
   works (the subject is an ordinary value, often one of the stable
   absent cells). Absents stay values, not implicit failure.
@@ -470,11 +473,11 @@ when a construction or editing problem forces the change.
   Minting a fresh cell per parameter is an authoring default, not a
   language rule. Shared vocabulary cells *are* a calling convention;
   `add` and `multiply` already share `left` and `right`.
-- Patterned function arguments can use the same destructure as `case`.
+- Patterned function arguments can use the same destructure as `match`.
   A call is already an open record, so a pattern `{left: {bind: x},
   right: {bind: y}}` matches `{function: f, left: a, right: b, …}` and
   ignores `function` and extras. That would replace the ordered
-  param-list binding story. `case` remains as local match (same
+  param-list binding story. `match` remains as local match (same
   matcher, or an immediately applied patterned lambda).
 - Secondary marks should follow cells only. Lighting up equal blobs,
   lists, or compact text is leftover from models where those were

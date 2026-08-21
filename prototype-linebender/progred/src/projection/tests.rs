@@ -22,6 +22,33 @@ impl puri::edit::TextClipboard for EmptyClipboard {
     fn set_text(&mut self, _: &str) {}
 }
 
+#[test]
+fn projection_targets_append_relative_steps() {
+    let parent = gid::new_cell_id();
+    let field = gid::new_cell_id();
+    let hooks = Hooks::<Vec<Path>> {
+        select: Rc::new(|selections, path| selections.push(path)),
+        toggle: Rc::new(|_, _| {}),
+        rename: Rc::new(|_, _, _| {}),
+        edit: Rc::new(|_| None),
+        pick: Rc::new(|_, _| false),
+        insert: Rc::new(|_, _| {}),
+        delete: Rc::new(|_| false),
+        apply: Rc::new(|_, _, _, _| false),
+    };
+    let target = projection_targets(&[Step::Key(parent)], &hooks).at([Step::Key(field)]);
+    assert_eq!(
+        target.hover,
+        Hover::Value(vec![Step::Key(parent), Step::Key(field)])
+    );
+    let mut selections = Vec::new();
+    assert!((target.select)(&mut selections));
+    assert_eq!(
+        selections,
+        [vec![Step::Key(parent), Step::Key(field)]]
+    );
+}
+
 fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
     Sources { doc, library }
 }
@@ -1658,11 +1685,11 @@ fn a_document_defined_partial_projects_its_convention() {
         grap::lambda(
             [data::vocabulary::VALUE],
             grap::call(
-                Value::from(control::vocabulary::CASE),
+                Value::from(control::vocabulary::MATCH),
                 [
                     (control::vocabulary::VALUE, Value::from(data::vocabulary::VALUE)),
                     (
-                        control::vocabulary::ALTERNATIVES,
+                        control::vocabulary::CASES,
                         Value::list([Value::record([
                             (
                                 control::vocabulary::PATTERN,
@@ -1686,7 +1713,6 @@ fn a_document_defined_partial_projects_its_convention() {
                             ),
                         ])]),
                     ),
-                    (control::vocabulary::DEFAULT, absent::value()),
                 ],
             ),
         ),
