@@ -29,6 +29,7 @@ enum Transition {
     Ime,
 }
 
+#[cfg(test)]
 pub(crate) const EVENT_FUNCTIONS: [CellId; 5] = [
     line_edit::vocabulary::POINTER_DOWN,
     line_edit::vocabulary::POINTER_MOVE,
