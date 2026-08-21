@@ -130,15 +130,6 @@ impl Svg {
         writeln!(self.0, r#"<path d="{}" fill="{color}"/>"#, path.to_svg()).unwrap();
     }
 
-    fn stroke(&mut self, path: &BezPath, color: &str, width: f64) {
-        writeln!(
-            self.0,
-            r#"<path d="{}" fill="none" stroke="{color}" stroke-width="{width}" stroke-linecap="round" stroke-linejoin="round"/>"#,
-            path.to_svg()
-        )
-        .unwrap();
-    }
-
     fn rect(&mut self, rect: Rect, color: &str) {
         writeln!(
             self.0,
