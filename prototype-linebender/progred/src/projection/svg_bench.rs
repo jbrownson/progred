@@ -265,7 +265,6 @@ fn place_with_annotations(
         ProjectDescription {
             sources,
             selection,
-            graph_node: None,
             annotations,
             raw: false,
             styles: &styles,

@@ -10,7 +10,6 @@ mod frame;
 mod gid_text;
 #[cfg(test)]
 mod grap_examples;
-mod graph_view;
 mod history;
 mod hover;
 mod identity;
@@ -36,7 +35,7 @@ mod test_values;
 mod text_store;
 
 use crate::frame::{Dispatch, FrameDisposition, Frame, Hovered, Paint, frame_disposition};
-use crate::model::{Model, Selected, ViewFlags};
+use crate::model::{Model, ViewFlags};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -46,7 +45,7 @@ use puri::handler::ImeEvent;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerEvent;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::kurbo::{Point, Rect, Size, Vec2};
+use vello::kurbo::{Point, Rect, Size};
 use vello::peniko::{Brush, Color};
 use vello::util::{RenderContext, RenderSurface};
 use vello::wgpu::{self, CurrentSurfaceTexture};
@@ -179,11 +178,6 @@ pub(crate) fn content_viewport(viewport: Size, scale: f64) -> Rect {
     )
 }
 
-pub(crate) fn graph_panel(viewport: Size, scale: f64) -> Rect {
-    let content = content_viewport(viewport, scale);
-    graph_view::panel(content.width(), content.height()) + Vec2::new(0.0, content.y0)
-}
-
 /// The position carried by any pointer translation, for cursor
 /// tracking.
 fn pointer_position(event: &PointerEvent) -> Option<Point> {
@@ -197,11 +191,11 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
     }
 }
 
-/// The selection as a restorable edge path — pendings and graph
-/// selections restore as nothing, being disposable.
-pub(crate) fn edge_path(selection: &Option<Selected>) -> Option<gid::Path> {
+/// The selection as a restorable edge path — pendings restore as
+/// nothing, being disposable.
+pub(crate) fn edge_path(selection: &Option<selection::Selection>) -> Option<gid::Path> {
     match selection {
-        Some(Selected::Tree(current)) if current.stage() == selection::Stage::Edge => {
+        Some(current) if current.stage() == selection::Stage::Edge => {
             Some(current.path().to_vec())
         }
         _ => None,
@@ -300,23 +294,6 @@ impl ApplicationHandler<UserEvent> for App {
         };
         let scale = window.scale_factor();
 
-        // Pinch zooms the graph toward the cursor; winit delivers it
-        // outside the pointer stream the reducer covers.
-        if let WindowEvent::PinchGesture { delta, .. } = &event
-            && self.view_flags().graph
-        {
-            let size = window.inner_size();
-            let panel = graph_panel(Size::new(size.width as f64, size.height as f64), scale);
-            let anchor = if panel.contains(self.cursor) {
-                self.cursor - panel.center()
-            } else {
-                Vec2::ZERO
-            };
-            self.model.graph.zoom_at(1.0 + delta, anchor, scale);
-            window.request_redraw();
-            return;
-        }
-
         if !matches!(
             event,
             WindowEvent::KeyboardInput {
@@ -365,25 +342,23 @@ impl ApplicationHandler<UserEvent> for App {
                             || self.pending_paste_key(&key_event)
                             || dispatch.handler.dispatch_key(self, &key_event)
                             || self.clipboard_key(&dispatch.descends, &key_event)
-                            || self.graph_key(&key_event)
                             || self.delete_key(&dispatch.descends, &key_event)
                             || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
                             || self.rename_key(&key_event)
                             || self.collapse_key(&key_event)
                             || match navigate::step_selection(
                                 &dispatch.descends,
-                                self.model.tree_selection(),
+                                self.model.selection.as_ref(),
                                 dispatch.line,
                                 &key_event,
                             ) {
                                 Some(path) => {
-                                    self.model.selection =
-                                        Some(Selected::Tree(selection::selected_by_arrow(
-                                            &self.sources(),
-                                            &self.stack.projection,
-                                            path,
-                                            &key_event,
-                                        )));
+                                    self.model.selection = Some(selection::selected_by_arrow(
+                                        &self.sources(),
+                                        &self.stack.projection,
+                                        path,
+                                        &key_event,
+                                    ));
                                     true
                                 }
                                 None => false,
@@ -443,7 +418,7 @@ impl ApplicationHandler<UserEvent> for App {
                     let library = &self.stack.library;
                     let foreign = &self.stack.foreign;
                     let model = &mut self.model;
-                    if let Some(Selected::Tree(selection)) = &mut model.selection {
+                    if let Some(selection) = &mut model.selection {
                         let before = model.doc.clone();
                         // True on the first write of the editor's
                         // life: the run's one step opens here.
@@ -585,7 +560,6 @@ fn main() {
             doc,
             selection: None,
             annotations: annotations::Annotations::default(),
-            graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view: ViewFlags::default(),
             scroll: 0.0,
@@ -672,9 +646,8 @@ impl App {
             menu::Selection::Undo => self.step_history(true),
             menu::Selection::Redo => self.step_history(false),
             menu::Selection::Raw => self.model.view.raw = !self.model.view.raw,
-            menu::Selection::Graph => self.model.view.graph = !self.model.view.graph,
         }
-        if matches!(selection, menu::Selection::Raw | menu::Selection::Graph)
+        if selection == menu::Selection::Raw
             && let RenderState::Active { window, .. } = &self.state
         {
             window.request_redraw();
@@ -722,15 +695,12 @@ impl App {
         };
         if let Some((doc, restore)) = restored {
             self.model.doc = doc;
-            // One slot: restoring (or clearing) the tree selection
-            // also drops any graph selection, which may reference
-            // content the restored document no longer has.
             self.model.selection = restore.map(|path| {
-                Selected::Tree(selection::Selection::edge(
+                selection::Selection::edge(
                     &self.sources(),
                     &self.stack.projection,
                     path,
-                ))
+                )
             });
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
@@ -833,7 +803,7 @@ impl App {
                     self.model.history.mark_saved();
                     // A run must not straddle the save mark, or edits
                     // after it would coalesce into a pre-save step.
-                    selection::break_edit_run(self.model.tree_selection_mut());
+                    selection::break_edit_run(self.model.selection.as_mut());
                     self.adopt_doc_path(path);
                 }
                 Err(error) => {
@@ -861,7 +831,6 @@ impl App {
             doc,
             selection: None,
             annotations: annotations::Annotations::default(),
-            graph: graph_view::GraphView::default(),
             history: history::History::default(),
             view,
             scroll: 0.0,
@@ -909,13 +878,7 @@ impl App {
         let width = surface.config.width;
         let height = surface.config.height;
 
-        // Advance the force simulation while the graph is open; the
-        // continuous redraw request below keeps it animating.
         self.sync_menus();
-        let view = self.view_flags();
-        if view.graph {
-            self.model.graph.step(&self.model.doc);
-        }
         let viewport = Size::new(width as f64, height as f64);
         self.scene.reset();
         let Frame {
@@ -994,9 +957,5 @@ impl App {
         surface_texture.present();
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
-
-        if view.graph && self.model.graph.hot() {
-            window.request_redraw();
-        }
     }
 }

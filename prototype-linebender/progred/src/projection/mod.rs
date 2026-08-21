@@ -1984,7 +1984,6 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Valu
 pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
     pub selection: Option<&'a Selection>,
-    pub graph_node: Option<&'a Value>,
     pub annotations: &'a Annotations,
     pub raw: bool,
     pub styles: &'a Styles,
@@ -2004,7 +2003,6 @@ pub fn project<
     let ProjectDescription {
         sources,
         selection,
-        graph_node,
         annotations,
         raw,
         styles,
@@ -2021,10 +2019,9 @@ pub fn project<
         selection,
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
-        // The graph view's selected cell is a secondary here too:
-        // its projections are the same value. The HOVERED value's
-        // faint marks come from the render pass's Ink instead.
-        secondary: secondary_of(&sources, selection).or_else(|| graph_node.cloned()),
+        // Other projections of the selected cell are secondary. The
+        // HOVERED value's faint marks come from the render pass's Ink.
+        secondary: secondary_of(&sources, selection),
     };
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();

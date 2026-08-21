@@ -25,7 +25,6 @@ pub enum Selection {
     Undo,
     Redo,
     Raw,
-    Graph,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,7 +59,6 @@ impl Shortcut {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortcutKey {
-    G,
     N,
     O,
     Q,
@@ -72,7 +70,6 @@ pub enum ShortcutKey {
 impl ShortcutKey {
     pub const fn label(self) -> &'static str {
         match self {
-            Self::G => "G",
             Self::N => "N",
             Self::O => "O",
             Self::Q => "Q",
@@ -160,13 +157,6 @@ const RAW: Item = Item {
     shortcut: Shortcut::plain(ShortcutKey::R),
     kind: Kind::Check,
 };
-const GRAPH: Item = Item {
-    selection: Selection::Graph,
-    label: "Graph",
-    shortcut: Shortcut::plain(ShortcutKey::G),
-    kind: Kind::Check,
-};
-
 pub fn definition(platform: Platform) -> Vec<Menu> {
     let quit = Item {
         label: if platform == Platform::MacOs {
@@ -208,7 +198,7 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
             },
             Menu {
                 label: "View",
-                entries: vec![Entry::Item(RAW), Entry::Item(GRAPH)],
+                entries: vec![Entry::Item(RAW)],
             },
         ])
         .collect()
@@ -301,7 +291,6 @@ mod view {
         pub state: State,
         pub availability: Availability,
         pub raw: bool,
-        pub graph: bool,
         pub scale: f64,
         pub width: f64,
     }
@@ -486,7 +475,6 @@ mod view {
                     menu_item.kind == Kind::Check
                         && match menu_item.selection {
                             Selection::Raw => description.raw,
-                            Selection::Graph => description.graph,
                             _ => false,
                         },
                     description.availability.enabled(menu_item.selection),
@@ -651,7 +639,7 @@ mod tests {
         for platform in [Platform::Drawn, Platform::MacOs] {
             let definition = definition(platform);
             let items = items(&definition).collect::<Vec<_>>();
-            assert_eq!(items.len(), 9);
+            assert_eq!(items.len(), 8);
             for (index, item) in items.iter().enumerate() {
                 assert!(
                     items[index + 1..]

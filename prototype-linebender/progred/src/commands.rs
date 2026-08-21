@@ -1,8 +1,6 @@
 //! Editor commands: insert, delete, clipboard, rename, collapse.
 
 use crate::completion;
-use crate::graph_view;
-use crate::model::Selected;
 use crate::navigate;
 use crate::projection;
 use crate::selection;
@@ -13,33 +11,6 @@ use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl App {
-    /// Graph-view keys: Delete detaches the selected node — the
-    /// cell's whole entry removed and every link to it unlinked, or
-    /// the root emptied. The one selection slot means this and the
-    /// document delete below can never both match; Escape falls
-    /// through to the universal clear in `insert_key`.
-    pub(crate) fn graph_key(&mut self, event: &KeyboardEvent) -> bool {
-        event.state.is_down()
-            && plain(event)
-            && matches!(
-                &event.key,
-                Key::Named(NamedKey::Backspace | NamedKey::Delete)
-            )
-            && match self.model.graph_selection() {
-                Some(selection) => {
-                    let selection = *selection;
-                    let before = self.model.doc.clone();
-                    if graph_view::delete_selection(&mut self.model.doc, &selection) {
-                        self.model.history.record(before, None);
-                        self.refresh_title();
-                    }
-                    self.model.selection = None;
-                    true
-                }
-                None => false,
-            }
-    }
-
     /// Backspace or Delete removes the selected edge — a focused atom
     /// editor claims the keys while it has text and declines on an
     /// empty buffer, so emptying a string then backspacing again
@@ -65,7 +36,7 @@ impl App {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
-            Some(Selected::Tree(current))
+            Some(current)
                 if current.stage() == selection::Stage::Edge =>
             {
                 let path = current.path().to_vec();
@@ -81,11 +52,11 @@ impl App {
                         self.refresh_title();
                     }
                     let next = navigate::selection_after_delete(descends, &path);
-                    self.model.selection = Some(Selected::Tree(selection::Selection::edge(
+                    self.model.selection = Some(selection::Selection::edge(
                         &self.sources(),
                         &self.stack.projection,
                         next,
-                    )));
+                    ));
                     true
                 }
             }
@@ -123,13 +94,13 @@ impl App {
     pub(crate) fn pick_identity(&mut self, id: Value) -> bool {
         if matches!(
             &self.model.selection,
-            Some(Selected::Tree(current)) if current.stage() == selection::Stage::Label
+            Some(current) if current.stage() == selection::Stage::Label
         ) && id.as_cell().is_none()
         {
             return false;
         }
         match self.model.selection.take() {
-            Some(Selected::Tree(current)) => match current.stage() {
+            Some(current) => match current.stage() {
                 selection::Stage::Pending => {
                     self.commit_value(
                         current.path().to_vec(),
@@ -146,7 +117,7 @@ impl App {
                     true
                 }
                 selection::Stage::Edge => {
-                    self.model.selection = Some(Selected::Tree(current));
+                    self.model.selection = Some(current);
                     false
                 }
             },
@@ -165,11 +136,11 @@ impl App {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(Selected::Tree(selection::Selection::edge(
+        self.model.selection = Some(selection::Selection::edge(
             &self.sources(),
             &self.stack.projection,
             path,
-        )));
+        ));
     }
 
     /// A resolved label advances the pending edge to its value stage —
@@ -192,11 +163,11 @@ impl App {
         let mut path = parent.clone();
         path.push(Step::Key(label));
         if self.sources().resolve(&path).is_some() {
-            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
+            self.model.selection = Some(selection::Selection::edge(
                 &self.sources(),
                 &self.stack.projection,
                 path,
-            )));
+            ));
             return;
         }
         match replacing {
@@ -223,11 +194,11 @@ impl App {
                     path = parent;
                     path.push(Step::Key(old));
                 }
-                self.model.selection = Some(Selected::Tree(selection::Selection::edge(
+                self.model.selection = Some(selection::Selection::edge(
                     &self.sources(),
                     &self.stack.projection,
                     path,
-                )));
+                ));
             }
             None => {
                 if let Some((cell, value)) = created {
@@ -236,14 +207,14 @@ impl App {
                     self.model.history.record(before, None);
                     self.refresh_title();
                 }
-                self.model.selection = Some(Selected::Tree(selection::pending_value(path)));
+                self.model.selection = Some(selection::pending_value(path));
             }
         }
     }
 
     /// Structural copy/paste, the shell's fallback: a focused text
     /// editor's own clipboard handling wins by dispatch order, so
-    /// these fire on cell, list, and graph selections. Deliberately
+    /// these fire on structural selections. Deliberately
     /// NOT menu items — muda accelerators intercept ahead of key
     /// dispatch, which would take Cmd+C/V away from text editing.
     pub(crate) fn clipboard_key(
@@ -267,15 +238,12 @@ impl App {
 
     /// Copies the selected value — SHALLOW: a link is its identity
     /// alone, no cell values travel; the value carries its own inline
-    /// structure. Graph selections copy their node's value.
+    /// structure.
     pub(crate) fn copy_selection(&self) -> bool {
         use clipboard_rs::{Clipboard, ClipboardContext};
         let sources = self.sources();
         let value = match &self.model.selection {
-            Some(Selected::Tree(selection)) => sources.resolve(selection.path()).cloned(),
-            Some(Selected::Graph(graph_view::GraphSelection::Node(node))) => {
-                graph_view::node_value(&self.model.doc, node)
-            }
+            Some(selection) => sources.resolve(selection.path()).cloned(),
             None => None,
         };
         let Some(value) = value else {
@@ -326,7 +294,7 @@ impl App {
         }
         if !matches!(
             &self.model.selection,
-            Some(Selected::Tree(current)) if current.stage() != selection::Stage::Edge
+            Some(current) if current.stage() != selection::Stage::Edge
         ) {
             return false;
         }
@@ -362,7 +330,7 @@ impl App {
         if self.pick_identity(value.clone()) {
             return true;
         }
-        let Some(Selected::Tree(current)) = &self.model.selection else {
+        let Some(current) = &self.model.selection else {
             return false;
         };
         if current.stage() != selection::Stage::Edge {
@@ -378,11 +346,11 @@ impl App {
         if selection::set_value(&mut self.model.doc, &self.stack.library, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
-            self.model.selection = Some(Selected::Tree(selection::Selection::edge(
+            self.model.selection = Some(selection::Selection::edge(
                 &self.sources(),
                 &self.stack.projection,
                 path,
-            )));
+            ));
             true
         } else {
             false
@@ -399,10 +367,9 @@ impl App {
     /// author first, then values; list elements are one-stage value
     /// pendings, the projection minting the position.
     /// On an empty document Enter begins the root value. Escape
-    /// clears the selection from anywhere, discarding any pending
-    /// with the graph untouched; Backspace on an empty query cancels
-    /// a pending back to its anchor instead, keeping the keyboard
-    /// flow.
+    /// clears the selection from anywhere, discarding any pending;
+    /// Backspace on an empty query cancels a pending back to its
+    /// anchor instead, keeping the keyboard flow.
     pub(crate) fn insert_key(
         &mut self,
         descends: &[navigate::Descend],
@@ -417,7 +384,7 @@ impl App {
                     if !projection::command(&event.modifiers) =>
                 {
                     match &mut self.model.selection {
-                        Some(Selected::Tree(current))
+                        Some(current)
                             if current.stage() != selection::Stage::Edge =>
                         {
                             let len = popup.as_ref().map(|p| p.entries.len()).unwrap_or(0);
@@ -432,7 +399,7 @@ impl App {
                     }
                 }
                 Key::Named(NamedKey::Enter) => match self.model.selection.take() {
-                    Some(Selected::Tree(current))
+                    Some(current)
                         if current.stage() != selection::Stage::Edge =>
                     {
                         let labels = current.stage() == selection::Stage::Label;
@@ -451,15 +418,9 @@ impl App {
                         true
                     }
                     selection => {
-                        // Only a tree selection anchors authoring; a
-                        // graph selection has no path to author at.
-                        let tree = match &selection {
-                            Some(Selected::Tree(current)) => Some(current),
-                            _ => None,
-                        };
                         let sources = self.sources();
                         let shift = event.modifiers.shift();
-                        let started = match tree {
+                        let started = match selection.as_ref() {
                             Some(current) if projection::command(&event.modifiers) => {
                                 selection::pending_insert(&sources, current.path(), shift)
                             }
@@ -469,14 +430,14 @@ impl App {
                             None => selection::pending_root(&sources),
                         };
                         let began = started.is_some();
-                        self.model.selection = started.map(Selected::Tree).or(selection);
+                        self.model.selection = started.or(selection);
                         began
                     }
                 },
                 Key::Named(NamedKey::Escape) => self.model.selection.take().is_some(),
                 Key::Named(NamedKey::Backspace) => {
                     match &self.model.selection {
-                        Some(Selected::Tree(current))
+                        Some(current)
                             if current.stage() == selection::Stage::Pending =>
                         {
                             let back =
@@ -486,15 +447,15 @@ impl App {
                             // would pend again.
                             self.model.selection =
                                 (!(back.is_empty() && self.model.doc.root.is_none())).then(|| {
-                                    Selected::Tree(selection::Selection::edge(
+                                    selection::Selection::edge(
                                         &self.sources(),
                                         &self.stack.projection,
                                         back,
-                                    ))
+                                    )
                                 });
                             true
                         }
-                        Some(Selected::Tree(current))
+                        Some(current)
                             if current.stage() == selection::Stage::Label =>
                         {
                             // A cancelled rename returns to its field;
@@ -503,12 +464,11 @@ impl App {
                             if let Some(old) = current.replacing() {
                                 back.push(Step::Key(old));
                             }
-                            self.model.selection =
-                                Some(Selected::Tree(selection::Selection::edge(
-                                    &self.sources(),
-                                    &self.stack.projection,
-                                    back,
-                                )));
+                            self.model.selection = Some(selection::Selection::edge(
+                                &self.sources(),
+                                &self.stack.projection,
+                                back,
+                            ));
                             true
                         }
                         _ => false,
@@ -527,13 +487,13 @@ impl App {
             && projection::command(&event.modifiers)
             && matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "l")
             && match &self.model.selection {
-                Some(Selected::Tree(current))
+                Some(current)
                     if current.stage() == selection::Stage::Edge =>
                 {
                     let path = current.path().to_vec();
                     match selection::pending_rename(&self.sources(), &path) {
                         Some(pending) => {
-                            self.model.selection = Some(Selected::Tree(pending));
+                            self.model.selection = Some(pending);
                             true
                         }
                         None => false,
@@ -557,7 +517,7 @@ impl App {
             Key::Named(NamedKey::ArrowDown) if projection::command(&event.modifiers) => Some(false),
             _ => return false,
         };
-        let Some(Selected::Tree(current)) = &self.model.selection else {
+        let Some(current) = &self.model.selection else {
             return false;
         };
         if current.stage() != selection::Stage::Edge {

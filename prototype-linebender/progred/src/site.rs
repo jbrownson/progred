@@ -3,7 +3,6 @@
 
 #[cfg(test)]
 use crate::annotations::Annotations;
-use crate::model::Selected;
 use crate::selection::Selection;
 #[cfg(test)]
 use crate::sources::Sources;
@@ -44,12 +43,14 @@ const EVENT_FUNCTIONS: [gid::CellId; 9] = [
 pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> bool {
     let recorded = app
         .model
-        .tree_selection()
+        .selection
+        .as_ref()
         .filter(|selection| selection.path() == path)
         .is_some_and(Selection::recorded);
     let current = app
         .model
-        .tree_selection()
+        .selection
+        .as_ref()
         .filter(|selection| selection.path() == path)
         .map(|selection| selection.payload().clone());
     let staged = RefCell::new(PendingChanges {
@@ -109,12 +110,13 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
                         payload,
                     );
                     next.preserve_recorded(recorded);
-                    app.model.selection = Some(Selected::Tree(next));
+                    app.model.selection = Some(next);
                 }
                 None
                     if app
                         .model
-                        .tree_selection()
+                        .selection
+                        .as_ref()
                         .is_some_and(|selection| selection.path() == path) =>
                 {
                     app.model.selection = None;

@@ -3,17 +3,16 @@
 //! caller's choice, so a silent mint never draws.
 
 use crate::completion;
-use crate::graph_view;
 use crate::hover;
 use crate::menu;
-use crate::model::{Model, Selected, ViewFlags};
+use crate::model::{Model, ViewFlags};
 use crate::navigate;
 use crate::placed::{self, Placed};
 use crate::projection;
 use crate::selection;
 use crate::sources;
 use crate::stack;
-use crate::{App, content_viewport, graph_panel};
+use crate::{App, content_viewport};
 use gid::Value;
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
@@ -51,12 +50,11 @@ pub(crate) struct Frame {
     pub(crate) hovered_value: Option<Value>,
 }
 
-/// The app's one hover, the selection's shape: what the resting
-/// pointer claims in whichever pane it rests over.
+/// What the resting pointer claims in the document or application
+/// menu.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Hovered {
     Tree(hover::Hover),
-    Graph(graph_view::GraphNode),
     Menu(menu::Hover),
 }
 
@@ -213,7 +211,8 @@ impl App {
     ) -> bool {
         let reveal = self
             .model
-            .tree_selection()
+            .selection
+            .as_ref()
             .map(|s| (s.path().to_vec(), s.stage()));
         if reveal == self.revealed {
             false
@@ -250,13 +249,8 @@ impl App {
                     scroll += (top - pad - content.y0) / scale;
                 }
                 self.model.scroll = scroll.clamp(0.0, dispatch.max_scroll);
-                // The same chase horizontally, against the width the
-                // graph panel leaves visible.
-                let visible = if self.view_flags().graph {
-                    graph_panel(viewport, scale).x0
-                } else {
-                    viewport.width
-                };
+                // The same chase horizontally, against the viewport.
+                let visible = viewport.width;
                 let mut scroll_x = self.model.scroll_x;
                 if rect.x1 > visible {
                     scroll_x += (rect.x1 + pad - visible) / scale;
@@ -321,11 +315,9 @@ impl App {
                     library: &self.stack.library,
                 },
                 self.model.view.raw,
-                self.model.tree_selection(),
+                self.model.selection.as_ref(),
                 hover,
             ),
-            Some(Hovered::Graph(node)) => graph_view::node_value(&self.model.doc, node)
-                .filter(|value| !matches!(value, Value::Record(_))),
             Some(Hovered::Menu(_)) => None,
             None => None,
         };
@@ -405,7 +397,6 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 state: menu,
                 availability,
                 raw: flags.raw,
-                graph: flags.graph,
                 scale,
                 width: viewport_width,
             },
@@ -427,21 +418,12 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         doc: &model.doc,
         library: &stack.library,
     };
-    let graph_node = model.graph_node();
     let margin = 12.0 * scale;
-    // The width layout answers to: the window, less the graph panel
-    // when it is up — the panel overlays the right side, and content
-    // should break rather than run beneath it.
-    let body_width = if flags.graph {
-        graph_panel(viewport, scale).x0 - 2.0 * margin
-    } else {
-        viewport_width - 2.0 * margin
-    };
+    let body_width = viewport_width - 2.0 * margin;
     let body = projection::project(
         projection::ProjectDescription {
             sources,
-            selection: model.tree_selection(),
-            graph_node: graph_node.as_ref(),
+            selection: model.selection.as_ref(),
             annotations: &model.annotations,
             raw: flags.raw,
             styles: &styles,
@@ -455,7 +437,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
             // Editable text handles its coordinate-sensitive pointer
             // transition through the Grap event capability instead.
             select: Rc::new(move |app: &mut App, path| {
-                let fresh = match app.model.tree_selection() {
+                let fresh = match app.model.selection.as_ref() {
                     None => true,
                     Some(current) => {
                         current.stage() == selection::Stage::Label || current.path() != path
@@ -467,10 +449,11 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                         &app.stack.projection,
                         path,
                     );
-                    app.model.selection = Some(Selected::Tree(next));
+                    app.model.selection = Some(next);
                 } else if let Some(line) = app
                         .model
-                        .tree_selection_mut()
+                        .selection
+                        .as_mut()
                         .and_then(selection::Selection::edit_mut)
                 {
                     line.cursor_to_end();
@@ -495,14 +478,14 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                     if let Some(line) = pending.edit_mut() {
                         line.cursor_to(index);
                     }
-                    app.model.selection = Some(Selected::Tree(pending));
+                    app.model.selection = Some(pending);
                 }
             }),
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             insert: Rc::new(|app: &mut App, path| {
                 if let Some(pending) = selection::pending_after(&app.sources(), &path) {
-                    app.model.selection = Some(Selected::Tree(pending));
+                    app.model.selection = Some(pending);
                 }
             }),
             delete: Rc::new(|app: &mut App| {
@@ -525,12 +508,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         model.scroll_x.clamp(0.0, max_scroll_x) * scale,
         model.scroll.clamp(0.0, max_scroll) * scale,
     );
-    let graph_panel_rect = flags.graph.then(|| graph_panel(viewport, scale));
     // The stage: one tree. A viewport-filling base carries the
     // empty-space deselect — the bottom of the stack, so every
     // content claim answers first and only a press that claims no
-    // edge falls through — and each pane floats over it, later
-    // layers on top.
+    // edge falls through.
     let mut stage = placed::leaf(
         measured::Extent {
             width: viewport.width,
@@ -554,79 +535,22 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
     stage = measured::overlay(
         stage,
         placed::scrolled(content, offset, move |app: &mut App, update| {
-            let point = Point::new(update.state.position.x, update.state.position.y);
-            !graph_panel_rect.is_some_and(|panel| panel.contains(point))
-                && app.scroll_document(
-                    update,
-                    scale,
-                    content_viewport.height(),
-                    max_scroll,
-                    max_scroll_x,
-                )
+            app.scroll_document(
+                update,
+                scale,
+                content_viewport.height(),
+                max_scroll,
+                max_scroll_x,
+            )
         }),
         move |_, _, _| Some(Placement::new(content_viewport, content_viewport)),
     );
-    // The graph pane floats over the document's right side, above the
-    // body so its handlers win inside the panel.
-    if flags.graph {
-        let panel = graph_panel(viewport, scale);
-        let pane = graph_view::pane(
-            &sources,
-            &model.graph,
-            model.graph_selection(),
-            model.tree_selection(),
-            flags.raw,
-            &mut tcx,
-            panel,
-            &graph_view::Hooks {
-                press_node: Rc::new(|app: &mut App, id, grab, world| {
-                    // Grabbing a node drops a tree selection (its
-                    // editor must not stay focused behind the drag);
-                    // a graph selection stands until the release
-                    // decides click or drag.
-                    if matches!(app.model.selection, Some(Selected::Tree(_))) {
-                        app.model.selection = None;
-                    }
-                    app.model.graph.press_node(id, grab, world);
-                }),
-                press_background: Rc::new(|app: &mut App, panel| {
-                    app.model.graph.press_background(panel);
-                }),
-                drag_to: Rc::new(|app: &mut App, world, panel, px| {
-                    app.model.graph.drag_to(world, panel, px)
-                }),
-                release: Rc::new(|app: &mut App| match app.model.graph.release() {
-                    Some(graph_view::Release::ClickNode(id)) => {
-                        app.model.selection =
-                            Some(Selected::Graph(graph_view::GraphSelection::Node(id)));
-                        true
-                    }
-                    Some(graph_view::Release::ClickBackground) => {
-                        app.model.selection = None;
-                        true
-                    }
-                    Some(graph_view::Release::Drag) => true,
-                    None => false,
-                }),
-                scroll: Rc::new(|app: &mut App, delta, cursor, scale| {
-                    app.model.graph.scroll(delta, cursor, scale);
-                }),
-                pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-            },
-        );
-        stage = measured::overlay(stage, pane, move |_, extent, _| {
-            Some(Placement::new(
-                extent.rect_at(Point::new(panel.x0, panel.y0)),
-                content_viewport,
-            ))
-        });
-    }
 
     // The pending row's popup floats above everything the body
     // placed, its click targets winning. The card is built while a
     // pending is engaged; its anchor is discovered at place time in
     // the stage's output, where the pending row stashed it.
-    let engaged = model.tree_selection().and_then(|current| match current.stage() {
+    let engaged = model.selection.as_ref().and_then(|current| match current.stage() {
         selection::Stage::Pending => Some((current.edit()?, current.choice(), false)),
         selection::Stage::Label => Some((current.edit()?, current.choice(), true)),
         selection::Stage::Edge => None,
@@ -637,7 +561,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         let entries = completion::completion_entries(&sources, flags.raw, labels, query.text());
         let commit =
             |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
-                Some(Selected::Tree(current)) => match current.stage() {
+                Some(current) => match current.stage() {
                     selection::Stage::Pending => {
                         app.commit_value(current.path().to_vec(), action);
                     }
@@ -645,7 +569,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                         app.commit_label(current.path().to_vec(), current.replacing(), action);
                     }
                     selection::Stage::Edge => {
-                        app.model.selection = Some(Selected::Tree(current));
+                        app.model.selection = Some(current);
                     }
                 },
                 selection => app.model.selection = selection,
@@ -722,7 +646,8 @@ pub(crate) fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
         ..
     } = app;
     let state = model
-        .tree_selection_mut()
+        .selection
+        .as_mut()
         .and_then(selection::Selection::edit_mut)?;
     Some(EditCtx {
         state,
