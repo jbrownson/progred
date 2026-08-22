@@ -72,9 +72,25 @@ impl DelimStyle {
 }
 
 pub fn open(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
+    open_with_bow(delim, style, top, bottom, style.bow_for(delim, bottom - top))
+}
+
+/// The same height-sensitive stroke as [`open`], constrained to the
+/// delimiter's base advance. Useful when a layout leaf promises that
+/// its rectangle contains all of its ink.
+pub fn open_fitted(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
+    open_with_bow(delim, style, top, bottom, style.bow(delim))
+}
+
+fn open_with_bow(
+    delim: Delim,
+    style: &DelimStyle,
+    top: f64,
+    bottom: f64,
+    bow: f64,
+) -> BezPath {
     let bottom = bottom.max(top + style.stem);
     let (belly, tip) = style.weights(bottom - top);
-    let bow = style.bow_for(delim, bottom - top);
     match delim {
         Delim::Paren => paren(bow, top, bottom, belly, tip),
         Delim::Bracket => bracket(bow, top, bottom, belly, tip),
@@ -90,6 +106,20 @@ pub fn close(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath
         0.0,
         1.0,
         style.bow_for(delim, bottom.max(top + style.stem) - top),
+        0.0,
+    ]));
+    path
+}
+
+/// Mirrored [`open_fitted`].
+pub fn close_fitted(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
+    let mut path = open_fitted(delim, style, top, bottom);
+    path.apply_affine(Affine::new([
+        -1.0,
+        0.0,
+        0.0,
+        1.0,
+        style.bow(delim),
         0.0,
     ]));
     path
@@ -250,6 +280,22 @@ mod tests {
                 ink(&open(delim, &STYLE, 0.0, 160.0)),
                 &format!("{delim:?} grown mirror"),
             );
+        }
+    }
+
+    #[test]
+    fn fitted_delimiters_keep_their_base_width_at_any_height() {
+        for delim in [Delim::Paren, Delim::Bracket, Delim::Brace] {
+            for height in [40.0, 160.0, 4_000.0] {
+                assert_eq!(
+                    ink(&open_fitted(delim, &STYLE, 0.0, height)).width(),
+                    STYLE.bow(delim),
+                );
+                assert_eq!(
+                    ink(&close_fitted(delim, &STYLE, 0.0, height)).width(),
+                    STYLE.bow(delim),
+                );
+            }
         }
     }
 

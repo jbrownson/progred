@@ -70,6 +70,7 @@ fn accelerator(item: Item) -> Accelerator {
             Modifiers::META
         }),
         match shortcut.key {
+            ShortcutKey::D => Code::KeyD,
             ShortcutKey::N => Code::KeyN,
             ShortcutKey::O => Code::KeyO,
             ShortcutKey::Q => Code::KeyQ,
@@ -136,6 +137,7 @@ impl Menu {
             item.set_enabled(availability.enabled(*selection));
             item.set_checked(match selection {
                 Selection::Raw => view.raw,
+                Selection::DebugGeometry => view.debug_geometry,
                 _ => false,
             });
         }

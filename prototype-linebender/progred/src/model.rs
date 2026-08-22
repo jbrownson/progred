@@ -12,6 +12,8 @@ pub(crate) struct ViewFlags {
     /// The one Raw bit: convention layers derive from it — names
     /// answer bare identities. Lists stay lists; kind is data.
     pub raw: bool,
+    /// Overlay leaf rectangles and the pointer hysteresis geometry.
+    pub debug_geometry: bool,
 }
 
 pub(crate) struct Model {

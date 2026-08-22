@@ -90,17 +90,17 @@ pub enum RowAlignment {
     Center,
 }
 
-/// A plain primary click on the subtree that owns the handler. The
-/// language carries no geometry or modifiers: the editor decides what
-/// holding the command key means (a pick, not a click). Coordinate-aware
-/// interactions use [`Layout::OnEvent`].
-pub type ClickHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
+/// A coordinate-free action on the subtree that owns the handler.
+/// The language carries no pointer geometry or modifiers; those stay
+/// in [`Layout::OnEvent`] and the editor chooses the later semantic
+/// action itself.
+pub type ActionHandler<World> = Rc<dyn Fn(&mut World) -> bool>;
 
 /// Selection and hover behavior for a location relative to the value
 /// currently being projected. The host resolves the relative steps;
 /// libraries never receive its absolute document path.
 pub struct ProjectionTarget<World, Hover> {
-    pub select: ClickHandler<World>,
+    pub select: ActionHandler<World>,
     pub hover: Hover,
 }
 
@@ -131,7 +131,7 @@ impl<World, Hover> ProjectionTargets<World, Hover> {
 impl<World: 'static, Hover: Clone + 'static> ProjectionTargets<World, Hover> {
     /// A host with no relative locations may map every request back
     /// to the current target.
-    pub fn fixed(select: ClickHandler<World>, hover: Hover) -> Self {
+    pub fn fixed(select: ActionHandler<World>, hover: Hover) -> Self {
         Self::new(move |_| ProjectionTarget {
             select: select.clone(),
             hover: hover.clone(),
@@ -149,13 +149,22 @@ pub enum Layout<World, Hover> {
     Query,
     OnClick {
         child: Box<Layout<World, Hover>>,
-        handler: ClickHandler<World>,
+        handler: ActionHandler<World>,
     },
-    /// The value a command-click here commits into an open pending —
-    /// any value, not only a cell; the editor narrows where a stage
-    /// demands (labels take cells). Data, not a callback.
+    /// A coordinate-free editor action addressed by the same target
+    /// used for hover. Raw pointer events get first refusal in the
+    /// host; activation is the semantic fallback.
+    OnActivate {
+        child: Box<Layout<World, Hover>>,
+        target: Hover,
+        handler: ActionHandler<World>,
+    },
+    /// The value a Pick action here commits into an open pending — any
+    /// value, not only a cell; the editor narrows where a stage demands
+    /// (labels take cells). Data, not a callback.
     OnPick {
         child: Box<Layout<World, Hover>>,
+        target: Hover,
         value: Value,
     },
     /// Apply a Grap callable when an event reaches the subtree.
@@ -241,8 +250,22 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 child: child.clone(),
                 handler: handler.clone(),
             },
-            Self::OnPick { child, value } => Self::OnPick {
+            Self::OnActivate {
+                child,
+                target,
+                handler,
+            } => Self::OnActivate {
                 child: child.clone(),
+                target: target.clone(),
+                handler: handler.clone(),
+            },
+            Self::OnPick {
+                child,
+                target,
+                value,
+            } => Self::OnPick {
+                child: child.clone(),
+                target: target.clone(),
                 value: value.clone(),
             },
             Self::OnEvent {
@@ -357,7 +380,7 @@ pub struct ProjectionInput<'a, World, Hover> {
     pub selection: Option<&'a Value>,
     /// This path's annotation record (fold state and whatever joins it).
     pub state: Option<&'a Value>,
-    pub select: ClickHandler<World>,
+    pub select: ActionHandler<World>,
     pub hover: Hover,
     /// Derive an interaction target below this value without
     /// projecting that descendant or exposing the host's full path.
@@ -417,7 +440,7 @@ pub fn leaf<World, Hover>(display: Display) -> Layout<World, Hover> {
 
 pub fn on_click<World, Hover>(
     child: Layout<World, Hover>,
-    handler: ClickHandler<World>,
+    handler: ActionHandler<World>,
 ) -> Layout<World, Hover> {
     Layout::OnClick {
         child: Box::new(child),
@@ -425,9 +448,34 @@ pub fn on_click<World, Hover>(
     }
 }
 
-pub fn pickable<World, Hover>(child: Layout<World, Hover>, value: Value) -> Layout<World, Hover> {
+pub fn on_activate<World, Hover>(
+    child: Layout<World, Hover>,
+    target: Hover,
+    handler: ActionHandler<World>,
+) -> Layout<World, Hover> {
+    Layout::OnActivate {
+        child: Box::new(child),
+        target,
+        handler,
+    }
+}
+
+pub fn activatable<World, Hover: Clone>(
+    child: Layout<World, Hover>,
+    target: Hover,
+    handler: ActionHandler<World>,
+) -> Layout<World, Hover> {
+    on_hover(on_activate(child, target.clone(), handler), target)
+}
+
+pub fn pickable<World, Hover>(
+    child: Layout<World, Hover>,
+    target: Hover,
+    value: Value,
+) -> Layout<World, Hover> {
     Layout::OnPick {
         child: Box::new(child),
+        target,
         value,
     }
 }

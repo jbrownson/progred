@@ -1419,6 +1419,18 @@ their starting hover. The only durable part of hover computation is
 the 8px air hysteresis, resolved against the prior footprint. The SVG
 tests now inspect placement claims directly rather than dispatching
 synthetic or real moves.
+FIFTH SHAPE (2026-08-21) restores target-relative hysteresis without
+restoring stale footprints. Every settled hover region answers
+`Direct(target)` over its real placement and `Extended(target)` over
+the visible placement inflated by 8px. The one topmost-first probe
+returns immediately for a direct claim or occluder, but merely
+remembers an extension matching the prior target while it continues
+looking for a direct answer. Thus extensions can RETAIN but never
+establish hover, a neighboring real target always wins, and the
+directional bias across air is exactly the target the pointer came
+from. Because both answers come from the current pass's placements,
+scroll and layout changes cannot leave retained geometry stale. This
+replaces the path-dependent `LazyPointer` ring.
 
 THE GID NOTATION (2026-07-22, evening; now the temporary text bridge
 in docs/gid-text.md; this section records the superseded original

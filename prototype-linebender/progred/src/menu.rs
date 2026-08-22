@@ -25,6 +25,7 @@ pub enum Selection {
     Undo,
     Redo,
     Raw,
+    DebugGeometry,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,6 +60,7 @@ impl Shortcut {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortcutKey {
+    D,
     N,
     O,
     Q,
@@ -70,6 +72,7 @@ pub enum ShortcutKey {
 impl ShortcutKey {
     pub const fn label(self) -> &'static str {
         match self {
+            Self::D => "D",
             Self::N => "N",
             Self::O => "O",
             Self::Q => "Q",
@@ -157,6 +160,12 @@ const RAW: Item = Item {
     shortcut: Shortcut::plain(ShortcutKey::R),
     kind: Kind::Check,
 };
+const DEBUG_GEOMETRY: Item = Item {
+    selection: Selection::DebugGeometry,
+    label: "Debug Geometry",
+    shortcut: Shortcut::plain(ShortcutKey::D),
+    kind: Kind::Check,
+};
 pub fn definition(platform: Platform) -> Vec<Menu> {
     let quit = Item {
         label: if platform == Platform::MacOs {
@@ -198,7 +207,7 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
             },
             Menu {
                 label: "View",
-                entries: vec![Entry::Item(RAW)],
+                entries: vec![Entry::Item(RAW), Entry::Item(DEBUG_GEOMETRY)],
             },
         ])
         .collect()
@@ -273,7 +282,6 @@ mod view {
     use crate::placed::{self, Placed};
     use measured::{self, Extent, Measured};
     use puri::draw::Canvas;
-    use puri::hover::Claim;
     use puri::text::{TextCtx, TextStyle};
     use std::rc::Rc;
     use vello::kurbo::{Affine, Insets, Rect, Stroke};
@@ -291,6 +299,7 @@ mod view {
         pub state: State,
         pub availability: Availability,
         pub raw: bool,
+        pub debug_geometry: bool,
         pub scale: f64,
         pub width: f64,
     }
@@ -325,16 +334,18 @@ mod view {
         BAR_HEIGHT * scale
     }
 
-    fn hover_target<C: 'static, Cv: Canvas + 'static>(
+    fn activatable<C: 'static, Cv: Canvas + 'static>(
         hover: Hover,
         content: Measured<Placed<C, Cv>>,
+        action: impl Fn(&mut C) -> bool + 'static,
     ) -> Measured<Placed<C, Cv>> {
+        let action = Rc::new(action);
         placed::before(content, move |p, placement| {
-            p.claim(move |point| {
-                placement
-                    .contains(point)
-                    .then(|| Claim::Names(Hovered::Menu(hover)))
-            });
+            let target = Hovered::Menu(hover);
+            p.claim(placement, target.clone());
+            let activate = action.clone();
+            p.activate(target.clone(), move |world| activate(world));
+            p.pick(target, move |world| action(world));
         })
     }
 
@@ -360,10 +371,10 @@ mod view {
                 }
             });
         });
-        placed::on_primary_pointer_down(
-            hover_target(Hover::Heading(index), content),
-            |_| true,
-            move |app, _| {
+        activatable(
+            Hover::Heading(index),
+            content,
+            move |app| {
                 toggle(app, index);
                 true
             },
@@ -441,10 +452,10 @@ mod view {
             });
         });
         if enabled {
-            placed::on_primary_pointer_down(
-                hover_target(Hover::Item(selection), content),
-                |_| true,
-                move |app, _| {
+            activatable(
+                Hover::Item(selection),
+                content,
+                move |app| {
                     select(app, selection);
                     true
                 },
@@ -475,6 +486,7 @@ mod view {
                     menu_item.kind == Kind::Check
                         && match menu_item.selection {
                             Selection::Raw => description.raw,
+                            Selection::DebugGeometry => description.debug_geometry,
                             _ => false,
                         },
                     description.availability.enabled(menu_item.selection),
@@ -500,7 +512,7 @@ mod view {
                 );
             }),
             |p, placement| {
-                p.claim(move |point| placement.contains(point).then_some(Claim::Occludes));
+                p.occlude(placement);
             },
         )
     }
@@ -639,7 +651,7 @@ mod tests {
         for platform in [Platform::Drawn, Platform::MacOs] {
             let definition = definition(platform);
             let items = items(&definition).collect::<Vec<_>>();
-            assert_eq!(items.len(), 8);
+            assert_eq!(items.len(), 9);
             for (index, item) in items.iter().enumerate() {
                 assert!(
                     items[index + 1..]

@@ -5,6 +5,7 @@
 use super::*;
 use progred_libraries::{name, text};
 use puri::draw::{DrawCmd, DrawList, GlyphRun, Shape};
+use puri::hover::Claim;
 use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
@@ -22,9 +23,9 @@ struct Bench {
 
 /// Probe with the pointer, then render and unpack the placed frame.
 fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
-    let hit = pointer.and_then(|point| placed.probe(point));
+    let hit = pointer.and_then(|point| placed.probe(point, None, crate::frame::HOVER_REACH));
     let hovered = match &hit {
-        Some(Claim::Names(hover)) => Some(hover.clone()),
+        Some(Claim::Direct(hover)) => Some(hover.clone()),
         _ => None,
     };
     let Placed {
@@ -38,6 +39,7 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
     let ink = crate::placed::Ink {
         hovered: hovered.as_ref(),
         hovered_value: None,
+        debug_geometry: false,
     };
     for render in renders {
         render(&mut bench, ink);
@@ -563,7 +565,7 @@ fn placement_claims_the_hover_innermost_last() {
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(string_rect.center()));
     assert!(matches!(
         &bench.hit,
-        Some(Claim::Names(Hovered::Tree(Hover::Value(path)))) if *path == string_path
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if *path == string_path
     ));
     let (bench, _) = place_with_pointer(&doc, None, 560.0, Some(Point::new(-10.0, -10.0)));
     assert!(bench.hit.is_none());
@@ -606,7 +608,7 @@ fn hovering_a_field_label_paints_the_hover_wash() {
         let (bench, _) = place_with_pointer(&doc, None, 400.0, Some(Point::new(x, y)));
         if matches!(
             &bench.hit,
-            Some(Claim::Names(Hovered::Tree(Hover::Label(path))))
+            Some(Claim::Direct(Hovered::Tree(Hover::Label(path))))
                 if path.last() == Some(&Step::Key(key))
         ) {
             found = Some(bench);
@@ -694,7 +696,7 @@ fn flat_separators_claim_the_insert_between() {
     let (bench, _) = place_with_pointer(&doc, None, width, Some(mid));
     assert!(matches!(
         &bench.hit,
-        Some(Claim::Names(Hovered::Tree(Hover::Insert(path)))) if *path == first.path
+        Some(Claim::Direct(Hovered::Tree(Hover::Insert(path)))) if *path == first.path
     ));
 }
 
@@ -734,7 +736,7 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
     );
     assert!(matches!(
         &claimed.hit,
-        Some(Claim::Names(Hovered::Tree(Hover::Value(path)))) if *path == parent
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if *path == parent
     ));
 }
 
@@ -790,7 +792,7 @@ fn popup_rows_claim_their_entries_and_the_card_occludes() {
         .filter_map(|y| {
             let (bench, _) = place_card(Point::new(extent.width / 2.0, y as f64 + 0.5));
             match bench.hit {
-                Some(Claim::Names(Hovered::Tree(hover))) => Some(hover),
+                Some(Claim::Direct(Hovered::Tree(hover))) => Some(hover),
                 _ => None,
             }
         })
@@ -914,5 +916,37 @@ fn line_edit_definition_layout_canary() {
     };
     for width in [900.0, 1_200.0, 1_600.0] {
         let _ = place(&doc, None, width);
+    }
+}
+
+#[test]
+fn tall_delimiter_ink_stays_inside_its_leaf_rectangle() {
+    for open in [true, false] {
+        let node = tall_delim::<World, Bench>(
+            1.0,
+            Delim::Bracket,
+            open,
+            Extent {
+                width: 0.0,
+                ascent: 80.0,
+                descent: 80.0,
+            },
+            Color::BLACK.into(),
+        );
+        let rect = node.extent.rect_at(Point::new(20.0, 100.0));
+        let bench = settle(measured::place(node, Placement::root(rect)), None);
+        let [DrawCmd::Fill {
+            shape: Shape::Path(path),
+            transform,
+            ..
+        }] = &bench.list.0[..]
+        else {
+            panic!("a delimiter is one filled path");
+        };
+        let mut path = path.clone();
+        path.apply_affine(*transform);
+        let ink = path.bounding_box();
+        assert!(ink.x0 >= rect.x0 && ink.x1 <= rect.x1, "{ink:?} outside {rect:?}");
+        assert!(ink.y0 >= rect.y0 && ink.y1 <= rect.y1, "{ink:?} outside {rect:?}");
     }
 }

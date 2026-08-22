@@ -26,11 +26,15 @@ use std::rc::Rc;
 use ui_events::pointer::PointerButton;
 use vello::Scene;
 use vello::kurbo::{Affine, Point, Size, Stroke, Vec2};
-use vello::peniko::Brush;
+use vello::peniko::{Brush, Color};
 use winit::dpi::PhysicalPosition;
+
+pub(crate) const HOVER_REACH: f64 = 8.0;
 
 pub(crate) struct Dispatch {
     pub(crate) handler: Handler<App>,
+    pub(crate) activations: Vec<placed::TargetAction<App>>,
+    pub(crate) picks: Vec<placed::TargetAction<App>>,
     pub(crate) descends: Vec<navigate::Descend>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
@@ -56,6 +60,10 @@ pub(crate) struct Frame {
 pub(crate) enum Hovered {
     Tree(hover::Hover),
     Menu(menu::Hover),
+    /// Pointer-occupied chrome with no editor action. Keeping this
+    /// distinct from air prevents the shell's empty-space fallback
+    /// without inventing a clickable identity for the chrome.
+    Blocked,
 }
 
 /// The concrete canvas frame ink renders into: the vello scene,
@@ -144,24 +152,24 @@ fn reveal_vertical_scroll(
 }
 
 /// The frame's hover, derived from this pass's settled geometry: a
-/// claim under the pointer answers outright (an occluder answers
-/// "nothing"), air defers to the ring's trailing center — the
-/// little-gap hold, as a filter on the pointer instead of remembered
-/// footprints — and a pressed gesture keeps the hover it began with.
+/// direct claim under the pointer answers outright, an extension may
+/// retain only the prior target, and an occluder blocks both. A
+/// pressed gesture keeps the hover it began with.
 pub(crate) fn derive_hover<C: 'static, Cv>(
     placed: &Placed<C, Cv>,
     prior: Option<Hovered>,
     pointer: Option<Point>,
-    ring: Point,
     pressed: bool,
+    reach: f64,
 ) -> Option<Hovered> {
     if pressed {
         return prior;
     }
     let point = pointer?;
-    match placed.probe(point) {
-        Some(claim) => claim.names(),
-        None => placed.probe(ring).and_then(Claim::names),
+    match placed.probe(point, prior.as_ref(), reach) {
+        Some(Claim::Direct(target) | Claim::Extended(target)) => Some(target),
+        Some(Claim::Occludes) => Some(Hovered::Blocked),
+        None => None,
     }
 }
 
@@ -295,6 +303,7 @@ impl App {
     /// back deferred; the caller renders it or drops it.
     pub(crate) fn build_frame(&mut self, scale: f64, viewport: Size) -> Frame {
         let view = self.view_flags();
+        let debug_geometry = view.debug_geometry;
         let availability = self.menu_availability();
         let description = FrameDescription {
             model: &self.model,
@@ -322,12 +331,13 @@ impl App {
                 viewport,
             )),
         );
+        let hover_reach = HOVER_REACH * scale;
         self.hover = derive_hover(
             &placed,
             self.hover.take(),
             self.pointer,
-            self.ring.center,
             self.pressed,
+            hover_reach,
         );
         let hovered_value = match &self.hover {
             Some(Hovered::Tree(hover)) => hover::hover_value(
@@ -340,18 +350,39 @@ impl App {
                 hover,
             ),
             Some(Hovered::Menu(_)) => None,
+            Some(Hovered::Blocked) => None,
             None => None,
         };
+        let extended_rects = debug_geometry
+            .then(|| {
+                self.hover
+                    .as_ref()
+                    .map(|hover| placed.extended_rects(hover, hover_reach))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
         let Placed {
             probes: _,
+            activations,
+            picks,
             handler,
             descends,
             popup,
-            renders,
+            mut renders,
         } = placed;
+        if debug_geometry {
+            renders.push(Box::new(move |canvas, _| {
+                let guide = Color::new([0.92, 0.12, 0.58, 0.80]);
+                for rect in extended_rects {
+                    canvas.stroke(rect, Stroke::new(1.0), guide, Affine::IDENTITY);
+                }
+            }));
+        }
         Frame {
             dispatch: Dispatch {
                 handler: handler.unwrap_or_else(Handler::new),
+                activations,
+                picks,
                 descends,
                 line: 14.0 * scale,
                 max_scroll,
@@ -418,6 +449,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 state: menu,
                 availability,
                 raw: flags.raw,
+                debug_geometry: flags.debug_geometry,
                 scale,
                 width: viewport_width,
             },
@@ -529,22 +561,16 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         model.scroll_x.clamp(0.0, max_scroll_x) * scale,
         model.scroll.clamp(0.0, max_scroll) * scale,
     );
-    // The stage: one tree. A viewport-filling base carries the
-    // empty-space deselect — the bottom of the stack, so every
-    // content claim answers first and only a press that claims no
-    // edge falls through.
+    // The stage: one tree. Empty-space deselection is the shell's
+    // final editor-action fallback after raw pointer handlers and a
+    // resolved target's Activate/Pick have declined.
     let mut stage = placed::leaf(
         measured::Extent {
             width: viewport.width,
             ascent: 0.0,
             descent: viewport.height,
         },
-        |p, _| {
-            p.handler().on_pointer_down(|app: &mut App, event| {
-                event.button == Some(PointerButton::Primary)
-                    && app.model.selection.take().is_some()
-            });
-        },
+        |_, _| {},
     );
     if let Some(bar) = menu_bar {
         let bar_placement = Placement::new(
@@ -620,8 +646,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
 
     if let Some((x, popup)) = menu_popup {
         let heading_width = menu_heading_width;
-        // Close and swallow ride under the popup's own content:
-        // above every other pane, below the menu items.
+        // Outside presses close the popup. Its own Occludes claim
+        // becomes Hovered::Blocked over separators and disabled
+        // entries; enabled items resolve their semantic target above
+        // it, so no raw inside-swallow may preempt them.
         let popup = placed::before(popup, move |p, placement| {
             let rect = placement.rect;
             let headings =
@@ -632,10 +660,6 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                     && !headings.contains(point)
                     && !rect.contains(point)
                     && app.menu.close()
-            });
-            p.handler().on_pointer_down(move |_: &mut App, event| {
-                event.button == Some(PointerButton::Primary)
-                    && rect.contains(Point::new(event.state.position.x, event.state.position.y))
             });
             p.handler().on_scroll(move |_: &mut App, event| {
                 rect.contains(Point::new(event.state.position.x, event.state.position.y))
@@ -729,78 +753,118 @@ mod frame_tests {
     }
 
     #[test]
-    fn hover_derives_from_the_pointer_with_the_ring_as_air_fallback() {
-        let inside = |rect: vello::kurbo::Rect, claim: Claim<Hovered>| -> placed::Probe {
-            Box::new(move |point| rect.contains(point).then(|| claim.clone()))
-        };
-        let target = || Hovered::Tree(hover::Hover::Value(Vec::new()));
+    fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
+        let target = |index| Hovered::Tree(hover::Hover::Entry(index));
+        let viewport = vello::kurbo::Rect::new(-100.0, -100.0, 100.0, 100.0);
         let mut placed: Placed<App, Paint> = Placed::empty();
-        placed.probes.push(inside(
-            vello::kurbo::Rect::new(0.0, 0.0, 20.0, 20.0),
-            Claim::Names(target()),
+        placed.probes.push(placed::Probe::direct(
+            Placement::new(
+                vello::kurbo::Rect::new(0.0, 0.0, 10.0, 10.0),
+                viewport,
+            ),
+            target(0),
         ));
-        // A direct answer at the pointer wins, wherever the ring is.
+        placed.probes.push(placed::Probe::direct(
+            Placement::new(
+                vello::kurbo::Rect::new(14.0, 0.0, 24.0, 10.0),
+                viewport,
+            ),
+            target(1),
+        ));
+        // A direct answer establishes hover.
         assert_eq!(
             derive_hover(
                 &placed,
                 None,
                 Some(Point::new(5.0, 5.0)),
-                Point::new(50.0, 50.0),
                 false,
+                8.0,
             ),
-            Some(target())
+            Some(target(0))
         );
-        // Air at the pointer defers to the ring's trailing center —
-        // the little-gap hold.
+        // In the gap, only the prior target's extension may retain.
+        assert_eq!(
+            derive_hover(
+                &placed,
+                Some(target(0)),
+                Some(Point::new(12.0, 5.0)),
+                false,
+                8.0,
+            ),
+            Some(target(0))
+        );
+        assert_eq!(
+            derive_hover(
+                &placed,
+                Some(target(1)),
+                Some(Point::new(12.0, 5.0)),
+                false,
+                8.0,
+            ),
+            Some(target(1))
+        );
+        // Even when the prior target's extension is encountered
+        // first in z-order, a later direct answer overrides it.
+        assert_eq!(
+            derive_hover(
+                &placed,
+                Some(target(1)),
+                Some(Point::new(8.0, 5.0)),
+                false,
+                8.0,
+            ),
+            Some(target(0))
+        );
+        // The neighboring real target overrides the prior target's
+        // overlapping extension.
+        assert_eq!(
+            derive_hover(
+                &placed,
+                Some(target(0)),
+                Some(Point::new(16.0, 5.0)),
+                false,
+                8.0,
+            ),
+            Some(target(1))
+        );
         assert_eq!(
             derive_hover(
                 &placed,
                 None,
-                Some(Point::new(25.0, 5.0)),
-                Point::new(15.0, 5.0),
+                Some(Point::new(12.0, 5.0)),
                 false,
-            ),
-            Some(target())
-        );
-        // Air over air clears; no pointer answers nothing.
-        assert_eq!(
-            derive_hover(
-                &placed,
-                Some(target()),
-                Some(Point::new(40.0, 40.0)),
-                Point::new(40.0, 40.0),
-                false,
+                8.0,
             ),
             None
         );
-        assert_eq!(derive_hover(&placed, Some(target()), None, Point::ZERO, false), None);
+        assert_eq!(derive_hover(&placed, Some(target(0)), None, false, 8.0), None);
         // A pressed gesture keeps the hover it began with.
         assert_eq!(
             derive_hover(
                 &placed,
-                Some(target()),
+                Some(target(0)),
                 Some(Point::new(40.0, 40.0)),
-                Point::ZERO,
                 true,
+                8.0,
             ),
-            Some(target())
+            Some(target(0))
         );
-        // An occluder answers "nothing" outright and blocks the
+        // An occluder answers "blocked" outright and blocks the
         // fallback — an overlay's pointer never lights what sits
-        // beneath it.
-        placed.probes.push(inside(
+        // beneath it or triggers the empty-space action.
+        placed.probes.push(placed::Probe::occludes(Placement::new(
             vello::kurbo::Rect::new(0.0, 0.0, 40.0, 40.0),
-            Claim::Occludes,
-        ));
+            viewport,
+        )));
         assert_eq!(
             derive_hover(
                 &placed,
                 None,
                 Some(Point::new(25.0, 5.0)),
-                Point::new(15.0, 5.0),
                 false,
+                8.0,
             ),
-            None
+            Some(Hovered::Blocked)
         );
     }
 }

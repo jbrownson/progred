@@ -11,9 +11,9 @@
 use crate::{Library, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
-    ClickHandler, Delim, Display, Face, Layout, RowAlignment, Vector, VectorCommand, alternatives,
-    block_hover, bracket, leaf, on_click, on_event, on_hover, overlay as layout_overlay, pickable,
-    slot,
+    ActionHandler, Delim, Display, Face, Layout, RowAlignment, Vector, VectorCommand, alternatives,
+    block_hover, bracket, leaf, on_activate, on_event, on_hover, overlay as layout_overlay,
+    pickable, slot,
 };
 
 pub mod vocabulary {
@@ -351,7 +351,7 @@ pub fn on(child: Value, handler: Value) -> Value {
 /// junk, so a malformed layout falls through whole.
 pub fn decode<World, Hover: Clone>(
     value: &Value,
-    select: &ClickHandler<World>,
+    select: &ActionHandler<World>,
     hover: &Hover,
 ) -> Option<Layout<World, Hover>> {
     let fields = value.as_record()?;
@@ -468,12 +468,17 @@ pub fn decode<World, Hover: Clone>(
         return Some(slot());
     }
     if let Some(content) = fields.get(&vocabulary::SELECTABLE) {
-        return Some(on_click(decode(content, select, hover)?, select.clone()));
+        return Some(on_activate(
+            decode(content, select, hover)?,
+            hover.clone(),
+            select.clone(),
+        ));
     }
     if let Some(content) = fields.get(&vocabulary::PICKABLE) {
         let content = content.as_record()?;
         return Some(pickable(
             decode(content.get(&vocabulary::CHILD)?, select, hover)?,
+            hover.clone(),
             content.get(&vocabulary::VALUE)?.clone(),
         ));
     }
@@ -495,7 +500,7 @@ pub fn decode<World, Hover: Clone>(
 
 fn children<World, Hover: Clone>(
     list: &Value,
-    select: &ClickHandler<World>,
+    select: &ActionHandler<World>,
     hover: &Hover,
 ) -> Option<Vec<Layout<World, Hover>>> {
     list.as_list()?
@@ -680,7 +685,7 @@ mod tests {
     use std::rc::Rc;
 
     fn decoded(value: &Value) -> Option<Layout<(), ()>> {
-        let select: ClickHandler<()> = Rc::new(|_| false);
+        let select: ActionHandler<()> = Rc::new(|_| false);
         decode(value, &select, &())
     }
 
@@ -703,7 +708,7 @@ mod tests {
             panic!("alternatives decode");
         };
         assert_eq!(forms.len(), 2);
-        let Layout::OnClick { child, .. } = &forms[0] else {
+        let Layout::OnActivate { child, .. } = &forms[0] else {
             panic!("selectable attaches the provided select");
         };
         let Layout::Row { gap, children, .. } = child.as_ref() else {

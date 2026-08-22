@@ -10,7 +10,6 @@ use crate::hover::Hover;
 use crate::navigate::{Descend, HasDescends};
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
 use measured::{Extent, Measured, centered_row, col, layers, min_width, pad, row};
-use puri::hover::Claim;
 #[cfg(test)]
 use crate::navigate::{projected_name_owner, step_selection};
 #[cfg(test)]
@@ -91,7 +90,7 @@ impl<World> Projection<World> {
         value: &Value,
         selection: Option<&Value>,
         state: Option<&Value>,
-        select: progred_display::ClickHandler<World>,
+        select: progred_display::ActionHandler<World>,
         hover: Hover,
         targets: progred_display::ProjectionTargets<World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
@@ -787,12 +786,30 @@ fn prepare<
             );
             ChoiceLayout::map(inner, 0.0, move |inner| realize_click(handler, inner))
         }
-        progred_display::Layout::OnPick { child, value: picked } => {
+        progred_display::Layout::OnActivate {
+            child,
+            target,
+            handler,
+        } => {
+            let inner = prepare(
+                cx, projection, tcx, path, ancestors, hooks, value, *child, build,
+            );
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                realize_activate(target, handler, inner)
+            })
+        }
+        progred_display::Layout::OnPick {
+            child,
+            target,
+            value: picked,
+        } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
             );
             let pick = hooks.pick.clone();
-            ChoiceLayout::map(inner, 0.0, move |inner| realize_pick_with(picked, pick, inner))
+            ChoiceLayout::map(inner, 0.0, move |inner| {
+                realize_pick_with(target, picked, pick, inner)
+            })
         }
         progred_display::Layout::OnEvent {
             child,
@@ -1081,7 +1098,7 @@ fn prepare_at<
 }
 
 fn realize_click<C: 'static, Cv: Canvas + 'static>(
-    handler: progred_display::ClickHandler<C>,
+    handler: progred_display::ActionHandler<C>,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     before(inner, move |p, placement| {
@@ -1091,6 +1108,16 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && handler(world)
         });
+    })
+}
+
+fn realize_activate<C: 'static, Cv: Canvas + 'static>(
+    target: Hover,
+    handler: progred_display::ActionHandler<C>,
+    inner: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
+    before(inner, move |p, _| {
+        p.activate(Hovered::Tree(target), move |world| handler(world));
     })
 }
 
@@ -1363,17 +1390,13 @@ fn ime_value(event: &ImeEvent) -> Value {
 }
 
 fn realize_pick_with<C: 'static, Cv: Canvas + 'static>(
+    target: Hover,
     picked: Value,
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     inner: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    before(inner, move |p, placement| {
-        p.handler().on_pointer_down(move |world, event| {
-            event.button == Some(PointerButton::Primary)
-                && command(&event.state.modifiers)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && pick(world, picked.clone())
-        });
+    before(inner, move |p, _| {
+        p.pick(Hovered::Tree(target), move |world| pick(world, picked.clone()));
     })
 }
 
@@ -1546,7 +1569,7 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
     }
 }
 
-fn select_handler<C: 'static>(path: Path, hooks: &Hooks<C>) -> progred_display::ClickHandler<C> {
+fn select_handler<C: 'static>(path: Path, hooks: &Hooks<C>) -> progred_display::ActionHandler<C> {
     let select = hooks.select.clone();
     Rc::new(move |world| {
         select(world, path.clone());
@@ -1646,10 +1669,8 @@ fn delim_style(scale: f64) -> DelimStyle {
     DelimStyle::for_text_size(14.0 * scale)
 }
 
-/// A delimiter's advance: the FLAT ink plus both side bearings —
-/// what layout charges at any height. A grown tall delimiter
-/// OVERHANGS its advance on the outward side, the way a glyph's ink
-/// may exceed its advance; layout never pays for growth.
+/// A delimiter's advance: its fitted ink plus both side bearings.
+/// The leaf rectangle contains the drawing at every height.
 fn delim_advance(scale: f64, delim: Delim) -> f64 {
     delim_style(scale).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * scale
 }
@@ -1666,10 +1687,8 @@ fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {
 /// advance, the span it must cover) while the ink inside spans
 /// `ink_top..ink_bottom` relative to the baseline, stroked in the dim
 /// brush like the text delimiters it replaces. A grown tall
-/// delimiter keeps its terminals where the flat form's would be and
-/// bulges OUTWARD past its advance — typographic overhang, so growth
-/// costs layout nothing and nested delimiters bow into each other's
-/// empty sides.
+/// delimiter keeps its terminals where the flat form's would be while
+/// remaining inside the advance promised to layout.
 fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     delim: Delim,
@@ -1682,12 +1701,11 @@ fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
     let style = delim_style(scale);
     let bearing = SIDE_BEARING_EM * 14.0 * scale;
     let path = if open {
-        delim::open(delim, &style, ink_top, ink_bottom)
+        delim::open_fitted(delim, &style, ink_top, ink_bottom)
     } else {
-        delim::close(delim, &style, ink_top, ink_bottom)
+        delim::close_fitted(delim, &style, ink_top, ink_bottom)
     };
-    let overhang = style.bow_for(delim, ink_bottom - ink_top) - style.bow(delim);
-    let ink_x = if open { bearing - overhang } else { bearing };
+    let ink_x = bearing;
     leaf(
         Extent {
             width: style.bow(delim) + 2.0 * bearing,
@@ -1867,17 +1885,13 @@ fn hover_claim<C: 'static, Cv: 'static>(
     placement: Placement,
     key: Hover,
 ) {
-    p.claim(move |point| {
-        placement
-            .contains(point)
-            .then(|| Claim::Names(Hovered::Tree(key.clone())))
-    });
+    p.claim(placement, Hovered::Tree(key));
 }
 
 /// An occluder: takes the pointer and names nothing, so targets
 /// beneath an overlay never light.
 fn hover_block<C: 'static, Cv: 'static>(p: &mut placed::Builder<C, Cv>, placement: Placement) {
-    p.claim(move |point| placement.contains(point).then_some(Claim::Occludes));
+    p.occlude(placement);
 }
 
 /// The pointer's preview of a click's meaning: the same box the
@@ -1907,13 +1921,11 @@ fn primary_highlight<P: Canvas>(scale: f64, p: &mut P, rect: Rect) {
 /// Marks CONTENT-SHAPED `child` as the projection of the value at
 /// `path` — its bounding box is all ink (a pending's query, an
 /// engaged name, the empty-document placeholder), so the whole box
-/// is an honest click target. On placement it draws the highlight
-/// when this is the selected path, registers a click that selects it
-/// (innermost wins by handler precedence) — or, with the command
-/// modifier and a pending open, picks `value` into it — and records
-/// itself for keyboard navigation. Views whose boxes span structural
-/// whitespace use [`descend_landmark`] plus explicit content claims
-/// instead.
+/// is an honest hover target. On placement it draws the highlight,
+/// registers Activate and Pick actions addressed to that hover, and
+/// records itself for keyboard navigation. Views whose boxes span
+/// structural whitespace use [`descend_landmark`] plus explicit
+/// content claims instead.
 fn source_target<C: 'static, Cv: Canvas + 'static>(
     cx: &Cx,
     path: Path,
@@ -1948,18 +1960,14 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
         let pick = pick.clone();
         let target = path.clone();
         let value = value.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    let picked = command(&event.state.modifiers)
-                        && value.as_ref().is_some_and(|value| pick(ctx, value.clone()));
-                    if !picked {
-                        select(ctx, target.clone());
-                    }
-                    true
-                }
+        let action_target = Hovered::Tree(Hover::Value(target.clone()));
+        p.activate(action_target.clone(), move |ctx| {
+            select(ctx, target.clone());
+            true
         });
+        if let Some(value) = value {
+            p.pick(action_target, move |ctx| pick(ctx, value.clone()));
+        }
         if !transient {
             p.descends().push(Descend { path, rect });
         }
@@ -2424,7 +2432,7 @@ fn document_partial_layout<C>(
     value: &Value,
     selection: Option<&Value>,
     state: Option<&Value>,
-    select: &progred_display::ClickHandler<C>,
+    select: &progred_display::ActionHandler<C>,
     hover: &Hover,
 ) -> Option<progred_display::Layout<C, Hover>> {
     let registry = cx
@@ -2462,11 +2470,10 @@ fn document_partial_layout<C>(
     })
 }
 
-/// Every projected value's command-click backstop: pick the value
-/// into an open pending, or — nothing pending — select it like a
-/// plain click, so a stray modifier never deadens the gesture.
-/// Content declines command-clicks, so inner [`realize_pick`] wrappers
-/// answer first and this catches what they refused.
+/// Every projected value's Pick backstop: pick the value into an open
+/// pending, or — nothing pending — select it like Activate, so a stray
+/// modifier never deadens the gesture. Inner Pick registrations answer
+/// first and this catches what they refused.
 fn pick_target_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     value: Value,
@@ -2474,21 +2481,16 @@ fn pick_target_with<C: 'static, Cv: Canvas + 'static>(
     select: Rc<dyn Fn(&mut C, Path)>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    before(child, move |p, placement| {
+    before(child, move |p, _| {
         let pick = pick.clone();
         let select = select.clone();
         let path = path.clone();
         let value = value.clone();
-        p.handler().on_pointer_down(move |world, event| {
-            event.button == Some(PointerButton::Primary)
-                && command(&event.state.modifiers)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    if !pick(world, value.clone()) {
-                        select(world, path.clone());
-                    }
-                    true
-                }
+        p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
+            if !pick(world, value.clone()) {
+                select(world, path.clone());
+            }
+            true
         });
     })
 }
@@ -2703,14 +2705,16 @@ pub fn popup_view<C: 'static, Cv: Canvas + 'static>(
                     }
                 });
                 hover_claim(p, placement, Hover::Entry(index));
-                p.handler().on_pointer_down(move |ctx, event| {
-                    event.button == Some(PointerButton::Primary)
-                        && placement
-                            .contains(Point::new(event.state.position.x, event.state.position.y))
-                        && {
-                            commit(ctx, &action);
-                            true
-                        }
+                let target = Hovered::Tree(Hover::Entry(index));
+                let pick_commit = commit.clone();
+                let pick_action = action.clone();
+                p.activate(target.clone(), move |ctx| {
+                    commit(ctx, &action);
+                    true
+                });
+                p.pick(target, move |ctx| {
+                    pick_commit(ctx, &pick_action);
+                    true
                 });
             })
         })
@@ -2727,9 +2731,6 @@ pub fn popup_view<C: 'static, Cv: Canvas + 'static>(
             Affine::IDENTITY,
         );
         hover_block(p, placement);
-        p.handler().on_pointer_down(move |_, event| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-        });
     })
 }
 
@@ -2819,10 +2820,9 @@ fn label_query<
     pad(Insets::new(4.0 * scale, 0.0, 4.0 * scale, 0.0), ringed)
 }
 
-/// A plain click-to-select target for `path` — for parts like labels
-/// and the cell star that select without carrying an editor click.
-/// With the command modifier and a pending open, picks `value` — the
-/// identity the part displays — into it instead.
+/// An Activate-to-select target for `path` — for parts like labels
+/// and the cell star. Its Pick action offers `value`, the identity the
+/// part displays, to an open pending instead.
 fn select_target_with<C: 'static, Cv: Canvas + 'static>(
     path: Path,
     value: Value,
@@ -2835,7 +2835,7 @@ fn select_target_with<C: 'static, Cv: Canvas + 'static>(
 }
 
 /// Name the value at `path` for the pointer over this ink, adding no
-/// click of its own — the hover half of [`select_target`], and the
+/// action of its own — the hover half of [`select_target`], and the
 /// flat literal's delimiter dress.
 fn hover_target<C: 'static, Cv: Canvas + 'static>(path: Path, content: Measured<Placed<C, Cv>>) -> Measured<Placed<C, Cv>> {
     before(content, move |p, placement| {
@@ -2854,22 +2854,17 @@ fn quiet_select_target_with<C: 'static, Cv: Canvas + 'static>(
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     content: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    before(content, move |p, placement| {
+    before(content, move |p, _| {
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
         let value = value.clone();
-        p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
-                && placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && {
-                    let picked = command(&event.state.modifiers) && pick(ctx, value.clone());
-                    if !picked {
-                        select(ctx, target.clone());
-                    }
-                    true
-                }
+        let action_target = Hovered::Tree(Hover::Value(target.clone()));
+        p.activate(action_target.clone(), move |ctx| {
+            select(ctx, target.clone());
+            true
         });
+        p.pick(action_target, move |ctx| pick(ctx, value.clone()));
     })
 }
 

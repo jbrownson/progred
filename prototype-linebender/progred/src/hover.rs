@@ -6,21 +6,21 @@ use crate::selection::Selection;
 use crate::sources::Sources;
 use gid::{Path, Step, Value};
 
-/// What the pointer rests on: the claim a plain click at that point
-/// would fire. Values preview their selection; labels, toggles, and
-/// popup entries light their own ink. Placement derives it from the
-/// current pointer input and settled geometry; only gap hysteresis
-/// needs the prior answer.
+/// What the pointer rests on: the address a later editor action will
+/// target. Values preview their selection; labels, toggles, and popup
+/// entries light their own ink. Placement derives it from the current
+/// pointer input and settled geometry; only gap hysteresis needs the
+/// prior answer.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hover {
-    /// A click here selects the value at this path.
+    /// Activate here selects the value at this path.
     Value(Path),
-    /// A click here re-opens this field's label as its rename.
+    /// Activate here re-opens this field's label as its rename.
     Label(Path),
-    /// A click here toggles this path's collapse.
+    /// Activate here toggles this path's collapse.
     Toggle(Path),
     /// A click here opens a pending sibling after the element at
-    /// this path — the flat list separator's click.
+    /// this path — the flat list separator's action.
     Insert(Path),
     /// A click here commits the completion entry at this index. An
     /// index, not the entry: a hover stores ADDRESSES, never values,

@@ -18,10 +18,87 @@ use uig::Placement;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
 use vello::kurbo::{Affine, Point, Rect, Stroke, Vec2};
-use vello::peniko::Brush;
+use vello::peniko::{Brush, Color};
 
-pub type Probe = Box<dyn Fn(Point) -> Option<Claim<Hovered>>>;
 pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
+pub type EditorAction<C> = Box<dyn Fn(&mut C) -> bool>;
+
+enum ProbeTarget {
+    Names(Hovered),
+    Occludes,
+}
+
+/// One settled hover region. Its real placement can establish hover;
+/// its expanded visible rectangle can only retain the same target.
+pub struct Probe {
+    placement: Placement,
+    target: ProbeTarget,
+}
+
+impl Probe {
+    pub fn direct(placement: Placement, target: Hovered) -> Self {
+        Self {
+            placement,
+            target: ProbeTarget::Names(target),
+        }
+    }
+
+    pub fn occludes(placement: Placement) -> Self {
+        Self {
+            placement,
+            target: ProbeTarget::Occludes,
+        }
+    }
+
+    fn extended_rect(&self, reach: f64) -> Option<Rect> {
+        if self.placement.clipped_out() {
+            return None;
+        }
+        let rect = self
+            .placement
+            .visible_rect()
+            .inflate(reach, reach)
+            .intersect(self.placement.clip_rect);
+        (rect.width() > 0.0 && rect.height() > 0.0).then_some(rect)
+    }
+
+    fn answer(
+        &self,
+        point: Point,
+        prior: Option<&Hovered>,
+        reach: f64,
+    ) -> Option<Claim<Hovered>> {
+        if self.placement.contains(point) {
+            return Some(match &self.target {
+                ProbeTarget::Names(target) => Claim::Direct(target.clone()),
+                ProbeTarget::Occludes => Claim::Occludes,
+            });
+        }
+        match &self.target {
+            ProbeTarget::Names(target) if prior == Some(target) => self
+                .extended_rect(reach)
+                .filter(|rect| rect.contains(point))
+                .map(|_| Claim::Extended(target.clone())),
+            _ => None,
+        }
+    }
+}
+
+/// A coordinate-free editor action addressed to the same identity
+/// hover resolves. The topmost registration for a target gets the
+/// first chance to handle it; false falls through to registrations
+/// beneath it.
+pub struct TargetAction<C> {
+    target: Hovered,
+    action: EditorAction<C>,
+}
+
+pub fn dispatch_target<C>(actions: &[TargetAction<C>], ctx: &mut C, target: &Hovered) -> bool {
+    actions
+        .iter()
+        .rev()
+        .any(|candidate| candidate.target == *target && (candidate.action)(ctx))
+}
 
 /// What ink may condition on: the frame's RESOLVED hover, decided
 /// from this same pass's geometry before any render runs.
@@ -31,10 +108,14 @@ pub struct Ink<'a> {
     /// The value the hover refers to; its other projections carry
     /// the faint secondary mark.
     pub hovered_value: Option<&'a Value>,
+    /// Draw each leaf's honest placement rectangle after its own ink.
+    pub debug_geometry: bool,
 }
 
 pub struct Placed<C, Cv> {
     pub probes: Vec<Probe>,
+    pub activations: Vec<TargetAction<C>>,
+    pub picks: Vec<TargetAction<C>>,
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C>>,
@@ -47,6 +128,8 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
     fn empty() -> Self {
         Self {
             probes: Vec::new(),
+            activations: Vec::new(),
+            picks: Vec::new(),
             handler: None,
             descends: Vec::new(),
             popup: None,
@@ -56,6 +139,8 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
 
     fn over(mut self, above: Self) -> Self {
         self.probes.extend(above.probes);
+        self.activations.extend(above.activations);
+        self.picks.extend(above.picks);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
@@ -69,9 +154,36 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
 }
 
 impl<C: 'static, Cv> Placed<C, Cv> {
-    /// What the pointer at `point` rests on: the topmost claim.
-    pub fn probe(&self, point: Point) -> Option<Claim<Hovered>> {
-        self.probes.iter().rev().find_map(|probe| probe(point))
+    /// What the pointer at `point` rests on. A direct answer or
+    /// occluder wins immediately in placement order; an extension of
+    /// `prior` is remembered only in case every real region is air.
+    pub fn probe(
+        &self,
+        point: Point,
+        prior: Option<&Hovered>,
+        reach: f64,
+    ) -> Option<Claim<Hovered>> {
+        let mut retained = None;
+        for probe in self.probes.iter().rev() {
+            match probe.answer(point, prior, reach) {
+                direct @ Some(Claim::Direct(_) | Claim::Occludes) => return direct,
+                Some(Claim::Extended(target)) => {
+                    retained = Some(Claim::Extended(target));
+                }
+                _ => {}
+            }
+        }
+        retained
+    }
+
+    pub fn extended_rects(&self, target: &Hovered, reach: f64) -> Vec<Rect> {
+        self.probes
+            .iter()
+            .filter_map(|probe| match &probe.target {
+                ProbeTarget::Names(candidate) if candidate == target => probe.extended_rect(reach),
+                _ => None,
+            })
+            .collect()
     }
 
     pub fn handler_mut(&mut self) -> &mut Handler<C> {
@@ -123,10 +235,36 @@ impl<C: 'static, Cv> Builder<C, Cv> {
         }
     }
 
-    /// Contribute a hover probe: asked when the frame wants to know
-    /// what the pointer rests on, topmost contribution first.
-    pub fn claim(&mut self, probe: impl Fn(Point) -> Option<Claim<Hovered>> + 'static) {
-        self.placed.probes.push(Box::new(probe));
+    /// Contribute a named hover region.
+    pub fn claim(&mut self, placement: Placement, target: Hovered) {
+        self.placed.probes.push(Probe::direct(placement, target));
+    }
+
+    /// Contribute an unnamed region that blocks targets below it.
+    pub fn occlude(&mut self, placement: Placement) {
+        self.placed.probes.push(Probe::occludes(placement));
+    }
+
+    pub fn activate(
+        &mut self,
+        target: Hovered,
+        action: impl Fn(&mut C) -> bool + 'static,
+    ) {
+        self.placed.activations.push(TargetAction {
+            target,
+            action: Box::new(action),
+        });
+    }
+
+    pub fn pick(
+        &mut self,
+        target: Hovered,
+        action: impl Fn(&mut C) -> bool + 'static,
+    ) {
+        self.placed.picks.push(TargetAction {
+            target,
+            action: Box::new(action),
+        });
     }
 
     /// Contribute ink that reads the resolved hover — the only paint
@@ -213,11 +351,27 @@ pub fn built<C: 'static, Cv: 'static>(
     }
 }
 
-pub fn leaf<C: 'static, Cv: 'static>(
+pub fn leaf<C: 'static, Cv: Canvas + 'static>(
     extent: Extent,
     place: impl FnOnce(&mut Builder<C, Cv>, Placement) + 'static,
 ) -> Measured<Placed<C, Cv>> {
-    measured::leaf(extent, built(place))
+    let place = built(place);
+    measured::leaf(extent, move |placement| {
+        let mut placed = place(placement);
+        let renders = std::mem::take(&mut placed.renders);
+        placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+            Placed::<C, Cv>::render(renders, cv, ink);
+            if ink.debug_geometry {
+                cv.stroke(
+                    placement.rect,
+                    Stroke::new(0.75),
+                    Color::new([0.0, 0.65, 1.0, 0.36]),
+                    Affine::IDENTITY,
+                );
+            }
+        }));
+        placed
+    })
 }
 
 pub fn before<C: 'static, Cv: 'static>(
@@ -247,16 +401,6 @@ pub fn on_key<C: 'static, Cv: 'static>(
 ) -> Measured<Placed<C, Cv>> {
     before(child, move |p, _| {
         p.handler().on_key(action);
-    })
-}
-
-pub fn on_primary_pointer_down<C: 'static, Cv: 'static>(
-    child: Measured<Placed<C, Cv>>,
-    accepts: impl Fn(&PointerButtonEvent) -> bool + 'static,
-    action: impl Fn(&mut C, &PointerButtonEvent) -> bool + 'static,
-) -> Measured<Placed<C, Cv>> {
-    before(child, move |p, placement| {
-        puri::interact::on_primary_pointer_down(p, placement, accepts, action);
     })
 }
 
@@ -384,6 +528,7 @@ mod tests {
         Ink {
             hovered: None,
             hovered_value: None,
+            debug_geometry: false,
         }
     }
 
@@ -425,6 +570,79 @@ mod tests {
             delta: ScrollDelta::LineDelta(0.0, 1.0),
             state: state_at(x, y),
         }
+    }
+
+    #[test]
+    fn target_actions_follow_resolved_hover_and_visual_precedence() {
+        let target = Hovered::Tree(crate::hover::Hover::Value(Vec::new()));
+        let other = Hovered::Tree(crate::hover::Hover::Toggle(Vec::new()));
+        let actions = vec![
+            TargetAction {
+                target: target.clone(),
+                action: Box::new(|log: &mut Vec<&'static str>| {
+                    log.push("lower");
+                    true
+                }),
+            },
+            TargetAction {
+                target: other,
+                action: Box::new(|log: &mut Vec<&'static str>| {
+                    log.push("other");
+                    true
+                }),
+            },
+            TargetAction {
+                target: target.clone(),
+                action: Box::new(|log: &mut Vec<&'static str>| {
+                    log.push("upper");
+                    false
+                }),
+            },
+        ];
+        let mut log = Vec::new();
+
+        assert!(dispatch_target(&actions, &mut log, &target));
+        assert_eq!(log, ["upper", "lower"]);
+    }
+
+    #[test]
+    fn debug_geometry_outlines_the_leafs_placement() {
+        let child = leaf(
+            Extent {
+                width: 12.0,
+                ascent: 4.0,
+                descent: 6.0,
+            },
+            |p: &mut Builder<(), TestCanvas>, placement| {
+                p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
+            },
+        );
+        let rect = Rect::new(3.0, 5.0, 15.0, 15.0);
+        let placed = measured::place(child, Placement::root(rect));
+        let mut canvas = TestCanvas(DrawList::new());
+        Placed::<(), TestCanvas>::render(
+            placed.renders,
+            &mut canvas,
+            Ink {
+                hovered: None,
+                hovered_value: None,
+                debug_geometry: true,
+            },
+        );
+
+        assert!(matches!(
+            &canvas.0.0[..],
+            [
+                DrawCmd::Fill {
+                    shape: Shape::Rect(fill),
+                    ..
+                },
+                DrawCmd::Stroke {
+                    shape: Shape::Rect(outline),
+                    ..
+                }
+            ] if *fill == rect && *outline == rect
+        ));
     }
 
     #[test]

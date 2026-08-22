@@ -9,8 +9,8 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime as grap;
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Layout, ProjectionInput, alternatives, at_with_projection, centered_row, col, dim, hug,
-    on_click, on_hover, row, shared,
+    Layout, ProjectionInput, activatable, alternatives, at_with_projection, centered_row, col, dim,
+    hug, row, shared,
 };
 use std::collections::BTreeMap;
 
@@ -298,9 +298,10 @@ fn case_display<World, Hover: Clone>(
     let expression_target = input
         .targets
         .at([Step::Key(grap_runtime::vocabulary::EXPRESSION)]);
-    let arrow = on_hover(
-        on_click(dim("→"), expression_target.select),
+    let arrow = activatable(
+        dim("→"),
         expression_target.hover,
+        expression_target.select,
     );
     Some(hug(
         centered_row(
@@ -367,9 +368,10 @@ pub fn bindings_display<World, Hover: Clone>(
             let expression_target = input
                 .targets
                 .at([Step::Key(grap_runtime::vocabulary::EXPRESSION)]);
-            let in_marker = shared(on_hover(
-                on_click(dim("in"), expression_target.select),
+            let in_marker = shared(activatable(
+                dim("in"),
                 expression_target.hover,
+                expression_target.select,
             ));
             Some(alternatives([
                 row(
@@ -418,9 +420,10 @@ fn binding_display<World, Hover: Clone>(
     };
     let value = fields.get(&vocabulary::VALUE)?;
     let value_target = input.targets.at([Step::Key(vocabulary::VALUE)]);
-    let equals = on_hover(
-        on_click(dim("="), value_target.select),
+    let equals = activatable(
+        dim("="),
         value_target.hover,
+        value_target.select,
     );
     Some(hug(
         centered_row(
@@ -436,11 +439,11 @@ fn binding_display<World, Hover: Clone>(
     ))
 }
 
-fn quote_marker<World, Hover>(
+fn quote_marker<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     (input.value.as_cell()? == vocabulary::QUOTE).then(|| {
-        on_hover(on_click(dim("\""), input.select), input.hover)
+        activatable(dim("\""), input.hover, input.select)
     })
 }
 
@@ -663,7 +666,7 @@ mod tests {
         let Layout::OnHover { child, .. } = marker else {
             panic!("the marker claims hover");
         };
-        let Layout::OnClick { child, .. } = *child else {
+        let Layout::OnActivate { child, .. } = *child else {
             panic!("the marker remains selectable");
         };
         let Layout::Leaf(progred_display::Display::Text { text, face }) = *child else {
@@ -1028,7 +1031,7 @@ mod tests {
             hover.as_deref(),
             Some(&[Step::Key(grap::vocabulary::EXPRESSION)][..])
         );
-        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
+        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
     }
 
     #[test]

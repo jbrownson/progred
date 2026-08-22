@@ -8,8 +8,8 @@ use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
 use crate::identity::short_id;
 use progred_display::{
-    Delim, Face, Layout, alternatives, at, block_hover, bracket, col, descend, dim, faced, hug, id,
-    on_click, on_hover, pickable, query, row, shared, slot,
+    Delim, Face, Layout, activatable, alternatives, at, block_hover, bracket, col, descend, dim,
+    faced, hug, id, on_activate, on_click, on_hover, pickable, query, row, shared, slot,
 };
 use progred_libraries::{name, text};
 use std::rc::Rc;
@@ -261,7 +261,9 @@ fn field_head<World: 'static>(
         child.push(Step::Key(key));
         selectable(head, &child, &Value::from(key), hooks, true)
     } else {
-        pickable(head, Value::Cell(key))
+        let mut child = path.to_vec();
+        child.push(Step::Key(key));
+        pickable(head, Hover::Label(child), Value::Cell(key))
     }
 }
 
@@ -284,15 +286,13 @@ fn field_label<World: 'static>(
         let handler_target = target.clone();
         let rename = hooks.rename.clone();
         let caret = spelling.len();
-        on_hover(
-            on_click(
-                label,
-                Rc::new(move |world| {
-                    rename(world, handler_target.clone(), caret);
-                    true
-                }),
-            ),
+        activatable(
+            label,
             Hover::Label(target),
+            Rc::new(move |world| {
+                rename(world, handler_target.clone(), caret);
+                true
+            }),
         )
     }
 }
@@ -321,8 +321,10 @@ fn selectable<World: 'static>(
     claim_hover: bool,
 ) -> View<World> {
     let path = path.to_vec();
-    let clicked = on_click(
-        pickable(child, value.clone()),
+    let target = Hover::Value(path.clone());
+    let clicked = on_activate(
+        pickable(child, target.clone(), value.clone()),
+        target,
         select_handler(path.clone(), hooks),
     );
     if claim_hover {
@@ -335,15 +337,13 @@ fn selectable<World: 'static>(
 fn toggle<World: 'static>(child: View<World>, path: &[Step], hooks: &Hooks<World>) -> View<World> {
     let target = path.to_vec();
     let toggle = hooks.toggle.clone();
-    on_hover(
-        on_click(
-            child,
-            Rc::new(move |world| {
-                toggle(world, target.clone());
-                true
-            }),
-        ),
+    activatable(
+        child,
         Hover::Toggle(path.to_vec()),
+        Rc::new(move |world| {
+            toggle(world, target.clone());
+            true
+        }),
     )
 }
 
@@ -357,15 +357,13 @@ fn insert<World: 'static>(
     target.push(Step::Element(after));
     let insert = hooks.insert.clone();
     let handler_target = target.clone();
-    on_hover(
-        on_click(
-            child,
-            Rc::new(move |world| {
-                insert(world, handler_target.clone());
-                true
-            }),
-        ),
+    activatable(
+        child,
         Hover::Insert(target),
+        Rc::new(move |world| {
+            insert(world, handler_target.clone());
+            true
+        }),
     )
 }
 

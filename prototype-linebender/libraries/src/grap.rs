@@ -7,8 +7,8 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
 use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Face, Layout, ProjectionInput, RecordField, alternatives, at_with_projection, col, dim, faced,
-    hug, on_click, on_hover, record, row, shared, transient,
+    Face, Layout, ProjectionInput, RecordField, activatable, alternatives, at_with_projection, col,
+    dim, faced, hug, record, row, shared, transient,
 };
 
 fn short_id(cell: CellId) -> String {
@@ -30,9 +30,10 @@ fn shallow_cell<World, Hover: Clone>(
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value.as_cell()?;
     let (spelling, face) = spelling(input.env, cell);
-    Some(on_hover(
-        on_click(faced(spelling, face), input.select),
+    Some(activatable(
+        faced(spelling, face),
         input.hover,
+        input.select,
     ))
 }
 
@@ -143,7 +144,7 @@ pub fn call_display<World, Hover: Clone>(
             let (spelling, face) = field_spelling(input.env, field);
             let target = input.targets.at([Step::Key(field)]);
             RecordField {
-                label: on_hover(on_click(faced(spelling, face), target.select), target.hover),
+                label: activatable(faced(spelling, face), target.hover, target.select),
                 value: at([Step::Key(field)], value),
             }
         },
@@ -171,10 +172,11 @@ pub fn lambda_display<World, Hover: Clone>(
         .collect::<Option<Vec<_>>>()?;
     let params = row(4.0, params);
     let body_target = input.targets.at([Step::Key(BODY)]);
-    let lambda = on_hover(on_click(dim("λ"), input.select), input.hover);
-    let arrow = on_hover(
-        on_click(dim("→"), body_target.select),
+    let lambda = activatable(dim("λ"), input.hover, input.select);
+    let arrow = activatable(
+        dim("→"),
         body_target.hover,
+        body_target.select,
     );
     let head = row(3.0, [lambda, params, arrow]);
     Some(hug(head, at([Step::Key(BODY)], body), 6.0, 20.0))
@@ -196,7 +198,7 @@ pub fn display<World, Hover: Clone>(
     let expression = input.value.as_record()?.get(&GRAP)?;
     let (result, fuel) = input.env.evaluate(expression);
     let expression = shared(at([Step::Key(GRAP)], expression));
-    let shaft = shared(on_hover(on_click(dim("→"), input.select), input.hover));
+    let shaft = shared(activatable(dim("→"), input.hover, input.select));
     let result = shared(transient(&result, fuel));
     Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
@@ -520,7 +522,7 @@ mod tests {
             panic!("the label targets its argument");
         };
         assert_eq!(hover.as_deref(), Some(&[Step::Key(argument)][..]));
-        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
+        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
     }
 
     #[test]
@@ -617,13 +619,13 @@ mod tests {
             panic!("lambda marker targets the whole function");
         };
         assert_eq!(hover.as_deref(), Some(&[][..]));
-        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
+        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
         assert!(matches!(&head[1], Layout::Row { .. }));
         let Layout::OnHover { child, hover } = &head[2] else {
             panic!("lambda arrow targets its body");
         };
         assert_eq!(hover.as_deref(), Some(&[Step::Key(BODY)][..]));
-        assert!(matches!(child.as_ref(), Layout::OnClick { .. }));
+        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
         assert!(matches!(
             unshared(&children[1]),
             Layout::At {

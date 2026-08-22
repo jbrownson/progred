@@ -1462,8 +1462,8 @@ fn a_projection_defined_as_data_realizes() {
         measured,
         puri::geometry::Placement::root(measured_rect(500.0)),
     );
-    // The data's selectable attached the provided handler.
-    assert!(placed.handler.is_some());
+    // The data's selectable attached the provided semantic action.
+    assert!(!placed.activations.is_empty());
 }
 
 #[test]

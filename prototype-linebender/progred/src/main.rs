@@ -43,7 +43,7 @@ use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-use ui_events::pointer::PointerEvent;
+use ui_events::pointer::{PointerButton, PointerEvent};
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::kurbo::{Point, Rect, Size};
 use vello::peniko::{Brush, Color};
@@ -144,11 +144,6 @@ pub(crate) struct App {
     /// A button is down: gestures keep the hover they began with, so
     /// hover resolution stands down until release.
     pub(crate) pressed: bool,
-    /// Whether settled geometry has resolved `hover` for the
-    /// next draw. Geometry-changing redraw sources clear it.
-    /// The little-gap ring: a dead-zone filter over the pointer whose
-    /// trailing center is the air fallback for hover probes.
-    pub(crate) ring: puri::hover::LazyPointer,
     /// The selection identity last scrolled into view — path AND
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
@@ -367,30 +362,31 @@ impl ApplicationHandler<UserEvent> for App {
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Down(button)))) => {
                         let position =
                             Point::new(button.state.position.x, button.state.position.y);
-                        if self.pointer.is_none() {
-                            self.ring.center = position;
-                        }
                         self.pointer = Some(position);
                         self.pressed = true;
-                        dispatch.handler.dispatch_pointer_down(self, &button)
+                        let raw = dispatch.handler.dispatch_pointer_down(self, &button);
+                        if raw || button.button != Some(PointerButton::Primary) {
+                            raw
+                        } else if let Some(target) = self.hover.clone() {
+                            if projection::command(&button.state.modifiers) {
+                                placed::dispatch_target(&dispatch.picks, self, &target)
+                            } else {
+                                placed::dispatch_target(&dispatch.activations, self, &target)
+                            }
+                        } else {
+                            self.model.selection.take().is_some()
+                        }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
                         // Pointer position is frame input. Unpressed
                         // motion remints even when no event handler
                         // consumes it; pressed gestures freeze hover
-                        // while their ordinary drag handlers run —
-                        // the ring only tracks between gestures.
+                        // while their ordinary drag handlers run.
                         let position = Point::new(
                             update.current.position.x,
                             update.current.position.y,
                         );
-                        if self.pointer.is_none() {
-                            self.ring.center = position;
-                        }
                         self.pointer = Some(position);
-                        if !self.pressed {
-                            self.ring.track(position, 8.0 * scale);
-                        }
                         frame_input_changed = !self.pressed;
                         dispatch.handler.dispatch_pointer_move(self, &update)
                     }
@@ -399,7 +395,6 @@ impl ApplicationHandler<UserEvent> for App {
                             Point::new(button.state.position.x, button.state.position.y);
                         self.pointer = Some(position);
                         self.pressed = false;
-                        self.ring.track(position, 8.0 * scale);
                         frame_input_changed = true;
                         dispatch.handler.dispatch_pointer_up(self, &button)
                     }
@@ -574,7 +569,6 @@ fn main() {
         pointer: None,
         hover: None,
         pressed: false,
-        ring: puri::hover::LazyPointer::new(Point::ZERO),
         revealed: None,
         dispatch: None,
         last_descends: Vec::new(),
@@ -646,8 +640,14 @@ impl App {
             menu::Selection::Undo => self.step_history(true),
             menu::Selection::Redo => self.step_history(false),
             menu::Selection::Raw => self.model.view.raw = !self.model.view.raw,
+            menu::Selection::DebugGeometry => {
+                self.model.view.debug_geometry = !self.model.view.debug_geometry
+            }
         }
-        if selection == menu::Selection::Raw
+        if matches!(
+            selection,
+            menu::Selection::Raw | menu::Selection::DebugGeometry
+        )
             && let RenderState::Active { window, .. } = &self.state
         {
             window.request_redraw();
@@ -891,6 +891,7 @@ impl App {
         let ink = placed::Ink {
             hovered: self.hover.as_ref(),
             hovered_value: hovered_value.as_ref(),
+            debug_geometry: self.model.view.debug_geometry,
         };
         let mut paint = Paint {
             scene: std::mem::replace(&mut self.scene, Scene::new()),
