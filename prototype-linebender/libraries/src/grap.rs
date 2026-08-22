@@ -158,19 +158,18 @@ pub fn lambda_display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
-    let params = fields.get(&PARAMS)?.as_list()?;
+    let params = fields.get(&PARAMS)?;
+    params
+        .as_list()?
+        .values()
+        .all(|param| param.as_cell().is_some())
+        .then_some(())?;
     let body = fields.get(&BODY)?;
-    let params = params
-        .iter()
-        .map(|(position, param)| {
-            param.as_cell()?;
-            Some(shallow_at(
-                [Step::Key(PARAMS), Step::Element(position.clone())],
-                param,
-            ))
-        })
-        .collect::<Option<Vec<_>>>()?;
-    let params = row(4.0, params);
+    let params = at_with_projection(
+        [Step::Key(PARAMS)],
+        params,
+        [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
+    );
     let body_target = input.targets.at([Step::Key(BODY)]);
     let lambda = activatable(dim("λ"), input.hover, input.select);
     let arrow = activatable(
@@ -620,7 +619,14 @@ mod tests {
         };
         assert_eq!(hover.as_deref(), Some(&[][..]));
         assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
-        assert!(matches!(&head[1], Layout::Row { .. }));
+        assert!(matches!(
+            &head[1],
+            Layout::At {
+                steps,
+                projection: Some(projection),
+                ..
+            } if *steps == [Step::Key(PARAMS)] && projection.len() == 1
+        ));
         let Layout::OnHover { child, hover } = &head[2] else {
             panic!("lambda arrow targets its body");
         };
