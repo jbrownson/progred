@@ -949,10 +949,34 @@ fn tall_delimiter_families_fill_equal_honest_leaf_rectangles() {
             let ink = path.bounding_box();
             assert!((ink.x0 - (rect.x0 + bearing)).abs() < 1e-6);
             assert!((ink.x1 - (rect.x1 - bearing)).abs() < 1e-6);
-            assert!(
-                ink.y0 >= rect.y0 && ink.y1 <= rect.y1,
-                "{ink:?} outside {rect:?}"
-            );
+            match delim {
+                Delim::Bracket => {
+                    assert!((ink.y0 - rect.y0).abs() < 1e-6);
+                    assert!((ink.y1 - rect.y1).abs() < 1e-6);
+                }
+                Delim::Paren | Delim::Brace => assert!(
+                    ink.y0 >= rect.y0 && ink.y1 <= rect.y1,
+                    "{ink:?} outside {rect:?}"
+                ),
+            }
         }
     }
+
+    let content = Extent {
+        width: 0.0,
+        ascent: 20.0,
+        descent: 10.0,
+    };
+    let widths = [Delim::Paren, Delim::Bracket, Delim::Brace].map(|delim| {
+        tall_delim::<World, Bench>(
+            1.0,
+            delim,
+            true,
+            content,
+            Color::BLACK.into(),
+        )
+        .extent
+        .width
+    });
+    assert_eq!(widths, [widths[0]; 3]);
 }

@@ -73,17 +73,20 @@ impl DelimStyle {
 }
 
 pub fn open(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    open_with_bow(delim, style, top, bottom, style.bow_for(delim, bottom - top))
+    open_with_width(delim, style, top, bottom, style.bow_for(delim, bottom - top))
 }
 
 /// The same height-sensitive stroke as [`open`], constrained to the
 /// delimiter's base advance. Useful when a layout leaf promises that
 /// its rectangle contains all of its ink.
 pub fn open_fitted(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    open_with_bow(delim, style, top, bottom, style.bow(delim))
+    open_with_width(delim, style, top, bottom, style.bow(delim))
 }
 
-fn open_with_bow(
+/// Draw a delimiter at an explicitly allocated width. This separates
+/// vertical trimming from width growth when a layout box, rather than
+/// the ink span within it, determines the width.
+pub fn open_with_width(
     delim: Delim,
     style: &DelimStyle,
     top: f64,
@@ -100,27 +103,30 @@ fn open_with_bow(
 }
 
 pub fn close(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    let mut path = open(delim, style, top, bottom);
-    path.apply_affine(Affine::new([
-        -1.0,
-        0.0,
-        0.0,
-        1.0,
-        style.bow_for(delim, bottom.max(top + style.stem) - top),
-        0.0,
-    ]));
-    path
+    let width = style.bow_for(delim, bottom.max(top + style.stem) - top);
+    close_with_width(delim, style, top, bottom, width)
 }
 
 /// Mirrored [`open_fitted`].
 pub fn close_fitted(delim: Delim, style: &DelimStyle, top: f64, bottom: f64) -> BezPath {
-    let mut path = open_fitted(delim, style, top, bottom);
+    close_with_width(delim, style, top, bottom, style.bow(delim))
+}
+
+/// Mirrored [`open_with_width`].
+pub fn close_with_width(
+    delim: Delim,
+    style: &DelimStyle,
+    top: f64,
+    bottom: f64,
+    width: f64,
+) -> BezPath {
+    let mut path = open_with_width(delim, style, top, bottom, width);
     path.apply_affine(Affine::new([
         -1.0,
         0.0,
         0.0,
         1.0,
-        style.bow(delim),
+        width,
         0.0,
     ]));
     path

@@ -1702,11 +1702,11 @@ fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     let style = delim_style(scale);
     let bearing = SIDE_BEARING_EM * 14.0 * scale;
-    let bow = style.bow_for(delim, ink_bottom - ink_top);
+    let bow = style.bow_for(delim, extent.ascent + extent.descent);
     let path = if open {
-        delim::open(delim, &style, ink_top, ink_bottom)
+        delim::open_with_width(delim, &style, ink_top, ink_bottom, bow)
     } else {
-        delim::close(delim, &style, ink_top, ink_bottom)
+        delim::close_with_width(delim, &style, ink_top, ink_bottom, bow)
     };
     let ink_x = bearing;
     leaf(
@@ -1742,8 +1742,16 @@ fn tall_delim<C: 'static, Cv: Canvas + 'static>(
         ascent: content.ascent.max(GLYPH_ASC_EM * em),
         descent: content.descent.max(GLYPH_DESC_EM * em),
     };
-    let ink_top = -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em);
-    let ink_bottom = (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em);
+    let (ink_top, ink_bottom) = match delim {
+        // Square caps visibly define the enclosure, so they meet the
+        // full measured box rather than the glyph ink within its
+        // first and last line boxes.
+        Delim::Bracket => (-content.ascent, content.descent),
+        Delim::Paren | Delim::Brace => (
+            -(content.ascent - TOP_TRIM_EM * em).max(GLYPH_ASC_EM * em),
+            (content.descent - BOTTOM_TRIM_EM * em).max(GLYPH_DESC_EM * em),
+        ),
+    };
     delim_leaf(scale, delim, open, content, ink_top, ink_bottom, brush)
 }
 
