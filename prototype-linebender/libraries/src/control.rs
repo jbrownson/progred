@@ -346,44 +346,14 @@ pub fn bindings_display<World, Hover: Clone>(
         vocabulary::WHERE => BindingForm::Where,
         _ => return None,
     };
-    let bindings = fields.get(&vocabulary::BINDINGS)?.as_list()?;
+    let bindings = fields.get(&vocabulary::BINDINGS)?;
+    bindings.as_list()?;
     let expression = fields.get(&grap_runtime::vocabulary::EXPRESSION)?;
-    let clauses = bindings
-        .iter()
-        .map(|(position, binding)| {
-            let fields = binding.as_record()?;
-            match (
-                fields.get(&vocabulary::BIND),
-                fields.get(&vocabulary::PATTERN),
-            ) {
-                (Some(binder), None) => {
-                    binder.as_cell()?;
-                }
-                (None, Some(_)) => {}
-                _ => return None,
-            }
-            fields.get(&vocabulary::VALUE)?;
-            Some(shared(at_with_projection(
-                [
-                    Step::Key(vocabulary::BINDINGS),
-                    Step::Element(position.clone()),
-                ],
-                binding,
-                [binding_display::<World, Hover> as progred_display::Partial<World, Hover>],
-            )))
-        })
-        .collect::<Option<Vec<_>>>()?;
-    let mut inline_clauses = Vec::new();
-    for (index, clause) in clauses.iter().enumerate() {
-        if index > 0 {
-            inline_clauses.push(dim(", "));
-        }
-        inline_clauses.push(clause.clone());
-    }
-    let bindings = shared(alternatives([
-        row(0.0, inline_clauses),
-        col(0, 2.0, clauses),
-    ]));
+    let bindings = shared(at_with_projection(
+        [Step::Key(vocabulary::BINDINGS)],
+        bindings,
+        [binding_display::<World, Hover> as progred_display::Partial<World, Hover>],
+    ));
     let function = shared(crate::grap::shallow_at(
         [Step::Key(grap_runtime::vocabulary::FUNCTION)],
         function,
@@ -944,22 +914,16 @@ mod tests {
         else {
             panic!("let shares its bindings");
         };
-        let Layout::Alternatives(binding_options) = bindings.as_ref() else {
-            panic!("bindings have inline and block forms");
+        let Layout::At {
+            steps,
+            projection: Some(projection),
+            ..
+        } = bindings.as_ref()
+        else {
+            panic!("let descends to its bindings list");
         };
-        let Layout::Row { children, .. } = &binding_options[0] else {
-            panic!("inline bindings first");
-        };
-        let Layout::Shared { child, .. } = &children[0] else {
-            panic!("the binding is shared");
-        };
-        let Layout::At { steps, .. } = child.as_ref() else {
-            panic!("the binding retains its list location");
-        };
-        assert!(matches!(
-            steps.as_slice(),
-            [Step::Key(key), Step::Element(_)] if *key == vocabulary::BINDINGS
-        ));
+        assert_eq!(steps, &[Step::Key(vocabulary::BINDINGS)]);
+        assert_eq!(projection.len(), 1);
 
         let where_layout = bindings_display(relative_projection_input(&where_call)).unwrap();
         let Layout::Alternatives(where_options) = where_layout else {
