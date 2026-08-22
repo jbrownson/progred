@@ -1,7 +1,7 @@
 //! A UTF-8 text convention over ordinary GID data. Text is a
 //! positively recognized record facet, not a GID-core atom.
 
-use crate::{Library, absent, layout, line_edit, name};
+use crate::{Library, line_edit, name};
 use gid::{Cells, Value};
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 use progred_display::{Layout, ProjectionInput, overlay_value};
@@ -51,15 +51,12 @@ pub fn display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let content = read(input.value)?;
-    let expression = line_edit::call(
-        value(content),
+    Some(line_edit::layout(
+        content,
         grap_runtime::ffi(vocabulary::UPDATE),
-        value("\""),
-        value("\""),
-        input.selection.cloned().unwrap_or_else(absent::value),
-    );
-    let (display, _) = input.env.evaluate(&expression);
-    layout::decode(&display, &input.select, &input.hover)
+        "\"",
+        "\"",
+    ))
 }
 
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
@@ -117,59 +114,33 @@ mod tests {
         );
     }
 
-    struct TestEnv {
-        cells: Cells,
-        functions: ForeignFunctions,
-    }
-
-    impl progred_display::Env for TestEnv {
-        fn evaluate(&self, expression: &Value) -> (Value, usize) {
-            let evaluation = grap_runtime::evaluate(
-                expression,
-                |cell| self.cells.value(cell).cloned(),
-                &self.functions,
-                500,
-            );
-            (evaluation.result, evaluation.remaining_fuel)
-        }
-    }
-
-    fn env() -> TestEnv {
-        let library = Library::<(), ()>::merge_all([
-            name::library(),
-            crate::control::library(),
-            crate::selection::library(),
-            crate::layout::library(),
-            crate::line_edit::library(),
-        ]);
-        TestEnv {
-            cells: library.cells,
-            functions: library
-                .functions
-                .merge(crate::line_edit::test_geometry_functions()),
-        }
-    }
-
     #[test]
     fn display_is_an_editable_line() {
         let select = std::rc::Rc::new(|_: &mut ()| false);
         let display = display::<(), ()>(ProjectionInput {
-                env: &env(),
-                value: &value("hi"),
-                selection: None,
-                state: None,
-                select: select.clone(),
-                hover: (),
-                targets: progred_display::ProjectionTargets::fixed(select, ()),
-            })
-            .expect("text projection");
-        let Layout::OnEvent { child, .. } = display else {
-            panic!("inactive editor installs pointer-down");
+            env: &NoEval,
+            value: &value("hi"),
+            selection: None,
+            state: None,
+            select: select.clone(),
+            hover: (),
+            targets: progred_display::ProjectionTargets::fixed(select, ()),
+        })
+        .expect("text projection");
+        let progred_display::Layout::LineEdit(line) = display else {
+            panic!("text projects directly to a line editor")
         };
-        let Layout::OnHover { child, .. } = *child else {
-            panic!("line editor claims hover");
-        };
-        assert!(matches!(*child, Layout::Overlay { .. }));
+        assert_eq!(line.text, "hi");
+        assert_eq!(line.prefix, "\"");
+        assert_eq!(line.suffix, "\"");
+    }
+
+    struct NoEval;
+
+    impl progred_display::Env for NoEval {
+        fn evaluate(&self, _: &Value) -> (Value, usize) {
+            panic!("the Rust line editor does not evaluate while projecting")
+        }
     }
 
     #[test]

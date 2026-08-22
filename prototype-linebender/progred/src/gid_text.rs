@@ -721,6 +721,44 @@ mod tests {
 mod checked_in_files {
     use super::*;
 
+    fn root_reachable_cells(doc: &Document) -> HashSet<CellId> {
+        fn enqueue(cell: CellId, reached: &mut HashSet<CellId>, pending: &mut Vec<CellId>) {
+            if reached.insert(cell) {
+                pending.push(cell);
+            }
+        }
+
+        fn visit(value: &Value, reached: &mut HashSet<CellId>, pending: &mut Vec<CellId>) {
+            match value {
+                Value::Cell(cell) => enqueue(*cell, reached, pending),
+                Value::Blob(_) => {}
+                Value::List(elements) => {
+                    for value in elements.values() {
+                        visit(value, reached, pending);
+                    }
+                }
+                Value::Record(fields) => {
+                    for (label, value) in fields {
+                        enqueue(*label, reached, pending);
+                        visit(value, reached, pending);
+                    }
+                }
+            }
+        }
+
+        let mut reached = HashSet::new();
+        let mut pending = Vec::new();
+        if let Some(root) = &doc.root {
+            visit(root, &mut reached, &mut pending);
+        }
+        while let Some(cell) = pending.pop() {
+            if let Some(value) = doc.cells.value(cell) {
+                visit(value, &mut reached, &mut pending);
+            }
+        }
+        reached
+    }
+
     /// The checked-in sample is canonical: it parses, and printing
     /// it back is the identity — the printer's golden fixture.
     #[test]
@@ -729,6 +767,20 @@ mod checked_in_files {
         let (doc, binders) = parse(text).expect("the sample parses");
         assert!(doc.root.is_some());
         assert_eq!(print(&doc, &binders), text);
+    }
+
+    #[test]
+    fn every_sample_cell_definition_is_root_reachable() {
+        let (doc, _) = parse(include_str!("../../sample.gid")).expect("the sample parses");
+        let reached = root_reachable_cells(&doc);
+        let mut orphans: Vec<_> = doc
+            .cells
+            .cells()
+            .filter(|cell| !reached.contains(cell))
+            .copied()
+            .collect();
+        orphans.sort();
+        assert!(orphans.is_empty(), "orphan cell definitions: {orphans:?}");
     }
 
     #[test]

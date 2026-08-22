@@ -1,7 +1,6 @@
 use super::*;
 use crate::annotations::Annotations;
 use crate::selection::payload as selection_payload;
-use crate::selection::line_edit;
 use crate::hover::hover_value;
 use gid::Position;
 use progred_libraries::{f64, name, text};
@@ -28,6 +27,7 @@ fn projection_targets_append_relative_steps() {
     let field = gid::new_cell_id();
     let hooks = Hooks::<Vec<Path>> {
         select: Rc::new(|selections, path| selections.push(path)),
+        start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
         rename: Rc::new(|_, _, _| {}),
         edit: Rc::new(|_| None),
@@ -54,29 +54,96 @@ fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
 }
 
 fn make_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
-    Selection::edge(
-        &src(doc, library),
-        &crate::stack::load::<()>().projection,
-        path,
-    )
+    Selection::edge(&src(doc, library), path)
+}
+
+/// Select through the action installed by the projected navigation
+/// landmark, as the shell does after an arrow step.
+fn make_projected_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
+    type World = Vec<(Path, progred_display::LineEdit)>;
+
+    let stack = crate::stack::load::<World>();
+    let projection_library = library.clone().merged(stack.library.clone());
+    let styles = crate::styles::editor(1.0);
+    let annotations = Annotations::default();
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let measured = project::<World, crate::frame::Paint>(
+        ProjectDescription {
+            sources: Sources {
+                doc,
+                library: &projection_library,
+            },
+            selection: None,
+            annotations: &annotations,
+            raw: false,
+            styles: &styles,
+            width: 500.0,
+            projection: Some(&stack.projection),
+            foreign: &stack.foreign,
+        },
+        &mut tcx,
+        Hooks {
+            select: Rc::new(|_, _| {}),
+            start_edit: Rc::new(|selected, path, line| selected.push((path, line))),
+            toggle: Rc::new(|_, _| {}),
+            rename: Rc::new(|_, _, _| {}),
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+            apply: Rc::new(|_, _, _, _| false),
+        },
+    );
+    let height = measured.extent.height().max(1.0);
+    let placed = measured::place(
+        measured,
+        Placement::root(Rect::new(0.0, 0.0, 500.0, height)),
+    );
+    let mut selected = World::new();
+    if let Some(target) = placed.descends.iter().find(|target| target.path == path) {
+        (target.select)(&mut selected);
+    }
+    match selected.pop() {
+        Some((path, line)) => Selection::from_line(&src(doc, library), path, line),
+        None => make_selection(doc, library, path),
+    }
 }
 
 fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
-    let sources = src(doc, library);
-    let value = sources.resolve(&path).expect("editable value");
-    let (spelling, update) = match (text::read(value), f64::read(value)) {
-        (Some(text), _) => (text.to_string(), grap::ffi(text::vocabulary::UPDATE)),
-        (_, Some(number)) => (number.to_string(), grap::ffi(f64::vocabulary::UPDATE)),
-        _ => panic!("test value is not line editable"),
+    struct NoEval;
+    impl progred_display::Env for NoEval {
+        fn evaluate(&self, _: &Value) -> (Value, usize) {
+            panic!("line projection evaluated")
+        }
+    }
+
+    let value = src(doc, library).resolve(&path).expect("selected value");
+    let stack = crate::stack::load::<()>();
+    let select = Rc::new(|_: &mut ()| false);
+    let layout = stack
+        .projection
+        .apply(
+            &NoEval,
+            value,
+            None,
+            None,
+            select.clone(),
+            Hover::Value(path.clone()),
+            progred_display::ProjectionTargets::fixed(select, Hover::Value(path.clone())),
+        )
+        .expect("value projection");
+    let progred_display::Layout::LineEdit(line) = layout else {
+        panic!("value is not line editable")
     };
-    let payload = selection_payload::with_update(&selection_payload::edge(), &update);
-    let payload = selection_payload::with_editor(&payload, &line_edit(&spelling), false);
-    Selection::from_payload(
-        &sources,
-        &crate::stack::load::<()>().projection,
-        path,
-        payload,
-    )
+    Selection::from_line(&src(doc, library), path, line)
 }
 
 fn toggle_fold(sources: &Sources, collapse: &mut Annotations, path: &[Step]) -> bool {
@@ -112,10 +179,11 @@ fn positions(value: &Value) -> Vec<Position> {
 
 const LINE: f64 = 16.0;
 
-fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend {
+fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
     Descend {
         path,
         rect: Rect::new(x0, y0, x1, y1),
+        select: Rc::new(|_| true),
     }
 }
 
@@ -128,9 +196,10 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
     }
 }
 
-fn stepped(ds: &[Descend], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
+fn stepped(ds: &[Descend<()>], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
     let selection = from.map(crate::selection::bare_edge);
     step_selection(ds, selection.as_ref(), LINE, &arrow(named))
+        .map(|descend| descend.path.clone())
 }
 
 #[test]
@@ -281,7 +350,7 @@ fn set_collapse_is_directional_and_stays_sparse() {
 }
 
 #[test]
-fn selecting_text_leaves_editing_to_the_projection_event() {
+fn line_projection_descriptions_mount_the_rust_editor() {
     let lib = Cells::new();
     let (mut doc, cell) = doc_of(vec![
         (
@@ -293,31 +362,66 @@ fn selecting_text_leaves_editing_to_the_projection_event() {
             crate::test_values::text("1.5"),
         ),
     ]);
-    let at = |doc: &Document, path: Vec<Step>| make_selection(doc, &lib, path);
-    assert!(at(&doc, vec![Step::Follow, key("name")]).edit().is_none());
-    assert!(at(&doc, vec![Step::Follow, key("x")]).edit().is_none());
+    let edit = |doc: &Document, path: Vec<Step>| make_editing_selection(doc, &lib, path);
+    assert_eq!(
+        edit(&doc, vec![Step::Follow, key("name")])
+            .edit()
+            .map(LineEditState::text),
+        Some("old")
+    );
+    assert_eq!(
+        edit(&doc, vec![Step::Follow, key("x")])
+            .edit()
+            .map(LineEditState::text),
+        Some("1.5")
+    );
     // Missing fields, links, and blobs carry no editor.
     assert!(
-        at(&doc, vec![Step::Follow, key("missing")])
+        make_selection(&doc, &lib, vec![Step::Follow, key("missing")])
             .edit()
             .is_none()
     );
-    assert!(at(&doc, vec![]).edit().is_none());
+    assert!(make_selection(&doc, &lib, vec![]).edit().is_none());
     doc.cells.set_value(
         cell,
         Value::record([(crate::test_values::label("b"), Value::from(vec![0xff_u8]))]),
     );
-    assert!(at(&doc, vec![Step::Follow, key("b")]).edit().is_none());
-    // A cell holding text edits at its Follow path.
-    doc.cells.set_value(cell, crate::test_values::text("held"));
-    assert!(at(&doc, vec![Step::Follow]).edit().is_none());
-    // A simple name convention is just another text field.
-    doc.cells.set_value(cell, name::record("roof", []));
     assert!(
-        at(&doc, vec![Step::Follow, Step::Key(name::vocabulary::NAME),],)
+        make_selection(&doc, &lib, vec![Step::Follow, key("b")])
             .edit()
             .is_none()
     );
+    // A cell holding text edits at its Follow path.
+    doc.cells.set_value(cell, crate::test_values::text("held"));
+    assert_eq!(
+        edit(&doc, vec![Step::Follow])
+            .edit()
+            .map(LineEditState::text),
+        Some("held")
+    );
+    // A simple name convention is just another text field.
+    doc.cells.set_value(cell, name::record("roof", []));
+    assert_eq!(
+        edit(&doc, vec![Step::Follow, Step::Key(name::vocabulary::NAME),],)
+            .edit()
+            .map(LineEditState::text),
+        Some("roof")
+    );
+}
+
+#[test]
+fn a_line_control_installs_its_navigation_selection() {
+    let lib = Cells::new();
+    let (doc, _) = doc_of(vec![(
+        crate::test_values::label("name"),
+        crate::test_values::text("old"),
+    )]);
+    let selected = make_projected_selection(
+        &doc,
+        &lib,
+        vec![Step::Follow, key("name")],
+    );
+    assert_eq!(selected.edit().map(LineEditState::text), Some("old"));
 }
 
 #[test]
@@ -1346,6 +1450,7 @@ fn partials_receive_selection_and_annotations_positionally() {
             &mut tcx,
             Hooks::<()> {
                 select: Rc::new(|_, _| {}),
+                start_edit: Rc::new(|_, _, _| {}),
                 toggle: Rc::new(|_, _| {}),
                 rename: Rc::new(|_, _, _| {}),
                 edit: Rc::new(|_| None),
@@ -1395,9 +1500,8 @@ fn the_pending_query_writes_through_to_the_payload() {
 #[test]
 fn a_projection_defined_as_data_realizes() {
     // The display language's data form, decoded with the PROVIDED
-    // intents and realized through the ordinary pipeline — what a
-    // document-defined partial will return once stack::load reads
-    // them from libraries.
+    // intents and realized through the ordinary pipeline — the same
+    // boundary a Grap-backed library projection can use.
     fn probe(
         input: progred_display::ProjectionInput<'_, (), Hover>,
     ) -> Option<progred_display::Layout<(), Hover>> {
@@ -1451,6 +1555,7 @@ fn a_projection_defined_as_data_realizes() {
         &mut tcx,
         Hooks::<()> {
             select: Rc::new(|_, _| {}),
+            start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
@@ -1522,6 +1627,7 @@ fn a_data_event_realizes_the_apply_hook() {
         &mut tcx,
         Hooks::<Vec<(Path, Value, Value)>> {
             select: Rc::new(|_, _| {}),
+            start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
             rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
@@ -1613,174 +1719,4 @@ fn a_data_event_realizes_the_apply_hook() {
 
 fn measured_rect(width: f64) -> vello::kurbo::Rect {
     vello::kurbo::Rect::new(0.0, 0.0, width, 100.0)
-}
-
-fn projected_extent(doc: &Document) -> Extent {
-    let stack = crate::stack::load::<()>();
-    let styles = crate::styles::editor(1.0);
-    let mut fonts = parley::FontContext::new();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let mut tcx = TextCtx {
-        fonts: &mut fonts,
-        layouts: &mut layouts,
-        scale: 1.0,
-        cache: &mut cache,
-    };
-    let empty = Annotations::default();
-    project::<(), crate::frame::Paint>(
-        ProjectDescription {
-            sources: Sources {
-                doc,
-                library: &stack.library,
-            },
-            selection: None,
-            annotations: &empty,
-            raw: false,
-            styles: &styles,
-            width: 500.0,
-            projection: Some(&stack.projection),
-            foreign: &stack.foreign,
-        },
-        &mut tcx,
-        Hooks::<()> {
-            select: Rc::new(|_, _| {}),
-            toggle: Rc::new(|_, _| {}),
-            rename: Rc::new(|_, _, _| {}),
-            edit: Rc::new(|_| None),
-            pick: Rc::new(|_, _| false),
-            insert: Rc::new(|_, _| {}),
-            delete: Rc::new(|_| false),
-            apply: Rc::new(|_, _, _, _| false),
-        },
-    )
-    .extent
-}
-
-#[test]
-fn a_document_defined_partial_projects_its_convention() {
-    use progred_libraries::{control, layout as data};
-
-    let row_field = new_cell_id();
-    let col_field = new_cell_id();
-    let partial = new_cell_id();
-    let bind = |cell: CellId| Value::record([(control::vocabulary::BIND, Value::from(cell))]);
-    let unquote = |cell: CellId| Value::record([(control::vocabulary::UNQUOTE, Value::from(cell))]);
-    let spliced_text = |binder: CellId| {
-        Value::record([(
-            data::vocabulary::TEXT,
-            Value::record([
-                (data::vocabulary::CONTENT, unquote(binder)),
-                (
-                    data::vocabulary::FACE,
-                    Value::from(data::vocabulary::NAME_FACE),
-                ),
-            ]),
-        )])
-    };
-    let mut cells = Cells::new();
-    cells.set_value(
-        partial,
-        grap::lambda(
-            [data::vocabulary::VALUE],
-            grap::call(
-                Value::from(control::vocabulary::MATCH),
-                [
-                    (control::vocabulary::VALUE, Value::from(data::vocabulary::VALUE)),
-                    (
-                        control::vocabulary::CASES,
-                        Value::list([Value::record([
-                            (
-                                control::vocabulary::PATTERN,
-                                Value::record([
-                                    (row_field, bind(row_field)),
-                                    (col_field, bind(col_field)),
-                                ]),
-                            ),
-                            (
-                                grap::vocabulary::EXPRESSION,
-                                grap::call(
-                                    Value::from(control::vocabulary::QUOTE),
-                                    [(
-                                        grap::vocabulary::EXPRESSION,
-                                        data::selectable(data::row(
-                                            4.0,
-                                            [spliced_text(row_field), spliced_text(col_field)],
-                                        )),
-                                    )],
-                                ),
-                            ),
-                        ])]),
-                    ),
-                ],
-            ),
-        ),
-    );
-    cells.set_value(
-        data::vocabulary::PROJECTIONS,
-        Value::list([Value::from(partial)]),
-    );
-
-    let at = |row: &str, col: &str| {
-        Value::record([(row_field, text::value(row)), (col_field, text::value(col))])
-    };
-    let custom = projected_extent(&Document {
-        root: Some(at("top", "left")),
-        cells: cells.clone(),
-    });
-    let fallback = projected_extent(&Document {
-        root: Some(at("top", "left")),
-        cells: Cells::new(),
-    });
-    // Two spliced words beat the structural record rendering.
-    assert!(custom.width < fallback.width);
-
-    // The splice is genuine data flow: longer field text widens it.
-    let wider = projected_extent(&Document {
-        root: Some(at("topmost-corner", "left")),
-        cells: cells.clone(),
-    });
-    assert!(wider.width > custom.width);
-
-    // Values outside the convention fall through to the identical
-    // structural rendering.
-    let unmatched = Value::record([(new_cell_id(), text::value("other"))]);
-    let with_registry = projected_extent(&Document {
-        root: Some(unmatched.clone()),
-        cells,
-    });
-    let without = projected_extent(&Document {
-        root: Some(unmatched),
-        cells: Cells::new(),
-    });
-    assert_eq!(with_registry.width, without.width);
-    assert_eq!(with_registry.height(), without.height());
-}
-
-#[test]
-fn broken_document_partials_fall_through_whole() {
-    use progred_libraries::layout as data;
-
-    // One partial evaluates to junk the decoder refuses; one is a
-    // dangling reference that diagnoses. Neither disturbs the
-    // structural fallback.
-    let mut cells = Cells::new();
-    cells.set_value(
-        data::vocabulary::PROJECTIONS,
-        Value::list([
-            grap::lambda([], Value::record([(new_cell_id(), text::value("junk"))])),
-            Value::from(new_cell_id()),
-        ]),
-    );
-    let root = Value::record([(new_cell_id(), text::value("plain"))]);
-    let with_registry = projected_extent(&Document {
-        root: Some(root.clone()),
-        cells,
-    });
-    let without = projected_extent(&Document {
-        root: Some(root),
-        cells: Cells::new(),
-    });
-    assert_eq!(with_registry.width, without.width);
-    assert_eq!(with_registry.height(), without.height());
 }

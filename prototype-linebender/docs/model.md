@@ -72,24 +72,15 @@ record conventions never descend by element, and computed list
 views go through Transient). Ordinals-resolved-at-realize is the
 shelf design if a real per-element library need ever appears, every vocabulary cell a named library cell so authors see the
 language inside the editor, and junk decoding to None so a malformed
-layout falls through whole; (3) DONE 2026-08-19: documents contribute
-projection partials — the registry is a DOCUMENT FACT, a list of
-grap callables on the `layout` library's PROJECTIONS cell, tried
-before the editor's own partials (the author installed them in THIS
-document; a decline falls through, so overriding is intent, never an
-accident) and silenced by the raw view exactly as the Rust ones are.
-Each callable is applied to the VALUE/SELECTION/STATE contract
-(absent-classified when missing, so partials may declare any subset)
-through `grap::apply`, the values-in application boundary added for
-this: arguments BIND AS DATA, where `call` + `evaluate` would
-misevaluate a code-shaped value (a stored lambda or call record) as
-an expression — `write_through` switched to it for the same reason.
-Declines are any diagnostic or an undecodable result, falling
-through whole. No new FFIs were needed: `case` is the facet match
-and field binder, `quote`/`unquote` the record builder — the proof
-is checked in as the sample's `at display` cell, a projection
-authored purely as document data that renders `at` records as
-"row × col" in sample.gid and every bench render; (4) FFI
+layout falls through whole; (3) RETIRED 2026-08-22: an experiment let
+documents contribute projection partials through a fixed-address
+`PROJECTIONS` cell. That made library configuration hidden, left its
+definitions unreachable from root, and reserved an ordinary document
+cell address. The registry was removed from the runtime. Any future
+document-local library mechanism must be designed deliberately
+and represented through ordinary root-reachable data. The sample's
+`at display` Grap value remains as inert, root-reachable code to inspect
+and edit; it is not installed as a projection; (4) FFI
 curation as standing practice, one deliberate capability at a time;
 (5) DONE 2026-08-20: Grap-authored layouts can draw a small vector
 command list and attach Grap handlers to generic pointer, scroll, key,
@@ -97,12 +88,14 @@ and IME event kinds. Events arrive as GID records. Site annotations
 and selection are temporary get/set capabilities closed over the
 current projection path, never serialized addresses; handler writes
 commit transactionally only when the handler accepts the event.
-(6) DONE 2026-08-20: the stock line editor is a Grap library function.
-Puri returns shaped text geometry as ordinary GID data; Grap builds an
-overlay of vector selection ink, plain text, and vector caret ink, then
-adds hover and event wrappers. Pointer/key/IME transitions are scoped
-FFIs, and Grap installs the returned selection payload. No line-edit
-display/layout tag, text metadata, or recognition pass remains.
+(6) DONE 2026-08-20, RETIRED 2026-08-21: the stock line editor was
+implemented as a Grap library function, proving that Grap-authored
+controls can use shaped geometry, vector ink, generic events, and
+site/selection capabilities. After that forcing function had paid for
+the surrounding architecture, its composition returned to Rust: a
+library now requests the stock host control with spelling, affixes,
+and a Grap write-back rule. It lowers through Puri to ordinary text,
+vector ink, and handlers; the drawing language remains low-level.
 
 Landed so far (2026-08-20): `Annotations` replaced the collapse-only
 override map; the selection is stored as (Path, payload Value, tier-2
@@ -110,12 +103,12 @@ editor) — stage/query/choice/replacing live in the payload, decoded
 through `Stage` for matching, with the live editor's text writing
 through to the payload at the same per-event point the document takes
 its writes; and `ProjectionInput` carries the positional view
-(`selection`, `state`), so partials see editor state as data. The loaded
-An edge selection begins editing through the projected Grap event path;
-the selection layer no longer inspects a projection to discover a line.
-Known seams, deliberate: one registry cell means
-last-writer-wins if multi-document library loading ever merges cell
-tables; and an FFI registry target still evaluates its call fields
+(`selection`, `state`), so partials see editor state as data. An edge
+selection discovers the stock line description through the
+Rust projection. Generic Grap event handlers remain part of the layout
+data form, but documents do not currently install projections or other
+library contributions.
+Known seam, deliberate: an FFI registry target still evaluates its call fields
 itself, keeping the code-shaped edge `apply` removes for closures.
 Next candidates: view flags as presence and editor APIs for label/query.
 

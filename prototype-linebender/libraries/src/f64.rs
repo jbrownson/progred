@@ -2,7 +2,7 @@
 //! data; arithmetic is supplied to the evaluator as Rust foreign
 //! functions.
 
-use crate::{Library, absent, layout, line_edit, name, text};
+use crate::{Library, absent, line_edit, name};
 use gid::{Cells, Value};
 #[cfg(test)]
 use grap_runtime as grap;
@@ -41,15 +41,12 @@ pub fn display<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let content = read(input.value)?.to_string();
-    let expression = line_edit::call(
-        text::value(content),
+    Some(line_edit::layout(
+        content,
         grap_runtime::ffi(vocabulary::UPDATE),
-        text::value(""),
-        text::value(""),
-        input.selection.cloned().unwrap_or_else(absent::value),
-    );
-    let (display, _) = input.env.evaluate(&expression);
-    layout::decode(&display, &input.select, &input.hover)
+        "",
+        "",
+    ))
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -57,11 +54,11 @@ pub fn functions() -> ForeignFunctions {
         .register(
             vocabulary::UPDATE,
             ForeignFunction::new(|context, call, environment| {
-            let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
-                return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
-            };
-            let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
-                return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
+                let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
+                    return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
+                };
+                let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
+                    return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
                 };
                 let current = context.eval(current, environment)?;
                 let input = context.eval(input, environment)?;

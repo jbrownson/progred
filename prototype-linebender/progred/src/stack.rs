@@ -26,10 +26,7 @@ impl<World> Clone for Stack<World> {
 
 pub fn load<World>() -> Stack<World> {
     let library = Library::merge_all(libraries());
-    let foreign = library
-        .functions
-        .clone()
-        .merge(crate::line_edit::drawing_functions());
+    let foreign = library.functions.clone();
     let projection = Projection::new(library.projections);
     Stack {
         library: library.cells,

@@ -18,7 +18,7 @@ impl App {
     /// the previous, else the parent.
     pub(crate) fn delete_key(
         &mut self,
-        descends: &[navigate::Descend],
+        descends: &[navigate::Descend<App>],
         event: &KeyboardEvent,
     ) -> bool {
         event.state.is_down()
@@ -32,7 +32,7 @@ impl App {
 
     /// Deletes the selected edge and lands the selection on a
     /// survivor — Backspace/Delete's action, and cut's second half.
-    pub(crate) fn delete_selected_edge(&mut self, descends: &[navigate::Descend]) -> bool {
+    pub(crate) fn delete_selected_edge(&mut self, descends: &[navigate::Descend<App>]) -> bool {
         match &self.model.selection {
             // Only a real edge deletes; a pending's Backspace is its
             // cancel, handled by insert_key.
@@ -54,7 +54,6 @@ impl App {
                     let next = navigate::selection_after_delete(descends, &path);
                     self.model.selection = Some(selection::Selection::edge(
                         &self.sources(),
-                        &self.stack.projection,
                         next,
                     ));
                     true
@@ -138,7 +137,6 @@ impl App {
         }
         self.model.selection = Some(selection::Selection::edge(
             &self.sources(),
-            &self.stack.projection,
             path,
         ));
     }
@@ -165,7 +163,6 @@ impl App {
         if self.sources().resolve(&path).is_some() {
             self.model.selection = Some(selection::Selection::edge(
                 &self.sources(),
-                &self.stack.projection,
                 path,
             ));
             return;
@@ -196,7 +193,6 @@ impl App {
                 }
                 self.model.selection = Some(selection::Selection::edge(
                     &self.sources(),
-                    &self.stack.projection,
                     path,
                 ));
             }
@@ -219,7 +215,7 @@ impl App {
     /// dispatch, which would take Cmd+C/V away from text editing.
     pub(crate) fn clipboard_key(
         &mut self,
-        descends: &[navigate::Descend],
+        descends: &[navigate::Descend<App>],
         event: &KeyboardEvent,
     ) -> bool {
         if !event.state.is_down() || !projection::command(&event.modifiers) {
@@ -308,8 +304,8 @@ impl App {
     /// Pastes the clipboard's value — the private format's structure
     /// when it carries one, else the text's query reading: into an
     /// open pending first (the label stage narrows to atoms through
-    /// the pick), else over the selected edge — one undo step, the
-    /// selection remounted so a pasted atom gets its editor.
+    /// the pick), else over the selected edge — one undo step,
+    /// retaining ordinary structural selection at the changed site.
     pub(crate) fn paste_clipboard(&mut self) -> bool {
         use clipboard_rs::{Clipboard, ClipboardContext};
         let value = match self.clipboard_structure() {
@@ -348,7 +344,6 @@ impl App {
             self.refresh_title();
             self.model.selection = Some(selection::Selection::edge(
                 &self.sources(),
-                &self.stack.projection,
                 path,
             ));
             true
@@ -372,7 +367,7 @@ impl App {
     /// anchor instead, keeping the keyboard flow.
     pub(crate) fn insert_key(
         &mut self,
-        descends: &[navigate::Descend],
+        descends: &[navigate::Descend<App>],
         popup: &Option<completion::Popup>,
         event: &KeyboardEvent,
     ) -> bool {
@@ -449,7 +444,6 @@ impl App {
                                 (!(back.is_empty() && self.model.doc.root.is_none())).then(|| {
                                     selection::Selection::edge(
                                         &self.sources(),
-                                        &self.stack.projection,
                                         back,
                                     )
                                 });
@@ -466,7 +460,6 @@ impl App {
                             }
                             self.model.selection = Some(selection::Selection::edge(
                                 &self.sources(),
-                                &self.stack.projection,
                                 back,
                             ));
                             true

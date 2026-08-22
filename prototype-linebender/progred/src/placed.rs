@@ -119,7 +119,11 @@ pub struct Placed<C, Cv> {
     /// `None` until something registers: combining empty frames must
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C>>,
-    pub descends: Vec<Descend>,
+    pub descends: Vec<Descend<C>>,
+    /// A projected control may override how the nearest enclosing
+    /// navigation landmark is selected. The landmark consumes this
+    /// while placing, so it never leaks into an ancestor.
+    pub landmark_select: Option<progred_display::ActionHandler<C>>,
     pub popup: Option<Popup>,
     pub renders: Vec<Render<Cv>>,
 }
@@ -132,6 +136,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
             picks: Vec::new(),
             handler: None,
             descends: Vec::new(),
+            landmark_select: None,
             popup: None,
             renders: Vec::new(),
         }
@@ -147,6 +152,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
             (Some(base), Some(above)) => Some(handler_over(base, above)),
         };
         self.descends.extend(above.descends);
+        self.landmark_select = above.landmark_select.or(self.landmark_select);
         self.popup = above.popup.or(self.popup);
         self.renders.extend(above.renders);
         self
@@ -195,6 +201,14 @@ impl<C: 'static, Cv> Placed<C, Cv> {
         for render in renders {
             render(canvas, ink);
         }
+    }
+}
+
+impl<C: 'static, Cv> Builder<C, Cv> {
+    /// Install the selection transition for the navigation landmark
+    /// enclosing this projected control.
+    pub fn select_landmark(&mut self, action: progred_display::ActionHandler<C>) {
+        self.placed.landmark_select = Some(action);
     }
 }
 
@@ -328,8 +342,8 @@ impl<C: 'static, Cv> HasHandler<C> for Builder<C, Cv> {
     }
 }
 
-impl<C: 'static, Cv> HasDescends for Builder<C, Cv> {
-    fn descends(&mut self) -> &mut Vec<Descend> {
+impl<C: 'static, Cv> HasDescends<C> for Builder<C, Cv> {
+    fn descends(&mut self) -> &mut Vec<Descend<C>> {
         &mut self.placed.descends
     }
 }

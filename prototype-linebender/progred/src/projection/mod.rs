@@ -27,7 +27,7 @@ use crate::selection::{
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
-use progred_libraries::{absent, f64 as f64_convention, layout as layout_data, text};
+use progred_libraries::{f64 as f64_convention, layout as layout_data, text};
 mod location;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
@@ -780,6 +780,13 @@ fn prepare<
                 None => render::text(tcx, "…", &cx.styles.dim),
             })
         }
+        progred_display::Layout::LineEdit(line) => ChoiceLayout::fixed(line_edit_view(
+            cx,
+            tcx,
+            path,
+            line,
+            hooks,
+        )),
         progred_display::Layout::OnClick { child, handler } => {
             let inner = prepare(
                 cx, projection, tcx, path, ancestors, hooks, value, *child, build,
@@ -1464,6 +1471,88 @@ fn leaf_display<
     }
 }
 
+/// Lower the stock Rust line control. An inactive line owns the raw
+/// click that mounts its editor and places the caret; once active,
+/// Puri's line editor owns pointer, keyboard, and IME dispatch. The
+/// projection still supplies the Grap update rule used at write-back.
+fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
+    cx: &Cx,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    line: progred_display::LineEdit,
+    hooks: &Hooks<C>,
+) -> Measured<Placed<C, Cv>> {
+    let editing = cx
+        .selection
+        .filter(|selection| selection.path() == path)
+        .and_then(Selection::edit);
+    let active = editing.is_some();
+    let edit = hooks.edit.clone();
+    let content = render::line_edit(tcx, cx.styles, &line, editing, move |ctx| edit(ctx));
+
+    // A transient evaluation result has no writable source location.
+    // Its owner supplies the surrounding interaction identity.
+    if cx.source.transient() {
+        return content;
+    }
+
+    let path = path.to_vec();
+    let select_path = path.clone();
+    let select_line = line.clone();
+    let start_edit = hooks.start_edit.clone();
+    let select: progred_display::ActionHandler<C> = Rc::new(move |ctx| {
+        start_edit(ctx, select_path.clone(), select_line.clone());
+        true
+    });
+    let content = before(content, move |p, _| p.select_landmark(select));
+    if active {
+        return before(content, move |p, placement| {
+            hover_claim(p, placement, Hover::Value(path));
+        });
+    }
+
+    let presentation = cx.styles.line_presentation(&line.prefix, &line.suffix);
+    let scale = cx.styles.scale;
+    let start_edit = hooks.start_edit.clone();
+    let edit = hooks.edit.clone();
+    before(content, move |p, placement| {
+        hover_claim(p, placement, Hover::Value(path.clone()));
+        let path = path.clone();
+        let line = line.clone();
+        let presentation = presentation.clone();
+        let start_edit = start_edit.clone();
+        let edit = edit.clone();
+        p.handler().on_pointer_down(move |ctx, event| {
+            event.button == Some(PointerButton::Primary)
+                && !command(&event.state.modifiers)
+                && placement.contains(Point::new(
+                    event.state.position.x,
+                    event.state.position.y,
+                ))
+                && {
+                    start_edit(ctx, path.clone(), line.clone());
+                    if let Some(edit) = edit(ctx) {
+                        edit.state.pointer_down(
+                            &presentation,
+                            edit.fonts,
+                            edit.layouts,
+                            scale as f32,
+                            LineEditPointerDown {
+                                point: Point::new(
+                                    event.state.position.x - placement.rect.x0,
+                                    event.state.position.y - placement.rect.y0,
+                                ),
+                                shift: event.state.modifiers.shift(),
+                                count: event.state.count.max(1),
+                            },
+                        );
+                    }
+                    true
+                }
+        });
+    })
+}
+
 fn vector_leaf<C: 'static, Cv: Canvas + 'static>(
     styles: &Styles,
     vector: progred_display::Vector,
@@ -1535,6 +1624,9 @@ fn vector_leaf<C: 'static, Cv: Canvas + 'static>(
 /// the remaining host-owned editor state and measurement caches.
 pub struct Hooks<C> {
     pub select: Rc<dyn Fn(&mut C, Path)>,
+    /// Mount the stock editor described by a Rust projection. Its
+    /// first pointer event then uses `edit` below for caret placement.
+    pub start_edit: Rc<dyn Fn(&mut C, Path, progred_display::LineEdit)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
     /// Re-open the label of the field at `path` (a Key path) as its
     /// seeded query — the click gesture on a writable field's label.
@@ -1973,15 +2065,25 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
         let target = path.clone();
         let value = value.clone();
         let action_target = Hovered::Tree(Hover::Value(target.clone()));
+        let activate_select = select.clone();
         p.activate(action_target.clone(), move |ctx| {
-            select(ctx, target.clone());
+            activate_select(ctx, target.clone());
             true
         });
         if let Some(value) = value {
             p.pick(action_target, move |ctx| pick(ctx, value.clone()));
         }
         if !transient {
-            p.descends().push(Descend { path, rect });
+            let target = path.clone();
+            let select = select.clone();
+            p.descends().push(Descend {
+                path,
+                rect,
+                select: Rc::new(move |ctx| {
+                    select(ctx, target.clone());
+                    true
+                }),
+            });
         }
     })
 }
@@ -2077,14 +2179,16 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
     selected: bool,
     scale: f64,
     path: Path,
+    select: progred_display::ActionHandler<C>,
     delete: Rc<dyn Fn(&mut C) -> bool>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     if transient {
         return child;
     }
+    let highlight_path = path.clone();
     let marked = decorate(child, move |p, rect| {
-        let highlight_path = path.clone();
+        let highlight_path = highlight_path.clone();
         p.ink(move |cv, ink| {
             if selected {
                 primary_highlight(scale, cv, rect);
@@ -2093,10 +2197,16 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
                 hover_highlight(scale, cv, rect);
             }
         });
-        p.descends().push(Descend {
-            path: path.clone(),
-            rect,
+    });
+    let marked = measured::around(marked, move |placement, inner| {
+        let mut placed = inner.place();
+        let select = placed.landmark_select.take().unwrap_or(select);
+        placed.descends.push(Descend {
+            path,
+            rect: placement.rect,
+            select,
         });
+        placed
     });
     if selected {
         bind_delete_with(delete, marked)
@@ -2213,6 +2323,7 @@ fn prepare_transient_root<
     let select_origin = origin.clone();
     let result_hooks = Hooks {
         select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
+        start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
         rename: Rc::new(|_, _, _| {}),
         edit: Rc::new(|_| None),
@@ -2372,9 +2483,18 @@ fn prepare_present_value<
     let selected = cx.selected(path);
     let scale = cx.styles.scale;
     let landmark_path = path.to_vec();
+    let select = select_handler(landmark_path.clone(), hooks);
     let delete = hooks.delete.clone();
     let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
-        descend_landmark_with(transient, selected, scale, landmark_path, delete, inner)
+        descend_landmark_with(
+            transient,
+            selected,
+            scale,
+            landmark_path,
+            select,
+            delete,
+            inner,
+        )
     });
     let grounded = match ground_decoration(cx, path, value) {
         Some((scale, color)) => {
@@ -2408,7 +2528,6 @@ fn present_layout<C: 'static>(
         .and_then(|projection| {
             // Editor state arrives positionally: the payload only at
             // the selected path, the annotations only at this one.
-            // The document's own partials answer first.
             let selection = cx
                 .selection
                 .filter(|current| current.path() == path)
@@ -2417,69 +2536,18 @@ fn present_layout<C: 'static>(
             let select = select_handler(path.to_vec(), hooks);
             let hover = Hover::Value(path.to_vec());
             let targets = projection_targets(path, hooks);
-            document_partial_layout(cx, value, selection, state, &select, &hover).or_else(|| {
-                projection.apply(
-                    &ProjectEnv { cx },
-                    value,
-                    selection,
-                    state,
-                    select,
-                    hover,
-                    targets,
-                )
-            })
+            projection.apply(
+                &ProjectEnv { cx },
+                value,
+                selection,
+                state,
+                select,
+                hover,
+                targets,
+            )
         })
         .unwrap_or_else(|| structure::of(cx, path, value, hooks));
     project_layout()
-}
-
-/// The document's own partials, tried before the editor's: the
-/// registry is a document fact — a list of Grap callables on the
-/// [`PROJECTIONS`](layout_data::vocabulary::PROJECTIONS) cell — each
-/// applied to the value and its positional editor state, the result
-/// decoded from the display data form. Any diagnostic or undecodable
-/// result declines, falling through whole.
-fn document_partial_layout<C>(
-    cx: &Cx,
-    value: &Value,
-    selection: Option<&Value>,
-    state: Option<&Value>,
-    select: &progred_display::ActionHandler<C>,
-    hover: &Hover,
-) -> Option<progred_display::Layout<C, Hover>> {
-    let registry = cx
-        .sources
-        .doc
-        .cells
-        .value(layout_data::vocabulary::PROJECTIONS)?
-        .as_list()?;
-    registry.values().find_map(|partial| {
-        let fuel = if cx.source.transient() {
-            cx.fuel.get()
-        } else {
-            grap::DEFAULT_FUEL
-        };
-        let evaluation = grap::apply(
-            partial,
-            [
-                (layout_data::vocabulary::VALUE, value.clone()),
-                (
-                    layout_data::vocabulary::SELECTION,
-                    selection.cloned().unwrap_or_else(absent::value),
-                ),
-                (
-                    layout_data::vocabulary::STATE,
-                    state.cloned().unwrap_or_else(absent::value),
-                ),
-            ],
-            |cell| cx.sources.value(cell).cloned(),
-            cx.foreign,
-            fuel,
-        );
-        cx.fuel.set(evaluation.remaining_fuel);
-        evaluation.diagnostics.is_empty().then_some(())?;
-        layout_data::decode(&evaluation.result, select, hover)
-    })
 }
 
 /// Every projected value's Pick backstop: pick the value into an open

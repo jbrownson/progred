@@ -2,6 +2,7 @@
 
 use crate::selection::Selection;
 use gid::{Path, Step};
+use progred_display::ActionHandler;
 use progred_libraries::name;
 use std::collections::HashMap;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
@@ -11,23 +12,37 @@ use vello::kurbo::Rect;
 /// rect it occupied, collected fresh every frame in placement order.
 /// [`step_selection`] reads it to move the selection by keyboard;
 /// clicks go through each descend's own handler, not this list.
-#[derive(Clone)]
-pub struct Descend {
+pub struct Descend<World> {
     pub path: Path,
     /// The settled rect, for scroll-to-selection.
     pub rect: Rect,
+    /// The projection-installed transition for landing here. This is
+    /// usually ordinary edge selection, but a projected control may
+    /// mount its own editing state without the shell inspecting the
+    /// projected layout to rediscover it.
+    pub select: ActionHandler<World>,
+}
+
+impl<World> Clone for Descend<World> {
+    fn clone(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            rect: self.rect,
+            select: self.select.clone(),
+        }
+    }
 }
 
 /// Placement contexts that accumulate descends as the projection
 /// places, so the shell can step selection by keyboard.
-pub trait HasDescends {
-    fn descends(&mut self) -> &mut Vec<Descend>;
+pub trait HasDescends<World> {
+    fn descends(&mut self) -> &mut Vec<Descend<World>>;
 }
 
 /// Where the selection lands after deleting `path`: the next sibling,
 /// else the previous, else the parent. Also where a discarded pending
 /// edge returns to.
-pub fn selection_after_delete(descends: &[Descend], path: &[Step]) -> Path {
+pub fn selection_after_delete<World>(descends: &[Descend<World>], path: &[Step]) -> Path {
     sibling(descends, path, true)
         .or_else(|| sibling(descends, path, false))
         .unwrap_or_else(|| {
@@ -45,14 +60,15 @@ pub fn selection_after_delete(descends: &[Descend], path: &[Step]) -> Path {
 /// WITHIN the line, into and across the content beside the current
 /// stop; left from a row widens to the parent. Any arrow selects the
 /// root when nothing is selected. `line` is one nominal line height,
-/// the quantum separating "beside" from "below". Returns the path to
-/// select, or `None` for keys navigation doesn't own.
-pub fn step_selection(
-    descends: &[Descend],
+/// the quantum separating "beside" from "below". Returns the settled
+/// landmark whose installed transition should run, or `None` for keys
+/// navigation doesn't own.
+pub fn step_selection<'a, World>(
+    descends: &'a [Descend<World>],
     selection: Option<&Selection>,
     line: f64,
     event: &KeyboardEvent,
-) -> Option<Path> {
+) -> Option<&'a Descend<World>> {
     let modified = event.modifiers.ctrl()
         || event.modifiers.meta()
         || event.modifiers.alt()
@@ -68,14 +84,14 @@ pub fn step_selection(
     }
     .filter(|_| event.state.is_down() && !modified)?;
     let Some(selection) = selection else {
-        return Some(Vec::new());
+        return descends.iter().find(|descend| descend.path.is_empty());
     };
     let path = selection.path();
     let order = reading_order(descends, line);
     let at = order
         .iter()
         .position(|stop| descends[stop.descend].path.as_slice() == path);
-    let found = |stop: &Stop| Some(descends[stop.descend].path.clone());
+    let found = |stop: &Stop| Some(&descends[stop.descend]);
     match (arrow, at) {
         (NamedKey::ArrowDown, Some(at)) => {
             order[at + 1..].iter().find(|stop| stop.row).and_then(found)
@@ -89,7 +105,9 @@ pub fn step_selection(
             order.get(at + 1).filter(|stop| !stop.row).and_then(found)
         }
         (NamedKey::ArrowLeft, Some(at)) if !order[at].row => found(&order[at - 1]),
-        (NamedKey::ArrowLeft, _) => path.split_last().map(|(_, parent)| parent.to_vec()),
+        (NamedKey::ArrowLeft, _) => path
+            .split_last()
+            .and_then(|(_, parent)| descends.iter().find(|descend| descend.path == parent)),
         _ => None,
     }
 }
@@ -119,7 +137,7 @@ pub(crate) fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
 /// own first line, never a row. Order is rebuilt from per-parent
 /// registration order, which is document order; the raw list settles
 /// children first.
-fn reading_order(descends: &[Descend], line: f64) -> Vec<Stop> {
+fn reading_order<World>(descends: &[Descend<World>], line: f64) -> Vec<Stop> {
     let by_path: HashMap<&[Step], usize> = descends
         .iter()
         .enumerate()
@@ -182,7 +200,7 @@ fn same_line(a: Rect, b: Rect, line: f64) -> bool {
 /// The neighboring sibling in placement order, continuing through
 /// ancestors at the ends — where the selection lands after a delete,
 /// via [`selection_after_delete`].
-fn sibling(descends: &[Descend], path: &[Step], next: bool) -> Option<Path> {
+fn sibling<World>(descends: &[Descend<World>], path: &[Step], next: bool) -> Option<Path> {
     let mut path = path.to_vec();
     loop {
         let (_, parent) = path.split_last()?;

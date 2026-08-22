@@ -16,7 +16,7 @@ type World = ();
 
 struct Bench {
     list: DrawList,
-    descends: Vec<Descend>,
+    descends: Vec<Descend<World>>,
     /// What the probe answered for the pass's pointer input.
     hit: Option<Claim<Hovered>>,
 }
@@ -249,6 +249,7 @@ fn place_with_annotations(
     };
     let hooks = Hooks::<World> {
         select: Rc::new(|_, _| {}),
+        start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
         rename: Rc::new(|_, _, _| {}),
         edit: Rc::new(|_| None),
@@ -328,6 +329,136 @@ fn svg_bench_renders_the_sample_projection() {
     // this render is also the canary against layout cost blowing
     // up when width is scarce.
     render(&doc, None, 320.0, "../target/raw_projection_tight.svg");
+}
+
+#[test]
+fn sample_text_line_claims_its_own_hover() {
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../sample.gid"))
+        .expect("the sample parses");
+    let path = vec![
+        Step::Key(sample_vocabulary::STYLE),
+        Step::Follow,
+        Step::Key(sample_vocabulary::COLOR),
+    ];
+    let (bench, _) = place(&doc, None, 900.0);
+    let rect = bench
+        .descends
+        .iter()
+        .find(|descend| descend.path == path)
+        .expect("color descend")
+        .rect;
+    let (bench, _) = place_with_pointer(&doc, None, 900.0, Some(rect.center()));
+    assert_eq!(
+        bench.hit,
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
+    );
+}
+
+#[test]
+fn sample_text_line_click_mounts_its_own_editor() {
+    struct ClickWorld {
+        doc: Document,
+        library: Cells,
+        selection: Option<Selection>,
+        applied: Option<Path>,
+    }
+
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../sample.gid"))
+        .expect("the sample parses");
+    let stack = crate::stack::load::<ClickWorld>();
+    let styles = crate::styles::editor(1.0);
+    let mut fonts = parley::FontContext::new();
+    let mut layouts = parley::LayoutContext::new();
+    let mut cache = puri::text::TextCache::default();
+    let mut tcx = TextCtx {
+        fonts: &mut fonts,
+        layouts: &mut layouts,
+        scale: 1.0,
+        cache: &mut cache,
+    };
+    let node = project::<ClickWorld, Bench>(
+        ProjectDescription {
+            sources: Sources {
+                doc: &doc,
+                library: &stack.library,
+            },
+            selection: None,
+            annotations: &Annotations::default(),
+            raw: false,
+            styles: &styles,
+            width: 852.0,
+            projection: Some(&stack.projection),
+            foreign: &stack.foreign,
+        },
+        &mut tcx,
+        Hooks {
+            select: Rc::new(|_, _| {}),
+            start_edit: Rc::new(|world: &mut ClickWorld, path, line| {
+                world.selection = Some(Selection::from_line(
+                    &Sources {
+                        doc: &world.doc,
+                        library: &world.library,
+                    },
+                    path,
+                    line,
+                ));
+            }),
+            toggle: Rc::new(|_, _| {}),
+            rename: Rc::new(|_, _, _| {}),
+            // A selection transition must consume the click even if
+            // retained dispatch cannot recover an edit context for
+            // the optional caret-placement follow-up.
+            edit: Rc::new(|_| None),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+            apply: Rc::new(|world: &mut ClickWorld, path, _, _| {
+                world.applied = Some(path);
+                true
+            }),
+        },
+    );
+    let path = vec![
+        Step::Key(sample_vocabulary::STYLE),
+        Step::Follow,
+        Step::Key(sample_vocabulary::COLOR),
+    ];
+    let rect = node.extent.rect_at(Point::new(24.0, 24.0));
+    let placed = measured::place(node, Placement::root(rect));
+    let point = placed
+        .descends
+        .iter()
+        .find(|descend| descend.path == path)
+        .expect("color descend")
+        .rect
+        .center();
+    let mut state = ui_events::pointer::PointerState::default();
+    state.position.x = point.x;
+    state.position.y = point.y;
+    let event = ui_events::pointer::PointerButtonEvent {
+        button: Some(PointerButton::Primary),
+        pointer: ui_events::pointer::PointerInfo {
+            pointer_id: Some(ui_events::pointer::PointerId::PRIMARY),
+            persistent_device_id: None,
+            pointer_type: ui_events::pointer::PointerType::Mouse,
+        },
+        state,
+    };
+    let mut world = ClickWorld {
+        doc: doc.clone(),
+        library: stack.library.clone(),
+        selection: None,
+        applied: None,
+    };
+    assert!(placed
+        .handler
+        .expect("line handler")
+        .dispatch_pointer_down(&mut world, &event));
+    assert_eq!(
+        world.selection.as_ref().map(|selection| selection.path()),
+        Some(path.as_slice())
+    );
+    assert_eq!(world.applied, None);
 }
 
 #[test]
@@ -477,9 +608,9 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             line,
             &press(NamedKey::ArrowDown),
         ) {
-            Some(path) => {
-                selection = Some(select(&path));
-                walk.push(path);
+            Some(target) => {
+                selection = Some(select(&target.path));
+                walk.push(target.path.clone());
             }
             None => break,
         }
@@ -505,8 +636,8 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             &press(NamedKey::ArrowUp),
         )
         .expect("up retraces the walk");
-        assert_eq!(&up, expect);
-        selection = Some(select(&up));
+        assert_eq!(&up.path, expect);
+        selection = Some(select(&up.path));
     }
     // A projected simple-name field is the cell's editable head.
     let head = bench
@@ -528,7 +659,8 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             Some(&select(&cell)),
             line,
             &press(NamedKey::ArrowRight),
-        ),
+        )
+        .map(|target| target.path.clone()),
         Some(head)
     );
 }
@@ -659,8 +791,8 @@ fn gap_document() -> Document {
 }
 
 /// The two descends under `field`, in the given axis order.
-fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Descend, Descend) {
-    let mut found: Vec<&Descend> = bench
+fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Descend<World>, Descend<World>) {
+    let mut found: Vec<&Descend<World>> = bench
         .descends
         .iter()
         .filter(|descend| descend.path.len() == 2 && descend.path.first() == Some(&key(field)))
@@ -674,11 +806,7 @@ fn elements_of(bench: &Bench, field: &str, by_y: bool) -> (Descend, Descend) {
         a.total_cmp(&b)
     });
     assert_eq!(found.len(), 2);
-    let clone = |d: &Descend| Descend {
-        path: d.path.clone(),
-        rect: d.rect,
-    };
-    (clone(found[0]), clone(found[1]))
+    (found[0].clone(), found[1].clone())
 }
 
 #[test]
@@ -851,7 +979,6 @@ fn svg_bench_renders_the_placeholder_notation() {
             doc: &empty_string,
             library: &stack.library,
         },
-        &stack.projection,
         Vec::new(),
     );
     render(
@@ -899,20 +1026,6 @@ fn svg_bench_renders_a_pending_edge() {
     assert_eq!(edge.stage(), crate::selection::Stage::Label);
     let typing = edge.with_query("na");
     render(&doc, Some(&typing), 560.0, "../target/raw_pending_edge.svg");
-}
-
-/// The LineEdit definition is the largest choice-heavy projection we
-/// routinely open as data. Keep it as a no-threshold canary: run with
-/// `PROGRED_LAYOUT_TRACE=1` to inspect the resolver's search.
-#[test]
-fn line_edit_definition_layout_canary() {
-    let doc = Document {
-        root: Some(Value::from(progred_libraries::line_edit::vocabulary::LINE_EDIT)),
-        cells: Cells::new(),
-    };
-    for width in [900.0, 1_200.0, 1_600.0] {
-        let _ = place(&doc, None, width);
-    }
 }
 
 #[test]

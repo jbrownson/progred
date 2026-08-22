@@ -8,15 +8,10 @@ use crate::selection::Selection;
 use crate::sources::Sources;
 use crate::App;
 use gid::{Path, Value};
-use progred_libraries::{
-    absent, layout, line_edit as line_edit_library,
-    selection as selection_capability, site,
-};
-use parley::{FontContext, LayoutContext};
+use progred_libraries::{absent, layout, selection as selection_capability, site};
 use std::cell::RefCell;
 #[cfg(test)]
 use std::rc::Rc;
-use vello::peniko::Brush;
 
 struct PendingChanges {
     annotation: Option<Value>,
@@ -25,16 +20,11 @@ struct PendingChanges {
     selection_changed: bool,
 }
 
-const EVENT_FUNCTIONS: [gid::CellId; 9] = [
+const EVENT_FUNCTIONS: [gid::CellId; 4] = [
     site::vocabulary::GET,
     site::vocabulary::SET,
     selection_capability::vocabulary::GET,
     selection_capability::vocabulary::SET,
-    line_edit_library::vocabulary::POINTER_DOWN,
-    line_edit_library::vocabulary::POINTER_MOVE,
-    line_edit_library::vocabulary::POINTER_UP,
-    line_edit_library::vocabulary::KEY,
-    line_edit_library::vocabulary::IME,
 ];
 
 /// Apply one event handler with its get/set functions bound to this
@@ -59,8 +49,6 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
         selection: current,
         selection_changed: false,
     });
-    let fonts = RefCell::new(&mut app.font_cx);
-    let layouts = RefCell::new(&mut app.layout_cx);
     let evaluation = {
         let call = |
             function,
@@ -68,15 +56,7 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
             call: &Value,
             environment: &grap::Environment,
         | {
-            event_foreign(
-                function,
-                context,
-                call,
-                environment,
-                &staged,
-                &fonts,
-                &layouts,
-            )
+            event_foreign(function, context, call, environment, &staged)
         };
         let overlay = grap::ForeignOverlay::new(&EVENT_FUNCTIONS, &call);
         let sources = crate::sources::Sources {
@@ -92,8 +72,6 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
             grap::DEFAULT_FUEL,
         )
     };
-    drop(fonts);
-    drop(layouts);
     let staged = staged.into_inner();
     let handled = evaluation.diagnostics.is_empty() && !absent::is_absent(&evaluation.result);
     if handled {
@@ -105,7 +83,6 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
                 Some(payload) => {
                     let mut next = Selection::from_payload(
                         &app.sources(),
-                        &app.stack.projection,
                         path,
                         payload,
                     );
@@ -134,8 +111,6 @@ fn event_foreign(
     call: &Value,
     environment: &grap::Environment,
     staged: &RefCell<PendingChanges>,
-    fonts: &RefCell<&mut FontContext>,
-    layouts: &RefCell<&mut LayoutContext<Brush>>,
 ) -> Result<Value, grap::Halt> {
     if function == site::vocabulary::GET {
         return Ok(staged
@@ -170,15 +145,7 @@ fn event_foreign(
         }
         return Ok(result);
     }
-    crate::line_edit::apply_scoped(
-        function,
-        context,
-        call,
-        environment,
-        fonts,
-        layouts,
-    )
-    .unwrap_or_else(|| Ok(absent::value()))
+    Ok(absent::value())
 }
 
 #[cfg(test)]

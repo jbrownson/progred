@@ -35,7 +35,7 @@ pub(crate) struct Dispatch {
     pub(crate) handler: Handler<App>,
     pub(crate) activations: Vec<placed::TargetAction<App>>,
     pub(crate) picks: Vec<placed::TargetAction<App>>,
-    pub(crate) descends: Vec<navigate::Descend>,
+    pub(crate) descends: Vec<navigate::Descend<App>>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
     pub(crate) line: f64,
@@ -367,9 +367,14 @@ impl App {
             picks,
             handler,
             descends,
+            landmark_select,
             popup,
             mut renders,
         } = placed;
+        debug_assert!(
+            landmark_select.is_none(),
+            "selection handler escaped its landmark"
+        );
         if debug_geometry {
             renders.push(Box::new(move |canvas, _| {
                 let guide = Color::new([0.92, 0.12, 0.58, 0.80]);
@@ -488,7 +493,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         projection::Hooks {
             // The host's ordinary structural selection transition.
             // Editable text handles its coordinate-sensitive pointer
-            // transition through the Grap event capability instead.
+            // transition through the stock control's raw handler.
             select: Rc::new(move |app: &mut App, path| {
                 let fresh = match app.model.selection.as_ref() {
                     None => true,
@@ -499,7 +504,6 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 if fresh {
                     let next = selection::Selection::edge(
                         &app.sources(),
-                        &app.stack.projection,
                         path,
                     );
                     app.model.selection = Some(next);
@@ -511,6 +515,13 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 {
                     line.cursor_to_end();
                 }
+            }),
+            start_edit: Rc::new(|app: &mut App, path, line| {
+                app.model.selection = Some(selection::Selection::from_line(
+                    &app.sources(),
+                    path,
+                    line,
+                ));
             }),
             toggle: Rc::new(|app: &mut App, path| {
                 selection::toggle_collapse(

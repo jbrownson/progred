@@ -5,7 +5,6 @@
 use crate::annotations::{self, Annotations};
 use crate::identity::short_id;
 use progred_libraries::{absent, f64 as f64_convention, isa};
-use crate::projection::Projection;
 use crate::sources::Sources;
 use crate::spine;
 use gid::{CellId, Cells, Document, Path, Position, Step, Value, position};
@@ -63,9 +62,8 @@ impl Selection {
     /// boundary used by current-site Grap capabilities: the address
     /// never enters the payload, and any line editor is only a Rust
     /// working copy of the payload's editing fields.
-    pub(crate) fn from_payload<World>(
+    pub(crate) fn from_payload(
         sources: &Sources,
-        _projection: &Projection<World>,
         path: Path,
         payload: Value,
     ) -> Self {
@@ -97,13 +95,14 @@ impl Selection {
         }
     }
 
-    /// Select the value at `path`; a compact text value brings a focused editor (the root included —
-    /// its commits target the document's root field). Selecting an
+    /// Select the structural edge at `path`. Projected controls may
+    /// install a richer transition on their navigation landmark; the
+    /// stock line control uses that to mount its exact editor. An
     /// EMPTY VALUE SLOT is already authoring it — there is nothing
     /// there to select, only something to begin, so it pends
     /// immediately: the empty document's root, and a valueless
     /// writable cell's Follow slot (its rendered placeholder).
-    pub fn edge<World>(sources: &Sources, _projection: &Projection<World>, path: Path) -> Self {
+    pub fn edge(sources: &Sources, path: Path) -> Self {
         let empty_slot = match path.split_last() {
             None => sources.root().is_none(),
             Some((Step::Follow, parent)) => sources
@@ -116,6 +115,19 @@ impl Selection {
             return pending_value(path);
         }
         edge_selection(path, None)
+    }
+
+    /// Mount a line control already chosen by the current frame. This
+    /// keeps pointer selection and caret placement on the exact
+    /// projection the user clicked, without re-projecting after the
+    /// selection transition.
+    pub(crate) fn from_line(
+        sources: &Sources,
+        path: Path,
+        line: progred_display::LineEdit,
+    ) -> Self {
+        let editor = writable_at(sources, &path).then(|| line_editing(line));
+        edge_selection(path, editor)
     }
 
     pub fn path(&self) -> &[Step] {
@@ -209,12 +221,20 @@ fn edge_selection(path: Path, editor: Option<Editor>) -> Selection {
 }
 
 // Seeded with the caret at the end: an editor mounted without a
-// click — a keyboard landing, Cmd+L — starts appending (a select-all
-// trial read as dangerous), and a mounting click's caret placement
-// overrides it (`select`, `rename`). The one exception is a LEFTWARD
-// keyboard landing, which seeds the start (`selected_by_arrow`).
+// pointer — notably a keyboard landing — starts appending (a
+// select-all trial read as dangerous), and a mounting click's caret
+// placement overrides it (`select`, `rename`). A leftward keyboard
+// landing reseeds the start through `seed_from_arrow`.
 pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
+}
+
+fn line_editing(line: progred_display::LineEdit) -> Editor {
+    Editor {
+        line: line_edit(&line.text),
+        update: Some(line.update),
+        recorded: false,
+    }
 }
 
 /// The selection an arrow step lands on: the caret seeds the side the
@@ -222,18 +242,11 @@ pub(crate) fn line_edit(text: &str) -> LineEditState {
 /// crosses projected text in one press. The end-seeded default already IS
 /// the rightward case; a leftward landing seeds the START instead of
 /// grinding back through every character.
-pub fn selected_by_arrow<World>(
-    sources: &Sources,
-    projection: &Projection<World>,
-    path: Path,
-    event: &KeyboardEvent,
-) -> Selection {
-    let mut selection = Selection::edge(sources, projection, path);
+pub fn seed_from_arrow(selection: &mut Selection, event: &KeyboardEvent) {
     if matches!(&event.key, Key::Named(NamedKey::ArrowLeft))
     {
         selection.payload = payload::with_offsets(&selection.payload, 0, 0);
     }
-    selection
 }
 
 /// The index of the path's last Follow step: the identity crossing

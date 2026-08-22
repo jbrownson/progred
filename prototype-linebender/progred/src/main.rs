@@ -13,7 +13,6 @@ mod grap_examples;
 mod history;
 mod hover;
 mod identity;
-mod line_edit;
 #[cfg(target_os = "macos")]
 mod macos_menu;
 mod menu;
@@ -153,7 +152,7 @@ pub(crate) struct App {
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
     /// does.
-    pub(crate) last_descends: Vec<navigate::Descend>,
+    pub(crate) last_descends: Vec<navigate::Descend<App>>,
     pub(crate) reducer: WindowEventReducer,
     /// Routes the discard sheet's answer back into the loop.
     pub(crate) proxy: winit::event_loop::EventLoopProxy<UserEvent>,
@@ -347,13 +346,12 @@ impl ApplicationHandler<UserEvent> for App {
                                 dispatch.line,
                                 &key_event,
                             ) {
-                                Some(path) => {
-                                    self.model.selection = Some(selection::selected_by_arrow(
-                                        &self.sources(),
-                                        &self.stack.projection,
-                                        path,
-                                        &key_event,
-                                    ));
+                                Some(target) => {
+                                    let select = target.select.clone();
+                                    select(self);
+                                    if let Some(selection) = &mut self.model.selection {
+                                        selection::seed_from_arrow(selection, &key_event);
+                                    }
                                     true
                                 }
                                 None => false,
@@ -698,7 +696,6 @@ impl App {
             self.model.selection = restore.map(|path| {
                 selection::Selection::edge(
                     &self.sources(),
-                    &self.stack.projection,
                     path,
                 )
             });

@@ -1,7 +1,7 @@
 //! Named faces the walk picks from. The editor fills them in.
 
 use parley::style::GenericFamily;
-use puri::edit::EditStyle;
+use puri::edit::{EditStyle, LineEditPresentation};
 use puri::text::TextStyle;
 use vello::peniko::{Brush, Color};
 
@@ -40,5 +40,12 @@ pub fn editor(scale: f64) -> Styles {
             cursor: Brush::from(Color::new([0.13, 0.14, 0.16, 1.0])),
         },
         scale,
+    }
+}
+
+impl Styles {
+    pub fn line_presentation(&self, prefix: &str, suffix: &str) -> LineEditPresentation {
+        LineEditPresentation::new(self.string.size, self.string.brush.clone())
+            .with_affixes(prefix, suffix)
     }
 }

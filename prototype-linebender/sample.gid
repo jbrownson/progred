@@ -56,7 +56,6 @@
     "points": e92356b75104edae387062fcf8a859e0,
     "primary": 09f73c1a02464b762ae34adc9ec17baa,
     "profile": 3624cc3724556440847e7da953d398fc,
-    "projections": cdaff65dbbd2e37b0a7deafe862d8695,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "radius": e2321b78d65f87918c64b7875408051a,
     "right": 4f53ff25390f58472d31a6142644dec2,
@@ -121,6 +120,7 @@
                           pattern: {
                             button: primary,
                             modifiers: [],
+                            event_kind: pointer_down,
                           },
                           expression: {
                             selection_value: {
@@ -201,7 +201,6 @@
                       ],
                     },
                   },
-                  event_kind: pointer_down,
                 },
               },
             },
@@ -322,9 +321,6 @@
       f64: 0x0000000000000440,
     },
     favorite_value: corner,
-    projections: [
-      at_display,
-    ],
     _321ee: {
       color: "rebeccapurple",
       swatch: 0x663399,
@@ -332,6 +328,7 @@
   },
   "root": {
     style: _321ee,
+    at_display: at_display,
     favorite: favorite_value,
     shape: roof,
   },

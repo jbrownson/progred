@@ -35,6 +35,18 @@ pub enum Display {
     Vector(Vector),
 }
 
+/// A Rust library's description of the stock host line editor. This
+/// is a layout/control request, not a drawing primitive: Progred
+/// lowers it through Puri into text, vector ink, and event handlers.
+#[derive(Clone)]
+pub struct LineEdit {
+    pub text: String,
+    /// The Grap write-back rule applied to CURRENT and typed INPUT.
+    pub update: Value,
+    pub prefix: String,
+    pub suffix: String,
+}
+
 #[derive(Clone)]
 pub struct Vector {
     pub width: f64,
@@ -147,6 +159,7 @@ pub enum Layout<World, Hover> {
     /// layout composition debt, not a drawing primitive disguised as
     /// one.
     Query,
+    LineEdit(LineEdit),
     OnClick {
         child: Box<Layout<World, Hover>>,
         handler: ActionHandler<World>,
@@ -246,6 +259,7 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
         match self {
             Self::Leaf(display) => Self::Leaf(display.clone()),
             Self::Query => Self::Query,
+            Self::LineEdit(line) => Self::LineEdit(line.clone()),
             Self::OnClick { child, handler } => Self::OnClick {
                 child: child.clone(),
                 handler: handler.clone(),
@@ -415,6 +429,10 @@ pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World,
 
 pub fn query<World, Hover>() -> Layout<World, Hover> {
     Layout::Query
+}
+
+pub fn line_edit<World, Hover>(line: LineEdit) -> Layout<World, Hover> {
+    Layout::LineEdit(line)
 }
 
 pub fn slot<World, Hover>() -> Layout<World, Hover> {
