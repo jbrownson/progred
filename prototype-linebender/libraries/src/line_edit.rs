@@ -182,17 +182,30 @@ fn handle(function: CellId) -> Value {
     )
 }
 
-/// One generic event handler dispatching the event data to a host
-/// transition, then installing its returned selection payload.
+/// One generic event handler dispatching event data to a host
+/// transition, then installing its returned selection payload. One
+/// accepted shape is a destructuring `let`; alternatives require
+/// `match`.
 fn handler(handlers: impl IntoIterator<Item = (CellId, CellId)>) -> Value {
-    let cases = handlers.into_iter().map(|(kind, function)| {
-        case_arm(
-            Value::record([(layout::vocabulary::EVENT_KIND, Value::from(kind))]),
-            handle(function),
+    let mut alternatives = handlers
+        .into_iter()
+        .map(|(kind, function)| {
+            (
+                Value::record([(layout::vocabulary::EVENT_KIND, Value::from(kind))]),
+                handle(function),
+            )
+        })
+        .collect::<Vec<_>>();
+    let body = if alternatives.len() == 1 {
+        let (pattern, expression) = alternatives.remove(0);
+        let_expression(
+            [binding_clause(
+                pattern,
+                Value::from(layout::vocabulary::EVENT),
+            )],
+            expression,
         )
-    });
-    grap_runtime::lambda(
-        [layout::vocabulary::EVENT],
+    } else {
         grap_runtime::call(
             Value::from(control::vocabulary::MATCH),
             [
@@ -202,11 +215,16 @@ fn handler(handlers: impl IntoIterator<Item = (CellId, CellId)>) -> Value {
                 ),
                 (
                     control::vocabulary::CASES,
-                    Value::list(cases),
+                    Value::list(
+                        alternatives
+                            .into_iter()
+                            .map(|(pattern, expression)| case_arm(pattern, expression)),
+                    ),
                 ),
             ],
-        ),
-    )
+        )
+    };
+    grap_runtime::lambda([layout::vocabulary::EVENT], body)
 }
 
 fn definition() -> Value {
@@ -449,17 +467,42 @@ mod tests {
     use super::*;
     use crate::{control, layout, selection, text};
 
-    fn event_kinds(handler: &Value) -> Vec<CellId> {
+    fn handler_body(handler: &Value) -> &Value {
         handler
             .as_record()
             .and_then(|fields| fields.get(&grap_runtime::vocabulary::CLOSURE))
             .and_then(Value::as_record)
             .and_then(|fields| fields.get(&grap_runtime::vocabulary::BODY))
-            .and_then(Value::as_record)
-            .and_then(|fields| fields.get(&control::vocabulary::CASES))
-            .and_then(Value::as_list)
-            .expect("event handler match cases")
-            .values()
+            .expect("event handler closure body")
+    }
+
+    fn handler_form(handler: &Value) -> CellId {
+        handler_body(handler)
+            .as_record()
+            .and_then(|fields| fields.get(&grap_runtime::vocabulary::FUNCTION))
+            .and_then(Value::as_cell)
+            .expect("event handler control form")
+    }
+
+    fn event_kinds(handler: &Value) -> Vec<CellId> {
+        let body = handler_body(handler).as_record().expect("event handler call");
+        let alternatives = match handler_form(handler) {
+            control::vocabulary::MATCH => body
+                .get(&control::vocabulary::CASES)
+                .and_then(Value::as_list)
+                .expect("event handler match cases")
+                .values()
+                .collect::<Vec<_>>(),
+            control::vocabulary::LET => body
+                .get(&control::vocabulary::BINDINGS)
+                .and_then(Value::as_list)
+                .expect("event handler let bindings")
+                .values()
+                .collect::<Vec<_>>(),
+            _ => panic!("event handler uses match or let"),
+        };
+        alternatives
+            .into_iter()
             .map(|alternative| {
                 alternative
                     .as_record()
@@ -506,6 +549,7 @@ mod tests {
         let handler = content
             .get(&layout::vocabulary::HANDLER)
             .expect("event handler");
+        assert_eq!(handler_form(handler), control::vocabulary::MATCH);
         assert_eq!(
             event_kinds(handler),
             [
@@ -568,10 +612,9 @@ mod tests {
             .and_then(|fields| fields.get(&layout::vocabulary::ON_EVENT))
             .and_then(Value::as_record)
             .unwrap();
-        assert_eq!(
-            event_kinds(wrapper.get(&layout::vocabulary::HANDLER).unwrap()),
-            [layout::vocabulary::POINTER_DOWN]
-        );
+        let handler = wrapper.get(&layout::vocabulary::HANDLER).unwrap();
+        assert_eq!(handler_form(handler), control::vocabulary::LET);
+        assert_eq!(event_kinds(handler), [layout::vocabulary::POINTER_DOWN]);
         assert!(
             wrapper
                 .get(&layout::vocabulary::CHILD)
