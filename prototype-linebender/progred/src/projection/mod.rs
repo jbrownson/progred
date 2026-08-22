@@ -1669,10 +1669,13 @@ fn delim_style(scale: f64) -> DelimStyle {
     DelimStyle::for_text_size(14.0 * scale)
 }
 
-/// A delimiter's advance: its fitted ink plus both side bearings.
-/// The leaf rectangle contains the drawing at every height.
+/// The delimiter width reserved while responsive choices are being
+/// selected. The child's final height is not known until its choice
+/// settles, so reserve the capped grown width; the final leaf below
+/// takes only its actual height-derived width.
 fn delim_advance(scale: f64, delim: Delim) -> f64 {
-    delim_style(scale).bow(delim) + 2.0 * SIDE_BEARING_EM * 14.0 * scale
+    delim_style(scale).bow(delim) * delim::MAX_GROWTH
+        + 2.0 * SIDE_BEARING_EM * 14.0 * scale
 }
 
 fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {
@@ -1683,12 +1686,11 @@ fn side_advance(scale: f64, ink: &progred_display::Ink) -> f64 {
     }
 }
 
-/// A drawn delimiter leaf: `extent` is what layout sees (the FLAT
-/// advance, the span it must cover) while the ink inside spans
-/// `ink_top..ink_bottom` relative to the baseline, stroked in the dim
-/// brush like the text delimiters it replaces. A grown tall
-/// delimiter keeps its terminals where the flat form's would be while
-/// remaining inside the advance promised to layout.
+/// A drawn delimiter leaf whose box grows with and contains its ink.
+/// `extent` supplies the vertical span while `ink_top..ink_bottom`
+/// determines the common height-sensitive width of every delimiter
+/// family. Side bearings are part of the box and therefore of its
+/// honest hover target.
 fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     delim: Delim,
@@ -1700,15 +1702,16 @@ fn delim_leaf<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     let style = delim_style(scale);
     let bearing = SIDE_BEARING_EM * 14.0 * scale;
+    let bow = style.bow_for(delim, ink_bottom - ink_top);
     let path = if open {
-        delim::open_fitted(delim, &style, ink_top, ink_bottom)
+        delim::open(delim, &style, ink_top, ink_bottom)
     } else {
-        delim::close_fitted(delim, &style, ink_top, ink_bottom)
+        delim::close(delim, &style, ink_top, ink_bottom)
     };
     let ink_x = bearing;
     leaf(
         Extent {
-            width: style.bow(delim) + 2.0 * bearing,
+            width: bow + 2.0 * bearing,
             ..extent
         },
         move |p, placement| {
@@ -1798,8 +1801,9 @@ fn frame_leaf<C: 'static, Cv: Canvas + 'static>(
 }
 
 /// Place `left` and `right` in the side columns of `content`: same
-/// height as the child, width the flat advance. The display nodes
-/// paint; this only allocates and keeps the sides as handles.
+/// height as the child, with their width grown from that height. The
+/// display nodes paint; this only allocates and keeps the sides as
+/// handles.
 fn surround_sides<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     brush: Brush,

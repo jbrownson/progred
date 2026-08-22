@@ -27,11 +27,12 @@ pub enum Delim {
 pub const MAX_GROWTH: f64 = 2.0;
 pub const MAX_CONTRAST: f64 = 1.6;
 
-/// Proportions taken from the system font's own glyphs (SF Pro:
-/// paren/bracket ink 0.21 em wide, brace 0.30 em, both spanning
-/// -0.704..+0.171 em around the baseline with 0.05 em side
-/// bearings); `line` is the one-line reference height the growth and
-/// contrast ramps measure against.
+/// The three families share a 0.30 em base width, wide enough to keep
+/// their curvature and arms legible and deliberately more regular
+/// than the system font's differently proportioned glyphs. They span
+/// -0.704..+0.171 em around the baseline with 0.05 em side bearings;
+/// `line` is the one-line reference height the growth and contrast
+/// ramps measure against.
 #[derive(Debug, Clone, Copy)]
 pub struct DelimStyle {
     pub stem: f64,
@@ -44,7 +45,7 @@ impl DelimStyle {
     pub fn for_text_size(size: f64) -> Self {
         Self {
             stem: size * 0.075,
-            bow: size * 0.21,
+            bow: size * 0.30,
             brace_bow: size * 0.30,
             line: size * 1.18,
         }
@@ -144,12 +145,14 @@ fn paren(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
     path
 }
 
-/// Thick upright, thin arms — the bracket's contrast lives in the
-/// stem against its serif-like ticks.
-fn bracket(bow: f64, top: f64, bottom: f64, belly: f64, tip: f64) -> BezPath {
-    let mut path = Rect::new(0.0, top, belly.min(bow), bottom).to_path(0.05);
-    path.extend(Rect::new(0.0, top, bow, top + tip).to_path(0.05));
-    path.extend(Rect::new(0.0, bottom - tip, bow, bottom).to_path(0.05));
+/// A square bracket is monoline: its horizontal arms track the
+/// height-sensitive weight of its vertical stem. Its square corners
+/// read heavier than curves at equal weight, so lighten both together.
+fn bracket(bow: f64, top: f64, bottom: f64, belly: f64, _tip: f64) -> BezPath {
+    let weight = belly * 0.8;
+    let mut path = Rect::new(0.0, top, weight.min(bow), bottom).to_path(0.05);
+    path.extend(Rect::new(0.0, top, bow, top + weight).to_path(0.05));
+    path.extend(Rect::new(0.0, bottom - weight, bow, bottom).to_path(0.05));
     path
 }
 
@@ -280,6 +283,16 @@ mod tests {
                 ink(&open(delim, &STYLE, 0.0, 160.0)),
                 &format!("{delim:?} grown mirror"),
             );
+        }
+    }
+
+    #[test]
+    fn stock_delimiter_families_have_the_same_width() {
+        let style = DelimStyle::for_text_size(14.0);
+        for height in [style.line, style.line * 2.0, style.line * 4.0] {
+            let widths = [Delim::Paren, Delim::Bracket, Delim::Brace]
+                .map(|delim| style.bow_for(delim, height));
+            assert_eq!(widths, [widths[0]; 3]);
         }
     }
 

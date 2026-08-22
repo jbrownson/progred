@@ -719,7 +719,6 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
     assert!(air.hit.is_none());
     // Just inside the bracket's absorbed gap, the bracket claims
     // the container outright — the widened handle.
-    let styles = crate::styles::editor(1.0);
     let list = bench
         .descends
         .iter()
@@ -729,10 +728,7 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
         &doc,
         None,
         560.0,
-        Some(Point::new(
-            list.rect.x0 + delim_advance(styles.scale, Delim::Bracket) + 1.0,
-            gap_y,
-        )),
+        Some(Point::new(list.rect.x0 + 1.0, gap_y)),
     );
     assert!(matches!(
         &claimed.hit,
@@ -920,33 +916,43 @@ fn line_edit_definition_layout_canary() {
 }
 
 #[test]
-fn tall_delimiter_ink_stays_inside_its_leaf_rectangle() {
-    for open in [true, false] {
-        let node = tall_delim::<World, Bench>(
-            1.0,
-            Delim::Bracket,
-            open,
-            Extent {
-                width: 0.0,
-                ascent: 80.0,
-                descent: 80.0,
-            },
-            Color::BLACK.into(),
-        );
-        let rect = node.extent.rect_at(Point::new(20.0, 100.0));
-        let bench = settle(measured::place(node, Placement::root(rect)), None);
-        let [DrawCmd::Fill {
-            shape: Shape::Path(path),
-            transform,
-            ..
-        }] = &bench.list.0[..]
-        else {
-            panic!("a delimiter is one filled path");
-        };
-        let mut path = path.clone();
-        path.apply_affine(*transform);
-        let ink = path.bounding_box();
-        assert!(ink.x0 >= rect.x0 && ink.x1 <= rect.x1, "{ink:?} outside {rect:?}");
-        assert!(ink.y0 >= rect.y0 && ink.y1 <= rect.y1, "{ink:?} outside {rect:?}");
+fn tall_delimiter_families_fill_equal_honest_leaf_rectangles() {
+    let mut expected_width = None;
+    let bearing = SIDE_BEARING_EM * 14.0;
+    for delim in [Delim::Paren, Delim::Bracket, Delim::Brace] {
+        for open in [true, false] {
+            let node = tall_delim::<World, Bench>(
+                1.0,
+                delim,
+                open,
+                Extent {
+                    width: 0.0,
+                    ascent: 80.0,
+                    descent: 80.0,
+                },
+                Color::BLACK.into(),
+            );
+            let rect = node.extent.rect_at(Point::new(20.0, 100.0));
+            let width = *expected_width.get_or_insert(rect.width());
+            assert!((rect.width() - width).abs() < 1e-6);
+            let bench = settle(measured::place(node, Placement::root(rect)), None);
+            let [DrawCmd::Fill {
+                shape: Shape::Path(path),
+                transform,
+                ..
+            }] = &bench.list.0[..]
+            else {
+                panic!("a delimiter is one filled path");
+            };
+            let mut path = path.clone();
+            path.apply_affine(*transform);
+            let ink = path.bounding_box();
+            assert!((ink.x0 - (rect.x0 + bearing)).abs() < 1e-6);
+            assert!((ink.x1 - (rect.x1 - bearing)).abs() < 1e-6);
+            assert!(
+                ink.y0 >= rect.y0 && ink.y1 <= rect.y1,
+                "{ink:?} outside {rect:?}"
+            );
+        }
     }
 }
