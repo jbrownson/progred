@@ -101,8 +101,23 @@ fn let_expression(
     bindings: impl IntoIterator<Item = Value>,
     expression: Value,
 ) -> Value {
+    bindings_expression(control::vocabulary::LET, bindings, expression)
+}
+
+fn where_expression(
+    bindings: impl IntoIterator<Item = Value>,
+    expression: Value,
+) -> Value {
+    bindings_expression(control::vocabulary::WHERE, bindings, expression)
+}
+
+fn bindings_expression(
+    function: CellId,
+    bindings: impl IntoIterator<Item = Value>,
+    expression: Value,
+) -> Value {
     grap_runtime::call(
-        Value::from(control::vocabulary::LET),
+        Value::from(function),
         [
             (
                 control::vocabulary::BINDINGS,
@@ -344,11 +359,14 @@ fn definition() -> Value {
             ),
         ],
     );
-    let body = let_expression(
+    let event_handler = let_expression(
+        [bind_clause(vocabulary::HANDLE, handle_definition())],
+        event_handler,
+    );
+    let body = where_expression(
         [
-            bind_clause(vocabulary::HANDLE, handle_definition()),
-            bind_clause(vocabulary::EVENT_HANDLER, event_handler),
             bind_clause(vocabulary::DRAWING, drawing),
+            bind_clause(vocabulary::EVENT_HANDLER, event_handler),
         ],
         quote(layout::on(
             unquote(Value::from(vocabulary::DRAWING)),
@@ -513,6 +531,38 @@ mod tests {
                     .expect("event-kind pattern")
             })
             .collect()
+    }
+
+    #[test]
+    fn line_edit_puts_its_outer_definitions_in_use_order_after_a_where() {
+        let definition = definition();
+        let body = definition
+            .as_record()
+            .and_then(|fields| fields.get(&grap_runtime::vocabulary::BODY))
+            .and_then(Value::as_record)
+            .expect("line edit body");
+        assert_eq!(
+            body.get(&grap_runtime::vocabulary::FUNCTION)
+                .and_then(Value::as_cell),
+            Some(control::vocabulary::WHERE)
+        );
+        let binders = body
+            .get(&control::vocabulary::BINDINGS)
+            .and_then(Value::as_list)
+            .expect("outer where bindings")
+            .values()
+            .map(|binding| {
+                binding
+                    .as_record()
+                    .and_then(|fields| fields.get(&control::vocabulary::BIND))
+                    .and_then(Value::as_cell)
+                    .expect("simple outer binder")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            binders,
+            [vocabulary::DRAWING, vocabulary::EVENT_HANDLER]
+        );
     }
 
     #[test]
