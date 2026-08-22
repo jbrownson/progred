@@ -903,6 +903,9 @@ pub mod payload {
         let mut fields = payload.as_record().cloned().unwrap_or_default();
         fields.insert(vocabulary::EDITOR_TEXT, text::value(line.text()));
         if own_text {
+            if query(payload) != Some(line.text()) {
+                fields.insert(vocabulary::CHOICE, f64_convention::value(0.0));
+            }
             fields.insert(vocabulary::QUERY, text::value(line.text()));
         }
         let (anchor, focus) = line.selection_offsets();
@@ -1029,6 +1032,24 @@ pub mod payload {
             let fields = settled.as_record().unwrap();
             assert!(!fields.contains_key(&vocabulary::PREEDIT));
             assert!(!fields.contains_key(&vocabulary::DRAG));
+        }
+
+        #[test]
+        fn changing_an_owned_query_resets_its_completion_choice() {
+            let changed = with_editor(
+                &pending("old", 2),
+                &LineEditState::from_parts("new", 3, 3, None, None),
+                true,
+            );
+            assert_eq!(query(&changed), Some("new"));
+            assert_eq!(choice(&changed), Some(0));
+
+            let unchanged = with_editor(
+                &pending("same", 2),
+                &LineEditState::from_parts("same", 4, 4, None, None),
+                true,
+            );
+            assert_eq!(choice(&unchanged), Some(2));
         }
 
         #[test]

@@ -581,6 +581,38 @@ mod tests {
     }
 
     #[test]
+    fn editing_a_query_resets_its_completion_choice() {
+        let event = Value::record([
+            (layout::vocabulary::EVENT_STATE, Value::from(layout::vocabulary::DOWN)),
+            (layout::vocabulary::CONTENT, text::value("!")),
+            (layout::vocabulary::MODIFIERS, Value::list([])),
+        ]);
+        let result = invoke(
+            line_edit::vocabulary::KEY,
+            payload::pending("hi", 1),
+            event,
+        );
+        assert_eq!(payload::query(&result), Some("hi!"));
+        assert_eq!(payload::choice(&result), Some(0));
+    }
+
+    #[test]
+    fn moving_within_a_query_preserves_its_completion_choice() {
+        let event = Value::record([
+            (layout::vocabulary::EVENT_STATE, Value::from(layout::vocabulary::DOWN)),
+            (layout::vocabulary::CONTENT, text::value("ArrowLeft")),
+            (layout::vocabulary::MODIFIERS, Value::list([])),
+        ]);
+        let result = invoke(
+            line_edit::vocabulary::KEY,
+            payload::pending("hi", 1),
+            event,
+        );
+        assert_eq!(payload::query(&result), Some("hi"));
+        assert_eq!(payload::choice(&result), Some(1));
+    }
+
+    #[test]
     fn the_grap_composed_pointer_handler_replaces_the_site_selection() {
         let stack = crate::stack::load::<()>();
         let expression = line_edit::call(

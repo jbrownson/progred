@@ -1377,16 +1377,19 @@ fn the_pending_query_writes_through_to_the_payload() {
     };
     let lib = Cells::new();
     let mut pending = crate::selection::pending_with_query(Vec::new(), "");
+    pending.set_choice(2);
     pending
         .edit_mut()
         .unwrap()
         .handle_ime(&puri::handler::ImeEvent::Commit("ab".to_string()));
     // The payload is stale only WITHIN the dispatch...
     assert_eq!(selection_payload::query(pending.payload()), Some(""));
+    assert_eq!(pending.choice(), 2);
     // ...and the per-event write-through syncs it, the same point the
     // document takes its writes.
     write_through(&mut doc, &lib, &crate::stack::load::<()>().foreign, &mut pending);
     assert_eq!(selection_payload::query(pending.payload()), Some("ab"));
+    assert_eq!(pending.choice(), 0);
 }
 
 #[test]
