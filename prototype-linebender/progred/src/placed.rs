@@ -7,7 +7,7 @@
 
 use crate::completion::{HasPopup, Popup};
 use crate::frame::Hovered;
-use gid::Value;
+use crate::hover::Secondary;
 use crate::navigate::{Descend, HasDescends};
 use measured::{Extent, Measured, Output};
 use puri::draw::{Canvas, GlyphRun, Shape};
@@ -105,9 +105,9 @@ pub fn dispatch_target<C>(actions: &[TargetAction<C>], ctx: &mut C, target: &Hov
 #[derive(Clone, Copy)]
 pub struct Ink<'a> {
     pub hovered: Option<&'a Hovered>,
-    /// The value the hover refers to; its other projections carry
-    /// the faint secondary mark.
-    pub hovered_value: Option<&'a Value>,
+    /// The cell-relative location the hover refers to; its other
+    /// projections carry the faint secondary mark.
+    pub hovered_secondary: Option<&'a Secondary>,
     /// Draw each leaf's honest placement rectangle after its own ink.
     pub debug_geometry: bool,
 }
@@ -545,7 +545,7 @@ mod tests {
     fn no_ink<'a>() -> Ink<'a> {
         Ink {
             hovered: None,
-            hovered_value: None,
+            hovered_secondary: None,
             debug_geometry: false,
         }
     }
@@ -676,7 +676,7 @@ mod tests {
             &mut canvas,
             Ink {
                 hovered: None,
-                hovered_value: None,
+                hovered_secondary: None,
                 debug_geometry: true,
             },
         );

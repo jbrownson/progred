@@ -880,13 +880,13 @@ impl App {
         let Frame {
             dispatch,
             renders,
-            hovered_value,
+            hovered_secondary,
         } = self.build_frame(scale, viewport);
         self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
         let ink = placed::Ink {
             hovered: self.hover.as_ref(),
-            hovered_value: hovered_value.as_ref(),
+            hovered_secondary: hovered_secondary.as_ref(),
             debug_geometry: self.model.view.debug_geometry,
         };
         let mut paint = Paint {

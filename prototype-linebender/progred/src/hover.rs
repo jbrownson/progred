@@ -4,7 +4,7 @@
 use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
-use gid::{Step, Value};
+use gid::{CellId, Step, Value};
 use std::rc::Rc;
 
 /// What the pointer rests on: the address a later editor action will
@@ -29,23 +29,88 @@ pub enum Hover {
     Entry(usize),
 }
 
-/// The cell a hover refers to — the hover's `secondary_of`, for
-/// marking its other projections. Marks mean IDENTITY: the same
-/// cell, shared — never a copy that happens to be equal, so only
-/// cell values answer. An `Entry` hover re-derives from the LIVE
-/// completion offers of the open pending (recomputed here — the
-/// price of never marking a snapshot).
-pub fn hover_value(
+/// What makes two projected locations secondary copies. Cell values
+/// match wherever that cell is referenced. Other values match only
+/// at the same path inside the same nearest enclosing cell.
+#[derive(Clone, Debug)]
+pub(crate) enum Secondary {
+    Cell(CellId),
+    InCell {
+        cell: CellId,
+        path: Rc<[Step]>,
+        /// The first step relative to `cell`, immediately after its
+        /// `Follow` step in `path`.
+        relative_from: usize,
+    },
+}
+
+impl Secondary {
+    pub(crate) fn from_context(
+        path: Rc<[Step]>,
+        value: &Value,
+        enclosing: Option<(CellId, usize)>,
+    ) -> Option<Self> {
+        match value.as_cell() {
+            Some(cell) => Some(Self::Cell(cell)),
+            None => enclosing.map(|(cell, relative_from)| Self::InCell {
+                cell,
+                path,
+                relative_from,
+            }),
+        }
+    }
+
+    pub(crate) fn from_path(sources: &Sources, path: Rc<[Step]>, value: &Value) -> Option<Self> {
+        let enclosing = path
+            .iter()
+            .rposition(|step| *step == Step::Follow)
+            .and_then(|follow| {
+                sources
+                    .resolve(&path[..follow])
+                    .and_then(Value::as_cell)
+                    .map(|cell| (cell, follow + 1))
+            });
+        Self::from_context(path, value, enclosing)
+    }
+}
+
+impl PartialEq for Secondary {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Cell(left), Self::Cell(right)) => left == right,
+            (
+                Self::InCell {
+                    cell: left_cell,
+                    path: left_path,
+                    relative_from: left_from,
+                },
+                Self::InCell {
+                    cell: right_cell,
+                    path: right_path,
+                    relative_from: right_from,
+                },
+            ) => {
+                left_cell == right_cell
+                    && left_path[*left_from..] == right_path[*right_from..]
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Secondary {}
+
+/// The secondary target a hover refers to. An `Entry` hover
+/// re-derives from the live completion offers of the open pending
+/// (recomputed here — the price of never marking a snapshot).
+pub(crate) fn hover_secondary(
     sources: &Sources,
     raw: bool,
     selection: Option<&Selection>,
     hover: &Hover,
-) -> Option<Value> {
+) -> Option<Secondary> {
     match hover {
-        Hover::Value(path) => sources
-            .resolve(path.as_ref())
-            .filter(|value| value.as_cell().is_some())
-            .cloned(),
+        Hover::Value(path) => Secondary::from_path(sources, path.clone(), sources.resolve(path)?),
         Hover::Entry(index) => {
             let current = selection?;
             let labels = match current.stage() {
@@ -56,10 +121,92 @@ pub fn hover_value(
             let query = current.edit()?;
             let entries = completion_entries(sources, raw, labels, query.text());
             match &entries.get(*index)?.action {
-                EntryAction::Value(value) if value.as_cell().is_some() => Some(value.clone()),
+                EntryAction::Value(value) => value.as_cell().map(Secondary::Cell),
                 _ => None,
             }
         }
         Hover::Toggle(_) | Hover::Insert(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gid::{Cells, Document, new_cell_id};
+
+    fn secondary(sources: &Sources, path: Vec<Step>) -> Option<Secondary> {
+        let path: Rc<[Step]> = Rc::from(path);
+        Secondary::from_path(sources, path.clone(), sources.resolve(path.as_ref())?)
+    }
+
+    #[test]
+    fn nested_values_match_by_cell_and_relative_path() {
+        let shared = new_cell_id();
+        let other = new_cell_id();
+        let outer = crate::test_values::label("outer");
+        let inner = crate::test_values::label("inner");
+        let peer = crate::test_values::label("peer");
+        let contents = Value::record([
+            (
+                outer,
+                Value::record([(inner, crate::test_values::text("asdf"))]),
+            ),
+            (peer, crate::test_values::text("asdf")),
+        ]);
+        let mut cells = Cells::new();
+        cells.set_value(shared, contents.clone());
+        cells.set_value(other, contents);
+        let root = Value::list([
+            Value::from(shared),
+            Value::from(shared),
+            Value::from(other),
+        ]);
+        let positions: Vec<_> = root
+            .as_list()
+            .expect("root list")
+            .keys()
+            .cloned()
+            .collect();
+        let doc = Document {
+            root: Some(root),
+            cells,
+        };
+        let library = Cells::new();
+        let sources = Sources {
+            doc: &doc,
+            library: &library,
+        };
+        let nested = |position| {
+            vec![
+                Step::Element(position),
+                Step::Follow,
+                Step::Key(outer),
+                Step::Key(inner),
+            ]
+        };
+
+        assert_eq!(
+            secondary(&sources, nested(positions[0].clone())),
+            secondary(&sources, nested(positions[1].clone()))
+        );
+        assert_ne!(
+            secondary(&sources, nested(positions[0].clone())),
+            secondary(
+                &sources,
+                vec![
+                    Step::Element(positions[1].clone()),
+                    Step::Follow,
+                    Step::Key(peer),
+                ],
+            )
+        );
+        assert_ne!(
+            secondary(&sources, nested(positions[0].clone())),
+            secondary(&sources, nested(positions[2].clone()))
+        );
+        assert_eq!(
+            secondary(&sources, vec![Step::Element(positions[0].clone())]),
+            secondary(&sources, vec![Step::Element(positions[1].clone())])
+        );
     }
 }

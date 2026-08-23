@@ -13,7 +13,6 @@ use crate::selection;
 use crate::sources;
 use crate::stack;
 use crate::{App, content_viewport};
-use gid::Value;
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::EditCtx;
@@ -49,9 +48,9 @@ pub(crate) struct Dispatch {
 pub(crate) struct Frame {
     pub(crate) dispatch: Dispatch,
     pub(crate) renders: Vec<placed::Render<Paint>>,
-    /// The value the resolved hover refers to, for the render pass's
-    /// secondary marks.
-    pub(crate) hovered_value: Option<Value>,
+    /// The cell-relative location the resolved hover refers to, for
+    /// the render pass's secondary marks.
+    pub(crate) hovered_secondary: Option<hover::Secondary>,
 }
 
 /// What the resting pointer claims in the document or application
@@ -339,8 +338,8 @@ impl App {
             self.pressed,
             hover_reach,
         );
-        let hovered_value = match &self.hover {
-            Some(Hovered::Tree(hover)) => hover::hover_value(
+        let hovered_secondary = match &self.hover {
+            Some(Hovered::Tree(hover)) => hover::hover_secondary(
                 &sources::Sources {
                     doc: &self.model.doc,
                     library: &self.stack.library,
@@ -395,7 +394,7 @@ impl App {
                 popup,
             },
             renders,
-            hovered_value,
+            hovered_secondary,
         }
     }
 

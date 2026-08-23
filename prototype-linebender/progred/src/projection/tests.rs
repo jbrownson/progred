@@ -1,7 +1,7 @@
 use super::*;
 use crate::annotations::Annotations;
 use crate::selection::payload as selection_payload;
-use crate::hover::hover_value;
+use crate::hover::hover_secondary;
 use gid::Position;
 use progred_libraries::{f64, name, text};
 use ui_events::keyboard::{KeyState, Modifiers};
@@ -1083,11 +1083,14 @@ fn entry_hover_marks_follow_the_live_query() {
     // IDENTITY: an equal text value is a copy, not the same cell,
     // so string entries mark nothing.
     assert_eq!(
-        hover_value(&sources, false, Some(&pending("\"a\"")), &Hover::Entry(0)),
+        hover_secondary(&sources, false, Some(&pending("\"a\"")), &Hover::Entry(0)),
         None
     );
     // A closed pending answers nothing.
-    assert_eq!(hover_value(&sources, false, None, &Hover::Entry(0)), None);
+    assert_eq!(
+        hover_secondary(&sources, false, None, &Hover::Entry(0)),
+        None
+    );
 }
 
 #[test]

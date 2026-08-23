@@ -38,7 +38,7 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
     };
     let ink = crate::placed::Ink {
         hovered: hovered.as_ref(),
-        hovered_value: None,
+        hovered_secondary: None,
         debug_geometry: false,
     };
     for render in renders {

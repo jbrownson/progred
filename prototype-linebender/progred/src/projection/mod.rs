@@ -6,7 +6,7 @@ use crate::completion::{resolve_entry, resolve_label};
 use crate::completion::{Entry, EntryAction, HasPopup, Popup, completion_entries};
 use crate::filter;
 use crate::frame::Hovered;
-use crate::hover::Hover;
+use crate::hover::{Hover, Secondary};
 use crate::navigate::{Descend, HasDescends};
 use crate::placed::{self, Placed, before, decorate, leaf, on_key};
 use measured::{Extent, Measured, centered_row, col, layers, min_width, pad, row};
@@ -118,10 +118,19 @@ struct Cx<'a> {
     annotations: &'a Annotations,
     styles: &'a Styles,
     selection: Option<&'a Selection>,
-    /// The value whose other projections carry the secondary mark.
-    secondary: Option<Value>,
+    /// The selected cell-relative location whose other projections
+    /// carry the secondary mark.
+    secondary: Option<Secondary>,
     source: Source<'a>,
     fuel: std::cell::Cell<usize>,
+}
+
+#[derive(Clone, Default)]
+struct Traversal {
+    /// Cells crossed by `Follow`, used to stop projection cycles.
+    cells: HashSet<CellId>,
+    /// The nearest followed cell and the start of its relative path.
+    enclosing: Option<(CellId, usize)>,
 }
 
 #[derive(Clone, Copy)]
@@ -773,7 +782,7 @@ fn prepare<
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
+    ancestors: &Traversal,
     hooks: &Hooks<C>,
     value: &Value,
     layout: progred_display::Layout<C, Hover>,
@@ -1086,7 +1095,7 @@ fn prepare_at<
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
+    ancestors: &Traversal,
     steps: Vec<Step>,
     nested: Value,
     override_partials: Option<Vec<progred_display::Partial<C, Hover>>>,
@@ -1098,7 +1107,8 @@ fn prepare_at<
     for step in &steps {
         if *step == Step::Follow {
             if let Some(cell) = cx.sources.resolve(&path).and_then(Value::as_cell) {
-                follow_ancestors.insert(cell);
+                follow_ancestors.cells.insert(cell);
+                follow_ancestors.enclosing = Some((cell, path.len() + 1));
             }
         }
         path.push(step.clone());
@@ -2059,15 +2069,13 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-/// The cell marked as the secondary selection: the one at the
-/// selected path. Marks mean IDENTITY — the same cell projecting in
-/// many places — never equal copies, so only cell values answer.
-fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Value> {
+/// The selected location shared by repeated projections of a cell.
+fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Secondary> {
     match selection? {
-        current if current.stage() == Stage::Edge => sources
-            .resolve(current.path())
-            .filter(|value| value.as_cell().is_some())
-            .cloned(),
+        current if current.stage() == Stage::Edge => {
+            let path: SharedPath = Rc::from(current.path());
+            Secondary::from_path(sources, path.clone(), sources.resolve(path.as_ref())?)
+        }
         _ => None,
     }
 }
@@ -2123,7 +2131,7 @@ pub fn project<
         projection,
         tcx,
         &[],
-        &HashSet::new(),
+        &Traversal::default(),
         Location::Root(sources.root()),
         &hooks,
         &mut build,
@@ -2257,13 +2265,13 @@ fn ground_with<C: 'static, Cv: Canvas + 'static>(
 fn secondary_mark_with<C: 'static, Cv: Canvas + 'static>(
     strong: bool,
     scale: f64,
-    value: Value,
+    secondary: Secondary,
     content: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
     decorate(content, move |p, rect| {
         p.ink(move |cv, ink| {
             // The hover variant is the same mark at half voice.
-            let faint = !strong && ink.hovered_value == Some(&value);
+            let faint = !strong && ink.hovered_secondary == Some(&secondary);
             if !strong && !faint {
                 return;
             }
@@ -2325,7 +2333,7 @@ fn prepare_transient_root<
         projection,
         tcx,
         path,
-        &HashSet::new(),
+        &Traversal::default(),
         Location::Root(Some(&result)),
         &result_hooks,
         build,
@@ -2351,7 +2359,7 @@ fn prepare_descend<
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     parent_path: &[Step],
-    ancestors: &HashSet<CellId>,
+    ancestors: &Traversal,
     parent: &Value,
     step: Step,
     hooks: &Hooks<C>,
@@ -2361,7 +2369,10 @@ fn prepare_descend<
     path.push(step.clone());
     if step == Step::Follow {
         let mut ancestors = ancestors.clone();
-        ancestors.extend(parent.as_cell());
+        if let Some(cell) = parent.as_cell() {
+            ancestors.cells.insert(cell);
+            ancestors.enclosing = Some((cell, path.len()));
+        }
         prepare_location(
             cx,
             projection,
@@ -2395,7 +2406,7 @@ fn prepare_location<
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
+    ancestors: &Traversal,
     location: Location<'_>,
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
@@ -2424,7 +2435,7 @@ fn prepare_present_value<
     projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
+    ancestors: &Traversal,
     value: &Value,
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
@@ -2441,17 +2452,20 @@ fn prepare_present_value<
         layout,
         build,
     );
-    // Other projections of the selected value carry the secondary
+    let landmark_path: SharedPath = Rc::from(path);
+    let secondary = Secondary::from_context(landmark_path.clone(), value, ancestors.enclosing);
+    // Other projections of the selected location carry the secondary
     // mark; the selected one has the primary highlight.
     let inner = if cx.selected(path) {
         inner
-    } else {
-        let strong = cx.secondary.as_ref() == Some(value);
+    } else if let Some(secondary) = secondary {
+        let strong = cx.secondary.as_ref() == Some(&secondary);
         let scale = cx.styles.scale;
-        let value = value.clone();
         ChoiceLayout::map(inner, 0.0, move |inner| {
-            secondary_mark_with(strong, scale, value, inner)
+            secondary_mark_with(strong, scale, secondary, inner)
         })
+    } else {
+        inner
     };
     // A landmark, not a target: highlight and keyboard reach span
     // the full bounds, while clicks belong to the content each arm
@@ -2459,7 +2473,6 @@ fn prepare_present_value<
     let transient = cx.source.transient();
     let selected = cx.selected(path);
     let scale = cx.styles.scale;
-    let landmark_path: SharedPath = Rc::from(path);
     let select = select_handler(landmark_path.clone(), hooks);
     let delete = hooks.delete.clone();
     let landmark = landmark_path.clone();
@@ -2493,7 +2506,7 @@ fn present_layout<C: 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     path: &[Step],
-    ancestors: &HashSet<CellId>,
+    ancestors: &Traversal,
     value: &Value,
     hooks: &Hooks<C>,
 ) -> progred_display::Layout<C, Hover> {
@@ -2503,7 +2516,7 @@ fn present_layout<C: 'static>(
     // root once per projected value.
     let in_cycle = value
         .as_cell()
-        .is_some_and(|cell| ancestors.contains(&cell));
+        .is_some_and(|cell| ancestors.cells.contains(&cell));
     if crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
         .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
         && let Some(collapsed) = structure::collapsed_layout(cx, path, value, hooks)
