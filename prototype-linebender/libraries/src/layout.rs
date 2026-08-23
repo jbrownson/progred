@@ -686,7 +686,7 @@ fn read_command(value: &Value) -> Option<Command<Paint>> {
     }
 }
 
-fn read_optional_transform(fields: &im::OrdMap<CellId, Value>) -> Option<Affine> {
+fn read_optional_transform(fields: &gid::Record) -> Option<Affine> {
     match fields.get(&vocabulary::TRANSFORM) {
         Some(transform) => read_transform(transform),
         None => Some(Affine::IDENTITY),

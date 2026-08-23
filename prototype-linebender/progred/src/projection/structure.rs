@@ -164,7 +164,7 @@ fn list_layout<World: 'static>(
 fn record_layout<World: 'static>(
     cx: &Cx,
     path: &[Step],
-    fields: &im::OrdMap<CellId, Value>,
+    fields: &gid::Record,
     hooks: &Hooks<World>,
 ) -> View<World> {
     let consumes_simple_name = !cx.raw
@@ -181,7 +181,7 @@ fn record_layout<World: 'static>(
             .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(CellId, bool)> = fields
         .iter()
-        .filter(|(key, _)| !consumes_simple_name || **key != name::vocabulary::NAME)
+        .filter(|(key, _)| !consumes_simple_name || *key != name::vocabulary::NAME)
         .map(|(key, _)| (*key, true))
         .collect();
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {

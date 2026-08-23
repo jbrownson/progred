@@ -11,6 +11,119 @@ use im::OrdMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
+
+/// A small immutable map keyed by durable cell identity. Records are
+/// kept sorted and contiguous for cheap reads and iteration; clones
+/// share their storage, while edits copy only when another value still
+/// owns the same record.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Record(Arc<Vec<(CellId, Value)>>);
+
+impl Record {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn get(&self, key: &CellId) -> Option<&Value> {
+        self.0
+            .binary_search_by_key(key, |(field, _)| *field)
+            .ok()
+            .map(|index| &self.0[index].1)
+    }
+
+    pub fn contains_key(&self, key: &CellId) -> bool {
+        self.0
+            .binary_search_by_key(key, |(field, _)| *field)
+            .is_ok()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, (CellId, Value)> {
+        self.0.iter()
+    }
+
+    pub fn keys(&self) -> impl DoubleEndedIterator<Item = &CellId> + ExactSizeIterator {
+        self.0.iter().map(|(field, _)| field)
+    }
+
+    pub fn values(&self) -> impl DoubleEndedIterator<Item = &Value> + ExactSizeIterator {
+        self.0.iter().map(|(_, value)| value)
+    }
+
+    pub fn insert(&mut self, key: CellId, value: Value) -> Option<Value> {
+        let fields = Arc::make_mut(&mut self.0);
+        match fields.binary_search_by_key(&key, |(field, _)| *field) {
+            Ok(index) => Some(std::mem::replace(&mut fields[index].1, value)),
+            Err(index) => {
+                fields.insert(index, (key, value));
+                None
+            }
+        }
+    }
+
+    pub fn remove(&mut self, key: &CellId) -> Option<Value> {
+        let index = self.0.binary_search_by_key(key, |(field, _)| *field).ok()?;
+        Some(Arc::make_mut(&mut self.0).remove(index).1)
+    }
+
+    pub fn update(&self, key: CellId, value: Value) -> Self {
+        let mut next = self.clone();
+        next.insert(key, value);
+        next
+    }
+
+    pub fn without(&self, key: &CellId) -> Self {
+        let mut next = self.clone();
+        next.remove(key);
+        next
+    }
+}
+
+impl FromIterator<(CellId, Value)> for Record {
+    fn from_iter<T: IntoIterator<Item = (CellId, Value)>>(iter: T) -> Self {
+        let mut fields: Vec<_> = iter.into_iter().collect();
+        fields.sort_by_key(|(field, _)| *field);
+        let mut unique = Vec::with_capacity(fields.len());
+        for (field, value) in fields {
+            if let Some((last, stored)) = unique.last_mut()
+                && *last == field
+            {
+                *stored = value;
+            } else {
+                unique.push((field, value));
+            }
+        }
+        Self(Arc::new(unique))
+    }
+}
+
+impl IntoIterator for Record {
+    type Item = (CellId, Value);
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Record {
+    type Item = &'a (CellId, Value);
+    type IntoIter = std::slice::Iter<'a, (CellId, Value)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
 
 /// A value: anything sayable — pure structure, no identity of its
 /// own. Cycles are unrepresentable here; they exist only by a cell's
@@ -23,7 +136,7 @@ pub enum Value {
     Cell(CellId),
     Blob(Vec<u8>),
     List(OrdMap<Position, Value>),
-    Record(OrdMap<CellId, Value>),
+    Record(Record),
 }
 
 impl Value {
@@ -63,7 +176,7 @@ impl Value {
         }
     }
 
-    pub fn as_record(&self) -> Option<&OrdMap<CellId, Value>> {
+    pub fn as_record(&self) -> Option<&Record> {
         match self {
             Value::Record(fields) => Some(fields),
             _ => None,
@@ -206,7 +319,7 @@ impl Serialize for Value {
             Value::Cell(cell) => ValueRepr::Cell(*cell),
             Value::Blob(bytes) => ValueRepr::Blob(hex_string(bytes)),
             Value::List(elements) => ValueRepr::List(elements.values().cloned().collect()),
-            // OrdMap iterates in label order, so the file's pair
+            // Record storage is sorted by label, so the file's pair
             // order is canonical without an explicit sort.
             Value::Record(fields) => {
                 ValueRepr::Record(fields.iter().map(|(k, v)| (*k, v.clone())).collect())
@@ -308,6 +421,31 @@ mod tests {
         assert_ne!(Value::record([]), Value::list([]));
         // Equal inline records nest equally.
         assert_eq!(Value::list([a.clone()]), Value::list([b.clone()]));
+    }
+
+    #[test]
+    fn records_are_canonical_copy_on_write_values() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<Value>();
+
+        let x = label("x");
+        let y = label("y");
+        let mut original: Record = [(y, blob("first y")), (x, blob("x")), (y, blob("last y"))]
+            .into_iter()
+            .collect();
+        assert_eq!(original.keys().copied().collect::<Vec<_>>(), {
+            let mut labels = vec![x, y];
+            labels.sort();
+            labels
+        });
+        assert_eq!(original.get(&y), Some(&blob("last y")));
+
+        let snapshot = original.clone();
+        assert!(Arc::ptr_eq(&original.0, &snapshot.0));
+        original.insert(x, blob("changed"));
+        assert!(!Arc::ptr_eq(&original.0, &snapshot.0));
+        assert_eq!(original.get(&x), Some(&blob("changed")));
+        assert_eq!(snapshot.get(&x), Some(&blob("x")));
     }
 
     #[test]

@@ -132,7 +132,7 @@ pub fn call_display<World, Hover: Clone>(
     let arguments = record(
         fields
             .iter()
-            .filter(|(field, _)| **field != FUNCTION)
+            .filter(|(field, _)| *field != FUNCTION)
             .map(|(field, value)| (*field, value)),
         |left, right| match (parameter_positions.get(left), parameter_positions.get(right)) {
             (Some(left), Some(right)) => left.cmp(right),

@@ -12,4 +12,4 @@ pub use cell_id::{CellId, ParseCellIdError, new_cell_id};
 pub use cells::Cells;
 pub use document::{Document, Path};
 pub use position::Position;
-pub use value::{Step, Value, hex_string};
+pub use value::{Record, Step, Value, hex_string};

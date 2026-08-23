@@ -3,7 +3,7 @@
 //! and lists are inert data, and each recognized form chooses its own
 //! recursive evaluation.
 
-use gid::{CellId, Value};
+use gid::{CellId, Record, Value};
 use im::{HashMap, OrdMap};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -84,7 +84,7 @@ pub struct PreparedCallable {
 
 #[derive(Clone)]
 struct Closure {
-    fields: OrdMap<CellId, Value>,
+    fields: Record,
     params: Rc<[Parameter]>,
     body: Expression,
     environment: Environment,

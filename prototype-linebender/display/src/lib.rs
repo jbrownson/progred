@@ -702,11 +702,13 @@ pub fn alternatives<World, Hover>(
 /// Otherwise `patch`.
 pub fn overlay_value(current: &Value, patch: Value) -> Value {
     match (current.as_record(), patch.as_record()) {
-        (Some(current), Some(patch)) => Value::record(
-            current
-                .clone()
-                .union_with(patch.clone(), |_, incoming| incoming),
-        ),
+        (Some(current), Some(patch)) => {
+            let mut overlaid = current.clone();
+            for (field, value) in patch {
+                overlaid.insert(*field, value.clone());
+            }
+            Value::Record(overlaid)
+        }
         _ => patch,
     }
 }
