@@ -112,7 +112,7 @@ fn cell_head<World>(cx: &Cx, cell: CellId) -> View<World> {
 fn list_layout<World: 'static>(
     cx: &Cx,
     path: &[Step],
-    elements: &im::OrdMap<gid::Position, Value>,
+    elements: &gid::List,
     hooks: &Hooks<World>,
 ) -> View<World> {
     let mut items: Vec<(gid::Position, bool)> = elements

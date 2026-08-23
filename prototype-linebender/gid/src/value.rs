@@ -7,7 +7,6 @@
 
 use crate::cell_id::CellId;
 use crate::position::Position;
-use im::OrdMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -125,6 +124,120 @@ impl<'a> IntoIterator for &'a Record {
     }
 }
 
+/// An ordered sequence whose session-local positions give projected
+/// elements stable identities. Like records, lists are contiguous and
+/// copy-on-write; positions affect navigation but not value equality.
+#[derive(Debug, Clone, Default)]
+pub struct List(Arc<Vec<(Position, Value)>>);
+
+impl List {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn get(&self, key: &Position) -> Option<&Value> {
+        self.0
+            .binary_search_by(|(position, _)| position.cmp(key))
+            .ok()
+            .map(|index| &self.0[index].1)
+    }
+
+    pub fn contains_key(&self, key: &Position) -> bool {
+        self.0
+            .binary_search_by(|(position, _)| position.cmp(key))
+            .is_ok()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, (Position, Value)> {
+        self.0.iter()
+    }
+
+    pub fn keys(&self) -> impl DoubleEndedIterator<Item = &Position> + ExactSizeIterator {
+        self.0.iter().map(|(position, _)| position)
+    }
+
+    pub fn values(&self) -> impl DoubleEndedIterator<Item = &Value> + ExactSizeIterator {
+        self.0.iter().map(|(_, value)| value)
+    }
+
+    pub fn insert(&mut self, key: Position, value: Value) -> Option<Value> {
+        let elements = Arc::make_mut(&mut self.0);
+        match elements.binary_search_by(|(position, _)| position.cmp(&key)) {
+            Ok(index) => Some(std::mem::replace(&mut elements[index].1, value)),
+            Err(index) => {
+                elements.insert(index, (key, value));
+                None
+            }
+        }
+    }
+
+    pub fn remove(&mut self, key: &Position) -> Option<Value> {
+        let index = self
+            .0
+            .binary_search_by(|(position, _)| position.cmp(key))
+            .ok()?;
+        Some(Arc::make_mut(&mut self.0).remove(index).1)
+    }
+
+    pub fn update(&self, key: Position, value: Value) -> Self {
+        let mut next = self.clone();
+        next.insert(key, value);
+        next
+    }
+
+    pub fn without(&self, key: &Position) -> Self {
+        let mut next = self.clone();
+        next.remove(key);
+        next
+    }
+}
+
+impl FromIterator<(Position, Value)> for List {
+    fn from_iter<T: IntoIterator<Item = (Position, Value)>>(iter: T) -> Self {
+        let mut elements: Vec<_> = iter.into_iter().collect();
+        elements.sort_by(|(left, _), (right, _)| left.cmp(right));
+        let mut unique = Vec::with_capacity(elements.len());
+        for (position, value) in elements {
+            if let Some((last, stored)) = unique.last_mut()
+                && *last == position
+            {
+                *stored = value;
+            } else {
+                unique.push((position, value));
+            }
+        }
+        Self(Arc::new(unique))
+    }
+}
+
+impl IntoIterator for List {
+    type Item = (Position, Value);
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a List {
+    type Item = &'a (Position, Value);
+    type IntoIter = std::slice::Iter<'a, (Position, Value)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 /// A value: anything sayable — pure structure, no identity of its
 /// own. Cycles are unrepresentable here; they exist only by a cell's
 /// value linking back through `Value::Cell`. Positions are session-only
@@ -135,7 +248,7 @@ impl<'a> IntoIterator for &'a Record {
 pub enum Value {
     Cell(CellId),
     Blob(Vec<u8>),
-    List(OrdMap<Position, Value>),
+    List(List),
     Record(Record),
 }
 
@@ -169,7 +282,7 @@ impl Value {
         }
     }
 
-    pub fn as_list(&self) -> Option<&OrdMap<Position, Value>> {
+    pub fn as_list(&self) -> Option<&List> {
         match self {
             Value::List(elements) => Some(elements),
             _ => None,
@@ -408,6 +521,31 @@ mod tests {
             Value::list([Value::from(cell)]),
             Value::list([Value::from(new_cell_id())]),
         );
+    }
+
+    #[test]
+    fn lists_are_canonical_copy_on_write_sequences() {
+        let [first, second, third] = spread(3).try_into().unwrap();
+        let mut original: List = [
+            (third.clone(), blob("third")),
+            (first.clone(), blob("first")),
+            (second.clone(), blob("old second")),
+            (second.clone(), blob("second")),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            original.keys().cloned().collect::<Vec<_>>(),
+            [first.clone(), second.clone(), third]
+        );
+        assert_eq!(original.get(&second), Some(&blob("second")));
+
+        let snapshot = original.clone();
+        assert!(Arc::ptr_eq(&original.0, &snapshot.0));
+        original.insert(first.clone(), blob("changed"));
+        assert!(!Arc::ptr_eq(&original.0, &snapshot.0));
+        assert_eq!(original.get(&first), Some(&blob("changed")));
+        assert_eq!(snapshot.get(&first), Some(&blob("first")));
     }
 
     #[test]
