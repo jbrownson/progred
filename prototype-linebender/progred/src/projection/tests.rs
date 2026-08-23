@@ -1541,18 +1541,22 @@ fn a_data_event_realizes_the_apply_hook() {
             .and_then(Value::as_cell),
         Some(progred_libraries::layout::vocabulary::POINTER_MOVE),
     );
-    assert!(handler.dispatch_scroll(
-        &mut events,
-        &PointerScrollEvent {
-            pointer: PointerInfo {
-                pointer_id: Some(PointerId::PRIMARY),
-                persistent_device_id: None,
-                pointer_type: PointerType::Mouse,
-            },
-            delta: ScrollDelta::LineDelta(0.0, 1.0),
-            state,
-        },
-    ));
+    assert!(
+        handler
+            .dispatch_scroll(
+                &mut events,
+                &PointerScrollEvent {
+                    pointer: PointerInfo {
+                        pointer_id: Some(PointerId::PRIMARY),
+                        persistent_device_id: None,
+                        pointer_type: PointerType::Mouse,
+                    },
+                    delta: ScrollDelta::LineDelta(0.0, 1.0),
+                    state,
+                },
+            )
+            .handled()
+    );
     assert_eq!(
         events[2]
             .2

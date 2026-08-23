@@ -11,7 +11,7 @@ use crate::hover::Secondary;
 use crate::navigate::{Descend, HasDescends};
 use measured::{Extent, Measured, Output};
 use puri::draw::{Canvas, GlyphRun, Shape};
-use puri::handler::{Handler, HasHandler};
+use puri::handler::{Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::text::TextMetrics;
 use uig::Placement;
@@ -239,11 +239,26 @@ fn handler_over<C: 'static>(base: Handler<C>, above: Handler<C>) -> Handler<C> {
     {
         Box::new(move |ctx, event| above(ctx, event) || base(ctx, event))
     }
+    fn chain_scroll<C>(
+        base: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
+        above: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
+    ) -> Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>
+    where
+        C: 'static,
+    {
+        Box::new(move |ctx, event| {
+            let outcome = above(ctx, event);
+            match outcome.event(event) {
+                Some(event) => outcome.followed_by(base(ctx, &event)),
+                None => outcome,
+            }
+        })
+    }
     Handler {
         pointer_down: chain(base.pointer_down, above.pointer_down),
         pointer_move: chain(base.pointer_move, above.pointer_move),
         pointer_up: chain(base.pointer_up, above.pointer_up),
-        scroll: chain(base.scroll, above.scroll),
+        scroll: chain_scroll(base.scroll, above.scroll),
         key: chain(base.key, above.key),
         ime: chain(base.ime, above.ime),
     }
@@ -452,15 +467,18 @@ pub fn on_key<C: 'static, Cv: 'static>(
 pub fn scrolled<C: 'static, Cv: Canvas + 'static>(
     child: Measured<Placed<C, Cv>>,
     offset: Vec2,
-    on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> bool + 'static,
+    on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
 ) -> Measured<Placed<C, Cv>> {
     measured::around(child, move |placement, inner| {
         let rect = placement.rect;
         let mut base = Placed::empty();
         if !placement.clipped_out() {
             base.handler_mut().on_scroll(move |state, event| {
-                placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                    && on_scroll(state, event)
+                if placement.contains(Point::new(event.state.position.x, event.state.position.y)) {
+                    on_scroll(state, event)
+                } else {
+                    ScrollOutcome::pass(event)
+                }
             });
         }
         let child_rect = inner
@@ -496,8 +514,11 @@ fn gate_starts<C: 'static>(child: Handler<C>, placement: Placement) -> Handler<C
                 && pointer_down(ctx, event)
         });
         gated.on_scroll(move |ctx, event| {
-            placement.contains(Point::new(event.state.position.x, event.state.position.y))
-                && scroll(ctx, event)
+            if placement.contains(Point::new(event.state.position.x, event.state.position.y)) {
+                scroll(ctx, event)
+            } else {
+                ScrollOutcome::pass(event)
+            }
         });
     }
     gated.on_pointer_move(pointer_move);
@@ -772,7 +793,9 @@ mod tests {
             },
         );
         let placed = measured::place(
-            scrolled(probe, Vec2::new(5.0, 40.0), |_, _| false),
+            scrolled(probe, Vec2::new(5.0, 40.0), |_, event| {
+                ScrollOutcome::pass(event)
+            }),
             Placement::new(
                 Rect::new(10.0, 20.0, 90.0, 70.0),
                 Rect::new(0.0, 0.0, 100.0, 100.0),
@@ -827,18 +850,26 @@ mod tests {
             },
         );
         let placed = measured::place(
-            scrolled(child, Vec2::ZERO, |log: &mut Vec<&'static str>, _| {
+            scrolled(child, Vec2::ZERO, |log: &mut Vec<&'static str>, event| {
                 log.push("scroll");
-                true
+                ScrollOutcome::consume(event)
             }),
             Placement::root(Rect::new(0.0, 0.0, 10.0, 10.0)),
         );
         let handler = placed.handler.expect("registrations");
         let mut log = Vec::new();
         assert!(!handler.dispatch_pointer_down(&mut log, &down_at(20.0, 5.0)));
-        assert!(!handler.dispatch_scroll(&mut log, &scroll_at(20.0, 5.0)));
+        assert!(
+            !handler
+                .dispatch_scroll(&mut log, &scroll_at(20.0, 5.0))
+                .handled()
+        );
         assert!(handler.dispatch_pointer_down(&mut log, &down_at(5.0, 5.0)));
-        assert!(handler.dispatch_scroll(&mut log, &scroll_at(5.0, 5.0)));
+        assert!(
+            handler
+                .dispatch_scroll(&mut log, &scroll_at(5.0, 5.0))
+                .handled()
+        );
         assert!(handler.dispatch_pointer_move(&mut log, &move_at(20.0, 5.0)));
         assert!(handler.dispatch_pointer_up(&mut log, &down_at(20.0, 5.0)));
         assert_eq!(log, ["down", "scroll", "move", "up"]);

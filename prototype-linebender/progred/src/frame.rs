@@ -17,12 +17,13 @@ use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::EditCtx;
 use puri::geometry::Placement;
-use puri::handler::{Handler, HasHandler};
+use puri::handler::{Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
 use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
 use std::rc::Rc;
 use ui_events::pointer::PointerButton;
+use ui_events::ScrollDelta;
 use vello::Scene;
 use vello::kurbo::{Affine, Point, Size, Stroke, Vec2};
 use vello::peniko::{Brush, Color};
@@ -204,7 +205,7 @@ impl App {
         viewport: f64,
         max_scroll: f64,
         max_scroll_x: f64,
-    ) -> bool {
+    ) -> ScrollOutcome {
         let line = 40.0 * scale;
         let delta = update.delta.to_pixel_delta(
             PhysicalPosition { x: line, y: line },
@@ -219,14 +220,30 @@ impl App {
         // Stepping from the clamped position keeps the first tick
         // responsive when a resize left the stored offset out of
         // bounds.
-        let next =
-            (self.model.scroll.clamp(0.0, max_scroll) - delta.y / scale).clamp(0.0, max_scroll);
-        let next_x = (self.model.scroll_x.clamp(0.0, max_scroll_x) - delta.x / scale)
-            .clamp(0.0, max_scroll_x);
-        (next != self.model.scroll || next_x != self.model.scroll_x) && {
+        let current = self.model.scroll.clamp(0.0, max_scroll);
+        let current_x = self.model.scroll_x.clamp(0.0, max_scroll_x);
+        let next = (current - delta.y / scale).clamp(0.0, max_scroll);
+        let next_x = (current_x - delta.x / scale).clamp(0.0, max_scroll_x);
+        if next != self.model.scroll || next_x != self.model.scroll_x {
             self.model.scroll = next;
             self.model.scroll_x = next_x;
-            true
+            let remaining = PhysicalPosition {
+                x: delta.x - (current_x - next_x) * scale,
+                y: delta.y - (current - next) * scale,
+            };
+            ScrollOutcome::with_remainder(match update.delta {
+                ScrollDelta::PageDelta(_, _) => ScrollDelta::PageDelta(
+                    (remaining.x / viewport) as f32,
+                    (remaining.y / viewport) as f32,
+                ),
+                ScrollDelta::LineDelta(_, _) => ScrollDelta::LineDelta(
+                    (remaining.x / line) as f32,
+                    (remaining.y / line) as f32,
+                ),
+                ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(remaining),
+            })
+        } else {
+            ScrollOutcome::pass(update)
         }
     }
 
@@ -671,7 +688,11 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                     && app.menu.close()
             });
             p.handler().on_scroll(move |_: &mut App, event| {
-                rect.contains(Point::new(event.state.position.x, event.state.position.y))
+                if rect.contains(Point::new(event.state.position.x, event.state.position.y)) {
+                    ScrollOutcome::consume(event)
+                } else {
+                    ScrollOutcome::pass(event)
+                }
             });
         });
         stage = measured::overlay(stage, popup, move |_, extent, _| {

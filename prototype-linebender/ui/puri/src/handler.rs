@@ -22,6 +22,60 @@
 
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent, PointerUpdate};
+use ui_events::ScrollDelta;
+
+/// The part of a scroll event not accepted by this handler, plus
+/// whether accepting any part changed its context.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScrollOutcome {
+    pub remaining: ScrollDelta,
+    handled: bool,
+}
+
+impl ScrollOutcome {
+    pub fn with_remainder(delta: ScrollDelta) -> Self {
+        Self {
+            remaining: delta,
+            handled: true,
+        }
+    }
+
+    pub fn pass(event: &PointerScrollEvent) -> Self {
+        Self {
+            remaining: event.delta,
+            handled: false,
+        }
+    }
+
+    pub fn consume(event: &PointerScrollEvent) -> Self {
+        Self::with_remainder(match event.delta {
+            ScrollDelta::PageDelta(_, _) => ScrollDelta::PageDelta(0.0, 0.0),
+            ScrollDelta::LineDelta(_, _) => ScrollDelta::LineDelta(0.0, 0.0),
+            ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(Default::default()),
+        })
+    }
+
+    pub fn handled(self) -> bool {
+        self.handled
+    }
+
+    pub fn event(self, original: &PointerScrollEvent) -> Option<PointerScrollEvent> {
+        let empty = match self.remaining {
+            ScrollDelta::PageDelta(x, y) | ScrollDelta::LineDelta(x, y) => x == 0.0 && y == 0.0,
+            ScrollDelta::PixelDelta(delta) => delta.x == 0.0 && delta.y == 0.0,
+        };
+        (!empty).then(|| PointerScrollEvent {
+            pointer: original.pointer.clone(),
+            delta: self.remaining,
+            state: original.state.clone(),
+        })
+    }
+
+    pub fn followed_by(self, mut next: Self) -> Self {
+        next.handled |= self.handled;
+        next
+    }
+}
 
 /// Text composition events, mirroring winit's `Ime` (which bypasses
 /// ui-events); the shell converts.
@@ -36,7 +90,7 @@ pub struct Handler<C> {
     pub pointer_down: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
     pub pointer_move: Box<dyn Fn(&mut C, &PointerUpdate) -> bool>,
     pub pointer_up: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
-    pub scroll: Box<dyn Fn(&mut C, &PointerScrollEvent) -> bool>,
+    pub scroll: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
     pub key: Box<dyn Fn(&mut C, &KeyboardEvent) -> bool>,
     pub ime: Box<dyn Fn(&mut C, &ImeEvent) -> bool>,
 }
@@ -47,7 +101,7 @@ impl<C> Default for Handler<C> {
             pointer_down: Box::new(|_, _| false),
             pointer_move: Box::new(|_, _| false),
             pointer_up: Box::new(|_, _| false),
-            scroll: Box::new(|_, _| false),
+            scroll: Box::new(|_, event| ScrollOutcome::pass(event)),
             key: Box::new(|_, _| false),
             ime: Box::new(|_, _| false),
         }
@@ -61,6 +115,20 @@ fn compose<C: 'static, E: 'static>(
 ) {
     let rest = std::mem::replace(slot, Box::new(|_, _| false));
     *slot = Box::new(move |ctx, event| dispatch(ctx, event) || rest(ctx, event));
+}
+
+fn compose_scroll<C: 'static>(
+    slot: &mut Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
+    dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
+) {
+    let rest = std::mem::replace(slot, Box::new(|_, event| ScrollOutcome::pass(event)));
+    *slot = Box::new(move |ctx, event| {
+        let outcome = dispatch(ctx, event);
+        match outcome.event(event) {
+            Some(event) => outcome.followed_by(rest(ctx, &event)),
+            None => outcome,
+        }
+    });
 }
 
 impl<C> Handler<C> {
@@ -103,11 +171,14 @@ impl<C> Handler<C> {
         compose(&mut self.pointer_up, dispatch);
     }
 
-    pub fn on_scroll(&mut self, dispatch: impl Fn(&mut C, &PointerScrollEvent) -> bool + 'static)
+    pub fn on_scroll(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
+    )
     where
         C: 'static,
     {
-        compose(&mut self.scroll, dispatch);
+        compose_scroll(&mut self.scroll, dispatch);
     }
 
     pub fn on_ime(&mut self, dispatch: impl Fn(&mut C, &ImeEvent) -> bool + 'static)
@@ -129,7 +200,11 @@ impl<C> Handler<C> {
         (self.pointer_up)(ctx, event)
     }
 
-    pub fn dispatch_scroll(&self, ctx: &mut C, event: &PointerScrollEvent) -> bool {
+    pub fn dispatch_scroll(
+        &self,
+        ctx: &mut C,
+        event: &PointerScrollEvent,
+    ) -> ScrollOutcome {
         (self.scroll)(ctx, event)
     }
 
@@ -171,7 +246,8 @@ mod tests {
     use super::*;
     use kurbo::{Point, Rect};
     use ui_events::pointer::{
-        PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerState, PointerType,
+        PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent,
+        PointerState, PointerType,
     };
 
     fn down_at(x: f64, y: f64) -> PointerButtonEvent {
@@ -186,6 +262,18 @@ mod tests {
                 pointer_type: PointerType::Mouse,
             },
             state,
+        }
+    }
+
+    fn scroll(y: f32) -> PointerScrollEvent {
+        PointerScrollEvent {
+            pointer: PointerInfo {
+                pointer_id: Some(PointerId::PRIMARY),
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            delta: ScrollDelta::LineDelta(0.0, y),
+            state: PointerState::default(),
         }
     }
 
@@ -217,6 +305,32 @@ mod tests {
         assert!(handler.dispatch_pointer_down(&mut log, &down_at(10.0, 10.0)));
         assert!(!handler.dispatch_pointer_down(&mut log, &down_at(200.0, 200.0)));
         assert_eq!(log, vec!["top", "bottom"]);
+    }
+
+    #[test]
+    fn scroll_remainder_flows_to_the_next_handler() {
+        let mut handler: Handler<Vec<(&'static str, f32)>> = Handler::new();
+        handler.on_scroll(|log, event| {
+            let ScrollDelta::LineDelta(_, y) = event.delta else {
+                unreachable!()
+            };
+            log.push(("outer", y));
+            ScrollOutcome::consume(event)
+        });
+        handler.on_scroll(|log, event| {
+            let ScrollDelta::LineDelta(x, y) = event.delta else {
+                unreachable!()
+            };
+            log.push(("inner", y));
+            ScrollOutcome::with_remainder(ScrollDelta::LineDelta(x, y / 2.0))
+        });
+
+        let event = scroll(4.0);
+        let mut log = Vec::new();
+        let outcome = handler.dispatch_scroll(&mut log, &event);
+        assert!(outcome.handled());
+        assert_eq!(outcome.remaining, ScrollDelta::LineDelta(0.0, 0.0));
+        assert_eq!(log, [("inner", 4.0), ("outer", 2.0)]);
     }
 
     #[test]

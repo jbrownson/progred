@@ -42,7 +42,8 @@ use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-use ui_events::pointer::{PointerButton, PointerEvent};
+use ui_events::pointer::{PointerButton, PointerEvent, PointerScrollEvent, PointerUpdate};
+use ui_events::ScrollDelta;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
 use vello::kurbo::{Point, Rect, Size};
 use vello::peniko::{Brush, Color};
@@ -110,6 +111,46 @@ pub(crate) struct PendingPaint {
     pub(crate) hovered_secondary: Option<hover::Secondary>,
 }
 
+struct PendingScroll {
+    event: PointerScrollEvent,
+    scale: f64,
+    viewport: Size,
+}
+
+struct PendingPointer {
+    event: PointerUpdate,
+    scale: f64,
+    viewport: Size,
+}
+
+impl PendingScroll {
+    fn merge(&mut self, next: Self) -> Result<(), Self> {
+        let merged = self.scale == next.scale
+            && self.viewport == next.viewport
+            && match (&mut self.event.delta, next.event.delta) {
+                (ScrollDelta::PageDelta(x, y), ScrollDelta::PageDelta(next_x, next_y))
+                | (ScrollDelta::LineDelta(x, y), ScrollDelta::LineDelta(next_x, next_y)) => {
+                    *x += next_x;
+                    *y += next_y;
+                    true
+                }
+                (ScrollDelta::PixelDelta(delta), ScrollDelta::PixelDelta(next)) => {
+                    delta.x += next.x;
+                    delta.y += next.y;
+                    true
+                }
+                _ => false,
+            };
+        if merged {
+            self.event.pointer = next.event.pointer;
+            self.event.state = next.event.state;
+            Ok(())
+        } else {
+            Err(next)
+        }
+    }
+}
+
 pub(crate) struct App {
     pub(crate) context: RenderContext,
     pub(crate) renderers: Vec<Option<Renderer>>,
@@ -156,6 +197,26 @@ pub(crate) struct App {
     /// Ink from the successor frame already minted after an event.
     /// The next redraw consumes it instead of minting that frame twice.
     pub(crate) pending_paint: Option<PendingPaint>,
+    /// Consecutive scroll packets are one continuous displacement.
+    /// Hold them until paint or another event establishes an ordering
+    /// boundary, then dispatch their sum through the retained frame.
+    pending_scroll: Option<PendingScroll>,
+    /// Unpressed pointer motion is continuous frame input, like
+    /// scrolling. Keep only its latest sample until paint or a
+    /// discrete event establishes an ordering boundary. This is a
+    /// platform-independent frame contract, but matters especially on
+    /// macOS: Winit deliberately emits `CursorMoved` before every
+    /// scroll to refresh the otherwise position-less `MouseWheel`
+    /// event's implicit cursor state. Treating that synthetic refresh
+    /// as a barrier made projection work keep AppKit from reaching its
+    /// redraw boundary under continuous input.
+    ///
+    /// History: https://github.com/rust-windowing/winit/issues/942
+    /// and https://github.com/rust-windowing/winit/pull/1490
+    ///
+    /// Pressed motion is never deferred; drag gestures receive every
+    /// update delivered by the event source.
+    pending_pointer: Option<PendingPointer>,
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
     /// does.
@@ -217,6 +278,11 @@ pub(crate) fn text_dialog() -> rfd::FileDialog {
 
 impl ApplicationHandler<UserEvent> for App {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        if self.flush_pending_continuous()
+            && let RenderState::Active { window, .. } = &self.state
+        {
+            window.request_redraw();
+        }
         match event {
             #[cfg(target_os = "macos")]
             UserEvent::MacMenu(event) => {
@@ -278,6 +344,7 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        self.flush_pending_continuous();
         if let RenderState::Active { window, .. } = &self.state {
             self.state = RenderState::Suspended(Some(window.clone()));
         }
@@ -294,6 +361,20 @@ impl ApplicationHandler<UserEvent> for App {
             _ => return,
         };
         let scale = window.scale_factor();
+        // Coalesce by interaction semantics, not by comparing
+        // coordinates or trying to recognize Winit's macOS-generated
+        // refresh. Real unpressed motion is sampled at frame rate too;
+        // the newest position is the frame input. A future consumer
+        // that needs the intervening samples can receive them through
+        // `PointerUpdate::coalesced` without forcing intermediate
+        // projection/layout passes.
+        let continuous_pointer = matches!(&event, WindowEvent::CursorMoved { .. }) && !self.pressed;
+        if !matches!(&event, WindowEvent::MouseWheel { .. })
+            && !continuous_pointer
+            && self.flush_pending_continuous()
+        {
+            window.request_redraw();
+        }
 
         if !matches!(
             event,
@@ -317,14 +398,40 @@ impl ApplicationHandler<UserEvent> for App {
             {
                 self.cursor = position;
             }
-            // Events dispatch into the retained frame's handler — a
-            // pure function of the state it was built from, so it is
-            // single-shot: a handled (mutating) event spends it and
-            // the successor is minted immediately below. A genuinely
-            // declined event leaves it standing only when no frame
-            // input changed. Until the first redraw there is nothing
-            // to dispatch into.
-            if (ime.is_some() || translation.is_some())
+            // Scroll packets wait for an ordering boundary below.
+            // Every other event dispatches into the retained frame's
+            // single-shot handler and immediately mints its successor
+            // when handled or when a frame input changes.
+            if let Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update))) =
+                &translation
+            {
+                let size = window.inner_size();
+                let next = PendingScroll {
+                    event: update.clone(),
+                    scale,
+                    viewport: Size::new(size.width as f64, size.height as f64),
+                };
+                if let Some(pending) = self.queue_scroll(next) {
+                    self.dispatch_scroll_batch(pending);
+                }
+                window.request_redraw();
+            } else if let Some(WindowEventTranslation::Pointer(PointerEvent::Move(update))) =
+                &translation
+                && !self.pressed
+            {
+                let size = window.inner_size();
+                let position = Point::new(
+                    update.current.position.x,
+                    update.current.position.y,
+                );
+                self.pointer = Some(position);
+                self.pending_pointer = Some(PendingPointer {
+                    event: update.clone(),
+                    scale,
+                    viewport: Size::new(size.width as f64, size.height as f64),
+                });
+                window.request_redraw();
+            } else if (ime.is_some() || translation.is_some())
                 && let Some(dispatch) = self.dispatch.take()
             {
                 let size = window.inner_size();
@@ -408,25 +515,10 @@ impl ApplicationHandler<UserEvent> for App {
                         frame_input_changed = true;
                         false
                     }
-                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Scroll(update)))) => {
-                        dispatch.handler.dispatch_scroll(self, &update)
-                    }
                     _ => false,
                 };
                 if handled {
-                    let library = &self.stack.library;
-                    let foreign = &self.stack.foreign;
-                    let model = &mut self.model;
-                    if let Some(selection) = &mut model.selection {
-                        let before = model.doc.clone();
-                        // True on the first write of the editor's
-                        // life: the run's one step opens here.
-                        if selection::write_through(&mut model.doc, library, foreign, selection) {
-                            let path = selection.path().to_vec();
-                            model.history.record(before, Some(path));
-                            self.refresh_title();
-                        }
-                    }
+                    self.finish_handled_event();
                 }
                 match frame_disposition(handled, frame_input_changed) {
                     FrameDisposition::Retain => self.dispatch = Some(dispatch),
@@ -576,6 +668,8 @@ fn main() {
         revealed: None,
         dispatch: None,
         pending_paint: None,
+        pending_scroll: None,
+        pending_pointer: None,
         last_descends: Vec::new(),
         reducer: WindowEventReducer::default(),
         proxy,
@@ -588,6 +682,102 @@ fn main() {
 }
 
 impl App {
+    fn queue_scroll(&mut self, next: PendingScroll) -> Option<PendingScroll> {
+        match self.pending_scroll.take() {
+            None => {
+                self.pending_scroll = Some(next);
+                None
+            }
+            Some(mut pending) => match pending.merge(next) {
+                Ok(()) => {
+                    self.pending_scroll = Some(pending);
+                    None
+                }
+                Err(next) => {
+                    self.pending_scroll = Some(next);
+                    Some(pending)
+                }
+            },
+        }
+    }
+
+    fn finish_handled_event(&mut self) {
+        let library = &self.stack.library;
+        let foreign = &self.stack.foreign;
+        let model = &mut self.model;
+        if let Some(selection) = &mut model.selection {
+            let before = model.doc.clone();
+            if selection::write_through(&mut model.doc, library, foreign, selection) {
+                let path = selection.path().to_vec();
+                model.history.record(before, Some(path));
+                self.refresh_title();
+            }
+        }
+    }
+
+    fn dispatch_scroll_batch(&mut self, pending: PendingScroll) -> bool {
+        let initialized = self.dispatch.is_none();
+        if initialized {
+            self.retain_dispatch(pending.scale, pending.viewport, false);
+        }
+        match self.dispatch.take() {
+            Some(dispatch) => {
+                let outcome = dispatch.handler.dispatch_scroll(self, &pending.event);
+                if outcome.handled() {
+                    self.finish_handled_event();
+                    self.retain_dispatch(pending.scale, pending.viewport, true);
+                    true
+                } else {
+                    self.dispatch = Some(dispatch);
+                    initialized
+                }
+            }
+            None => false,
+        }
+    }
+
+    fn flush_pending_scroll(&mut self) -> bool {
+        match self.pending_scroll.take() {
+            Some(pending) => self.dispatch_scroll_batch(pending),
+            None => false,
+        }
+    }
+
+    fn dispatch_pointer_batch(&mut self, pending: &PendingPointer) -> bool {
+        if self.dispatch.is_none() {
+            self.retain_dispatch(pending.scale, pending.viewport, false);
+        }
+        let Some(dispatch) = self.dispatch.take() else {
+            return false;
+        };
+        if dispatch.handler.dispatch_pointer_move(self, &pending.event) {
+            self.finish_handled_event();
+            self.retain_dispatch(pending.scale, pending.viewport, true);
+            true
+        } else {
+            self.dispatch = Some(dispatch);
+            false
+        }
+    }
+
+    /// Settle continuous inputs into the frame state. Scroll runs
+    /// before the latest pointer sample: scrolling moves content, then
+    /// pointer motion observes its final position. If neither handler
+    /// spends the frame, pointer movement still requires one remint so
+    /// hover sees the new frame input.
+    fn flush_pending_continuous(&mut self) -> bool {
+        let pointer = self.pending_pointer.take();
+        let mut reminted = self.flush_pending_scroll();
+        if let Some(pointer) = pointer {
+            reminted |= self.dispatch_pointer_batch(&pointer);
+            if !reminted {
+                self.retain_dispatch(pointer.scale, pointer.viewport, false);
+                reminted = true;
+            }
+        }
+        reminted
+    }
+
     /// The current document read over the app's library.
     pub(crate) fn sources(&self) -> sources::Sources<'_> {
         sources::Sources {
@@ -974,5 +1164,56 @@ impl App {
         surface_texture.present();
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod shell_tests {
+    use super::*;
+    use ui_events::pointer::{PointerId, PointerInfo, PointerState, PointerType};
+    use winit::dpi::PhysicalPosition;
+
+    fn pending(delta: ScrollDelta, x: f64) -> PendingScroll {
+        let mut state = PointerState::default();
+        state.position.x = x;
+        PendingScroll {
+            event: PointerScrollEvent {
+                pointer: PointerInfo {
+                    pointer_id: Some(PointerId::PRIMARY),
+                    persistent_device_id: None,
+                    pointer_type: PointerType::Mouse,
+                },
+                delta,
+                state,
+            },
+            scale: 2.0,
+            viewport: Size::new(1800.0, 1280.0),
+        }
+    }
+
+    #[test]
+    fn pending_scrolls_sum_same_kind_packets_and_keep_the_latest_state() {
+        let mut accumulated = pending(
+            ScrollDelta::PixelDelta(PhysicalPosition::new(2.0, 3.0)),
+            10.0,
+        );
+        assert!(
+            accumulated
+                .merge(pending(
+                    ScrollDelta::PixelDelta(PhysicalPosition::new(5.0, 7.0)),
+                    20.0,
+                ))
+                .is_ok()
+        );
+        assert_eq!(
+            accumulated.event.delta,
+            ScrollDelta::PixelDelta(PhysicalPosition::new(7.0, 10.0))
+        );
+        assert_eq!(accumulated.event.state.position.x, 20.0);
+        assert!(
+            accumulated
+                .merge(pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0))
+                .is_err()
+        );
     }
 }

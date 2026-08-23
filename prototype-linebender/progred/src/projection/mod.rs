@@ -40,7 +40,7 @@ use puri::edit::{
     EditCtx, LineEditDescription, LineEditPointerDown, LineEditPresentation, LineEditState,
 };
 use puri::geometry::Placement;
-use puri::handler::{HasHandler, ImeEvent};
+use puri::handler::{HasHandler, ImeEvent, ScrollOutcome};
 use puri::text::{TextCtx, TextStyle};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
@@ -1223,7 +1223,7 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
             let function = function.clone();
             let apply = apply.clone();
             p.handler().on_scroll(move |world, event| {
-                placement.contains(Point::new(
+                if placement.contains(Point::new(
                     event.state.position.x,
                     event.state.position.y,
                 )) && apply(
@@ -1231,7 +1231,11 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
                     path.clone(),
                     function.clone(),
                     scroll_value(placement, scale, event),
-                )
+                ) {
+                    ScrollOutcome::consume(event)
+                } else {
+                    ScrollOutcome::pass(event)
+                }
             });
         }
         {
