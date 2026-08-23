@@ -21,6 +21,7 @@ pub mod vocabulary {
     pub const TAIL: CellId = CellId::from_u128(0xb5664e4ebf6aef871a4a02b0aa26d036);
     pub const UNFOLD: CellId = CellId::from_u128(0xb71c173bae05b26bfdca3b5bc79b2b09);
     pub const FOLD: CellId = CellId::from_u128(0x1df93e0aeb8cbeda81a7d513320dd4f0);
+    pub const ITERATE: CellId = CellId::from_u128(0x9546343518fe44f380e6134f3f56cf37);
     pub const INITIAL: CellId = CellId::from_u128(0x24d55aeab9383d53899091958de88d21);
     pub const STEP: CellId = CellId::from_u128(0x569e33fee165d346791e05c0e9cfea8e);
     pub const ACCUMULATOR: CellId = CellId::from_u128(0xb6bd623b43e80b7f039873ab5f6afa13);
@@ -193,6 +194,30 @@ fn functions() -> ForeignFunctions {
                 Ok(accumulator)
             }),
         )
+        .register(
+            vocabulary::ITERATE,
+            ForeignFunction::new(|context, call, environment| {
+                let Some(mut state) =
+                    evaluated(context, call, environment, vocabulary::INITIAL)?
+                else {
+                    return Ok(context.missing_argument(vocabulary::INITIAL));
+                };
+                let Some(step) = context.field(call, vocabulary::STEP) else {
+                    return Ok(context.missing_argument(vocabulary::STEP));
+                };
+                let step = context.prepare_callable(step, environment)?;
+                loop {
+                    let next = context.call_prepared(
+                        &step,
+                        [(vocabulary::STATE, state.clone())],
+                    )?;
+                    if absent::is_absent(&next) {
+                        break Ok(state);
+                    }
+                    state = next;
+                }
+            }),
+        )
 }
 
 pub fn library<World, Hover>() -> Library<World, Hover> {
@@ -208,6 +233,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::TAIL, "list tail"),
         (vocabulary::UNFOLD, "unfold"),
         (vocabulary::FOLD, "fold"),
+        (vocabulary::ITERATE, "iterate"),
         (vocabulary::INITIAL, "initial"),
         (vocabulary::STEP, "step"),
         (vocabulary::ACCUMULATOR, "accumulator"),
@@ -268,5 +294,39 @@ mod tests {
             grap::evaluate(&at, |_| None, &functions, 30).result,
             Value::from(b"b".to_vec())
         );
+    }
+
+    #[test]
+    fn iterate_drives_a_step_without_collecting_intermediate_values() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let step = gid::new_cell_id();
+        let calls = Rc::new(Cell::new(0));
+        let step_calls = calls.clone();
+        let functions = functions().register(
+            step,
+            ForeignFunction::new(move |_, _, _| {
+                let call = step_calls.get();
+                step_calls.set(call + 1);
+                Ok(if call == 3 {
+                    absent::value()
+                } else {
+                    Value::from(vec![call as u8])
+                })
+            }),
+        );
+        let iterated = call(
+            vocabulary::ITERATE,
+            [
+                (vocabulary::INITIAL, Value::from(vec![99])),
+                (vocabulary::STEP, Value::from(step)),
+            ],
+        );
+        assert_eq!(
+            grap::evaluate(&iterated, |_| None, &functions, 30).result,
+            Value::from(vec![2]),
+        );
+        assert_eq!(calls.get(), 4);
     }
 }

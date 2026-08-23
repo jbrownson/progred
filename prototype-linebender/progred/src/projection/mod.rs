@@ -29,6 +29,7 @@ use crate::sources::Sources;
 use crate::styles::Styles;
 use progred_libraries::{f64 as f64_convention, layout as layout_data, text};
 mod location;
+mod drawing;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use gid::{Cells, Document, new_cell_id};
@@ -786,6 +787,15 @@ fn prepare<
         progred_display::Layout::Leaf(content) => {
             ChoiceLayout::fixed(leaf_display(cx.styles, tcx, content))
         }
+        progred_display::Layout::DrawingProgram {
+            width,
+            ascent,
+            descent,
+            fuel,
+            program,
+        } => ChoiceLayout::fixed(drawing::program_leaf(
+            cx, width, ascent, descent, fuel, program,
+        )),
         progred_display::Layout::Query => {
             let engaged = cx
                 .pending_rename_under(path)

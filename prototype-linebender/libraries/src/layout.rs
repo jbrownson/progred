@@ -40,6 +40,7 @@ pub mod vocabulary {
 
     // Generic display and event nodes.
     pub const DRAWING: CellId = CellId::from_u128(0x6889fa235b002be4c8b106d5f31dafbf);
+    pub const PROGRAM: CellId = CellId::from_u128(0xbdf607810b274ad5b02bd409aef34b6a);
     pub const ON_EVENT: CellId = CellId::from_u128(0x1b87f7de18e7c46c5fbfadea1f18aea4);
 
     // Interaction attach-points.
@@ -543,6 +544,17 @@ pub fn decode<World, Hover: Clone>(
         let width = read_nonnegative(content.get(&vocabulary::WIDTH)?)?;
         let ascent = read_nonnegative(content.get(&vocabulary::ASCENT)?)?;
         let descent = read_nonnegative(content.get(&vocabulary::DESCENT)?)?;
+        if let Some(program) = content.get(&vocabulary::PROGRAM) {
+            let fuel = read_nonnegative(content.get(&vocabulary::FUEL)?)?;
+            (fuel.fract() == 0.0).then_some(())?;
+            return Some(Layout::DrawingProgram {
+                width,
+                ascent,
+                descent,
+                fuel: fuel as usize,
+                program: program.clone(),
+            });
+        }
         let commands = content
             .get(&vocabulary::COMMANDS)?
             .as_list()?
@@ -622,7 +634,7 @@ fn read_face(value: &Value) -> Option<Face> {
     }
 }
 
-fn read_paint(value: &Value) -> Option<Paint> {
+pub fn read_paint(value: &Value) -> Option<Paint> {
     read_face(value)
         .map(Paint::Face)
         .or_else(|| color::read(value).map(|color| Paint::Brush(Brush::from(color))))
@@ -693,7 +705,7 @@ fn read_optional_transform(fields: &gid::Record) -> Option<Affine> {
     }
 }
 
-fn read_transform(value: &Value) -> Option<Affine> {
+pub fn read_transform(value: &Value) -> Option<Affine> {
     value.as_list()?.values().try_fold(Affine::IDENTITY, |transform, operation| {
         let fields = operation.as_record()?;
         if let Some(point) = fields.get(&vocabulary::TRANSLATE) {
@@ -707,7 +719,7 @@ fn read_transform(value: &Value) -> Option<Affine> {
     })
 }
 
-fn read_shape(value: &Value) -> Option<Shape> {
+pub fn read_shape(value: &Value) -> Option<Shape> {
     let fields = value.as_record()?;
     if let Some(content) = fields.get(&vocabulary::RECT) {
         let (x, y, width, height) = read_box(content)?;
@@ -842,6 +854,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::TRANSIENT, "transient"),
         (vocabulary::TEXT, "text"),
         (vocabulary::DRAWING, "drawing"),
+        (vocabulary::PROGRAM, "program"),
         (vocabulary::SLOT, "slot"),
         (vocabulary::SELECTABLE, "selectable"),
         (vocabulary::PICKABLE, "pickable"),

@@ -1032,6 +1032,30 @@ pub fn evaluate(
     .run(expression)
 }
 
+/// Evaluate with a borrowed foreign-function layer that exists only for
+/// this synchronous evaluation.
+pub fn evaluate_scoped<'a>(
+    expression: &Value,
+    resolve: impl Fn(CellId) -> Option<Value>,
+    foreign: &'a ForeignFunctions,
+    overlay: &'a ForeignOverlay<'a>,
+    fuel: usize,
+) -> Evaluation {
+    Context {
+        resolve: &resolve,
+        foreign,
+        overlay: Some(overlay),
+        remaining_fuel: fuel,
+        diagnostics: Vec::new(),
+        dependencies: BTreeSet::new(),
+        resolving: Vec::new(),
+        expressions: Vec::new(),
+        cell_states: Vec::new(),
+        indices: CellIndices::default(),
+    }
+    .run(expression)
+}
+
 /// Apply a callable to already-evaluated argument VALUES. This is the
 /// host boundary: a code-shaped value (a stored lambda or call
 /// record) binds as data, where `call` + [`evaluate`] would evaluate
@@ -1721,6 +1745,28 @@ mod tests {
         );
         assert_eq!(applied.result, blob("scoped"));
         assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
+    fn a_scoped_foreign_layer_can_evaluate_a_source_call() {
+        let function = new_cell_id();
+        let calls = std::cell::Cell::new(0);
+        let functions = [function];
+        let scoped =
+            |_, _: &mut Context<'_>, _: Expression, _: &Environment| {
+                calls.set(calls.get() + 1);
+                Ok(blob("drawn"))
+            };
+        let overlay = ForeignOverlay::new(&functions, &scoped);
+        let evaluation = evaluate_scoped(
+            &call(Value::from(function), []),
+            |_| None,
+            &ForeignFunctions::default(),
+            &overlay,
+            10,
+        );
+        assert_eq!(evaluation.result, blob("drawn"));
+        assert_eq!(calls.get(), 1);
     }
 
     #[test]

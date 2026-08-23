@@ -341,27 +341,33 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         .and_then(Value::as_list)
         .and_then(|root| root.values().next())
         .expect("the first root item is the scene call");
-    let stack = crate::stack::load::<()>();
-    let sources = Sources {
-        doc: &doc,
-        library: &stack.library,
-    };
     let fuel = 2_000_000;
-    let start = std::time::Instant::now();
-    let evaluation = grap::evaluate(
-        expression,
-        |cell| sources.value(cell).cloned(),
-        &stack.foreign,
-        fuel,
-    );
-    eprintln!(
-        "tree evaluation: {:.1?}, fuel {}",
-        start.elapsed(),
-        fuel - evaluation.remaining_fuel,
-    );
-    assert!(evaluation.diagnostics.is_empty());
     let result = Document {
-        root: Some(evaluation.result),
+        root: Some(Value::record([(
+            progred_libraries::layout::vocabulary::DRAWING,
+            Value::record([
+                (
+                    progred_libraries::layout::vocabulary::WIDTH,
+                    f64_convention::value(500.0),
+                ),
+                (
+                    progred_libraries::layout::vocabulary::ASCENT,
+                    f64_convention::value(490.0),
+                ),
+                (
+                    progred_libraries::layout::vocabulary::DESCENT,
+                    f64_convention::value(10.0),
+                ),
+                (
+                    progred_libraries::layout::vocabulary::FUEL,
+                    f64_convention::value(fuel as f64),
+                ),
+                (
+                    progred_libraries::layout::vocabulary::PROGRAM,
+                    expression.clone(),
+                ),
+            ]),
+        )])),
         cells: doc.cells,
     };
     let (bench, extent) = place(&result, None, 1400.0);

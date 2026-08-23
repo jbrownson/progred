@@ -1,24 +1,18 @@
 {
   "binders": {
-    "acc_commands": 06712e5dbc436e7c4fba7a0d39c23d95,
-    "acc_points": 901367eb981a70708bd734cfabf4d9ce,
     "accumulator": b6bd623b43e80b7f039873ab5f6afa13,
     "add": 201af445eb7e2c270bb5ead10b781fc1,
-    "all_commands": f207a3e37806b26ca4751a782705f7a2,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": 40a5a9cf5afb5a16171a9dae3fd06e7c,
-    "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "blossom_colors": 2a5109ec22acf09a33b63836c01ea058,
     "blossom_command": 2ddf1fcb694303921182f35459218aee,
-    "blossom_commands": 8f0aff8c585744502b326504fab05d04,
     "blossom_index": 3000d79cfc62262635d95ceaad339453,
     "blossom_points": 242e77282d28e5266df1da8bc40ea4cb,
     "blossoms": 8e6f78c4ab9b8bef8a26643b2a6203b2,
     "blossoms_per_branch": 02a022e127aba280fa54bfc9876ab42e,
     "body": 986143866eda2e2fbf9ab8484357a0c9,
-    "branch_commands": 4f7174503b83fe38e47b326bea4c2baf,
     "branch_item": 36b771a86bf3f81e62ddd3b7bfeb2485,
     "branch_items": 6de2b6ac6cdfb49f75c7a323152eb700,
     "branch_length": d219d7e20342e9423e3bc5f319d8f4fe,
@@ -31,20 +25,16 @@
     "child_depth": ee142e9d6e06eb62da5db5dcf242700d,
     "child_width": aaa4e1f70b7edac5317b9fbbd23c7e55,
     "circle": e06a6d094c4f75cd6c1d59ed6ed64e05,
-    "clip": 30b1e31f7eda7e84d9309e5e2d6ef48f,
     "close": adf2742dbde1b09b03e1fc649f5e1f58,
     "color": 6c8a17cbe463186cc8b07e536ccffa6b,
     "color_index": 59f21ccbee8a91496c84e22532df9ca9,
     "color_pick": 982d9a84180c604b1a60fbfffb59da03,
     "command": 570cfe675e206018960714f79933f25e,
-    "commands": b3604c47bef05aa4c7ef0b2d5794da14,
     "concat": 6f2613d22b4690ed5bac39776e51b775,
     "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
     "current": 2680dedea78f6efb6866a9e537f09aa4,
     "depth": 180339357267d28e55bf88ce1b27b5d8,
-    "descent": 2ed0b9294782093c08695dd5137df21a,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
-    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
     "dx": c96dfbe500e6a701033d92bc6c527398,
     "dy": 89d9b403fe0eba053af7048e29bf2f16,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
@@ -66,6 +56,7 @@
     "initial": 24d55aeab9383d53899091958de88d21,
     "initial_y": bd4e962b430257524294181aaa2f18af,
     "item": 67bdfe4ec7d3bafc14407235618840aa,
+    "iterate": 9546343518fe44f380e6134f3f56cf37,
     "left": 764f6afe17ba14e81f5ab61204be0bec,
     "left_angle": 46c6cebbd94b017d68e355e57d6fffb0,
     "length": fb16faf9e37d6a0489205c28afcf55c1,
@@ -155,15 +146,6 @@
     "y_jitter": 29d8f49e530e8052669d487fbb0c8036,
   },
   "cells": {
-    acc_points: {
-      name: "accumulated blossom points",
-    },
-    acc_commands: {
-      name: "accumulated commands",
-    },
-    all_commands: {
-      name: "all commands",
-    },
     amount: {
       name: "amount",
     },
@@ -175,9 +157,6 @@
     },
     blossom_command: {
       name: "blossom command",
-    },
-    blossom_commands: {
-      name: "blossom commands",
     },
     blossom_index: {
       name: "blossom index",
@@ -194,7 +173,7 @@
       ],
       body: {
         function: let,
-        expression: blossom_commands,
+        expression: next_state,
         bindings: [
           {
             value: {
@@ -235,19 +214,14 @@
                           expression: {
                             function: quote,
                             expression: {
-                              state: {
-                                random_state: {
-                                  unquote: random_state,
-                                },
-                                blossom_index: {
-                                  unquote: next_blossom,
-                                },
-                                segment_index: {
-                                  unquote: next_segment,
-                                },
+                              random_state: {
+                                unquote: random_state,
                               },
-                              item: {
-                                unquote: blossom_command,
+                              blossom_index: {
+                                unquote: next_blossom,
+                              },
+                              segment_index: {
+                                unquote: next_segment,
                               },
                             },
                           },
@@ -441,25 +415,13 @@
                             },
                             {
                               value: {
-                                function: quote,
-                                expression: {
-                                  fill: {
-                                    paint: {
-                                      unquote: paint,
-                                    },
-                                    shape: {
-                                      circle: {
-                                        x: {
-                                          unquote: x,
-                                        },
-                                        y: {
-                                          unquote: y,
-                                        },
-                                        radius: {
-                                          unquote: radius,
-                                        },
-                                      },
-                                    },
+                                function: fill,
+                                paint: paint,
+                                shape: {
+                                  circle: {
+                                    x: x,
+                                    y: y,
+                                    radius: radius,
                                   },
                                 },
                               },
@@ -561,25 +523,15 @@
                   ],
                 },
               },
-              function: unfold,
+              function: iterate,
             },
-            pattern: {
-              list: {
-                bind: blossom_commands,
-              },
-              state: {
-                bind: next_state,
-              },
-            },
+            bind: next_state,
           },
         ],
       },
     },
     blossoms_per_branch: {
       name: "blossoms per branch",
-    },
-    branch_commands: {
-      name: "branch commands",
     },
     branch_item: {
       name: "branch item",
@@ -606,7 +558,7 @@
       ],
       body: {
         function: let,
-        expression: branch_commands,
+        expression: blossom_points,
         bindings: [
           {
             value: {
@@ -1169,68 +1121,42 @@
                     },
                     {
                       value: {
-                        function: quote,
-                        expression: {
-                          fill: {
-                            transform: [
-                              {
-                                translate: {
-                                  x: {
-                                    unquote: x,
-                                  },
-                                  y: {
-                                    unquote: y,
-                                  },
-                                },
-                              },
-                              {
-                                rotate: {
-                                  unquote: angle,
-                                },
-                              },
-                            ],
-                            paint: {
-                              color: "#000000",
+                        transform: [
+                          {
+                            translate: {
+                              x: x,
+                              y: y,
                             },
-                            shape: {
-                              rect: {
-                                x: {
-                                  f64: 0x0000000000000000,
-                                },
-                                y: {
-                                  unquote: {
-                                    right: half_width,
-                                    function: subtract,
-                                    left: {
-                                      f64: 0x0000000000000000,
-                                    },
-                                  },
-                                },
-                                height: {
-                                  unquote: branch_width,
-                                },
-                                width: {
-                                  unquote: length,
-                                },
+                          },
+                          {
+                            rotate: angle,
+                          },
+                        ],
+                        function: fill,
+                        paint: {
+                          color: "#000000",
+                        },
+                        shape: {
+                          rect: {
+                            x: {
+                              f64: 0x0000000000000000,
+                            },
+                            y: {
+                              right: half_width,
+                              function: subtract,
+                              left: {
+                                f64: 0x0000000000000000,
                               },
                             },
+                            height: branch_width,
+                            width: length,
                           },
                         },
                       },
                       bind: command,
                     },
                     {
-                      value: {
-                        function: quote,
-                        expression: {
-                          blossom_points: {
-                            unquote: branch_points,
-                          },
-                          command: {
-                            unquote: command,
-                          },
-                        },
-                      },
+                      value: branch_points,
                       bind: branch_item,
                     },
                   ],
@@ -1250,72 +1176,21 @@
           {
             value: {
               list: branch_items,
-              initial: {
-                blossom_points: [],
-                commands: [],
-              },
+              initial: [],
               step: {
                 params: [
                   accumulator,
                   item,
                 ],
                 body: {
-                  function: let,
-                  expression: {
-                    function: quote,
-                    expression: {
-                      blossom_points: {
-                        unquote: {
-                          right: branch_points,
-                          function: concat,
-                          left: acc_points,
-                        },
-                      },
-                      commands: {
-                        unquote: {
-                          right: {
-                            function: quote,
-                            expression: [
-                              {
-                                unquote: command,
-                              },
-                            ],
-                          },
-                          function: concat,
-                          left: acc_commands,
-                        },
-                      },
-                    },
-                  },
-                  bindings: [
-                    {
-                      value: accumulator,
-                      pattern: {
-                        blossom_points: {
-                          bind: acc_points,
-                        },
-                        commands: {
-                          bind: acc_commands,
-                        },
-                      },
-                    },
-                    {
-                      value: item,
-                      pattern: {
-                        blossom_points: {
-                          bind: branch_points,
-                        },
-                        command: {
-                          bind: command,
-                        },
-                      },
-                    },
-                  ],
+                  right: item,
+                  function: concat,
+                  left: accumulator,
                 },
               },
               function: fold,
             },
-            bind: branch_commands,
+            bind: blossom_points,
           },
         ],
       },
@@ -1406,26 +1281,7 @@
       ],
       body: {
         function: let,
-        expression: {
-          function: quote,
-          expression: {
-            random_state: {
-              unquote: next_state,
-            },
-            command: {
-              fill: {
-                paint: {
-                  unquote: paint,
-                },
-                shape: {
-                  path: {
-                    unquote: path_elements,
-                  },
-                },
-              },
-            },
-          },
-        },
+        expression: next_state,
         bindings: [
           {
             value: {
@@ -1647,6 +1503,16 @@
             },
             bind: path_elements,
           },
+          {
+            value: {
+              function: fill,
+              paint: paint,
+              shape: {
+                path: path_elements,
+              },
+            },
+            bind: command,
+          },
         ],
       },
     },
@@ -1708,59 +1574,72 @@
       ],
       body: {
         function: let,
-        expression: {
-          function: quote,
-          expression: {
-            drawing: {
-              descent: {
-                f64: 0x0000000000002c40,
-              },
-              ascent: {
-                unquote: {
-                  right: {
-                    f64: 0x0000000000002c40,
-                  },
-                  function: subtract,
-                  left: canvas_height,
-                },
-              },
-              commands: [
-                {
-                  clip: {
-                    commands: {
-                      unquote: all_commands,
-                    },
-                    shape: {
-                      rect: {
-                        x: {
-                          f64: 0x0000000000000000,
-                        },
-                        y: {
-                          f64: 0x0000000000000000,
-                        },
-                        height: {
-                          unquote: canvas_height,
-                        },
-                        width: {
-                          unquote: canvas_width,
-                        },
-                      },
-                    },
-                  },
-                },
-              ],
-              width: {
-                unquote: canvas_width,
-              },
-            },
-          },
-        },
+        expression: next_state,
         bindings: [
           {
             value: {
               function: reset_random,
             },
             bind: random_state,
+          },
+          {
+            value: {
+              function: fill,
+              paint: {
+                function: quote,
+                expression: {
+                  linear_gradient: {
+                    stops: [
+                      {
+                        paint: {
+                          unquote: sky_top,
+                        },
+                        gradient_offset: {
+                          f64: 0x0000000000000000,
+                        },
+                      },
+                      {
+                        paint: {
+                          unquote: sky_bottom,
+                        },
+                        gradient_offset: {
+                          f64: 0x000000000000f03f,
+                        },
+                      },
+                    ],
+                    gradient_end: {
+                      x: {
+                        f64: 0x0000000000000000,
+                      },
+                      y: {
+                        unquote: canvas_height,
+                      },
+                    },
+                    gradient_start: {
+                      x: {
+                        f64: 0x0000000000000000,
+                      },
+                      y: {
+                        f64: 0x0000000000000000,
+                      },
+                    },
+                  },
+                },
+              },
+              shape: {
+                rect: {
+                  x: {
+                    f64: 0x0000000000000000,
+                  },
+                  y: {
+                    f64: 0x0000000000000000,
+                  },
+                  height: canvas_height,
+                  width: canvas_width,
+                },
+              },
+            },
+            bind: command,
           },
           {
             value: {
@@ -1773,25 +1652,7 @@
                 f64: 0x0000000000406040,
               },
             },
-            pattern: {
-              random_state: {
-                bind: next_state,
-              },
-              command: {
-                bind: command,
-              },
-            },
-          },
-          {
-            value: {
-              function: quote,
-              expression: [
-                {
-                  unquote: command,
-                },
-              ],
-            },
-            bind: acc_commands,
+            bind: next_state,
           },
           {
             value: {
@@ -1804,29 +1665,7 @@
                 f64: 0x0000000000004940,
               },
             },
-            pattern: {
-              random_state: {
-                bind: random_state,
-              },
-              command: {
-                bind: command,
-              },
-            },
-          },
-          {
-            value: {
-              right: {
-                function: quote,
-                expression: [
-                  {
-                    unquote: command,
-                  },
-                ],
-              },
-              function: concat,
-              left: acc_commands,
-            },
-            bind: acc_commands,
+            bind: random_state,
           },
           {
             value: {
@@ -1836,14 +1675,7 @@
               canvas_width: canvas_width,
               branch_length: branch_length,
             },
-            pattern: {
-              blossom_points: {
-                bind: blossom_points,
-              },
-              commands: {
-                bind: branch_commands,
-              },
-            },
+            bind: blossom_points,
           },
           {
             value: {
@@ -1852,85 +1684,7 @@
               blossom_colors: blossom_colors,
               function: blossoms,
             },
-            bind: blossom_commands,
-          },
-          {
-            value: {
-              right: {
-                right: {
-                  right: blossom_commands,
-                  function: concat,
-                  left: branch_commands,
-                },
-                function: concat,
-                left: acc_commands,
-              },
-              function: concat,
-              left: {
-                function: quote,
-                expression: [
-                  {
-                    fill: {
-                      paint: {
-                        linear_gradient: {
-                          stops: [
-                            {
-                              paint: {
-                                unquote: sky_top,
-                              },
-                              gradient_offset: {
-                                f64: 0x0000000000000000,
-                              },
-                            },
-                            {
-                              paint: {
-                                unquote: sky_bottom,
-                              },
-                              gradient_offset: {
-                                f64: 0x000000000000f03f,
-                              },
-                            },
-                          ],
-                          gradient_end: {
-                            x: {
-                              f64: 0x0000000000000000,
-                            },
-                            y: {
-                              unquote: canvas_height,
-                            },
-                          },
-                          gradient_start: {
-                            x: {
-                              f64: 0x0000000000000000,
-                            },
-                            y: {
-                              f64: 0x0000000000000000,
-                            },
-                          },
-                        },
-                      },
-                      shape: {
-                        rect: {
-                          x: {
-                            f64: 0x0000000000000000,
-                          },
-                          y: {
-                            f64: 0x0000000000000000,
-                          },
-                          height: {
-                            unquote: canvas_height,
-                          },
-                          width: {
-                            unquote: canvas_width,
-                          },
-                        },
-                      },
-                    },
-                  },
-                ],
-              },
-            },
-            bind: all_commands,
+            bind: next_state,
           },
         ],
       },

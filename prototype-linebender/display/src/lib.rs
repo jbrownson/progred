@@ -127,6 +127,16 @@ impl<World: 'static, Hover: Clone + 'static> ProjectionTargets<World, Hover> {
 /// Progred's measured boxes (those have extents and place closures).
 pub enum Layout<World, Hover> {
     Leaf(Leaf<Paint>),
+    /// A Grap program interpreted against the host's live Puri canvas
+    /// during rendering. Production streams through canvas FFIs;
+    /// tests may install a recording canvas instead.
+    DrawingProgram {
+        width: f64,
+        ascent: f64,
+        descent: f64,
+        fuel: usize,
+        program: Value,
+    },
     /// Progred's still-host-owned completion query. This is explicit
     /// layout composition debt, not a drawing primitive disguised as
     /// one.
@@ -230,6 +240,19 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
     fn clone(&self) -> Self {
         match self {
             Self::Leaf(display) => Self::Leaf(display.clone()),
+            Self::DrawingProgram {
+                width,
+                ascent,
+                descent,
+                fuel,
+                program,
+            } => Self::DrawingProgram {
+                width: *width,
+                ascent: *ascent,
+                descent: *descent,
+                fuel: *fuel,
+                program: program.clone(),
+            },
             Self::Query => Self::Query,
             Self::LineEdit(line) => Self::LineEdit(line.clone()),
             Self::OnClick { child, handler } => Self::OnClick {
