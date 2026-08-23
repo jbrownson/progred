@@ -80,11 +80,6 @@ pub(crate) enum RenderState {
     Suspended(Option<Arc<Window>>),
 }
 
-/// The last rendered frame's dispatch outputs, retained until the
-/// next redraw replaces them: the handler events feed, plus what the
-/// shell's key fallbacks interpret. The user reacts to what was
-/// presented, so its geometry is the honest hit-test target — and the
-/// event path runs no pass at all.
 /// The pasteboard type structural copies ride under, beside their
 /// plain text; its PRESENCE is the structure/text distinction, so
 /// text that merely spells Value JSON is never mistaken for a copy.
@@ -106,6 +101,13 @@ impl TextClipboard for SystemTextClipboard {
             cb.set_text(text.to_string()).ok();
         }
     }
+}
+
+pub(crate) struct PendingPaint {
+    pub(crate) scale: f64,
+    pub(crate) viewport: Size,
+    pub(crate) renders: Vec<placed::Render<Paint>>,
+    pub(crate) hovered_secondary: Option<hover::Secondary>,
 }
 
 pub(crate) struct App {
@@ -148,7 +150,12 @@ pub(crate) struct App {
     /// so reveal fires once per change and never fights manual
     /// scrolling.
     pub(crate) revealed: Option<(gid::Path, selection::Stage)>,
+    /// A minted frame's event surface, retained until an event spends
+    /// it. `pending_paint` carries the same successor frame's pixels.
     pub(crate) dispatch: Option<Dispatch>,
+    /// Ink from the successor frame already minted after an event.
+    /// The next redraw consumes it instead of minting that frame twice.
+    pub(crate) pending_paint: Option<PendingPaint>,
     /// Geometry from the last minted frame, so projection key
     /// handlers can land a delete the same way the shell fallback
     /// does.
@@ -568,6 +575,7 @@ fn main() {
         pressed: false,
         revealed: None,
         dispatch: None,
+        pending_paint: None,
         last_descends: Vec::new(),
         reducer: WindowEventReducer::default(),
         proxy,
@@ -641,13 +649,11 @@ impl App {
                 self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
         }
-        if matches!(
-            selection,
-            menu::Selection::Raw | menu::Selection::DebugGeometry
-        )
-            && let RenderState::Active { window, .. } = &self.state
-        {
-            window.request_redraw();
+        if matches!(selection, menu::Selection::Raw | menu::Selection::DebugGeometry) {
+            self.pending_paint = None;
+            if let RenderState::Active { window, .. } = &self.state {
+                window.request_redraw();
+            }
         }
     }
 
@@ -877,13 +883,27 @@ impl App {
         self.sync_menus();
         let viewport = Size::new(width as f64, height as f64);
         self.scene.reset();
-        let Frame {
-            dispatch,
-            renders,
-            hovered_secondary,
-        } = self.build_frame(scale, viewport);
-        self.last_descends = dispatch.descends.clone();
-        self.dispatch = Some(dispatch);
+        let pending = self
+            .pending_paint
+            .take()
+            .filter(|pending| pending.scale == scale && pending.viewport == viewport);
+        let (renders, hovered_secondary) = match pending {
+            Some(PendingPaint {
+                renders,
+                hovered_secondary,
+                ..
+            }) => (renders, hovered_secondary),
+            None => {
+                let Frame {
+                    dispatch,
+                    renders,
+                    hovered_secondary,
+                } = self.build_frame(scale, viewport);
+                self.last_descends = dispatch.descends.clone();
+                self.dispatch = Some(dispatch);
+                (renders, hovered_secondary)
+            }
+        };
         let ink = placed::Ink {
             hovered: self.hover.as_ref(),
             hovered_secondary: hovered_secondary.as_ref(),

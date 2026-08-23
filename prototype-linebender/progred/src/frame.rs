@@ -12,7 +12,7 @@ use crate::projection;
 use crate::selection;
 use crate::sources;
 use crate::stack;
-use crate::{App, content_viewport};
+use crate::{App, PendingPaint, content_viewport};
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::edit::EditCtx;
@@ -408,13 +408,24 @@ impl App {
         reveal_selection: bool,
     ) -> bool {
         let before = self.hover.clone();
-        let mut dispatch = self.build_frame(scale, viewport).dispatch;
-        if reveal_selection && self.reveal_selection(&dispatch, scale, viewport) {
-            dispatch = self.build_frame(scale, viewport).dispatch;
+        let mut frame = self.build_frame(scale, viewport);
+        if reveal_selection && self.reveal_selection(&frame.dispatch, scale, viewport) {
+            frame = self.build_frame(scale, viewport);
         }
+        let Frame {
+            dispatch,
+            renders,
+            hovered_secondary,
+        } = frame;
         let hover_changed = self.hover != before;
         self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
+        self.pending_paint = Some(PendingPaint {
+            scale,
+            viewport,
+            renders,
+            hovered_secondary,
+        });
         hover_changed
     }
 }
