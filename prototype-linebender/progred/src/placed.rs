@@ -254,21 +254,29 @@ fn handler_over<C: 'static>(base: Handler<C>, above: Handler<C>) -> Handler<C> {
 /// against live machinery. Ink defers; everything else settles here.
 pub struct Builder<'a, C: 'static, Cv> {
     placed: &'a mut Placed<C, Cv>,
+    visible: bool,
 }
 
 impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
-    fn new(placed: &'builder mut Placed<C, Cv>) -> Self {
-        Self { placed }
+    fn new(placed: &'builder mut Placed<C, Cv>, placement: Placement) -> Self {
+        Self {
+            placed,
+            visible: !placement.clipped_out(),
+        }
     }
 
     /// Contribute a named hover region.
     pub fn claim(&mut self, placement: Placement, target: Hovered) {
-        self.placed.probes.push(Probe::direct(placement, target));
+        if !placement.clipped_out() {
+            self.placed.probes.push(Probe::direct(placement, target));
+        }
     }
 
     /// Contribute an unnamed region that blocks targets below it.
     pub fn occlude(&mut self, placement: Placement) {
-        self.placed.probes.push(Probe::occludes(placement));
+        if !placement.clipped_out() {
+            self.placed.probes.push(Probe::occludes(placement));
+        }
     }
 
     pub fn activate(
@@ -276,10 +284,12 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         target: Hovered,
         action: impl Fn(&mut C) -> bool + 'static,
     ) {
-        self.placed.activations.push(TargetAction {
-            target,
-            action: Box::new(action),
-        });
+        if self.visible {
+            self.placed.activations.push(TargetAction {
+                target,
+                action: Box::new(action),
+            });
+        }
     }
 
     pub fn pick(
@@ -287,25 +297,31 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
         target: Hovered,
         action: impl Fn(&mut C) -> bool + 'static,
     ) {
-        self.placed.picks.push(TargetAction {
-            target,
-            action: Box::new(action),
-        });
+        if self.visible {
+            self.placed.picks.push(TargetAction {
+                target,
+                action: Box::new(action),
+            });
+        }
     }
 
     /// Contribute ink that reads the resolved hover — the only paint
     /// that may differ under the pointer.
     pub fn ink(&mut self, render: impl for<'ink> FnOnce(&mut Cv, Ink<'ink>) + 'static) {
-        self.placed.renders.push(Box::new(render));
+        if self.visible {
+            self.placed.renders.push(Box::new(render));
+        }
     }
 }
 
 impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
-        let (shape, brush) = (shape.into(), brush.into());
-        self.placed
-            .renders
-            .push(Box::new(move |cv, _| cv.fill(shape, brush, transform)));
+        if self.visible {
+            let (shape, brush) = (shape.into(), brush.into());
+            self.placed
+                .renders
+                .push(Box::new(move |cv, _| cv.fill(shape, brush, transform)));
+        }
     }
 
     fn stroke(
@@ -315,16 +331,20 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
         brush: impl Into<Brush>,
         transform: Affine,
     ) {
-        let (shape, brush) = (shape.into(), brush.into());
-        self.placed
-            .renders
-            .push(Box::new(move |cv, _| cv.stroke(shape, style, brush, transform)));
+        if self.visible {
+            let (shape, brush) = (shape.into(), brush.into());
+            self.placed
+                .renders
+                .push(Box::new(move |cv, _| cv.stroke(shape, style, brush, transform)));
+        }
     }
 
     fn glyph_run(&mut self, run: GlyphRun) {
-        self.placed
-            .renders
-            .push(Box::new(move |cv, _| cv.glyph_run(run)));
+        if self.visible {
+            self.placed
+                .renders
+                .push(Box::new(move |cv, _| cv.glyph_run(run)));
+        }
     }
 
     fn clip(
@@ -333,15 +353,17 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
         transform: Affine,
         content: impl FnOnce(&mut Self),
     ) {
-        let shape = shape.into();
-        let render_start = self.placed.renders.len();
-        content(self);
-        let renders = self.placed.renders.split_off(render_start);
-        self.placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
-            cv.clip(shape, transform, |cv| {
-                Placed::<C, Cv>::render(renders, cv, ink)
-            })
-        }));
+        if self.visible {
+            let shape = shape.into();
+            let render_start = self.placed.renders.len();
+            content(self);
+            let renders = self.placed.renders.split_off(render_start);
+            self.placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+                cv.clip(shape, transform, |cv| {
+                    Placed::<C, Cv>::render(renders, cv, ink)
+                })
+            }));
+        }
     }
 }
 
@@ -366,7 +388,7 @@ impl<C: 'static, Cv> HasPopup for Builder<'_, C, Cv> {
 fn built_into<C: 'static, Cv: 'static>(
     f: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
 ) -> impl FnOnce(Placement, &mut Placed<C, Cv>) + 'static {
-    move |placement, placed| f(&mut Builder::new(placed), placement)
+    move |placement, placed| f(&mut Builder::new(placed, placement), placement)
 }
 
 pub fn leaf<C: 'static, Cv: Canvas + 'static>(
@@ -376,16 +398,18 @@ pub fn leaf<C: 'static, Cv: Canvas + 'static>(
     let place = built_into(place);
     measured::leaf_into(extent, move |placement, placed: &mut Placed<C, Cv>| {
         place(placement, placed);
-        placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
-            if ink.debug_geometry {
-                cv.stroke(
-                    placement.rect,
-                    Stroke::new(0.75),
-                    Color::new([0.0, 0.65, 1.0, 0.36]),
-                    Affine::IDENTITY,
-                );
-            }
-        }));
+        if !placement.clipped_out() {
+            placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+                if ink.debug_geometry {
+                    cv.stroke(
+                        placement.rect,
+                        Stroke::new(0.75),
+                        Color::new([0.0, 0.65, 1.0, 0.36]),
+                        Affine::IDENTITY,
+                    );
+                }
+            }));
+        }
     })
 }
 
@@ -691,6 +715,38 @@ mod tests {
                 }
             ] if *fill == rect && *outline == rect
         ));
+    }
+
+    #[test]
+    fn clipped_leaves_keep_handlers_but_contribute_no_visible_work() {
+        let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+        let child = leaf(
+            Extent {
+                width: 10.0,
+                ascent: 5.0,
+                descent: 5.0,
+            },
+            move |p: &mut Builder<'_, (), TestCanvas>, placement| {
+                p.claim(placement, target.clone());
+                p.activate(target.clone(), |_| true);
+                p.pick(target, |_| true);
+                p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
+                p.handler().on_pointer_move(|_, _| true);
+            },
+        );
+        let placed = measured::place(
+            child,
+            Placement::new(
+                Rect::new(20.0, 20.0, 30.0, 30.0),
+                Rect::new(0.0, 0.0, 10.0, 10.0),
+            ),
+        );
+
+        assert!(placed.probes.is_empty());
+        assert!(placed.activations.is_empty());
+        assert!(placed.picks.is_empty());
+        assert!(placed.renders.is_empty());
+        assert!(placed.handler.is_some());
     }
 
     #[test]
