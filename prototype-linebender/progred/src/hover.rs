@@ -4,7 +4,8 @@
 use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
-use gid::{Path, Value};
+use gid::{Step, Value};
+use std::rc::Rc;
 
 /// What the pointer rests on: the address a later editor action will
 /// target. Values preview their selection; toggles and popup entries
@@ -14,12 +15,12 @@ use gid::{Path, Value};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hover {
     /// Activate here selects the value at this path.
-    Value(Path),
+    Value(Rc<[Step]>),
     /// Activate here toggles this path's collapse.
-    Toggle(Path),
+    Toggle(Rc<[Step]>),
     /// A click here opens a pending sibling after the element at
     /// this path — the flat list separator's action.
-    Insert(Path),
+    Insert(Rc<[Step]>),
     /// A click here commits the completion entry at this index. An
     /// index, not the entry: a hover stores ADDRESSES, never values,
     /// so what it means re-derives from the LIVE entries each frame —
@@ -42,7 +43,7 @@ pub fn hover_value(
 ) -> Option<Value> {
     match hover {
         Hover::Value(path) => sources
-            .resolve(path)
+            .resolve(path.as_ref())
             .filter(|value| value.as_cell().is_some())
             .cloned(),
         Hover::Entry(index) => {

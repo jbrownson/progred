@@ -408,13 +408,13 @@ fn sample_text_line_claims_its_own_hover() {
     let rect = bench
         .descends
         .iter()
-        .find(|descend| descend.path == path)
+        .find(|descend| descend.path.as_ref() == &path)
         .expect("color descend")
         .rect;
     let (bench, _) = place_with_pointer(&doc, None, 900.0, Some(rect.center()));
     assert_eq!(
         bench.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(Rc::from(path)))))
     );
 }
 
@@ -491,7 +491,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
     let point = placed
         .descends
         .iter()
-        .find(|descend| descend.path == path)
+        .find(|descend| descend.path.as_ref() == &path)
         .expect("color descend")
         .rect
         .center();
@@ -594,7 +594,7 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
         bench
             .descends
             .iter()
-            .filter(|descend| descend.path == [Step::Key(field)])
+            .filter(|descend| descend.path.as_ref() == [Step::Key(field)])
             .map(|descend| descend.rect.y0)
             .reduce(f64::min)
             .expect("field descend")
@@ -628,13 +628,23 @@ fn expression_children_are_real() {
     let mut source_note = result.clone();
     source_note.push(Step::Key(binders["note"]));
     let (bench, _) = place(&doc, None, 560.0);
-    assert!(bench.descends.iter().any(|descend| descend.path == record));
-    assert!(bench.descends.iter().any(|descend| descend.path == result));
     assert!(
         bench
             .descends
             .iter()
-            .any(|descend| descend.path == source_note)
+            .any(|descend| descend.path.as_ref() == &record)
+    );
+    assert!(
+        bench
+            .descends
+            .iter()
+            .any(|descend| descend.path.as_ref() == &result)
+    );
+    assert!(
+        bench
+            .descends
+            .iter()
+            .any(|descend| descend.path.as_ref() == &source_note)
     );
 }
 
@@ -657,11 +667,11 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
         bench
             .descends
             .iter()
-            .find(|descend| &descend.path == path)
+            .find(|descend| descend.path.as_ref() == path)
             .expect("walk stops on placed descends")
             .rect
     };
-    let select = |path: &Path| crate::selection::bare_edge(path.clone());
+    let select = |path: &[Step]| crate::selection::bare_edge(path.to_vec());
     let mut selection: Option<Selection> = None;
     let mut walk: Vec<Path> = Vec::new();
     while walk.len() < 200 {
@@ -673,7 +683,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
         ) {
             Some(target) => {
                 selection = Some(select(&target.path));
-                walk.push(target.path.clone());
+                walk.push(target.path.to_vec());
             }
             None => break,
         }
@@ -699,14 +709,14 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             &press(NamedKey::ArrowUp),
         )
         .expect("up retraces the walk");
-        assert_eq!(&up.path, expect);
+        assert_eq!(up.path.as_ref(), expect);
         selection = Some(select(&up.path));
     }
     // A projected simple-name field is the cell's editable head.
     let head = bench
         .descends
         .iter()
-        .map(|descend| descend.path.clone())
+        .map(|descend| descend.path.to_vec())
         .find(|path| {
             matches!(
                 path.last(),
@@ -723,7 +733,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
             line,
             &press(NamedKey::ArrowRight),
         )
-        .map(|target| target.path.clone()),
+        .map(|target| target.path.to_vec()),
         Some(head)
     );
 }
@@ -913,7 +923,7 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
     let list = bench
         .descends
         .iter()
-        .find(|descend| descend.path == parent)
+        .find(|descend| descend.path.as_ref() == &parent)
         .expect("the list has a landmark");
     let (claimed, _) = place_with_pointer(
         &doc,
@@ -923,7 +933,7 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
     );
     assert!(matches!(
         &claimed.hit,
-        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if *path == parent
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.as_ref() == &parent
     ));
 }
 

@@ -357,7 +357,7 @@ pub trait Env {
 
     /// Conventional human name for a cell, when this host has one.
     /// A projection remains responsible for its unnamed fallback.
-    fn name(&self, _cell: CellId) -> Option<String> {
+    fn name(&self, _cell: CellId) -> Option<&str> {
         None
     }
 

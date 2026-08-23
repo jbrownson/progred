@@ -53,6 +53,8 @@ use ui_events::ScrollDelta;
 use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
 use vello::peniko::{Brush, Color};
 
+type SharedPath = Rc<[Step]>;
+
 /// One ordered composition of partial value projections. The
 /// structural fallback lives in this runtime and is always total.
 pub struct Projection<World> {
@@ -171,8 +173,8 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         (evaluation.result, evaluation.remaining_fuel)
     }
 
-    fn name(&self, cell: CellId) -> Option<String> {
-        self.cx.name(cell).map(str::to_owned)
+    fn name(&self, cell: CellId) -> Option<&str> {
+        self.cx.name(cell)
     }
 
     fn cell_value(&self, cell: CellId) -> Option<&Value> {
@@ -1521,12 +1523,12 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
         return content;
     }
 
-    let path = path.to_vec();
+    let path: SharedPath = Rc::from(path);
     let select_path = path.clone();
     let select_line = line.clone();
     let start_edit = hooks.start_edit.clone();
     let select: progred_display::ActionHandler<C> = Rc::new(move |ctx| {
-        start_edit(ctx, select_path.clone(), select_line.clone());
+        start_edit(ctx, select_path.to_vec(), select_line.clone());
         true
     });
     let content = before(content, move |p, _| p.select_landmark(select));
@@ -1555,7 +1557,7 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
                     event.state.position.y,
                 ))
                 && {
-                    start_edit(ctx, path.clone(), line.clone());
+                    start_edit(ctx, path.to_vec(), line.clone());
                     if let Some(edit) = edit(ctx) {
                         edit.state.pointer_down(
                             &presentation,
@@ -1638,10 +1640,13 @@ pub(crate) fn command(modifiers: &ui_events::keyboard::Modifiers) -> bool {
     }
 }
 
-fn select_handler<C: 'static>(path: Path, hooks: &Hooks<C>) -> progred_display::ActionHandler<C> {
+fn select_handler<C: 'static>(
+    path: SharedPath,
+    hooks: &Hooks<C>,
+) -> progred_display::ActionHandler<C> {
     let select = hooks.select.clone();
     Rc::new(move |world| {
-        select(world, path.clone());
+        select(world, path.to_vec());
         true
     })
 }
@@ -1651,12 +1656,12 @@ fn projection_target<C: 'static>(
     hooks: &Hooks<C>,
     steps: Vec<Step>,
 ) -> progred_display::ProjectionTarget<C, Hover> {
-    let path = path.iter().cloned().chain(steps).collect::<Path>();
+    let path: SharedPath = Rc::from(path.iter().cloned().chain(steps).collect::<Path>());
     let selected = path.clone();
     let select = hooks.select.clone();
     progred_display::ProjectionTarget {
         select: Rc::new(move |world| {
-            select(world, selected.clone());
+            select(world, selected.to_vec());
             true
         }),
         hover: Hover::Value(path),
@@ -1879,6 +1884,7 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     let extent = content.extent;
     let gap = 2.0 * scale;
+    let path: SharedPath = Rc::from(path);
     row(
         0.0,
         vec![
@@ -1999,13 +2005,13 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
     hooks: &Hooks<C>,
     child: Measured<Placed<C, Cv>>,
 ) -> Measured<Placed<C, Cv>> {
-    let (path, transient) = match cx.source {
+    let (path, transient): (SharedPath, bool) = match cx.source {
         Source::Transient { owner } if owner != path.as_slice() => return child,
-        Source::Transient { owner } => (owner.to_vec(), true),
-        Source::Stored => (path, false),
+        Source::Transient { owner } => (Rc::from(owner), true),
+        Source::Stored => (Rc::from(path), false),
     };
     let scale = cx.styles.scale;
-    let selected = cx.selected(&path);
+    let selected = cx.selected(path.as_ref());
     let select = hooks.select.clone();
     let pick = hooks.pick.clone();
     before(child, move |p, placement| {
@@ -2014,7 +2020,10 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
         p.ink(move |cv, ink| {
             if selected {
                 primary_highlight(scale, cv, rect);
-            } else if matches!(tree_hovered(ink), Some(Hover::Value(hovered)) if *hovered == highlight_path)
+            } else if matches!(
+                tree_hovered(ink),
+                Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
+            )
             {
                 hover_highlight(scale, cv, rect);
             }
@@ -2029,7 +2038,7 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
         let action_target = Hovered::Tree(Hover::Value(target.clone()));
         let activate_select = select.clone();
         p.activate(action_target.clone(), move |ctx| {
-            activate_select(ctx, target.clone());
+            activate_select(ctx, target.to_vec());
             true
         });
         if let Some(value) = value {
@@ -2042,7 +2051,7 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
                 path,
                 rect,
                 select: Rc::new(move |ctx| {
-                    select(ctx, target.clone());
+                    select(ctx, target.to_vec());
                     true
                 }),
             });
@@ -2140,7 +2149,7 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
     transient: bool,
     selected: bool,
     scale: f64,
-    path: Path,
+    path: SharedPath,
     select: progred_display::ActionHandler<C>,
     delete: Rc<dyn Fn(&mut C) -> bool>,
     child: Measured<Placed<C, Cv>>,
@@ -2154,7 +2163,10 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
         p.ink(move |cv, ink| {
             if selected {
                 primary_highlight(scale, cv, rect);
-            } else if matches!(tree_hovered(ink), Some(Hover::Value(hovered)) if *hovered == highlight_path)
+            } else if matches!(
+                tree_hovered(ink),
+                Some(Hover::Value(hovered)) if hovered.as_ref() == highlight_path.as_ref()
+            )
             {
                 hover_highlight(scale, cv, rect);
             }
@@ -2447,15 +2459,16 @@ fn prepare_present_value<
     let transient = cx.source.transient();
     let selected = cx.selected(path);
     let scale = cx.styles.scale;
-    let landmark_path = path.to_vec();
+    let landmark_path: SharedPath = Rc::from(path);
     let select = select_handler(landmark_path.clone(), hooks);
     let delete = hooks.delete.clone();
+    let landmark = landmark_path.clone();
     let placed = ChoiceLayout::map(inner, 0.0, move |inner| {
         descend_landmark_with(
             transient,
             selected,
             scale,
-            landmark_path,
+            landmark,
             select,
             delete,
             inner,
@@ -2467,7 +2480,7 @@ fn prepare_present_value<
         }
         None => placed,
     };
-    let target_path = path.to_vec();
+    let target_path = landmark_path.clone();
     let target_value = value.clone();
     let pick = hooks.pick.clone();
     let select = hooks.select.clone();
@@ -2524,7 +2537,7 @@ fn present_layout<C: 'static>(
 /// modifier never deadens the gesture. Inner Pick registrations answer
 /// first and this catches what they refused.
 fn pick_target_with<C: 'static, Cv: Canvas + 'static>(
-    path: Path,
+    path: SharedPath,
     value: Value,
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     select: Rc<dyn Fn(&mut C, Path)>,
@@ -2537,7 +2550,7 @@ fn pick_target_with<C: 'static, Cv: Canvas + 'static>(
         let value = value.clone();
         p.pick(Hovered::Tree(Hover::Value(path.clone())), move |world| {
             if !pick(world, value.clone()) {
-                select(world, path.clone());
+                select(world, path.to_vec());
             }
             true
         });
@@ -2872,7 +2885,7 @@ fn label_query<
 /// and the cell star. Its Pick action offers `value`, the identity the
 /// part displays, to an open pending instead.
 fn select_target_with<C: 'static, Cv: Canvas + 'static>(
-    path: Path,
+    path: SharedPath,
     value: Value,
     select: Rc<dyn Fn(&mut C, Path)>,
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
@@ -2885,7 +2898,10 @@ fn select_target_with<C: 'static, Cv: Canvas + 'static>(
 /// Name the value at `path` for the pointer over this ink, adding no
 /// action of its own — the hover half of [`select_target`], and the
 /// flat literal's delimiter dress.
-fn hover_target<C: 'static, Cv: Canvas + 'static>(path: Path, content: Measured<Placed<C, Cv>>) -> Measured<Placed<C, Cv>> {
+fn hover_target<C: 'static, Cv: Canvas + 'static>(
+    path: SharedPath,
+    content: Measured<Placed<C, Cv>>,
+) -> Measured<Placed<C, Cv>> {
     before(content, move |p, placement| {
         hover_claim(p, placement, Hover::Value(path.clone()));
     })
@@ -2896,7 +2912,7 @@ fn hover_target<C: 'static, Cv: Canvas + 'static>(path: Path, content: Measured<
 /// hold and whose delimiter ink names the container through
 /// [`hover_target`].
 fn quiet_select_target_with<C: 'static, Cv: Canvas + 'static>(
-    path: Path,
+    path: SharedPath,
     value: Value,
     select: Rc<dyn Fn(&mut C, Path)>,
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
@@ -2909,7 +2925,7 @@ fn quiet_select_target_with<C: 'static, Cv: Canvas + 'static>(
         let value = value.clone();
         let action_target = Hovered::Tree(Hover::Value(target.clone()));
         p.activate(action_target.clone(), move |ctx| {
-            select(ctx, target.clone());
+            select(ctx, target.to_vec());
             true
         });
         p.pick(action_target, move |ctx| pick(ctx, value.clone()));

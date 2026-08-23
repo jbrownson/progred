@@ -262,7 +262,7 @@ impl App {
                         dispatch
                             .descends
                             .iter()
-                            .find(|descend| &descend.path == path)
+                            .find(|descend| descend.path.as_ref() == path)
                             .map(|descend| descend.rect)
                     })
                 });

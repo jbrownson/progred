@@ -592,8 +592,8 @@ mod tests {
 
     #[test]
     fn target_actions_follow_resolved_hover_and_visual_precedence() {
-        let target = Hovered::Tree(crate::hover::Hover::Value(Vec::new()));
-        let other = Hovered::Tree(crate::hover::Hover::Toggle(Vec::new()));
+        let target = Hovered::Tree(crate::hover::Hover::Value(std::rc::Rc::from([])));
+        let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
         let actions = vec![
             TargetAction {
                 target: target.clone(),

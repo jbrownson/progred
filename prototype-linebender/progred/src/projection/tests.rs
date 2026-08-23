@@ -32,7 +32,7 @@ fn projection_target_appends_relative_steps() {
     );
     assert_eq!(
         target.hover,
-        Hover::Value(vec![Step::Key(parent), Step::Key(field)])
+        Hover::Value(Rc::from(vec![Step::Key(parent), Step::Key(field)]))
     );
     let mut selections = Vec::new();
     assert!((target.select)(&mut selections));
@@ -100,7 +100,11 @@ fn make_projected_selection(doc: &Document, library: &Cells, path: Path) -> Sele
         Placement::root(Rect::new(0.0, 0.0, 500.0, height)),
     );
     let mut selected = World::new();
-    if let Some(target) = placed.descends.iter().find(|target| target.path == path) {
+    if let Some(target) = placed
+        .descends
+        .iter()
+        .find(|target| target.path.as_ref() == &path)
+    {
         (target.select)(&mut selected);
     }
     match selected.pop() {
@@ -122,7 +126,7 @@ fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Select
     let layout = {
         let target = |_| progred_display::ProjectionTarget {
             select: Rc::new(|_: &mut ()| false),
-            hover: Hover::Value(path.clone()),
+            hover: Hover::Value(Rc::from(path.clone())),
         };
         stack.projection.apply(
             &NoEval,
@@ -174,7 +178,7 @@ const LINE: f64 = 16.0;
 
 fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
     Descend {
-        path,
+        path: Rc::from(path),
         rect: Rect::new(x0, y0, x1, y1),
         select: Rc::new(|_| true),
     }
@@ -192,7 +196,7 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
 fn stepped(ds: &[Descend<()>], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
     let selection = from.map(crate::selection::bare_edge);
     step_selection(ds, selection.as_ref(), LINE, &arrow(named))
-        .map(|descend| descend.path.clone())
+        .map(|descend| descend.path.to_vec())
 }
 
 #[test]

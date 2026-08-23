@@ -5,6 +5,7 @@ use gid::{Path, Step};
 use progred_display::ActionHandler;
 use progred_libraries::name;
 use std::collections::HashMap;
+use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use vello::kurbo::Rect;
 
@@ -13,7 +14,7 @@ use vello::kurbo::Rect;
 /// [`step_selection`] reads it to move the selection by keyboard;
 /// clicks go through each descend's own handler, not this list.
 pub struct Descend<World> {
-    pub path: Path,
+    pub path: Rc<[Step]>,
     /// The settled rect, for scroll-to-selection.
     pub rect: Rect,
     /// The projection-installed transition for landing here. This is
@@ -90,7 +91,7 @@ pub fn step_selection<'a, World>(
     let order = reading_order(descends, line);
     let at = order
         .iter()
-        .position(|stop| descends[stop.descend].path.as_slice() == path);
+        .position(|stop| descends[stop.descend].path.as_ref() == path);
     let found = |stop: &Stop| Some(&descends[stop.descend]);
     match (arrow, at) {
         (NamedKey::ArrowDown, Some(at)) => {
@@ -105,9 +106,11 @@ pub fn step_selection<'a, World>(
             order.get(at + 1).filter(|stop| !stop.row).and_then(found)
         }
         (NamedKey::ArrowLeft, Some(at)) if !order[at].row => found(&order[at - 1]),
-        (NamedKey::ArrowLeft, _) => path
-            .split_last()
-            .and_then(|(_, parent)| descends.iter().find(|descend| descend.path == parent)),
+        (NamedKey::ArrowLeft, _) => path.split_last().and_then(|(_, parent)| {
+            descends
+                .iter()
+                .find(|descend| descend.path.as_ref() == parent)
+        }),
         _ => None,
     }
 }
@@ -141,7 +144,7 @@ fn reading_order<World>(descends: &[Descend<World>], line: f64) -> Vec<Stop> {
     let by_path: HashMap<&[Step], usize> = descends
         .iter()
         .enumerate()
-        .map(|(index, descend)| (descend.path.as_slice(), index))
+        .map(|(index, descend)| (descend.path.as_ref(), index))
         .collect();
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); descends.len()];
     let mut roots = Vec::new();
@@ -204,19 +207,19 @@ fn sibling<World>(descends: &[Descend<World>], path: &[Step], next: bool) -> Opt
     let mut path = path.to_vec();
     loop {
         let (_, parent) = path.split_last()?;
-        let siblings: Vec<&Path> = descends
+        let siblings: Vec<&[Step]> = descends
             .iter()
-            .map(|descend| &descend.path)
+            .map(|descend| descend.path.as_ref())
             .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
             .collect();
-        let index = siblings.iter().position(|p| **p == path)?;
+        let index = siblings.iter().position(|p| *p == path)?;
         let neighbor = if next {
             siblings.get(index + 1)
         } else {
             index.checked_sub(1).and_then(|index| siblings.get(index))
         };
         match neighbor {
-            Some(found) => return Some((*found).clone()),
+            Some(found) => return Some(found.to_vec()),
             None => {
                 path.pop();
             }

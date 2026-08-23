@@ -18,7 +18,7 @@ fn short_id(cell: CellId) -> String {
 
 fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
     match env.name(cell) {
-        Some(name) => (name, Face::Name),
+        Some(name) => (name.to_owned(), Face::Name),
         None => (short_id(cell), Face::Id),
     }
 }
@@ -62,7 +62,7 @@ pub(crate) fn at<World, Hover: Clone>(
 
 fn field_spelling(env: &dyn progred_display::Env, field: CellId) -> (String, Face) {
     match env.name(field) {
-        Some(name) => (name, Face::Label),
+        Some(name) => (name.to_owned(), Face::Label),
         None => (short_id(field), Face::Id),
     }
 }

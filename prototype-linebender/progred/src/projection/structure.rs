@@ -258,7 +258,7 @@ fn field_head<World: 'static>(
     } else {
         let mut child = path.to_vec();
         child.push(Step::Key(key));
-        pickable(head, Hover::Value(child), Value::Cell(key))
+        pickable(head, Hover::Value(Rc::from(child)), Value::Cell(key))
     }
 }
 
@@ -293,7 +293,7 @@ fn selectable<World: 'static>(
     hooks: &Hooks<World>,
     claim_hover: bool,
 ) -> View<World> {
-    let path = path.to_vec();
+    let path: Rc<[Step]> = Rc::from(path);
     let target = Hover::Value(path.clone());
     let clicked = on_activate(
         pickable(child, target.clone(), value.clone()),
@@ -308,13 +308,13 @@ fn selectable<World: 'static>(
 }
 
 fn toggle<World: 'static>(child: View<World>, path: &[Step], hooks: &Hooks<World>) -> View<World> {
-    let target = path.to_vec();
+    let target: Rc<[Step]> = Rc::from(path);
     let toggle = hooks.toggle.clone();
     activatable(
         child,
-        Hover::Toggle(path.to_vec()),
+        Hover::Toggle(target.clone()),
         Rc::new(move |world| {
-            toggle(world, target.clone());
+            toggle(world, target.to_vec());
             true
         }),
     )
@@ -329,12 +329,13 @@ fn insert<World: 'static>(
     let mut target = path.to_vec();
     target.push(Step::Element(after));
     let insert = hooks.insert.clone();
+    let target: Rc<[Step]> = Rc::from(target);
     let handler_target = target.clone();
     activatable(
         child,
         Hover::Insert(target),
         Rc::new(move |world| {
-            insert(world, handler_target.clone());
+            insert(world, handler_target.to_vec());
             true
         }),
     )
