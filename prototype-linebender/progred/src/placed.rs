@@ -375,11 +375,8 @@ pub fn leaf<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     let place = built_into(place);
     measured::leaf_into(extent, move |placement, placed: &mut Placed<C, Cv>| {
-        let render_start = placed.renders.len();
         place(placement, placed);
-        let renders = placed.renders.split_off(render_start);
         placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
-            Placed::<C, Cv>::render(renders, cv, ink);
             if ink.debug_geometry {
                 cv.stroke(
                     placement.rect,
