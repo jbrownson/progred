@@ -4,7 +4,6 @@
 //! recursive evaluation.
 
 use gid::{CellId, Record, Value};
-use im::OrdMap;
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
@@ -147,6 +146,13 @@ type CellIndices = Rc<RefCell<CellIndexTable>>;
 
 fn cell_index(indices: &CellIndices, cell: CellId) -> CellIndex {
     indices.borrow_mut().intern(cell)
+}
+
+fn lowered_field(fields: &[(CellId, Expression)], label: CellId) -> Option<Expression> {
+    fields
+        .binary_search_by_key(&label, |(field, _)| *field)
+        .ok()
+        .map(|index| fields[index].1)
 }
 
 #[derive(Debug, Clone)]
@@ -405,7 +411,7 @@ pub struct Context<'a> {
 struct Lowered {
     source: Value,
     form: Form,
-    fields: Option<OrdMap<CellId, Expression>>,
+    fields: Option<Vec<(CellId, Expression)>>,
     elements: Option<Vec<Expression>>,
 }
 
@@ -413,10 +419,7 @@ struct Lowered {
 enum Form {
     Data,
     Cell(CellIndex),
-    Call {
-        fields: OrdMap<CellId, Expression>,
-        function: Expression,
-    },
+    Call { function: Expression },
     Lambda {
         parameters: LambdaParameters,
         body: Expression,
@@ -489,16 +492,14 @@ impl<'a> Context<'a> {
         let form = match value {
             Value::Cell(cell) => Form::Cell(cell_index(&self.indices, *cell)),
             Value::Record(fields) if fields.contains_key(&vocabulary::FUNCTION) => {
-                let fields: OrdMap<_, _> = fields
+                let fields: Vec<_> = fields
                     .iter()
                     .map(|(field, value)| (*field, self.lower_with(value, descend_data)))
                     .collect();
-                let form = Form::Call {
-                    function: *fields.get(&vocabulary::FUNCTION).unwrap(),
-                    fields: fields.clone(),
-                };
+                let function = lowered_field(&fields, vocabulary::FUNCTION)
+                    .expect("the source record contains a function field");
                 lowered_fields = Some(fields);
-                form
+                Form::Call { function }
             }
             Value::Record(fields)
                 if fields.contains_key(&vocabulary::PARAMS)
@@ -612,9 +613,7 @@ impl<'a> Context<'a> {
         match self.expressions[expression.0].form.clone() {
             Form::Data => Ok(RuntimeValue::Data(self.value(expression).clone())),
             Form::Cell(index) => self.eval_cell(index, environment),
-            Form::Call { fields, function } => {
-                self.eval_call(expression, &fields, function, environment)
-            }
+            Form::Call { function } => self.eval_call(expression, function, environment),
             Form::Lambda { parameters, body } => {
                 Ok(self.eval_lambda(expression, parameters, body, environment))
             }
@@ -633,11 +632,7 @@ impl<'a> Context<'a> {
     }
 
     pub fn field(&self, call: Expression, label: CellId) -> Option<Expression> {
-        self.expressions[call.0]
-            .fields
-            .as_ref()?
-            .get(&label)
-            .copied()
+        lowered_field(self.expressions[call.0].fields.as_ref()?, label)
     }
 
     pub fn fields(&self, expression: Expression) -> Option<Vec<(CellId, Expression)>> {
@@ -758,13 +753,12 @@ impl<'a> Context<'a> {
     fn eval_call(
         &mut self,
         call: Expression,
-        fields: &OrdMap<CellId, Expression>,
         function: Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         let callable = self.eval_runtime(function, environment)?;
         if let Some(closure) = self.runtime_closure(&callable) {
-            return self.eval_grap_call(closure, fields, environment);
+            return self.eval_grap_call(closure, call, environment);
         }
         let foreign = match &callable {
             RuntimeValue::Foreign(foreign) => Some(foreign.clone()),
@@ -949,12 +943,12 @@ impl<'a> Context<'a> {
     fn eval_grap_call(
         &mut self,
         closure: Closure,
-        fields: &OrdMap<CellId, Expression>,
+        call: Expression,
         calling_environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         let mut arguments = Vec::with_capacity(closure.params.len());
         for parameter in closure.params.iter() {
-            let Some(expression) = fields.get(&parameter.cell).copied() else {
+            let Some(expression) = self.field(call, parameter.cell) else {
                 return Ok(RuntimeValue::Data(self.missing_argument(parameter.cell)));
             };
             arguments.push((
