@@ -27,6 +27,7 @@ use parley::Layout;
 use parley::style::GenericFamily;
 use parley::{FontContext, LayoutContext, PlainEditor, StyleProperty};
 use peniko::Brush;
+use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 use ui_events::pointer::PointerButton;
 
@@ -565,7 +566,7 @@ pub struct LineEdit {
     text: String,
     metrics: TextMetrics,
     scale: f32,
-    ghost: Option<Layout<Brush>>,
+    ghost: Option<Rc<Layout<Brush>>>,
     layout: Option<Layout<Brush>>,
     layout_baseline: f64,
     editor_baseline: f64,
@@ -768,7 +769,7 @@ pub fn text_edit(description: LineEditDescription<'_>, tcx: &mut TextCtx) -> Lin
     // the cursor hang from the shared visual baseline.
     let (metrics, layout_baseline) = ghost
         .as_ref()
-        .and_then(metrics_of)
+        .and_then(|layout| metrics_of(layout))
         .or_else(|| layout.as_ref().and_then(metrics_of))
         .unwrap_or((TextMetrics::default(), 0.0));
 

@@ -10,6 +10,7 @@ use parley::style::{FontWeight, GenericFamily};
 use parley::{AlignmentOptions, Cursor, FontContext, LayoutContext, LineHeight, StyleProperty};
 use peniko::Brush;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct TextCtx<'a> {
     pub fonts: &'a mut FontContext,
@@ -29,7 +30,7 @@ pub struct TextCtx<'a> {
 pub struct TextCache(HashMap<TextKey, CacheEntry>);
 
 struct CacheEntry {
-    layout: Layout<Brush>,
+    layout: Rc<Layout<Brush>>,
     used: bool,
 }
 
@@ -80,7 +81,7 @@ pub struct TextMetrics {
 }
 
 pub struct Text {
-    layout: Layout<Brush>,
+    layout: Rc<Layout<Brush>>,
     metrics: TextMetrics,
 }
 
@@ -120,7 +121,7 @@ pub fn paragraph(
 
 /// The single-line layout [`text`] draws for `s`, shared through the
 /// cache — for callers that hit-test a text leaf after the fact.
-pub fn line_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Layout<Brush> {
+pub fn line_layout(ctx: &mut TextCtx, s: &str, style: &TextStyle) -> Rc<Layout<Brush>> {
     build_layout(ctx, s, style, None, None)
 }
 
@@ -136,7 +137,7 @@ pub(crate) fn build_layout(
     style: &TextStyle,
     line_height: Option<f32>,
     max_width: Option<f32>,
-) -> Layout<Brush> {
+) -> Rc<Layout<Brush>> {
     let key = (line_height.is_none() && max_width.is_none())
         .then(|| text_key(s, style, ctx.scale))
         .flatten();
@@ -144,7 +145,7 @@ pub(crate) fn build_layout(
         && let Some(hit) = ctx.cache.0.get_mut(key)
     {
         hit.used = true;
-        return hit.layout.clone();
+        return Rc::clone(&hit.layout);
     }
     let mut builder = ctx.layouts.ranged_builder(ctx.fonts, s, ctx.scale, true);
     builder.push_default(StyleProperty::Brush(style.brush.clone()));
@@ -159,11 +160,12 @@ pub(crate) fn build_layout(
     let mut layout: Layout<Brush> = builder.build(s);
     layout.break_all_lines(max_width);
     layout.align(Alignment::Start, AlignmentOptions::default());
+    let layout = Rc::new(layout);
     if let Some(key) = key {
         ctx.cache.0.insert(
             key,
             CacheEntry {
-                layout: layout.clone(),
+                layout: Rc::clone(&layout),
                 used: true,
             },
         );
@@ -171,7 +173,7 @@ pub(crate) fn build_layout(
     layout
 }
 
-fn measured_text(layout: Layout<Brush>, include_trailing_whitespace: bool) -> Text {
+fn measured_text(layout: Rc<Layout<Brush>>, include_trailing_whitespace: bool) -> Text {
     let first = layout.lines().next().map(|line| *line.metrics());
     let baseline = first.map(|m| m.baseline as f64).unwrap_or(0.0);
     let width = if include_trailing_whitespace {
@@ -248,6 +250,30 @@ mod tests {
     use crate::draw::{DrawCmd, DrawList};
     use kurbo::Rect;
     use peniko::Color;
+
+    #[test]
+    fn cached_line_layouts_share_the_shaped_result() {
+        let mut fonts = FontContext::new();
+        let mut layouts = LayoutContext::new();
+        let mut cache = TextCache::default();
+        let mut ctx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let style = TextStyle {
+            size: 16.0,
+            brush: Color::WHITE.into(),
+            weight: None,
+            family: GenericFamily::SystemUi,
+        };
+
+        let first = line_layout(&mut ctx, "shared", &style);
+        let second = line_layout(&mut ctx, "shared", &style);
+
+        assert!(Rc::ptr_eq(&first, &second));
+    }
 
     #[test]
     fn text_metrics_support_a_shared_baseline() {
