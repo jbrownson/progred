@@ -128,6 +128,20 @@ pub struct Placed<C, Cv> {
     pub renders: Vec<Render<Cv>>,
 }
 
+/// Preserve the destination's ordering while avoiding an allocation
+/// and element moves when an empty parent can simply take ownership of
+/// its first child's buffer.
+fn append<T>(base: &mut Vec<T>, mut above: Vec<T>) {
+    if above.is_empty() {
+        return;
+    }
+    if base.is_empty() {
+        *base = above;
+    } else {
+        base.append(&mut above);
+    }
+}
+
 impl<C: 'static, Cv> Output for Placed<C, Cv> {
     fn empty() -> Self {
         Self {
@@ -143,18 +157,18 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
     }
 
     fn over(mut self, above: Self) -> Self {
-        self.probes.extend(above.probes);
-        self.activations.extend(above.activations);
-        self.picks.extend(above.picks);
+        append(&mut self.probes, above.probes);
+        append(&mut self.activations, above.activations);
+        append(&mut self.picks, above.picks);
         self.handler = match (self.handler, above.handler) {
             (base, None) => base,
             (None, above) => above,
             (Some(base), Some(above)) => Some(handler_over(base, above)),
         };
-        self.descends.extend(above.descends);
+        append(&mut self.descends, above.descends);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
         self.popup = above.popup.or(self.popup);
-        self.renders.extend(above.renders);
+        append(&mut self.renders, above.renders);
         self
     }
 }
