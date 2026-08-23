@@ -12,7 +12,6 @@ use progred_display::{
     Layout, ProjectionInput, activatable, alternatives, at_with_projection, centered_row, col, dim,
     hug, row, shared,
 };
-use std::collections::BTreeMap;
 
 pub mod vocabulary {
     use gid::CellId;
@@ -59,27 +58,30 @@ fn replace_unquotes(
     context: &mut Context,
     environment: &Environment,
 ) -> Result<Value, Halt> {
-    if let Some(fields) = context.fields(expression) {
-        if let Some((_, unquote)) = fields
-            .iter()
-            .find(|(field, _)| *field == vocabulary::UNQUOTE)
-        {
-            return context.eval(*unquote, environment);
-        }
-        return Ok(Value::record(
+    if let Some(field_count) = context.fields(expression).map(<[_]>::len) {
+        let unquote = context.fields(expression).and_then(|fields| {
             fields
-                .into_iter()
-                .map(|(field, value)| Ok((field, replace_unquotes(value, context, environment)?)))
-                .collect::<Result<Vec<_>, Halt>>()?,
-        ));
+                .iter()
+                .find(|(field, _)| *field == vocabulary::UNQUOTE)
+                .map(|(_, unquote)| *unquote)
+        });
+        if let Some(unquote) = unquote {
+            return context.eval(unquote, environment);
+        }
+        let mut replaced = Vec::with_capacity(field_count);
+        for index in 0..field_count {
+            let (field, value) = context.fields(expression).unwrap()[index];
+            replaced.push((field, replace_unquotes(value, context, environment)?));
+        }
+        return Ok(Value::record(replaced));
     }
-    if let Some(elements) = context.elements(expression) {
-        return Ok(Value::list(
-            elements
-                .into_iter()
-                .map(|value| replace_unquotes(value, context, environment))
-                .collect::<Result<Vec<_>, Halt>>()?,
-        ));
+    if let Some(element_count) = context.elements(expression).map(<[_]>::len) {
+        let mut replaced = Vec::with_capacity(element_count);
+        for index in 0..element_count {
+            let value = context.elements(expression).unwrap()[index];
+            replaced.push(replace_unquotes(value, context, environment)?);
+        }
+        return Ok(Value::list(replaced));
     }
     let value = context.value(expression).clone();
     replace_unquotes_value(&value, context, environment)
@@ -162,9 +164,10 @@ fn bindings_foreign(
         return Ok(context.missing_argument(grap_runtime::vocabulary::EXPRESSION));
     };
     let bindings_value = context.eval(bindings, environment)?;
-    if let Some(bindings) = context.elements(bindings) {
+    if let Some(binding_count) = context.elements(bindings).map(<[_]>::len) {
         let mut environment = environment.clone();
-        for binding in bindings {
+        for index in 0..binding_count {
+            let binding = context.elements(bindings).unwrap()[index];
             let Some(value) = context.field(binding, vocabulary::VALUE) else {
                 return Ok(Value::from(vocabulary::INVALID_BINDING));
             };
@@ -230,7 +233,7 @@ fn bindings_foreign(
 enum LoweredSelection {
     Expression {
         expression: Expression,
-        bindings: BTreeMap<CellId, Value>,
+        bindings: Vec<(CellId, Value)>,
     },
     NoMatch,
     Invalid(CellId),
@@ -267,7 +270,7 @@ fn select_lowered(
 enum Selection<'a> {
     Expression {
         expression: &'a Value,
-        bindings: BTreeMap<CellId, Value>,
+        bindings: Vec<(CellId, Value)>,
     },
     NoMatch,
     Invalid(CellId),
@@ -308,24 +311,24 @@ struct InvalidBinder;
 fn destructure(
     pattern: &Value,
     value: &Value,
-) -> Result<Option<BTreeMap<CellId, Value>>, InvalidBinder> {
-    let mut bindings = BTreeMap::new();
+) -> Result<Option<Vec<(CellId, Value)>>, InvalidBinder> {
+    let mut bindings = Vec::new();
     matches_pattern(pattern, value, &mut bindings).map(|matched| matched.then_some(bindings))
 }
 
 fn matches_pattern(
     pattern: &Value,
     value: &Value,
-    bindings: &mut BTreeMap<CellId, Value>,
+    bindings: &mut Vec<(CellId, Value)>,
 ) -> Result<bool, InvalidBinder> {
     match pattern {
         Value::Record(pattern_fields) => {
             if let Some(binder) = pattern_fields.get(&vocabulary::BIND) {
                 match binder.as_cell() {
-                    Some(binder) => match bindings.get(&binder) {
-                        Some(bound) => Ok(bound == value),
+                    Some(binder) => match bindings.iter().find(|(bound, _)| *bound == binder) {
+                        Some((_, bound)) => Ok(bound == value),
                         None => {
-                            bindings.insert(binder, value.clone());
+                            bindings.push((binder, value.clone()));
                             Ok(true)
                         }
                     },

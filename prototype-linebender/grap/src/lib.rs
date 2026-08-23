@@ -635,19 +635,12 @@ impl<'a> Context<'a> {
         lowered_field(self.expressions[call.0].fields.as_ref()?, label)
     }
 
-    pub fn fields(&self, expression: Expression) -> Option<Vec<(CellId, Expression)>> {
-        Some(
-            self.expressions[expression.0]
-                .fields
-                .as_ref()?
-                .iter()
-                .map(|(field, expression)| (*field, *expression))
-                .collect(),
-        )
+    pub fn fields(&self, expression: Expression) -> Option<&[(CellId, Expression)]> {
+        self.expressions[expression.0].fields.as_deref()
     }
 
-    pub fn elements(&self, expression: Expression) -> Option<Vec<Expression>> {
-        self.expressions[expression.0].elements.clone()
+    pub fn elements(&self, expression: Expression) -> Option<&[Expression]> {
+        self.expressions[expression.0].elements.as_deref()
     }
 
     pub fn missing_argument(&mut self, cell: CellId) -> Value {
