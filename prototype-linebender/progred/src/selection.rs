@@ -707,8 +707,25 @@ pub fn set_collapse(
 /// cycle, expanded otherwise — or `None` when there is nothing to
 /// collapse.
 pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool> {
-    sources
-        .resolve(path)
+    let value = sources.resolve(path)?;
+    let in_cycle = value.as_cell().is_some_and(|cell| {
+        (0..path.len())
+            .filter(|end| path[*end] == Step::Follow)
+            .filter_map(|end| sources.resolve(&path[..end]).and_then(Value::as_cell))
+            .any(|ancestor| ancestor == cell)
+    });
+    collapse_default_for_value(sources, value, in_cycle)
+}
+
+/// The collapse class of an already-resolved value. Projection has
+/// the ancestor cells in hand as it walks, while editor commands
+/// recover the same `in_cycle` answer from their one-off path.
+pub(crate) fn collapse_default_for_value(
+    sources: &Sources,
+    value: &Value,
+    in_cycle: bool,
+) -> Option<bool> {
+    Some(value)
         .filter(|value| text::read(value).is_none() && f64_convention::read(value).is_none())
         .filter(|value| match value {
             Value::Cell(cell) => sources.value(*cell).is_some(),
@@ -716,11 +733,7 @@ pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool>
             Value::List(elements) => !elements.is_empty(),
             Value::Record(fields) => !fields.is_empty(),
         })
-        .map(|value| {
-            (0..path.len())
-                .filter_map(|end| sources.resolve(&path[..end]))
-                .any(|ancestor| ancestor == value)
-        })
+        .map(|_| in_cycle)
 }
 
 /// Writes the selection's editor text through to its location after

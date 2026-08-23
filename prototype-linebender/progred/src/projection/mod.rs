@@ -2441,7 +2441,7 @@ fn prepare_present_value<
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
-    let layout = present_layout(cx, projection, path, value, hooks);
+    let layout = present_layout(cx, projection, path, ancestors, value, hooks);
     let inner = prepare(
         cx,
         projection,
@@ -2504,10 +2504,18 @@ fn present_layout<C: 'static>(
     cx: &Cx,
     projection: Option<&Projection<C>>,
     path: &[Step],
+    ancestors: &HashSet<CellId>,
     value: &Value,
     hooks: &Hooks<C>,
 ) -> progred_display::Layout<C, Hover> {
-    if crate::selection::collapse_default(&cx.sources, path)
+    // Traversal has already accumulated the cells crossed by Follow
+    // edges. A repeated cell is the graph cycle; re-resolving this
+    // path and all its prefixes here made every frame walk from the
+    // root once per projected value.
+    let in_cycle = value
+        .as_cell()
+        .is_some_and(|cell| ancestors.contains(&cell));
+    if crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
         .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
         && let Some(collapsed) = structure::collapsed_layout(cx, path, value, hooks)
     {
