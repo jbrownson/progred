@@ -88,38 +88,27 @@ pub struct ProjectionTarget<World, Hover> {
     pub hover: Hover,
 }
 
-pub struct ProjectionTargets<World, Hover> {
-    at: Rc<dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>>,
+/// A borrowed resolver for the current projection target and relative
+/// targets beneath it. Resolving owns the returned interaction data;
+/// merely trying a partial projection allocates nothing.
+#[derive(Clone, Copy)]
+pub struct ProjectionTargets<'a, World, Hover> {
+    at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>,
 }
 
-impl<World, Hover> Clone for ProjectionTargets<World, Hover> {
-    fn clone(&self) -> Self {
-        Self {
-            at: self.at.clone(),
-        }
-    }
-}
-
-impl<World, Hover> ProjectionTargets<World, Hover> {
+impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
     pub fn new(
-        at: impl Fn(Vec<Step>) -> ProjectionTarget<World, Hover> + 'static,
+        at: &'a dyn Fn(Vec<Step>) -> ProjectionTarget<World, Hover>,
     ) -> Self {
-        Self { at: Rc::new(at) }
+        Self { at }
     }
 
     pub fn at(&self, steps: impl Into<Vec<Step>>) -> ProjectionTarget<World, Hover> {
         (self.at)(steps.into())
     }
-}
 
-impl<World: 'static, Hover: Clone + 'static> ProjectionTargets<World, Hover> {
-    /// A host with no relative locations may map every request back
-    /// to the current target.
-    pub fn fixed(select: ActionHandler<World>, hover: Hover) -> Self {
-        Self::new(move |_| ProjectionTarget {
-            select: select.clone(),
-            hover: hover.clone(),
-        })
+    pub fn current(&self) -> ProjectionTarget<World, Hover> {
+        (self.at)(Vec::new())
     }
 }
 
@@ -395,11 +384,10 @@ pub struct ProjectionInput<'a, World, Hover> {
     pub selection: Option<&'a Value>,
     /// This path's annotation record (fold state and whatever joins it).
     pub state: Option<&'a Value>,
-    pub select: ActionHandler<World>,
-    pub hover: Hover,
-    /// Derive an interaction target below this value without
-    /// projecting that descendant or exposing the host's full path.
-    pub targets: ProjectionTargets<World, Hover>,
+    /// Derive this value's interaction target, or one below it,
+    /// without exposing the host's full path. The host work is lazy:
+    /// a declining projection need never construct either target.
+    pub targets: ProjectionTargets<'a, World, Hover>,
 }
 
 /// A partial borrows the shared projection input. Ordered composition

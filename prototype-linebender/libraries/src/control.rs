@@ -536,7 +536,8 @@ fn quote_marker<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     (input.value.as_cell()? == vocabulary::QUOTE).then(|| {
-        activatable(dim("\""), input.hover.clone(), input.select.clone())
+        let target = input.targets.current();
+        activatable(dim("\""), target.hover, target.select)
     })
 }
 
@@ -619,35 +620,37 @@ mod tests {
         }
     }
 
+    fn unit_target(_: Vec<Step>) -> progred_display::ProjectionTarget<(), ()> {
+        progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_| false),
+            hover: (),
+        }
+    }
+
+    fn relative_target(steps: Vec<Step>) -> progred_display::ProjectionTarget<(), Vec<Step>> {
+        progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_| false),
+            hover: steps,
+        }
+    }
+
     fn projection_input(value: &Value) -> ProjectionInput<'_, (), ()> {
-        let select = std::rc::Rc::new(|_: &mut ()| false);
         ProjectionInput {
             env: &NoEval,
             value,
             selection: None,
             state: None,
-            select: select.clone(),
-            hover: (),
-            targets: progred_display::ProjectionTargets::fixed(select, ()),
+            targets: progred_display::ProjectionTargets::new(&unit_target),
         }
     }
 
     fn relative_projection_input(value: &Value) -> ProjectionInput<'_, (), Vec<Step>> {
-        let select = std::rc::Rc::new(|_: &mut ()| false);
-        let target_select = select.clone();
         ProjectionInput {
             env: &NoEval,
             value,
             selection: None,
             state: None,
-            select,
-            hover: Vec::new(),
-            targets: progred_display::ProjectionTargets::new(move |steps| {
-                progred_display::ProjectionTarget {
-                    select: target_select.clone(),
-                    hover: steps,
-                }
-            }),
+            targets: progred_display::ProjectionTargets::new(&relative_target),
         }
     }
 

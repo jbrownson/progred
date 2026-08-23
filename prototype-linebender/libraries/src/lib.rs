@@ -146,15 +146,16 @@ mod tests {
                 .projections
                 .iter()
                 .map(|projection| {
-                    let select = Rc::new(|_: &mut ()| false);
+                    let target = |_| progred_display::ProjectionTarget {
+                        select: Rc::new(|_: &mut ()| false),
+                        hover: (),
+                    };
                     projection(&ProjectionInput {
                         env: &NoEval,
                         value: &value,
                         selection: None,
                         state: None,
-                        select: select.clone(),
-                        hover: (),
-                        targets: progred_display::ProjectionTargets::fixed(select, ()),
+                        targets: progred_display::ProjectionTargets::new(&target),
                     })
                     .and_then(|layout| match layout {
                         Layout::Leaf(Leaf::Text { text, .. }) => Some(text),

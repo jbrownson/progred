@@ -11,9 +11,9 @@
 use crate::{Library, color, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
-    ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, RowAlignment, alternatives,
-    block_hover, bracket, leaf, on_activate, on_event, on_hover, overlay as layout_overlay,
-    pickable, slot,
+    ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment,
+    alternatives, block_hover, bracket, leaf, on_activate, on_event, on_hover,
+    overlay as layout_overlay, pickable, slot,
 };
 use puri::{
     Affine, BezPath, Brush, Circle, ColorStop, Command, Drawing, Gradient, Leaf, Line, Point, Rect,
@@ -447,13 +447,23 @@ pub fn decode<World, Hover: Clone>(
     select: &ActionHandler<World>,
     hover: &Hover,
 ) -> Option<Layout<World, Hover>> {
+    decode_with(value, &|| ProjectionTarget {
+        select: select.clone(),
+        hover: hover.clone(),
+    })
+}
+
+fn decode_with<World, Hover: Clone>(
+    value: &Value,
+    target: &impl Fn() -> ProjectionTarget<World, Hover>,
+) -> Option<Layout<World, Hover>> {
     let fields = value.as_record()?;
     if let Some(content) = fields.get(&vocabulary::ROW) {
         let content = content.as_record()?;
         return Some(Layout::Row {
             alignment: RowAlignment::Baseline,
             gap: read_number(content.get(&vocabulary::GAP)?)?,
-            children: children(content.get(&vocabulary::CHILDREN)?, select, hover)?,
+            children: children(content.get(&vocabulary::CHILDREN)?, target)?,
         });
     }
     if let Some(content) = fields.get(&vocabulary::COL) {
@@ -463,11 +473,11 @@ pub fn decode<World, Hover: Clone>(
         return Some(Layout::Col {
             baseline: baseline as usize,
             gap: read_number(content.get(&vocabulary::GAP)?)?,
-            children: children(content.get(&vocabulary::CHILDREN)?, select, hover)?,
+            children: children(content.get(&vocabulary::CHILDREN)?, target)?,
         });
     }
     if let Some(content) = fields.get(&vocabulary::OVERLAY) {
-        return Some(layout_overlay(children(content, select, hover)?));
+        return Some(layout_overlay(children(content, target)?));
     }
     if let Some(content) = fields.get(&vocabulary::PAD) {
         let content = content.as_record()?;
@@ -476,7 +486,7 @@ pub fn decode<World, Hover: Clone>(
             top: read_number(content.get(&vocabulary::TOP)?)?,
             right: read_number(content.get(&vocabulary::RIGHT)?)?,
             bottom: read_number(content.get(&vocabulary::BOTTOM)?)?,
-            child: Box::new(decode(content.get(&vocabulary::CHILD)?, select, hover)?),
+            child: Box::new(decode_with(content.get(&vocabulary::CHILD)?, target)?),
         });
     }
     if let Some(content) = fields.get(&vocabulary::BRACKET) {
@@ -489,11 +499,11 @@ pub fn decode<World, Hover: Clone>(
         };
         return Some(bracket(
             delim,
-            decode(content.get(&vocabulary::CHILD)?, select, hover)?,
+            decode_with(content.get(&vocabulary::CHILD)?, target)?,
         ));
     }
     if let Some(content) = fields.get(&vocabulary::ALTERNATIVES) {
-        return Some(alternatives(children(content, select, hover)?));
+        return Some(alternatives(children(content, target)?));
     }
     if let Some(content) = fields.get(&vocabulary::DESCEND) {
         let step = read_step(content.as_record()?.get(&vocabulary::STEP)?)?;
@@ -572,30 +582,37 @@ pub fn decode<World, Hover: Clone>(
         return Some(slot());
     }
     if let Some(content) = fields.get(&vocabulary::SELECTABLE) {
+        let child = decode_with(content, target)?;
+        let interaction = target();
         return Some(on_activate(
-            decode(content, select, hover)?,
-            hover.clone(),
-            select.clone(),
+            child,
+            interaction.hover,
+            interaction.select,
         ));
     }
     if let Some(content) = fields.get(&vocabulary::PICKABLE) {
         let content = content.as_record()?;
+        let child = decode_with(content.get(&vocabulary::CHILD)?, target)?;
+        let interaction = target();
         return Some(pickable(
-            decode(content.get(&vocabulary::CHILD)?, select, hover)?,
-            hover.clone(),
+            child,
+            interaction.hover,
             content.get(&vocabulary::VALUE)?.clone(),
         ));
     }
     if let Some(content) = fields.get(&vocabulary::HOVERABLE) {
-        return Some(on_hover(decode(content, select, hover)?, hover.clone()));
+        return Some(on_hover(
+            decode_with(content, target)?,
+            target().hover,
+        ));
     }
     if let Some(content) = fields.get(&vocabulary::HOVER_BLOCK) {
-        return Some(block_hover(decode(content, select, hover)?));
+        return Some(block_hover(decode_with(content, target)?));
     }
     if let Some(content) = fields.get(&vocabulary::ON_EVENT) {
         let content = content.as_record()?;
         return Some(on_event(
-            decode(content.get(&vocabulary::CHILD)?, select, hover)?,
+            decode_with(content.get(&vocabulary::CHILD)?, target)?,
             content.get(&vocabulary::HANDLER)?.clone(),
         ));
     }
@@ -604,12 +621,11 @@ pub fn decode<World, Hover: Clone>(
 
 fn children<World, Hover: Clone>(
     list: &Value,
-    select: &ActionHandler<World>,
-    hover: &Hover,
+    target: &impl Fn() -> ProjectionTarget<World, Hover>,
 ) -> Option<Vec<Layout<World, Hover>>> {
     list.as_list()?
         .values()
-        .map(|child| decode(child, select, hover))
+        .map(|child| decode_with(child, target))
         .collect()
 }
 
@@ -837,7 +853,7 @@ fn read_step(value: &Value) -> Option<Step> {
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    decode(input.value, &input.select, &input.hover)
+    decode_with(input.value, &|| input.targets.current())
 }
 
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {

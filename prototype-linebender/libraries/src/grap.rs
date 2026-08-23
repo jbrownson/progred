@@ -30,10 +30,11 @@ fn shallow_cell<World, Hover: Clone>(
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value.as_cell()?;
     let (spelling, face) = spelling(input.env, cell);
+    let target = input.targets.current();
     Some(activatable(
         faced(spelling, face),
-        input.hover.clone(),
-        input.select.clone(),
+        target.hover,
+        target.select,
     ))
 }
 
@@ -171,7 +172,8 @@ pub fn lambda_display<World, Hover: Clone>(
         [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
     );
     let body_target = input.targets.at([Step::Key(BODY)]);
-    let lambda = activatable(dim("λ"), input.hover.clone(), input.select.clone());
+    let lambda_target = input.targets.current();
+    let lambda = activatable(dim("λ"), lambda_target.hover, lambda_target.select);
     let arrow = activatable(
         dim("→"),
         body_target.hover,
@@ -197,11 +199,8 @@ pub fn display<World, Hover: Clone>(
     let expression = input.value.as_record()?.get(&GRAP)?;
     let (result, fuel) = input.env.evaluate(expression);
     let expression = shared(at([Step::Key(GRAP)], expression));
-    let shaft = shared(activatable(
-        dim("→"),
-        input.hover.clone(),
-        input.select.clone(),
-    ));
+    let shaft_target = input.targets.current();
+    let shaft = shared(activatable(dim("→"), shaft_target.hover, shaft_target.select));
     let result = shared(transient(&result, fuel));
     Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
@@ -304,16 +303,27 @@ mod tests {
         }
     }
 
+    fn unit_target(_: Vec<Step>) -> progred_display::ProjectionTarget<(), ()> {
+        progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_| false),
+            hover: (),
+        }
+    }
+
+    fn relative_target(steps: Vec<Step>) -> progred_display::ProjectionTarget<(), Vec<Step>> {
+        progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_| false),
+            hover: steps,
+        }
+    }
+
     fn input<'a>(env: &'a dyn Env, value: &'a Value) -> ProjectionInput<'a, (), ()> {
-        let select = std::rc::Rc::new(|_: &mut ()| false);
         ProjectionInput {
             env,
             value,
             selection: None,
             state: None,
-            select: select.clone(),
-            hover: (),
-            targets: progred_display::ProjectionTargets::fixed(select, ()),
+            targets: progred_display::ProjectionTargets::new(&unit_target),
         }
     }
 
@@ -321,21 +331,12 @@ mod tests {
         env: &'a dyn Env,
         value: &'a Value,
     ) -> ProjectionInput<'a, (), Vec<Step>> {
-        let select = std::rc::Rc::new(|_: &mut ()| false);
-        let target_select = select.clone();
         ProjectionInput {
             env,
             value,
             selection: None,
             state: None,
-            select,
-            hover: Vec::new(),
-            targets: progred_display::ProjectionTargets::new(move |steps| {
-                progred_display::ProjectionTarget {
-                    select: target_select.clone(),
-                    hover: steps,
-                }
-            }),
+            targets: progred_display::ProjectionTargets::new(&relative_target),
         }
     }
 

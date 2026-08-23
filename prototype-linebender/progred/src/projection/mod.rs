@@ -91,17 +91,13 @@ impl<World> Projection<World> {
         value: &Value,
         selection: Option<&Value>,
         state: Option<&Value>,
-        select: progred_display::ActionHandler<World>,
-        hover: Hover,
-        targets: progred_display::ProjectionTargets<World, Hover>,
+        targets: progred_display::ProjectionTargets<'_, World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
         let input = progred_display::ProjectionInput {
             env,
             value,
             selection,
             state,
-            select,
-            hover,
             targets,
         };
         self.partials
@@ -1661,24 +1657,21 @@ fn select_handler<C: 'static>(path: Path, hooks: &Hooks<C>) -> progred_display::
     })
 }
 
-fn projection_targets<C: 'static>(
+fn projection_target<C: 'static>(
     path: &[Step],
     hooks: &Hooks<C>,
-) -> progred_display::ProjectionTargets<C, Hover> {
-    let base = path.to_vec();
+    steps: Vec<Step>,
+) -> progred_display::ProjectionTarget<C, Hover> {
+    let path = path.iter().cloned().chain(steps).collect::<Path>();
+    let selected = path.clone();
     let select = hooks.select.clone();
-    progred_display::ProjectionTargets::new(move |steps| {
-        let path = base.iter().cloned().chain(steps).collect::<Path>();
-        let selected = path.clone();
-        let select = select.clone();
-        progred_display::ProjectionTarget {
-            select: Rc::new(move |world| {
-                select(world, selected.clone());
-                true
-            }),
-            hover: Hover::Value(path),
-        }
-    })
+    progred_display::ProjectionTarget {
+        select: Rc::new(move |world| {
+            select(world, selected.clone());
+            true
+        }),
+        hover: Hover::Value(path),
+    }
 }
 
 impl Cx<'_> {
@@ -2529,17 +2522,13 @@ fn present_layout<C: 'static>(
                 .filter(|current| current.path() == path)
                 .map(Selection::payload);
             let state = cx.annotations.at(path);
-            let select = select_handler(path.to_vec(), hooks);
-            let hover = Hover::Value(path.to_vec());
-            let targets = projection_targets(path, hooks);
+            let target = |steps| projection_target(path, hooks, steps);
             projection.apply(
                 &ProjectEnv { cx },
                 value,
                 selection,
                 state,
-                select,
-                hover,
-                targets,
+                progred_display::ProjectionTargets::new(&target),
             )
         })
         .unwrap_or_else(|| structure::of(cx, path, value, hooks));

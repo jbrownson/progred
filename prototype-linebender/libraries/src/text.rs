@@ -116,15 +116,16 @@ mod tests {
 
     #[test]
     fn display_is_an_editable_line() {
-        let select = std::rc::Rc::new(|_: &mut ()| false);
+        let target = |_| progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_| false),
+            hover: (),
+        };
         let display = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &value("hi"),
             selection: None,
             state: None,
-            select: select.clone(),
-            hover: (),
-            targets: progred_display::ProjectionTargets::fixed(select, ()),
+            targets: progred_display::ProjectionTargets::new(&target),
         })
         .expect("text projection");
         let progred_display::Layout::LineEdit(line) = display else {

@@ -72,7 +72,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
 mod tests {
     use super::*;
     use gid::{CellId, Value};
-    use progred_display::{ActionHandler, Env, ProjectionTargets};
+    use progred_display::{Env, ProjectionTargets};
     use std::rc::Rc;
 
     const LEFT_VALUE: CellId = CellId::from_u128(1);
@@ -87,15 +87,16 @@ mod tests {
     }
 
     fn projected(value: &Value, env: &dyn Env) -> Option<Layout<(), ()>> {
-        let select: ActionHandler<()> = Rc::new(|_| false);
+        let target = |_| progred_display::ProjectionTarget {
+            select: Rc::new(|_| false),
+            hover: (),
+        };
         display(&ProjectionInput {
             env,
             value,
             selection: None,
             state: None,
-            select: select.clone(),
-            hover: (),
-            targets: ProjectionTargets::fixed(select, ()),
+            targets: ProjectionTargets::new(&target),
         })
     }
 

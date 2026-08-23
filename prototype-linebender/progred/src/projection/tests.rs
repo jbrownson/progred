@@ -22,7 +22,7 @@ impl puri::edit::TextClipboard for EmptyClipboard {
 }
 
 #[test]
-fn projection_targets_append_relative_steps() {
+fn projection_target_appends_relative_steps() {
     let parent = gid::new_cell_id();
     let field = gid::new_cell_id();
     let hooks = Hooks::<Vec<Path>> {
@@ -36,7 +36,11 @@ fn projection_targets_append_relative_steps() {
         delete: Rc::new(|_| false),
         apply: Rc::new(|_, _, _, _| false),
     };
-    let target = projection_targets(&[Step::Key(parent)], &hooks).at([Step::Key(field)]);
+    let target = projection_target(
+        &[Step::Key(parent)],
+        &hooks,
+        vec![Step::Key(field)],
+    );
     assert_eq!(
         target.hover,
         Hover::Value(vec![Step::Key(parent), Step::Key(field)])
@@ -127,19 +131,20 @@ fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Select
 
     let value = src(doc, library).resolve(&path).expect("selected value");
     let stack = crate::stack::load::<()>();
-    let select = Rc::new(|_: &mut ()| false);
-    let layout = stack
-        .projection
-        .apply(
+    let layout = {
+        let target = |_| progred_display::ProjectionTarget {
+            select: Rc::new(|_: &mut ()| false),
+            hover: Hover::Value(path.clone()),
+        };
+        stack.projection.apply(
             &NoEval,
             value,
             None,
             None,
-            select.clone(),
-            Hover::Value(path.clone()),
-            progred_display::ProjectionTargets::fixed(select, Hover::Value(path.clone())),
+            progred_display::ProjectionTargets::new(&target),
         )
-        .expect("value projection");
+    }
+    .expect("value projection");
     let progred_display::Layout::LineEdit(line) = layout else {
         panic!("value is not line editable")
     };
@@ -1507,6 +1512,7 @@ fn a_projection_defined_as_data_realizes() {
     ) -> Option<progred_display::Layout<(), Hover>> {
         use progred_libraries::layout as data;
         input.value.as_blob()?;
+        let target = input.targets.current();
         data::decode(
             &data::selectable(data::row(
                 4.0,
@@ -1515,8 +1521,8 @@ fn a_projection_defined_as_data_realizes() {
                     data::text_leaf("data", data::vocabulary::DIM_FACE),
                 ],
             )),
-            &input.select,
-            &input.hover,
+            &target.select,
+            &target.hover,
         )
     }
     let doc = Document {
@@ -1581,13 +1587,14 @@ fn a_data_event_realizes_the_apply_hook() {
     ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hover>> {
         use progred_libraries::layout as data;
         input.value.as_blob()?;
+        let target = input.targets.current();
         data::decode(
             &data::on(
                 data::text_leaf("go", data::vocabulary::NAME_FACE),
                 Value::from(data::vocabulary::HANDLER),
             ),
-            &input.select,
-            &input.hover,
+            &target.select,
+            &target.hover,
         )
     }
     let doc = Document {
