@@ -413,7 +413,7 @@ struct Lowered {
     source: Value,
     form: Form,
     fields: Option<OrdMap<CellId, Expression>>,
-    elements: Option<Vec<(gid::Position, Expression)>>,
+    elements: Option<Vec<Expression>>,
 }
 
 #[derive(Clone)]
@@ -554,10 +554,8 @@ impl<'a> Context<'a> {
                 if descend_data {
                     lowered_elements = Some(
                         elements
-                            .iter()
-                            .map(|(position, value)| {
-                                (position.clone(), self.lower_with(value, true))
-                            })
+                            .values()
+                            .map(|value| self.lower_with(value, true))
                             .collect(),
                     );
                 }
@@ -660,7 +658,7 @@ impl<'a> Context<'a> {
         )
     }
 
-    pub fn elements(&self, expression: Expression) -> Option<Vec<(gid::Position, Expression)>> {
+    pub fn elements(&self, expression: Expression) -> Option<Vec<Expression>> {
         self.expressions[expression.0].elements.clone()
     }
 

@@ -74,13 +74,11 @@ fn replace_unquotes(
         ));
     }
     if let Some(elements) = context.elements(expression) {
-        return Ok(Value::List(
+        return Ok(Value::list(
             elements
                 .into_iter()
-                .map(|(position, value)| {
-                    Ok((position, replace_unquotes(value, context, environment)?))
-                })
-                .collect::<Result<_, Halt>>()?,
+                .map(|value| replace_unquotes(value, context, environment))
+                .collect::<Result<Vec<_>, Halt>>()?,
         ));
     }
     let value = context.value(expression).clone();
@@ -166,7 +164,7 @@ fn bindings_foreign(
     let bindings_value = context.eval(bindings, environment)?;
     if let Some(bindings) = context.elements(bindings) {
         let mut environment = environment.clone();
-        for (_, binding) in bindings {
+        for binding in bindings {
             let Some(value) = context.field(binding, vocabulary::VALUE) else {
                 return Ok(Value::from(vocabulary::INVALID_BINDING));
             };
@@ -241,9 +239,9 @@ enum LoweredSelection {
 fn select_lowered(
     context: &Context,
     value: &Value,
-    cases: &[(gid::Position, Expression)],
+    cases: &[Expression],
 ) -> LoweredSelection {
-    for (_, case) in cases {
+    for case in cases {
         let (Some(pattern), Some(expression)) = (
             context.field(*case, vocabulary::PATTERN),
             context.field(*case, grap_runtime::vocabulary::EXPRESSION),
