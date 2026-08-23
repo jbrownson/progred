@@ -335,8 +335,37 @@ fn svg_bench_renders_the_sample_projection() {
 fn iop_tree_projects_through_grap_into_puri_ink() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../iop-tree.gid"))
         .expect("the IoP tree demo parses");
-    let (bench, extent) = place(&doc, None, 1400.0);
-    assert!(extent.width > 500.0);
+    let expression = doc
+        .root
+        .as_ref()
+        .and_then(Value::as_list)
+        .and_then(|root| root.values().next())
+        .expect("the first root item is the scene call");
+    let stack = crate::stack::load::<()>();
+    let sources = Sources {
+        doc: &doc,
+        library: &stack.library,
+    };
+    let fuel = 2_000_000;
+    let start = std::time::Instant::now();
+    let evaluation = grap::evaluate(
+        expression,
+        |cell| sources.value(cell).cloned(),
+        &stack.foreign,
+        fuel,
+    );
+    eprintln!(
+        "tree evaluation: {:.1?}, fuel {}",
+        start.elapsed(),
+        fuel - evaluation.remaining_fuel,
+    );
+    assert!(evaluation.diagnostics.is_empty());
+    let result = Document {
+        root: Some(evaluation.result),
+        cells: doc.cells,
+    };
+    let (bench, extent) = place(&result, None, 1400.0);
+    assert_eq!(extent.width, 500.0);
     assert!(bench.list.0.iter().any(|command| matches!(
         command,
         DrawCmd::Fill {

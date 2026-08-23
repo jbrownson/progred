@@ -5,7 +5,7 @@
 use crate::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
-use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Face, Layout, ProjectionInput, RecordField, activatable, alternatives, at_with_projection, col,
     dim, faced, hug, record, row, shared, transient,
@@ -207,7 +207,7 @@ pub fn display<World, Hover: Clone>(
 
 fn evaluate_foreign(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     calling_environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION) else {
@@ -217,9 +217,9 @@ fn evaluate_foreign(
         return Ok(context.missing_argument(grap_runtime::vocabulary::ENVIRONMENT));
     };
     let environment = context.eval(environment, calling_environment)?;
-    match Environment::try_from(environment) {
-        Ok(environment) => context.eval(expression, &environment),
-        Err(()) => Ok(Value::from(grap_runtime::absent::INVALID_ENVIRONMENT)),
+    match context.environment(&environment) {
+        Some(environment) => context.eval(expression, &environment),
+        None => Ok(Value::from(grap_runtime::absent::INVALID_ENVIRONMENT)),
     }
 }
 

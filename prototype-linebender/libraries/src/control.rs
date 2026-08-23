@@ -7,7 +7,7 @@ use crate::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
 #[cfg(test)]
 use grap_runtime as grap;
-use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Layout, ProjectionInput, activatable, alternatives, at_with_projection, centered_row, col, dim,
     hug, row, shared,
@@ -45,7 +45,7 @@ pub fn functions() -> ForeignFunctions {
 
 fn quote_foreign(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION) else {
@@ -55,18 +55,51 @@ fn quote_foreign(
 }
 
 fn replace_unquotes(
+    expression: Expression,
+    context: &mut Context,
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    if let Some(fields) = context.fields(expression) {
+        if let Some((_, unquote)) = fields
+            .iter()
+            .find(|(field, _)| *field == vocabulary::UNQUOTE)
+        {
+            return context.eval(*unquote, environment);
+        }
+        return Ok(Value::record(
+            fields
+                .into_iter()
+                .map(|(field, value)| Ok((field, replace_unquotes(value, context, environment)?)))
+                .collect::<Result<Vec<_>, Halt>>()?,
+        ));
+    }
+    if let Some(elements) = context.elements(expression) {
+        return Ok(Value::List(
+            elements
+                .into_iter()
+                .map(|(position, value)| {
+                    Ok((position, replace_unquotes(value, context, environment)?))
+                })
+                .collect::<Result<_, Halt>>()?,
+        ));
+    }
+    let value = context.value(expression).clone();
+    replace_unquotes_value(&value, context, environment)
+}
+
+fn replace_unquotes_value(
     value: &Value,
     context: &mut Context,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     match value {
         Value::Record(fields) => match fields.get(&vocabulary::UNQUOTE) {
-            Some(expression) => context.eval(expression, environment),
+            Some(expression) => context.eval_value(expression, environment),
             None => Ok(Value::Record(
                 fields
                     .iter()
                     .map(|(field, value)| {
-                        Ok((*field, replace_unquotes(value, context, environment)?))
+                        Ok((*field, replace_unquotes_value(value, context, environment)?))
                     })
                     .collect::<Result<_, Halt>>()?,
             )),
@@ -77,7 +110,7 @@ fn replace_unquotes(
                 .map(|(position, value)| {
                     Ok((
                         position.clone(),
-                        replace_unquotes(value, context, environment)?,
+                        replace_unquotes_value(value, context, environment)?,
                     ))
                 })
                 .collect::<Result<_, Halt>>()?,
@@ -88,7 +121,7 @@ fn replace_unquotes(
 
 fn match_foreign(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(value) = context.field(call, vocabulary::VALUE) else {
@@ -98,12 +131,22 @@ fn match_foreign(
         return Ok(context.missing_argument(vocabulary::CASES));
     };
     let value = context.eval(value, environment)?;
-    let cases = context.eval(cases, environment)?;
-    match select(&value, &cases) {
+    let cases_value = context.eval(cases, environment)?;
+    if let Some(cases) = context.elements(cases) {
+        return match select_lowered(context, &value, &cases) {
+            LoweredSelection::Expression {
+                expression,
+                bindings,
+            } => context.eval(expression, &environment.extended(bindings)),
+            LoweredSelection::NoMatch => Ok(absent::value()),
+            LoweredSelection::Invalid(cell) => Ok(Value::from(cell)),
+        };
+    }
+    match select(&value, &cases_value) {
         Selection::Expression {
             expression,
             bindings,
-        } => context.eval(expression, &environment.extended(bindings)),
+        } => context.eval_value(expression, &environment.extended(bindings)),
         Selection::NoMatch => Ok(absent::value()),
         Selection::Invalid(cell) => Ok(Value::from(cell)),
     }
@@ -111,7 +154,7 @@ fn match_foreign(
 
 fn bindings_foreign(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
 ) -> Result<Value, Halt> {
     let Some(bindings) = context.field(call, vocabulary::BINDINGS) else {
@@ -120,8 +163,37 @@ fn bindings_foreign(
     let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION) else {
         return Ok(context.missing_argument(grap_runtime::vocabulary::EXPRESSION));
     };
-    let bindings = context.eval(bindings, environment)?;
-    let Some(bindings) = bindings.as_list() else {
+    let bindings_value = context.eval(bindings, environment)?;
+    if let Some(bindings) = context.elements(bindings) {
+        let mut environment = environment.clone();
+        for (_, binding) in bindings {
+            let Some(value) = context.field(binding, vocabulary::VALUE) else {
+                return Ok(Value::from(vocabulary::INVALID_BINDING));
+            };
+            let binder = context.field(binding, vocabulary::BIND);
+            let pattern = context.field(binding, vocabulary::PATTERN);
+            let (binder, pattern) = match (binder, pattern) {
+                (Some(binder), None) => match context.value(binder).as_cell() {
+                    Some(binder) => (Some(binder), None),
+                    None => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+                },
+                (None, Some(pattern)) => (None, Some(context.value(pattern).clone())),
+                _ => return Ok(Value::from(vocabulary::INVALID_BINDING)),
+            };
+            let value = context.eval(value, &environment)?;
+            if let Some(binder) = binder {
+                environment = environment.extended([(binder, value)]);
+            } else if let Some(pattern) = pattern {
+                match destructure(&pattern, &value) {
+                    Ok(Some(bindings)) => environment = environment.extended(bindings),
+                    Ok(None) => return Ok(absent::value()),
+                    Err(InvalidBinder) => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+                }
+            }
+        }
+        return context.eval(expression, &environment);
+    }
+    let Some(bindings) = bindings_value.as_list() else {
         return Ok(Value::from(vocabulary::INVALID_BINDINGS));
     };
     let mut environment = environment.clone();
@@ -143,7 +215,7 @@ fn bindings_foreign(
             (None, Some(pattern)) => (None, Some(pattern)),
             _ => return Ok(Value::from(vocabulary::INVALID_BINDING)),
         };
-        let value = context.eval(value, &environment)?;
+        let value = context.eval_value(value, &environment)?;
         if let Some(binder) = binder {
             environment = environment.extended([(binder, value)]);
         } else if let Some(pattern) = pattern {
@@ -155,6 +227,43 @@ fn bindings_foreign(
         }
     }
     context.eval(expression, &environment)
+}
+
+enum LoweredSelection {
+    Expression {
+        expression: Expression,
+        bindings: BTreeMap<CellId, Value>,
+    },
+    NoMatch,
+    Invalid(CellId),
+}
+
+fn select_lowered(
+    context: &Context,
+    value: &Value,
+    cases: &[(gid::Position, Expression)],
+) -> LoweredSelection {
+    for (_, case) in cases {
+        let (Some(pattern), Some(expression)) = (
+            context.field(*case, vocabulary::PATTERN),
+            context.field(*case, grap_runtime::vocabulary::EXPRESSION),
+        ) else {
+            return LoweredSelection::Invalid(vocabulary::INVALID_CASE);
+        };
+        match destructure(context.value(pattern), value) {
+            Ok(Some(bindings)) => {
+                return LoweredSelection::Expression {
+                    expression,
+                    bindings,
+                };
+            }
+            Ok(None) => {}
+            Err(InvalidBinder) => {
+                return LoweredSelection::Invalid(vocabulary::INVALID_BINDER);
+            }
+        }
+    }
+    LoweredSelection::NoMatch
 }
 
 enum Selection<'a> {
@@ -272,10 +381,7 @@ pub fn match_display<World, Hover: Clone>(
     let head = row(
         4.0,
         [
-            crate::grap::shallow_at(
-                [Step::Key(grap_runtime::vocabulary::FUNCTION)],
-                function,
-            ),
+            crate::grap::shallow_at([Step::Key(grap_runtime::vocabulary::FUNCTION)], function),
             crate::grap::at([Step::Key(vocabulary::VALUE)], subject),
         ],
     );
@@ -298,11 +404,7 @@ fn case_display<World, Hover: Clone>(
     let expression_target = input
         .targets
         .at([Step::Key(grap_runtime::vocabulary::EXPRESSION)]);
-    let arrow = activatable(
-        dim("→"),
-        expression_target.hover,
-        expression_target.select,
-    );
+    let arrow = activatable(dim("→"), expression_target.hover, expression_target.select);
     Some(hug(
         centered_row(
             6.0,
@@ -420,19 +522,9 @@ fn binding_display<World, Hover: Clone>(
     };
     let value = fields.get(&vocabulary::VALUE)?;
     let value_target = input.targets.at([Step::Key(vocabulary::VALUE)]);
-    let equals = activatable(
-        dim("="),
-        value_target.hover,
-        value_target.select,
-    );
+    let equals = activatable(dim("="), value_target.hover, value_target.select);
     Some(hug(
-        centered_row(
-            6.0,
-            [
-                left,
-                equals,
-            ],
-        ),
+        centered_row(6.0, [left, equals]),
         crate::grap::at([Step::Key(vocabulary::VALUE)], value),
         6.0,
         20.0,
@@ -442,9 +534,8 @@ fn binding_display<World, Hover: Clone>(
 fn quote_marker<World, Hover: Clone>(
     input: ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    (input.value.as_cell()? == vocabulary::QUOTE).then(|| {
-        activatable(dim("\""), input.hover, input.select)
-    })
+    (input.value.as_cell()? == vocabulary::QUOTE)
+        .then(|| activatable(dim("\""), input.hover, input.select))
 }
 
 /// Quote reads as a small structural marker followed by its template,
@@ -574,10 +665,7 @@ mod tests {
     }
 
     fn binding_clause(pattern: Value, value: Value) -> Value {
-        Value::record([
-            (vocabulary::PATTERN, pattern),
-            (vocabulary::VALUE, value),
-        ])
+        Value::record([(vocabulary::PATTERN, pattern), (vocabulary::VALUE, value)])
     }
 
     fn bind_clause(binder: CellId, value: Value) -> Value {
@@ -601,10 +689,7 @@ mod tests {
         )
     }
 
-    fn match_call(
-        value: Value,
-        cases: impl IntoIterator<Item = Value>,
-    ) -> Value {
+    fn match_call(value: Value, cases: impl IntoIterator<Item = Value>) -> Value {
         grap::call(
             Value::from(vocabulary::MATCH),
             [
@@ -1064,10 +1149,7 @@ mod tests {
             Value::from(vocabulary::INVALID_CASES)
         );
 
-        let invalid_case = match_call(
-            blob("subject"),
-            [blob("not a case")],
-        );
+        let invalid_case = match_call(blob("subject"), [blob("not a case")]);
         assert_eq!(
             evaluate(&invalid_case).result,
             Value::from(vocabulary::INVALID_CASE)
@@ -1100,11 +1182,7 @@ mod tests {
             Value::from(vocabulary::INVALID_BINDINGS)
         );
 
-        let invalid_binding = bindings_call(
-            vocabulary::LET,
-            [blob("not a binding")],
-            blob("body"),
-        );
+        let invalid_binding = bindings_call(vocabulary::LET, [blob("not a binding")], blob("body"));
         assert_eq!(
             evaluate(&invalid_binding).result,
             Value::from(vocabulary::INVALID_BINDING)

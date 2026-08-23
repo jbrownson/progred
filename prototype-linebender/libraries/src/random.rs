@@ -4,7 +4,7 @@
 
 use crate::{Library, absent, f64, name};
 use gid::{Cells, Value};
-use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -33,7 +33,7 @@ fn read_state(value: &Value) -> Option<u64> {
 
 fn evaluated(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<Option<Value>, Halt> {

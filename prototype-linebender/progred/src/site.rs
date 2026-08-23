@@ -53,7 +53,7 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
         let call = |
             function,
             context: &mut grap::Context<'_>,
-            call: &Value,
+            call: grap::Expression,
             environment: &grap::Environment,
         | {
             event_foreign(function, context, call, environment, &staged)
@@ -108,7 +108,7 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
 fn event_foreign(
     function: gid::CellId,
     context: &mut grap::Context,
-    call: &Value,
+    call: grap::Expression,
     environment: &grap::Environment,
     staged: &RefCell<PendingChanges>,
 ) -> Result<Value, grap::Halt> {

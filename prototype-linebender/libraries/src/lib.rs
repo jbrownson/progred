@@ -61,7 +61,7 @@ impl<World, Hover> Library<World, Hover> {
 mod tests {
     use super::*;
     use gid::{CellId, Value};
-    use grap_runtime::{Environment, ForeignFunction, Halt};
+    use grap_runtime::{Environment, Expression, ForeignFunction, Halt};
     use progred_display::{Env, Layout, ProjectionInput, text as text_layout};
     use puri::Leaf;
     use std::rc::Rc;
@@ -71,7 +71,7 @@ mod tests {
 
     fn left_function(
         _: &mut grap_runtime::Context,
-        _: &Value,
+        _: Expression,
         _: &Environment,
     ) -> Result<Value, Halt> {
         Ok(Value::from(b"left".to_vec()))
@@ -79,7 +79,7 @@ mod tests {
 
     fn right_function(
         _: &mut grap_runtime::Context,
-        _: &Value,
+        _: Expression,
         _: &Environment,
     ) -> Result<Value, Halt> {
         Ok(Value::from(b"right".to_vec()))

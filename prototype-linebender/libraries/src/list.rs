@@ -4,7 +4,7 @@
 
 use crate::{Library, absent, f64, name};
 use gid::{Cells, Value};
-use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -30,7 +30,7 @@ pub mod vocabulary {
 
 fn evaluated(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
     field: gid::CellId,
 ) -> Result<Option<Value>, Halt> {
@@ -135,15 +135,14 @@ fn functions() -> ForeignFunctions {
                 else {
                     return Ok(context.missing_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = evaluated(context, call, environment, vocabulary::STEP)? else {
+                let Some(step) = context.field(call, vocabulary::STEP) else {
                     return Ok(context.missing_argument(vocabulary::STEP));
                 };
+                let step = context.prepare_callable(step, environment)?;
                 let mut items = Vec::new();
                 loop {
-                    let result = context.eval(
-                        &grap_runtime::call(step.clone(), [(vocabulary::STATE, state.clone())]),
-                        environment,
-                    )?;
+                    let result =
+                        context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
                     if absent::is_absent(&result) {
                         break Ok(Value::record([
                             (vocabulary::LIST, Value::list(items)),
@@ -175,22 +174,20 @@ fn functions() -> ForeignFunctions {
                 else {
                     return Ok(context.missing_argument(vocabulary::INITIAL));
                 };
-                let Some(step) = evaluated(context, call, environment, vocabulary::STEP)? else {
+                let Some(step) = context.field(call, vocabulary::STEP) else {
                     return Ok(context.missing_argument(vocabulary::STEP));
                 };
+                let step = context.prepare_callable(step, environment)?;
                 let Some(list) = list.as_list() else {
                     return Ok(Value::from(vocabulary::NOT_LIST));
                 };
                 for item in list.values() {
-                    accumulator = context.eval(
-                        &grap_runtime::call(
-                            step.clone(),
-                            [
-                                (vocabulary::ACCUMULATOR, accumulator),
-                                (vocabulary::ITEM, item.clone()),
-                            ],
-                        ),
-                        environment,
+                    accumulator = context.call_prepared(
+                        &step,
+                        [
+                            (vocabulary::ACCUMULATOR, accumulator),
+                            (vocabulary::ITEM, item.clone()),
+                        ],
                     )?;
                 }
                 Ok(accumulator)

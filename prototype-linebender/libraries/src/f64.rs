@@ -6,7 +6,7 @@ use crate::{Library, absent, line_edit, logic, name};
 use gid::{Cells, Value};
 #[cfg(test)]
 use grap_runtime as grap;
-use grap_runtime::{Context, Environment, ForeignFunction, ForeignFunctions, Halt};
+use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{Layout, ProjectionInput, overlay_value};
 
 pub mod vocabulary {
@@ -140,7 +140,7 @@ pub fn functions() -> ForeignFunctions {
 
 fn binary(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
     operation: impl FnOnce(f64, f64) -> f64,
 ) -> Result<Value, Halt> {
@@ -151,7 +151,7 @@ fn binary(
 
 fn binary_value(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
     operation: impl FnOnce(f64, f64) -> Value,
 ) -> Result<Value, Halt> {
@@ -172,7 +172,7 @@ fn binary_value(
 
 fn unary(
     context: &mut Context,
-    call: &Value,
+    call: Expression,
     environment: &Environment,
     operation: impl FnOnce(f64) -> f64,
 ) -> Result<Value, Halt> {
