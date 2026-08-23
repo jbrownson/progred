@@ -48,7 +48,7 @@ pub fn functions() -> ForeignFunctions {
 }
 
 pub fn display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let content = read(input.value)?;
     Some(line_edit::layout(
@@ -117,7 +117,7 @@ mod tests {
     #[test]
     fn display_is_an_editable_line() {
         let select = std::rc::Rc::new(|_: &mut ()| false);
-        let display = display::<(), ()>(ProjectionInput {
+        let display = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &value("hi"),
             selection: None,

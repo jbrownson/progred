@@ -402,8 +402,13 @@ pub struct ProjectionInput<'a, World, Hover> {
     pub targets: ProjectionTargets<World, Hover>,
 }
 
+/// A partial borrows the shared projection input. Ordered composition
+/// can therefore try declining projections without cloning interaction
+/// targets that only the successful projection retains.
 pub type Partial<World, Hover> =
-    for<'a> fn(ProjectionInput<'a, World, Hover>) -> Option<Layout<World, Hover>>;
+    for<'a, 'input> fn(
+        &'input ProjectionInput<'a, World, Hover>,
+    ) -> Option<Layout<World, Hover>>;
 
 pub fn text<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
     faced(text, Face::Name)

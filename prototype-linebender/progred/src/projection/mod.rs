@@ -95,17 +95,18 @@ impl<World> Projection<World> {
         hover: Hover,
         targets: progred_display::ProjectionTargets<World, Hover>,
     ) -> Option<progred_display::Layout<World, Hover>> {
-        self.partials.iter().find_map(|partial| {
-            partial(progred_display::ProjectionInput {
-                env,
-                value,
-                selection,
-                state,
-                select: select.clone(),
-                hover: hover.clone(),
-                targets: targets.clone(),
-            })
-        })
+        let input = progred_display::ProjectionInput {
+            env,
+            value,
+            selection,
+            state,
+            select,
+            hover,
+            targets,
+        };
+        self.partials
+            .iter()
+            .find_map(|partial| partial(&input))
     }
 
 }

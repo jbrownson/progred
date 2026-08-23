@@ -26,14 +26,14 @@ fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
 /// A cell as a reference, not as an invitation to inspect its value.
 /// Contextual projections use this for binders and callable names.
 fn shallow_cell<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let cell = input.value.as_cell()?;
     let (spelling, face) = spelling(input.env, cell);
     Some(activatable(
         faced(spelling, face),
-        input.hover,
-        input.select,
+        input.hover.clone(),
+        input.select.clone(),
     ))
 }
 
@@ -116,7 +116,7 @@ fn standard_field_order(
 /// reference when it is a cell; arguments retain Grap's contextual
 /// projection.
 pub fn call_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     let function = fields.get(&FUNCTION)?;
@@ -155,7 +155,7 @@ pub fn call_display<World, Hover: Clone>(
 /// A stored lambda exposes its parameter references shallowly and
 /// continues Grap's contextual projection through its body.
 pub fn lambda_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     let params = fields.get(&PARAMS)?;
@@ -171,7 +171,7 @@ pub fn lambda_display<World, Hover: Clone>(
         [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
     );
     let body_target = input.targets.at([Step::Key(BODY)]);
-    let lambda = activatable(dim("λ"), input.hover, input.select);
+    let lambda = activatable(dim("λ"), input.hover.clone(), input.select.clone());
     let arrow = activatable(
         dim("→"),
         body_target.hover,
@@ -184,7 +184,7 @@ pub fn lambda_display<World, Hover: Clone>(
 /// Foreignness is an evaluator implementation detail. In source, an
 /// FFI callable projects exactly like the cell it names.
 pub fn ffi_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let ffi = input.value.as_record()?.get(&FFI)?;
     ffi.as_cell()?;
@@ -192,12 +192,16 @@ pub fn ffi_display<World, Hover: Clone>(
 }
 
 pub fn display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let expression = input.value.as_record()?.get(&GRAP)?;
     let (result, fuel) = input.env.evaluate(expression);
     let expression = shared(at([Step::Key(GRAP)], expression));
-    let shaft = shared(activatable(dim("→"), input.hover, input.select));
+    let shaft = shared(activatable(
+        dim("→"),
+        input.hover.clone(),
+        input.select.clone(),
+    ));
     let result = shared(transient(&result, fuel));
     Some(alternatives([
         row(6.0, [expression.clone(), shaft.clone(), result.clone()]),
@@ -336,7 +340,7 @@ mod tests {
     }
 
     fn projected(env: &dyn Env, value: &Value) -> Option<Layout<(), ()>> {
-        display(input(env, value))
+        display(&input(env, value))
     }
 
     fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
@@ -450,7 +454,7 @@ mod tests {
     fn a_call_projects_its_function_cell_shallowly() {
         let function = new_cell_id();
         let argument = new_cell_id();
-        let layout = call_display(input(
+        let layout = call_display(&input(
             &env(),
             &grap_runtime::call(
                 Value::from(function),
@@ -484,7 +488,7 @@ mod tests {
             Value::from(function),
             [(argument, Value::from(vec![1]))],
         );
-        let layout = call_display(relative_input(&env(), &call)).unwrap();
+        let layout = call_display(&relative_input(&env(), &call)).unwrap();
         let Layout::Alternatives(call_options) = layout else {
             panic!("call has responsive forms");
         };
@@ -561,8 +565,7 @@ mod tests {
                 (FIRST_PARAMETER, Value::from(vec![3])),
             ],
         );
-        let layout = call_display(input(&env, &call))
-        .unwrap();
+        let layout = call_display(&input(&env, &call)).unwrap();
 
         assert_eq!(
             argument_order(&layout),
@@ -589,7 +592,7 @@ mod tests {
                 (FIRST_PARAMETER, Value::from(vec![2])),
             ],
         );
-        let layout = call_display(input(&env(), &call)).unwrap();
+        let layout = call_display(&input(&env(), &call)).unwrap();
 
         assert_eq!(
             argument_order(&layout),
@@ -601,7 +604,7 @@ mod tests {
     fn a_lambda_targets_its_syntax_and_projects_its_body_as_grap() {
         let parameter = new_cell_id();
         let definition = grap_runtime::lambda([parameter], Value::from(parameter));
-        let layout = lambda_display(relative_input(&env(), &definition)).unwrap();
+        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("lambda has responsive forms");
         };

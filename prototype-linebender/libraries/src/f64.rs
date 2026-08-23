@@ -48,7 +48,7 @@ pub fn read(value: &Value) -> Option<f64> {
 }
 
 pub fn display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let content = read(input.value)?.to_string();
     Some(line_edit::layout(

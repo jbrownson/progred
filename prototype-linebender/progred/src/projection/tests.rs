@@ -1403,7 +1403,7 @@ fn partials_receive_selection_and_annotations_positionally() {
     // positionally: the payload only at the selected path, the
     // annotation record only at its own.
     fn probe(
-        input: progred_display::ProjectionInput<'_, (), Hover>,
+        input: &progred_display::ProjectionInput<'_, (), Hover>,
     ) -> Option<progred_display::Layout<(), Hover>> {
         input.value.as_blob()?;
         Some(progred_display::dim(
@@ -1503,7 +1503,7 @@ fn a_projection_defined_as_data_realizes() {
     // intents and realized through the ordinary pipeline — the same
     // boundary a Grap-backed library projection can use.
     fn probe(
-        input: progred_display::ProjectionInput<'_, (), Hover>,
+        input: &progred_display::ProjectionInput<'_, (), Hover>,
     ) -> Option<progred_display::Layout<(), Hover>> {
         use progred_libraries::layout as data;
         input.value.as_blob()?;
@@ -1577,7 +1577,7 @@ fn a_projection_defined_as_data_realizes() {
 #[test]
 fn a_data_event_realizes_the_apply_hook() {
     fn probe(
-        input: progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
+        input: &progred_display::ProjectionInput<'_, Vec<(Path, Value, Value)>, Hover>,
     ) -> Option<progred_display::Layout<Vec<(Path, Value, Value)>, Hover>> {
         use progred_libraries::layout as data;
         input.value.as_blob()?;

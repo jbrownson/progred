@@ -371,7 +371,7 @@ fn matches_pattern(
 /// Match is a control form in projection even though evaluation sees
 /// an ordinary call to the Rust implementation.
 pub fn match_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
@@ -399,7 +399,7 @@ pub fn match_display<World, Hover: Clone>(
 }
 
 fn case_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let (pattern, expression) = case_parts(input.value)?;
     let expression_target = input
@@ -441,7 +441,7 @@ enum BindingForm {
 /// arrangements. Keeping the function field visible makes switching
 /// between the prefix and postfix forms an ordinary graph edit.
 pub fn bindings_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
@@ -507,7 +507,7 @@ pub fn bindings_display<World, Hover: Clone>(
 }
 
 fn binding_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     let left = match (
@@ -533,17 +533,18 @@ fn binding_display<World, Hover: Clone>(
 }
 
 fn quote_marker<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    (input.value.as_cell()? == vocabulary::QUOTE)
-        .then(|| activatable(dim("\""), input.hover, input.select))
+    (input.value.as_cell()? == vocabulary::QUOTE).then(|| {
+        activatable(dim("\""), input.hover.clone(), input.select.clone())
+    })
 }
 
 /// Quote reads as a small structural marker followed by its template,
 /// rather than as a generic call with a redundant `expression` label.
 /// Decorated calls fall through so this compact form never hides data.
 pub fn quote_display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     (fields.len() == 2).then_some(())?;
@@ -724,7 +725,7 @@ mod tests {
     fn quote_projects_a_selectable_marker_and_its_expression() {
         let expression = blob("body");
         let quoted = quote_call(expression.clone());
-        let layout = quote_display(projection_input(&quoted)).unwrap();
+        let layout = quote_display(&projection_input(&quoted)).unwrap();
         let Layout::Row { children, .. } = &layout else {
             panic!("quote is an inline prefix");
         };
@@ -748,7 +749,7 @@ mod tests {
         assert_eq!(steps, &[Step::Key(grap::vocabulary::EXPRESSION)]);
         assert_eq!(value, &expression);
 
-        let marker = quote_marker(projection_input(&Value::from(vocabulary::QUOTE))).unwrap();
+        let marker = quote_marker(&projection_input(&Value::from(vocabulary::QUOTE))).unwrap();
         let Layout::OnHover { child, .. } = marker else {
             panic!("the marker claims hover");
         };
@@ -775,7 +776,7 @@ mod tests {
                 (extra, blob("visible")),
             ],
         );
-        assert!(quote_display(projection_input(&quote)).is_none());
+        assert!(quote_display(&projection_input(&quote)).is_none());
     }
 
     #[test]
@@ -977,7 +978,7 @@ mod tests {
         let let_call = bindings_call(vocabulary::LET, clauses(), body.clone());
         let where_call = bindings_call(vocabulary::WHERE, clauses(), body.clone());
 
-        let let_layout = bindings_display(relative_projection_input(&let_call)).unwrap();
+        let let_layout = bindings_display(&relative_projection_input(&let_call)).unwrap();
         let Layout::Alternatives(let_options) = let_layout else {
             panic!("let has responsive forms");
         };
@@ -1017,7 +1018,7 @@ mod tests {
         assert_eq!(steps, &[Step::Key(vocabulary::BINDINGS)]);
         assert_eq!(projection.len(), 1);
 
-        let where_layout = bindings_display(relative_projection_input(&where_call)).unwrap();
+        let where_layout = bindings_display(&relative_projection_input(&where_call)).unwrap();
         let Layout::Alternatives(where_options) = where_layout else {
             panic!("where has responsive forms");
         };
@@ -1038,7 +1039,7 @@ mod tests {
     fn direct_binding_is_shallow_and_centered_beside_its_equals() {
         let binder = new_cell_id();
         let binding = bind_clause(binder, blob("value"));
-        let layout = binding_display(relative_projection_input(&binding)).unwrap();
+        let layout = binding_display(&relative_projection_input(&binding)).unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("a binding has responsive forms");
         };
@@ -1072,7 +1073,7 @@ mod tests {
                 case_arm(binding(binder), Value::from(binder)),
             ],
         );
-        let layout = match_display(projection_input(&expression)).unwrap();
+        let layout = match_display(&projection_input(&expression)).unwrap();
         let Layout::Alternatives(options) = layout else {
             panic!("match has responsive forms");
         };
@@ -1095,12 +1096,12 @@ mod tests {
         assert_eq!(steps, &[Step::Key(vocabulary::CASES)]);
         assert_eq!(projection.len(), 1);
 
-        assert!(case_display(relative_projection_input(cases)).is_none());
+        assert!(case_display(&relative_projection_input(cases)).is_none());
         let case = cases
             .as_list()
             .and_then(|cases| cases.values().next())
             .expect("the standard list contains its cases");
-        let case = case_display(relative_projection_input(case)).unwrap();
+        let case = case_display(&relative_projection_input(case)).unwrap();
         let Layout::Alternatives(options) = case else {
             panic!("a case has responsive forms");
         };
@@ -1126,14 +1127,14 @@ mod tests {
     #[test]
     fn non_case_elements_use_the_standard_projection_inside_match() {
         let malformed = match_call(blob("subject"), [blob("not a case")]);
-        assert!(match_display(projection_input(&malformed)).is_some());
+        assert!(match_display(&projection_input(&malformed)).is_some());
         let case = malformed
             .as_record()
             .and_then(|fields| fields.get(&vocabulary::CASES))
             .and_then(Value::as_list)
             .and_then(|cases| cases.values().next())
             .unwrap();
-        assert!(case_display(projection_input(case)).is_none());
+        assert!(case_display(&projection_input(case)).is_none());
     }
 
     #[test]

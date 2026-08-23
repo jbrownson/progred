@@ -835,7 +835,7 @@ fn read_step(value: &Value) -> Option<Step> {
 }
 
 pub fn display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     decode(input.value, &input.select, &input.hover)
 }

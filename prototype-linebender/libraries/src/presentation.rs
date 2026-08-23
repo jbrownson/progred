@@ -14,7 +14,7 @@ pub mod vocabulary {
 }
 
 pub fn display<World, Hover: Clone>(
-    input: ProjectionInput<'_, World, Hover>,
+    input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
     let fields = input.value.as_record()?;
     if let Some(split) = fields.get(&vocabulary::SPLIT) {
@@ -88,7 +88,7 @@ mod tests {
 
     fn projected(value: &Value, env: &dyn Env) -> Option<Layout<(), ()>> {
         let select: ActionHandler<()> = Rc::new(|_| false);
-        display(ProjectionInput {
+        display(&ProjectionInput {
             env,
             value,
             selection: None,

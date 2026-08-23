@@ -85,11 +85,11 @@ mod tests {
         Ok(Value::from(b"right".to_vec()))
     }
 
-    fn left_projection(_: ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
+    fn left_projection(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
         Some(text_layout("left"))
     }
 
-    fn right_projection(_: ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
+    fn right_projection(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
         Some(text_layout("right"))
     }
 
@@ -147,7 +147,7 @@ mod tests {
                 .iter()
                 .map(|projection| {
                     let select = Rc::new(|_: &mut ()| false);
-                    projection(ProjectionInput {
+                    projection(&ProjectionInput {
                         env: &NoEval,
                         value: &value,
                         selection: None,
