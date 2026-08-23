@@ -1458,7 +1458,7 @@ fn realize_hover<C: 'static, Cv: Canvas + 'static>(
 
 /// Claim `hover` and, when it is the resolved hover, wash the box.
 fn light_hover<C: 'static, Cv: Canvas + 'static>(
-    p: &mut placed::Builder<C, Cv>,
+    p: &mut placed::Builder<'_, C, Cv>,
     placement: Placement,
     hover: Hover,
     scale: f64,
@@ -1976,7 +1976,7 @@ fn highlight_rect(scale: f64, rect: Rect) -> RoundedRect {
 /// ink as its footprint. Placement order is precedence: descendants
 /// and overlays contribute later and answer first.
 fn hover_claim<C: 'static, Cv: 'static>(
-    p: &mut placed::Builder<C, Cv>,
+    p: &mut placed::Builder<'_, C, Cv>,
     placement: Placement,
     key: Hover,
 ) {
@@ -1985,7 +1985,7 @@ fn hover_claim<C: 'static, Cv: 'static>(
 
 /// An occluder: takes the pointer and names nothing, so targets
 /// beneath an overlay never light.
-fn hover_block<C: 'static, Cv: 'static>(p: &mut placed::Builder<C, Cv>, placement: Placement) {
+fn hover_block<C: 'static, Cv: 'static>(p: &mut placed::Builder<'_, C, Cv>, placement: Placement) {
     p.occlude(placement);
 }
 
@@ -2189,16 +2189,20 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
             }
         });
     });
-    let marked = measured::around(marked, move |placement, inner| {
-        let mut placed = inner.place();
-        let select = placed.landmark_select.take().unwrap_or(select);
-        placed.descends.push(Descend {
-            path,
-            rect: placement.rect,
-            select,
-        });
-        placed
-    });
+    let marked = measured::around_into(
+        marked,
+        move |placement, inner, placed: &mut Placed<C, Cv>| {
+            let outer_select = placed.landmark_select.take();
+            inner.place_into(placed);
+            let select = placed.landmark_select.take().unwrap_or(select);
+            placed.landmark_select = outer_select;
+            placed.descends.push(Descend {
+                path,
+                rect: placement.rect,
+                select,
+            });
+        },
+    );
     if selected {
         bind_delete_with(delete, marked)
     } else {

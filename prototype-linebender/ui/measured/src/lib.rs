@@ -8,10 +8,11 @@
 //! placement is one pure traversal from settled geometry to the
 //! caller's [`Output`].
 //!
-//! The engine is generic in what placement produces. Leaves yield an
-//! `Out` from their settled [`Placement`]; containers combine children
-//! with [`Output::over`] in placement order, so the later-placed
-//! contribution is the one on top — painted last, asked first.
+//! The engine is generic in what placement produces. Leaves either
+//! yield an `Out` from their settled [`Placement`] or contribute
+//! directly to the frame's accumulator. Containers visit children in
+//! placement order, so the later-placed contribution is the one on top
+//! — painted last, asked first.
 
 use kurbo::{Insets, Point, Rect, Size};
 use uig::Placement;
@@ -50,6 +51,8 @@ pub struct Measured<Out> {
 }
 
 /// A child held back for its wrapper: place it, move it, or drop it.
+/// It may be collected as an isolated output or placed directly into
+/// the frame's existing accumulator.
 pub struct PlaceInner<Out> {
     child: Measured<Out>,
     placement: Placement,
@@ -72,16 +75,24 @@ impl<Out: Output> PlaceInner<Out> {
         place(self.child, placement)
     }
 
+    pub fn place_into(self, out: &mut Out) {
+        place_into(self.child, self.placement, out)
+    }
+
+    pub fn place_at_into(self, placement: Placement, out: &mut Out) {
+        place_into(self.child, placement, out)
+    }
+
     pub fn extent(&self) -> Extent {
         self.child.extent
     }
 }
 
-type PlaceAround<Out> = Box<dyn FnOnce(Placement, PlaceInner<Out>) -> Out>;
-type PlaceLeaf<Out> = Box<dyn FnOnce(Placement) -> Out>;
+type PlaceInto<Out> = Box<dyn FnOnce(Placement, &mut Out)>;
+type PlaceAround<Out> = Box<dyn FnOnce(Placement, PlaceInner<Out>, &mut Out)>;
 
 enum Kind<Out> {
-    Leaf(PlaceLeaf<Out>),
+    Leaf(PlaceInto<Out>),
     Row {
         children: Vec<Measured<Out>>,
         gap: f64,
@@ -104,7 +115,22 @@ enum Kind<Out> {
     },
 }
 
-pub fn leaf<Out>(extent: Extent, place: impl FnOnce(Placement) -> Out + 'static) -> Measured<Out> {
+pub fn leaf<Out: Output>(
+    extent: Extent,
+    place: impl FnOnce(Placement) -> Out + 'static,
+) -> Measured<Out> {
+    leaf_into(extent, move |placement, out| {
+        contribute(out, place(placement))
+    })
+}
+
+/// A leaf interpreted directly into the placement accumulator. This is
+/// the production path for outputs whose algebra is naturally mutable;
+/// [`leaf`] remains useful for small initial encodings in tests.
+pub fn leaf_into<Out>(
+    extent: Extent,
+    place: impl FnOnce(Placement, &mut Out) + 'static,
+) -> Measured<Out> {
     Measured {
         extent,
         kind: Kind::Leaf(Box::new(place)),
@@ -250,6 +276,21 @@ pub fn min_width<Out>(min: f64, child: Measured<Out>) -> Measured<Out> {
 pub fn around<Out>(
     child: Measured<Out>,
     place: impl FnOnce(Placement, PlaceInner<Out>) -> Out + 'static,
+) -> Measured<Out>
+where
+    Out: Output,
+{
+    around_into(child, move |placement, inner, out| {
+        contribute(out, place(placement, inner))
+    })
+}
+
+/// Transparently wrap direct placement. The callback may save and
+/// restore a small piece of accumulator state around `inner.place_into`,
+/// but the child's ordinary contributions flow straight to the frame.
+pub fn around_into<Out>(
+    child: Measured<Out>,
+    place: impl FnOnce(Placement, PlaceInner<Out>, &mut Out) + 'static,
 ) -> Measured<Out> {
     Measured {
         extent: child.extent,
@@ -301,6 +342,30 @@ pub fn after<Out: Output>(
     })
 }
 
+/// Contribute directly before placing `child`, without constructing a
+/// temporary subtree output.
+pub fn before_into<Out: Output>(
+    child: Measured<Out>,
+    place_before: impl FnOnce(Placement, &mut Out) + 'static,
+) -> Measured<Out> {
+    around_into(child, move |placement, inner, out| {
+        place_before(placement, out);
+        inner.place_into(out);
+    })
+}
+
+/// Contribute directly after placing `child`, without constructing a
+/// temporary subtree output.
+pub fn after_into<Out: Output>(
+    child: Measured<Out>,
+    place_after: impl FnOnce(Placement, &mut Out) + 'static,
+) -> Measured<Out> {
+    around_into(child, move |placement, inner, out| {
+        inner.place_into(out);
+        place_after(placement, out);
+    })
+}
+
 /// The historical leading decoration operation, retained as the
 /// rectangle-only spelling of [`before`].
 pub fn decorate<Out: Output>(
@@ -311,16 +376,26 @@ pub fn decorate<Out: Output>(
 }
 
 pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
+    let mut out = Out::empty();
+    place_into(layout, placement, &mut out);
+    out
+}
+
+fn contribute<Out: Output>(out: &mut Out, above: Out) {
+    let base = std::mem::replace(out, Out::empty());
+    *out = base.over(above);
+}
+
+fn place_into<Out: Output>(layout: Measured<Out>, placement: Placement, out: &mut Out) {
     let extent = layout.extent;
     let at = Point::new(placement.rect.x0, placement.rect.y0 + extent.ascent);
     match layout.kind {
-        Kind::Leaf(f) => f(placement),
+        Kind::Leaf(f) => f(placement, out),
         Kind::Row {
             children,
             gap,
             centered,
         } => {
-            let mut out = Out::empty();
             let mut x = at.x;
             let top = at.y - extent.ascent;
             for child in children {
@@ -336,13 +411,11 @@ pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
                     x + child.extent.width,
                     y + child.extent.height(),
                 );
-                out = out.over(place(child, child_placement(placement, rect)));
+                place_into(child, child_placement(placement, rect), out);
                 x += advance;
             }
-            out
         }
         Kind::Col { children, gap } => {
-            let mut out = Out::empty();
             let mut y = at.y - extent.ascent;
             for child in children {
                 let advance = child.extent.height() + gap;
@@ -353,20 +426,21 @@ pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
                     at.x + child.extent.width,
                     child_baseline + child.extent.descent,
                 );
-                out = out.over(place(child, child_placement(placement, rect)));
+                place_into(child, child_placement(placement, rect), out);
                 y += advance;
             }
-            out
         }
-        Kind::Overlay { children } => children.into_iter().fold(Out::empty(), |out, child| {
-            let rect = Rect::new(
-                at.x,
-                at.y - child.extent.ascent,
-                at.x + child.extent.width,
-                at.y + child.extent.descent,
-            );
-            out.over(place(child, child_placement(placement, rect)))
-        }),
+        Kind::Overlay { children } => {
+            for child in children {
+                let rect = Rect::new(
+                    at.x,
+                    at.y - child.extent.ascent,
+                    at.x + child.extent.width,
+                    at.y + child.extent.descent,
+                );
+                place_into(child, child_placement(placement, rect), out);
+            }
+        }
         Kind::Pad { child, insets } => {
             let child_at = Point::new(at.x + insets.x0, at.y);
             let rect = Rect::new(
@@ -375,14 +449,15 @@ pub fn place<Out: Output>(layout: Measured<Out>, placement: Placement) -> Out {
                 child_at.x + child.extent.width,
                 child_at.y + child.extent.descent,
             );
-            place(*child, child_placement(placement, rect))
+            place_into(*child, child_placement(placement, rect), out)
         }
-        Kind::Around { child, place: wrap } => wrap(
+        Kind::Around { child, place } => place(
             placement,
             PlaceInner {
                 child: *child,
                 placement,
             },
+            out,
         ),
     }
 }
@@ -410,6 +485,12 @@ mod tests {
 
     fn probe(extent: Extent) -> Measured<Vec<Placement>> {
         leaf(extent, move |placement| vec![placement])
+    }
+
+    fn direct_probe(extent: Extent) -> Measured<Vec<Placement>> {
+        leaf_into(extent, move |placement, out: &mut Vec<Placement>| {
+            out.push(placement)
+        })
     }
 
     fn ext(width: f64, ascent: f64, descent: f64) -> Extent {
@@ -546,6 +627,26 @@ mod tests {
     }
 
     #[test]
+    fn direct_leaves_and_decorators_preserve_placement_order() {
+        let child = direct_probe(ext(10.0, 8.0, 2.0));
+        let marked = before_into(child, |placement, out| {
+            out.push(Placement::root(placement.rect.inflate(1.0, 1.0)));
+        });
+        let covered = after_into(marked, |placement, out| {
+            out.push(Placement::root(placement.rect.inflate(2.0, 2.0)));
+        });
+        let placed = place_top_left(covered, Point::ZERO);
+        assert_eq!(
+            placed.iter().map(|p| p.rect).collect::<Vec<_>>(),
+            vec![
+                Rect::new(-1.0, -1.0, 11.0, 11.0),
+                Rect::new(0.0, 0.0, 10.0, 10.0),
+                Rect::new(-2.0, -2.0, 12.0, 12.0),
+            ]
+        );
+    }
+
+    #[test]
     fn around_controls_the_inner_placement_and_sees_the_clip_rect() {
         let child = leaf(ext(20.0, 10.0, 10.0), |_| vec!["inner"]);
         let wrapped = around(child, |placement, place_inner| {
@@ -564,6 +665,27 @@ mod tests {
             ),
         );
         assert_eq!(placed, ["before", "inner", "after"]);
+    }
+
+    #[test]
+    fn around_into_places_its_child_in_the_existing_accumulator() {
+        let child = leaf_into(ext(20.0, 10.0, 10.0), |_, out: &mut Vec<&str>| {
+            out.push("inner")
+        });
+        let wrapped = around_into(child, |placement, inner, out| {
+            assert_eq!(placement.rect, Rect::new(1.0, 0.0, 21.0, 20.0));
+            out.push("before");
+            inner.place_into(out);
+            out.push("after");
+        });
+        let layout = row(
+            0.0,
+            vec![leaf(ext(1.0, 1.0, 0.0), |_| vec!["outer"]), wrapped],
+        );
+        assert_eq!(
+            place_top_left(layout, Point::ZERO),
+            ["outer", "before", "inner", "after"]
+        );
     }
 
     #[test]

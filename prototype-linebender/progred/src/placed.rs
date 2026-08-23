@@ -218,7 +218,7 @@ impl<C: 'static, Cv> Placed<C, Cv> {
     }
 }
 
-impl<C: 'static, Cv> Builder<C, Cv> {
+impl<C: 'static, Cv> Builder<'_, C, Cv> {
     /// Install the selection transition for the navigation landmark
     /// enclosing this projected control.
     pub fn select_landmark(&mut self, action: progred_display::ActionHandler<C>) {
@@ -252,15 +252,13 @@ fn handler_over<C: 'static>(base: Handler<C>, above: Handler<C>) -> Handler<C> {
 /// The leaf-construction context: today's placement-pass interface,
 /// accumulating a [`Placed`] instead of drawing and registering
 /// against live machinery. Ink defers; everything else settles here.
-pub struct Builder<C: 'static, Cv> {
-    placed: Placed<C, Cv>,
+pub struct Builder<'a, C: 'static, Cv> {
+    placed: &'a mut Placed<C, Cv>,
 }
 
-impl<C: 'static, Cv> Builder<C, Cv> {
-    fn new() -> Self {
-        Self {
-            placed: Placed::empty(),
-        }
+impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
+    fn new(placed: &'builder mut Placed<C, Cv>) -> Self {
+        Self { placed }
     }
 
     /// Contribute a named hover region.
@@ -297,12 +295,12 @@ impl<C: 'static, Cv> Builder<C, Cv> {
 
     /// Contribute ink that reads the resolved hover — the only paint
     /// that may differ under the pointer.
-    pub fn ink(&mut self, render: impl for<'a> FnOnce(&mut Cv, Ink<'a>) + 'static) {
+    pub fn ink(&mut self, render: impl for<'ink> FnOnce(&mut Cv, Ink<'ink>) + 'static) {
         self.placed.renders.push(Box::new(render));
     }
 }
 
-impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<C, Cv> {
+impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<'_, C, Cv> {
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         let (shape, brush) = (shape.into(), brush.into());
         self.placed
@@ -336,57 +334,50 @@ impl<C: 'static, Cv: Canvas + 'static> Canvas for Builder<C, Cv> {
         content: impl FnOnce(&mut Self),
     ) {
         let shape = shape.into();
-        let mut inner = Self::new();
-        content(&mut inner);
-        let mut placed = inner.placed;
-        let renders = std::mem::take(&mut placed.renders);
-        placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
+        let render_start = self.placed.renders.len();
+        content(self);
+        let renders = self.placed.renders.split_off(render_start);
+        self.placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
             cv.clip(shape, transform, |cv| {
                 Placed::<C, Cv>::render(renders, cv, ink)
             })
         }));
-        let base = std::mem::replace(&mut self.placed, Placed::empty());
-        self.placed = base.over(placed);
     }
 }
 
-impl<C: 'static, Cv> HasHandler<C> for Builder<C, Cv> {
+impl<C: 'static, Cv> HasHandler<C> for Builder<'_, C, Cv> {
     fn handler(&mut self) -> &mut Handler<C> {
         self.placed.handler_mut()
     }
 }
 
-impl<C: 'static, Cv> HasDescends<C> for Builder<C, Cv> {
+impl<C: 'static, Cv> HasDescends<C> for Builder<'_, C, Cv> {
     fn descends(&mut self) -> &mut Vec<Descend<C>> {
         &mut self.placed.descends
     }
 }
 
-impl<C: 'static, Cv> HasPopup for Builder<C, Cv> {
+impl<C: 'static, Cv> HasPopup for Builder<'_, C, Cv> {
     fn popup(&mut self) -> &mut Option<Popup> {
         &mut self.placed.popup
     }
 }
 
-/// Adapt an imperative leaf body to a staged placement continuation.
-pub fn built<C: 'static, Cv: 'static>(
-    f: impl FnOnce(&mut Builder<C, Cv>, Placement) + 'static,
-) -> impl FnOnce(Placement) -> Placed<C, Cv> + 'static {
-    move |placement| {
-        let mut builder = Builder::new();
-        f(&mut builder, placement);
-        builder.placed
-    }
+fn built_into<C: 'static, Cv: 'static>(
+    f: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
+) -> impl FnOnce(Placement, &mut Placed<C, Cv>) + 'static {
+    move |placement, placed| f(&mut Builder::new(placed), placement)
 }
 
 pub fn leaf<C: 'static, Cv: Canvas + 'static>(
     extent: Extent,
-    place: impl FnOnce(&mut Builder<C, Cv>, Placement) + 'static,
+    place: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
 ) -> Measured<Placed<C, Cv>> {
-    let place = built(place);
-    measured::leaf(extent, move |placement| {
-        let mut placed = place(placement);
-        let renders = std::mem::take(&mut placed.renders);
+    let place = built_into(place);
+    measured::leaf_into(extent, move |placement, placed: &mut Placed<C, Cv>| {
+        let render_start = placed.renders.len();
+        place(placement, placed);
+        let renders = placed.renders.split_off(render_start);
         placed.renders.push(Box::new(move |cv: &mut Cv, ink| {
             Placed::<C, Cv>::render(renders, cv, ink);
             if ink.debug_geometry {
@@ -398,27 +389,26 @@ pub fn leaf<C: 'static, Cv: Canvas + 'static>(
                 );
             }
         }));
-        placed
     })
 }
 
 pub fn before<C: 'static, Cv: 'static>(
     child: Measured<Placed<C, Cv>>,
-    place_before: impl FnOnce(&mut Builder<C, Cv>, Placement) + 'static,
+    place_before: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
 ) -> Measured<Placed<C, Cv>> {
-    measured::before(child, built(place_before))
+    measured::before_into(child, built_into(place_before))
 }
 
 pub fn after<C: 'static, Cv: 'static>(
     child: Measured<Placed<C, Cv>>,
-    place_after: impl FnOnce(&mut Builder<C, Cv>, Placement) + 'static,
+    place_after: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
 ) -> Measured<Placed<C, Cv>> {
-    measured::after(child, built(place_after))
+    measured::after_into(child, built_into(place_after))
 }
 
 pub fn decorate<C: 'static, Cv: 'static>(
     child: Measured<Placed<C, Cv>>,
-    draw: impl FnOnce(&mut Builder<C, Cv>, Rect) + 'static,
+    draw: impl FnOnce(&mut Builder<'_, C, Cv>, Rect) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     before(child, move |p, placement| draw(p, placement.rect))
 }
@@ -634,6 +624,39 @@ mod tests {
     }
 
     #[test]
+    fn direct_placement_preserves_handler_precedence() {
+        let extent = Extent {
+            width: 10.0,
+            ascent: 5.0,
+            descent: 5.0,
+        };
+        let lower = leaf(
+            extent,
+            |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {
+                p.handler().on_pointer_down(|log, _| {
+                    log.push("lower");
+                    true
+                });
+            },
+        );
+        let upper = leaf(
+            extent,
+            |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {
+                p.handler().on_pointer_down(|log, _| {
+                    log.push("upper");
+                    false
+                });
+            },
+        );
+        let placed = measured::place_top_left(measured::layers(vec![lower, upper]), Point::ZERO);
+        let handler = placed.handler.expect("registrations");
+        let mut log = Vec::new();
+
+        assert!(handler.dispatch_pointer_down(&mut log, &down_at(5.0, 5.0)));
+        assert_eq!(log, ["upper", "lower"]);
+    }
+
+    #[test]
     fn debug_geometry_outlines_the_leafs_placement() {
         let child = leaf(
             Extent {
@@ -641,7 +664,7 @@ mod tests {
                 ascent: 4.0,
                 descent: 6.0,
             },
-            |p: &mut Builder<(), TestCanvas>, placement| {
+            |p: &mut Builder<'_, (), TestCanvas>, placement| {
                 p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
             },
         );
@@ -681,7 +704,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 300.0,
             },
-            |p: &mut Builder<(), TestCanvas>, placement| {
+            |p: &mut Builder<'_, (), TestCanvas>, placement| {
                 assert_eq!(placement.clip_rect, Rect::new(10.0, 20.0, 90.0, 70.0));
                 p.fill(
                     Rect::new(
@@ -735,7 +758,7 @@ mod tests {
                 ascent: 0.0,
                 descent: 30.0,
             },
-            |p: &mut Builder<Vec<&'static str>, TestCanvas>, _| {
+            |p: &mut Builder<'_, Vec<&'static str>, TestCanvas>, _| {
                 p.handler().on_pointer_down(|log, _| {
                     log.push("down");
                     true
