@@ -3137,6 +3137,8 @@ name = "progred-display"
 version = "0.1.0"
 dependencies = [
  "gid",
+ "peniko",
+ "puri",
 ]
 
 [[package]]
@@ -3147,6 +3149,7 @@ dependencies = [
  "grap",
  "im",
  "progred-display",
+ "puri",
 ]
 
 [[package]]

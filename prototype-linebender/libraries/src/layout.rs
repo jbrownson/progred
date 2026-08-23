@@ -1,5 +1,5 @@
-//! The display language's data form: layouts as GID values, so a Grap
-//! projection can return one. Each node is a
+//! The layout language and Puri leaf language as GID values, so a Grap
+//! projection can return them. Each node is a
 //! record under a single marker key, strings ride the text convention
 //! and numbers the f64 convention. Interaction either attaches
 //! host-provided editor intents or a Grap handler to generic event
@@ -8,12 +8,16 @@
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
-use crate::{Library, f64 as f64_convention, name, text};
+use crate::{Library, color, f64 as f64_convention, name, text};
 use gid::{CellId, Step, Value};
 use progred_display::{
-    ActionHandler, Delim, Display, Face, Layout, RowAlignment, Vector, VectorCommand, alternatives,
+    ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, RowAlignment, alternatives,
     block_hover, bracket, leaf, on_activate, on_event, on_hover, overlay as layout_overlay,
     pickable, slot,
+};
+use puri::{
+    Affine, BezPath, Brush, Circle, ColorStop, Command, Drawing, Gradient, Leaf, Line, Point, Rect,
+    RoundedRect, Shape, Stroke,
 };
 
 pub mod vocabulary {
@@ -35,7 +39,7 @@ pub mod vocabulary {
     pub const SLOT: CellId = CellId::from_u128(0x96e07d2a58c4b1f3f3b18e57d0c2946a);
 
     // Generic display and event nodes.
-    pub const VECTOR: CellId = CellId::from_u128(0x1c2b3ed21cc83b14e73f02aa5067423e);
+    pub const DRAWING: CellId = CellId::from_u128(0x6889fa235b002be4c8b106d5f31dafbf);
     pub const ON_EVENT: CellId = CellId::from_u128(0x1b87f7de18e7c46c5fbfadea1f18aea4);
 
     // Interaction attach-points.
@@ -66,7 +70,7 @@ pub mod vocabulary {
     pub const BOTTOM: CellId = CellId::from_u128(0x94d1e75b3f28c6a02b85d4c7e6013f9a);
     pub const DELIM: CellId = CellId::from_u128(0x71c35a9e04b8d2f6f9401c7b3e685da2);
     pub const CONTENT: CellId = CellId::from_u128(0x3e6b91d4a25f70c8815d29f6c4a30e7b);
-    pub const FACE: CellId = CellId::from_u128(0xcb04728f5e6a1d93a6790238b5f1ce4d);
+    pub const PAINT: CellId = CellId::from_u128(0xcb04728f5e6a1d93a6790238b5f1ce4d);
     pub const STEP: CellId = CellId::from_u128(0x67a2d5e0b93c48f14e28b671d0a5c39f);
     pub const STEPS: CellId = CellId::from_u128(0x1298c6f4a7053edb09b64d2e8371fa5c);
     pub const VALUE: CellId = CellId::from_u128(0x85e3b0d729c4165ffa1e0c5d49b3872e);
@@ -99,10 +103,31 @@ pub mod vocabulary {
     pub const END: CellId = CellId::from_u128(0xabbfd273a978cb520a145eb65568f224);
     pub const RADIUS: CellId = CellId::from_u128(0x6423c35e07d7a4ff536127d1f1d8eb53);
     pub const LINE_WIDTH: CellId = CellId::from_u128(0xa8e4d1cb2cd9f070eb428e013fecc5ef);
-    pub const FILL_ROUNDED_RECT: CellId =
-        CellId::from_u128(0xd63668dc14d562633833bb7677c97df4);
-    pub const STROKE_ROUNDED_RECT: CellId =
-        CellId::from_u128(0x9e3e40a6c5b11699b89c182266f53e0a);
+    pub const FILL: CellId = CellId::from_u128(0x1624dc973ec7790203eb8fd22c9d6d05);
+    pub const STROKE: CellId = CellId::from_u128(0xc2025f7714e1f74c8ad75f28ea00f616);
+    pub const CLIP: CellId = CellId::from_u128(0x30b1e31f7eda7e84d9309e5e2d6ef48f);
+    pub const SHAPE: CellId = CellId::from_u128(0xfcaaadef14980397cce95363fc5a54f9);
+    pub const RECT: CellId = CellId::from_u128(0xbb5e62c1b300b1e8c2484a0f4879a1fe);
+    pub const ROUNDED_RECT: CellId = CellId::from_u128(0xb07684708c0d04b7dfd66b9ec7ecf35b);
+    pub const CIRCLE: CellId = CellId::from_u128(0xe06a6d094c4f75cd6c1d59ed6ed64e05);
+    pub const LINE: CellId = CellId::from_u128(0x5fb0417f31da1dea06802eb484fa0b17);
+    pub const PATH: CellId = CellId::from_u128(0xfbcf1931c6e050d62c4caf5cccba2ce8);
+    pub const X1: CellId = CellId::from_u128(0x97da731fd85c22bbfc5f9dde4b74fedd);
+    pub const Y1: CellId = CellId::from_u128(0xc2ff9b77b6ea033bc3b6f02dd2860282);
+    pub const X2: CellId = CellId::from_u128(0xfbca1692325e21e057204bbee4296f87);
+    pub const Y2: CellId = CellId::from_u128(0x7bc90a68d48548a46ecf99a1d105d5ef);
+    pub const MOVE_TO: CellId = CellId::from_u128(0x1f6ae3a0b82fb63f233f4713cd0c8e30);
+    pub const LINE_TO: CellId = CellId::from_u128(0x2b1cebde44cbdadcd6de44facda4ee94);
+    pub const QUAD_TO: CellId = CellId::from_u128(0xda1c37c330243e538702cb0e19a711ce);
+    pub const CURVE_TO: CellId = CellId::from_u128(0x44bfb8ebda540e9c037328f706c0c142);
+    pub const CLOSE: CellId = CellId::from_u128(0xadf2742dbde1b09b03e1fc649f5e1f58);
+    pub const LINEAR_GRADIENT: CellId =
+        CellId::from_u128(0x7595f5eee03cd47be1f3fee10806d6a9);
+    pub const STOPS: CellId = CellId::from_u128(0x5d4211d5e7184a41fe1ffaa2cd5865c9);
+    pub const OFFSET: CellId = CellId::from_u128(0xf348e826a277875d63e7a0197730f036);
+    pub const TRANSFORM: CellId = CellId::from_u128(0x0c69b749e5d076609a6642a20b736fb4);
+    pub const TRANSLATE: CellId = CellId::from_u128(0xb9c300206cc1c193cc801f4f058f2647);
+    pub const ROTATE: CellId = CellId::from_u128(0x2500213d415930c6b40f15d633cc04a4);
 
     // Faces.
     pub const NAME_FACE: CellId = CellId::from_u128(0x520e9b3c7ad6f18409cf25a7d8631be0);
@@ -110,8 +135,7 @@ pub mod vocabulary {
     pub const DIM_FACE: CellId = CellId::from_u128(0xf14b6a08d29c53e7bd0561f8a3c2497e);
     pub const LABEL_FACE: CellId = CellId::from_u128(0x7d90c4e5f1382ab6270d94c1e5a8f36b);
     pub const ID_FACE: CellId = CellId::from_u128(0xb38a1d67e02f49c5c9e8073a6b5d21f4);
-    pub const ACCENT_WASH_FACE: CellId =
-        CellId::from_u128(0x1ec921b1240171ceb6dcae8d15889ef4);
+    pub const ACCENT_WASH_FACE: CellId = CellId::from_u128(0x1ec921b1240171ceb6dcae8d15889ef4);
     pub const INK_FACE: CellId = CellId::from_u128(0xe553afe01621dbdfe528b1f5fcd69e21);
 
     // Delimiters.
@@ -122,7 +146,6 @@ pub mod vocabulary {
     /// A walk step following the value's link — the one step that is
     /// not a field key.
     pub const FOLLOW: CellId = CellId::from_u128(0xdc27a94e6b105f83b0562f8ea19d34c7);
-
 }
 
 fn node(key: CellId, content: Value) -> Value {
@@ -217,19 +240,19 @@ pub fn text_leaf(content: &str, face: CellId) -> Value {
         vocabulary::TEXT,
         Value::record([
             (vocabulary::CONTENT, text::value(content)),
-            (vocabulary::FACE, Value::Cell(face)),
+            (vocabulary::PAINT, Value::Cell(face)),
         ]),
     )
 }
 
-pub fn vector(
+pub fn drawing(
     width: f64,
     ascent: f64,
     descent: f64,
     commands: impl IntoIterator<Item = Value>,
 ) -> Value {
     node(
-        vocabulary::VECTOR,
+        vocabulary::DRAWING,
         Value::record([
             (vocabulary::WIDTH, number(width)),
             (vocabulary::ASCENT, number(ascent)),
@@ -239,68 +262,154 @@ pub fn vector(
     )
 }
 
-pub fn fill_rounded_rect(
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    radius: f64,
-    face: CellId,
-) -> Value {
-    vector_command(
-        vocabulary::FILL_ROUNDED_RECT,
-        x,
-        y,
-        width,
-        height,
-        radius,
-        None,
-        face,
+pub fn fill(shape: Value, paint: Value) -> Value {
+    node(
+        vocabulary::FILL,
+        Value::record([
+            (vocabulary::SHAPE, shape),
+            (vocabulary::PAINT, paint),
+        ]),
     )
 }
 
-pub fn stroke_rounded_rect(
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    radius: f64,
-    line_width: f64,
-    face: CellId,
-) -> Value {
-    vector_command(
-        vocabulary::STROKE_ROUNDED_RECT,
-        x,
-        y,
-        width,
-        height,
-        radius,
-        Some(line_width),
-        face,
+pub fn stroke(shape: Value, line_width: f64, paint: Value) -> Value {
+    node(
+        vocabulary::STROKE,
+        Value::record([
+            (vocabulary::SHAPE, shape),
+            (vocabulary::LINE_WIDTH, number(line_width)),
+            (vocabulary::PAINT, paint),
+        ]),
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn vector_command(
-    kind: CellId,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    radius: f64,
-    line_width: Option<f64>,
-    face: CellId,
-) -> Value {
+pub fn clip(shape: Value, commands: impl IntoIterator<Item = Value>) -> Value {
+    node(
+        vocabulary::CLIP,
+        Value::record([
+            (vocabulary::SHAPE, shape),
+            (vocabulary::COMMANDS, Value::list(commands)),
+        ]),
+    )
+}
+
+pub fn rect(x: f64, y: f64, width: f64, height: f64) -> Value {
+    shape_box(vocabulary::RECT, x, y, width, height, None)
+}
+
+pub fn rounded_rect(x: f64, y: f64, width: f64, height: f64, radius: f64) -> Value {
+    shape_box(vocabulary::ROUNDED_RECT, x, y, width, height, Some(radius))
+}
+
+fn shape_box(kind: CellId, x: f64, y: f64, width: f64, height: f64, radius: Option<f64>) -> Value {
     let fields = [
         Some((vocabulary::X, number(x))),
         Some((vocabulary::Y, number(y))),
         Some((vocabulary::WIDTH, number(width))),
         Some((vocabulary::HEIGHT, number(height))),
-        Some((vocabulary::RADIUS, number(radius))),
-        line_width.map(|width| (vocabulary::LINE_WIDTH, number(width))),
-        Some((vocabulary::FACE, Value::Cell(face))),
+        radius.map(|radius| (vocabulary::RADIUS, number(radius))),
     ];
     node(kind, Value::record(fields.into_iter().flatten()))
+}
+
+pub fn circle(x: f64, y: f64, radius: f64) -> Value {
+    node(
+        vocabulary::CIRCLE,
+        Value::record([
+            (vocabulary::X, number(x)),
+            (vocabulary::Y, number(y)),
+            (vocabulary::RADIUS, number(radius)),
+        ]),
+    )
+}
+
+pub fn line(x1: f64, y1: f64, x2: f64, y2: f64) -> Value {
+    node(
+        vocabulary::LINE,
+        Value::record([
+            (vocabulary::X1, number(x1)),
+            (vocabulary::Y1, number(y1)),
+            (vocabulary::X2, number(x2)),
+            (vocabulary::Y2, number(y2)),
+        ]),
+    )
+}
+
+pub fn path(elements: impl IntoIterator<Item = Value>) -> Value {
+    node(vocabulary::PATH, Value::list(elements))
+}
+
+pub fn move_to(x: f64, y: f64) -> Value {
+    point_element(vocabulary::MOVE_TO, x, y)
+}
+
+pub fn line_to(x: f64, y: f64) -> Value {
+    point_element(vocabulary::LINE_TO, x, y)
+}
+
+fn point_element(kind: CellId, x: f64, y: f64) -> Value {
+    node(
+        kind,
+        Value::record([(vocabulary::X, number(x)), (vocabulary::Y, number(y))]),
+    )
+}
+
+pub fn quad_to(x1: f64, y1: f64, x: f64, y: f64) -> Value {
+    node(
+        vocabulary::QUAD_TO,
+        Value::record([
+            (vocabulary::X1, number(x1)),
+            (vocabulary::Y1, number(y1)),
+            (vocabulary::X, number(x)),
+            (vocabulary::Y, number(y)),
+        ]),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn curve_to(x1: f64, y1: f64, x2: f64, y2: f64, x: f64, y: f64) -> Value {
+    node(
+        vocabulary::CURVE_TO,
+        Value::record([
+            (vocabulary::X1, number(x1)),
+            (vocabulary::Y1, number(y1)),
+            (vocabulary::X2, number(x2)),
+            (vocabulary::Y2, number(y2)),
+            (vocabulary::X, number(x)),
+            (vocabulary::Y, number(y)),
+        ]),
+    )
+}
+
+pub fn close() -> Value {
+    node(vocabulary::CLOSE, Value::record([]))
+}
+
+pub fn linear_gradient(
+    start: (f64, f64),
+    end: (f64, f64),
+    stops: impl IntoIterator<Item = (f64, Value)>,
+) -> Value {
+    node(
+        vocabulary::LINEAR_GRADIENT,
+        Value::record([
+            (vocabulary::START, point(start.0, start.1)),
+            (vocabulary::END, point(end.0, end.1)),
+            (
+                vocabulary::STOPS,
+                Value::list(stops.into_iter().map(|(offset, paint)| {
+                    Value::record([
+                        (vocabulary::OFFSET, number(offset)),
+                        (vocabulary::PAINT, paint),
+                    ])
+                })),
+            ),
+        ]),
+    )
+}
+
+fn point(x: f64, y: f64) -> Value {
+    Value::record([(vocabulary::X, number(x)), (vocabulary::Y, number(y))])
 }
 
 pub fn selectable(child: Value) -> Value {
@@ -310,10 +419,7 @@ pub fn selectable(child: Value) -> Value {
 pub fn pick_target(child: Value, value: Value) -> Value {
     node(
         vocabulary::PICKABLE,
-        Value::record([
-            (vocabulary::CHILD, child),
-            (vocabulary::VALUE, value),
-        ]),
+        Value::record([(vocabulary::CHILD, child), (vocabulary::VALUE, value)]),
     )
 }
 
@@ -328,10 +434,7 @@ pub fn hover_block(child: Value) -> Value {
 pub fn on(child: Value, handler: Value) -> Value {
     node(
         vocabulary::ON_EVENT,
-        Value::record([
-            (vocabulary::CHILD, child),
-            (vocabulary::HANDLER, handler),
-        ]),
+        Value::record([(vocabulary::CHILD, child), (vocabulary::HANDLER, handler)]),
     )
 }
 
@@ -420,7 +523,7 @@ pub fn decode<World, Hover: Clone>(
     }
     if let Some(content) = fields.get(&vocabulary::TEXT) {
         let content = content.as_record()?;
-        let face = match content.get(&vocabulary::FACE)?.as_cell()? {
+        let face = match content.get(&vocabulary::PAINT)?.as_cell()? {
             cell if cell == vocabulary::NAME_FACE => Face::Name,
             cell if cell == vocabulary::STRING_FACE => Face::String,
             cell if cell == vocabulary::DIM_FACE => Face::Dim,
@@ -430,12 +533,12 @@ pub fn decode<World, Hover: Clone>(
             cell if cell == vocabulary::INK_FACE => Face::Ink,
             _ => return None,
         };
-        return Some(leaf(Display::Text {
+        return Some(leaf(Leaf::Text {
             text: text::read(content.get(&vocabulary::CONTENT)?)?.to_string(),
-            face,
+            paint: Paint::Face(face),
         }));
     }
-    if let Some(content) = fields.get(&vocabulary::VECTOR) {
+    if let Some(content) = fields.get(&vocabulary::DRAWING) {
         let content = content.as_record()?;
         let width = read_nonnegative(content.get(&vocabulary::WIDTH)?)?;
         let ascent = read_nonnegative(content.get(&vocabulary::ASCENT)?)?;
@@ -444,9 +547,9 @@ pub fn decode<World, Hover: Clone>(
             .get(&vocabulary::COMMANDS)?
             .as_list()?
             .values()
-            .map(read_vector_command)
+            .map(read_command)
             .collect::<Option<Vec<_>>>()?;
-        return Some(leaf(Display::Vector(Vector {
+        return Some(leaf(Leaf::Drawing(Drawing {
             width,
             ascent,
             descent,
@@ -519,45 +622,193 @@ fn read_face(value: &Value) -> Option<Face> {
     }
 }
 
-fn read_vector_command(value: &Value) -> Option<VectorCommand> {
-    let fields = value.as_record()?;
-    let command = |content: &Value| {
-        let content = content.as_record()?;
-        Some((
-            read_number(content.get(&vocabulary::X)?)?,
-            read_number(content.get(&vocabulary::Y)?)?,
-            read_nonnegative(content.get(&vocabulary::WIDTH)?)?,
-            read_nonnegative(content.get(&vocabulary::HEIGHT)?)?,
-            read_nonnegative(content.get(&vocabulary::RADIUS)?)?,
-            read_face(content.get(&vocabulary::FACE)?)?,
-        ))
-    };
-    if let Some(content) = fields.get(&vocabulary::FILL_ROUNDED_RECT) {
-        let (x, y, width, height, radius, face) = command(content)?;
-        Some(VectorCommand::FillRoundedRect {
-            x,
-            y,
-            width,
-            height,
-            radius,
-            face,
+fn read_paint(value: &Value) -> Option<Paint> {
+    read_face(value)
+        .map(Paint::Face)
+        .or_else(|| color::read(value).map(|color| Paint::Brush(Brush::from(color))))
+        .or_else(|| read_linear_gradient(value).map(|gradient| Paint::Brush(Brush::from(gradient))))
+}
+
+fn read_linear_gradient(value: &Value) -> Option<Gradient> {
+    let fields = value
+        .as_record()?
+        .get(&vocabulary::LINEAR_GRADIENT)?
+        .as_record()?;
+    let start = read_point(fields.get(&vocabulary::START)?)?;
+    let end = read_point(fields.get(&vocabulary::END)?)?;
+    let stops = fields
+        .get(&vocabulary::STOPS)?
+        .as_list()?
+        .values()
+        .map(|stop| {
+            let stop = stop.as_record()?;
+            let offset = read_number(stop.get(&vocabulary::OFFSET)?)?;
+            (0.0..=1.0).contains(&offset).then_some(ColorStop {
+                offset: offset as f32,
+                color: color::read(stop.get(&vocabulary::PAINT)?)?.into(),
+            })
         })
-    } else if let Some(content) = fields.get(&vocabulary::STROKE_ROUNDED_RECT) {
-        let (x, y, width, height, radius, face) = command(content)?;
-        Some(VectorCommand::StrokeRoundedRect {
-            x,
-            y,
-            width,
-            height,
-            radius,
-            line_width: read_nonnegative(
-                content.as_record()?.get(&vocabulary::LINE_WIDTH)?,
-            )?,
-            face,
+        .collect::<Option<Vec<_>>>()?;
+    Some(Gradient::new_linear(start, end).with_stops(stops.as_slice()))
+}
+
+fn read_command(value: &Value) -> Option<Command<Paint>> {
+    let fields = value.as_record()?;
+    if let Some(content) = fields.get(&vocabulary::FILL) {
+        let content = content.as_record()?;
+        Some(Command::Fill {
+            shape: read_shape(content.get(&vocabulary::SHAPE)?)?,
+            paint: read_paint(content.get(&vocabulary::PAINT)?)?,
+            transform: read_optional_transform(content)?,
+        })
+    } else if let Some(content) = fields.get(&vocabulary::STROKE) {
+        let content = content.as_record()?;
+        Some(Command::Stroke {
+            shape: read_shape(content.get(&vocabulary::SHAPE)?)?,
+            style: Stroke::new(read_nonnegative(content.get(&vocabulary::LINE_WIDTH)?)?),
+            paint: read_paint(content.get(&vocabulary::PAINT)?)?,
+            transform: read_optional_transform(content)?,
+        })
+    } else if let Some(content) = fields.get(&vocabulary::CLIP) {
+        let content = content.as_record()?;
+        Some(Command::Clip {
+            shape: read_shape(content.get(&vocabulary::SHAPE)?)?,
+            transform: read_optional_transform(content)?,
+            children: content
+                .get(&vocabulary::COMMANDS)?
+                .as_list()?
+                .values()
+                .map(read_command)
+                .collect::<Option<Vec<_>>>()?,
         })
     } else {
         None
     }
+}
+
+fn read_optional_transform(fields: &im::OrdMap<CellId, Value>) -> Option<Affine> {
+    match fields.get(&vocabulary::TRANSFORM) {
+        Some(transform) => read_transform(transform),
+        None => Some(Affine::IDENTITY),
+    }
+}
+
+fn read_transform(value: &Value) -> Option<Affine> {
+    value.as_list()?.values().try_fold(Affine::IDENTITY, |transform, operation| {
+        let fields = operation.as_record()?;
+        if let Some(point) = fields.get(&vocabulary::TRANSLATE) {
+            let point = read_point(point)?;
+            Some(transform * Affine::translate((point.x, point.y)))
+        } else if let Some(angle) = fields.get(&vocabulary::ROTATE) {
+            Some(transform * Affine::rotate(read_number(angle)?))
+        } else {
+            None
+        }
+    })
+}
+
+fn read_shape(value: &Value) -> Option<Shape> {
+    let fields = value.as_record()?;
+    if let Some(content) = fields.get(&vocabulary::RECT) {
+        let (x, y, width, height) = read_box(content)?;
+        Some(Shape::Rect(Rect::new(x, y, x + width, y + height)))
+    } else if let Some(content) = fields.get(&vocabulary::ROUNDED_RECT) {
+        let (x, y, width, height) = read_box(content)?;
+        let radius = read_nonnegative(content.as_record()?.get(&vocabulary::RADIUS)?)?;
+        Some(Shape::RoundedRect(RoundedRect::from_rect(
+            Rect::new(x, y, x + width, y + height),
+            radius,
+        )))
+    } else if let Some(content) = fields.get(&vocabulary::CIRCLE) {
+        let content = content.as_record()?;
+        Some(Shape::Circle(Circle::new(
+            Point::new(
+            read_number(content.get(&vocabulary::X)?)?,
+            read_number(content.get(&vocabulary::Y)?)?,
+            ),
+            read_nonnegative(content.get(&vocabulary::RADIUS)?)?,
+        )))
+    } else if let Some(content) = fields.get(&vocabulary::LINE) {
+        let content = content.as_record()?;
+        Some(Shape::Line(Line::new(
+            Point::new(
+                read_number(content.get(&vocabulary::X1)?)?,
+                read_number(content.get(&vocabulary::Y1)?)?,
+            ),
+            Point::new(
+                read_number(content.get(&vocabulary::X2)?)?,
+                read_number(content.get(&vocabulary::Y2)?)?,
+            ),
+        )))
+    } else if let Some(content) = fields.get(&vocabulary::PATH) {
+        let mut path = BezPath::new();
+        for element in content.as_list()?.values() {
+            read_path_element(&mut path, element)?;
+        }
+        Some(Shape::Path(path))
+    } else {
+        None
+    }
+}
+
+fn read_box(value: &Value) -> Option<(f64, f64, f64, f64)> {
+    let fields = value.as_record()?;
+    Some((
+        read_number(fields.get(&vocabulary::X)?)?,
+        read_number(fields.get(&vocabulary::Y)?)?,
+        read_nonnegative(fields.get(&vocabulary::WIDTH)?)?,
+        read_nonnegative(fields.get(&vocabulary::HEIGHT)?)?,
+    ))
+}
+
+fn read_path_element(path: &mut BezPath, value: &Value) -> Option<()> {
+    let fields = value.as_record()?;
+    if let Some(content) = fields.get(&vocabulary::MOVE_TO) {
+        path.move_to(read_point(content)?);
+    } else if let Some(content) = fields.get(&vocabulary::LINE_TO) {
+        path.line_to(read_point(content)?);
+    } else if let Some(content) = fields.get(&vocabulary::QUAD_TO) {
+        let content = content.as_record()?;
+        path.quad_to(
+            Point::new(
+                read_number(content.get(&vocabulary::X1)?)?,
+                read_number(content.get(&vocabulary::Y1)?)?,
+            ),
+            Point::new(
+                read_number(content.get(&vocabulary::X)?)?,
+                read_number(content.get(&vocabulary::Y)?)?,
+            ),
+        );
+    } else if let Some(content) = fields.get(&vocabulary::CURVE_TO) {
+        let content = content.as_record()?;
+        path.curve_to(
+            Point::new(
+                read_number(content.get(&vocabulary::X1)?)?,
+                read_number(content.get(&vocabulary::Y1)?)?,
+            ),
+            Point::new(
+                read_number(content.get(&vocabulary::X2)?)?,
+                read_number(content.get(&vocabulary::Y2)?)?,
+            ),
+            Point::new(
+                read_number(content.get(&vocabulary::X)?)?,
+                read_number(content.get(&vocabulary::Y)?)?,
+            ),
+        );
+    } else if fields.get(&vocabulary::CLOSE).is_some() {
+        path.close_path();
+    } else {
+        return None;
+    }
+    Some(())
+}
+
+fn read_point(value: &Value) -> Option<Point> {
+    let fields = value.as_record()?;
+    Some(Point::new(
+        read_number(fields.get(&vocabulary::X)?)?,
+        read_number(fields.get(&vocabulary::Y)?)?,
+    ))
 }
 
 /// A walk step: the FOLLOW marker, or a field key's cell. List
@@ -571,7 +822,13 @@ fn read_step(value: &Value) -> Option<Step> {
     })
 }
 
-pub fn library<World, Hover>() -> Library<World, Hover> {
+pub fn display<World, Hover: Clone>(
+    input: ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    decode(input.value, &input.select, &input.hover)
+}
+
+pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = gid::Cells::new();
     for (cell, spelling) in [
         (vocabulary::ROW, "row"),
@@ -584,7 +841,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::AT, "at"),
         (vocabulary::TRANSIENT, "transient"),
         (vocabulary::TEXT, "text"),
-        (vocabulary::VECTOR, "vector"),
+        (vocabulary::DRAWING, "drawing"),
         (vocabulary::SLOT, "slot"),
         (vocabulary::SELECTABLE, "selectable"),
         (vocabulary::PICKABLE, "pickable"),
@@ -610,7 +867,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::BOTTOM, "bottom"),
         (vocabulary::DELIM, "delim"),
         (vocabulary::CONTENT, "content"),
-        (vocabulary::FACE, "face"),
+        (vocabulary::PAINT, "paint"),
         (vocabulary::STEP, "step"),
         (vocabulary::STEPS, "steps"),
         (vocabulary::VALUE, "value"),
@@ -643,8 +900,30 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::END, "end"),
         (vocabulary::RADIUS, "radius"),
         (vocabulary::LINE_WIDTH, "line width"),
-        (vocabulary::FILL_ROUNDED_RECT, "fill rounded rect"),
-        (vocabulary::STROKE_ROUNDED_RECT, "stroke rounded rect"),
+        (vocabulary::FILL, "fill"),
+        (vocabulary::STROKE, "stroke"),
+        (vocabulary::CLIP, "clip"),
+        (vocabulary::SHAPE, "shape"),
+        (vocabulary::RECT, "rect"),
+        (vocabulary::ROUNDED_RECT, "rounded rect"),
+        (vocabulary::CIRCLE, "circle"),
+        (vocabulary::LINE, "line"),
+        (vocabulary::PATH, "path"),
+        (vocabulary::X1, "x1"),
+        (vocabulary::Y1, "y1"),
+        (vocabulary::X2, "x2"),
+        (vocabulary::Y2, "y2"),
+        (vocabulary::MOVE_TO, "move to"),
+        (vocabulary::LINE_TO, "line to"),
+        (vocabulary::QUAD_TO, "quad to"),
+        (vocabulary::CURVE_TO, "curve to"),
+        (vocabulary::CLOSE, "close"),
+        (vocabulary::LINEAR_GRADIENT, "linear gradient"),
+        (vocabulary::STOPS, "stops"),
+        (vocabulary::OFFSET, "offset"),
+        (vocabulary::TRANSFORM, "transform"),
+        (vocabulary::TRANSLATE, "translate"),
+        (vocabulary::ROTATE, "rotate"),
         (vocabulary::NAME_FACE, "name face"),
         (vocabulary::STRING_FACE, "string face"),
         (vocabulary::DIM_FACE, "dim face"),
@@ -661,6 +940,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     }
     Library {
         cells,
+        projections: vec![display::<World, Hover>],
         ..Library::default()
     }
 }
@@ -687,7 +967,11 @@ mod tests {
             )),
             bracketed(
                 vocabulary::CURLY,
-                col(0, 2.0, [descend_follow(), text_leaf("…", vocabulary::DIM_FACE)]),
+                col(
+                    0,
+                    2.0,
+                    [descend_follow(), text_leaf("…", vocabulary::DIM_FACE)],
+                ),
             ),
         ]);
         let Some(Layout::Alternatives(forms)) = decoded(&value) else {
@@ -703,19 +987,25 @@ mod tests {
         assert_eq!(*gap, 4.0);
         assert!(matches!(
             &children[0],
-            Layout::Leaf(Display::Text { text, face: Face::Name, .. }) if text == "shape"
+            Layout::Leaf(Leaf::Text {
+                text,
+                paint: Paint::Face(Face::Name),
+                ..
+            }) if text == "shape"
         ));
         assert!(matches!(
             &children[1],
             Layout::Descend { step: Step::Key(key) } if *key == vocabulary::GAP
         ));
         let Layout::Surround {
-            left: progred_display::Ink::Delim {
+            left:
+                progred_display::Ink::Delim {
                 delim: Delim::Brace,
                 side: progred_display::Side::Open,
             },
             child,
-            right: progred_display::Ink::Delim {
+            right:
+                progred_display::Ink::Delim {
                 delim: Delim::Brace,
                 side: progred_display::Side::Close,
             },
@@ -726,7 +1016,10 @@ mod tests {
         let Layout::Col { children, .. } = child.as_ref() else {
             panic!("col inside");
         };
-        assert!(matches!(&children[0], Layout::Descend { step: Step::Follow }));
+        assert!(matches!(
+            &children[0],
+            Layout::Descend { step: Step::Follow }
+        ));
     }
 
     #[test]
@@ -740,7 +1033,10 @@ mod tests {
         ));
         assert!(matches!(
             decoded(&hoverable(text_leaf("h", vocabulary::LABEL_FACE))),
-            Some(Layout::OnHover { hover: Some(()), .. })
+            Some(Layout::OnHover {
+                hover: Some(()),
+                ..
+            })
         ));
         assert!(matches!(
             decoded(&hover_block(node(vocabulary::SLOT, Value::record([])))),
@@ -760,32 +1056,53 @@ mod tests {
     }
 
     #[test]
-    fn vector_commands_are_ordinary_display_data() {
-        let display = vector(
+    fn puri_commands_are_ordinary_display_data() {
+        let display = drawing(
             20.0,
             8.0,
             2.0,
             [
-                fill_rounded_rect(0.0, 0.0, 20.0, 10.0, 2.0, vocabulary::DIM_FACE),
-                stroke_rounded_rect(
-                    0.5,
-                    0.5,
-                    19.0,
-                    9.0,
-                    2.0,
+                fill(
+                    rounded_rect(0.0, 0.0, 20.0, 10.0, 2.0),
+                    Value::from(vocabulary::DIM_FACE),
+                ),
+                stroke(
+                    circle(10.0, 5.0, 4.0),
                     1.0,
-                    vocabulary::NAME_FACE,
+                    Value::from(vocabulary::NAME_FACE),
+                ),
+                clip(
+                    rect(0.0, 0.0, 20.0, 10.0),
+                    [stroke(
+                        path([
+                            move_to(0.0, 0.0),
+                            line_to(5.0, 5.0),
+                            quad_to(7.0, 3.0, 10.0, 5.0),
+                            curve_to(11.0, 6.0, 12.0, 4.0, 15.0, 5.0),
+                            close(),
+                        ]),
+                        2.0,
+                        Value::from(vocabulary::INK_FACE),
+                    )],
                 ),
             ],
         );
-        let Some(Layout::Leaf(Display::Vector(vector))) = decoded(&display) else {
-            panic!("vector leaf");
+        let Some(Layout::Leaf(Leaf::Drawing(drawing))) = decoded(&display) else {
+            panic!("Puri drawing leaf");
         };
-        assert_eq!((vector.width, vector.ascent, vector.descent), (20.0, 8.0, 2.0));
-        assert_eq!(vector.commands.len(), 2);
+        assert_eq!(
+            (drawing.width, drawing.ascent, drawing.descent),
+            (20.0, 8.0, 2.0)
+        );
+        assert_eq!(drawing.commands.len(), 3);
         assert!(matches!(
-            vector.commands[1],
-            VectorCommand::StrokeRoundedRect { line_width: 1.0, .. }
+            drawing.commands[1],
+            Command::Stroke { shape: Shape::Circle(_), ref style, .. } if style.width == 1.0
+        ));
+        assert!(matches!(
+            drawing.commands[2],
+            Command::Clip { ref children, .. }
+                if matches!(children.as_slice(), [Command::Stroke { shape: Shape::Path(_), .. }])
         ));
     }
 
@@ -793,13 +1110,16 @@ mod tests {
     fn junk_falls_through_whole() {
         assert!(decoded(&Value::record([])).is_none());
         assert!(decoded(&text::value("plain text is not a layout")).is_none());
-        let broken = row(1.0, [text_leaf("ok", vocabulary::NAME_FACE), Value::record([])]);
+        let broken = row(
+            1.0,
+            [text_leaf("ok", vocabulary::NAME_FACE), Value::record([])],
+        );
         assert!(decoded(&broken).is_none());
         let bad_face = node(
             vocabulary::TEXT,
             Value::record([
                 (vocabulary::CONTENT, text::value("x")),
-                (vocabulary::FACE, Value::Cell(vocabulary::GAP)),
+                (vocabulary::PAINT, Value::Cell(vocabulary::GAP)),
             ]),
         );
         assert!(decoded(&bad_face).is_none());

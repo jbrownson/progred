@@ -669,11 +669,14 @@ mod tests {
         let Layout::OnActivate { child, .. } = *child else {
             panic!("the marker remains selectable");
         };
-        let Layout::Leaf(progred_display::Display::Text { text, face }) = *child else {
+        let Layout::Leaf(puri::Leaf::Text { text, paint: face }) = *child else {
             panic!("the marker is text");
         };
         assert_eq!(text, "\"");
-        assert!(face == progred_display::Face::Dim);
+        assert!(matches!(
+            face,
+            progred_display::Paint::Face(progred_display::Face::Dim)
+        ));
     }
 
     #[test]

@@ -1,18 +1,20 @@
 //! Layout a projection can return: boxes, leaves, walk, and event
-//! attachment. A leaf's [`Display`] is what it shows. The editor
+//! attachment. A leaf is a paint-parametric Puri program. The editor
 //! measures boxes and turns leaves into place continuations;
 //! libraries never see a UI runtime. Host intents are owned callbacks
 //! over the caller's `World`; Grap handlers are data carried by
 //! [`Layout::OnEvent`], not a central enum of editor actions.
 
 use gid::{CellId, Step, Value};
+use peniko::Brush;
+use puri::{Affine, Command, Drawing, Leaf, RoundedRect, Shape, Stroke};
 use std::cmp::Ordering;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 static NEXT_SHARED_LAYOUT: AtomicUsize = AtomicUsize::new(0);
 
-/// Editor-mapped face a text leaf asks for. Libraries pick a role,
+/// Editor-mapped paint face a Puri leaf asks for. Libraries pick a role,
 /// not a color.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Face {
@@ -25,19 +27,18 @@ pub enum Face {
     Ink,
 }
 
-/// Drawing only. Nothing here knows about GID locations, selection,
-/// editing, labels, queries, or events.
+/// The paint a Progred projection supplies to Puri. Faces defer to
+/// the editor theme; a literal brush belongs to the projected
+/// content itself.
 #[derive(Clone)]
-pub enum Display {
-    Text { text: String, face: Face },
-    /// Vector commands in a box with explicit baseline metrics. The
-    /// coordinates are logical and local to the box's top-left.
-    Vector(Vector),
+pub enum Paint {
+    Face(Face),
+    Brush(Brush),
 }
 
 /// A Rust library's description of the stock host line editor. This
 /// is a layout/control request, not a drawing primitive: Progred
-/// lowers it through Puri into text, vector ink, and event handlers.
+/// lowers it through Puri into text, canvas ink, and event handlers.
 #[derive(Clone)]
 pub struct LineEdit {
     pub text: String,
@@ -45,35 +46,6 @@ pub struct LineEdit {
     pub update: Value,
     pub prefix: String,
     pub suffix: String,
-}
-
-#[derive(Clone)]
-pub struct Vector {
-    pub width: f64,
-    pub ascent: f64,
-    pub descent: f64,
-    pub commands: Vec<VectorCommand>,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum VectorCommand {
-    FillRoundedRect {
-        x: f64,
-        y: f64,
-        width: f64,
-        height: f64,
-        radius: f64,
-        face: Face,
-    },
-    StrokeRoundedRect {
-        x: f64,
-        y: f64,
-        width: f64,
-        height: f64,
-        radius: f64,
-        line_width: f64,
-        face: Face,
-    },
 }
 
 /// A layout-owned decoration whose geometry depends on the box it
@@ -154,7 +126,7 @@ impl<World: 'static, Hover: Clone + 'static> ProjectionTargets<World, Hover> {
 /// Unevaluated layout: grouping, walk, and leaves. Distinct from
 /// Progred's measured boxes (those have extents and place closures).
 pub enum Layout<World, Hover> {
-    Leaf(Display),
+    Leaf(Leaf<Paint>),
     /// Progred's still-host-owned completion query. This is explicit
     /// layout composition debt, not a drawing primitive disguised as
     /// one.
@@ -365,6 +337,12 @@ pub trait Env {
     /// so a grap-shaped result can continue the same allowance.
     fn evaluate(&self, expression: &Value) -> (Value, usize);
 
+    /// Evaluate with an explicit allowance. Hosts that do not expose
+    /// fuel may keep their ordinary behavior.
+    fn evaluate_with_fuel(&self, expression: &Value, _fuel: usize) -> (Value, usize) {
+        self.evaluate(expression)
+    }
+
     /// Conventional human name for a cell, when this host has one.
     /// A projection remains responsible for its unnamed fallback.
     fn name(&self, _cell: CellId) -> Option<String> {
@@ -421,9 +399,9 @@ pub fn id<World, Hover>(text: impl Into<String>) -> Layout<World, Hover> {
 }
 
 pub fn faced<World, Hover>(text: impl Into<String>, face: Face) -> Layout<World, Hover> {
-    leaf(Display::Text {
+    leaf(Leaf::Text {
         text: text.into(),
-        face,
+        paint: Paint::Face(face),
     })
 }
 
@@ -436,24 +414,24 @@ pub fn line_edit<World, Hover>(line: LineEdit) -> Layout<World, Hover> {
 }
 
 pub fn slot<World, Hover>() -> Layout<World, Hover> {
-    leaf(Display::Vector(Vector {
+    leaf(Leaf::Drawing(Drawing {
         width: 21.0,
         ascent: 11.0,
         descent: 4.0,
-        commands: vec![VectorCommand::StrokeRoundedRect {
-            x: 0.5,
-            y: 0.5,
-            width: 20.0,
-            height: 14.0,
-            radius: 3.0,
-            line_width: 1.0,
-            face: Face::Dim,
+        commands: vec![Command::Stroke {
+            shape: Shape::RoundedRect(RoundedRect::from_rect(
+                puri::Rect::new(0.5, 0.5, 20.5, 14.5),
+                3.0,
+            )),
+            style: Stroke::new(1.0),
+            paint: Paint::Face(Face::Dim),
+            transform: Affine::IDENTITY,
         }],
     }))
 }
 
-pub fn leaf<World, Hover>(display: Display) -> Layout<World, Hover> {
-    Layout::Leaf(display)
+pub fn leaf<World, Hover>(leaf: Leaf<Paint>) -> Layout<World, Hover> {
+    Layout::Leaf(leaf)
 }
 
 pub fn on_click<World, Hover>(

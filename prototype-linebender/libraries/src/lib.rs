@@ -6,6 +6,7 @@ use grap_runtime::ForeignFunctions;
 use progred_display::Partial;
 
 pub mod absent;
+pub mod color;
 pub mod control;
 pub mod f64;
 pub mod geometry;
@@ -13,7 +14,11 @@ pub mod grap;
 pub mod isa;
 pub mod layout;
 pub mod line_edit;
+pub mod list;
+pub mod logic;
 pub mod name;
+pub mod presentation;
+pub mod random;
 pub mod selection;
 pub mod site;
 pub mod text;
@@ -57,7 +62,8 @@ mod tests {
     use super::*;
     use gid::{CellId, Value};
     use grap_runtime::{Environment, ForeignFunction, Halt};
-    use progred_display::{Display, Env, Layout, ProjectionInput, text as text_layout};
+    use progred_display::{Env, Layout, ProjectionInput, text as text_layout};
+    use puri::Leaf;
     use std::rc::Rc;
 
     const SHARED_CELL: CellId = CellId::from_u128(1);
@@ -151,7 +157,7 @@ mod tests {
                         targets: progred_display::ProjectionTargets::fixed(select, ()),
                     })
                     .and_then(|layout| match layout {
-                        Layout::Leaf(Display::Text { text, .. }) => Some(text),
+                        Layout::Leaf(Leaf::Text { text, .. }) => Some(text),
                         _ => None,
                     })
                     .unwrap()

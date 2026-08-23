@@ -67,8 +67,8 @@ provenance has no editable document location and may attribute interaction to
 the stored expression which produced it. Source/editability and
 projection choice remain separate inputs.
 
-A partial returns a `Layout<World, Hover>`: boxes, display leaves
-(`Text` and `Vector`), the stock host `LineEdit` control, generic hover
+A partial returns a `Layout<World, Hover>`: boxes, paint-parametric Puri
+leaves (`Text` and `Drawing`), the stock host `LineEdit` control, generic hover
 claims, and event wrappers. A generic event wrapper holds a Grap
 callable; realize turns platform events into GID records and invokes
 the callable with capabilities closed over the wrapper's projection
@@ -77,8 +77,9 @@ selection are get/set capabilities in that temporary overlay, and
 their writes commit only when the handler returns a non-absent result
 without diagnostics. Text and f64 request the stock Rust line control
 with their spelling, affixes, and Grap write-back rule. Progred lowers
-that control through Puri; the drawing language remains only `Text`
-and `Vector`, with no editor metadata on either. `grap` is grouping (`at`, `descend`,
+that control through Puri. Puri itself is the leaf language: text plus
+fill/stroke/clip canvas programs over its ordinary shape vocabulary, with no
+editor metadata on either. `grap` is grouping (`at`, `descend`,
 `alternatives`, `surround`, `hug`). The live interpreter measures that layout;
 callbacks become Puri handlers. There is no projection-action enum or
 central reducer: a callback receives `&mut World` when it fires. The

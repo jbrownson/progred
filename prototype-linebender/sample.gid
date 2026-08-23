@@ -22,12 +22,14 @@
     "dim_face": f14b6a08d29c53e7bd0561f8a3c2497e,
     "double": 1588cd2c81f1c6563cfe843f32e760df,
     "double_pitch": e69c085ed00f5270f24a895cca9cd7d6,
+    "draw_shape": fcaaadef14980397cce95363fc5a54f9,
+    "draw_stroke": c2025f7714e1f74c8ad75f28ea00f616,
+    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
     "edge": 2f74c8a1936e05bd4c17e2b98d60a5f4,
     "event": bd232b5fb4450b52e088470776ed2a01,
     "event_kind": 9cacae824e9661b167f3ed2b8e187ee0,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
-    "face": cb04728f5e6a1d93a6790238b5f1ce4d,
     "favorite": a83b16a0d85afeb98d46c3459f2e7e16,
     "favorite_value": 7acfbb51cd4b3c60645d0c2955775c1a,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
@@ -48,6 +50,7 @@
     "of": 4544b0db160b6330f20a69dd3ce34e2d,
     "on_event": 1b87f7de18e7c46c5fbfadea1f18aea4,
     "origin": 065c608bbd1f53075b5c831cc4c5abd6,
+    "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pitch": 563079b77defe2a26abcdccfa47655ed,
@@ -60,13 +63,13 @@
     "radius": e2321b78d65f87918c64b7875408051a,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "roof": 06068f483e95e24492a0835caa2751cb,
+    "rounded_rect": b07684708c0d04b7dfd66b9ec7ecf35b,
     "row": a791e4873aa95e21bc925dacbbbf6ea5,
     "selection_set": a12f30681dc2a8465da7673a7e2da9a8,
     "selection_value": 544d3b52ea73cd263c435ecddfe5e8bf,
     "shape": b5db29c46198e28df0c26ac4aa5a411a,
     "stage": 6a1fd3082b9c47e5f60d21a8c45e9b37,
     "stroke": 083e083f1549e362245fe6fb27135193,
-    "stroke_rounded_rect": 9e3e40a6c5b11699b89c182266f53e0a,
     "style": 2b9652d2cb8cb5c9d633b34d827048b1,
     "subject": 00dafdc01c7e014edd857e174c6c8b6f,
     "swatch": f2aadbb9e548ea30aceb7fed5773ea8a,
@@ -74,7 +77,6 @@
     "text": 08e64d1f3a92c5b7b7f0d38a165e29c4,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "value": 85e3b0d729c4165ffa1e0c5d49b3872e,
-    "vector": 1c2b3ed21cc83b14e73f02aa5067423e,
     "width": f33c672fef9d0d4561102410fd64129f,
     "x": 415def0fa0a9ac40dfba5fca4d0f8876,
     "y": 4e2dcde5b1ab1480a2f126176dd148c7,
@@ -139,7 +141,7 @@
                       },
                       children: [
                         {
-                          vector: {
+                          drawing: {
                             descent: {
                               f64: 0x0000000000000040,
                             },
@@ -148,25 +150,29 @@
                             },
                             commands: [
                               {
-                                stroke_rounded_rect: {
-                                  x: {
-                                    f64: 0x000000000000e03f,
-                                  },
-                                  y: {
-                                    f64: 0x000000000000e03f,
-                                  },
-                                  layout_radius: {
-                                    f64: 0x0000000000000040,
-                                  },
+                                draw_stroke: {
                                   line_width: {
                                     f64: 0x000000000000f03f,
                                   },
-                                  face: dim_face,
-                                  height: {
-                                    f64: 0x0000000000002240,
-                                  },
-                                  width: {
-                                    f64: 0x0000000000002240,
+                                  paint: dim_face,
+                                  draw_shape: {
+                                    rounded_rect: {
+                                      x: {
+                                        f64: 0x000000000000e03f,
+                                      },
+                                      y: {
+                                        f64: 0x000000000000e03f,
+                                      },
+                                      layout_radius: {
+                                        f64: 0x0000000000000040,
+                                      },
+                                      height: {
+                                        f64: 0x0000000000002240,
+                                      },
+                                      width: {
+                                        f64: 0x0000000000002240,
+                                      },
+                                    },
                                   },
                                 },
                               },
@@ -181,13 +187,13 @@
                             content: {
                               unquote: row,
                             },
-                            face: name_face,
+                            paint: name_face,
                           },
                         },
                         {
                           text: {
                             content: "×",
-                            face: dim_face,
+                            paint: dim_face,
                           },
                         },
                         {
@@ -195,7 +201,7 @@
                             content: {
                               unquote: col,
                             },
-                            face: name_face,
+                            paint: name_face,
                           },
                         },
                       ],

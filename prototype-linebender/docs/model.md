@@ -44,8 +44,8 @@ functions, declining via the absent convention, and any missing
 capability (float parsing, record overlay) is one FFI away — and the
 undo-run `recorded` bit. The hover ring and `pressed` remain input
 state. The layered widget story follows: once widget state inputs are
-data, today's Display leaves become blessed standard functions over
-boxes + vector ink, with phase-bound machinery (caret hit-testing,
+data, today's Puri leaves become blessed standard functions over
+boxes + canvas ink, with phase-bound machinery (caret hit-testing,
 the popup channel, IME delivery) remaining editor-owned hooks.
 
 THE POINT of all of it (Jake, 2026-08-19): libraries for custom types

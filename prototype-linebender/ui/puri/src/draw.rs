@@ -10,6 +10,143 @@
 use kurbo::{Affine, BezPath, Circle, Line, Rect, RoundedRect, Stroke};
 use peniko::{Brush, FontData};
 
+/// A measured Puri leaf. Text asks its consumer to shape one line;
+/// drawing programs carry their own metrics and use leaf-local logical
+/// coordinates. `Paint` is deliberately supplied by the consumer —
+/// Progred uses semantic faces while another application may use brushes
+/// directly.
+#[derive(Debug, Clone)]
+pub enum Leaf<Paint> {
+    Text { text: String, paint: Paint },
+    Drawing(Drawing<Paint>),
+}
+
+/// An initially encoded Puri canvas program with explicit baseline metrics.
+/// It is the data interpreter of the same fill/stroke/clip language exposed
+/// by [`Canvas`], suitable for projection output and tests.
+#[derive(Debug, Clone)]
+pub struct Drawing<Paint> {
+    pub width: f64,
+    pub ascent: f64,
+    pub descent: f64,
+    pub commands: Vec<Command<Paint>>,
+}
+
+impl<Paint> Drawing<Paint> {
+    pub fn map_paint<Mapped>(self, map: impl Fn(Paint) -> Mapped) -> Drawing<Mapped> {
+        Drawing {
+            width: self.width,
+            ascent: self.ascent,
+            descent: self.descent,
+            commands: self
+                .commands
+                .into_iter()
+                .map(|command| command.map_paint(&map))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Command<Paint> {
+    Fill {
+        shape: Shape,
+        paint: Paint,
+        transform: Affine,
+    },
+    Stroke {
+        shape: Shape,
+        style: Stroke,
+        paint: Paint,
+        transform: Affine,
+    },
+    Clip {
+        shape: Shape,
+        transform: Affine,
+        children: Vec<Command<Paint>>,
+    },
+}
+
+impl<Paint> Command<Paint> {
+    fn map_paint<Mapped>(self, map: &impl Fn(Paint) -> Mapped) -> Command<Mapped> {
+        match self {
+            Self::Fill {
+                shape,
+                paint,
+                transform,
+            } => Command::Fill {
+                shape,
+                paint: map(paint),
+                transform,
+            },
+            Self::Stroke {
+                shape,
+                style,
+                paint,
+                transform,
+            } => Command::Stroke {
+                shape,
+                style,
+                paint: map(paint),
+                transform,
+            },
+            Self::Clip {
+                shape,
+                transform,
+                children,
+            } => Command::Clip {
+                shape,
+                transform,
+                children: children
+                    .into_iter()
+                    .map(|child| child.map_paint(map))
+                    .collect(),
+            },
+        }
+    }
+}
+
+/// Interpret an initially encoded drawing into any Puri canvas. `outer`
+/// places the leaf; command transforms remain local to it.
+pub fn draw<Paint, C: Canvas>(
+    drawing: Drawing<Paint>,
+    canvas: &mut C,
+    outer: Affine,
+    resolve: impl Fn(&Paint) -> Brush,
+) {
+    draw_commands(drawing.commands, canvas, outer, &resolve);
+}
+
+fn draw_commands<Paint, C: Canvas>(
+    commands: Vec<Command<Paint>>,
+    canvas: &mut C,
+    outer: Affine,
+    resolve: &impl Fn(&Paint) -> Brush,
+) {
+    for command in commands {
+        match command {
+            Command::Fill {
+                shape,
+                paint,
+                transform,
+            } => canvas.fill(shape, resolve(&paint), outer * transform),
+            Command::Stroke {
+                shape,
+                style,
+                paint,
+                transform,
+            } => canvas.stroke(shape, style, resolve(&paint), outer * transform),
+            Command::Clip {
+                shape,
+                transform,
+                children,
+            } => canvas.clip(shape, outer * transform, |canvas| {
+                draw_commands(children, canvas, outer, resolve)
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Shape {
     Rect(Rect),
@@ -254,5 +391,50 @@ mod tests {
         let mut replayed = DrawList::new();
         replay(&original, &mut replayed);
         assert_eq!(format!("{original:?}"), format!("{replayed:?}"));
+    }
+
+    #[test]
+    fn an_initial_drawing_interprets_through_the_canvas_language() {
+        let drawing = Drawing {
+            width: 10.0,
+            ascent: 8.0,
+            descent: 2.0,
+            commands: vec![
+                Command::Fill {
+                    shape: Shape::Circle(Circle::new((5.0, 5.0), 4.0)),
+                    paint: Color::WHITE,
+                    transform: Affine::IDENTITY,
+                },
+                Command::Clip {
+                    shape: Shape::Rect(Rect::new(0.0, 0.0, 10.0, 10.0)),
+                    transform: Affine::IDENTITY,
+                    children: vec![Command::Stroke {
+                        shape: Shape::Line(Line::new((0.0, 0.0), (10.0, 10.0))),
+                        style: Stroke::new(2.0),
+                        paint: Color::BLACK,
+                        transform: Affine::IDENTITY,
+                    }],
+                },
+            ],
+        };
+        let mut recorded = DrawList::new();
+        draw(
+            drawing,
+            &mut recorded,
+            Affine::translate((20.0, 30.0)),
+            |paint| Brush::from(*paint),
+        );
+        assert!(matches!(
+            &recorded.0[..],
+            [
+                DrawCmd::Fill {
+                    shape: Shape::Circle(_),
+                    transform,
+                    ..
+                },
+                DrawCmd::Clip { children, .. },
+            ] if *transform == Affine::translate((20.0, 30.0))
+                && matches!(children.as_slice(), [DrawCmd::Stroke { shape: Shape::Line(_), .. }])
+        ));
     }
 }

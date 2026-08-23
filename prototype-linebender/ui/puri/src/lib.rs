@@ -14,8 +14,12 @@ pub mod hover;
 pub mod interact;
 pub mod text;
 
+pub use kurbo::{Affine, BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Stroke, Vec2};
+pub use peniko::{Brush, Color, ColorStop, Gradient};
 pub use delim::{Delim, DelimStyle};
-pub use draw::{Canvas, DrawCmd, DrawList, Glyph, GlyphRun, Shape, replay};
+pub use draw::{
+    Canvas, Command, DrawCmd, DrawList, Drawing, Glyph, GlyphRun, Leaf, Shape, draw, replay,
+};
 pub use edit::{
     EditCtx, EditStyle, LineEdit, LineEditDescription, LineEditGeometry, LineEditPointerDown,
     LineEditPresentation, LineEditState, TextClipboard, text_edit,

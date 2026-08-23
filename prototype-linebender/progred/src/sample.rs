@@ -40,7 +40,7 @@ pub fn at_display_partial() -> Value {
                     Value::record([(control::vocabulary::UNQUOTE, Value::from(binder))]),
                 ),
                 (
-                    layout::vocabulary::FACE,
+                    layout::vocabulary::PAINT,
                     Value::from(layout::vocabulary::NAME_FACE),
                 ),
             ]),
@@ -123,18 +123,16 @@ pub fn at_display_partial() -> Value {
                                                 layout::row(
                                                     4.0,
                                                     [
-                                                        layout::vector(
+                                                        layout::drawing(
                                                             10.0,
                                                             8.0,
                                                             2.0,
-                                                            [layout::stroke_rounded_rect(
-                                                                0.5,
-                                                                0.5,
-                                                                9.0,
-                                                                9.0,
-                                                                2.0,
+                                                            [layout::stroke(
+                                                                layout::rounded_rect(
+                                                                    0.5, 0.5, 9.0, 9.0, 2.0,
+                                                                ),
                                                                 1.0,
-                                                                layout::vocabulary::DIM_FACE,
+                                                                Value::from(layout::vocabulary::DIM_FACE),
                                                             )],
                                                         ),
                                                         spliced_text(sample_vocabulary::ROW),

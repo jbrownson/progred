@@ -789,4 +789,13 @@ mod checked_in_files {
         let (doc, binders) = parse(text).expect("the Grap demo parses");
         assert_eq!(print(&doc, &binders), text);
     }
+
+    #[test]
+    fn the_iop_tree_demo_is_a_fixed_point_without_orphans() {
+        let text = include_str!("../../iop-tree.gid");
+        let (doc, binders) = parse(text).expect("the IoP tree demo parses");
+        assert_eq!(print(&doc, &binders), text);
+        let reached = root_reachable_cells(&doc);
+        assert!(doc.cells.cells().all(|cell| reached.contains(cell)));
+    }
 }

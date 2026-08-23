@@ -332,6 +332,36 @@ fn svg_bench_renders_the_sample_projection() {
 }
 
 #[test]
+fn iop_tree_projects_through_grap_into_puri_ink() {
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../iop-tree.gid"))
+        .expect("the IoP tree demo parses");
+    let (bench, extent) = place(&doc, None, 1400.0);
+    assert!(extent.width > 500.0);
+    assert!(bench.list.0.iter().any(|command| matches!(
+        command,
+        DrawCmd::Fill {
+            brush: Brush::Gradient(_),
+            ..
+        }
+    )));
+    assert!(
+        bench
+            .list
+            .0
+            .iter()
+            .filter(|command| matches!(
+                command,
+                DrawCmd::Fill {
+                    shape: Shape::Circle(_),
+                    ..
+                }
+            ))
+            .count()
+            > 7_000
+    );
+}
+
+#[test]
 fn sample_text_line_claims_its_own_hover() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../sample.gid"))
         .expect("the sample parses");

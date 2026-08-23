@@ -7,4 +7,5 @@ edition = "2024"
 gid = { path = "../gid" }
 grap-runtime = { package = "grap", path = "../grap" }
 progred-display = { path = "../display" }
+puri = { path = "../ui/puri" }
 im = "15"

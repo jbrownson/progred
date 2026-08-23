@@ -159,6 +159,22 @@ impl progred_display::Env for ProjectEnv<'_, '_> {
         (evaluation.result, evaluation.remaining_fuel)
     }
 
+    fn evaluate_with_fuel(&self, expression: &Value, fuel: usize) -> (Value, usize) {
+        let fuel = if self.cx.source.transient() {
+            self.cx.fuel.get().min(fuel)
+        } else {
+            fuel
+        };
+        let evaluation = grap::evaluate(
+            expression,
+            |cell| self.cx.sources.value(cell).cloned(),
+            self.cx.foreign,
+            fuel,
+        );
+        self.cx.fuel.set(evaluation.remaining_fuel);
+        (evaluation.result, evaluation.remaining_fuel)
+    }
+
     fn name(&self, cell: CellId) -> Option<String> {
         self.cx.name(cell).map(str::to_owned)
     }
@@ -748,7 +764,7 @@ mod choice_tests {
     }
 }
 
-/// Lower a projection layout to measured boxes. Display leaves
+/// Lower a projection layout to measured boxes. Puri leaves
 /// become place-continuations; interaction nodes become Puri handlers.
 #[allow(clippy::too_many_arguments)]
 fn prepare<
@@ -1461,13 +1477,20 @@ fn leaf_display<
 >(
     styles: &Styles,
     tcx: &mut TextCtx,
-    content: progred_display::Display,
+    content: puri::Leaf<progred_display::Paint>,
 ) -> Measured<Placed<C, Cv>> {
     match content {
-        progred_display::Display::Text { text, face } => {
-            render::text(tcx, &text, face_style(styles, face))
+        puri::Leaf::Text { text, paint } => {
+            let style = match paint {
+                progred_display::Paint::Face(face) => face_style(styles, face).clone(),
+                progred_display::Paint::Brush(brush) => TextStyle {
+                    brush,
+                    ..styles.name.clone()
+                },
+            };
+            render::text(tcx, &text, &style)
         }
-        progred_display::Display::Vector(vector) => vector_leaf(styles, vector),
+        puri::Leaf::Drawing(drawing) => drawing_leaf(styles, drawing),
     }
 }
 
@@ -1553,68 +1576,26 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
     })
 }
 
-fn vector_leaf<C: 'static, Cv: Canvas + 'static>(
+fn drawing_leaf<C: 'static, Cv: Canvas + 'static>(
     styles: &Styles,
-    vector: progred_display::Vector,
+    drawing: puri::Drawing<progred_display::Paint>,
 ) -> Measured<Placed<C, Cv>> {
     let scale = styles.scale;
-    let commands = vector
-        .commands
-        .into_iter()
-        .map(|command| match command {
-            progred_display::VectorCommand::FillRoundedRect {
-                x,
-                y,
-                width,
-                height,
-                radius,
-                face,
-            } => (
-                false,
-                Rect::new(x, y, x + width, y + height),
-                radius,
-                0.0,
-                face_style(styles, face).brush.clone(),
-            ),
-            progred_display::VectorCommand::StrokeRoundedRect {
-                x,
-                y,
-                width,
-                height,
-                radius,
-                line_width,
-                face,
-            } => (
-                true,
-                Rect::new(x, y, x + width, y + height),
-                radius,
-                line_width,
-                face_style(styles, face).brush.clone(),
-            ),
-        })
-        .collect::<Vec<_>>();
+    let extent = Extent {
+        width: drawing.width * scale,
+        ascent: drawing.ascent * scale,
+        descent: drawing.descent * scale,
+    };
+    let drawing = drawing.map_paint(|paint| match paint {
+        progred_display::Paint::Face(face) => face_style(styles, face).brush.clone(),
+        progred_display::Paint::Brush(brush) => brush,
+    });
     leaf(
-        Extent {
-            width: vector.width * scale,
-            ascent: vector.ascent * scale,
-            descent: vector.descent * scale,
-        },
+        extent,
         move |p, placement| {
             let transform = Affine::translate((placement.rect.x0, placement.rect.y0))
                 * Affine::scale(scale);
-            for (stroke, rect, radius, line_width, brush) in commands {
-                let shape = RoundedRect::from_rect(rect, radius);
-                if stroke {
-                    p.stroke(
-                        shape,
-                        Stroke::new(line_width),
-                        brush,
-                        transform,
-                    );
-                } else {
-                    p.fill(shape, brush, transform);
-                }
-            }
+            puri::draw::draw(drawing, p, transform, Clone::clone);
         },
     )
 }

@@ -1,0 +1,2082 @@
+{
+  "binders": {
+    "acc_commands": 06712e5dbc436e7c4fba7a0d39c23d95,
+    "acc_points": 901367eb981a70708bd734cfabf4d9ce,
+    "accumulator": b6bd623b43e80b7f039873ab5f6afa13,
+    "add": 201af445eb7e2c270bb5ead10b781fc1,
+    "all_commands": f207a3e37806b26ca4751a782705f7a2,
+    "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
+    "angle": 40a5a9cf5afb5a16171a9dae3fd06e7c,
+    "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
+    "bind": 5e46d12705690e8a377eb0f16ad9dba6,
+    "bindings": f6fb0062e8a14f808e416a9edece2a9d,
+    "blossom_colors": 2a5109ec22acf09a33b63836c01ea058,
+    "blossom_command": 2ddf1fcb694303921182f35459218aee,
+    "blossom_commands": 8f0aff8c585744502b326504fab05d04,
+    "blossom_index": 3000d79cfc62262635d95ceaad339453,
+    "blossom_points": 242e77282d28e5266df1da8bc40ea4cb,
+    "blossoms": 8e6f78c4ab9b8bef8a26643b2a6203b2,
+    "blossoms_per_branch": 02a022e127aba280fa54bfc9876ab42e,
+    "body": 986143866eda2e2fbf9ab8484357a0c9,
+    "branch_commands": 4f7174503b83fe38e47b326bea4c2baf,
+    "branch_item": 36b771a86bf3f81e62ddd3b7bfeb2485,
+    "branch_items": 6de2b6ac6cdfb49f75c7a323152eb700,
+    "branch_length": d219d7e20342e9423e3bc5f319d8f4fe,
+    "branch_points": 8ae688f06bec51bfbb2d207dfa9f6761,
+    "branch_width": abe1635b2cd83f005071c5d7a6bbb40c,
+    "branches": e303be811c2209c2f87bc861e22bc4d0,
+    "canvas_height": 274d0b51bc6c8033eb55de7d825eca01,
+    "canvas_width": 957105218c1fd308ab76b51fd4e368cb,
+    "cases": a9aadcb44755963498c743fa114f0f00,
+    "child_depth": ee142e9d6e06eb62da5db5dcf242700d,
+    "child_width": aaa4e1f70b7edac5317b9fbbd23c7e55,
+    "circle": e06a6d094c4f75cd6c1d59ed6ed64e05,
+    "clip": 30b1e31f7eda7e84d9309e5e2d6ef48f,
+    "close": adf2742dbde1b09b03e1fc649f5e1f58,
+    "color": 6c8a17cbe463186cc8b07e536ccffa6b,
+    "color_index": 59f21ccbee8a91496c84e22532df9ca9,
+    "color_pick": 982d9a84180c604b1a60fbfffb59da03,
+    "command": 570cfe675e206018960714f79933f25e,
+    "commands": b3604c47bef05aa4c7ef0b2d5794da14,
+    "concat": 6f2613d22b4690ed5bac39776e51b775,
+    "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
+    "current": 2680dedea78f6efb6866a9e537f09aa4,
+    "depth": 180339357267d28e55bf88ce1b27b5d8,
+    "descent": 2ed0b9294782093c08695dd5137df21a,
+    "divide": b08dd4c44eeea43ab3c7593ddeedd742,
+    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
+    "dx": c96dfbe500e6a701033d92bc6c527398,
+    "dy": 89d9b403fe0eba053af7048e29bf2f16,
+    "end": 3a816b0af0160bc77ba1948b122b3f29,
+    "end_value": 8bb963a6909a802401353a81fe0d2b03,
+    "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
+    "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
+    "fill": 1624dc973ec7790203eb8fd22c9d6d05,
+    "floor": d007814c5f6a6c38b025605b399473d4,
+    "fold": 1df93e0aeb8cbeda81a7d513320dd4f0,
+    "frontier": 7c6d509824ee4861ccafb0a34f5adba6,
+    "function": 751fca4373debdd0b7e6eb73e08d684b,
+    "gradient_end": abbfd273a978cb520a145eb65568f224,
+    "gradient_offset": f348e826a277875d63e7a0197730f036,
+    "gradient_start": c68a36ea81944cdbc8e7897ffda5a36c,
+    "half_width": be2613d7fe73e7f6c393a2f08cf2ae02,
+    "height": cc32dd050a9351804e7a704b4d59e7ac,
+    "index": 15db24ee6ff0354d94c0628fc412d64f,
+    "initial": 24d55aeab9383d53899091958de88d21,
+    "initial_y": bd4e962b430257524294181aaa2f18af,
+    "item": 67bdfe4ec7d3bafc14407235618840aa,
+    "left": 764f6afe17ba14e81f5ab61204be0bec,
+    "left_angle": 46c6cebbd94b017d68e355e57d6fffb0,
+    "length": fb16faf9e37d6a0489205c28afcf55c1,
+    "lerp": 432ad7a31ef129e353e251419e690ca1,
+    "less": ed44dbf5b4cdf5c952e1ef00f219b655,
+    "let": f4f93c70910c4d8a8eeb8e049cc64c14,
+    "line_to": 2b1cebde44cbdadcd6de44facda4ee94,
+    "linear_gradient": 7595f5eee03cd47be1f3fee10806d6a9,
+    "list": 216008ae157998d3838112b96e584d11,
+    "list_at": e56c968fe11bbf17b2033d12f5af5472,
+    "list_length": 6882dc6ab06d393217abe6f888585499,
+    "list_tail": b5664e4ebf6aef871a4a02b0aa26d036,
+    "match": b3f6a62e4926889bcfcd338025f4a6f9,
+    "maximum": 4be40301b427aeed939ef079ab63cf92,
+    "minimum": 61213005b01abca2d4fb351cc4fe4d98,
+    "mountain": f86efd38203717f07eef5524419a0412,
+    "mountain_back": 3275c316dc6d5a3112c268d3e95aebad,
+    "mountain_front": 3acbe4a32d86db11b227a8bb24c8e533,
+    "move_to": 1f6ae3a0b82fb63f233f4713cd0c8e30,
+    "multiply": d6f384c439d9d69996d545df422efd79,
+    "name": 02e562654d6d0828d3a7559e6f75fffe,
+    "new_frontier": 350dc49c31dfef1386aa6e4237ebccc6,
+    "next_blossom": 111340de338c3926a7d571cb2b99a04c,
+    "next_segment": d166e4b370043426839169095751b129,
+    "next_state": 32787ea4c1eeb8a881df39ec6e0a2032,
+    "next_x": 50c48e66179603824fc6e10b41b5504e,
+    "next_y": 962188a9877f14bd02d819d68c9c7fef,
+    "offset": dfd07a562aafe45ae556fea89958a59e,
+    "operand": 50a20d15e4ae56be51b882de9d58c676,
+    "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
+    "params": 195b378d0d31d90ab0d7366c15346b70,
+    "path": fbcf1931c6e050d62c4caf5cccba2ce8,
+    "path_elements": fd52747f31d0a82f9926e99331c69368,
+    "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
+    "pi": 9cd591f37312e563f52b7374a6cef5c0,
+    "prepend": 06f34b889ba63141b4b62f02d8d49aa9,
+    "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
+    "radius": 6423c35e07d7a4ff536127d1f1d8eb53,
+    "random_between": e8a99ada91800bca33709da0db80c29f,
+    "random_scale": 1bc6faa0c835d0636606db22ffdfa935,
+    "random_state": 1c80fb9f0035b66347ae1529e42af98b,
+    "random_value": 725980a1344dbdce099fcdf189f77ba9,
+    "rect": bb5e62c1b300b1e8c2484a0f4879a1fe,
+    "reset_random": bced0768fa647daf95a663b3e626b4ae,
+    "rest": 27866faf05bcd734dcd453d70a16b581,
+    "right": 4f53ff25390f58472d31a6142644dec2,
+    "right_angle": 74d076eff44a24482f9f06b433664388,
+    "rotate": 2500213d415930c6b40f15d633cc04a4,
+    "scaled_length": b6de540458c5b666fee2f2f8d5eaaacd,
+    "scene": a9779ccfb039a7197dadae4d8115a971,
+    "segment": 816321c945094d7839a8754d191b1ce1,
+    "segment_count": 19a4df8c5983adbf4fdb3b206d6fdf69,
+    "segment_index": e1cdb8af848f7be1babc5eb79af4e21e,
+    "shape": fcaaadef14980397cce95363fc5a54f9,
+    "sin": 9f62e0f56d92be74f6ae36378d889262,
+    "sky_bottom": eeea7678df2543fd269591cc5b8e0fbd,
+    "sky_top": 043d453da9551469f4d2838478dc4ec9,
+    "start": 4b4fb6349d2fd798e7aafca85a2deca8,
+    "start_value": 5afff5ae637f50cadd813f2c213c306e,
+    "state": 3775735ae4c156144c110ba819cb1e39,
+    "step": 569e33fee165d346791e05c0e9cfea8e,
+    "stops": 5d4211d5e7184a41fe1ffaa2cd5865c9,
+    "subtract": 08d1ebc7fd4ce62efec9671f73e9b645,
+    "tip_distance": 3087b52f1e61ecc77b2768d8dced0d7c,
+    "tip_x": c0c24024572a578694cb666c24b533ba,
+    "tip_y": d843ffc3a66afaa9d8b21bd7597e6007,
+    "transform": 0c69b749e5d076609a6642a20b736fb4,
+    "translate": b9c300206cc1c193cc801f4f058f2647,
+    "true": 04831f9b704935059231eb111770e62e,
+    "trunk_length": 2d32fc785aae627f3f5c34f601e9f03c,
+    "turn_left": 039dae8299938bd45e7bd27629aae539,
+    "turn_right": dea4f4b45c15610e60582a12d967f7e8,
+    "tween": e874f74bb9986467e02c5e1d0091fcbd,
+    "unfold": b71c173bae05b26bfdca3b5bc79b2b09,
+    "unquote": da48703c290e3b35d7353c38110bc953,
+    "value": 00dafdc01c7e014edd857e174c6c8b6f,
+    "width": f33c672fef9d0d4561102410fd64129f,
+    "x": 415def0fa0a9ac40dfba5fca4d0f8876,
+    "x0": 882baf61dc20dc2b3b6e66a4944ee3f9,
+    "x1": ff0eee8dd1b9f0f3ef1124f88040ff6c,
+    "x_amount": ac4bbe36e35ae47cefa81bf03b5a047e,
+    "x_jitter": ff29ccd09c65082ca8f22b5f0beab43d,
+    "y": 4e2dcde5b1ab1480a2f126176dd148c7,
+    "y0": 44e5a507e051c6c1226afef5cd1f6f93,
+    "y1": 7c30613c46c9f445ae048fe4e94540fe,
+    "y_amount": 3db1eefc26ee9cf35ac915ec483267a9,
+    "y_jitter": 29d8f49e530e8052669d487fbb0c8036,
+  },
+  "cells": {
+    acc_points: {
+      name: "accumulated blossom points",
+    },
+    acc_commands: {
+      name: "accumulated commands",
+    },
+    all_commands: {
+      name: "all commands",
+    },
+    amount: {
+      name: "amount",
+    },
+    angle: {
+      name: "angle",
+    },
+    blossom_colors: {
+      name: "blossom colors",
+    },
+    blossom_command: {
+      name: "blossom command",
+    },
+    blossom_commands: {
+      name: "blossom commands",
+    },
+    blossom_index: {
+      name: "blossom index",
+    },
+    blossom_points: {
+      name: "blossom points",
+    },
+    blossoms: {
+      name: "blossoms",
+      params: [
+        blossom_points,
+        blossom_colors,
+        blossoms_per_branch,
+      ],
+      body: {
+        function: let,
+        expression: blossom_commands,
+        bindings: [
+          {
+            value: {
+              initial: {
+                function: quote,
+                expression: {
+                  random_state: {
+                    unquote: {
+                      function: reset_random,
+                    },
+                  },
+                  blossom_index: {
+                    f64: 0x0000000000000000,
+                  },
+                  segment_index: {
+                    f64: 0x0000000000000000,
+                  },
+                },
+              },
+              step: {
+                params: [
+                  state,
+                ],
+                body: {
+                  function: let,
+                  expression: {
+                    value: {
+                      right: segment_count,
+                      function: less,
+                      left: segment_index,
+                    },
+                    function: match,
+                    cases: [
+                      {
+                        pattern: true,
+                        expression: {
+                          function: let,
+                          expression: {
+                            function: quote,
+                            expression: {
+                              state: {
+                                random_state: {
+                                  unquote: random_state,
+                                },
+                                blossom_index: {
+                                  unquote: next_blossom,
+                                },
+                                segment_index: {
+                                  unquote: next_segment,
+                                },
+                              },
+                              item: {
+                                unquote: blossom_command,
+                              },
+                            },
+                          },
+                          bindings: [
+                            {
+                              value: {
+                                index: segment_index,
+                                list: blossom_points,
+                                function: list_at,
+                              },
+                              bind: segment,
+                            },
+                            {
+                              value: segment,
+                              pattern: [
+                                {
+                                  bind: x0,
+                                },
+                                {
+                                  bind: y0,
+                                },
+                                {
+                                  bind: x1,
+                                },
+                                {
+                                  bind: y1,
+                                },
+                              ],
+                            },
+                            {
+                              value: {
+                                random_state: random_state,
+                                maximum: {
+                                  f64: 0x000000000000f03f,
+                                },
+                                minimum: {
+                                  f64: 0x0000000000000000,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: next_state,
+                                },
+                                random_value: {
+                                  bind: x_amount,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                random_state: next_state,
+                                maximum: {
+                                  f64: 0x0000000000002440,
+                                },
+                                minimum: {
+                                  f64: 0x00000000000024c0,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: random_state,
+                                },
+                                random_value: {
+                                  bind: x_jitter,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                random_state: random_state,
+                                maximum: {
+                                  f64: 0x000000000000f03f,
+                                },
+                                minimum: {
+                                  f64: 0x0000000000000000,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: next_state,
+                                },
+                                random_value: {
+                                  bind: y_amount,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                random_state: next_state,
+                                maximum: {
+                                  f64: 0x0000000000002440,
+                                },
+                                minimum: {
+                                  f64: 0x00000000000024c0,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: random_state,
+                                },
+                                random_value: {
+                                  bind: y_jitter,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                random_state: random_state,
+                                maximum: {
+                                  list: blossom_colors,
+                                  function: list_length,
+                                },
+                                minimum: {
+                                  f64: 0x0000000000000000,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: next_state,
+                                },
+                                random_value: {
+                                  bind: color_pick,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                random_state: next_state,
+                                maximum: {
+                                  f64: 0x0000000000001440,
+                                },
+                                minimum: {
+                                  f64: 0x0000000000000040,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: random_state,
+                                },
+                                random_value: {
+                                  bind: radius,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                right: x_jitter,
+                                function: add,
+                                left: {
+                                  end: x1,
+                                  start: x0,
+                                  amount: x_amount,
+                                  function: lerp,
+                                },
+                              },
+                              bind: x,
+                            },
+                            {
+                              value: {
+                                right: y_jitter,
+                                function: add,
+                                left: {
+                                  end: y1,
+                                  start: y0,
+                                  amount: y_amount,
+                                  function: lerp,
+                                },
+                              },
+                              bind: y,
+                            },
+                            {
+                              value: {
+                                operand: color_pick,
+                                function: floor,
+                              },
+                              bind: color_index,
+                            },
+                            {
+                              value: {
+                                index: color_index,
+                                list: blossom_colors,
+                                function: list_at,
+                              },
+                              bind: paint,
+                            },
+                            {
+                              value: {
+                                function: quote,
+                                expression: {
+                                  fill: {
+                                    paint: {
+                                      unquote: paint,
+                                    },
+                                    shape: {
+                                      circle: {
+                                        x: {
+                                          unquote: x,
+                                        },
+                                        y: {
+                                          unquote: y,
+                                        },
+                                        radius: {
+                                          unquote: radius,
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                              bind: blossom_command,
+                            },
+                            {
+                              value: {
+                                right: {
+                                  f64: 0x000000000000f03f,
+                                },
+                                function: add,
+                                left: blossom_index,
+                              },
+                              bind: next_blossom,
+                            },
+                            {
+                              value: {
+                                value: {
+                                  right: blossoms_per_branch,
+                                  function: less,
+                                  left: next_blossom,
+                                },
+                                function: match,
+                                cases: [
+                                  {
+                                    pattern: true,
+                                    expression: {
+                                      function: quote,
+                                      expression: {
+                                        blossom_index: {
+                                          unquote: next_blossom,
+                                        },
+                                        segment_index: {
+                                          unquote: segment_index,
+                                        },
+                                      },
+                                    },
+                                  },
+                                  {
+                                    pattern: {
+                                      bind: value,
+                                    },
+                                    expression: {
+                                      function: quote,
+                                      expression: {
+                                        blossom_index: {
+                                          f64: 0x0000000000000000,
+                                        },
+                                        segment_index: {
+                                          unquote: {
+                                            right: {
+                                              f64: 0x000000000000f03f,
+                                            },
+                                            function: add,
+                                            left: segment_index,
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                ],
+                              },
+                              pattern: {
+                                blossom_index: {
+                                  bind: next_blossom,
+                                },
+                                segment_index: {
+                                  bind: next_segment,
+                                },
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                  bindings: [
+                    {
+                      value: state,
+                      pattern: {
+                        random_state: {
+                          bind: random_state,
+                        },
+                        blossom_index: {
+                          bind: blossom_index,
+                        },
+                        segment_index: {
+                          bind: segment_index,
+                        },
+                      },
+                    },
+                    {
+                      value: {
+                        list: blossom_points,
+                        function: list_length,
+                      },
+                      bind: segment_count,
+                    },
+                  ],
+                },
+              },
+              function: unfold,
+            },
+            pattern: {
+              list: {
+                bind: blossom_commands,
+              },
+              state: {
+                bind: next_state,
+              },
+            },
+          },
+        ],
+      },
+    },
+    blossoms_per_branch: {
+      name: "blossoms per branch",
+    },
+    branch_commands: {
+      name: "branch commands",
+    },
+    branch_item: {
+      name: "branch item",
+    },
+    branch_items: {
+      name: "branch items",
+    },
+    branch_length: {
+      name: "branch length",
+    },
+    branch_points: {
+      name: "branch points",
+    },
+    branch_width: {
+      name: "branch width",
+    },
+    branches: {
+      name: "branches",
+      params: [
+        canvas_width,
+        canvas_height,
+        branch_length,
+        trunk_length,
+      ],
+      body: {
+        function: let,
+        expression: branch_commands,
+        bindings: [
+          {
+            value: {
+              initial: {
+                function: quote,
+                expression: {
+                  random_state: {
+                    unquote: {
+                      function: reset_random,
+                    },
+                  },
+                  frontier: [
+                    [
+                      {
+                        f64: 0x0000000000000000,
+                      },
+                      {
+                        unquote: {
+                          right: {
+                            f64: 0x0000000000000040,
+                          },
+                          function: divide,
+                          left: {
+                            right: pi,
+                            function: subtract,
+                            left: {
+                              f64: 0x0000000000000000,
+                            },
+                          },
+                        },
+                      },
+                      {
+                        unquote: {
+                          right: {
+                            f64: 0x0000000000000040,
+                          },
+                          function: divide,
+                          left: canvas_width,
+                        },
+                      },
+                      {
+                        unquote: canvas_height,
+                      },
+                      {
+                        f64: 0x0000000000003e40,
+                      },
+                    ],
+                  ],
+                },
+              },
+              step: {
+                params: [
+                  state,
+                ],
+                body: {
+                  function: let,
+                  expression: {
+                    function: quote,
+                    expression: {
+                      state: {
+                        random_state: {
+                          unquote: random_state,
+                        },
+                        frontier: {
+                          unquote: new_frontier,
+                        },
+                      },
+                      item: {
+                        unquote: branch_item,
+                      },
+                    },
+                  },
+                  bindings: [
+                    {
+                      value: state,
+                      pattern: {
+                        random_state: {
+                          bind: random_state,
+                        },
+                        frontier: {
+                          bind: frontier,
+                        },
+                      },
+                    },
+                    {
+                      value: {
+                        index: {
+                          f64: 0x0000000000000000,
+                        },
+                        list: frontier,
+                        function: list_at,
+                      },
+                      bind: current,
+                    },
+                    {
+                      value: {
+                        list: frontier,
+                        function: list_tail,
+                      },
+                      bind: rest,
+                    },
+                    {
+                      value: current,
+                      pattern: [
+                        {
+                          bind: depth,
+                        },
+                        {
+                          bind: angle,
+                        },
+                        {
+                          bind: x,
+                        },
+                        {
+                          bind: y,
+                        },
+                        {
+                          bind: branch_width,
+                        },
+                      ],
+                    },
+                    {
+                      value: {
+                        random_state: random_state,
+                        maximum: {
+                          f64: 0xcdccccccccccf43f,
+                        },
+                        minimum: {
+                          f64: 0x666666666666e63f,
+                        },
+                        function: random_between,
+                      },
+                      pattern: {
+                        random_state: {
+                          bind: next_state,
+                        },
+                        random_value: {
+                          bind: random_scale,
+                        },
+                      },
+                    },
+                    {
+                      value: {
+                        right: random_scale,
+                        function: multiply,
+                        left: {
+                          value: depth,
+                          end: {
+                            f64: 0x0000000000002840,
+                          },
+                          start: {
+                            f64: 0x000000000000f03f,
+                          },
+                          start_value: branch_length,
+                          function: tween,
+                          end_value: {
+                            f64: 0x0000000000000840,
+                          },
+                        },
+                      },
+                      bind: scaled_length,
+                    },
+                    {
+                      value: {
+                        value: {
+                          right: {
+                            f64: 0x0000000000000000,
+                          },
+                          function: equal,
+                          left: depth,
+                        },
+                        function: match,
+                        cases: [
+                          {
+                            pattern: true,
+                            expression: trunk_length,
+                          },
+                          {
+                            pattern: {
+                              bind: value,
+                            },
+                            expression: scaled_length,
+                          },
+                        ],
+                      },
+                      bind: length,
+                    },
+                    {
+                      value: {
+                        right: {
+                          f64: 0x0000000000000040,
+                        },
+                        function: divide,
+                        left: branch_width,
+                      },
+                      bind: half_width,
+                    },
+                    {
+                      value: {
+                        right: half_width,
+                        function: subtract,
+                        left: length,
+                      },
+                      bind: tip_distance,
+                    },
+                    {
+                      value: {
+                        right: {
+                          right: {
+                            operand: angle,
+                            function: cos,
+                          },
+                          function: multiply,
+                          left: tip_distance,
+                        },
+                        function: add,
+                        left: x,
+                      },
+                      bind: tip_x,
+                    },
+                    {
+                      value: {
+                        right: {
+                          right: {
+                            operand: angle,
+                            function: sin,
+                          },
+                          function: multiply,
+                          left: tip_distance,
+                        },
+                        function: add,
+                        left: y,
+                      },
+                      bind: tip_y,
+                    },
+                    {
+                      value: {
+                        right: {
+                          f64: 0x000000000000f03f,
+                        },
+                        function: add,
+                        left: depth,
+                      },
+                      bind: child_depth,
+                    },
+                    {
+                      value: {
+                        right: {
+                          f64: 0x666666666666e63f,
+                        },
+                        function: multiply,
+                        left: branch_width,
+                      },
+                      bind: child_width,
+                    },
+                    {
+                      value: {
+                        value: {
+                          right: {
+                            f64: 0x0000000000001840,
+                          },
+                          function: less,
+                          left: depth,
+                        },
+                        function: match,
+                        cases: [
+                          {
+                            pattern: true,
+                            expression: {
+                              function: let,
+                              expression: {
+                                function: quote,
+                                expression: {
+                                  random_state: {
+                                    unquote: next_state,
+                                  },
+                                  new_frontier: {
+                                    unquote: new_frontier,
+                                  },
+                                },
+                              },
+                              bindings: [
+                                {
+                                  value: {
+                                    random_state: next_state,
+                                    maximum: {
+                                      f64: 0x9a9999999999a9bf,
+                                    },
+                                    minimum: {
+                                      f64: 0x333333333333c3bf,
+                                    },
+                                    function: random_between,
+                                  },
+                                  pattern: {
+                                    random_state: {
+                                      bind: random_state,
+                                    },
+                                    random_value: {
+                                      bind: turn_left,
+                                    },
+                                  },
+                                },
+                                {
+                                  value: {
+                                    random_state: random_state,
+                                    maximum: {
+                                      f64: 0x9a9999999999a93f,
+                                    },
+                                    minimum: {
+                                      f64: 0x333333333333c33f,
+                                    },
+                                    function: random_between,
+                                  },
+                                  pattern: {
+                                    random_state: {
+                                      bind: next_state,
+                                    },
+                                    random_value: {
+                                      bind: turn_right,
+                                    },
+                                  },
+                                },
+                                {
+                                  value: {
+                                    right: {
+                                      right: pi,
+                                      function: multiply,
+                                      left: turn_left,
+                                    },
+                                    function: add,
+                                    left: angle,
+                                  },
+                                  bind: left_angle,
+                                },
+                                {
+                                  value: {
+                                    right: {
+                                      right: pi,
+                                      function: multiply,
+                                      left: turn_right,
+                                    },
+                                    function: add,
+                                    left: angle,
+                                  },
+                                  bind: right_angle,
+                                },
+                                {
+                                  value: {
+                                    right: rest,
+                                    function: concat,
+                                    left: {
+                                      function: quote,
+                                      expression: [
+                                        [
+                                          {
+                                            unquote: child_depth,
+                                          },
+                                          {
+                                            unquote: left_angle,
+                                          },
+                                          {
+                                            unquote: tip_x,
+                                          },
+                                          {
+                                            unquote: tip_y,
+                                          },
+                                          {
+                                            unquote: child_width,
+                                          },
+                                        ],
+                                        [
+                                          {
+                                            unquote: child_depth,
+                                          },
+                                          {
+                                            unquote: right_angle,
+                                          },
+                                          {
+                                            unquote: tip_x,
+                                          },
+                                          {
+                                            unquote: tip_y,
+                                          },
+                                          {
+                                            unquote: child_width,
+                                          },
+                                        ],
+                                      ],
+                                    },
+                                  },
+                                  bind: new_frontier,
+                                },
+                              ],
+                            },
+                          },
+                          {
+                            pattern: {
+                              bind: value,
+                            },
+                            expression: {
+                              value: {
+                                right: {
+                                  f64: 0x0000000000002840,
+                                },
+                                function: less,
+                                left: depth,
+                              },
+                              function: match,
+                              cases: [
+                                {
+                                  pattern: true,
+                                  expression: {
+                                    function: let,
+                                    expression: {
+                                      function: quote,
+                                      expression: {
+                                        random_state: {
+                                          unquote: random_state,
+                                        },
+                                        new_frontier: {
+                                          unquote: new_frontier,
+                                        },
+                                      },
+                                    },
+                                    bindings: [
+                                      {
+                                        value: {
+                                          random_state: next_state,
+                                          maximum: {
+                                            f64: 0x9a9999999999a9bf,
+                                          },
+                                          minimum: {
+                                            f64: 0x000000000000d03f,
+                                          },
+                                          function: random_between,
+                                        },
+                                        pattern: {
+                                          random_state: {
+                                            bind: random_state,
+                                          },
+                                          random_value: {
+                                            bind: turn_left,
+                                          },
+                                        },
+                                      },
+                                      {
+                                        value: {
+                                          right: {
+                                            right: pi,
+                                            function: multiply,
+                                            left: turn_left,
+                                          },
+                                          function: add,
+                                          left: angle,
+                                        },
+                                        bind: left_angle,
+                                      },
+                                      {
+                                        value: {
+                                          list: rest,
+                                          item: {
+                                            function: quote,
+                                            expression: [
+                                              {
+                                                unquote: child_depth,
+                                              },
+                                              {
+                                                unquote: left_angle,
+                                              },
+                                              {
+                                                unquote: tip_x,
+                                              },
+                                              {
+                                                unquote: tip_y,
+                                              },
+                                              {
+                                                unquote: child_width,
+                                              },
+                                            ],
+                                          },
+                                          function: prepend,
+                                        },
+                                        bind: new_frontier,
+                                      },
+                                    ],
+                                  },
+                                },
+                                {
+                                  pattern: {
+                                    bind: value,
+                                  },
+                                  expression: {
+                                    function: quote,
+                                    expression: {
+                                      random_state: {
+                                        unquote: next_state,
+                                      },
+                                      new_frontier: {
+                                        unquote: rest,
+                                      },
+                                    },
+                                  },
+                                },
+                              ],
+                            },
+                          },
+                        ],
+                      },
+                      pattern: {
+                        random_state: {
+                          bind: random_state,
+                        },
+                        new_frontier: {
+                          bind: new_frontier,
+                        },
+                      },
+                    },
+                    {
+                      value: {
+                        value: {
+                          right: depth,
+                          function: less,
+                          left: {
+                            f64: 0x0000000000001040,
+                          },
+                        },
+                        function: match,
+                        cases: [
+                          {
+                            pattern: true,
+                            expression: {
+                              function: quote,
+                              expression: [
+                                [
+                                  {
+                                    unquote: x,
+                                  },
+                                  {
+                                    unquote: y,
+                                  },
+                                  {
+                                    unquote: tip_x,
+                                  },
+                                  {
+                                    unquote: tip_y,
+                                  },
+                                ],
+                              ],
+                            },
+                          },
+                          {
+                            pattern: {
+                              bind: value,
+                            },
+                            expression: [],
+                          },
+                        ],
+                      },
+                      bind: branch_points,
+                    },
+                    {
+                      value: {
+                        function: quote,
+                        expression: {
+                          fill: {
+                            transform: [
+                              {
+                                translate: {
+                                  x: {
+                                    unquote: x,
+                                  },
+                                  y: {
+                                    unquote: y,
+                                  },
+                                },
+                              },
+                              {
+                                rotate: {
+                                  unquote: angle,
+                                },
+                              },
+                            ],
+                            paint: {
+                              color: "#000000",
+                            },
+                            shape: {
+                              rect: {
+                                x: {
+                                  f64: 0x0000000000000000,
+                                },
+                                y: {
+                                  unquote: {
+                                    right: half_width,
+                                    function: subtract,
+                                    left: {
+                                      f64: 0x0000000000000000,
+                                    },
+                                  },
+                                },
+                                height: {
+                                  unquote: branch_width,
+                                },
+                                width: {
+                                  unquote: length,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                      bind: command,
+                    },
+                    {
+                      value: {
+                        function: quote,
+                        expression: {
+                          blossom_points: {
+                            unquote: branch_points,
+                          },
+                          command: {
+                            unquote: command,
+                          },
+                        },
+                      },
+                      bind: branch_item,
+                    },
+                  ],
+                },
+              },
+              function: unfold,
+            },
+            pattern: {
+              list: {
+                bind: branch_items,
+              },
+              state: {
+                bind: next_state,
+              },
+            },
+          },
+          {
+            value: {
+              list: branch_items,
+              initial: {
+                blossom_points: [],
+                commands: [],
+              },
+              step: {
+                params: [
+                  accumulator,
+                  item,
+                ],
+                body: {
+                  function: let,
+                  expression: {
+                    function: quote,
+                    expression: {
+                      blossom_points: {
+                        unquote: {
+                          right: branch_points,
+                          function: concat,
+                          left: acc_points,
+                        },
+                      },
+                      commands: {
+                        unquote: {
+                          right: {
+                            function: quote,
+                            expression: [
+                              {
+                                unquote: command,
+                              },
+                            ],
+                          },
+                          function: concat,
+                          left: acc_commands,
+                        },
+                      },
+                    },
+                  },
+                  bindings: [
+                    {
+                      value: accumulator,
+                      pattern: {
+                        blossom_points: {
+                          bind: acc_points,
+                        },
+                        commands: {
+                          bind: acc_commands,
+                        },
+                      },
+                    },
+                    {
+                      value: item,
+                      pattern: {
+                        blossom_points: {
+                          bind: branch_points,
+                        },
+                        command: {
+                          bind: command,
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+              function: fold,
+            },
+            bind: branch_commands,
+          },
+        ],
+      },
+    },
+    canvas_height: {
+      name: "canvas height",
+    },
+    canvas_width: {
+      name: "canvas width",
+    },
+    child_depth: {
+      name: "child depth",
+    },
+    child_width: {
+      name: "child width",
+    },
+    color_index: {
+      name: "color index",
+    },
+    color_pick: {
+      name: "color pick",
+    },
+    command: {
+      name: "command",
+    },
+    current: {
+      name: "current",
+    },
+    depth: {
+      name: "depth",
+    },
+    dx: {
+      name: "dx",
+    },
+    dy: {
+      name: "dy",
+    },
+    end: {
+      name: "end",
+    },
+    end_value: {
+      name: "end value",
+    },
+    frontier: {
+      name: "frontier",
+    },
+    half_width: {
+      name: "half width",
+    },
+    initial_y: {
+      name: "initial y",
+    },
+    left_angle: {
+      name: "left angle",
+    },
+    length: {
+      name: "length",
+    },
+    lerp: {
+      name: "lerp",
+      params: [
+        start,
+        end,
+        amount,
+      ],
+      body: {
+        right: {
+          right: amount,
+          function: multiply,
+          left: {
+            right: start,
+            function: subtract,
+            left: end,
+          },
+        },
+        function: add,
+        left: start,
+      },
+    },
+    mountain: {
+      name: "mountain",
+      params: [
+        canvas_width,
+        canvas_height,
+        offset,
+        paint,
+        random_state,
+      ],
+      body: {
+        function: let,
+        expression: {
+          function: quote,
+          expression: {
+            random_state: {
+              unquote: next_state,
+            },
+            command: {
+              fill: {
+                paint: {
+                  unquote: paint,
+                },
+                shape: {
+                  path: {
+                    unquote: path_elements,
+                  },
+                },
+              },
+            },
+          },
+        },
+        bindings: [
+          {
+            value: {
+              right: offset,
+              function: subtract,
+              left: canvas_height,
+            },
+            bind: initial_y,
+          },
+          {
+            value: {
+              initial: {
+                function: quote,
+                expression: {
+                  random_state: {
+                    unquote: random_state,
+                  },
+                  x: {
+                    f64: 0x0000000000000000,
+                  },
+                  y: {
+                    unquote: initial_y,
+                  },
+                },
+              },
+              step: {
+                params: [
+                  state,
+                ],
+                body: {
+                  function: let,
+                  expression: {
+                    value: {
+                      right: canvas_width,
+                      function: less,
+                      left: x,
+                    },
+                    function: match,
+                    cases: [
+                      {
+                        pattern: true,
+                        expression: {
+                          function: let,
+                          expression: {
+                            function: quote,
+                            expression: {
+                              state: {
+                                random_state: {
+                                  unquote: random_state,
+                                },
+                                x: {
+                                  unquote: next_x,
+                                },
+                                y: {
+                                  unquote: next_y,
+                                },
+                              },
+                              item: {
+                                line_to: {
+                                  x: {
+                                    unquote: next_x,
+                                  },
+                                  y: {
+                                    unquote: next_y,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                          bindings: [
+                            {
+                              value: {
+                                random_state: random_state,
+                                maximum: {
+                                  f64: 0x0000000000002440,
+                                },
+                                minimum: {
+                                  f64: 0x0000000000000040,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: next_state,
+                                },
+                                random_value: {
+                                  bind: dx,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                random_state: next_state,
+                                maximum: {
+                                  f64: 0x0000000000000840,
+                                },
+                                minimum: {
+                                  f64: 0x00000000000010c0,
+                                },
+                                function: random_between,
+                              },
+                              pattern: {
+                                random_state: {
+                                  bind: random_state,
+                                },
+                                random_value: {
+                                  bind: dy,
+                                },
+                              },
+                            },
+                            {
+                              value: {
+                                right: dx,
+                                function: add,
+                                left: x,
+                              },
+                              bind: next_x,
+                            },
+                            {
+                              value: {
+                                right: dy,
+                                function: add,
+                                left: y,
+                              },
+                              bind: next_y,
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                  bindings: [
+                    {
+                      value: state,
+                      pattern: {
+                        random_state: {
+                          bind: random_state,
+                        },
+                        x: {
+                          bind: x,
+                        },
+                        y: {
+                          bind: y,
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+              function: unfold,
+            },
+            pattern: {
+              list: {
+                bind: path_elements,
+              },
+              state: {
+                random_state: {
+                  bind: next_state,
+                },
+                x: {
+                  bind: next_x,
+                },
+                y: {
+                  bind: next_y,
+                },
+              },
+            },
+          },
+          {
+            value: {
+              right: {
+                right: {
+                  function: quote,
+                  expression: [
+                    {
+                      line_to: {
+                        x: {
+                          unquote: canvas_width,
+                        },
+                        y: {
+                          unquote: canvas_height,
+                        },
+                      },
+                    },
+                    {
+                      line_to: {
+                        x: {
+                          f64: 0x0000000000000000,
+                        },
+                        y: {
+                          unquote: canvas_height,
+                        },
+                      },
+                    },
+                    {
+                      close: {},
+                    },
+                  ],
+                },
+                function: concat,
+                left: path_elements,
+              },
+              function: concat,
+              left: {
+                function: quote,
+                expression: [
+                  {
+                    move_to: {
+                      x: {
+                        f64: 0x0000000000000000,
+                      },
+                      y: {
+                        unquote: initial_y,
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            bind: path_elements,
+          },
+        ],
+      },
+    },
+    mountain_back: {
+      name: "mountain back",
+    },
+    mountain_front: {
+      name: "mountain front",
+    },
+    new_frontier: {
+      name: "new frontier",
+    },
+    next_blossom: {
+      name: "next blossom",
+    },
+    next_segment: {
+      name: "next segment",
+    },
+    next_state: {
+      name: "next state",
+    },
+    next_x: {
+      name: "next x",
+    },
+    next_y: {
+      name: "next y",
+    },
+    offset: {
+      name: "offset",
+    },
+    path_elements: {
+      name: "path elements",
+    },
+    random_scale: {
+      name: "random scale",
+    },
+    rest: {
+      name: "rest",
+    },
+    right_angle: {
+      name: "right angle",
+    },
+    scaled_length: {
+      name: "scaled length",
+    },
+    scene: {
+      name: "scene",
+      params: [
+        canvas_width,
+        canvas_height,
+        branch_length,
+        trunk_length,
+        blossoms_per_branch,
+        sky_top,
+        sky_bottom,
+        mountain_back,
+        mountain_front,
+        blossom_colors,
+      ],
+      body: {
+        function: let,
+        expression: {
+          function: quote,
+          expression: {
+            drawing: {
+              descent: {
+                f64: 0x0000000000002c40,
+              },
+              ascent: {
+                unquote: {
+                  right: {
+                    f64: 0x0000000000002c40,
+                  },
+                  function: subtract,
+                  left: canvas_height,
+                },
+              },
+              commands: [
+                {
+                  clip: {
+                    commands: {
+                      unquote: all_commands,
+                    },
+                    shape: {
+                      rect: {
+                        x: {
+                          f64: 0x0000000000000000,
+                        },
+                        y: {
+                          f64: 0x0000000000000000,
+                        },
+                        height: {
+                          unquote: canvas_height,
+                        },
+                        width: {
+                          unquote: canvas_width,
+                        },
+                      },
+                    },
+                  },
+                },
+              ],
+              width: {
+                unquote: canvas_width,
+              },
+            },
+          },
+        },
+        bindings: [
+          {
+            value: {
+              function: reset_random,
+            },
+            bind: random_state,
+          },
+          {
+            value: {
+              random_state: random_state,
+              canvas_height: canvas_height,
+              function: mountain,
+              canvas_width: canvas_width,
+              paint: mountain_back,
+              offset: {
+                f64: 0x0000000000406040,
+              },
+            },
+            pattern: {
+              random_state: {
+                bind: next_state,
+              },
+              command: {
+                bind: command,
+              },
+            },
+          },
+          {
+            value: {
+              function: quote,
+              expression: [
+                {
+                  unquote: command,
+                },
+              ],
+            },
+            bind: acc_commands,
+          },
+          {
+            value: {
+              random_state: next_state,
+              canvas_height: canvas_height,
+              function: mountain,
+              canvas_width: canvas_width,
+              paint: mountain_front,
+              offset: {
+                f64: 0x0000000000004940,
+              },
+            },
+            pattern: {
+              random_state: {
+                bind: random_state,
+              },
+              command: {
+                bind: command,
+              },
+            },
+          },
+          {
+            value: {
+              right: {
+                function: quote,
+                expression: [
+                  {
+                    unquote: command,
+                  },
+                ],
+              },
+              function: concat,
+              left: acc_commands,
+            },
+            bind: acc_commands,
+          },
+          {
+            value: {
+              canvas_height: canvas_height,
+              trunk_length: trunk_length,
+              function: branches,
+              canvas_width: canvas_width,
+              branch_length: branch_length,
+            },
+            pattern: {
+              blossom_points: {
+                bind: blossom_points,
+              },
+              commands: {
+                bind: branch_commands,
+              },
+            },
+          },
+          {
+            value: {
+              blossoms_per_branch: blossoms_per_branch,
+              blossom_points: blossom_points,
+              blossom_colors: blossom_colors,
+              function: blossoms,
+            },
+            bind: blossom_commands,
+          },
+          {
+            value: {
+              right: {
+                right: {
+                  right: blossom_commands,
+                  function: concat,
+                  left: branch_commands,
+                },
+                function: concat,
+                left: acc_commands,
+              },
+              function: concat,
+              left: {
+                function: quote,
+                expression: [
+                  {
+                    fill: {
+                      paint: {
+                        linear_gradient: {
+                          stops: [
+                            {
+                              paint: {
+                                unquote: sky_top,
+                              },
+                              gradient_offset: {
+                                f64: 0x0000000000000000,
+                              },
+                            },
+                            {
+                              paint: {
+                                unquote: sky_bottom,
+                              },
+                              gradient_offset: {
+                                f64: 0x000000000000f03f,
+                              },
+                            },
+                          ],
+                          gradient_end: {
+                            x: {
+                              f64: 0x0000000000000000,
+                            },
+                            y: {
+                              unquote: canvas_height,
+                            },
+                          },
+                          gradient_start: {
+                            x: {
+                              f64: 0x0000000000000000,
+                            },
+                            y: {
+                              f64: 0x0000000000000000,
+                            },
+                          },
+                        },
+                      },
+                      shape: {
+                        rect: {
+                          x: {
+                            f64: 0x0000000000000000,
+                          },
+                          y: {
+                            f64: 0x0000000000000000,
+                          },
+                          height: {
+                            unquote: canvas_height,
+                          },
+                          width: {
+                            unquote: canvas_width,
+                          },
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            bind: all_commands,
+          },
+        ],
+      },
+    },
+    segment: {
+      name: "segment",
+    },
+    segment_count: {
+      name: "segment count",
+    },
+    segment_index: {
+      name: "segment index",
+    },
+    sky_bottom: {
+      name: "sky bottom",
+    },
+    sky_top: {
+      name: "sky top",
+    },
+    start: {
+      name: "start",
+    },
+    start_value: {
+      name: "start value",
+    },
+    tip_distance: {
+      name: "tip distance",
+    },
+    tip_x: {
+      name: "tip x",
+    },
+    tip_y: {
+      name: "tip y",
+    },
+    trunk_length: {
+      name: "trunk length",
+    },
+    turn_left: {
+      name: "turn left",
+    },
+    turn_right: {
+      name: "turn right",
+    },
+    tween: {
+      name: "tween",
+      params: [
+        value,
+        start,
+        start_value,
+        end,
+        end_value,
+      ],
+      body: {
+        end: end_value,
+        start: start_value,
+        amount: {
+          right: {
+            right: start,
+            function: subtract,
+            left: end,
+          },
+          function: divide,
+          left: {
+            right: start,
+            function: subtract,
+            left: value,
+          },
+        },
+        function: lerp,
+      },
+    },
+    x_amount: {
+      name: "x amount",
+    },
+    x_jitter: {
+      name: "x jitter",
+    },
+    x0: {
+      name: "x0",
+    },
+    x1: {
+      name: "x1",
+    },
+    y_amount: {
+      name: "y amount",
+    },
+    y_jitter: {
+      name: "y jitter",
+    },
+    y0: {
+      name: "y0",
+    },
+    y1: {
+      name: "y1",
+    },
+  },
+  "root": [
+    {
+      blossoms_per_branch: {
+        f64: 0x0000000000003040,
+      },
+      sky_top: {
+        color: "#b4e0fe",
+      },
+      canvas_height: {
+        f64: 0x0000000000407f40,
+      },
+      blossom_colors: [
+        {
+          color: "#f5ceea99",
+        },
+        {
+          color: "#e8d9e499",
+        },
+        {
+          color: "#f7c9f399",
+        },
+        {
+          color: "#ebb4cc99",
+        },
+      ],
+      trunk_length: {
+        f64: 0x0000000000405840,
+      },
+      mountain_back: {
+        color: "#8bb2bb",
+      },
+      mountain_front: {
+        color: "#618087",
+      },
+      function: scene,
+      canvas_width: {
+        f64: 0x0000000000407f40,
+      },
+      branch_length: {
+        f64: 0x0000000000004e40,
+      },
+      sky_bottom: {
+        color: "#d3f8ff",
+      },
+    },
+    scene,
+    mountain,
+    branches,
+    blossoms,
+    tween,
+    lerp,
+  ],
+}
