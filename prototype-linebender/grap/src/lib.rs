@@ -4,9 +4,9 @@
 //! recursive evaluation.
 
 use gid::{CellId, Record, Value};
-use im::{HashMap, OrdMap};
+use im::OrdMap;
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 use std::rc::Rc;
 
@@ -283,25 +283,18 @@ pub struct ForeignFunctions {
 }
 
 impl ForeignFunctions {
-    pub fn register(self, function: CellId, definition: ForeignFunction) -> Self {
-        Self {
-            functions: self.functions.update(function, definition),
-        }
+    pub fn register(mut self, function: CellId, definition: ForeignFunction) -> Self {
+        self.functions.insert(function, definition);
+        self
     }
 
     fn get(&self, function: CellId) -> Option<&ForeignFunction> {
         self.functions.get(&function)
     }
 
-    pub fn merge(self, other: Self) -> Self {
-        Self {
-            functions: other
-                .functions
-                .into_iter()
-                .fold(self.functions, |functions, (cell, definition)| {
-                    functions.update(cell, definition)
-                }),
-        }
+    pub fn merge(mut self, other: Self) -> Self {
+        self.functions.extend(other.functions);
+        self
     }
 
     pub fn merge_all(tables: impl IntoIterator<Item = Self>) -> Self {
