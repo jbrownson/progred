@@ -533,18 +533,6 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                     &path,
                 );
             }),
-            rename: Rc::new(|app: &mut App, path, index| {
-                if let Some(mut pending) = selection::pending_rename(&app.sources(), &path) {
-                    // The index was hit-tested against the label that
-                    // was clicked, in the label's own face; the seed
-                    // shares its spelling, so the caret lands under
-                    // the pointer in whatever face the editor draws.
-                    if let Some(line) = pending.edit_mut() {
-                        line.cursor_to(index);
-                    }
-                    app.model.selection = Some(pending);
-                }
-            }),
             edit: Rc::new(edit_ctx),
             pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
             insert: Rc::new(|app: &mut App, path| {
@@ -624,7 +612,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                         app.commit_value(current.path().to_vec(), action);
                     }
                     selection::Stage::Label => {
-                        app.commit_label(current.path().to_vec(), current.replacing(), action);
+                        app.commit_label(current.path().to_vec(), action);
                     }
                     selection::Stage::Edge => {
                         app.model.selection = Some(current);

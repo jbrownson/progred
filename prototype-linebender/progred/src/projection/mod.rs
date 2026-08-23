@@ -22,8 +22,8 @@ use crate::selection::{Selection, Stage, last_follow};
 #[cfg(test)]
 use crate::selection::{
     break_edit_run, delete_edge, from_clipboard, from_structure, pending_edge,
-    pending_follow, pending_insert, pending_into, pending_rename, pending_value, rename_field,
-    resolve_query, set_collapse, set_value, to_clipboard, toggle_collapse, write_through,
+    pending_follow, pending_insert, pending_into, pending_value, resolve_query, set_collapse,
+    set_value, to_clipboard, toggle_collapse, write_through,
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
@@ -42,8 +42,6 @@ use puri::edit::{
 use puri::geometry::Placement;
 use puri::handler::{HasHandler, ImeEvent};
 use puri::text::{TextCtx, TextStyle};
-#[cfg(test)]
-use puri::text::{caret_index, line_layout};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::KeyboardEvent;
@@ -794,10 +792,7 @@ fn prepare<
             cx, width, ascent, descent, fuel, program,
         )),
         progred_display::Layout::Query => {
-            let engaged = cx
-                .pending_rename_under(path)
-                .map(|(_, query, _)| query)
-                .or_else(|| cx.pending_edge_under(path).map(|(query, _)| query));
+            let engaged = cx.pending_edge_under(path).map(|(query, _)| query);
             ChoiceLayout::fixed(match engaged {
                 Some(query) => label_query(cx, tcx, query, hooks),
                 None => render::text(tcx, "…", &cx.styles.dim),
@@ -1437,7 +1432,7 @@ fn realize_hover<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     let highlight = matches!(
         hover.as_ref(),
-        Some(Hover::Label(_) | Hover::Toggle(_) | Hover::Insert(_))
+        Some(Hover::Toggle(_) | Hover::Insert(_))
     );
     before(inner, move |p, placement| {
         match hover {
@@ -1616,12 +1611,6 @@ pub struct Hooks<C> {
     /// first pointer event then uses `edit` below for caret placement.
     pub start_edit: Rc<dyn Fn(&mut C, Path, progred_display::LineEdit)>,
     pub toggle: Rc<dyn Fn(&mut C, Path)>,
-    /// Re-open the label of the field at `path` (a Key path) as its
-    /// seeded query — the click gesture on a writable field's label.
-    /// The byte index is the click hit-tested against the label's own
-    /// layout; the seed shares its spelling, so the shell lands the
-    /// caret there in whatever face the editor draws.
-    pub rename: Rc<dyn Fn(&mut C, Path, usize)>,
     /// None when the editor is already gone — retained-frame dispatch
     /// may fire a frame late, and absent state declines.
     pub edit: Rc<dyn for<'a> Fn(&'a mut C) -> Option<EditCtx<'a>>>,
@@ -1708,21 +1697,9 @@ impl Cx<'_> {
     fn pending_edge_under(&self, path: &[Step]) -> Option<(&LineEditState, usize)> {
         let current = self.selection?;
         (current.stage() == Stage::Label
-            && current.replacing().is_none()
             && current.path() == path)
             .then(|| Some((current.edit()?, current.choice())))
             .flatten()
-    }
-
-    /// The re-opened label of an existing field on the record at
-    /// `path`, with the key it replaces.
-    fn pending_rename_under(&self, path: &[Step]) -> Option<(CellId, &LineEditState, usize)> {
-        let current = self.selection?;
-        if current.stage() != Stage::Label || current.path() != path {
-            return None;
-        }
-        let replacing = current.replacing()?;
-        Some((replacing, current.edit()?, current.choice()))
     }
 }
 
@@ -2314,7 +2291,6 @@ fn prepare_transient_root<
         select: Rc::new(move |ctx, _| select(ctx, select_origin.clone())),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
-        rename: Rc::new(|_, _, _| {}),
         edit: Rc::new(|_| None),
         pick: hooks.pick.clone(),
         insert: Rc::new(|_, _| {}),
@@ -2868,12 +2844,11 @@ fn atom_content<C: 'static, Cv: Canvas + 'static>(
     }
 }
 
-/// The label stage engaged — a rename's re-opened label or a new
-/// field's — its query wearing the primary ring explicitly: a
-/// pending edge has no path of its own for [`descend`] to mark, and
-/// the ring spans the QUERY frame alone, the way a value pending's
-/// does. Clicks inside belong to the query's own caret target;
-/// clicks beside fall through like any pending's.
+/// The new-field label stage engaged, its query wearing the primary
+/// ring explicitly: a pending edge has no path of its own for
+/// [`descend`] to mark, and the ring spans the QUERY frame alone, the
+/// way a value pending's does. Clicks inside belong to the query's
+/// own caret target; clicks beside fall through like any pending's.
 fn label_query<
     C: 'static,
     Cv: Canvas + 'static,

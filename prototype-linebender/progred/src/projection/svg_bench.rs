@@ -251,7 +251,6 @@ fn place_with_annotations(
         select: Rc::new(|_, _| {}),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
-        rename: Rc::new(|_, _, _| {}),
         edit: Rc::new(|_| None),
         pick: Rc::new(|_, _| false),
         insert: Rc::new(|_, _| {}),
@@ -469,7 +468,6 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 ));
             }),
             toggle: Rc::new(|_, _| {}),
-            rename: Rc::new(|_, _, _| {}),
             // A selection transition must consume the click even if
             // retained dispatch cannot recover an edit context for
             // the optional caret-placement follow-up.
@@ -785,7 +783,7 @@ fn placement_claims_the_hover_innermost_last() {
 }
 
 #[test]
-fn hovering_a_field_label_paints_the_hover_wash() {
+fn hovering_a_field_label_targets_its_value() {
     let key = crate::test_values::label("title");
     let doc = Document {
         root: Some(Value::record([(key, text::value("hi"))])),
@@ -805,7 +803,7 @@ fn hovering_a_field_label_paints_the_hover_wash() {
         let (bench, _) = place_with_pointer(&doc, None, 400.0, Some(Point::new(x, y)));
         if matches!(
             &bench.hit,
-            Some(Claim::Direct(Hovered::Tree(Hover::Label(path))))
+            Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
                 if path.last() == Some(&Step::Key(key))
         ) {
             found = Some(bench);
@@ -1052,28 +1050,6 @@ fn svg_bench_renders_the_placeholder_notation() {
         320.0,
         "../target/raw_empty_string_editing.svg",
     );
-}
-
-// The re-opened label: the tags field's query seeded with its
-// quoted spelling, ringed in place, the value staying put.
-#[test]
-fn svg_bench_renders_a_label_rename() {
-    let doc = sample_document();
-    let library = crate::stack::load::<()>().library;
-    let path = vec![
-        Step::Key(crate::test_values::label("shape")),
-        Step::Follow,
-        Step::Key(crate::test_values::label("tags")),
-    ];
-    let rename = pending_rename(
-        &Sources {
-            doc: &doc,
-            library: &library,
-        },
-        &path,
-    )
-    .unwrap();
-    render(&doc, Some(&rename), 560.0, "../target/raw_label_rename.svg");
 }
 
 #[test]

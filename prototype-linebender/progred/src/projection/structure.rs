@@ -51,8 +51,7 @@ pub(super) fn collapsed_layout<World: 'static>(
             let mut followed = path.to_vec();
             followed.push(Step::Follow);
             let pending_inside = cx.pending_child_of(&followed).is_some()
-                || cx.pending_edge_under(&followed).is_some()
-                || cx.pending_rename_under(&followed).is_some();
+                || cx.pending_edge_under(&followed).is_some();
             (!pending_inside).then_some(Delim::Paren)?
         }
         Value::List(elements)
@@ -63,8 +62,7 @@ pub(super) fn collapsed_layout<World: 'static>(
         Value::Record(fields)
             if !fields.is_empty()
                 && cx.pending_child_of(path).is_none()
-                && cx.pending_edge_under(path).is_none()
-                && cx.pending_rename_under(path).is_none() =>
+                && cx.pending_edge_under(path).is_none() =>
         {
             Delim::Brace
         }
@@ -251,10 +249,7 @@ fn field_head<World: 'static>(
     present: bool,
     hooks: &Hooks<World>,
 ) -> View<World> {
-    let label = match cx.pending_rename_under(path) {
-        Some((replacing, _, _)) if replacing == key => query(),
-        _ => field_label(cx, path, key, hooks),
-    };
+    let label = field_label(cx, key);
     let head = row(0.0, [label, dim(":")]);
     if present {
         let mut child = path.to_vec();
@@ -263,38 +258,16 @@ fn field_head<World: 'static>(
     } else {
         let mut child = path.to_vec();
         child.push(Step::Key(key));
-        pickable(head, Hover::Label(child), Value::Cell(key))
+        pickable(head, Hover::Value(child), Value::Cell(key))
     }
 }
 
-fn field_label<World: 'static>(
-    cx: &Cx,
-    path: &[Step],
-    key: CellId,
-    hooks: &Hooks<World>,
-) -> View<World> {
+fn field_label<World>(cx: &Cx, key: CellId) -> View<World> {
     let (spelling, face) = match cx.name(key) {
         Some(name) => (name.to_string(), Face::Label),
         None => (short_id(key), Face::Id),
     };
-    let label = faced(spelling.clone(), face);
-    if !writable_at(&cx.sources, path) || cx.source.transient() {
-        label
-    } else {
-        let mut target = path.to_vec();
-        target.push(Step::Key(key));
-        let handler_target = target.clone();
-        let rename = hooks.rename.clone();
-        let caret = spelling.len();
-        activatable(
-            label,
-            Hover::Label(target),
-            Rc::new(move |world| {
-                rename(world, handler_target.clone(), caret);
-                true
-            }),
-        )
-    }
+    faced(spelling, face)
 }
 
 fn field_row<World: 'static>(

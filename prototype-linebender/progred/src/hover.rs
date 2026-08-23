@@ -4,19 +4,17 @@
 use crate::completion::{EntryAction, completion_entries};
 use crate::selection::Selection;
 use crate::sources::Sources;
-use gid::{Path, Step, Value};
+use gid::{Path, Value};
 
 /// What the pointer rests on: the address a later editor action will
-/// target. Values preview their selection; labels, toggles, and popup
-/// entries light their own ink. Placement derives it from the current
+/// target. Values preview their selection; toggles and popup entries
+/// light their own ink. Placement derives it from the current
 /// pointer input and settled geometry; only gap hysteresis needs the
 /// prior answer.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Hover {
     /// Activate here selects the value at this path.
     Value(Path),
-    /// Activate here re-opens this field's label as its rename.
-    Label(Path),
     /// Activate here toggles this path's collapse.
     Toggle(Path),
     /// A click here opens a pending sibling after the element at
@@ -47,16 +45,6 @@ pub fn hover_value(
             .resolve(path)
             .filter(|value| value.as_cell().is_some())
             .cloned(),
-        // A dead address answers nothing: the label must still be in
-        // the document, or a rename under a parked pointer would keep
-        // marking the old spelling's ghost.
-        Hover::Label(path) => {
-            sources.resolve(path)?;
-            match path.last()? {
-                Step::Key(key) => Some(Value::Cell(*key)),
-                _ => None,
-            }
-        }
         Hover::Entry(index) => {
             let current = selection?;
             let labels = match current.stage() {

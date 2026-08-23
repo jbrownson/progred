@@ -1,4 +1,4 @@
-//! Editor commands: insert, delete, clipboard, rename, collapse.
+//! Editor commands: insert, delete, clipboard, and collapse.
 
 use crate::completion;
 use crate::navigate;
@@ -6,7 +6,7 @@ use crate::projection;
 use crate::selection;
 use crate::sources;
 use crate::{App, CLIPBOARD_FORMAT, plain};
-use gid::{CellId, Path, Step, Value};
+use gid::{Path, Step, Value};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -110,7 +110,6 @@ impl App {
                 selection::Stage::Label => {
                     self.commit_label(
                         current.path().to_vec(),
-                        current.replacing(),
                         &completion::EntryAction::Value(id),
                     );
                     true
@@ -141,20 +140,11 @@ impl App {
         ));
     }
 
-    /// A resolved label advances the pending edge to its value stage —
-    /// or selects the existing field when the label is taken (rename
-    /// included: a taken label never clobbers its field, selection
-    /// communicates it, and replacing it means deleting it first).
-    /// A free-text label persists its newly named cell before the
-    /// value stage; a bare-cell choice has nothing to persist. A
-    /// rename re-keys the field and creates its label cell in one
-    /// history step, the value carried.
-    pub(crate) fn commit_label(
-        &mut self,
-        parent: Path,
-        replacing: Option<CellId>,
-        action: &completion::EntryAction,
-    ) {
+    /// A resolved new label advances the pending edge to its value
+    /// stage, or selects the existing field when the label is taken.
+    /// A free-text label persists its newly named cell first; a
+    /// bare-cell choice has nothing to persist.
+    pub(crate) fn commit_label(&mut self, parent: Path, action: &completion::EntryAction) {
         let Some((label, created)) = completion::resolve_label(action) else {
             return;
         };
@@ -167,45 +157,13 @@ impl App {
             ));
             return;
         }
-        match replacing {
-            Some(old) => {
-                let before = self.model.doc.clone();
-                if let Some((cell, value)) = &created {
-                    self.model.doc.cells.set_value(*cell, value.clone());
-                }
-                let renamed = selection::rename_field(
-                    &mut self.model.doc,
-                    &self.stack.library,
-                    &parent,
-                    &old,
-                    label,
-                );
-                if renamed {
-                    self.model.history.record(before, None);
-                    self.refresh_title();
-                } else {
-                    if let Some((cell, _)) = created {
-                        self.model.doc.cells.clear_value(cell);
-                    }
-                    // The rename could not land; back to the field.
-                    path = parent;
-                    path.push(Step::Key(old));
-                }
-                self.model.selection = Some(selection::Selection::edge(
-                    &self.sources(),
-                    path,
-                ));
-            }
-            None => {
-                if let Some((cell, value)) = created {
-                    let before = self.model.doc.clone();
-                    self.model.doc.cells.set_value(cell, value);
-                    self.model.history.record(before, None);
-                    self.refresh_title();
-                }
-                self.model.selection = Some(selection::pending_value(path));
-            }
+        if let Some((cell, value)) = created {
+            let before = self.model.doc.clone();
+            self.model.doc.cells.set_value(cell, value);
+            self.model.history.record(before, None);
+            self.refresh_title();
         }
+        self.model.selection = Some(selection::pending_value(path));
     }
 
     /// Structural copy/paste, the shell's fallback: a focused text
@@ -402,11 +360,7 @@ impl App {
                         let query = current.edit().unwrap_or(&fallback);
                         let action = Self::chosen_action(popup, query, current.choice(), labels);
                         if labels {
-                            self.commit_label(
-                                current.path().to_vec(),
-                                current.replacing(),
-                                &action,
-                            );
+                            self.commit_label(current.path().to_vec(), &action);
                         } else {
                             self.commit_value(current.path().to_vec(), &action);
                         }
@@ -452,44 +406,13 @@ impl App {
                         Some(current)
                             if current.stage() == selection::Stage::Label =>
                         {
-                            // A cancelled rename returns to its field;
-                            // a cancelled new field to the record.
-                            let mut back = current.path().to_vec();
-                            if let Some(old) = current.replacing() {
-                                back.push(Step::Key(old));
-                            }
                             self.model.selection = Some(selection::Selection::edge(
                                 &self.sources(),
-                                back,
+                                current.path().to_vec(),
                             ));
                             true
                         }
                         _ => false,
-                    }
-                }
-                _ => false,
-            }
-    }
-
-    /// Cmd+L re-opens the selected field's label as its seeded rename
-    /// query — the keyboard route to what clicking the label does. The
-    /// popup opens only on this explicit ask, never during navigation.
-    /// (Cmd+R belongs to the Raw view toggle.)
-    pub(crate) fn rename_key(&mut self, event: &KeyboardEvent) -> bool {
-        event.state.is_down()
-            && projection::command(&event.modifiers)
-            && matches!(&event.key, Key::Character(c) if c.to_lowercase().as_str() == "l")
-            && match &self.model.selection {
-                Some(current)
-                    if current.stage() == selection::Stage::Edge =>
-                {
-                    let path = current.path().to_vec();
-                    match selection::pending_rename(&self.sources(), &path) {
-                        Some(pending) => {
-                            self.model.selection = Some(pending);
-                            true
-                        }
-                        None => false,
                     }
                 }
                 _ => false,

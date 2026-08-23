@@ -3,12 +3,10 @@
 //! there and how authoring and mutation land.
 
 use crate::annotations::{self, Annotations};
-use crate::identity::short_id;
-use progred_libraries::{absent, f64 as f64_convention, isa};
 use crate::sources::Sources;
 use crate::spine;
-use gid::{CellId, Cells, Document, Path, Position, Step, Value, position};
-use progred_libraries::{name, text};
+use gid::{Cells, Document, Path, Position, Step, Value, position};
+use progred_libraries::{absent, f64 as f64_convention, isa, text};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -27,7 +25,7 @@ pub(crate) struct Editor {
 }
 
 /// What is selected, stored as data plus tier-2 editing state: the
-/// payload is a GID value — stage, query, choice, replacing; what a
+/// payload is a GID value — stage, query, choice; what a
 /// projection at the selected path receives — while the live editor
 /// stays Rust beside it, its text writing through to the payload at
 /// the same per-event point the document takes its writes. A pending
@@ -49,11 +47,9 @@ pub enum Stage {
     /// A nonexistent location's value being authored (the root and a
     /// bare cell's value included).
     Pending,
-    /// A field label being authored on the record at the path — new,
-    /// or, with `replacing`, an existing one re-opened: commit re-keys
-    /// the field whole, its value carried — values write through,
-    /// addresses stage (a label is a key in a shared map, so
-    /// intermediate spellings must never land).
+    /// A new field label being authored on the record at the path.
+    /// Values write through, addresses stage: a label is a key in a
+    /// shared map, so intermediate spellings must never land.
     Label,
 }
 
@@ -157,10 +153,6 @@ impl Selection {
         self.payload = payload::with_choice(&self.payload, choice);
     }
 
-    pub fn replacing(&self) -> Option<CellId> {
-        payload::replacing(&self.payload)
-    }
-
     /// Whether the mounted editor's write-through run has recorded
     /// its undo step — deleting through the value is one gesture.
     pub(crate) fn recorded(&self) -> bool {
@@ -223,7 +215,7 @@ fn edge_selection(path: Path, editor: Option<Editor>) -> Selection {
 // Seeded with the caret at the end: an editor mounted without a
 // pointer — notably a keyboard landing — starts appending (a
 // select-all trial read as dangerous), and a mounting click's caret
-// placement overrides it (`select`, `rename`). A leftward keyboard
+// placement overrides it (`select`). A leftward keyboard
 // landing reseeds the start through `seed_from_arrow`.
 pub(crate) fn line_edit(text: &str) -> LineEditState {
     LineEditState::new(text).with_cursor_at_end()
@@ -392,28 +384,7 @@ pub fn pending_edge(sources: &Sources, parent: Path) -> Option<Selection> {
         Value::Blob(_) | Value::List(_) => return None,
     };
     writable_at(sources, &parent).then_some(())?;
-    Some(query_selection(parent, payload::label("", 0, None)))
-}
-
-/// An existing field's label re-opened as a pending edge, the query
-/// seeded with the cell label's current display name or short id.
-/// Another cell may share the name; the seed is presentation, not
-/// identity. Committing a taken label navigates to its field, the
-/// new-field rule.
-pub fn pending_rename(sources: &Sources, path: &[Step]) -> Option<Selection> {
-    let (step, parent) = path.split_last()?;
-    let Step::Key(key) = step else { return None };
-    sources.resolve(path)?;
-    writable_at(sources, parent).then_some(())?;
-    let seed = sources
-        .value(*key)
-        .and_then(name::read)
-        .map(str::to_owned)
-        .unwrap_or_else(|| short_id(*key));
-    Some(query_selection(
-        parent.to_vec(),
-        payload::label(&seed, 0, Some(*key)),
-    ))
+    Some(query_selection(parent, payload::label("", 0)))
 }
 
 /// A bare cell's value being authored: the within-gesture's meaning
@@ -637,37 +608,6 @@ pub fn set_value(doc: &mut Document, library: &Cells, path: &[Step], value: Valu
     }
 }
 
-/// Re-keys the field `old` on the record at `parent` to `label`, the
-/// value carried — one write through [`set_value`]. Declines when
-/// the record or field is missing or the label is taken: a rename
-/// never destroys a sibling (the caller navigates to it instead).
-pub fn rename_field(
-    doc: &mut Document,
-    library: &Cells,
-    parent: &[Step],
-    old: &CellId,
-    label: CellId,
-) -> bool {
-    let rekeyed = {
-        let sources = Sources {
-            doc: &*doc,
-            library,
-        };
-        sources
-            .resolve(parent)
-            .and_then(Value::as_record)
-            .and_then(|fields| {
-                (!fields.contains_key(&label)).then_some(())?;
-                let value = fields.get(old)?.clone();
-                Some(Value::Record(fields.without(old).update(label, value)))
-            })
-    };
-    match rekeyed {
-        Some(record) => set_value(doc, library, parent, record),
-        None => false,
-    }
-}
-
 /// Toggle the collapse override for the value at `path`. Declines
 /// unless there is something to collapse — a cell with a value, or a
 /// nonempty list or record.
@@ -828,14 +768,12 @@ pub mod payload {
         pub const STAGE: CellId = CellId::from_u128(0x6a1fd3082b9c47e5f60d21a8c45e9b37);
         pub const QUERY: CellId = CellId::from_u128(0xc25e80f7d1934ab6270c8f5e13b6d4a9);
         pub const CHOICE: CellId = CellId::from_u128(0x48b7a92c05e1d6f3891a4d20e7c53f6b);
-        pub const REPLACING: CellId = CellId::from_u128(0xe3906b5d78a2c4f10b358d96a1f42c7d);
 
         /// A value's edge is selected; editing state, if any, is tier-2.
         pub const EDGE: CellId = CellId::from_u128(0x2f74c8a1936e05bd4c17e2b98d60a5f4);
         /// A value pending: the query authors the value at the path.
         pub const PENDING: CellId = CellId::from_u128(0x91d5e60b3a8f27c4058b39f6d2c471ea);
-        /// A label pending on the record at the path: a new field's
-        /// label, or with REPLACING, an existing one re-opened.
+        /// A new label pending on the record at the path.
         pub const LABEL: CellId = CellId::from_u128(0x7be29f4680d1c5a3f2496e07b85d13c2);
 
         /// Selection byte offsets; FOCUS may precede ANCHOR.
@@ -871,16 +809,12 @@ pub mod payload {
         ])
     }
 
-    pub fn label(query: &str, choice: usize, replacing: Option<CellId>) -> Value {
-        let mut fields = vec![
+    pub fn label(query: &str, choice: usize) -> Value {
+        Value::record([
             (vocabulary::STAGE, Value::Cell(vocabulary::LABEL)),
             (vocabulary::QUERY, text::value(query)),
             (vocabulary::CHOICE, f64_convention::value(choice as f64)),
-        ];
-        if let Some(replacing) = replacing {
-            fields.push((vocabulary::REPLACING, Value::Cell(replacing)));
-        }
-        Value::record(fields)
+        ])
     }
 
     pub fn stage(payload: &Value) -> Option<CellId> {
@@ -894,10 +828,6 @@ pub mod payload {
     pub fn choice(payload: &Value) -> Option<usize> {
         let choice = f64_convention::read(payload.as_record()?.get(&vocabulary::CHOICE)?)?;
         (choice >= 0.0 && choice.fract() == 0.0).then_some(choice as usize)
-    }
-
-    pub fn replacing(payload: &Value) -> Option<CellId> {
-        payload.as_record()?.get(&vocabulary::REPLACING)?.as_cell()
     }
 
     pub fn with_update(payload: &Value, update: &Value) -> Value {
@@ -1025,13 +955,10 @@ pub mod payload {
             assert_eq!(stage(&pending), Some(vocabulary::PENDING));
             assert_eq!(query(&pending), Some("asd"));
             assert_eq!(choice(&pending), Some(2));
-            assert_eq!(replacing(&pending), None);
 
-            let key = gid::new_cell_id();
-            let rename = label("nm", 0, Some(key));
-            assert_eq!(stage(&rename), Some(vocabulary::LABEL));
-            assert_eq!(replacing(&rename), Some(key));
-            assert_eq!(label("nm", 0, None).as_record().unwrap().len(), 3);
+            let label = label("nm", 0);
+            assert_eq!(stage(&label), Some(vocabulary::LABEL));
+            assert_eq!(label.as_record().unwrap().len(), 3);
         }
 
         #[test]

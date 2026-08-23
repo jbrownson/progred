@@ -338,7 +338,6 @@ impl ApplicationHandler<UserEvent> for App {
                             || self.clipboard_key(&dispatch.descends, &key_event)
                             || self.delete_key(&dispatch.descends, &key_event)
                             || self.insert_key(&dispatch.descends, &dispatch.popup, &key_event)
-                            || self.rename_key(&key_event)
                             || self.collapse_key(&key_event)
                             || match navigate::step_selection(
                                 &dispatch.descends,

@@ -11,16 +11,6 @@ use ui_events::pointer::{
 };
 use ui_events::ScrollDelta;
 
-struct EmptyClipboard;
-
-impl puri::edit::TextClipboard for EmptyClipboard {
-    fn get_text(&mut self) -> Option<String> {
-        None
-    }
-
-    fn set_text(&mut self, _: &str) {}
-}
-
 #[test]
 fn projection_target_appends_relative_steps() {
     let parent = gid::new_cell_id();
@@ -29,7 +19,6 @@ fn projection_target_appends_relative_steps() {
         select: Rc::new(|selections, path| selections.push(path)),
         start_edit: Rc::new(|_, _, _| {}),
         toggle: Rc::new(|_, _| {}),
-        rename: Rc::new(|_, _, _| {}),
         edit: Rc::new(|_| None),
         pick: Rc::new(|_, _| false),
         insert: Rc::new(|_, _| {}),
@@ -98,7 +87,6 @@ fn make_projected_selection(doc: &Document, library: &Cells, path: Path) -> Sele
             select: Rc::new(|_, _| {}),
             start_edit: Rc::new(|selected, path, line| selected.push((path, line))),
             toggle: Rc::new(|_, _| {}),
-            rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
@@ -1079,45 +1067,6 @@ fn minting_seeds_bare_and_named_cells() {
 }
 
 #[test]
-fn pending_rename_seeds_the_current_spelling() {
-    let doc = sample_document();
-    let lib = crate::stack::load::<()>().library;
-    let sources = src(&doc, &lib);
-    // A cell label seeds its ordinary name — the spelling whose
-    // first choice resolves back to the same identity, so committing
-    // untouched is a no-op rename.
-    let tags = vec![key("shape"), Step::Follow, key("tags")];
-    let pending = pending_rename(&sources, &tags).unwrap();
-    assert_eq!(pending.edit().unwrap().text(), "tags");
-    assert_eq!(pending.stage(), crate::selection::Stage::Label);
-    assert_eq!(pending.path(), &tags[..2]);
-    assert_eq!(pending.replacing(), Some(crate::test_values::label("tags")));
-    // A cell label seeds by NAME — a spelling, not the identity;
-    // another cell sharing the name may rank first, accepted.
-    let roof = sources.resolve(&[key("shape")]).unwrap().as_cell().unwrap();
-    let stroke = sources
-        .value(roof)
-        .unwrap()
-        .as_record()
-        .unwrap()
-        .keys()
-        .copied()
-        .find(|cell| sources.value(*cell).and_then(name::read) == Some("stroke"))
-        .unwrap();
-    let path = vec![key("shape"), Step::Follow, Step::Key(stroke)];
-    assert_eq!(
-        pending_rename(&sources, &path)
-            .unwrap()
-            .edit()
-            .unwrap()
-            .text(),
-        "stroke"
-    );
-    // Missing fields have no label to re-open.
-    assert!(pending_rename(&sources, &[key("gone")]).is_none());
-}
-
-#[test]
 fn entry_hover_marks_follow_the_live_query() {
     // The reported bug: hover an entry, keep the mouse still,
     // type — the mark must follow what the entry NOW is, not
@@ -1133,122 +1082,8 @@ fn entry_hover_marks_follow_the_live_query() {
         hover_value(&sources, false, Some(&pending("\"a\"")), &Hover::Entry(0)),
         None
     );
-    // Dead addresses answer nothing: a closed pending, a label
-    // no longer in the document.
+    // A closed pending answers nothing.
     assert_eq!(hover_value(&sources, false, None, &Hover::Entry(0)), None);
-    assert_eq!(
-        hover_value(&sources, false, None, &Hover::Label(vec![key("gone")])),
-        None
-    );
-    assert_eq!(
-        hover_value(
-            &sources,
-            false,
-            None,
-            &Hover::Label(vec![key("shape"), Step::Follow, key("tags")])
-        ),
-        Some(Value::from(sample_vocabulary::TAGS))
-    );
-}
-
-#[test]
-fn a_mounting_click_can_place_the_rename_caret() {
-    // The caret index is hit-tested against the label's OWN
-    // layout — the text that was clicked, in its face — and lands
-    // in the seed by byte index, so nothing depends on the
-    // editor's font agreeing with the label's (short ids draw
-    // monospace; the editor draws system-ui).
-    let doc = sample_document();
-    let lib = crate::stack::load::<()>().library;
-    let sources = src(&doc, &lib);
-    let styles = crate::styles::editor(1.0);
-    let mut fonts = parley::FontContext::new();
-    let mut layouts = parley::LayoutContext::new();
-    let mut cache = puri::text::TextCache::default();
-    let layout = line_layout(
-        &mut TextCtx {
-            fonts: &mut fonts,
-            layouts: &mut layouts,
-            scale: 1.0,
-            cache: &mut cache,
-        },
-        "tags",
-        &styles.label,
-    );
-    let z = KeyboardEvent {
-        key: Key::Character("z".into()),
-        modifiers: Modifiers::empty(),
-        state: KeyState::Down,
-        ..Default::default()
-    };
-    let tags = vec![key("shape"), Step::Follow, key("tags")];
-    let presentation = edit_presentation(&styles.label);
-    let mut clipboard = EmptyClipboard;
-    // A click at the label's left edge prepends, where an
-    // unclicked mount appends...
-    let mut pending = pending_rename(&sources, &tags).unwrap();
-    let edit = pending.edit_mut().unwrap();
-    edit.cursor_to(caret_index(&layout, Point::ZERO));
-    edit.handle_key(&presentation, &mut fonts, &mut layouts, &mut clipboard, &z);
-    assert_eq!(edit.text(), "ztags");
-    // ...and one past the right edge still appends.
-    let mut pending = pending_rename(&sources, &tags).unwrap();
-    let edit = pending.edit_mut().unwrap();
-    edit.cursor_to(caret_index(&layout, Point::new(10_000.0, 7.0)));
-    edit.handle_key(&presentation, &mut fonts, &mut layouts, &mut clipboard, &z);
-    assert_eq!(edit.text(), "tagsz");
-}
-
-#[test]
-fn rename_carries_the_value_and_never_a_sibling() {
-    let lib = Cells::new();
-    let (mut doc, _cell) = doc_of(vec![
-        (
-            crate::test_values::label("a"),
-            crate::test_values::text("1"),
-        ),
-        (
-            crate::test_values::label("b"),
-            crate::test_values::text("2"),
-        ),
-    ]);
-    let parent = vec![Step::Follow];
-    // A taken label declines whole: the sibling keeps its value.
-    assert!(!rename_field(
-        &mut doc,
-        &lib,
-        &parent,
-        &crate::test_values::label("a"),
-        crate::test_values::label("b")
-    ));
-    // A fresh label re-keys in one write, the value carried.
-    assert!(rename_field(
-        &mut doc,
-        &lib,
-        &parent,
-        &crate::test_values::label("a"),
-        crate::test_values::label("c")
-    ));
-    {
-        let sources = src(&doc, &lib);
-        assert_eq!(
-            sources.resolve(&[Step::Follow, key("c")]).cloned(),
-            Some(crate::test_values::text("1"))
-        );
-        assert!(sources.resolve(&[Step::Follow, key("a")]).is_none());
-        assert_eq!(
-            sources.resolve(&[Step::Follow, key("b")]).cloned(),
-            Some(crate::test_values::text("2"))
-        );
-    }
-    // A missing field has nothing to carry.
-    assert!(!rename_field(
-        &mut doc,
-        &lib,
-        &parent,
-        &crate::test_values::label("gone"),
-        crate::test_values::label("d")
-    ));
 }
 
 #[test]
@@ -1457,7 +1292,6 @@ fn partials_receive_selection_and_annotations_positionally() {
                 select: Rc::new(|_, _| {}),
                 start_edit: Rc::new(|_, _, _| {}),
                 toggle: Rc::new(|_, _| {}),
-                rename: Rc::new(|_, _, _| {}),
                 edit: Rc::new(|_| None),
                 pick: Rc::new(|_, _| false),
                 insert: Rc::new(|_, _| {}),
@@ -1563,7 +1397,6 @@ fn a_projection_defined_as_data_realizes() {
             select: Rc::new(|_, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
-            rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
@@ -1636,7 +1469,6 @@ fn a_data_event_realizes_the_apply_hook() {
             select: Rc::new(|_, _| {}),
             start_edit: Rc::new(|_, _, _| {}),
             toggle: Rc::new(|_, _| {}),
-            rename: Rc::new(|_, _, _| {}),
             edit: Rc::new(|_| None),
             pick: Rc::new(|_, _| false),
             insert: Rc::new(|_, _| {}),
