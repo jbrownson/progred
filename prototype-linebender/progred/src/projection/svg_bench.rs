@@ -29,7 +29,9 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
         _ => None,
     };
     let Placed {
-        descends, renders, ..
+        descends,
+        renders,
+        ..
     } = placed;
     let mut bench = Bench {
         list: DrawList::new(),
@@ -221,6 +223,7 @@ fn place_with_inputs(
         width,
         pointer,
         viewport,
+        None,
     )
 }
 
@@ -231,6 +234,7 @@ fn place_with_annotations(
     width: f64,
     pointer: Option<Point>,
     viewport: Option<Rect>,
+    root: Option<(&[Step], Option<&Value>)>,
 ) -> (Bench, Extent) {
     let stack = crate::stack::load::<World>();
     let sources = Sources {
@@ -263,9 +267,12 @@ fn place_with_annotations(
     // widths are where accidental exponentials have surfaced twice.
     // Numbers only, no assert (user call).
     let start = std::time::Instant::now();
+    let (root_path, root) = root.unwrap_or((&[], sources.root()));
     let node = project::<World, Bench>(
         ProjectDescription {
             sources,
+            root,
+            root_path,
             selection,
             annotations,
             raw: false,
@@ -334,43 +341,29 @@ fn svg_bench_renders_the_sample_projection() {
 fn iop_tree_projects_through_grap_into_puri_ink() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../iop-tree.gid"))
         .expect("the IoP tree demo parses");
-    let expression = doc
+    let picture = CellId::from_u128(0x69500824d5b442523ec3fbad07d3ec06);
+    let position = doc
         .root
         .as_ref()
         .and_then(Value::as_list)
-        .and_then(|root| root.values().next())
-        .expect("the first root item is the scene call");
-    let fuel = 2_000_000;
-    let result = Document {
-        root: Some(Value::record([(
-            progred_libraries::layout::vocabulary::DRAWING,
-            Value::record([
-                (
-                    progred_libraries::layout::vocabulary::WIDTH,
-                    f64_convention::value(500.0),
-                ),
-                (
-                    progred_libraries::layout::vocabulary::ASCENT,
-                    f64_convention::value(490.0),
-                ),
-                (
-                    progred_libraries::layout::vocabulary::DESCENT,
-                    f64_convention::value(10.0),
-                ),
-                (
-                    progred_libraries::layout::vocabulary::FUEL,
-                    f64_convention::value(fuel as f64),
-                ),
-                (
-                    progred_libraries::layout::vocabulary::PROGRAM,
-                    expression.clone(),
-                ),
-            ]),
-        )])),
-        cells: doc.cells,
-    };
-    let (bench, extent) = place(&result, None, 1400.0);
-    assert_eq!(extent.width, 500.0);
+        .and_then(|items| {
+            items
+                .iter()
+                .find(|(_, value)| value.as_cell() == Some(picture))
+                .map(|(position, _)| position.clone())
+        })
+        .expect("picture is reachable from root");
+    let path = vec![Step::Element(position), Step::Follow];
+    let (bench, extent) = place_with_annotations(
+        &doc,
+        None,
+        &Annotations::default(),
+        1400.0,
+        None,
+        None,
+        Some((&path, doc.cells.value(picture))),
+    );
+    assert!(extent.width >= 500.0);
     assert!(bench.list.0.iter().any(|command| matches!(
         command,
         DrawCmd::Fill {
@@ -446,6 +439,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
                 doc: &doc,
                 library: &stack.library,
             },
+            root: doc.root.as_ref(),
+            root_path: &[],
             selection: None,
             annotations: &Annotations::default(),
             raw: false,
@@ -565,7 +560,7 @@ fn custom_match_projection_uses_the_editor_fold() {
     let mut annotations = Annotations::default();
     crate::annotations::set_collapsed(&mut annotations, &[], false, true);
     let (folded, folded_extent) =
-        place_with_annotations(&doc, None, &annotations, 900.0, None, None);
+        place_with_annotations(&doc, None, &annotations, 900.0, None, None, None);
 
     assert!(folded.descends.len() < expanded.descends.len());
     assert!(folded_extent.width < expanded_extent.width);
@@ -677,6 +672,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
     while walk.len() < 200 {
         match step_selection(
             &bench.descends,
+            None,
             selection.as_ref(),
             line,
             &press(NamedKey::ArrowDown),
@@ -704,6 +700,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
     for expect in walk.iter().rev().skip(1) {
         let up = step_selection(
             &bench.descends,
+            None,
             selection.as_ref(),
             line,
             &press(NamedKey::ArrowUp),
@@ -729,6 +726,7 @@ fn the_row_walk_descends_the_sample_projection_in_screen_order() {
     assert_eq!(
         step_selection(
             &bench.descends,
+            None,
             Some(&select(&cell)),
             line,
             &press(NamedKey::ArrowRight),

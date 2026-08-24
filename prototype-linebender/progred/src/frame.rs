@@ -12,6 +12,7 @@ use crate::projection;
 use crate::selection;
 use crate::sources;
 use crate::stack;
+use crate::workspace::{self, Root};
 use crate::{App, PendingPaint, content_viewport};
 use parley::{FontContext, LayoutContext};
 use puri::draw::{Canvas, GlyphRun, Shape};
@@ -36,11 +37,10 @@ pub(crate) struct Dispatch {
     pub(crate) activations: Vec<placed::TargetAction<App>>,
     pub(crate) picks: Vec<placed::TargetAction<App>>,
     pub(crate) descends: Vec<navigate::Descend<App>>,
+    pub(crate) view_regions: Vec<placed::ViewRegion>,
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
     pub(crate) line: f64,
-    pub(crate) max_scroll: f64,
-    pub(crate) max_scroll_x: f64,
     pub(crate) popup: Option<completion::Popup>,
 }
 
@@ -135,20 +135,91 @@ fn reveal_vertical_scroll(
     pad: f64,
     scale: f64,
 ) -> f64 {
-    if (viewport.y0..=viewport.y1).contains(&target.y0) {
+    reveal_axis(
+        current,
+        maximum,
+        target.y0,
+        target.y1,
+        viewport.y0,
+        viewport.y1,
+        pad,
+        scale,
+    )
+}
+
+fn reveal_axis(
+    current: f64,
+    maximum: f64,
+    start: f64,
+    end: f64,
+    viewport_start: f64,
+    viewport_end: f64,
+    pad: f64,
+    scale: f64,
+) -> f64 {
+    let current = current.clamp(0.0, maximum);
+    if (viewport_start..=viewport_end).contains(&start) {
         return current;
     }
     let mut scroll = current;
-    if target.y1 > viewport.y1 {
-        scroll += (target.y1 + pad - viewport.y1) / scale;
+    if end > viewport_end {
+        scroll += (end + pad - viewport_end) / scale;
     }
     // Checked against the adjusted position, so a target taller than
     // the viewport lands with its top visible.
-    let top = target.y0 - (scroll - current) * scale;
-    if top < viewport.y0 {
-        scroll += (top - pad - viewport.y0) / scale;
+    let adjusted_start = start - (scroll - current) * scale;
+    if adjusted_start < viewport_start {
+        scroll += (adjusted_start - pad - viewport_start) / scale;
     }
     scroll.clamp(0.0, maximum)
+}
+
+fn scroll_offset(
+    stored: Vec2,
+    update: &ui_events::pointer::PointerScrollEvent,
+    scale: f64,
+    viewport: Size,
+    maximum: Vec2,
+) -> (Vec2, ScrollOutcome) {
+    let line = 40.0 * scale;
+    // A split can transiently have no room while its window is being
+    // resized. Page deltas still need finite units and remainders.
+    let page = PhysicalPosition {
+        x: viewport.width.max(1.0),
+        y: viewport.height.max(1.0),
+    };
+    let delta = update.delta.to_pixel_delta(
+        PhysicalPosition { x: line, y: line },
+        page,
+    );
+    let current = Vec2::new(
+        stored.x.clamp(0.0, maximum.x),
+        stored.y.clamp(0.0, maximum.y),
+    );
+    let next = Vec2::new(
+        (current.x - delta.x / scale).clamp(0.0, maximum.x),
+        (current.y - delta.y / scale).clamp(0.0, maximum.y),
+    );
+    let outcome = if next != stored {
+        let remaining = PhysicalPosition {
+            x: delta.x - (current.x - next.x) * scale,
+            y: delta.y - (current.y - next.y) * scale,
+        };
+        ScrollOutcome::with_remainder(match update.delta {
+            ScrollDelta::PageDelta(_, _) => ScrollDelta::PageDelta(
+                (remaining.x / page.x) as f32,
+                (remaining.y / page.y) as f32,
+            ),
+            ScrollDelta::LineDelta(_, _) => ScrollDelta::LineDelta(
+                (remaining.x / line) as f32,
+                (remaining.y / line) as f32,
+            ),
+            ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(remaining),
+        })
+    } else {
+        ScrollOutcome::pass(update)
+    };
+    (next, outcome)
 }
 
 /// The frame's hover, derived from this pass's settled geometry: a
@@ -193,58 +264,39 @@ pub(crate) struct FrameResources<'a> {
 /// measurement settled.
 struct AppView {
     view: measured::Measured<Placed<App, Paint>>,
-    max_scroll: f64,
-    max_scroll_x: f64,
 }
 
 impl App {
-    pub(crate) fn scroll_document(
+    pub(crate) fn scroll_view(
         &mut self,
+        root: Root,
         update: &ui_events::pointer::PointerScrollEvent,
         scale: f64,
-        viewport: f64,
+        viewport: Size,
         max_scroll: f64,
         max_scroll_x: f64,
     ) -> ScrollOutcome {
-        let line = 40.0 * scale;
-        let delta = update.delta.to_pixel_delta(
-            PhysicalPosition { x: line, y: line },
-            PhysicalPosition {
-                x: viewport,
-                y: viewport,
-            },
-        );
         // ScrollDelta documents positive as viewport-down/right, but
         // ui-events-winit passes winit deltas through raw, where
         // positive is scroll-up/left; subtract to match reality.
         // Stepping from the clamped position keeps the first tick
         // responsive when a resize left the stored offset out of
         // bounds.
-        let current = self.model.scroll.clamp(0.0, max_scroll);
-        let current_x = self.model.scroll_x.clamp(0.0, max_scroll_x);
-        let next = (current - delta.y / scale).clamp(0.0, max_scroll);
-        let next_x = (current_x - delta.x / scale).clamp(0.0, max_scroll_x);
-        if next != self.model.scroll || next_x != self.model.scroll_x {
-            self.model.scroll = next;
-            self.model.scroll_x = next_x;
-            let remaining = PhysicalPosition {
-                x: delta.x - (current_x - next_x) * scale,
-                y: delta.y - (current - next) * scale,
-            };
-            ScrollOutcome::with_remainder(match update.delta {
-                ScrollDelta::PageDelta(_, _) => ScrollDelta::PageDelta(
-                    (remaining.x / viewport) as f32,
-                    (remaining.y / viewport) as f32,
-                ),
-                ScrollDelta::LineDelta(_, _) => ScrollDelta::LineDelta(
-                    (remaining.x / line) as f32,
-                    (remaining.y / line) as f32,
-                ),
-                ScrollDelta::PixelDelta(_) => ScrollDelta::PixelDelta(remaining),
-            })
-        } else {
-            ScrollOutcome::pass(update)
+        let (next, outcome) = scroll_offset(
+            self.model
+                .workspace
+                .view(&root)
+                .expect("a retained view is live")
+                .scroll,
+            update,
+            scale,
+            viewport,
+            Vec2::new(max_scroll_x, max_scroll),
+        );
+        if let Some(view) = self.model.workspace.view_mut(&root) {
+            view.scroll = next;
         }
+        outcome
     }
 
     /// Scroll-to-reveal, computed from the freshly retained dispatch
@@ -258,54 +310,72 @@ impl App {
         &mut self,
         dispatch: &Dispatch,
         scale: f64,
-        viewport: Size,
     ) -> bool {
         let reveal = self
             .model
             .selection
             .as_ref()
-            .map(|s| (s.path().to_vec(), s.stage()));
+            .map(|s| (s.root().clone(), s.path().to_vec(), s.stage()));
         if reveal == self.revealed {
             false
         } else {
             self.revealed = reveal.clone();
-            let target = dispatch
-                .popup
-                .as_ref()
-                .map(|popup| popup.anchor)
-                .or_else(|| {
-                    reveal.as_ref().and_then(|(path, _)| {
+            let target = reveal.as_ref().and_then(|(root, path, _)| {
+                dispatch
+                    .popup
+                    .as_ref()
+                    .map(|popup| popup.anchor)
+                    .or_else(|| {
                         dispatch
                             .descends
                             .iter()
-                            .find(|descend| descend.path.as_ref() == path)
+                            .find(|descend| {
+                                descend.root.as_ref() == Some(root)
+                                    && descend.path.as_ref() == path
+                            })
                             .map(|descend| descend.rect)
                     })
-                });
-            target.is_some_and(|rect| {
-                let before = (self.model.scroll, self.model.scroll_x);
+                    .map(|rect| (root.clone(), rect))
+            });
+            target.is_some_and(|(view, rect)| {
                 let pad = 12.0 * scale;
-                let content = content_viewport(viewport, scale);
-                self.model.scroll = reveal_vertical_scroll(
-                    self.model.scroll,
-                    dispatch.max_scroll,
-                    rect,
-                    content,
-                    pad,
-                    scale,
+                let Some(region) = dispatch
+                    .view_regions
+                    .iter()
+                    .find(|region| region.root == view)
+                else {
+                    return false;
+                };
+                let before = self
+                    .model
+                    .workspace
+                    .view(&view)
+                    .expect("the selected view is live")
+                    .scroll;
+                let next = Vec2::new(
+                    reveal_axis(
+                        before.x,
+                        region.maximum.x,
+                        rect.x0,
+                        rect.x1,
+                        region.rect.x0,
+                        region.rect.x1,
+                        pad,
+                        scale,
+                    ),
+                    reveal_vertical_scroll(
+                        before.y,
+                        region.maximum.y,
+                        rect,
+                        region.rect,
+                        pad,
+                        scale,
+                    ),
                 );
-                // The same chase horizontally, against the viewport.
-                let visible = viewport.width;
-                let mut scroll_x = self.model.scroll_x;
-                if rect.x1 > visible {
-                    scroll_x += (rect.x1 + pad - visible) / scale;
+                if let Some(selected_view) = self.model.workspace.view_mut(&view) {
+                    selected_view.scroll = next;
                 }
-                let left = rect.x0 - (scroll_x - self.model.scroll_x) * scale;
-                if left < 0.0 {
-                    scroll_x += (left - pad) / scale;
-                }
-                self.model.scroll_x = scroll_x.clamp(0.0, dispatch.max_scroll_x);
-                (self.model.scroll, self.model.scroll_x) != before
+                next != before
             })
         }
     }
@@ -335,11 +405,7 @@ impl App {
             layouts: &mut self.layout_cx,
             text_cache: &mut self.text_cache,
         };
-        let AppView {
-            view,
-            max_scroll,
-            max_scroll_x,
-        } = app_view(description, resources);
+        let AppView { view } = app_view(description, resources);
         let placed = measured::place(
             view,
             Placement::root(vello::kurbo::Rect::from_origin_size(
@@ -361,7 +427,13 @@ impl App {
                     doc: &self.model.doc,
                     library: &self.stack.library,
                 },
-                self.model.view.raw,
+                self.model
+                    .workspace
+                    .selected_or_document(
+                        self.model.selection.as_ref().map(selection::Selection::root),
+                    )
+                    .projection
+                    == workspace::Projection::Raw,
                 self.model.selection.as_ref(),
                 hover,
             ),
@@ -383,6 +455,7 @@ impl App {
             picks,
             handler,
             descends,
+            view_regions,
             landmark_select,
             popup,
             mut renders,
@@ -405,9 +478,8 @@ impl App {
                 activations,
                 picks,
                 descends,
+                view_regions,
                 line: 14.0 * scale,
-                max_scroll,
-                max_scroll_x,
                 popup,
             },
             renders,
@@ -426,7 +498,7 @@ impl App {
     ) -> bool {
         let before = self.hover.clone();
         let mut frame = self.build_frame(scale, viewport);
-        if reveal_selection && self.reveal_selection(&frame.dispatch, scale, viewport) {
+        if reveal_selection && self.reveal_selection(&frame.dispatch, scale) {
             frame = self.build_frame(scale, viewport);
         }
         let Frame {
@@ -445,6 +517,269 @@ impl App {
         });
         hover_changed
     }
+}
+
+fn projection_hooks(root: Root) -> projection::Hooks<App> {
+    let select_root = root.clone();
+    let edit_root = root.clone();
+    let toggle_root = root.clone();
+    let insert_root = root.clone();
+    let apply_root = root;
+    projection::Hooks {
+        // The host's ordinary structural selection transition.
+        // Editable text handles its coordinate-sensitive pointer
+        // transition through the stock control's raw handler.
+        select: Rc::new(move |app: &mut App, path| {
+            let fresh = match app.model.selection.as_ref() {
+                None => true,
+                Some(current) => {
+                    current.root() != &select_root
+                        || current.stage() == selection::Stage::Label
+                        || current.path() != path
+                }
+            };
+            if fresh {
+                let next = selection::Selection::edge(&app.sources(), path)
+                    .with_root(select_root.clone());
+                app.model.selection = Some(next);
+            } else if let Some(line) = app
+                .model
+                .selection
+                .as_mut()
+                .and_then(selection::Selection::edit_mut)
+            {
+                line.cursor_to_end();
+            }
+        }),
+        start_edit: Rc::new(move |app: &mut App, path, line| {
+            app.model.selection = Some(
+                selection::Selection::from_line(&app.sources(), path, line)
+                    .with_root(edit_root.clone()),
+            );
+        }),
+        toggle: Rc::new(move |app: &mut App, path| {
+            let Some(view) = app.model.workspace.view_mut(&toggle_root) else {
+                return;
+            };
+            selection::toggle_collapse(
+                &sources::Sources {
+                    doc: &app.model.doc,
+                    library: &app.stack.library,
+                },
+                &mut view.annotations,
+                &path,
+            );
+        }),
+        edit: Rc::new(edit_ctx),
+        pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
+        insert: Rc::new(move |app: &mut App, path| {
+            if let Some(pending) = selection::pending_after(&app.sources(), &path) {
+                app.model.selection = Some(pending.with_root(insert_root.clone()));
+            }
+        }),
+        delete: Rc::new(|app: &mut App| {
+            let descends = app.last_descends.clone();
+            app.delete_selected_edge(&descends)
+        }),
+        apply: Rc::new(move |app, path, function, event| {
+            crate::site::apply_event(app, apply_root.clone(), path, function, event)
+        }),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn project_workspace_view(
+    model: &Model,
+    stack: &stack::Stack<App>,
+    styles: &crate::styles::Styles,
+    tcx: &mut TextCtx,
+    sources: sources::Sources<'_>,
+    view: &workspace::View,
+    size: Size,
+    scale: f64,
+) -> measured::Measured<Placed<App, Paint>> {
+    let margin = 12.0 * scale;
+    let body_width = (size.width - 2.0 * margin).max(0.0);
+    let cell_root;
+    let root_path;
+    let root = match view.root.target() {
+        workspace::Target::Document => {
+            root_path = Vec::new();
+            sources.root()
+        }
+        workspace::Target::Cell { cell, anchor } => {
+            root_path = anchor.clone();
+            cell_root = gid::Value::Cell(*cell);
+            Some(&cell_root)
+        }
+    };
+    let raw = view.projection == workspace::Projection::Raw;
+    let projected = projection::project(
+        projection::ProjectDescription {
+            sources,
+            root,
+            root_path: &root_path,
+            selection: model
+                .selection
+                .as_ref()
+                .filter(|selection| selection.root() == &view.root),
+            annotations: &view.annotations,
+            raw,
+            styles,
+            width: body_width,
+            projection: (!raw).then_some(&stack.projection),
+            foreign: &stack.foreign,
+        },
+        tcx,
+        projection_hooks(view.root.clone()),
+    );
+    let content = measured::pad(vello::kurbo::Insets::uniform(margin), projected);
+    let maximum = Vec2::new(
+        ((content.extent.width - size.width) / scale).max(0.0),
+        ((content.extent.height() - size.height) / scale).max(0.0),
+    );
+    let offset = Vec2::new(
+        view.scroll.x.clamp(0.0, maximum.x) * scale,
+        view.scroll.y.clamp(0.0, maximum.y) * scale,
+    );
+    let root = view.root.clone();
+    let scroll_root = root.clone();
+    let scrolled = placed::scrolled_at(
+        content,
+        offset,
+        Some((root.clone(), scale)),
+        move |app: &mut App, update| {
+            app.scroll_view(
+                scroll_root.clone(),
+                update,
+                scale,
+                size,
+                maximum.y,
+                maximum.x,
+            )
+        },
+    );
+    let scrolled = placed::in_view(scrolled, root);
+    let frame = placed::leaf(
+        measured::Extent {
+            width: size.width,
+            ascent: 0.0,
+            descent: size.height,
+        },
+        |_, _| {},
+    );
+    measured::overlay(frame, scrolled, move |placement, _, _| {
+        Some(Placement::new(placement.rect, placement.clip_rect))
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn project_workspace(
+    model: &Model,
+    stack: &stack::Stack<App>,
+    styles: &crate::styles::Styles,
+    tcx: &mut TextCtx,
+    sources: sources::Sources<'_>,
+    size: Size,
+    scale: f64,
+) -> measured::Measured<Placed<App, Paint>> {
+    let geometry = model.workspace.geometry(size, scale);
+    let mut body = placed::leaf(
+        measured::Extent {
+            width: size.width,
+            ascent: 0.0,
+            descent: size.height,
+        },
+        |_, _| {},
+    );
+    for placed_view in geometry.views {
+        let view = model
+            .workspace
+            .view(&placed_view.root)
+            .expect("workspace geometry only names live views");
+        let rect = placed_view.rect;
+        let child = project_workspace_view(
+            model,
+            stack,
+            styles,
+            tcx,
+            sources,
+            view,
+            rect.size(),
+            scale,
+        );
+        body = measured::overlay(body, child, move |placement, _, _| {
+            let rect = rect + placement.rect.origin().to_vec2();
+            Some(Placement::new(rect, placement.clip_rect.intersect(rect)))
+        });
+    }
+    for placed_divider in geometry.dividers {
+        let rect = placed_divider.rect;
+        let divider = placed_divider.divider;
+        let vertical = matches!(divider, workspace::Divider::Columns(_));
+        let down_divider = divider.clone();
+        let move_divider = divider.clone();
+        let up_divider = divider;
+        let rule = placed::leaf(
+            measured::Extent {
+                width: rect.width(),
+                ascent: 0.0,
+                descent: rect.height(),
+            },
+            move |p, placement| {
+                let hit = if vertical {
+                    placement.rect.inflate(4.0 * scale, 0.0)
+                } else {
+                    placement.rect.inflate(0.0, 4.0 * scale)
+                };
+                let clip = placement.clip_rect;
+                p.fill(
+                    placement.rect,
+                    Color::new([0.82, 0.83, 0.86, 1.0]),
+                    Affine::IDENTITY,
+                );
+                p.occlude(Placement::new(hit, placement.clip_rect));
+                p.handler().on_pointer_down(move |app: &mut App, event| {
+                    event.button == Some(PointerButton::Primary)
+                        && hit.contains(Point::new(
+                            event.state.position.x,
+                            event.state.position.y,
+                        ))
+                        && app
+                            .model
+                            .workspace
+                            .start_resize(
+                                down_divider.clone(),
+                                Vec2::new(
+                                    event.state.position.x - clip.x0,
+                                    event.state.position.y - clip.y0,
+                                ),
+                            )
+                });
+                p.handler().on_pointer_move(move |app: &mut App, event| {
+                    app.model.workspace.resize(
+                        &move_divider,
+                        Vec2::new(
+                            event.current.position.x - clip.x0,
+                            event.current.position.y - clip.y0,
+                        ),
+                        size,
+                    )
+                });
+                p.handler().on_pointer_up(move |app: &mut App, _| {
+                    app.model.workspace.finish_resize(&up_divider)
+                });
+            },
+        );
+        body = measured::overlay(body, rule, move |placement, _, _| {
+            let rect = rect + placement.rect.origin().to_vec2();
+            // The rule is inside the workspace, but its retained drag
+            // needs the workspace origin after the pointer leaves the
+            // narrow hit target.
+            Some(Placement::new(rect, placement.clip_rect))
+        });
+    }
+    body
 }
 
 fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) -> AppView {
@@ -480,7 +815,11 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
             menu::Description {
                 state: menu,
                 availability,
-                raw: flags.raw,
+                raw: model
+                    .workspace
+                    .selected_or_document(model.selection.as_ref().map(selection::Selection::root))
+                    .projection
+                    == workspace::Projection::Raw,
                 debug_geometry: flags.debug_geometry,
                 scale,
                 width: viewport_width,
@@ -496,100 +835,21 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         None => (None, None, 0.0),
     };
     let content_viewport = content_viewport(viewport, scale);
-    // The Raw view is ONE bit, threaded as itself: name lookups
-    // derive from it downstream, no policy swapped here, and the
-    // model's configured policy rides along untouched.
     let sources = sources::Sources {
         doc: &model.doc,
         library: &stack.library,
     };
-    let margin = 12.0 * scale;
-    let body_width = viewport_width - 2.0 * margin;
-    let body = projection::project(
-        projection::ProjectDescription {
-            sources,
-            selection: model.selection.as_ref(),
-            annotations: &model.annotations,
-            raw: flags.raw,
-            styles: &styles,
-            width: body_width,
-            projection: (!flags.raw).then_some(&stack.projection),
-            foreign: &stack.foreign,
-        },
+    let body = project_workspace(
+        model,
+        stack,
+        &styles,
         &mut tcx,
-        projection::Hooks {
-            // The host's ordinary structural selection transition.
-            // Editable text handles its coordinate-sensitive pointer
-            // transition through the stock control's raw handler.
-            select: Rc::new(move |app: &mut App, path| {
-                let fresh = match app.model.selection.as_ref() {
-                    None => true,
-                    Some(current) => {
-                        current.stage() == selection::Stage::Label || current.path() != path
-                    }
-                };
-                if fresh {
-                    let next = selection::Selection::edge(
-                        &app.sources(),
-                        path,
-                    );
-                    app.model.selection = Some(next);
-                } else if let Some(line) = app
-                        .model
-                        .selection
-                        .as_mut()
-                        .and_then(selection::Selection::edit_mut)
-                {
-                    line.cursor_to_end();
-                }
-            }),
-            start_edit: Rc::new(|app: &mut App, path, line| {
-                app.model.selection = Some(selection::Selection::from_line(
-                    &app.sources(),
-                    path,
-                    line,
-                ));
-            }),
-            toggle: Rc::new(|app: &mut App, path| {
-                selection::toggle_collapse(
-                    &sources::Sources {
-                        doc: &app.model.doc,
-                        library: &app.stack.library,
-                    },
-                    &mut app.model.annotations,
-                    &path,
-                );
-            }),
-            edit: Rc::new(edit_ctx),
-            pick: Rc::new(|app: &mut App, id| app.pick_identity(id)),
-            insert: Rc::new(|app: &mut App, path| {
-                if let Some(pending) = selection::pending_after(&app.sources(), &path) {
-                    app.model.selection = Some(pending);
-                }
-            }),
-            delete: Rc::new(|app: &mut App| {
-                let descends = app.last_descends.clone();
-                app.delete_selected_edge(&descends)
-            }),
-            apply: Rc::new(crate::site::apply_event),
-        },
+        sources,
+        content_viewport.size(),
+        scale,
     );
-    // The body rides Progred's scroll container: margins pad into the
-    // content, the window is the viewport, and the app's clamped
-    // offsets (ordinary model state) shift it. The horizontal
-    // maximum answers to the LAYOUT width — content should only
-    // scroll where even the block forms overflowed it — not the
-    // window edge the viewport clips at.
-    let content = measured::pad(vello::kurbo::Insets::uniform(margin), body);
-    let max_scroll = ((content.extent.height() - content_viewport.height()) / scale).max(0.0);
-    let max_scroll_x = ((content.extent.width - (body_width + 2.0 * margin)) / scale).max(0.0);
-    let offset = Vec2::new(
-        model.scroll_x.clamp(0.0, max_scroll_x) * scale,
-        model.scroll.clamp(0.0, max_scroll) * scale,
-    );
-    // The stage: one tree. Empty-space deselection is the shell's
-    // final editor-action fallback after raw pointer handlers and a
-    // resolved target's Activate/Pick have declined.
+    // The stage is editor chrome around one workspace tree. Empty
+    // space deselection remains the shell's final editor action.
     let mut stage = placed::leaf(
         measured::Extent {
             width: viewport.width,
@@ -605,19 +865,9 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         );
         stage = measured::overlay(stage, bar, move |_, _, _| Some(bar_placement));
     }
-    stage = measured::overlay(
-        stage,
-        placed::scrolled(content, offset, move |app: &mut App, update| {
-            app.scroll_document(
-                update,
-                scale,
-                content_viewport.height(),
-                max_scroll,
-                max_scroll_x,
-            )
-        }),
-        move |_, _, _| Some(Placement::new(content_viewport, content_viewport)),
-    );
+    stage = measured::overlay(stage, body, move |_, _, _| {
+        Some(Placement::new(content_viewport, content_viewport))
+    });
 
     // The pending row's popup floats above everything the body
     // placed, its click targets winning. The card is built while a
@@ -631,15 +881,20 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
     if let Some((query, choice, labels)) = engaged {
         // The same inputs the pending row's stash reads: the drawn
         // rows and the keyboard commit must answer from one list.
-        let entries = completion::completion_entries(&sources, flags.raw, labels, query.text());
+        let active_raw = model
+            .workspace
+            .selected_or_document(model.selection.as_ref().map(selection::Selection::root))
+            .projection
+            == workspace::Projection::Raw;
+        let entries = completion::completion_entries(&sources, active_raw, labels, query.text());
         let commit =
             |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
                 Some(current) => match current.stage() {
                     selection::Stage::Pending => {
-                        app.commit_value(current.path().to_vec(), action);
+                        app.commit_value(current.root().clone(), current.path().to_vec(), action);
                     }
                     selection::Stage::Label => {
-                        app.commit_label(current.path().to_vec(), action);
+                        app.commit_label(current.root().clone(), current.path().to_vec(), action);
                     }
                     selection::Stage::Edge => {
                         app.model.selection = Some(current);
@@ -702,11 +957,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
             ))
         });
     }
-    AppView {
-        view: stage,
-        max_scroll,
-        max_scroll_x,
-    }
+    AppView { view: stage }
 }
 
 /// Dispatch-time access to the selection's editor. Retained-frame
@@ -735,6 +986,7 @@ pub(crate) fn edit_ctx(app: &mut App) -> Option<EditCtx<'_>> {
 #[cfg(test)]
 mod frame_tests {
     use super::*;
+    use gid::{CellId, Cells, Document, Value};
     use measured::Output;
 
     #[test]
@@ -780,6 +1032,96 @@ mod frame_tests {
             reveal_vertical_scroll(120.0, 1_000.0, target, viewport, 12.0, 1.0),
             192.0
         );
+    }
+
+    #[test]
+    fn reveal_clamps_an_offset_left_stale_by_a_resize() {
+        let viewport = vello::kurbo::Rect::new(0.0, 30.0, 400.0, 200.0);
+        let target = vello::kurbo::Rect::new(20.0, 80.0, 380.0, 120.0);
+
+        assert_eq!(
+            reveal_vertical_scroll(300.0, 100.0, target, viewport, 12.0, 1.0),
+            100.0
+        );
+    }
+
+    #[test]
+    fn workspace_columns_are_editor_geometry_with_independent_view_regions() {
+        let cell = CellId::from_u128(1);
+        let mut cells = Cells::new();
+        cells.set_value(cell, Value::from(b"pane".to_vec()));
+        let mut model = Model {
+            doc: Document {
+                root: Some(Value::Cell(cell)),
+                cells,
+            },
+            selection: None,
+            history: crate::history::History::default(),
+            view: ViewFlags::default(),
+            workspace: workspace::Workspace::default(),
+        };
+        let document = model.workspace.document_root().clone();
+        let upper = model
+            .workspace
+            .open_cell(workspace::Side::Left, cell, Vec::new());
+        let lower = model
+            .workspace
+            .open_cell(workspace::Side::Left, cell, Vec::new());
+        let stack = crate::stack::load::<App>();
+        let styles = crate::styles::editor(1.0);
+        let mut fonts = FontContext::new();
+        let mut layouts = LayoutContext::new();
+        let mut cache = puri::text::TextCache::default();
+        let mut tcx = TextCtx {
+            fonts: &mut fonts,
+            layouts: &mut layouts,
+            scale: 1.0,
+            cache: &mut cache,
+        };
+        let size = Size::new(801.0, 600.0);
+        let placed = measured::place(
+            project_workspace(
+                &model,
+                &stack,
+                &styles,
+                &mut tcx,
+                sources::Sources {
+                    doc: &model.doc,
+                    library: &stack.library,
+                },
+                size,
+                1.0,
+            ),
+            Placement::root(vello::kurbo::Rect::from_origin_size(Point::ZERO, size)),
+        );
+
+        assert_eq!(placed.view_regions.len(), 3);
+        let upper_region = placed
+            .view_regions
+            .iter()
+            .find(|region| region.root == upper)
+            .expect("upper pane");
+        let lower_region = placed
+            .view_regions
+            .iter()
+            .find(|region| region.root == lower)
+            .expect("lower pane");
+        let document_region = placed
+            .view_regions
+            .iter()
+            .find(|region| region.root == document)
+            .expect("document view");
+        assert_eq!((document_region.rect.y0, document_region.rect.y1), (0.0, 600.0));
+        assert_eq!(upper_region.rect.x0, lower_region.rect.x0);
+        assert_eq!(upper_region.rect.x1, lower_region.rect.x1);
+        assert_eq!(lower_region.rect.y0 - upper_region.rect.y1, 1.0);
+        assert!(placed
+            .descends
+            .iter()
+            .all(|descend| descend.root.is_some()));
+        assert!(placed.descends.iter().any(|descend| {
+            descend.root.as_ref() == Some(&upper) && descend.path.is_empty()
+        }));
     }
 
     #[test]

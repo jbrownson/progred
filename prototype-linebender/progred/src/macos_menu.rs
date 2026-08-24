@@ -25,13 +25,17 @@ impl NativeItem {
     fn new(item: Item) -> Self {
         match item.kind {
             Kind::Command => {
-                Self::Command(MenuItem::new(item.label, true, Some(accelerator(item))))
+                Self::Command(MenuItem::new(
+                    item.label,
+                    true,
+                    item.shortcut.map(accelerator),
+                ))
             }
             Kind::Check => Self::Check(CheckMenuItem::new(
                 item.label,
                 true,
                 false,
-                Some(accelerator(item)),
+                item.shortcut.map(accelerator),
             )),
         }
     }
@@ -61,8 +65,7 @@ impl NativeItem {
     }
 }
 
-fn accelerator(item: Item) -> Accelerator {
-    let shortcut = item.shortcut;
+fn accelerator(shortcut: menu::Shortcut) -> Accelerator {
     Accelerator::new(
         Some(if shortcut.shift {
             Modifiers::META | Modifiers::SHIFT
@@ -73,6 +76,7 @@ fn accelerator(item: Item) -> Accelerator {
             ShortcutKey::D => Code::KeyD,
             ShortcutKey::N => Code::KeyN,
             ShortcutKey::O => Code::KeyO,
+            ShortcutKey::P => Code::KeyP,
             ShortcutKey::Q => Code::KeyQ,
             ShortcutKey::R => Code::KeyR,
             ShortcutKey::S => Code::KeyS,
@@ -132,11 +136,11 @@ impl Menu {
             .map(|(selection, _)| *selection)
     }
 
-    pub fn sync(&self, availability: menu::Availability, view: ViewFlags) {
+    pub fn sync(&self, availability: menu::Availability, view: ViewFlags, raw: bool) {
         for (selection, item) in &self.items {
             item.set_enabled(availability.enabled(*selection));
             item.set_checked(match selection {
-                Selection::Raw => view.raw,
+                Selection::Raw => raw,
                 Selection::DebugGeometry => view.debug_geometry,
                 _ => false,
             });

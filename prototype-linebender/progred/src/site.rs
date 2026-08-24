@@ -4,6 +4,7 @@
 #[cfg(test)]
 use crate::annotations::Annotations;
 use crate::selection::Selection;
+use crate::workspace::Root;
 #[cfg(test)]
 use crate::sources::Sources;
 use crate::App;
@@ -30,21 +31,27 @@ const EVENT_FUNCTIONS: [gid::CellId; 4] = [
 /// Apply one event handler with its get/set functions bound to this
 /// projection site. An absent or diagnostic result declines without
 /// committing any pending annotation or selection change.
-pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> bool {
+pub fn apply_event(app: &mut App, root: Root, path: Path, function: Value, event: Value) -> bool {
     let recorded = app
         .model
         .selection
         .as_ref()
-        .filter(|selection| selection.path() == path)
+        .filter(|selection| selection.root() == &root && selection.path() == path)
         .is_some_and(Selection::recorded);
     let current = app
         .model
         .selection
         .as_ref()
-        .filter(|selection| selection.path() == path)
+        .filter(|selection| selection.root() == &root && selection.path() == path)
         .map(|selection| selection.payload().clone());
+    let annotation = app
+        .model
+        .workspace
+        .view(&root)
+        .and_then(|view| view.annotations.at(&path))
+        .cloned();
     let staged = RefCell::new(PendingChanges {
-        annotation: app.model.annotations.at(&path).cloned(),
+        annotation,
         annotation_changed: false,
         selection: current,
         selection_changed: false,
@@ -76,7 +83,10 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
     let handled = evaluation.diagnostics.is_empty() && !absent::is_absent(&evaluation.result);
     if handled {
         if staged.annotation_changed {
-            app.model.annotations.set(&path, staged.annotation);
+            let Some(view) = app.model.workspace.view_mut(&root) else {
+                return false;
+            };
+            view.annotations.set(&path, staged.annotation);
         }
         if staged.selection_changed {
             match staged.selection {
@@ -85,7 +95,8 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
                         &app.sources(),
                         path,
                         payload,
-                    );
+                    )
+                    .with_root(root.clone());
                     next.preserve_recorded(recorded);
                     app.model.selection = Some(next);
                 }
@@ -94,7 +105,9 @@ pub fn apply_event(app: &mut App, path: Path, function: Value, event: Value) -> 
                         .model
                         .selection
                         .as_ref()
-                        .is_some_and(|selection| selection.path() == path) =>
+                        .is_some_and(|selection| {
+                            selection.root() == &root && selection.path() == path
+                        }) =>
                 {
                     app.model.selection = None;
                 }

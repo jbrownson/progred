@@ -1,6 +1,7 @@
 //! Keyboard navigation over a frame's settled descends.
 
 use crate::selection::Selection;
+use crate::workspace::Root;
 use gid::{Path, Step};
 use progred_display::ActionHandler;
 use progred_libraries::name;
@@ -14,6 +15,9 @@ use vello::kurbo::Rect;
 /// [`step_selection`] reads it to move the selection by keyboard;
 /// clicks go through each descend's own handler, not this list.
 pub struct Descend<World> {
+    /// The editor view that produced this occurrence. Paths may be
+    /// projected in more than one pane at once.
+    pub root: Option<Root>,
     pub path: Rc<[Step]>,
     /// The settled rect, for scroll-to-selection.
     pub rect: Rect,
@@ -27,6 +31,7 @@ pub struct Descend<World> {
 impl<World> Clone for Descend<World> {
     fn clone(&self) -> Self {
         Self {
+            root: self.root.clone(),
             path: self.path.clone(),
             rect: self.rect,
             select: self.select.clone(),
@@ -43,9 +48,13 @@ pub trait HasDescends<World> {
 /// Where the selection lands after deleting `path`: the next sibling,
 /// else the previous, else the parent. Also where a discarded pending
 /// edge returns to.
-pub fn selection_after_delete<World>(descends: &[Descend<World>], path: &[Step]) -> Path {
-    sibling(descends, path, true)
-        .or_else(|| sibling(descends, path, false))
+pub fn selection_after_delete<World>(
+    descends: &[Descend<World>],
+    root: Option<&Root>,
+    path: &[Step],
+) -> Path {
+    sibling(descends, root, path, true)
+        .or_else(|| sibling(descends, root, path, false))
         .unwrap_or_else(|| {
             path.split_last()
                 .map(|(_, parent)| parent.to_vec())
@@ -66,6 +75,7 @@ pub fn selection_after_delete<World>(descends: &[Descend<World>], path: &[Step])
 /// navigation doesn't own.
 pub fn step_selection<'a, World>(
     descends: &'a [Descend<World>],
+    root: Option<&Root>,
     selection: Option<&Selection>,
     line: f64,
     event: &KeyboardEvent,
@@ -85,10 +95,12 @@ pub fn step_selection<'a, World>(
     }
     .filter(|_| event.state.is_down() && !modified)?;
     let Some(selection) = selection else {
-        return descends.iter().find(|descend| descend.path.is_empty());
+        return descends
+            .iter()
+            .find(|descend| root.is_none_or(|root| descend.root.as_ref() == Some(root)) && descend.path.is_empty());
     };
     let path = selection.path();
-    let order = reading_order(descends, line);
+    let order = reading_order(descends, root, line);
     let at = order
         .iter()
         .position(|stop| descends[stop.descend].path.as_ref() == path);
@@ -109,7 +121,10 @@ pub fn step_selection<'a, World>(
         (NamedKey::ArrowLeft, _) => path.split_last().and_then(|(_, parent)| {
             descends
                 .iter()
-                .find(|descend| descend.path.as_ref() == parent)
+                .find(|descend| {
+                    root.is_none_or(|root| descend.root.as_ref() == Some(root))
+                        && descend.path.as_ref() == parent
+                })
         }),
         _ => None,
     }
@@ -140,15 +155,23 @@ pub(crate) fn projected_name_owner(path: &[Step]) -> Option<&[Step]> {
 /// own first line, never a row. Order is rebuilt from per-parent
 /// registration order, which is document order; the raw list settles
 /// children first.
-fn reading_order<World>(descends: &[Descend<World>], line: f64) -> Vec<Stop> {
+fn reading_order<World>(
+    descends: &[Descend<World>],
+    root: Option<&Root>,
+    line: f64,
+) -> Vec<Stop> {
     let by_path: HashMap<&[Step], usize> = descends
         .iter()
         .enumerate()
+        .filter(|(_, descend)| root.is_none_or(|root| descend.root.as_ref() == Some(root)))
         .map(|(index, descend)| (descend.path.as_ref(), index))
         .collect();
     let mut children: Vec<Vec<usize>> = vec![Vec::new(); descends.len()];
     let mut roots = Vec::new();
     for (index, descend) in descends.iter().enumerate() {
+        if root.is_some_and(|root| descend.root.as_ref() != Some(root)) {
+            continue;
+        }
         let parent = projected_name_owner(&descend.path)
             .and_then(|owner| by_path.get(owner).copied())
             .or_else(|| {
@@ -203,12 +226,18 @@ fn same_line(a: Rect, b: Rect, line: f64) -> bool {
 /// The neighboring sibling in placement order, continuing through
 /// ancestors at the ends — where the selection lands after a delete,
 /// via [`selection_after_delete`].
-fn sibling<World>(descends: &[Descend<World>], path: &[Step], next: bool) -> Option<Path> {
+fn sibling<World>(
+    descends: &[Descend<World>],
+    root: Option<&Root>,
+    path: &[Step],
+    next: bool,
+) -> Option<Path> {
     let mut path = path.to_vec();
     loop {
         let (_, parent) = path.split_last()?;
         let siblings: Vec<&[Step]> = descends
             .iter()
+            .filter(|descend| root.is_none_or(|root| descend.root.as_ref() == Some(root)))
             .map(|descend| descend.path.as_ref())
             .filter(|p| p.split_last().is_some_and(|(_, prefix)| prefix == parent))
             .collect();

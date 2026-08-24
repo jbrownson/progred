@@ -74,6 +74,8 @@ fn make_projected_selection(doc: &Document, library: &Cells, path: Path) -> Sele
                 doc,
                 library: &projection_library,
             },
+            root: doc.root.as_ref(),
+            root_path: &[],
             selection: None,
             annotations: &annotations,
             raw: false,
@@ -178,6 +180,7 @@ const LINE: f64 = 16.0;
 
 fn stop(path: Vec<Step>, x0: f64, y0: f64, x1: f64, y1: f64) -> Descend<()> {
     Descend {
+        root: None,
         path: Rc::from(path),
         rect: Rect::new(x0, y0, x1, y1),
         select: Rc::new(|_| true),
@@ -195,7 +198,7 @@ fn arrow(named: NamedKey) -> KeyboardEvent {
 
 fn stepped(ds: &[Descend<()>], from: Option<Vec<Step>>, named: NamedKey) -> Option<Path> {
     let selection = from.map(crate::selection::bare_edge);
-    step_selection(ds, selection.as_ref(), LINE, &arrow(named))
+    step_selection(ds, None, selection.as_ref(), LINE, &arrow(named))
         .map(|descend| descend.path.to_vec())
 }
 
@@ -317,13 +320,13 @@ fn navigation_declines_modified_keys_releases_and_other_keys() {
         modifiers: Modifiers::SHIFT,
         ..arrow(NamedKey::ArrowDown)
     };
-    assert!(step_selection(&ds, None, LINE, &shifted).is_none());
+    assert!(step_selection(&ds, None, None, LINE, &shifted).is_none());
     let released = KeyboardEvent {
         state: KeyState::Up,
         ..arrow(NamedKey::ArrowDown)
     };
-    assert!(step_selection(&ds, None, LINE, &released).is_none());
-    assert!(step_selection(&ds, None, LINE, &arrow(NamedKey::Escape)).is_none());
+    assert!(step_selection(&ds, None, None, LINE, &released).is_none());
+    assert!(step_selection(&ds, None, None, LINE, &arrow(NamedKey::Escape)).is_none());
 }
 
 #[test]
@@ -1286,6 +1289,8 @@ fn partials_receive_selection_and_annotations_positionally() {
                     doc: &doc,
                     library: &lib,
                 },
+                root: doc.root.as_ref(),
+                root_path: &[],
                 selection,
                 annotations,
                 raw: false,
@@ -1391,6 +1396,8 @@ fn a_projection_defined_as_data_realizes() {
                 doc: &doc,
                 library: &lib,
             },
+            root: doc.root.as_ref(),
+            root_path: &[],
             selection: None,
             annotations: &empty,
             raw: false,
@@ -1463,6 +1470,8 @@ fn a_data_event_realizes_the_apply_hook() {
                 doc: &doc,
                 library: &lib,
             },
+            root: doc.root.as_ref(),
+            root_path: &[],
             selection: None,
             annotations: &empty,
             raw: false,

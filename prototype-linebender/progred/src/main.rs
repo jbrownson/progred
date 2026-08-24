@@ -32,6 +32,7 @@ mod styles;
 #[cfg(test)]
 mod test_values;
 mod text_store;
+mod workspace;
 
 use crate::frame::{Dispatch, FrameDisposition, Frame, Hovered, Paint, frame_disposition};
 use crate::model::{Model, ViewFlags};
@@ -190,7 +191,7 @@ pub(crate) struct App {
     /// variant, since Enter keeps the path while opening a pending —
     /// so reveal fires once per change and never fights manual
     /// scrolling.
-    pub(crate) revealed: Option<(gid::Path, selection::Stage)>,
+    pub(crate) revealed: Option<(workspace::Root, gid::Path, selection::Stage)>,
     /// A minted frame's event surface, retained until an event spends
     /// it. `pending_paint` carries the same successor frame's pixels.
     pub(crate) dispatch: Option<Dispatch>,
@@ -455,6 +456,13 @@ impl ApplicationHandler<UserEvent> for App {
                             || self.collapse_key(&key_event)
                             || match navigate::step_selection(
                                 &dispatch.descends,
+                                Some(
+                                    self.model
+                                        .selection
+                                        .as_ref()
+                                        .map(selection::Selection::root)
+                                        .unwrap_or_else(|| self.model.workspace.document_root()),
+                                ),
                                 self.model.selection.as_ref(),
                                 dispatch.line,
                                 &key_event,
@@ -475,14 +483,30 @@ impl ApplicationHandler<UserEvent> for App {
                             Point::new(button.state.position.x, button.state.position.y);
                         self.pointer = Some(position);
                         self.pressed = true;
+                        let event_root = dispatch
+                            .view_regions
+                            .iter()
+                            .rev()
+                            .find(|region| region.rect.contains(position))
+                            .map(|region| region.root.clone());
                         let raw = dispatch.handler.dispatch_pointer_down(self, &button);
                         if raw || button.button != Some(PointerButton::Primary) {
                             raw
                         } else if let Some(target) = self.hover.clone() {
                             if projection::command(&button.state.modifiers) {
-                                placed::dispatch_target(&dispatch.picks, self, &target)
+                                placed::dispatch_target(
+                                    &dispatch.picks,
+                                    self,
+                                    event_root.as_ref(),
+                                    &target,
+                                )
                             } else {
-                                placed::dispatch_target(&dispatch.activations, self, &target)
+                                placed::dispatch_target(
+                                    &dispatch.activations,
+                                    self,
+                                    event_root.as_ref(),
+                                    &target,
+                                )
                             }
                         } else {
                             self.model.selection.take().is_some()
@@ -513,7 +537,7 @@ impl ApplicationHandler<UserEvent> for App {
                         self.pointer = None;
                         self.pressed = false;
                         frame_input_changed = true;
-                        false
+                        self.model.workspace.cancel_resize()
                     }
                     _ => false,
                 };
@@ -650,11 +674,9 @@ fn main() {
         model: Model {
             doc,
             selection: None,
-            annotations: annotations::Annotations::default(),
             history: history::History::default(),
             view: ViewFlags::default(),
-            scroll: 0.0,
-            scroll_x: 0.0,
+            workspace: workspace::Workspace::default(),
         },
         doc_path,
         text_binders: binders,
@@ -809,16 +831,63 @@ impl App {
     /// panel, per platform convention.
     pub(crate) fn sync_menus(&self) {
         #[cfg(target_os = "macos")]
-        self.native_menu
-            .sync(self.menu_availability(), self.model.view);
+        self.native_menu.sync(
+            self.menu_availability(),
+            self.model.view,
+            self.model
+                .workspace
+                .selected_or_document(
+                    self.model.selection.as_ref().map(selection::Selection::root),
+                )
+                .projection
+                == workspace::Projection::Raw,
+        );
     }
 
     pub(crate) fn menu_availability(&self) -> menu::Availability {
+        let selected_root = self.model.selection.as_ref().map(selection::Selection::root);
         menu::Availability {
             save: self.model.history.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
+            open_pane: self.selected_cell_for_pane().is_some(),
+            move_up: selected_root.is_some_and(|root| {
+                self.model.workspace.can_move(root, workspace::Move::Up)
+            }),
+            move_down: selected_root.is_some_and(|root| {
+                self.model.workspace.can_move(root, workspace::Move::Down)
+            }),
+            move_left: selected_root.is_some_and(|root| {
+                self.model.workspace.can_move(root, workspace::Move::Left)
+            }),
+            move_right: selected_root.is_some_and(|root| {
+                self.model.workspace.can_move(root, workspace::Move::Right)
+            }),
         }
+    }
+
+    fn selected_cell_for_pane(&self) -> Option<(gid::CellId, gid::Path)> {
+        let current = self.model.selection.as_ref()?;
+        let path = current.path();
+        let sources = self.sources();
+        if let Some(cell) = sources.resolve(path).and_then(gid::Value::as_cell) {
+            return Some((cell, path.to_vec()));
+        }
+        let follow = selection::last_follow(path)?;
+        let anchor = path[..follow].to_vec();
+        let cell = sources.resolve(&anchor)?.as_cell()?;
+        Some((cell, anchor))
+    }
+
+    fn open_selected_in_pane(&mut self, side: workspace::Side) -> bool {
+        let Some((cell, anchor)) = self.selected_cell_for_pane() else {
+            return false;
+        };
+        let root = self.model.workspace.open_cell(side, cell, anchor.clone());
+        self.model.selection = Some(
+            selection::Selection::edge(&self.sources(), anchor).with_root(root),
+        );
+        true
     }
 
     pub(crate) fn handle_menu_selection(
@@ -834,12 +903,57 @@ impl App {
             menu::Selection::Quit => self.request_discard(event_loop, AfterDiscard::Quit),
             menu::Selection::Undo => self.step_history(true),
             menu::Selection::Redo => self.step_history(false),
-            menu::Selection::Raw => self.model.view.raw = !self.model.view.raw,
+            menu::Selection::OpenPaneLeft => {
+                self.open_selected_in_pane(workspace::Side::Left);
+            }
+            menu::Selection::OpenPaneRight => {
+                self.open_selected_in_pane(workspace::Side::Right);
+            }
+            menu::Selection::MovePaneUp
+            | menu::Selection::MovePaneDown
+            | menu::Selection::MovePaneLeft
+            | menu::Selection::MovePaneRight => {
+                let direction = match selection {
+                    menu::Selection::MovePaneUp => workspace::Move::Up,
+                    menu::Selection::MovePaneDown => workspace::Move::Down,
+                    menu::Selection::MovePaneLeft => workspace::Move::Left,
+                    menu::Selection::MovePaneRight => workspace::Move::Right,
+                    _ => unreachable!(),
+                };
+                if let Some(root) = self
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(selection::Selection::root)
+                    .cloned()
+                {
+                    self.model.workspace.move_pane(&root, direction);
+                }
+            }
+            menu::Selection::Raw => {
+                let selected = self
+                    .model
+                    .selection
+                    .as_ref()
+                    .map(selection::Selection::root)
+                    .cloned();
+                self.model.workspace.toggle_projection(selected.as_ref());
+            }
             menu::Selection::DebugGeometry => {
                 self.model.view.debug_geometry = !self.model.view.debug_geometry
             }
         }
-        if matches!(selection, menu::Selection::Raw | menu::Selection::DebugGeometry) {
+        if matches!(
+            selection,
+            menu::Selection::OpenPaneLeft
+                | menu::Selection::OpenPaneRight
+                | menu::Selection::MovePaneUp
+                | menu::Selection::MovePaneDown
+                | menu::Selection::MovePaneLeft
+                | menu::Selection::MovePaneRight
+                | menu::Selection::Raw
+                | menu::Selection::DebugGeometry
+        ) {
             self.pending_paint = None;
             if let RenderState::Active { window, .. } = &self.state {
                 window.request_redraw();
@@ -881,6 +995,14 @@ impl App {
     pub(crate) fn step_history(&mut self, back: bool) {
         let current = self.model.doc.clone();
         let selection = edge_path(&self.model.selection);
+        let root = self
+            .model
+            .selection
+            .as_ref()
+            .map(selection::Selection::root)
+            .filter(|root| self.model.workspace.view(root).is_some())
+            .cloned()
+            .unwrap_or_else(|| self.model.workspace.document_root().clone());
         let restored = if back {
             self.model.history.undo(current, selection)
         } else {
@@ -889,10 +1011,7 @@ impl App {
         if let Some((doc, restore)) = restored {
             self.model.doc = doc;
             self.model.selection = restore.map(|path| {
-                selection::Selection::edge(
-                    &self.sources(),
-                    path,
-                )
+                selection::Selection::edge(&self.sources(), path).with_root(root)
             });
             self.refresh_title();
             if let RenderState::Active { window, .. } = &self.state {
@@ -1022,11 +1141,9 @@ impl App {
         self.model = Model {
             doc,
             selection: None,
-            annotations: annotations::Annotations::default(),
             history: history::History::default(),
             view,
-            scroll: 0.0,
-            scroll_x: 0.0,
+            workspace: workspace::Workspace::default(),
         };
         self.hover = None;
         self.doc_path = path;

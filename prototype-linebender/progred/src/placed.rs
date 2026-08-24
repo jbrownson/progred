@@ -9,6 +9,7 @@ use crate::completion::{HasPopup, Popup};
 use crate::frame::Hovered;
 use crate::hover::Secondary;
 use crate::navigate::{Descend, HasDescends};
+use crate::workspace::Root;
 use measured::{Extent, Measured, Output};
 use puri::draw::{Canvas, GlyphRun, Shape};
 use puri::handler::{Handler, HasHandler, ScrollOutcome};
@@ -89,15 +90,33 @@ impl Probe {
 /// first chance to handle it; false falls through to registrations
 /// beneath it.
 pub struct TargetAction<C> {
+    root: Option<Root>,
     target: Hovered,
     action: EditorAction<C>,
 }
 
-pub fn dispatch_target<C>(actions: &[TargetAction<C>], ctx: &mut C, target: &Hovered) -> bool {
+/// A nested scroll container's settled geometry, retained so
+/// selection reveal can update the same view state as pointer scroll.
+pub struct ViewRegion {
+    pub root: Root,
+    pub rect: Rect,
+    pub maximum: Vec2,
+}
+
+pub fn dispatch_target<C>(
+    actions: &[TargetAction<C>],
+    ctx: &mut C,
+    root: Option<&Root>,
+    target: &Hovered,
+) -> bool {
     actions
         .iter()
         .rev()
-        .any(|candidate| candidate.target == *target && (candidate.action)(ctx))
+        .any(|candidate| {
+            candidate.root.as_ref().is_none_or(|candidate| Some(candidate) == root)
+                && candidate.target == *target
+                && (candidate.action)(ctx)
+        })
 }
 
 /// What ink may condition on: the frame's RESOLVED hover, decided
@@ -120,6 +139,7 @@ pub struct Placed<C, Cv> {
     /// not deepen the dispatch chain.
     pub handler: Option<Handler<C>>,
     pub descends: Vec<Descend<C>>,
+    pub view_regions: Vec<ViewRegion>,
     /// A projected control may override how the nearest enclosing
     /// navigation landmark is selected. The landmark consumes this
     /// while placing, so it never leaks into an ancestor.
@@ -150,6 +170,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
             picks: Vec::new(),
             handler: None,
             descends: Vec::new(),
+            view_regions: Vec::new(),
             landmark_select: None,
             popup: None,
             renders: Vec::new(),
@@ -166,6 +187,7 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
             (Some(base), Some(above)) => Some(handler_over(base, above)),
         };
         append(&mut self.descends, above.descends);
+        append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
         self.popup = above.popup.or(self.popup);
         append(&mut self.renders, above.renders);
@@ -301,6 +323,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     ) {
         if self.visible {
             self.placed.activations.push(TargetAction {
+                root: None,
                 target,
                 action: Box::new(action),
             });
@@ -314,6 +337,7 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     ) {
         if self.visible {
             self.placed.picks.push(TargetAction {
+                root: None,
                 target,
                 action: Box::new(action),
             });
@@ -464,9 +488,13 @@ pub fn on_key<C: 'static, Cv: 'static>(
 /// viewport (starts stay inside it); motion, release, and keys pass
 /// unbounded so active gestures and the focused editor keep working
 /// outside.
-pub fn scrolled<C: 'static, Cv: Canvas + 'static>(
+/// A scroll viewport tagged as an editor view. The settled region is frame
+/// output, not retained widget state; input and keyboard reveal use
+/// it to update the same caller-owned view.
+pub fn scrolled_at<C: 'static, Cv: Canvas + 'static>(
     child: Measured<Placed<C, Cv>>,
     offset: Vec2,
+    owner: Option<(Root, f64)>,
     on_scroll: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
 ) -> Measured<Placed<C, Cv>> {
     measured::around(child, move |placement, inner| {
@@ -481,8 +509,18 @@ pub fn scrolled<C: 'static, Cv: Canvas + 'static>(
                 }
             });
         }
-        let child_rect = inner
-            .extent()
+        let extent = inner.extent();
+        if let Some((root, scale)) = owner {
+            base.view_regions.push(ViewRegion {
+                root,
+                rect,
+                maximum: Vec2::new(
+                    ((extent.width - rect.width()) / scale).max(0.0),
+                    ((extent.height() - rect.height()) / scale).max(0.0),
+                ),
+            });
+        }
+        let child_rect = extent
             .rect_at(Point::new(rect.x0 - offset.x, rect.y0 - offset.y));
         let child_placement =
             measured::child_placement(measured::clipped_placement(placement, rect), child_rect);
@@ -495,6 +533,29 @@ pub fn scrolled<C: 'static, Cv: Canvas + 'static>(
         }));
         placed.handler = placed.handler.map(|handler| gate_starts(handler, placement));
         base.over(placed)
+    })
+}
+
+/// Associate every navigation occurrence produced by `child` with
+/// one editor view. This happens after projection and placement, so
+/// the projection language remains unaware of panes.
+pub fn in_view<C: 'static, Cv: 'static>(
+    child: Measured<Placed<C, Cv>>,
+    root: Root,
+) -> Measured<Placed<C, Cv>> {
+    measured::around(child, move |placement, inner| {
+        let mut placed = inner.place_at(placement);
+        for descend in &mut placed.descends {
+            descend.root = Some(root.clone());
+        }
+        for action in placed
+            .activations
+            .iter_mut()
+            .chain(&mut placed.picks)
+        {
+            action.root = Some(root.clone());
+        }
+        placed
     })
 }
 
@@ -638,6 +699,7 @@ mod tests {
         let other = Hovered::Tree(crate::hover::Hover::Toggle(std::rc::Rc::from([])));
         let actions = vec![
             TargetAction {
+                root: None,
                 target: target.clone(),
                 action: Box::new(|log: &mut Vec<&'static str>| {
                     log.push("lower");
@@ -645,6 +707,7 @@ mod tests {
                 }),
             },
             TargetAction {
+                root: None,
                 target: other,
                 action: Box::new(|log: &mut Vec<&'static str>| {
                     log.push("other");
@@ -652,6 +715,7 @@ mod tests {
                 }),
             },
             TargetAction {
+                root: None,
                 target: target.clone(),
                 action: Box::new(|log: &mut Vec<&'static str>| {
                     log.push("upper");
@@ -661,7 +725,7 @@ mod tests {
         ];
         let mut log = Vec::new();
 
-        assert!(dispatch_target(&actions, &mut log, &target));
+        assert!(dispatch_target(&actions, &mut log, None, &target));
         assert_eq!(log, ["upper", "lower"]);
     }
 
@@ -793,7 +857,7 @@ mod tests {
             },
         );
         let placed = measured::place(
-            scrolled(probe, Vec2::new(5.0, 40.0), |_, event| {
+            scrolled_at(probe, Vec2::new(5.0, 40.0), None, |_, event| {
                 ScrollOutcome::pass(event)
             }),
             Placement::new(
@@ -850,7 +914,7 @@ mod tests {
             },
         );
         let placed = measured::place(
-            scrolled(child, Vec2::ZERO, |log: &mut Vec<&'static str>, event| {
+            scrolled_at(child, Vec2::ZERO, None, |log: &mut Vec<&'static str>, event| {
                 log.push("scroll");
                 ScrollOutcome::consume(event)
             }),

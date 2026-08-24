@@ -4,6 +4,7 @@
     "add": 201af445eb7e2c270bb5ead10b781fc1,
     "amount": 55e66fc5eb91699cf12833fb0a15d4b6,
     "angle": 40a5a9cf5afb5a16171a9dae3fd06e7c,
+    "ascent": 7e1d0997f09e8231cabdd246ec1888f9,
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "blossom_colors": 2a5109ec22acf09a33b63836c01ea058,
@@ -34,7 +35,9 @@
     "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
     "current": 2680dedea78f6efb6866a9e537f09aa4,
     "depth": 180339357267d28e55bf88ce1b27b5d8,
+    "descent": 2ed0b9294782093c08695dd5137df21a,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
+    "drawing": 6889fa235b002be4c8b106d5f31dafbf,
     "dx": c96dfbe500e6a701033d92bc6c527398,
     "dy": 89d9b403fe0eba053af7048e29bf2f16,
     "end": 3a816b0af0160bc77ba1948b122b3f29,
@@ -46,6 +49,7 @@
     "floor": d007814c5f6a6c38b025605b399473d4,
     "fold": 1df93e0aeb8cbeda81a7d513320dd4f0,
     "frontier": 7c6d509824ee4861ccafb0a34f5adba6,
+    "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "gradient_end": abbfd273a978cb520a145eb65568f224,
     "gradient_offset": f348e826a277875d63e7a0197730f036,
@@ -92,7 +96,9 @@
     "path_elements": fd52747f31d0a82f9926e99331c69368,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
+    "picture": 69500824d5b442523ec3fbad07d3ec06,
     "prepend": 06f34b889ba63141b4b62f02d8d49aa9,
+    "program": bdf607810b274ad5b02bd409aef34b6a,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "radius": 6423c35e07d7a4ff536127d1f1d8eb53,
     "random_between": e8a99ada91800bca33709da0db80c29f,
@@ -125,6 +131,7 @@
     "tip_y": d843ffc3a66afaa9d8b21bd7597e6007,
     "transform": 0c69b749e5d076609a6642a20b736fb4,
     "translate": b9c300206cc1c193cc801f4f058f2647,
+    "tree": 7efda3670f4d2b402d5b02216f2a03d4,
     "true": 04831f9b704935059231eb111770e62e,
     "trunk_length": 2d32fc785aae627f3f5c34f601e9f03c,
     "turn_left": 039dae8299938bd45e7bd27629aae539,
@@ -1546,6 +1553,24 @@
     path_elements: {
       name: "path elements",
     },
+    picture: {
+      name: "picture",
+      drawing: {
+        descent: {
+          f64: 0x0000000000002440,
+        },
+        fuel: {
+          f64: 0x0000000080843e41,
+        },
+        ascent: {
+          f64: 0x0000000000a07e40,
+        },
+        program: tree,
+        width: {
+          f64: 0x0000000000407f40,
+        },
+      },
+    },
     random_scale: {
       name: "random scale",
     },
@@ -1719,6 +1744,51 @@
     tip_y: {
       name: "tip y",
     },
+    tree: {
+      blossoms_per_branch: {
+        f64: 0x0000000000003040,
+      },
+      name: "tree",
+      sky_top: {
+        color: "#b4e0fe",
+      },
+      canvas_height: {
+        f64: 0x0000000000407f40,
+      },
+      blossom_colors: [
+        {
+          color: "#f5ceea99",
+        },
+        {
+          color: "#e8d9e499",
+        },
+        {
+          color: "#f7c9f399",
+        },
+        {
+          color: "#ebb4cc99",
+        },
+      ],
+      trunk_length: {
+        f64: 0x0000000000405840,
+      },
+      mountain_back: {
+        color: "#8bb2bb",
+      },
+      mountain_front: {
+        color: "#618087",
+      },
+      function: scene,
+      canvas_width: {
+        f64: 0x0000000000407f40,
+      },
+      branch_length: {
+        f64: 0x0000000000004e40,
+      },
+      sky_bottom: {
+        color: "#d3f8ff",
+      },
+    },
     trunk_length: {
       name: "trunk length",
     },
@@ -1782,50 +1852,8 @@
     },
   },
   "root": [
-    {
-      blossoms_per_branch: {
-        f64: 0x0000000000003040,
-      },
-      sky_top: {
-        color: "#b4e0fe",
-      },
-      canvas_height: {
-        f64: 0x0000000000407f40,
-      },
-      blossom_colors: [
-        {
-          color: "#f5ceea99",
-        },
-        {
-          color: "#e8d9e499",
-        },
-        {
-          color: "#f7c9f399",
-        },
-        {
-          color: "#ebb4cc99",
-        },
-      ],
-      trunk_length: {
-        f64: 0x0000000000405840,
-      },
-      mountain_back: {
-        color: "#8bb2bb",
-      },
-      mountain_front: {
-        color: "#618087",
-      },
-      function: scene,
-      canvas_width: {
-        f64: 0x0000000000407f40,
-      },
-      branch_length: {
-        f64: 0x0000000000004e40,
-      },
-      sky_bottom: {
-        color: "#d3f8ff",
-      },
-    },
+    picture,
+    tree,
     scene,
     mountain,
     branches,

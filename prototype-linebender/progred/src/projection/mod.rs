@@ -2062,6 +2062,7 @@ fn source_target<C: 'static, Cv: Canvas + 'static>(
             let target = path.clone();
             let select = select.clone();
             p.descends().push(Descend {
+                root: None,
                 path,
                 rect,
                 select: Rc::new(move |ctx| {
@@ -2085,9 +2086,13 @@ fn secondary_of(sources: &Sources, selection: Option<&Selection>) -> Option<Seco
 }
 
 /// The explicit-state boundary: everything a projection pass reads.
-/// `width` is the space the projection may fill.
+/// `width` is the space the projection may fill. `root` and
+/// `root_path` let an editor pane begin at a stable cell occurrence
+/// while retaining ordinary document-relative interaction paths.
 pub struct ProjectDescription<'a, World> {
     pub sources: Sources<'a>,
+    pub root: Option<&'a Value>,
+    pub root_path: &'a [Step],
     pub selection: Option<&'a Selection>,
     pub annotations: &'a Annotations,
     pub raw: bool,
@@ -2107,6 +2112,8 @@ pub fn project<
 ) -> Measured<Placed<C, Cv>> {
     let ProjectDescription {
         sources,
+        root,
+        root_path,
         selection,
         annotations,
         raw,
@@ -2130,13 +2137,22 @@ pub fn project<
     };
     // An empty document is a selectable placeholder at the root path.
     let mut build = ChoiceBuild::default();
+    let mut traversal = Traversal::default();
+    if matches!(root_path.last(), Some(Step::Follow))
+        && let Some(cell) = sources
+            .resolve(&root_path[..root_path.len() - 1])
+            .and_then(Value::as_cell)
+    {
+        traversal.cells.insert(cell);
+        traversal.enclosing = Some((cell, root_path.len()));
+    }
     let layout = prepare_location(
         &cx,
         projection,
         tcx,
-        &[],
-        &Traversal::default(),
-        Location::Root(sources.root()),
+        root_path,
+        &traversal,
+        Location::Root(root),
         &hooks,
         &mut build,
     );
@@ -2192,6 +2208,7 @@ fn descend_landmark_with<C: 'static, Cv: Canvas + 'static>(
             let select = placed.landmark_select.take().unwrap_or(select);
             placed.landmark_select = outer_select;
             placed.descends.push(Descend {
+                root: None,
                 path,
                 rect: placement.rect,
                 select,

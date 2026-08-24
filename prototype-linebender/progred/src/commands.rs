@@ -39,7 +39,16 @@ impl App {
             Some(current)
                 if current.stage() == selection::Stage::Edge =>
             {
+                let root = current.root().clone();
                 let path = current.path().to_vec();
+                let pane_root = matches!(
+                    root.target(),
+                    crate::workspace::Target::Cell { anchor, .. } if *anchor == path
+                );
+                if pane_root && self.model.workspace.close(&root) {
+                    self.model.selection = None;
+                    return true;
+                }
                 // Backspacing through the value and once more to
                 // delete the edge is one gesture: when this edge has
                 // the open run, its frame (pre-run document, edge
@@ -51,11 +60,14 @@ impl App {
                         self.model.history.record(before, Some(path.clone()));
                         self.refresh_title();
                     }
-                    let next = navigate::selection_after_delete(descends, &path);
-                    self.model.selection = Some(selection::Selection::edge(
-                        &self.sources(),
-                        next,
-                    ));
+                    let next = navigate::selection_after_delete(
+                        descends,
+                        Some(&root),
+                        &path,
+                    );
+                    self.model.selection = Some(
+                        selection::Selection::edge(&self.sources(), next).with_root(root),
+                    );
                     true
                 }
             }
@@ -99,26 +111,31 @@ impl App {
             return false;
         }
         match self.model.selection.take() {
-            Some(current) => match current.stage() {
-                selection::Stage::Pending => {
-                    self.commit_value(
-                        current.path().to_vec(),
-                        &completion::EntryAction::Value(id),
-                    );
-                    true
+            Some(current) => {
+                let root = current.root().clone();
+                match current.stage() {
+                    selection::Stage::Pending => {
+                        self.commit_value(
+                            root,
+                            current.path().to_vec(),
+                            &completion::EntryAction::Value(id),
+                        );
+                        true
+                    }
+                    selection::Stage::Label => {
+                        self.commit_label(
+                            root,
+                            current.path().to_vec(),
+                            &completion::EntryAction::Value(id),
+                        );
+                        true
+                    }
+                    selection::Stage::Edge => {
+                        self.model.selection = Some(current);
+                        false
+                    }
                 }
-                selection::Stage::Label => {
-                    self.commit_label(
-                        current.path().to_vec(),
-                        &completion::EntryAction::Value(id),
-                    );
-                    true
-                }
-                selection::Stage::Edge => {
-                    self.model.selection = Some(current);
-                    false
-                }
-            },
+            }
             selection => {
                 self.model.selection = selection;
                 false
@@ -128,33 +145,41 @@ impl App {
 
     /// Commits the pending value stage — one undo step — and selects
     /// the edge it wrote.
-    pub(crate) fn commit_value(&mut self, path: Path, action: &completion::EntryAction) {
+    pub(crate) fn commit_value(
+        &mut self,
+        root: crate::workspace::Root,
+        path: Path,
+        action: &completion::EntryAction,
+    ) {
         let before = self.model.doc.clone();
         if completion::commit_pending(&mut self.model.doc, &self.stack.library, &path, action) {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(selection::Selection::edge(
-            &self.sources(),
-            path,
-        ));
+        self.model.selection = Some(
+            selection::Selection::edge(&self.sources(), path).with_root(root),
+        );
     }
 
     /// A resolved new label advances the pending edge to its value
     /// stage, or selects the existing field when the label is taken.
     /// A free-text label persists its newly named cell first; a
     /// bare-cell choice has nothing to persist.
-    pub(crate) fn commit_label(&mut self, parent: Path, action: &completion::EntryAction) {
+    pub(crate) fn commit_label(
+        &mut self,
+        root: crate::workspace::Root,
+        parent: Path,
+        action: &completion::EntryAction,
+    ) {
         let Some((label, created)) = completion::resolve_label(action) else {
             return;
         };
         let mut path = parent.clone();
         path.push(Step::Key(label));
         if self.sources().resolve(&path).is_some() {
-            self.model.selection = Some(selection::Selection::edge(
-                &self.sources(),
-                path,
-            ));
+            self.model.selection = Some(
+                selection::Selection::edge(&self.sources(), path).with_root(root),
+            );
             return;
         }
         if let Some((cell, value)) = created {
@@ -163,7 +188,7 @@ impl App {
             self.model.history.record(before, None);
             self.refresh_title();
         }
-        self.model.selection = Some(selection::pending_value(path));
+        self.model.selection = Some(selection::pending_value(path).with_root(root));
     }
 
     /// Structural copy/paste, the shell's fallback: a focused text
@@ -290,6 +315,7 @@ impl App {
         if current.stage() != selection::Stage::Edge {
             return false;
         }
+        let root = current.root().clone();
         let path = current.path().to_vec();
         // Idempotent pastes stay off the undo stack, as write_through
         // keeps no-op rewrites off it.
@@ -300,10 +326,9 @@ impl App {
         if selection::set_value(&mut self.model.doc, &self.stack.library, &path, value) {
             self.model.history.record(before, Some(path.clone()));
             self.refresh_title();
-            self.model.selection = Some(selection::Selection::edge(
-                &self.sources(),
-                path,
-            ));
+            self.model.selection = Some(
+                selection::Selection::edge(&self.sources(), path).with_root(root),
+            );
             true
         } else {
             false
@@ -355,20 +380,25 @@ impl App {
                     Some(current)
                         if current.stage() != selection::Stage::Edge =>
                     {
+                        let root = current.root().clone();
                         let labels = current.stage() == selection::Stage::Label;
                         let fallback = selection::line_edit("");
                         let query = current.edit().unwrap_or(&fallback);
                         let action = Self::chosen_action(popup, query, current.choice(), labels);
                         if labels {
-                            self.commit_label(current.path().to_vec(), &action);
+                            self.commit_label(root, current.path().to_vec(), &action);
                         } else {
-                            self.commit_value(current.path().to_vec(), &action);
+                            self.commit_value(root, current.path().to_vec(), &action);
                         }
                         true
                     }
                     selection => {
                         let sources = self.sources();
                         let shift = event.modifiers.shift();
+                        let root = selection
+                            .as_ref()
+                            .map(|current| current.root().clone())
+                            .unwrap_or_else(|| self.model.workspace.document_root().clone());
                         let started = match selection.as_ref() {
                             Some(current) if projection::command(&event.modifiers) => {
                                 selection::pending_insert(&sources, current.path(), shift)
@@ -379,7 +409,9 @@ impl App {
                             None => selection::pending_root(&sources),
                         };
                         let began = started.is_some();
-                        self.model.selection = started.or(selection);
+                        self.model.selection = started
+                            .map(|selection| selection.with_root(root))
+                            .or(selection);
                         began
                     }
                 },
@@ -389,27 +421,33 @@ impl App {
                         Some(current)
                             if current.stage() == selection::Stage::Pending =>
                         {
-                            let back =
-                                navigate::selection_after_delete(descends, current.path());
+                            let root = current.root().clone();
+                            let back = navigate::selection_after_delete(
+                                descends,
+                                Some(&root),
+                                current.path(),
+                            );
                             // Cancelling the empty document's root
                             // pending deselects — reselecting it
                             // would pend again.
                             self.model.selection =
                                 (!(back.is_empty() && self.model.doc.root.is_none())).then(|| {
-                                    selection::Selection::edge(
-                                        &self.sources(),
-                                        back,
-                                    )
+                                    selection::Selection::edge(&self.sources(), back)
+                                        .with_root(root)
                                 });
                             true
                         }
                         Some(current)
                             if current.stage() == selection::Stage::Label =>
                         {
-                            self.model.selection = Some(selection::Selection::edge(
-                                &self.sources(),
-                                current.path().to_vec(),
-                            ));
+                            let root = current.root().clone();
+                            self.model.selection = Some(
+                                selection::Selection::edge(
+                                    &self.sources(),
+                                    current.path().to_vec(),
+                                )
+                                .with_root(root),
+                            );
                             true
                         }
                         _ => false,
@@ -440,19 +478,23 @@ impl App {
             return false;
         }
         let path = current.path().to_vec();
+        let root = current.root().clone();
         let sources = sources::Sources {
             doc: &self.model.doc,
             library: &self.stack.library,
         };
+        let Some(view) = self.model.workspace.view_mut(&root) else {
+            return false;
+        };
         match set {
             None => selection::toggle_collapse(
                 &sources,
-                &mut self.model.annotations,
+                &mut view.annotations,
                 &path,
             ),
             Some(closed) => selection::set_collapse(
                 &sources,
-                &mut self.model.annotations,
+                &mut view.annotations,
                 &path,
                 closed,
             ),

@@ -5,6 +5,7 @@
 use crate::annotations::{self, Annotations};
 use crate::sources::Sources;
 use crate::spine;
+use crate::workspace;
 use gid::{Cells, Document, Path, Position, Step, Value, position};
 use progred_libraries::{absent, f64 as f64_convention, isa, text};
 use puri::edit::LineEditState;
@@ -32,6 +33,9 @@ pub(crate) struct Editor {
 /// stage's query resolves to the value that commits; until then the
 /// graph is untouched, and deselecting discards the pending entirely.
 pub struct Selection {
+    /// Which transient projection root owns this occurrence. Paths
+    /// may coincide across panes, but selection never does.
+    root: workspace::Root,
     /// Where: the value's path for edge and pending stages, the
     /// parent record's for a label stage.
     path: Path,
@@ -83,6 +87,7 @@ impl Selection {
                         })
                     });
                 Self {
+                    root: workspace::Root::document(),
                     path,
                     payload,
                     editor,
@@ -128,6 +133,18 @@ impl Selection {
 
     pub fn path(&self) -> &[Step] {
         &self.path
+    }
+
+    pub fn root(&self) -> &workspace::Root {
+        &self.root
+    }
+
+    /// Attach a freshly constructed selection to the view whose
+    /// projection created it. Selection constructors stay useful in
+    /// path-only tests while the shell supplies the real Rc root.
+    pub fn with_root(mut self, root: workspace::Root) -> Self {
+        self.root = root;
+        self
     }
 
     /// The selection as data — what a projection at this path receives.
@@ -206,6 +223,7 @@ fn edge_selection(path: Path, editor: Option<Editor>) -> Selection {
         None => payload::edge(),
     };
     Selection {
+        root: workspace::Root::document(),
         path,
         payload,
         editor,
@@ -337,6 +355,7 @@ pub fn pending_value(path: Path) -> Selection {
 #[cfg(test)]
 pub(crate) fn bare_edge(path: Path) -> Selection {
     Selection {
+        root: workspace::Root::document(),
         path,
         payload: payload::edge(),
         editor: None,
@@ -354,6 +373,7 @@ pub(crate) fn pending_with_query(path: Path, seed: &str) -> Selection {
 fn query_selection(path: Path, payload: Value) -> Selection {
     let line = payload::editor_line(&payload, payload::query(&payload).unwrap_or(""));
     Selection {
+        root: workspace::Root::document(),
         path,
         payload,
         editor: Some(Editor {

@@ -24,6 +24,12 @@ pub enum Selection {
     Quit,
     Undo,
     Redo,
+    OpenPaneLeft,
+    OpenPaneRight,
+    MovePaneUp,
+    MovePaneDown,
+    MovePaneLeft,
+    MovePaneRight,
     Raw,
     DebugGeometry,
 }
@@ -63,6 +69,7 @@ pub enum ShortcutKey {
     D,
     N,
     O,
+    P,
     Q,
     R,
     S,
@@ -75,6 +82,7 @@ impl ShortcutKey {
             Self::D => "D",
             Self::N => "N",
             Self::O => "O",
+            Self::P => "P",
             Self::Q => "Q",
             Self::R => "R",
             Self::S => "S",
@@ -87,7 +95,7 @@ impl ShortcutKey {
 pub struct Item {
     pub selection: Selection,
     pub label: &'static str,
-    pub shortcut: Shortcut,
+    pub shortcut: Option<Shortcut>,
     pub kind: Kind,
 }
 
@@ -115,55 +123,91 @@ pub fn items(menus: &[Menu]) -> impl Iterator<Item = Item> + '_ {
 const NEW: Item = Item {
     selection: Selection::New,
     label: "New",
-    shortcut: Shortcut::plain(ShortcutKey::N),
+    shortcut: Some(Shortcut::plain(ShortcutKey::N)),
     kind: Kind::Command,
 };
 const OPEN: Item = Item {
     selection: Selection::Open,
     label: "Open…",
-    shortcut: Shortcut::plain(ShortcutKey::O),
+    shortcut: Some(Shortcut::plain(ShortcutKey::O)),
     kind: Kind::Command,
 };
 const SAVE: Item = Item {
     selection: Selection::Save,
     label: "Save",
-    shortcut: Shortcut::plain(ShortcutKey::S),
+    shortcut: Some(Shortcut::plain(ShortcutKey::S)),
     kind: Kind::Command,
 };
 const SAVE_AS: Item = Item {
     selection: Selection::SaveAs,
     label: "Save As…",
-    shortcut: Shortcut::shifted(ShortcutKey::S),
+    shortcut: Some(Shortcut::shifted(ShortcutKey::S)),
     kind: Kind::Command,
 };
 const QUIT: Item = Item {
     selection: Selection::Quit,
     label: "Quit",
-    shortcut: Shortcut::plain(ShortcutKey::Q),
+    shortcut: Some(Shortcut::plain(ShortcutKey::Q)),
     kind: Kind::Command,
 };
 const UNDO: Item = Item {
     selection: Selection::Undo,
     label: "Undo",
-    shortcut: Shortcut::plain(ShortcutKey::Z),
+    shortcut: Some(Shortcut::plain(ShortcutKey::Z)),
     kind: Kind::Command,
 };
 const REDO: Item = Item {
     selection: Selection::Redo,
     label: "Redo",
-    shortcut: Shortcut::shifted(ShortcutKey::Z),
+    shortcut: Some(Shortcut::shifted(ShortcutKey::Z)),
+    kind: Kind::Command,
+};
+const OPEN_PANE_LEFT: Item = Item {
+    selection: Selection::OpenPaneLeft,
+    label: "Open Cell on Left",
+    shortcut: Some(Shortcut::plain(ShortcutKey::P)),
+    kind: Kind::Command,
+};
+const OPEN_PANE_RIGHT: Item = Item {
+    selection: Selection::OpenPaneRight,
+    label: "Open Cell on Right",
+    shortcut: Some(Shortcut::shifted(ShortcutKey::P)),
+    kind: Kind::Command,
+};
+const MOVE_PANE_UP: Item = Item {
+    selection: Selection::MovePaneUp,
+    label: "Move Pane Up",
+    shortcut: None,
+    kind: Kind::Command,
+};
+const MOVE_PANE_DOWN: Item = Item {
+    selection: Selection::MovePaneDown,
+    label: "Move Pane Down",
+    shortcut: None,
+    kind: Kind::Command,
+};
+const MOVE_PANE_LEFT: Item = Item {
+    selection: Selection::MovePaneLeft,
+    label: "Move Pane Left",
+    shortcut: None,
+    kind: Kind::Command,
+};
+const MOVE_PANE_RIGHT: Item = Item {
+    selection: Selection::MovePaneRight,
+    label: "Move Pane Right",
+    shortcut: None,
     kind: Kind::Command,
 };
 const RAW: Item = Item {
     selection: Selection::Raw,
     label: "Raw",
-    shortcut: Shortcut::plain(ShortcutKey::R),
+    shortcut: Some(Shortcut::plain(ShortcutKey::R)),
     kind: Kind::Check,
 };
 const DEBUG_GEOMETRY: Item = Item {
     selection: Selection::DebugGeometry,
     label: "Debug Geometry",
-    shortcut: Shortcut::plain(ShortcutKey::D),
+    shortcut: Some(Shortcut::plain(ShortcutKey::D)),
     kind: Kind::Check,
 };
 pub fn definition(platform: Platform) -> Vec<Menu> {
@@ -207,7 +251,18 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
             },
             Menu {
                 label: "View",
-                entries: vec![Entry::Item(RAW), Entry::Item(DEBUG_GEOMETRY)],
+                entries: vec![
+                    Entry::Item(OPEN_PANE_LEFT),
+                    Entry::Item(OPEN_PANE_RIGHT),
+                    Entry::Separator,
+                    Entry::Item(MOVE_PANE_UP),
+                    Entry::Item(MOVE_PANE_DOWN),
+                    Entry::Item(MOVE_PANE_LEFT),
+                    Entry::Item(MOVE_PANE_RIGHT),
+                    Entry::Separator,
+                    Entry::Item(RAW),
+                    Entry::Item(DEBUG_GEOMETRY),
+                ],
             },
         ])
         .collect()
@@ -247,6 +302,11 @@ pub struct Availability {
     pub save: bool,
     pub undo: bool,
     pub redo: bool,
+    pub open_pane: bool,
+    pub move_up: bool,
+    pub move_down: bool,
+    pub move_left: bool,
+    pub move_right: bool,
 }
 
 impl Availability {
@@ -255,6 +315,11 @@ impl Availability {
             Selection::Save => self.save,
             Selection::Undo => self.undo,
             Selection::Redo => self.redo,
+            Selection::OpenPaneLeft | Selection::OpenPaneRight => self.open_pane,
+            Selection::MovePaneUp => self.move_up,
+            Selection::MovePaneDown => self.move_down,
+            Selection::MovePaneLeft => self.move_left,
+            Selection::MovePaneRight => self.move_right,
             _ => true,
         }
     }
@@ -268,8 +333,10 @@ pub fn shortcut(event: &KeyboardEvent) -> Option<Selection> {
     match &event.key {
         Key::Character(key) => items(&definition(Platform::Drawn))
             .find(|item| {
-                item.shortcut.shift == modifiers.shift()
-                    && key.as_str().eq_ignore_ascii_case(item.shortcut.key.label())
+                item.shortcut.is_some_and(|shortcut| {
+                    shortcut.shift == modifiers.shift()
+                        && key.as_str().eq_ignore_ascii_case(shortcut.key.label())
+                })
             })
             .map(|item| item.selection),
         _ => None,
@@ -433,7 +500,14 @@ mod view {
             &format!("{}  {}", if checked { "✓" } else { " " }, item.label),
             style,
         );
-        let shortcut = crate::render::text(tcx, &item.shortcut.drawn_label(), shortcut_style);
+        let shortcut = crate::render::text(
+            tcx,
+            &item
+                .shortcut
+                .map(|shortcut| shortcut.drawn_label())
+                .unwrap_or_default(),
+            shortcut_style,
+        );
         let gap =
             (width - 24.0 * scale - label.extent.width - shortcut.extent.width).max(12.0 * scale);
         let content = measured::pad(
@@ -651,7 +725,7 @@ mod tests {
         for platform in [Platform::Drawn, Platform::MacOs] {
             let definition = definition(platform);
             let items = items(&definition).collect::<Vec<_>>();
-            assert_eq!(items.len(), 9);
+            assert_eq!(items.len(), 15);
             for (index, item) in items.iter().enumerate() {
                 assert!(
                     items[index + 1..]
@@ -704,11 +778,13 @@ mod tests {
         let definition = definition(Platform::Drawn);
         let items = items(&definition).collect::<Vec<_>>();
         for (index, item) in items.iter().enumerate() {
-            assert!(
-                items[index + 1..]
-                    .iter()
-                    .all(|other| item.shortcut != other.shortcut)
-            );
+            if let Some(shortcut) = item.shortcut {
+                assert!(
+                    items[index + 1..]
+                        .iter()
+                        .all(|other| other.shortcut != Some(shortcut))
+                );
+            }
         }
     }
 }
