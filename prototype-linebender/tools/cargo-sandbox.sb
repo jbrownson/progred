@@ -1,0 +1,46 @@
+(version 1)
+
+(deny default)
+
+(allow process*)
+(allow signal (target self))
+(allow sysctl-read)
+
+; Permit path discovery and compiler feature probes without exposing file contents.
+(allow file-read-metadata)
+
+(allow file-read*
+    (literal "/")
+    (subpath "/Applications")
+    (subpath "/Library")
+    (subpath "/System")
+    (subpath "/bin")
+    (subpath "/dev")
+    (subpath "/private/etc")
+    (subpath "/private/preboot")
+    (subpath "/private/var/db/dyld")
+    (subpath "/private/var/db/timezone")
+    (subpath "/private/var/select")
+    (subpath "/sbin")
+    (subpath "/usr")
+    (subpath (param "PROJECT_ROOT"))
+    (subpath (param "TOOLCHAIN_ROOT")))
+
+(allow file-write*
+    (literal "/dev/null")
+    (subpath (param "BUILD_ROOT"))
+    (subpath (param "SANDBOX_HOME"))
+    (subpath (param "SANDBOX_TMP")))
+
+(when (equal? (param "ALLOW_LOCK_WRITE") "1")
+    (allow file-write*
+        (literal (param "LOCKFILE"))))
+
+(when (equal? (param "ALLOW_NETWORK") "1")
+    (allow network*)
+    (allow mach-lookup
+        (global-name "com.apple.SystemConfiguration.configd")
+        (global-name "com.apple.mDNSResponder")
+        (global-name "com.apple.networkd")
+        (global-name "com.apple.trustd")
+        (global-name "com.apple.trustd.agent")))

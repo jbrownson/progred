@@ -51,6 +51,17 @@ fn service_error(error: impl std::fmt::Display) -> CompileError {
     CompileError::Toolchain(format!("compile service: {error}"))
 }
 
+fn rustc_command() -> Command {
+    std::env::var_os("RUSTC").map_or_else(
+        || {
+            let mut command = Command::new("rustup");
+            command.args(["run", TOOLCHAIN, "rustc"]);
+            command
+        },
+        Command::new,
+    )
+}
+
 pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
     // rustc stages stdout output as `stdout.<crate>` in its cwd, so
     // concurrent compiles sharing a directory clobber each other:
@@ -73,11 +84,8 @@ pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
 }
 
 fn run(source: &str, scratch: &std::path::Path) -> Result<Vec<u8>, CompileError> {
-    let mut child = Command::new("rustup")
+    let mut child = rustc_command()
         .args([
-            "run",
-            TOOLCHAIN,
-            "rustc",
             "-",
             "--edition",
             "2024",

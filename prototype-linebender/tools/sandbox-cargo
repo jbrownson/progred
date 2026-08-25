@@ -1,0 +1,71 @@
+#!/bin/sh
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+build_root="$project_root/target/sandbox"
+cargo_home="$build_root/cargo-home"
+sandbox_home="$build_root/home"
+sandbox_tmp="$build_root/tmp"
+target_dir="$build_root/build"
+user_name=$(id -un)
+
+if [ "$(uname -s)" != Darwin ]; then
+    echo "sandbox-cargo currently requires macOS sandbox-exec" >&2
+    exit 1
+fi
+
+cargo_path=$(rustup which cargo --toolchain stable)
+rustc_path=$(rustup which rustc --toolchain stable)
+rustdoc_path=$(rustup which rustdoc --toolchain stable)
+toolchain_root=$(dirname "$(dirname "$cargo_path")")
+
+mkdir -p "$cargo_home" "$sandbox_home" "$sandbox_tmp" "$target_dir"
+
+run_sandboxed() {
+    allow_network=$1
+    offline=$2
+    allow_lock_write=$3
+    shift 3
+    exec env -i \
+        CARGO_HOME="$cargo_home" \
+        CARGO_NET_OFFLINE="$offline" \
+        CARGO_TARGET_DIR="$target_dir" \
+        HOME="$sandbox_home" \
+        LOGNAME="$user_name" \
+        PATH="$toolchain_root/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+        RUSTC="$rustc_path" \
+        RUSTC_WRAPPER= \
+        RUSTDOC="$rustdoc_path" \
+        TMPDIR="$sandbox_tmp" \
+        USER="$user_name" \
+        /usr/bin/sandbox-exec \
+            -D "ALLOW_NETWORK=$allow_network" \
+            -D "ALLOW_LOCK_WRITE=$allow_lock_write" \
+            -D "PROJECT_ROOT=$project_root" \
+            -D "LOCKFILE=$project_root/Cargo.lock" \
+            -D "BUILD_ROOT=$build_root" \
+            -D "SANDBOX_HOME=$sandbox_home" \
+            -D "SANDBOX_TMP=$sandbox_tmp" \
+            -D "TOOLCHAIN_ROOT=$toolchain_root" \
+            -f "$tool_dir/cargo-sandbox.sb" \
+            "$@"
+}
+
+if [ "${1-}" = fetch ]; then
+    shift
+    run_sandboxed 1 false 0 "$cargo_path" fetch --locked "$@"
+fi
+
+if [ "${1-}" = update ]; then
+    shift
+    run_sandboxed 1 false 1 "$cargo_path" update "$@"
+fi
+
+if [ "$#" -eq 0 ]; then
+    echo "usage: tools/sandbox-cargo fetch | update | <cargo command> [arguments...]" >&2
+    exit 2
+fi
+
+run_sandboxed 0 true 0 "$cargo_path" --frozen "$@"

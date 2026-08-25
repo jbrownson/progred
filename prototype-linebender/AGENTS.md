@@ -6,15 +6,27 @@ editor model decisions, and `docs/projections.md` for Grap's GID-
 embedded evaluator and the retained, superseded wasm spike isolated in
 `experiments/rust-wasm-projection`.
 
-## Cargo Build Cache
+## Sandboxed Cargo
 
-Cursor's sandbox sets `CARGO_HOME` and `RUSTUP_HOME` to temporary directories. This causes cache invalidation when alternating between terminal and Cursor builds.
+Cargo build scripts and procedural macros execute dependency code. The
+checked-in `.cargo/config.toml` refuses ordinary Cargo builds and updates as an
+accidental-use tripwire. Do not bypass it by clearing `RUSTC_WRAPPER`.
 
-When running cargo commands, unset these:
+Use the repository's macOS Seatbelt wrapper, which has its own Cargo home and
+target directory under `target/sandbox`:
 
 ```bash
-unset CARGO_HOME RUSTUP_HOME && cargo build
+make sandbox-check
+make sandbox-test
+make sandbox-build
+./tools/sandbox-cargo <cargo command> [arguments...]
 ```
+
+Use `make run` in place of `cargo run --release`. It builds under Seatbelt,
+packages and ad-hoc signs the app with its App Sandbox entitlements, launches a
+fresh instance, and waits for it to exit. Agents still must not launch it; the
+user runs and visually tests the app. See `docs/build-security.md` for the
+boundary and the separate fetch/update commands.
 
 ## Workflow
 

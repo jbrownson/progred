@@ -42,6 +42,7 @@ web-sys = { version = "0.3", features = [
 
 [target.'cfg(target_os = "macos")'.dependencies]
 muda = { version = "0.15", default-features = false }
+objc2-foundation = { version = "0.3.2", features = ["NSData", "NSError", "NSString", "NSURL"] }
 
 [dev-dependencies]
 skrifa = "0.42.1"

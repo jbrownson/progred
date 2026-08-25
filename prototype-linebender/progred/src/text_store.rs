@@ -13,6 +13,29 @@ pub fn load(path: &Path) -> Result<(Document, Binders), String> {
 #[cfg(any(not(target_arch = "wasm32"), test))]
 pub fn save(path: &Path, doc: &Document, binders: &Binders) -> Result<(), String> {
     let text = gid_text::print(doc, binders);
+    save_text(path, text)
+}
+
+#[cfg(all(any(not(target_arch = "wasm32"), test), target_os = "macos"))]
+fn save_text(path: &Path, text: String) -> Result<(), String> {
+    use objc2_foundation::{NSData, NSDataWritingOptions, NSString, NSURL};
+
+    let path = path
+        .to_str()
+        .ok_or_else(|| "document path is not valid Unicode".to_string())?;
+    NSData::from_vec(text.into_bytes())
+        .writeToURL_options_error(
+            &NSURL::fileURLWithPath(&NSString::from_str(path)),
+            NSDataWritingOptions::Atomic,
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(all(
+    any(not(target_arch = "wasm32"), test),
+    not(target_os = "macos")
+))]
+fn save_text(path: &Path, text: String) -> Result<(), String> {
     // Write-then-rename, so a crash mid-write cannot truncate the
     // previous save.
     let tmp = path.with_extension("tmp");

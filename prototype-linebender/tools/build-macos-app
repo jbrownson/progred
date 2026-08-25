@@ -1,0 +1,47 @@
+#!/bin/sh
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+app_root="$project_root/target/sandbox/app"
+app="$app_root/Progred.app"
+executable="$project_root/target/sandbox/build/release/progred"
+identifier=com.progred.prototype
+
+if [ "$(uname -s)" != Darwin ]; then
+    echo "build-macos-app requires macOS" >&2
+    exit 1
+fi
+
+"$tool_dir/sandbox-cargo" build --release -p progred
+
+/usr/bin/plutil -lint "$project_root/macos/Info.plist" "$project_root/macos/Progred.entitlements"
+/bin/mkdir -p "$app_root"
+stage=$(/usr/bin/mktemp -d "$app_root/.Progred.app.XXXXXX")
+cleanup() {
+    /bin/rm -rf -- "$stage"
+}
+trap cleanup EXIT HUP INT TERM
+
+/bin/mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Resources"
+/bin/cp "$project_root/macos/Info.plist" "$stage/Contents/Info.plist"
+/usr/bin/install -m 755 "$executable" "$stage/Contents/MacOS/progred"
+
+/usr/bin/codesign \
+    --force \
+    --sign - \
+    --identifier "$identifier" \
+    --options runtime \
+    --timestamp=none \
+    --entitlements "$project_root/macos/Progred.entitlements" \
+    "$stage"
+/usr/bin/codesign --verify --strict --verbose=2 "$stage"
+
+if [ -e "$app" ]; then
+    /bin/rm -rf -- "$app"
+fi
+/bin/mv "$stage" "$app"
+trap - EXIT HUP INT TERM
+
+echo "$app"

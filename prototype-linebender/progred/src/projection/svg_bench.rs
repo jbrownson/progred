@@ -323,18 +323,25 @@ fn render(doc: &Document, selection: Option<&Selection>, width: f64, out_path: &
     .unwrap();
     write_cmds(&mut out, &bench.list.0);
     writeln!(out, "</svg>").unwrap();
-    std::fs::write(out_path, out).unwrap();
+    std::fs::write(
+        std::env::var_os("CARGO_TARGET_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("../target"))
+            .join(out_path),
+        out,
+    )
+    .unwrap();
 }
 
 #[test]
 fn svg_bench_renders_the_sample_projection() {
     let doc = sample_document();
-    render(&doc, None, 900.0, "../target/raw_projection.svg");
-    render(&doc, None, 560.0, "../target/raw_projection_narrow.svg");
+    render(&doc, None, 900.0, "raw_projection.svg");
+    render(&doc, None, 560.0, "raw_projection_narrow.svg");
     // The deep-fallback regime: hugging fails at most levels, so
     // this render is also the canary against layout cost blowing
     // up when width is scarce.
-    render(&doc, None, 320.0, "../target/raw_projection_tight.svg");
+    render(&doc, None, 320.0, "raw_projection_tight.svg");
 }
 
 #[test]
@@ -622,8 +629,8 @@ fn sample_text_line_click_mounts_its_own_editor() {
 fn svg_bench_renders_the_grap_demo() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../grap-demo.gid"))
         .expect("the Grap demo parses");
-    render(&doc, None, 900.0, "../target/grap_demo.svg");
-    render(&doc, None, 560.0, "../target/grap_demo_narrow.svg");
+    render(&doc, None, 900.0, "grap_demo.svg");
+    render(&doc, None, 560.0, "grap_demo_narrow.svg");
 }
 
 #[test]
@@ -1101,13 +1108,13 @@ fn svg_bench_renders_the_placeholder_notation() {
         root: None,
         cells: Cells::new(),
     };
-    render(&empty, None, 320.0, "../target/raw_placeholder_root.svg");
+    render(&empty, None, 320.0, "raw_placeholder_root.svg");
     // The engaged twin: same slot, same rect, selection blue.
     render(
         &empty,
         Some(&pending_value(Vec::new())),
         320.0,
-        "../target/raw_placeholder_engaged.svg",
+        "raw_placeholder_engaged.svg",
     );
     let cells = Cells::new();
     let bare = new_cell_id();
@@ -1118,7 +1125,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         },
         None,
         320.0,
-        "../target/raw_placeholder_cell.svg",
+        "raw_placeholder_cell.svg",
     );
     // The commit transition pair: the same spelling typed in the
     // slot and committed as the string — glyphs should not move.
@@ -1126,7 +1133,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         &empty,
         Some(&crate::selection::pending_with_query(Vec::new(), "\"asdf\"")),
         320.0,
-        "../target/raw_placeholder_typed.svg",
+        "raw_placeholder_typed.svg",
     );
     render(
         &Document {
@@ -1135,7 +1142,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         },
         Some(&crate::selection::bare_edge(Vec::new())),
         320.0,
-        "../target/raw_placeholder_committed.svg",
+        "raw_placeholder_committed.svg",
     );
     // The empty string under its write-through editor: quotes
     // stay snug, no slot minimum applies to string literals.
@@ -1155,7 +1162,7 @@ fn svg_bench_renders_the_placeholder_notation() {
         &empty_string,
         Some(&sel),
         320.0,
-        "../target/raw_empty_string_editing.svg",
+        "raw_empty_string_editing.svg",
     );
 }
 
@@ -1173,7 +1180,7 @@ fn svg_bench_renders_a_pending_edge() {
     .unwrap();
     assert_eq!(edge.stage(), crate::selection::Stage::Label);
     let typing = edge.with_query("na");
-    render(&doc, Some(&typing), 560.0, "../target/raw_pending_edge.svg");
+    render(&doc, Some(&typing), 560.0, "raw_pending_edge.svg");
 }
 
 #[test]
