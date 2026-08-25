@@ -24,7 +24,8 @@ fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
 
 #[test]
 fn the_sample_contains_a_projectable_grap_computation() {
-    let (doc, binders) = parse(include_str!("../../sample.gid")).expect("the sample parses");
+    let (doc, binders) =
+        parse(include_str!("../../examples/sample.gid")).expect("the sample parses");
     let roof = doc
         .root
         .as_ref()
@@ -55,7 +56,7 @@ fn the_sample_contains_a_projectable_grap_computation() {
 }
 
 fn demo_fixture() -> (Document, Binders) {
-    parse(include_str!("../../grap-demo.gid")).expect("the Grap demo parses")
+    parse(include_str!("../../examples/grap-demo.gid")).expect("the Grap demo parses")
 }
 
 fn demo_entry<'a>(doc: &'a Document, binders: &Binders, label: &str) -> &'a Value {

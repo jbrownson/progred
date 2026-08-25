@@ -172,7 +172,7 @@ pub fn at_display_partial() -> Value {
 /// and pitch flows through a small Grap function to a projected
 /// computed result.
 /// The app starts EMPTY now; this is the test fixture, and its
-/// text-bridge form is checked in as sample.gid.
+/// text-bridge form is checked in as examples/sample.gid.
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn sample_document() -> Document {
     let mut cells = Cells::new();

@@ -60,11 +60,11 @@ Cargo commands in this repository intentionally stop at a tripwire; read
 [`docs/build-security.md`](docs/build-security.md) before changing dependencies
 or bypassing the supplied commands.
 
-Sample documents at the root include:
+Sample documents under `examples/` include:
 
-- `sample.gid` — editor and projection examples;
-- `grap-demo.gid` — Grap language constructs;
-- `iop-tree.gid` — the first tree from Bret Victor's *Inventing on Principle*,
+- `examples/sample.gid` — editor and projection examples;
+- `examples/grap-demo.gid` — Grap language constructs;
+- `examples/iop-tree.gid` — the first tree from Bret Victor's *Inventing on Principle*,
   recreated as an editable Grap program and live drawing.
 
 The checked-in GID notation is a temporary bridge for Git, debugging, and
@@ -80,6 +80,7 @@ the bridge is documented in [`docs/gid-text.md`](docs/gid-text.md).
 - `ui/` — measurement, layout, Puri, and native/web drawing backends
 - `progred/` — editor application and projections
 - `docs/` — current design and implementation notes
+- `examples/` — checked-in GID example documents
 - `experiments/` — focused research retained alongside the main project
 - `reference/` — source material used to reproduce external examples
 

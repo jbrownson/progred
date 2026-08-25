@@ -1462,8 +1462,8 @@ a gid atom, numeric literals, the binary sibling. Naming SETTLED
 next day: GID was called the text format and a GID ID the identifier
 (user-called; `.gid` verified unclaimed — WinHelp's dead index
 files and a niche simulator's project dirs are the only priors).
-Same day: the app starts EMPTY (the sample became sample.gid.txt,
-checked in and pinned as the printer's golden fixed-point test;
+Same day: the app starts EMPTY (the sample became a checked-in fixture,
+now `examples/sample.gid`, pinned as the printer's golden fixed-point test;
 `sample_document()` lives on as the test fixture), and the file
 dialogs now speak `.gid.txt`, reserving `.gid` for native storage.
 

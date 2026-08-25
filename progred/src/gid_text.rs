@@ -774,7 +774,7 @@ mod checked_in_files {
     /// it back is the identity — the printer's golden fixture.
     #[test]
     fn the_sample_file_is_a_fixed_point() {
-        let text = include_str!("../../sample.gid");
+        let text = include_str!("../../examples/sample.gid");
         let (doc, binders) = parse(text).expect("the sample parses");
         assert!(doc.root.is_some());
         assert_eq!(print(&doc, &binders), text);
@@ -782,7 +782,8 @@ mod checked_in_files {
 
     #[test]
     fn every_sample_cell_definition_is_root_reachable() {
-        let (doc, _) = parse(include_str!("../../sample.gid")).expect("the sample parses");
+        let (doc, _) =
+            parse(include_str!("../../examples/sample.gid")).expect("the sample parses");
         let reached = root_reachable_cells(&doc);
         let mut orphans: Vec<_> = doc
             .cells
@@ -796,14 +797,14 @@ mod checked_in_files {
 
     #[test]
     fn the_grap_demo_is_a_fixed_point() {
-        let text = include_str!("../../grap-demo.gid");
+        let text = include_str!("../../examples/grap-demo.gid");
         let (doc, binders) = parse(text).expect("the Grap demo parses");
         assert_eq!(print(&doc, &binders), text);
     }
 
     #[test]
     fn the_iop_tree_demo_is_a_fixed_point_without_orphans() {
-        let text = include_str!("../../iop-tree.gid");
+        let text = include_str!("../../examples/iop-tree.gid");
         let (doc, binders) = parse(text).expect("the IoP tree demo parses");
         assert_eq!(print(&doc, &binders), text);
         let reached = root_reachable_cells(&doc);

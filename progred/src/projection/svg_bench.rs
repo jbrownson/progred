@@ -346,7 +346,7 @@ fn svg_bench_renders_the_sample_projection() {
 
 #[test]
 fn iop_tree_projects_through_grap_into_puri_ink() {
-    let (doc, _) = crate::gid_text::parse(include_str!("../../../iop-tree.gid"))
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/iop-tree.gid"))
         .expect("the IoP tree demo parses");
     let picture = CellId::from_u128(0x69500824d5b442523ec3fbad07d3ec06);
     let position = doc
@@ -397,7 +397,7 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
 
 #[test]
 fn sample_text_line_claims_its_own_hover() {
-    let (doc, _) = crate::gid_text::parse(include_str!("../../../sample.gid"))
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/sample.gid"))
         .expect("the sample parses");
     let path = vec![
         Step::Key(sample_vocabulary::STYLE),
@@ -443,7 +443,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
         clipboard: Clipboard,
     }
 
-    let (doc, _) = crate::gid_text::parse(include_str!("../../../sample.gid"))
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/sample.gid"))
         .expect("the sample parses");
     let stack = crate::stack::load::<ClickWorld>();
     let styles = crate::styles::editor(1.0);
@@ -627,7 +627,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
 
 #[test]
 fn svg_bench_renders_the_grap_demo() {
-    let (doc, _) = crate::gid_text::parse(include_str!("../../../grap-demo.gid"))
+    let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/grap-demo.gid"))
         .expect("the Grap demo parses");
     render(&doc, None, 900.0, "grap_demo.svg");
     render(&doc, None, 560.0, "grap_demo_narrow.svg");
@@ -707,7 +707,8 @@ fn named_fields_display_alphabetically_before_unnamed_fields() {
 
 #[test]
 fn expression_children_are_real() {
-    let (doc, binders) = crate::gid_text::parse(include_str!("../../../grap-demo.gid"))
+    let (doc, binders) =
+        crate::gid_text::parse(include_str!("../../../examples/grap-demo.gid"))
         .expect("the Grap demo parses");
     let label = binders["inert_data"];
     let position = doc

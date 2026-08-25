@@ -97,9 +97,9 @@ pub(crate) enum Example {
 impl Example {
     fn source(self) -> &'static str {
         match self {
-            Self::Sample => include_str!("../../sample.gid"),
-            Self::Grap => include_str!("../../grap-demo.gid"),
-            Self::IopTree => include_str!("../../iop-tree.gid"),
+            Self::Sample => include_str!("../../examples/sample.gid"),
+            Self::Grap => include_str!("../../examples/grap-demo.gid"),
+            Self::IopTree => include_str!("../../examples/iop-tree.gid"),
         }
     }
 }
@@ -827,7 +827,7 @@ fn main() {
             eprintln!("failed to load {}: {error}", path.display());
             std::process::exit(1);
         }),
-        // No path starts EMPTY — the sample lives in sample.gid now,
+        // No path starts EMPTY — the sample lives in examples/sample.gid now,
         // opened like any document.
         _ => (
             gid::Document {
