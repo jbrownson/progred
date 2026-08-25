@@ -588,6 +588,7 @@ pub fn from_clipboard(text: &str) -> Value {
 }
 
 /// The value the private clipboard format's bytes denote.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn from_structure(bytes: &[u8]) -> Option<Value> {
     serde_json::from_slice(bytes).ok()
 }
@@ -764,6 +765,7 @@ pub fn write_through(
 
 /// Breaks the open edit run: the next write records a fresh undo
 /// step. Called after a save, so a run never straddles the mark.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn break_edit_run(selection: Option<&mut Selection>) {
     if let Some(editor) = selection.and_then(|selection| selection.editor.as_mut()) {
         editor.recorded = false;
@@ -780,7 +782,7 @@ pub mod payload {
     use gid::{CellId, Value};
     use progred_libraries::{f64 as f64_convention, text};
     use puri::edit::LineEditState;
-    use vello::kurbo::Point;
+    use kurbo::Point;
 
     pub mod vocabulary {
         use gid::CellId;

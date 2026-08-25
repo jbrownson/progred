@@ -21,6 +21,7 @@
 use crate::draw::Canvas;
 use crate::geometry::Placement;
 use crate::handler::{HasHandler, ImeEvent};
+use crate::interact::is_primary_contact_move;
 use crate::text::{TextCtx, TextMetrics, TextStyle, build_layout, draw_layout};
 use kurbo::{Affine, Point, Rect};
 use parley::Layout;
@@ -29,7 +30,6 @@ use parley::{FontContext, LayoutContext, PlainEditor, StyleProperty};
 use peniko::Brush;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-use ui_events::pointer::PointerButton;
 
 /// A selection as comparable byte offsets, for did-anything-move
 /// checks around driver operations.
@@ -338,7 +338,12 @@ impl LineEditState {
         let handled = {
             let mut drv = editor.driver(fonts, layouts);
             match &event.key {
-                #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+                #[cfg(any(
+                    target_os = "windows",
+                    target_os = "macos",
+                    target_os = "linux",
+                    target_arch = "wasm32"
+                ))]
                 // Copy and cut handle only when text is actually
                 // selected: with nothing to copy they decline, so the
                 // caller can interpret the chord (structural copy of
@@ -683,7 +688,7 @@ impl LineEdit {
             let with_move = with.clone();
             let move_presentation = presentation.clone();
             p.handler().on_pointer_move(move |ctx, update| {
-                update.current.buttons.contains(PointerButton::Primary)
+                is_primary_contact_move(update)
                     && with_move(ctx).is_some_and(
                         |EditCtx {
                              state,
@@ -707,6 +712,10 @@ impl LineEdit {
             let with_up = with.clone();
             p.handler().on_pointer_up(move |ctx, _| {
                 with_up(ctx).is_some_and(|edit| edit.state.pointer_up())
+            });
+            let with_cancel = with.clone();
+            p.handler().on_pointer_cancel(move |ctx, _| {
+                with_cancel(ctx).is_some_and(|edit| edit.state.pointer_up())
             });
             p.handler()
                 .on_ime(move |ctx, event| with(ctx).is_some_and(|edit| edit.state.handle_ime(event)));

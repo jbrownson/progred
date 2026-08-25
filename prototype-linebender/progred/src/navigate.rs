@@ -8,7 +8,7 @@ use progred_libraries::name;
 use std::collections::HashMap;
 use std::rc::Rc;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-use vello::kurbo::Rect;
+use kurbo::Rect;
 
 /// A projected value's settled position: the path it stands for and the
 /// rect it occupied, collected fresh every frame in placement order.

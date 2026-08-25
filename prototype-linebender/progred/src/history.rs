@@ -63,6 +63,7 @@ impl History {
 
     /// Marks the current position as saved. The caller breaks any
     /// open edit run at the selection, keeping runs off the mark.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn mark_saved(&mut self) {
         self.saved = self.undo.len();
     }

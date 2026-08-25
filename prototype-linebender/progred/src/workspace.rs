@@ -6,7 +6,7 @@ use crate::annotations::Annotations;
 use gid::{CellId, Path};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
-use vello::kurbo::{Rect, Size, Vec2};
+use kurbo::{Rect, Size, Vec2};
 
 const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
 

@@ -41,17 +41,18 @@ use puri::edit::{
 };
 use puri::geometry::Placement;
 use puri::handler::{HasHandler, ImeEvent, ScrollOutcome};
+use puri::interact::is_primary_contact;
 use puri::text::{TextCtx, TextStyle};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::keyboard::{Key, KeyState, NamedKey};
 use ui_events::pointer::{
-    PointerButton, PointerButtonEvent, PointerScrollEvent, PointerUpdate,
+    PointerButton, PointerButtonEvent, PointerScrollEvent, PointerType, PointerUpdate,
 };
 use ui_events::ScrollDelta;
-use vello::kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
-use vello::peniko::{Brush, Color};
+use kurbo::{Affine, Insets, Point, Rect, RoundedRect, Stroke};
+use peniko::{Brush, Color};
 
 type SharedPath = Rc<[Step]>;
 
@@ -1140,7 +1141,7 @@ fn realize_click<C: 'static, Cv: Canvas + 'static>(
 ) -> Measured<Placed<C, Cv>> {
     before(inner, move |p, placement| {
         p.handler().on_pointer_down(move |world, event| {
-            event.button == Some(PointerButton::Primary)
+            is_primary_contact(event)
                 && !command(&event.state.modifiers)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && handler(world)
@@ -1180,10 +1181,24 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
                     function.clone(),
                     pointer_button_value(
                         layout_data::vocabulary::POINTER_DOWN,
+                        layout_data::vocabulary::TOUCH_START,
                         placement,
                         scale,
                         event,
                     ),
+                )
+            });
+        }
+        {
+            let path = path.clone();
+            let function = function.clone();
+            let apply = apply.clone();
+            p.handler().on_pointer_cancel(move |world, event| {
+                apply(
+                    world,
+                    path.clone(),
+                    function.clone(),
+                    pointer_cancel_value(event),
                 )
             });
         }
@@ -1211,6 +1226,7 @@ fn realize_event_with<C: 'static, Cv: Canvas + 'static>(
                     function.clone(),
                     pointer_button_value(
                         layout_data::vocabulary::POINTER_UP,
+                        layout_data::vocabulary::TOUCH_END,
                         placement,
                         scale,
                         event,
@@ -1321,30 +1337,51 @@ fn pointer_fields(
 }
 
 fn pointer_button_value(
-    kind: CellId,
+    pointer_kind: CellId,
+    touch_kind: CellId,
     placement: Placement,
     scale: f64,
     event: &PointerButtonEvent,
 ) -> Value {
     let mut fields = pointer_fields(placement, scale, &event.state);
-    if event.button == Some(PointerButton::Primary) {
+    let touch = event.pointer.pointer_type == PointerType::Touch;
+    if !touch && event.button == Some(PointerButton::Primary) {
         fields.push((
             layout_data::vocabulary::BUTTON,
             Value::Cell(layout_data::vocabulary::PRIMARY),
         ));
     }
-    event_value(kind, fields)
+    event_value(if touch { touch_kind } else { pointer_kind }, fields)
 }
 
 fn pointer_move_value(placement: Placement, scale: f64, event: &PointerUpdate) -> Value {
     let mut fields = pointer_fields(placement, scale, &event.current);
-    if event.current.buttons.contains(PointerButton::Primary) {
+    let touch = event.pointer.pointer_type == PointerType::Touch;
+    if !touch && event.current.buttons.contains(PointerButton::Primary) {
         fields.push((
             layout_data::vocabulary::BUTTON,
             Value::Cell(layout_data::vocabulary::PRIMARY),
         ));
     }
-    event_value(layout_data::vocabulary::POINTER_MOVE, fields)
+    event_value(
+        if touch {
+            layout_data::vocabulary::TOUCH_MOVE
+        } else {
+            layout_data::vocabulary::POINTER_MOVE
+        },
+        fields,
+    )
+}
+
+fn pointer_cancel_value(event: &ui_events::pointer::PointerInfo) -> Value {
+    event_value(
+        if event.pointer_type == PointerType::Touch {
+            layout_data::vocabulary::TOUCH_CANCEL
+        } else {
+            layout_data::vocabulary::POINTER_CANCEL
+        },
+        [],
+    )
 }
 
 fn scroll_value(placement: Placement, scale: f64, event: &PointerScrollEvent) -> Value {
@@ -1546,12 +1583,6 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
         true
     });
     let content = before(content, move |p, _| p.select_landmark(select));
-    if active {
-        return before(content, move |p, placement| {
-            hover_claim(p, placement, Hover::Value(path));
-        });
-    }
-
     let presentation = cx.styles.line_presentation(&line.prefix, &line.suffix);
     let scale = cx.styles.scale;
     let start_edit = hooks.start_edit.clone();
@@ -1564,14 +1595,16 @@ fn line_edit_view<C: 'static, Cv: Canvas + 'static>(
         let start_edit = start_edit.clone();
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
+            is_primary_contact(event)
                 && !command(&event.state.modifiers)
                 && placement.contains(Point::new(
                     event.state.position.x,
                     event.state.position.y,
                 ))
                 && {
-                    start_edit(ctx, path.to_vec(), line.clone());
+                    if !active {
+                        start_edit(ctx, path.to_vec(), line.clone());
+                    }
                     if let Some(edit) = edit(ctx) {
                         edit.state.pointer_down(
                             &presentation,
@@ -2690,7 +2723,7 @@ fn query_content<
         hover_block(p, placement);
         let edit = edit.clone();
         p.handler().on_pointer_down(move |ctx, event| {
-            event.button == Some(PointerButton::Primary)
+            is_primary_contact(event)
                 && placement.contains(Point::new(event.state.position.x, event.state.position.y))
                 && edit(ctx).is_some_and(|edit| {
                     edit.state.pointer_down(

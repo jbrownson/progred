@@ -36,6 +36,8 @@ mod workspace;
 
 use crate::frame::{Dispatch, FrameDisposition, Frame, Hovered, Paint, frame_disposition};
 use crate::model::{Model, ViewFlags};
+use kurbo::{Point, Rect, Size};
+use peniko::{Brush, Color};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -43,25 +45,35 @@ use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
-use ui_events::pointer::{PointerButton, PointerEvent, PointerScrollEvent, PointerUpdate};
+use ui_events::pointer::{PointerEvent, PointerScrollEvent, PointerType, PointerUpdate};
 use ui_events::ScrollDelta;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
-use vello::kurbo::{Point, Rect, Size};
-use vello::peniko::{Brush, Color};
+#[cfg(not(target_arch = "wasm32"))]
 use vello::util::{RenderContext, RenderSurface};
+#[cfg(not(target_arch = "wasm32"))]
 use vello::wgpu::{self, CurrentSurfaceTexture};
+#[cfg(not(target_arch = "wasm32"))]
 use vello::{AaConfig, Renderer, RendererOptions, Scene};
 use winit::application::ApplicationHandler;
+#[cfg(not(target_arch = "wasm32"))]
 use winit::dpi::LogicalSize;
+use winit::dpi::PhysicalPosition;
 use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys, WindowExtWebSys};
+#[cfg(target_arch = "wasm32")]
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
 
 /// Everything arriving through the event-loop proxy.
 pub(crate) enum UserEvent {
     #[cfg(target_os = "macos")]
     MacMenu(macos_menu::Event),
     Menu(menu::Selection),
+    #[cfg(not(target_arch = "wasm32"))]
     Discard(bool),
 }
 
@@ -69,10 +81,30 @@ pub(crate) enum UserEvent {
 /// while a sheet is up are dropped.
 pub(crate) enum AfterDiscard {
     New,
+    #[cfg(not(target_arch = "wasm32"))]
     Open,
     Quit,
+    Example(Example),
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Example {
+    Sample,
+    Grap,
+    IopTree,
+}
+
+impl Example {
+    fn source(self) -> &'static str {
+        match self {
+            Self::Sample => include_str!("../../sample.gid"),
+            Self::Grap => include_str!("../../grap-demo.gid"),
+            Self::IopTree => include_str!("../../iop-tree.gid"),
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) enum RenderState {
     Active {
         surface: Box<RenderSurface<'static>>,
@@ -82,13 +114,33 @@ pub(crate) enum RenderState {
     Suspended(Option<Arc<Window>>),
 }
 
+#[cfg(target_arch = "wasm32")]
+pub(crate) enum RenderState {
+    Active {
+        canvas: HtmlCanvasElement,
+        context: CanvasRenderingContext2d,
+        window: Arc<Window>,
+    },
+    Suspended(Option<Arc<Window>>),
+}
+
 /// The pasteboard type structural copies ride under, beside their
 /// plain text; its PRESENCE is the structure/text distinction, so
 /// text that merely spells Value JSON is never mistaken for a copy.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) const CLIPBOARD_FORMAT: &str = "com.progred.value";
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) struct SystemTextClipboard;
 
+#[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+pub(crate) struct SystemTextClipboard {
+    text: Option<String>,
+    structure: Option<gid::Value>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl TextClipboard for SystemTextClipboard {
     fn get_text(&mut self) -> Option<String> {
         use clipboard_rs::{Clipboard, ClipboardContext};
@@ -102,6 +154,18 @@ impl TextClipboard for SystemTextClipboard {
         if let Ok(cb) = ClipboardContext::new() {
             cb.set_text(text.to_string()).ok();
         }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl TextClipboard for SystemTextClipboard {
+    fn get_text(&mut self) -> Option<String> {
+        self.text.clone()
+    }
+
+    fn set_text(&mut self, text: &str) {
+        self.text = Some(text.to_string());
+        self.structure = None;
     }
 }
 
@@ -153,9 +217,12 @@ impl PendingScroll {
 }
 
 pub(crate) struct App {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) context: RenderContext,
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) renderers: Vec<Option<Renderer>>,
     pub(crate) state: RenderState,
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) scene: Scene,
     pub(crate) font_cx: FontContext,
     pub(crate) layout_cx: LayoutContext<Brush>,
@@ -241,6 +308,46 @@ pub(crate) fn content_viewport(viewport: Size, scale: f64) -> Rect {
     )
 }
 
+fn font_context() -> FontContext {
+    #[cfg(not(target_arch = "wasm32"))]
+    return FontContext::new();
+    #[cfg(target_arch = "wasm32")]
+    {
+        use parley::fontique::Blob;
+        use parley::style::GenericFamily;
+
+        let mut fonts = FontContext::new();
+        let sans = fonts
+            .collection
+            .register_fonts(
+                Blob::from(include_bytes!("../assets/NotoSans-Regular.ttf").to_vec()),
+                None,
+            )
+            .into_iter()
+            .map(|(family, _)| family)
+            .collect::<Vec<_>>();
+        let mono = fonts
+            .collection
+            .register_fonts(
+                Blob::from(include_bytes!("../assets/NotoSansMono-Regular.ttf").to_vec()),
+                None,
+            )
+            .into_iter()
+            .map(|(family, _)| family)
+            .collect::<Vec<_>>();
+        fonts
+            .collection
+            .set_generic_families(GenericFamily::SystemUi, sans.iter().copied());
+        fonts
+            .collection
+            .set_generic_families(GenericFamily::SansSerif, sans.into_iter());
+        fonts
+            .collection
+            .set_generic_families(GenericFamily::Monospace, mono.into_iter());
+        fonts
+    }
+}
+
 /// The position carried by any pointer translation, for cursor
 /// tracking.
 fn pointer_position(event: &PointerEvent) -> Option<Point> {
@@ -273,6 +380,7 @@ pub(crate) fn plain(event: &KeyboardEvent) -> bool {
         || event.modifiers.shift())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn text_dialog() -> rfd::FileDialog {
     rfd::FileDialog::new().add_filter("GID", &["gid"])
 }
@@ -292,6 +400,7 @@ impl ApplicationHandler<UserEvent> for App {
                 }
             }
             UserEvent::Menu(selection) => self.handle_menu_selection(event_loop, selection),
+            #[cfg(not(target_arch = "wasm32"))]
             UserEvent::Discard(accepted) => {
                 let pending = self.pending_discard.take();
                 if accepted && let Some(then) = pending {
@@ -312,12 +421,25 @@ impl ApplicationHandler<UserEvent> for App {
         };
 
         let window = cached_window.take().unwrap_or_else(|| {
-            let attr = Window::default_attributes()
-                .with_inner_size(LogicalSize::new(900, 640))
-                .with_title(self.title());
-            Arc::new(event_loop.create_window(attr).unwrap())
+            let attributes = Window::default_attributes().with_title(self.title());
+            #[cfg(not(target_arch = "wasm32"))]
+            let attributes = attributes.with_inner_size(LogicalSize::new(900, 640));
+            #[cfg(target_arch = "wasm32")]
+            let attributes = {
+                let canvas = web_sys::window()
+                    .and_then(|window| window.document())
+                    .and_then(|document| document.get_element_by_id("progred"))
+                    .and_then(|element| element.dyn_into::<HtmlCanvasElement>().ok())
+                    .expect("#progred canvas");
+                attributes
+                    .with_canvas(Some(canvas))
+                    .with_prevent_default(true)
+            };
+            Arc::new(event_loop.create_window(attributes).unwrap())
         });
 
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let size = window.inner_size();
         let surface_future = self.context.create_surface(
             window.clone(),
@@ -342,6 +464,23 @@ impl ApplicationHandler<UserEvent> for App {
             valid_surface: true,
             window,
         };
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let canvas = window.canvas().expect("Winit web canvas");
+            let context = canvas
+                .get_context("2d")
+                .expect("Canvas2D lookup")
+                .expect("Canvas2D context")
+                .dyn_into::<CanvasRenderingContext2d>()
+                .expect("CanvasRenderingContext2D");
+            self.state = RenderState::Active {
+                canvas,
+                context,
+                window,
+            };
+        }
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
@@ -394,10 +533,28 @@ impl ApplicationHandler<UserEvent> for App {
                 _ => None,
             };
             let translation = self.reducer.reduce(scale, &event);
+            let previous_cursor = self.cursor;
             if let Some(WindowEventTranslation::Pointer(pointer)) = &translation
                 && let Some(position) = pointer_position(pointer)
             {
                 self.cursor = position;
+            }
+            // Touch has no preceding hover motion. Mint once at the
+            // contact point before dispatch so the ordinary activate
+            // fallback sees exactly the target a mouse click would.
+            if let Some(WindowEventTranslation::Pointer(PointerEvent::Down(button))) = &translation
+                && button.pointer.pointer_type == PointerType::Touch
+            {
+                let size = window.inner_size();
+                self.pointer = Some(Point::new(
+                    button.state.position.x,
+                    button.state.position.y,
+                ));
+                self.retain_dispatch(
+                    scale,
+                    Size::new(size.width as f64, size.height as f64),
+                    false,
+                );
             }
             // Scroll packets wait for an ordering boundary below.
             // Every other event dispatches into the retained frame's
@@ -490,7 +647,7 @@ impl ApplicationHandler<UserEvent> for App {
                             .find(|region| region.rect.contains(position))
                             .map(|region| region.root.clone());
                         let raw = dispatch.handler.dispatch_pointer_down(self, &button);
-                        if raw || button.button != Some(PointerButton::Primary) {
+                        if raw || !puri::interact::is_primary_contact(&button) {
                             raw
                         } else if let Some(target) = self.hover.clone() {
                             if projection::command(&button.state.modifiers) {
@@ -523,7 +680,25 @@ impl ApplicationHandler<UserEvent> for App {
                         );
                         self.pointer = Some(position);
                         frame_input_changed = !self.pressed;
-                        dispatch.handler.dispatch_pointer_move(self, &update)
+                        let moved = dispatch.handler.dispatch_pointer_move(self, &update);
+                        if moved || update.pointer.pointer_type != PointerType::Touch {
+                            moved
+                        } else {
+                            // A browser canvas has no wheel gesture on
+                            // touch. An unclaimed finger drag is the same
+                            // continuous displacement sent through the
+                            // existing nested scroll handlers; controls
+                            // with a raw drag handler still win first.
+                            let scroll = PointerScrollEvent {
+                                pointer: update.pointer,
+                                delta: ScrollDelta::PixelDelta(PhysicalPosition::new(
+                                    position.x - previous_cursor.x,
+                                    position.y - previous_cursor.y,
+                                )),
+                                state: update.current.clone(),
+                            };
+                            dispatch.handler.dispatch_scroll(self, &scroll).handled()
+                        }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Up(button)))) => {
                         let position =
@@ -538,6 +713,14 @@ impl ApplicationHandler<UserEvent> for App {
                         self.pressed = false;
                         frame_input_changed = true;
                         self.model.workspace.cancel_resize()
+                    }
+                    (None, Some(WindowEventTranslation::Pointer(PointerEvent::Cancel(pointer)))) => {
+                        self.pointer = None;
+                        self.pressed = false;
+                        frame_input_changed = true;
+                        let handled = dispatch.handler.dispatch_pointer_cancel(self, &pointer);
+                        let resize_cancelled = self.model.workspace.cancel_resize();
+                        handled || resize_cancelled
                     }
                     _ => false,
                 };
@@ -574,6 +757,7 @@ impl ApplicationHandler<UserEvent> for App {
             // commit). Revisit in a lower layer.
             WindowEvent::Resized(size) => {
                 let valid = size.width != 0 && size.height != 0;
+                #[cfg(not(target_arch = "wasm32"))]
                 if let RenderState::Active {
                     surface,
                     valid_surface,
@@ -587,7 +771,7 @@ impl ApplicationHandler<UserEvent> for App {
                     *valid_surface = valid;
                 }
                 if valid {
-                            self.redraw();
+                    self.redraw();
                 }
             }
 
@@ -627,7 +811,13 @@ impl ApplicationHandler<UserEvent> for App {
 }
 
 fn main() {
+    #[cfg(target_arch = "wasm32")]
+    console_error_panic_hook::set_once();
+
+    #[cfg(not(target_arch = "wasm32"))]
     let doc_path = std::env::args().nth(1).map(PathBuf::from);
+    #[cfg(target_arch = "wasm32")]
+    let doc_path: Option<PathBuf> = None;
     // A given-but-missing path is a new document there; no path is
     // untitled until the first save asks. A file that exists but does
     // not parse is refused rather than silently replaced, so a save
@@ -661,14 +851,21 @@ fn main() {
     #[cfg(target_os = "macos")]
     macos_menu::route_events(proxy.clone());
 
+    #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut app = App {
+        #[cfg(not(target_arch = "wasm32"))]
         context: RenderContext::new(),
+        #[cfg(not(target_arch = "wasm32"))]
         renderers: vec![],
         state: RenderState::Suspended(None),
+        #[cfg(not(target_arch = "wasm32"))]
         scene: Scene::new(),
-        font_cx: FontContext::new(),
+        font_cx: font_context(),
         layout_cx: LayoutContext::new(),
+        #[cfg(not(target_arch = "wasm32"))]
         text_clipboard: SystemTextClipboard,
+        #[cfg(target_arch = "wasm32")]
+        text_clipboard: SystemTextClipboard::default(),
         text_cache: puri::text::TextCache::default(),
         stack: stack::load(),
         model: Model {
@@ -698,9 +895,12 @@ fn main() {
         pending_discard: None,
     };
 
+    #[cfg(not(target_arch = "wasm32"))]
     event_loop
         .run_app(&mut app)
         .expect("Couldn't run event loop");
+    #[cfg(target_arch = "wasm32")]
+    event_loop.spawn_app(app);
 }
 
 impl App {
@@ -847,6 +1047,7 @@ impl App {
     pub(crate) fn menu_availability(&self) -> menu::Availability {
         let selected_root = self.model.selection.as_ref().map(selection::Selection::root);
         menu::Availability {
+            #[cfg(not(target_arch = "wasm32"))]
             save: self.model.history.dirty() || self.doc_path.is_none(),
             undo: self.model.history.can_undo(),
             redo: self.model.history.can_redo(),
@@ -897,10 +1098,22 @@ impl App {
     ) {
         match selection {
             menu::Selection::New => self.request_discard(event_loop, AfterDiscard::New),
+            #[cfg(not(target_arch = "wasm32"))]
             menu::Selection::Open => self.request_discard(event_loop, AfterDiscard::Open),
+            #[cfg(not(target_arch = "wasm32"))]
             menu::Selection::Save => self.menu_save(false),
+            #[cfg(not(target_arch = "wasm32"))]
             menu::Selection::SaveAs => self.menu_save(true),
             menu::Selection::Quit => self.request_discard(event_loop, AfterDiscard::Quit),
+            menu::Selection::ExampleSample => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::Sample))
+            }
+            menu::Selection::ExampleGrap => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::Grap))
+            }
+            menu::Selection::ExampleIopTree => {
+                self.request_discard(event_loop, AfterDiscard::Example(Example::IopTree))
+            }
             menu::Selection::Undo => self.step_history(true),
             menu::Selection::Redo => self.step_history(false),
             menu::Selection::OpenPaneLeft => {
@@ -1051,6 +1264,22 @@ impl App {
         if self.pending_discard.is_some() {
             return;
         }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let accepted = web_sys::window()
+                .and_then(|window| {
+                    window
+                        .confirm_with_message("Discard unsaved changes?")
+                        .ok()
+                })
+                .unwrap_or(false);
+            if accepted {
+                self.proceed(event_loop, then);
+            }
+            return;
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let RenderState::Active { window, .. } = &self.state else {
             return;
         };
@@ -1073,6 +1302,7 @@ impl App {
             );
             let _ = proxy.send_event(UserEvent::Discard(accepted));
         });
+        }
     }
 
     /// The action a confirmed (or unneeded) discard proceeds to.
@@ -1086,6 +1316,7 @@ impl App {
                 None,
                 gid_text::Binders::new(),
             ),
+            #[cfg(not(target_arch = "wasm32"))]
             AfterDiscard::Open => {
                 if let Some(path) = text_dialog().pick_file() {
                     match text_store::load(&path) {
@@ -1097,6 +1328,10 @@ impl App {
                 }
             }
             AfterDiscard::Quit => event_loop.exit(),
+            AfterDiscard::Example(example) => match gid_text::parse(example.source()) {
+                Ok((doc, binders)) => self.adopt_model(doc, None, binders),
+                Err(error) => panic!("built-in example failed to parse: {error}"),
+            },
         }
     }
 
@@ -1104,6 +1339,7 @@ impl App {
     /// always asks. Write-through editing means the GID document is always
     /// current, so there is nothing to flush first. A cancelled dialog
     /// saves nothing.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
         let target =
@@ -1161,6 +1397,7 @@ impl App {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn adopt_doc_path(&mut self, path: PathBuf) {
         self.doc_path = Some(path);
         if let RenderState::Active { window, .. } = &self.state {
@@ -1173,6 +1410,7 @@ impl App {
     /// pass BEFORE anything draws, so the reveal lands in the next
 
     /// Renders the current model to the surface, from `RedrawRequested`.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn redraw(&mut self) {
         let RenderState::Active {
             surface,
@@ -1281,6 +1519,77 @@ impl App {
         surface_texture.present();
 
         device_handle.device.poll(wgpu::PollType::Poll).unwrap();
+    }
+
+    /// The browser runs the same deferred frame ink directly into
+    /// Canvas2D. Layout and event dispatch are shared with desktop;
+    /// only this final interpreter differs.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn redraw(&mut self) {
+        let RenderState::Active {
+            canvas,
+            context,
+            window,
+        } = &self.state
+        else {
+            return;
+        };
+        let canvas = canvas.clone();
+        let context = context.clone();
+        let window = window.clone();
+        let scale = window.scale_factor();
+        let size = window.inner_size();
+        let width = size.width;
+        let height = size.height;
+        if width == 0 || height == 0 {
+            return;
+        }
+        if canvas.width() != width {
+            canvas.set_width(width);
+        }
+        if canvas.height() != height {
+            canvas.set_height(height);
+        }
+
+        self.sync_menus();
+        let viewport = Size::new(width as f64, height as f64);
+        let pending = self
+            .pending_paint
+            .take()
+            .filter(|pending| pending.scale == scale && pending.viewport == viewport);
+        let (renders, hovered_secondary) = match pending {
+            Some(PendingPaint {
+                renders,
+                hovered_secondary,
+                ..
+            }) => (renders, hovered_secondary),
+            None => {
+                let Frame {
+                    dispatch,
+                    renders,
+                    hovered_secondary,
+                } = self.build_frame(scale, viewport);
+                self.last_descends = dispatch.descends.clone();
+                self.dispatch = Some(dispatch);
+                (renders, hovered_secondary)
+            }
+        };
+        let ink = placed::Ink {
+            hovered: self.hover.as_ref(),
+            hovered_secondary: hovered_secondary.as_ref(),
+            debug_geometry: self.model.view.debug_geometry,
+        };
+        let mut paint = Paint {
+            canvas: puri_web::WebCanvas(context),
+        };
+        paint.canvas.clear(
+            width.into(),
+            height.into(),
+            Color::new([0.965, 0.965, 0.972, 1.0]),
+        );
+        for render in renders {
+            render(&mut paint, ink);
+        }
     }
 }
 

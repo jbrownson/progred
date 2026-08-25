@@ -5,9 +5,11 @@ use crate::navigate;
 use crate::projection;
 use crate::selection;
 use crate::sources;
-use crate::{App, CLIPBOARD_FORMAT, plain};
+use crate::{App, plain};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::CLIPBOARD_FORMAT;
 use gid::{Path, Step, Value};
-use puri::edit::LineEditState;
+use puri::edit::{LineEditState, TextClipboard};
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
 impl App {
@@ -218,8 +220,7 @@ impl App {
     /// Copies the selected value — SHALLOW: a link is its identity
     /// alone, no cell values travel; the value carries its own inline
     /// structure.
-    pub(crate) fn copy_selection(&self) -> bool {
-        use clipboard_rs::{Clipboard, ClipboardContext};
+    pub(crate) fn copy_selection(&mut self) -> bool {
         let sources = self.sources();
         let value = match &self.model.selection {
             Some(selection) => sources.resolve(selection.path()).cloned(),
@@ -229,8 +230,10 @@ impl App {
             return false;
         };
         let (text, structural) = selection::to_clipboard(&value);
-        ClipboardContext::new()
+        #[cfg(not(target_arch = "wasm32"))]
+        return clipboard_rs::ClipboardContext::new()
             .and_then(|cb| {
+                use clipboard_rs::Clipboard;
                 if structural {
                     // Both representations: the private format says
                     // "structure", the text reads anywhere.
@@ -245,16 +248,27 @@ impl App {
                     cb.set_text(text)
                 }
             })
-            .is_ok()
+            .is_ok();
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.text_clipboard.text = Some(text);
+            self.text_clipboard.structure = structural.then_some(value);
+            true
+        }
     }
 
     /// The private format's payload, when the clipboard carries one.
-    pub(crate) fn clipboard_structure(&self) -> Option<Value> {
-        use clipboard_rs::{Clipboard, ClipboardContext};
-        let bytes = ClipboardContext::new()
-            .ok()
-            .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
-        selection::from_structure(&bytes)
+    pub(crate) fn clipboard_structure(&mut self) -> Option<Value> {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use clipboard_rs::Clipboard;
+            let bytes = clipboard_rs::ClipboardContext::new()
+                .ok()
+                .and_then(|cb| cb.get_buffer(CLIPBOARD_FORMAT).ok())?;
+            return selection::from_structure(&bytes);
+        }
+        #[cfg(target_arch = "wasm32")]
+        self.text_clipboard.structure.clone()
     }
 
     /// Cmd+V while a pending is open and the clipboard CARRIES
@@ -290,14 +304,10 @@ impl App {
     /// the pick), else over the selected edge — one undo step,
     /// retaining ordinary structural selection at the changed site.
     pub(crate) fn paste_clipboard(&mut self) -> bool {
-        use clipboard_rs::{Clipboard, ClipboardContext};
         let value = match self.clipboard_structure() {
             Some(value) => value,
             None => {
-                let Some(text) = ClipboardContext::new()
-                    .ok()
-                    .and_then(|cb| cb.get_text().ok())
-                else {
+                let Some(text) = self.text_clipboard.get_text() else {
                     return false;
                 };
                 if text.is_empty() {

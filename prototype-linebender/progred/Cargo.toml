@@ -11,18 +11,34 @@ gid = { path = "../gid" }
 im = "15"
 measured = { path = "../ui/measured" }
 puri = { path = "../ui/puri" }
-puri-vello = { path = "../ui/puri-vello" }
 uig = { path = "../ui/uig" }
-vello = "0.9.0"
+kurbo = "0.13.1"
+peniko = "0.6.1"
 parley = "0.9.0"
 winit = "0.30.13"
-pollster = "0.4.0"
 ui-events = "0.3"
 ui-events-winit = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rfd = "0.15"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 clipboard-rs = "0.3.3"
+pollster = "0.4.0"
+puri-vello = { path = "../ui/puri-vello" }
+rfd = "0.15"
+vello = "0.9.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+puri-web = { path = "../ui/puri-web" }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "CanvasRenderingContext2d",
+    "Document",
+    "HtmlCanvasElement",
+    "Window",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 muda = { version = "0.15", default-features = false }

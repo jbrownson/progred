@@ -18,10 +18,16 @@ pub enum Platform {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Selection {
     New,
+    #[cfg(not(target_arch = "wasm32"))]
     Open,
+    #[cfg(not(target_arch = "wasm32"))]
     Save,
+    #[cfg(not(target_arch = "wasm32"))]
     SaveAs,
     Quit,
+    ExampleSample,
+    ExampleGrap,
+    ExampleIopTree,
     Undo,
     Redo,
     OpenPaneLeft,
@@ -68,10 +74,12 @@ impl Shortcut {
 pub enum ShortcutKey {
     D,
     N,
+    #[cfg(not(target_arch = "wasm32"))]
     O,
     P,
     Q,
     R,
+    #[cfg(not(target_arch = "wasm32"))]
     S,
     Z,
 }
@@ -81,10 +89,12 @@ impl ShortcutKey {
         match self {
             Self::D => "D",
             Self::N => "N",
+            #[cfg(not(target_arch = "wasm32"))]
             Self::O => "O",
             Self::P => "P",
             Self::Q => "Q",
             Self::R => "R",
+            #[cfg(not(target_arch = "wasm32"))]
             Self::S => "S",
             Self::Z => "Z",
         }
@@ -126,18 +136,21 @@ const NEW: Item = Item {
     shortcut: Some(Shortcut::plain(ShortcutKey::N)),
     kind: Kind::Command,
 };
+#[cfg(not(target_arch = "wasm32"))]
 const OPEN: Item = Item {
     selection: Selection::Open,
     label: "Open…",
     shortcut: Some(Shortcut::plain(ShortcutKey::O)),
     kind: Kind::Command,
 };
+#[cfg(not(target_arch = "wasm32"))]
 const SAVE: Item = Item {
     selection: Selection::Save,
     label: "Save",
     shortcut: Some(Shortcut::plain(ShortcutKey::S)),
     kind: Kind::Command,
 };
+#[cfg(not(target_arch = "wasm32"))]
 const SAVE_AS: Item = Item {
     selection: Selection::SaveAs,
     label: "Save As…",
@@ -148,6 +161,24 @@ const QUIT: Item = Item {
     selection: Selection::Quit,
     label: "Quit",
     shortcut: Some(Shortcut::plain(ShortcutKey::Q)),
+    kind: Kind::Command,
+};
+const EXAMPLE_SAMPLE: Item = Item {
+    selection: Selection::ExampleSample,
+    label: "Sample",
+    shortcut: None,
+    kind: Kind::Command,
+};
+const EXAMPLE_GRAP: Item = Item {
+    selection: Selection::ExampleGrap,
+    label: "Grap Demo",
+    shortcut: None,
+    kind: Kind::Command,
+};
+const EXAMPLE_IOP_TREE: Item = Item {
+    selection: Selection::ExampleIopTree,
+    label: "Inventing on Principle Tree",
+    shortcut: None,
     kind: Kind::Command,
 };
 const UNDO: Item = Item {
@@ -219,23 +250,27 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
         },
         ..QUIT
     };
+    #[cfg(target_arch = "wasm32")]
+    let file_entries = vec![Entry::Item(NEW)];
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut file_entries = vec![Entry::Item(NEW)];
+    #[cfg(not(target_arch = "wasm32"))]
+    file_entries.extend([
+        Entry::Item(OPEN),
+        Entry::Separator,
+        Entry::Item(SAVE),
+        Entry::Item(SAVE_AS),
+    ]);
+    #[cfg(not(target_arch = "wasm32"))]
+    file_entries.extend(
+        (platform == Platform::Drawn)
+            .then_some([Entry::Separator, Entry::Item(quit)])
+            .into_iter()
+            .flatten(),
+    );
     let file = Menu {
         label: "File",
-        entries: [
-            Entry::Item(NEW),
-            Entry::Item(OPEN),
-            Entry::Separator,
-            Entry::Item(SAVE),
-            Entry::Item(SAVE_AS),
-        ]
-        .into_iter()
-        .chain(
-            (platform == Platform::Drawn)
-                .then_some([Entry::Separator, Entry::Item(quit)])
-                .into_iter()
-                .flatten(),
-        )
-        .collect(),
+        entries: file_entries,
     };
     (platform == Platform::MacOs)
         .then(|| Menu {
@@ -245,6 +280,14 @@ pub fn definition(platform: Platform) -> Vec<Menu> {
         .into_iter()
         .chain([
             file,
+            Menu {
+                label: "Examples",
+                entries: vec![
+                    Entry::Item(EXAMPLE_SAMPLE),
+                    Entry::Item(EXAMPLE_GRAP),
+                    Entry::Item(EXAMPLE_IOP_TREE),
+                ],
+            },
             Menu {
                 label: "Edit",
                 entries: vec![Entry::Item(UNDO), Entry::Item(REDO)],
@@ -299,6 +342,7 @@ impl State {
 
 #[derive(Clone, Copy)]
 pub struct Availability {
+    #[cfg(not(target_arch = "wasm32"))]
     pub save: bool,
     pub undo: bool,
     pub redo: bool,
@@ -312,6 +356,7 @@ pub struct Availability {
 impl Availability {
     pub fn enabled(self, selection: Selection) -> bool {
         match selection {
+            #[cfg(not(target_arch = "wasm32"))]
             Selection::Save => self.save,
             Selection::Undo => self.undo,
             Selection::Redo => self.redo,
@@ -351,8 +396,8 @@ mod view {
     use puri::draw::Canvas;
     use puri::text::{TextCtx, TextStyle};
     use std::rc::Rc;
-    use vello::kurbo::{Affine, Insets, Rect, Stroke};
-    use vello::peniko::{Brush, Color};
+    use kurbo::{Affine, Insets, Rect, Stroke};
+    use peniko::{Brush, Color};
 
     const BAR_HEIGHT: f64 = 30.0;
     const MENU_WIDTH: f64 = 230.0;
@@ -725,7 +770,7 @@ mod tests {
         for platform in [Platform::Drawn, Platform::MacOs] {
             let definition = definition(platform);
             let items = items(&definition).collect::<Vec<_>>();
-            assert_eq!(items.len(), 15);
+            assert_eq!(items.len(), 18);
             for (index, item) in items.iter().enumerate() {
                 assert!(
                     items[index + 1..]
@@ -741,7 +786,7 @@ mod tests {
         let macos = definition(Platform::MacOs);
         assert_eq!(
             macos.iter().map(|menu| menu.label).collect::<Vec<_>>(),
-            vec!["Progred", "File", "Edit", "View"]
+            vec!["Progred", "File", "Examples", "Edit", "View"]
         );
         assert_eq!(
             macos[0].entries,
@@ -757,7 +802,7 @@ mod tests {
         let linux = definition(Platform::Drawn);
         assert_eq!(
             linux.iter().map(|menu| menu.label).collect::<Vec<_>>(),
-            vec!["File", "Edit", "View"]
+            vec!["File", "Examples", "Edit", "View"]
         );
         assert_eq!(
             linux[0].entries,

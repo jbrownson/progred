@@ -5,7 +5,23 @@
 use crate::geometry::Placement;
 use crate::handler::HasHandler;
 use kurbo::Point;
-use ui_events::pointer::{PointerButton, PointerButtonEvent};
+use ui_events::pointer::{PointerButton, PointerButtonEvent, PointerType, PointerUpdate};
+
+/// Whether a button event represents the ordinary direct-contact
+/// gesture: the primary mouse/pen button, or a touch contact (which
+/// truthfully has no button in `ui-events`).
+pub fn is_primary_contact(event: &PointerButtonEvent) -> bool {
+    event.button == Some(PointerButton::Primary)
+        || (event.button.is_none() && event.pointer.pointer_type == PointerType::Touch)
+}
+
+/// Whether a pointer move is continuing the ordinary direct-contact
+/// gesture. Touch moves only arrive while that contact is active, and
+/// therefore do not need a synthetic entry in `state.buttons`.
+pub fn is_primary_contact_move(event: &PointerUpdate) -> bool {
+    event.current.buttons.contains(PointerButton::Primary)
+        || event.pointer.pointer_type == PointerType::Touch
+}
 
 /// Attach a primary-button press whose predicate and action both see
 /// the settled placement. A false action declines to the handler
@@ -17,7 +33,7 @@ pub fn on_primary_pointer_down_where<C: 'static, P: HasHandler<C>>(
     action: impl Fn(&mut C, Placement, &PointerButtonEvent) -> bool + 'static,
 ) {
     p.handler().on_pointer_down(move |ctx, event| {
-        event.button == Some(PointerButton::Primary)
+        is_primary_contact(event)
             && placement.contains(Point::new(
                 event.state.position.x,
                 event.state.position.y,
@@ -113,6 +129,13 @@ mod tests {
         event
     }
 
+    fn touch_at(x: f64, y: f64) -> PointerButtonEvent {
+        let mut event = down_at(x, y);
+        event.button = None;
+        event.pointer.pointer_type = PointerType::Touch;
+        event
+    }
+
     struct Frame {
         handler: Handler<u32>,
     }
@@ -147,6 +170,28 @@ mod tests {
         let mut selected = 0;
         assert!(frame.dispatch_pointer_down(&mut selected, &down_at(5.0, 5.0)));
         assert_eq!(selected, 7);
+    }
+
+    #[test]
+    fn touch_contact_fires_without_inventing_a_button() {
+        let event = touch_at(5.0, 5.0);
+        assert_eq!(event.button, None);
+        let frame = placed(None);
+        let mut selected = 0;
+        assert!(frame.dispatch_pointer_down(&mut selected, &event));
+        assert_eq!(selected, 7);
+    }
+
+    #[test]
+    fn touch_move_is_an_active_contact_without_inventing_a_button() {
+        let event = ui_events::pointer::PointerUpdate {
+            pointer: touch_at(5.0, 5.0).pointer,
+            current: PointerState::default(),
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        };
+        assert!(event.current.buttons.is_empty());
+        assert!(is_primary_contact_move(&event));
     }
 
     #[test]

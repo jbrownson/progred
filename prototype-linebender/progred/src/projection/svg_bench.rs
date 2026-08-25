@@ -10,7 +10,7 @@ use skrifa::instance::{LocationRef, NormalizedCoord, Size};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::fmt::Write as _;
-use vello::kurbo::{BezPath, Shape as KurboShape};
+use kurbo::{BezPath, Shape as KurboShape};
 
 type World = ();
 
@@ -413,11 +413,27 @@ fn sample_text_line_claims_its_own_hover() {
 
 #[test]
 fn sample_text_line_click_mounts_its_own_editor() {
+    #[derive(Default)]
+    struct Clipboard(Option<String>);
+
+    impl puri::edit::TextClipboard for Clipboard {
+        fn get_text(&mut self) -> Option<String> {
+            self.0.clone()
+        }
+
+        fn set_text(&mut self, text: &str) {
+            self.0 = Some(text.to_string());
+        }
+    }
+
     struct ClickWorld {
         doc: Document,
         library: Cells,
         selection: Option<Selection>,
         applied: Option<Path>,
+        fonts: parley::FontContext,
+        layouts: parley::LayoutContext<Brush>,
+        clipboard: Clipboard,
     }
 
     let (doc, _) = crate::gid_text::parse(include_str!("../../../sample.gid"))
@@ -507,6 +523,9 @@ fn sample_text_line_click_mounts_its_own_editor() {
         library: stack.library.clone(),
         selection: None,
         applied: None,
+        fonts: parley::FontContext::new(),
+        layouts: parley::LayoutContext::new(),
+        clipboard: Clipboard::default(),
     };
     assert!(placed
         .handler
@@ -517,6 +536,86 @@ fn sample_text_line_click_mounts_its_own_editor() {
         Some(path.as_slice())
     );
     assert_eq!(world.applied, None);
+
+    // The next frame's focused editor still owns pointer-down: a
+    // double click selects its word, and a later single click can
+    // collapse that selection to a new caret. This is distinct from
+    // the first click above, which mounts the editor.
+    let mut frame_fonts = parley::FontContext::new();
+    let mut frame_layouts = parley::LayoutContext::new();
+    let mut frame_cache = puri::text::TextCache::default();
+    let mut frame_tcx = TextCtx {
+        fonts: &mut frame_fonts,
+        layouts: &mut frame_layouts,
+        scale: 1.0,
+        cache: &mut frame_cache,
+    };
+    let active = project::<ClickWorld, Bench>(
+        ProjectDescription {
+            sources: Sources {
+                doc: &world.doc,
+                library: &world.library,
+            },
+            root: world.doc.root.as_ref(),
+            root_path: &[],
+            selection: world.selection.as_ref(),
+            annotations: &Annotations::default(),
+            raw: false,
+            styles: &styles,
+            width: 852.0,
+            projection: Some(&stack.projection),
+            foreign: &stack.foreign,
+        },
+        &mut frame_tcx,
+        Hooks {
+            select: Rc::new(|_, _| {}),
+            start_edit: Rc::new(|_, _, _| {}),
+            toggle: Rc::new(|_, _| {}),
+            edit: Rc::new(|world: &mut ClickWorld| {
+                let ClickWorld {
+                    selection,
+                    fonts,
+                    layouts,
+                    clipboard,
+                    ..
+                } = world;
+                Some(puri::edit::EditCtx {
+                    state: selection.as_mut()?.edit_mut()?,
+                    fonts,
+                    layouts,
+                    clipboard,
+                })
+            }),
+            pick: Rc::new(|_, _| false),
+            insert: Rc::new(|_, _| {}),
+            delete: Rc::new(|_| false),
+            apply: Rc::new(|_, _, _, _| false),
+        },
+    );
+    let active = measured::place(active, Placement::root(rect));
+    let line = active
+        .descends
+        .iter()
+        .find(|descend| descend.path.as_ref() == &path)
+        .expect("active color descend")
+        .rect;
+    let mut double = event.clone();
+    double.state.position.x = line.center().x;
+    double.state.position.y = line.center().y;
+    double.state.count = 2;
+    let handler = active.handler.expect("active line handler");
+    assert!(handler.dispatch_pointer_down(&mut world, &double));
+    let selection = world.selection.as_ref().unwrap().edit().unwrap();
+    let (anchor, focus) = selection.selection_offsets();
+    assert_ne!(anchor, focus);
+
+    let mut single = double;
+    single.state.position.x = line.x0 + 1.0;
+    single.state.count = 1;
+    assert!(handler.dispatch_pointer_down(&mut world, &single));
+    let selection = world.selection.as_ref().unwrap().edit().unwrap();
+    let (anchor, focus) = selection.selection_offsets();
+    assert_eq!(anchor, focus);
 }
 
 #[test]

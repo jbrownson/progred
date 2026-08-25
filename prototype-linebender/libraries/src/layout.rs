@@ -56,6 +56,11 @@ pub mod vocabulary {
     pub const POINTER_DOWN: CellId = CellId::from_u128(0x67a9a626caff2f3568224eafcb338428);
     pub const POINTER_MOVE: CellId = CellId::from_u128(0xbf54bd5b9cd29a7c32fc496d6d59e4ca);
     pub const POINTER_UP: CellId = CellId::from_u128(0x5c2173cf26dfc305ebd89e3cf1d62890);
+    pub const POINTER_CANCEL: CellId = CellId::from_u128(0x594eeff3b32941fea937818d89ca2002);
+    pub const TOUCH_START: CellId = CellId::from_u128(0x87a2ba9cac6a4805b4e3baf9e9218dd5);
+    pub const TOUCH_MOVE: CellId = CellId::from_u128(0x5359b767cb744fb881c8a92b95664c20);
+    pub const TOUCH_END: CellId = CellId::from_u128(0x32b27cf0994b45208502d133d0da4eb2);
+    pub const TOUCH_CANCEL: CellId = CellId::from_u128(0xf96ee39a16f748cc85b6ea8c99b46394);
     pub const SCROLL: CellId = CellId::from_u128(0x7b0de6ea9b052da4b40e5f97438d537c);
     pub const KEY: CellId = CellId::from_u128(0xbabfda8d94c4a003ae22faf4a4a2fd01);
     pub const IME: CellId = CellId::from_u128(0x33b7ee93c08863b54d3106802a28d110);
@@ -883,6 +888,11 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::POINTER_DOWN, "pointer down"),
         (vocabulary::POINTER_MOVE, "pointer move"),
         (vocabulary::POINTER_UP, "pointer up"),
+        (vocabulary::POINTER_CANCEL, "pointer cancel"),
+        (vocabulary::TOUCH_START, "touch start"),
+        (vocabulary::TOUCH_MOVE, "touch move"),
+        (vocabulary::TOUCH_END, "touch end"),
+        (vocabulary::TOUCH_CANCEL, "touch cancel"),
         (vocabulary::SCROLL, "scroll"),
         (vocabulary::KEY, "key"),
         (vocabulary::IME, "ime"),

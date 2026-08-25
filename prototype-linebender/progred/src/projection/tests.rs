@@ -1550,6 +1550,74 @@ fn a_data_event_realizes_the_apply_hook() {
             .and_then(Value::as_cell),
         Some(progred_libraries::layout::vocabulary::POINTER_MOVE),
     );
+
+    let touch = PointerInfo {
+        pointer_id: PointerId::new(7),
+        persistent_device_id: None,
+        pointer_type: PointerType::Touch,
+    };
+    assert!(handler.dispatch_pointer_down(
+        &mut events,
+        &PointerButtonEvent {
+            button: None,
+            pointer: touch,
+            state: state.clone(),
+        },
+    ));
+    let touch_start = events[2].2.as_record().expect("touch start record");
+    assert_eq!(
+        touch_start
+            .get(&progred_libraries::layout::vocabulary::EVENT_KIND)
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_START),
+    );
+    assert!(!touch_start.contains_key(&progred_libraries::layout::vocabulary::BUTTON));
+
+    assert!(handler.dispatch_pointer_move(
+        &mut events,
+        &PointerUpdate {
+            pointer: touch,
+            current: state.clone(),
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        },
+    ));
+    assert_eq!(
+        events[3]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_MOVE),
+    );
+
+    assert!(handler.dispatch_pointer_up(
+        &mut events,
+        &PointerButtonEvent {
+            button: None,
+            pointer: touch,
+            state: state.clone(),
+        },
+    ));
+    assert_eq!(
+        events[4]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_END),
+    );
+
+    assert!(handler.dispatch_pointer_cancel(&mut events, &touch));
+    assert_eq!(
+        events[5]
+            .2
+            .as_record()
+            .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
+            .and_then(Value::as_cell),
+        Some(progred_libraries::layout::vocabulary::TOUCH_CANCEL),
+    );
+
     assert!(
         handler
             .dispatch_scroll(
@@ -1567,7 +1635,7 @@ fn a_data_event_realizes_the_apply_hook() {
             .handled()
     );
     assert_eq!(
-        events[2]
+        events[6]
             .2
             .as_record()
             .and_then(|fields| fields.get(&progred_libraries::layout::vocabulary::EVENT_KIND))
@@ -1576,6 +1644,6 @@ fn a_data_event_realizes_the_apply_hook() {
     );
 }
 
-fn measured_rect(width: f64) -> vello::kurbo::Rect {
-    vello::kurbo::Rect::new(0.0, 0.0, width, 100.0)
+fn measured_rect(width: f64) -> kurbo::Rect {
+    kurbo::Rect::new(0.0, 0.0, width, 100.0)
 }

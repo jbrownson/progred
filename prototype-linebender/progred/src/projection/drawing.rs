@@ -15,8 +15,8 @@ use progred_libraries::{
     layout as layout_data,
 };
 use puri::draw::Canvas;
-use vello::kurbo::{Affine, Circle, Rect};
-use vello::peniko::Brush;
+use kurbo::{Affine, Circle, Rect};
+use peniko::Brush;
 
 #[derive(Clone)]
 struct Faces {

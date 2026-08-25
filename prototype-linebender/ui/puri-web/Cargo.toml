@@ -1,0 +1,17 @@
+[package]
+name = "puri-web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+js-sys = "0.3"
+kurbo = "0.13.1"
+peniko = "0.6.1"
+puri = { path = "../puri" }
+skrifa = "0.42.1"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "CanvasGradient",
+    "CanvasRenderingContext2d",
+    "Path2d",
+] }

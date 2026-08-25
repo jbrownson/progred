@@ -612,6 +612,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1383,9 +1393,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3109,17 +3121,22 @@ name = "progred"
 version = "0.1.0"
 dependencies = [
  "clipboard-rs",
+ "console_error_panic_hook",
+ "getrandom",
  "gid",
  "grap",
  "im",
+ "kurbo",
  "measured",
  "muda",
  "parley",
+ "peniko",
  "pollster",
  "progred-display",
  "progred-libraries",
  "puri",
  "puri-vello",
+ "puri-web",
  "rfd",
  "serde",
  "serde_json",
@@ -3128,6 +3145,8 @@ dependencies = [
  "ui-events-winit",
  "uig",
  "vello",
+ "wasm-bindgen",
+ "web-sys",
  "winit",
 ]
 
@@ -3192,6 +3211,19 @@ version = "0.1.0"
 dependencies = [
  "puri",
  "vello",
+]
+
+[[package]]
+name = "puri-web"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "kurbo",
+ "peniko",
+ "puri",
+ "skrifa",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

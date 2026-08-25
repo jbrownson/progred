@@ -10,5 +10,6 @@ members = [
     "ui/measured",
     "ui/puri",
     "ui/puri-vello",
+    "ui/puri-web",
     "ui/uig",
 ]

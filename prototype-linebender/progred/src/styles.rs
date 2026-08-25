@@ -3,7 +3,7 @@
 use parley::style::GenericFamily;
 use puri::edit::{EditStyle, LineEditPresentation};
 use puri::text::TextStyle;
-use vello::peniko::{Brush, Color};
+use peniko::{Brush, Color};
 
 pub struct Styles {
     pub label: TextStyle,

@@ -2,9 +2,12 @@
 //! bridges to text-based tools; it is not GID's native representation.
 
 use gid::{CellId, Cells, Document, Value, new_cell_id};
-use progred_libraries::{name, text};
+#[cfg(any(not(target_arch = "wasm32"), test))]
+use progred_libraries::name;
+use progred_libraries::text;
 use std::collections::BTreeMap;
 use std::collections::HashSet;
+#[cfg(any(not(target_arch = "wasm32"), test))]
 use std::fmt::Write as _;
 
 /// The file-local binder table: pure serialization sugar, kept by
@@ -297,6 +300,7 @@ impl Parser<'_> {
 }
 
 /// The canonical printer — deterministic from (document, binders).
+#[cfg(any(not(target_arch = "wasm32"), test))]
 pub fn print(doc: &Document, binders: &Binders) -> String {
     // Loaded binders survive for cell identities the document still mentions.
     // Every other identity receives a deterministic binder: its
@@ -377,6 +381,7 @@ pub fn print(doc: &Document, binders: &Binders) -> String {
     out
 }
 
+#[cfg(any(not(target_arch = "wasm32"), test))]
 fn identity(spell: &BTreeMap<CellId, String>, cell: CellId) -> String {
     match spell.get(&cell) {
         Some(binder) => binder.clone(),
@@ -386,6 +391,7 @@ fn identity(spell: &BTreeMap<CellId, String>, cell: CellId) -> String {
 
 /// Every cell identity the document mentions: cell entries, links in values,
 /// cells used as labels.
+#[cfg(any(not(target_arch = "wasm32"), test))]
 fn mentioned_cell_ids(doc: &Document) -> HashSet<CellId> {
     let mut ids: HashSet<CellId> = doc.cells.cells().copied().collect();
     fn walk(value: &Value, ids: &mut HashSet<CellId>) {
@@ -422,6 +428,7 @@ fn mentioned_cell_ids(doc: &Document) -> HashSet<CellId> {
 
 /// The notation's own string spelling — exactly the four escapes the
 /// parser knows, everything else raw.
+#[cfg(any(not(target_arch = "wasm32"), test))]
 fn quoted(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
@@ -439,6 +446,7 @@ fn quoted(s: &str) -> String {
 }
 
 /// A name sanitized to the binder token grammar.
+#[cfg(any(not(target_arch = "wasm32"), test))]
 fn derive_binder(name: &str) -> String {
     let mut out = String::new();
     for c in name.chars() {
@@ -461,6 +469,7 @@ fn derive_binder(name: &str) -> String {
     out
 }
 
+#[cfg(any(not(target_arch = "wasm32"), test))]
 fn unique_binder(base: String, taken: &mut HashSet<String>) -> String {
     if taken.insert(base.clone()) {
         base
@@ -472,6 +481,7 @@ fn unique_binder(base: String, taken: &mut HashSet<String>) -> String {
     }
 }
 
+#[cfg(any(not(target_arch = "wasm32"), test))]
 fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>, level: usize) {
     let indent = "  ".repeat(level + 1);
     let closing = "  ".repeat(level);
@@ -515,6 +525,7 @@ fn print_value(out: &mut String, value: &Value, spell: &BTreeMap<CellId, String>
     }
 }
 
+#[cfg(any(not(target_arch = "wasm32"), test))]
 fn plain_text(value: &Value) -> Option<&str> {
     let text = text::read(value)?;
     value

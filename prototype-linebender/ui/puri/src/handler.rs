@@ -21,7 +21,7 @@
 //! before/after behavior, transform events for, or drop.
 
 use ui_events::keyboard::KeyboardEvent;
-use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent, PointerUpdate};
+use ui_events::pointer::{PointerButtonEvent, PointerInfo, PointerScrollEvent, PointerUpdate};
 use ui_events::ScrollDelta;
 
 /// The part of a scroll event not accepted by this handler, plus
@@ -90,6 +90,7 @@ pub struct Handler<C> {
     pub pointer_down: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
     pub pointer_move: Box<dyn Fn(&mut C, &PointerUpdate) -> bool>,
     pub pointer_up: Box<dyn Fn(&mut C, &PointerButtonEvent) -> bool>,
+    pub pointer_cancel: Box<dyn Fn(&mut C, &PointerInfo) -> bool>,
     pub scroll: Box<dyn Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome>,
     pub key: Box<dyn Fn(&mut C, &KeyboardEvent) -> bool>,
     pub ime: Box<dyn Fn(&mut C, &ImeEvent) -> bool>,
@@ -101,6 +102,7 @@ impl<C> Default for Handler<C> {
             pointer_down: Box::new(|_, _| false),
             pointer_move: Box::new(|_, _| false),
             pointer_up: Box::new(|_, _| false),
+            pointer_cancel: Box::new(|_, _| false),
             scroll: Box::new(|_, event| ScrollOutcome::pass(event)),
             key: Box::new(|_, _| false),
             ime: Box::new(|_, _| false),
@@ -171,6 +173,15 @@ impl<C> Handler<C> {
         compose(&mut self.pointer_up, dispatch);
     }
 
+    pub fn on_pointer_cancel(
+        &mut self,
+        dispatch: impl Fn(&mut C, &PointerInfo) -> bool + 'static,
+    ) where
+        C: 'static,
+    {
+        compose(&mut self.pointer_cancel, dispatch);
+    }
+
     pub fn on_scroll(
         &mut self,
         dispatch: impl Fn(&mut C, &PointerScrollEvent) -> ScrollOutcome + 'static,
@@ -198,6 +209,10 @@ impl<C> Handler<C> {
 
     pub fn dispatch_pointer_up(&self, ctx: &mut C, event: &PointerButtonEvent) -> bool {
         (self.pointer_up)(ctx, event)
+    }
+
+    pub fn dispatch_pointer_cancel(&self, ctx: &mut C, event: &PointerInfo) -> bool {
+        (self.pointer_cancel)(ctx, event)
     }
 
     pub fn dispatch_scroll(

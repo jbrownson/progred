@@ -10,6 +10,7 @@ pub fn load(path: &Path) -> Result<(Document, Binders), String> {
     gid_text::parse(&text)
 }
 
+#[cfg(any(not(target_arch = "wasm32"), test))]
 pub fn save(path: &Path, doc: &Document, binders: &Binders) -> Result<(), String> {
     let text = gid_text::print(doc, binders);
     // Write-then-rename, so a crash mid-write cannot truncate the

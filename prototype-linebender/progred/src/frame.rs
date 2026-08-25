@@ -20,14 +20,18 @@ use puri::edit::EditCtx;
 use puri::geometry::Placement;
 use puri::handler::{Handler, HasHandler, ScrollOutcome};
 use puri::hover::Claim;
+use puri::interact::is_primary_contact;
 use puri::text::TextCtx;
+#[cfg(not(target_arch = "wasm32"))]
 use puri_vello::VelloCanvas;
+#[cfg(target_arch = "wasm32")]
+use puri_web::WebCanvas;
 use std::rc::Rc;
-use ui_events::pointer::PointerButton;
 use ui_events::ScrollDelta;
+#[cfg(not(target_arch = "wasm32"))]
 use vello::Scene;
-use vello::kurbo::{Affine, Point, Size, Stroke, Vec2};
-use vello::peniko::{Brush, Color};
+use kurbo::{Affine, Insets, Point, Rect, Size, Stroke, Vec2};
+use peniko::{Brush, Color};
 use winit::dpi::PhysicalPosition;
 
 pub(crate) const HOVER_REACH: f64 = 8.0;
@@ -66,12 +70,14 @@ pub(crate) enum Hovered {
     Blocked,
 }
 
-/// The concrete canvas frame ink renders into: the vello scene,
+/// The concrete native canvas frame ink renders into: the Vello scene,
 /// owned so deferred ink closures need no lifetime.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) struct Paint {
     pub(crate) scene: Scene,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Canvas for Paint {
     fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
         VelloCanvas(&mut self.scene).fill(shape, brush, transform);
@@ -104,6 +110,45 @@ impl Canvas for Paint {
     }
 }
 
+/// The same deferred Puri ink, interpreted immediately by Canvas2D.
+#[cfg(target_arch = "wasm32")]
+pub(crate) struct Paint {
+    pub(crate) canvas: WebCanvas,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Canvas for Paint {
+    fn fill(&mut self, shape: impl Into<Shape>, brush: impl Into<Brush>, transform: Affine) {
+        self.canvas.fill(shape, brush, transform);
+    }
+
+    fn stroke(
+        &mut self,
+        shape: impl Into<Shape>,
+        style: Stroke,
+        brush: impl Into<Brush>,
+        transform: Affine,
+    ) {
+        self.canvas.stroke(shape, style, brush, transform);
+    }
+
+    fn glyph_run(&mut self, run: GlyphRun) {
+        self.canvas.glyph_run(run);
+    }
+
+    fn clip(
+        &mut self,
+        shape: impl Into<Shape>,
+        transform: Affine,
+        content: impl FnOnce(&mut Self),
+    ) {
+        let shape = shape.into();
+        self.canvas.push_clip(&shape, transform);
+        content(self);
+        self.canvas.pop_clip();
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FrameDisposition {
     Retain,
@@ -130,8 +175,8 @@ pub(crate) fn frame_disposition(handled: bool, frame_input_changed: bool) -> Fra
 fn reveal_vertical_scroll(
     current: f64,
     maximum: f64,
-    target: vello::kurbo::Rect,
-    viewport: vello::kurbo::Rect,
+    target: Rect,
+    viewport: Rect,
     pad: f64,
     scale: f64,
 ) -> f64 {
@@ -408,8 +453,8 @@ impl App {
         let AppView { view } = app_view(description, resources);
         let placed = measured::place(
             view,
-            Placement::root(vello::kurbo::Rect::from_origin_size(
-                vello::kurbo::Point::ZERO,
+            Placement::root(Rect::from_origin_size(
+                Point::ZERO,
                 viewport,
             )),
         );
@@ -633,7 +678,7 @@ fn project_workspace_view(
         tcx,
         projection_hooks(view.root.clone()),
     );
-    let content = measured::pad(vello::kurbo::Insets::uniform(margin), projected);
+    let content = measured::pad(Insets::uniform(margin), projected);
     let maximum = Vec2::new(
         ((content.extent.width - size.width) / scale).max(0.0),
         ((content.extent.height() - size.height) / scale).max(0.0),
@@ -740,7 +785,7 @@ fn project_workspace(
                 );
                 p.occlude(Placement::new(hit, placement.clip_rect));
                 p.handler().on_pointer_down(move |app: &mut App, event| {
-                    event.button == Some(PointerButton::Primary)
+                    is_primary_contact(event)
                         && hit.contains(Point::new(
                             event.state.position.x,
                             event.state.position.y,
@@ -860,8 +905,8 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
     );
     if let Some(bar) = menu_bar {
         let bar_placement = Placement::new(
-            vello::kurbo::Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
-            vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport.height),
+            Rect::new(0.0, 0.0, viewport_width, content_viewport.y0),
+            Rect::new(0.0, 0.0, viewport_width, viewport.height),
         );
         stage = measured::overlay(stage, bar, move |_, _, _| Some(bar_placement));
     }
@@ -934,10 +979,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         let popup = placed::before(popup, move |p, placement| {
             let rect = placement.rect;
             let headings =
-                vello::kurbo::Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
+                Rect::new(0.0, 0.0, heading_width, content_viewport.y0);
             p.handler().on_pointer_down(move |app: &mut App, event| {
                 let point = Point::new(event.state.position.x, event.state.position.y);
-                event.button == Some(PointerButton::Primary)
+                is_primary_contact(event)
                     && !headings.contains(point)
                     && !rect.contains(point)
                     && app.menu.close()
@@ -953,7 +998,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         stage = measured::overlay(stage, popup, move |_, extent, _| {
             Some(Placement::new(
                 extent.rect_at(Point::new(x, content_viewport.y0)),
-                vello::kurbo::Rect::new(0.0, 0.0, viewport_width, viewport.height),
+                Rect::new(0.0, 0.0, viewport_width, viewport.height),
             ))
         });
     }
@@ -1014,8 +1059,8 @@ mod frame_tests {
 
     #[test]
     fn an_oversized_target_with_a_visible_top_does_not_scroll() {
-        let viewport = vello::kurbo::Rect::new(0.0, 30.0, 400.0, 200.0);
-        let target = vello::kurbo::Rect::new(20.0, 80.0, 380.0, 500.0);
+        let viewport = Rect::new(0.0, 30.0, 400.0, 200.0);
+        let target = Rect::new(20.0, 80.0, 380.0, 500.0);
 
         assert_eq!(
             reveal_vertical_scroll(120.0, 1_000.0, target, viewport, 12.0, 1.0),
@@ -1025,8 +1070,8 @@ mod frame_tests {
 
     #[test]
     fn a_target_starting_below_the_viewport_is_still_revealed() {
-        let viewport = vello::kurbo::Rect::new(0.0, 30.0, 400.0, 200.0);
-        let target = vello::kurbo::Rect::new(20.0, 220.0, 380.0, 260.0);
+        let viewport = Rect::new(0.0, 30.0, 400.0, 200.0);
+        let target = Rect::new(20.0, 220.0, 380.0, 260.0);
 
         assert_eq!(
             reveal_vertical_scroll(120.0, 1_000.0, target, viewport, 12.0, 1.0),
@@ -1036,8 +1081,8 @@ mod frame_tests {
 
     #[test]
     fn reveal_clamps_an_offset_left_stale_by_a_resize() {
-        let viewport = vello::kurbo::Rect::new(0.0, 30.0, 400.0, 200.0);
-        let target = vello::kurbo::Rect::new(20.0, 80.0, 380.0, 120.0);
+        let viewport = Rect::new(0.0, 30.0, 400.0, 200.0);
+        let target = Rect::new(20.0, 80.0, 380.0, 120.0);
 
         assert_eq!(
             reveal_vertical_scroll(300.0, 100.0, target, viewport, 12.0, 1.0),
@@ -1092,7 +1137,7 @@ mod frame_tests {
                 size,
                 1.0,
             ),
-            Placement::root(vello::kurbo::Rect::from_origin_size(Point::ZERO, size)),
+            Placement::root(Rect::from_origin_size(Point::ZERO, size)),
         );
 
         assert_eq!(placed.view_regions.len(), 3);
@@ -1127,18 +1172,18 @@ mod frame_tests {
     #[test]
     fn hover_prefers_direct_claims_and_uses_extensions_only_to_retain() {
         let target = |index| Hovered::Tree(hover::Hover::Entry(index));
-        let viewport = vello::kurbo::Rect::new(-100.0, -100.0, 100.0, 100.0);
+        let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
         let mut placed: Placed<App, Paint> = Placed::empty();
         placed.probes.push(placed::Probe::direct(
             Placement::new(
-                vello::kurbo::Rect::new(0.0, 0.0, 10.0, 10.0),
+                Rect::new(0.0, 0.0, 10.0, 10.0),
                 viewport,
             ),
             target(0),
         ));
         placed.probes.push(placed::Probe::direct(
             Placement::new(
-                vello::kurbo::Rect::new(14.0, 0.0, 24.0, 10.0),
+                Rect::new(14.0, 0.0, 24.0, 10.0),
                 viewport,
             ),
             target(1),
@@ -1225,7 +1270,7 @@ mod frame_tests {
         // fallback — an overlay's pointer never lights what sits
         // beneath it or triggers the empty-space action.
         placed.probes.push(placed::Probe::occludes(Placement::new(
-            vello::kurbo::Rect::new(0.0, 0.0, 40.0, 40.0),
+            Rect::new(0.0, 0.0, 40.0, 40.0),
             viewport,
         )));
         assert_eq!(

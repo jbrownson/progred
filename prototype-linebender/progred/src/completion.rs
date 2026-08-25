@@ -6,7 +6,7 @@ use crate::selection::{parse_blob, set_value};
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use progred_libraries::{name, text};
-use vello::kurbo::Rect;
+use kurbo::Rect;
 
 /// A completion offer on a pending. The display styles itself by the
 /// action's kind at draw time.

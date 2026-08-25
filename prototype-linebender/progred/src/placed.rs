@@ -18,8 +18,8 @@ use puri::text::TextMetrics;
 use uig::Placement;
 use ui_events::keyboard::KeyboardEvent;
 use ui_events::pointer::{PointerButtonEvent, PointerScrollEvent};
-use vello::kurbo::{Affine, Point, Rect, Stroke, Vec2};
-use vello::peniko::{Brush, Color};
+use kurbo::{Affine, Point, Rect, Stroke, Vec2};
+use peniko::{Brush, Color};
 
 pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
 pub type EditorAction<C> = Box<dyn Fn(&mut C) -> bool>;
@@ -280,6 +280,7 @@ fn handler_over<C: 'static>(base: Handler<C>, above: Handler<C>) -> Handler<C> {
         pointer_down: chain(base.pointer_down, above.pointer_down),
         pointer_move: chain(base.pointer_move, above.pointer_move),
         pointer_up: chain(base.pointer_up, above.pointer_up),
+        pointer_cancel: chain(base.pointer_cancel, above.pointer_cancel),
         scroll: chain_scroll(base.scroll, above.scroll),
         key: chain(base.key, above.key),
         ime: chain(base.ime, above.ime),
@@ -564,6 +565,7 @@ fn gate_starts<C: 'static>(child: Handler<C>, placement: Placement) -> Handler<C
         pointer_down,
         pointer_move,
         pointer_up,
+        pointer_cancel,
         scroll,
         key,
         ime,
@@ -584,6 +586,7 @@ fn gate_starts<C: 'static>(child: Handler<C>, placement: Placement) -> Handler<C
     }
     gated.on_pointer_move(pointer_move);
     gated.on_pointer_up(pointer_up);
+    gated.on_pointer_cancel(pointer_cancel);
     gated.on_key(key);
     gated.on_ime(ime);
     gated
@@ -605,7 +608,7 @@ mod tests {
     use ui_events::pointer::{
         PointerButton, PointerId, PointerInfo, PointerState, PointerType, PointerUpdate,
     };
-    use vello::peniko::Color;
+    use peniko::Color;
 
     struct TestCanvas(DrawList);
 
