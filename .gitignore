@@ -1,5 +1,7 @@
 .DS_Store
 /.claude
+/target
+/web/pkg
 
 # Xcode
 xcuserdata/

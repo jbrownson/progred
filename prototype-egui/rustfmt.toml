@@ -1,2 +1,0 @@
-# Intentionally invalid TOML to prevent accidental cargo fmt runs.
-!!disabled!!

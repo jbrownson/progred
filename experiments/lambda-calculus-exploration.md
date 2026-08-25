@@ -3,7 +3,7 @@
 2026-07-14 through 2026-07-20, in the ~/git/lambda-editor sessions.
 This document records the line of thought — the questions, the dead
 ends, the reversals — not just the conclusions. The conclusions landed
-in `prototype-linebender/docs/model.md` ("Values and Cells" design
+in [`docs/model.md`](../docs/model.md) ("Values and Cells" design
 brief); the verified research map with ~150 link-checked sources lives
 at https://claude.ai/code/artifact/fa451f1a-9379-4e5b-9e73-b2ba9dae330c.
 

@@ -1,6 +1,0 @@
-node_modules
-npm-debug.log
-/dist
-/build
-/fidget/target
-/src/fidget/generated
