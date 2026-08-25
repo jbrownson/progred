@@ -1342,8 +1342,17 @@ impl App {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn menu_save(&mut self, save_as: bool) {
         let in_place = (!save_as).then(|| self.doc_path.clone()).flatten();
-        let target =
-            in_place.or_else(|| text_dialog().set_file_name("untitled.gid").save_file());
+        let target = in_place.or_else(|| {
+            let file_name = self
+                .doc_path
+                .as_deref()
+                .and_then(|path| path.file_name())
+                .map_or_else(
+                    || "untitled.gid".to_owned(),
+                    |name| name.to_string_lossy().into_owned(),
+                );
+            text_dialog().set_file_name(file_name).save_file()
+        });
         if let Some(path) = target {
             match text_store::save(&path, &self.model.doc, &self.text_binders) {
                 Ok(()) => {
