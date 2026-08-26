@@ -2620,7 +2620,6 @@ fn present_layout<C: 'static>(
         .as_cell()
         .is_some_and(|cell| ancestors.cells.contains(&cell));
     if crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
-        .map(|default| default || crate::workspace::is_declaration_path(path))
         .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
         && let Some(collapsed) = structure::collapsed_layout(cx, path, value, hooks)
     {

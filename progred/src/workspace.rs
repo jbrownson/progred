@@ -191,6 +191,7 @@ pub struct Workspace {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Declaration {
     pub side: Side,
+    pub record_path: Path,
     pub value_path: Path,
     /// Resolves to an optional ordinary Grap callable applied to the
     /// pane's source value. An absent result falls through to the
@@ -230,6 +231,7 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
                     ];
                     Some(Declaration {
                         side,
+                        record_path: parent.clone(),
                         value_path: parent
                             .iter()
                             .cloned()
@@ -244,29 +246,6 @@ pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
             })
     })
     .collect()
-}
-
-pub fn declaration_side(path: &[Step]) -> Option<Side> {
-    match path {
-        [Step::Key(panes), Step::Key(side), Step::Element(_)]
-            if *panes == vocabulary::PANES && *side == vocabulary::LEFT =>
-        {
-            Some(Side::Left)
-        }
-        [Step::Key(panes), Step::Key(side), Step::Element(_)]
-            if *panes == vocabulary::PANES && *side == vocabulary::RIGHT =>
-        {
-            Some(Side::Right)
-        }
-        _ => None,
-    }
-}
-
-/// Pane declaration records are the direct elements of the root's
-/// left and right `panes` lists. Their source projection defaults
-/// closed, while the ordinary annotation override can open them.
-pub fn is_declaration_path(path: &[Step]) -> bool {
-    declaration_side(path).is_some()
 }
 
 #[derive(Clone)]
@@ -390,15 +369,24 @@ impl Workspace {
                         if *value_path == declaration.value_path
                 )
             });
-            let pane = existing
-                .map(|index| declared.remove(index))
-                .unwrap_or_else(|| Pane {
-                    view: View::new(Root::declared(
-                        declaration.value_path.clone(),
-                        declaration.projection_path.clone(),
-                    )),
-                    height: 1.0,
-                });
+            let pane = existing.map_or_else(
+                || {
+                    crate::annotations::set_collapsed(
+                        &mut self.document.annotations,
+                        &declaration.record_path,
+                        false,
+                        true,
+                    );
+                    Pane {
+                        view: View::new(Root::declared(
+                            declaration.value_path.clone(),
+                            declaration.projection_path.clone(),
+                        )),
+                        height: 1.0,
+                    }
+                },
+                |index| declared.remove(index),
+            );
             match declaration.side {
                 Side::Left => left.push(pane),
                 Side::Right => right.push(pane),
@@ -945,6 +933,10 @@ mod tests {
             Some(&Step::Key(vocabulary::PROJECTION))
         );
         assert_eq!(
+            declarations[0].record_path.first(),
+            Some(&Step::Key(vocabulary::PANES))
+        );
+        assert_eq!(
             declarations[0].value_path.first(),
             Some(&Step::Key(vocabulary::PANES))
         );
@@ -952,32 +944,50 @@ mod tests {
             declarations[0].value_path.last(),
             Some(&Step::Key(presentation::vocabulary::VALUE))
         );
-        assert!(is_declaration_path(&declarations[0].value_path[..3]));
+        assert_eq!(declarations[0].record_path, declarations[0].value_path[..3]);
     }
 
     #[test]
     fn declared_panes_reconcile_without_losing_view_state() {
         let one = Declaration {
             side: Side::Left,
+            record_path: vec![Step::Key(CellId::from_u128(11))],
             value_path: vec![Step::Key(CellId::from_u128(1))],
             projection_path: vec![Step::Key(CellId::from_u128(9))],
         };
         let two = Declaration {
             side: Side::Left,
+            record_path: vec![Step::Key(CellId::from_u128(12))],
             value_path: vec![Step::Key(CellId::from_u128(2))],
             projection_path: vec![Step::Key(CellId::from_u128(9))],
         };
         let mut workspace = Workspace::default();
         workspace.sync_declared(&[one.clone(), two.clone()]);
+        assert!(crate::annotations::collapsed(
+            &workspace.document.annotations,
+            &one.record_path,
+            false,
+        ));
+        crate::annotations::set_collapsed(
+            &mut workspace.document.annotations,
+            &one.record_path,
+            false,
+            false,
+        );
         let root = workspace.left.panes[0].view.root.clone();
         workspace.left.panes[0].view.scroll = Vec2::new(4.0, 9.0);
         workspace.left.panes[0].view.projection = Projection::Raw;
 
-        workspace.sync_declared(&[two, one]);
+        workspace.sync_declared(&[two, one.clone()]);
         let moved = &workspace.left.panes[1].view;
         assert_eq!(moved.root, root);
         assert_eq!(moved.scroll, Vec2::new(4.0, 9.0));
         assert_eq!(moved.projection, Projection::Raw);
+        assert!(!crate::annotations::collapsed(
+            &workspace.document.annotations,
+            &one.record_path,
+            false,
+        ));
         assert!(!workspace.can_move(&root, Move::Up));
         assert!(!workspace.close(&root));
 
