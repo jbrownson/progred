@@ -14,6 +14,8 @@ mod history;
 mod hover;
 mod identity;
 #[cfg(target_os = "macos")]
+mod macos_surface;
+#[cfg(target_os = "macos")]
 mod macos_menu;
 mod menu;
 mod model;
@@ -441,6 +443,14 @@ impl ApplicationHandler<UserEvent> for App {
         #[cfg(not(target_arch = "wasm32"))]
         {
         let size = window.inner_size();
+        #[cfg(target_os = "macos")]
+        let surface_future = self.context.create_render_surface(
+            macos_surface::create(&self.context.instance, &window),
+            size.width,
+            size.height,
+            wgpu::PresentMode::AutoVsync,
+        );
+        #[cfg(not(target_os = "macos"))]
         let surface_future = self.context.create_surface(
             window.clone(),
             size.width,
@@ -748,13 +758,6 @@ impl ApplicationHandler<UserEvent> for App {
                 self.request_discard(event_loop, AfterDiscard::Quit);
             }
 
-            // KNOWN ISSUE: a live drag-resize can still glitch on macOS
-            // (the compositor stretches a stale frame mid-drag). Not
-            // ours — vello's own examples show it. Rendering the new
-            // size synchronously inside the resize event narrows the
-            // stale window; the real fix is below wgpu (CAMetalLayer
-            // `presentsWithTransaction` / a synchronized drawable
-            // commit). Revisit in a lower layer.
             WindowEvent::Resized(size) => {
                 let valid = size.width != 0 && size.height != 0;
                 #[cfg(not(target_arch = "wasm32"))]
