@@ -54,6 +54,7 @@
     "gradient_end": abbfd273a978cb520a145eb65568f224,
     "gradient_offset": f348e826a277875d63e7a0197730f036,
     "gradient_start": c68a36ea81944cdbc8e7897ffda5a36c,
+    "grap": 315ca8459cfc64a210d518da1cad79b9,
     "half_width": be2613d7fe73e7f6c393a2f08cf2ae02,
     "height": cc32dd050a9351804e7a704b4d59e7ac,
     "index": 15db24ee6ff0354d94c0628fc412d64f,
@@ -91,6 +92,8 @@
     "offset": dfd07a562aafe45ae556fea89958a59e,
     "operand": 50a20d15e4ae56be51b882de9d58c676,
     "paint": cb04728f5e6a1d93a6790238b5f1ce4d,
+    "pane_left": dc3a1b9a7fb4bc348760160e3b365bca,
+    "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "path": fbcf1931c6e050d62c4caf5cccba2ce8,
     "path_elements": fd52747f31d0a82f9926e99331c69368,
@@ -99,6 +102,8 @@
     "picture": 69500824d5b442523ec3fbad07d3ec06,
     "prepend": 06f34b889ba63141b4b62f02d8d49aa9,
     "program": bdf607810b274ad5b02bd409aef34b6a,
+    "projection": 873503e2e37a1722a0dd21399be9ee7f,
+    "projection_value": 84d3ba81fd2a52ea37478f4a868106f4,
     "quote": 7f81d4812ceb33d4222e9e5cb9c82497,
     "radius": 6423c35e07d7a4ff536127d1f1d8eb53,
     "random_between": e8a99ada91800bca33709da0db80c29f,
@@ -1555,20 +1560,18 @@
     },
     picture: {
       name: "picture",
-      drawing: {
-        descent: {
-          f64: 0x0000000000002440,
-        },
-        fuel: {
-          f64: 0x0000000080843e41,
-        },
-        ascent: {
-          f64: 0x0000000000a07e40,
-        },
-        program: tree,
-        width: {
-          f64: 0x0000000000407f40,
-        },
+      descent: {
+        f64: 0x0000000000002440,
+      },
+      fuel: {
+        f64: 0x0000000080843e41,
+      },
+      ascent: {
+        f64: 0x0000000000a07e40,
+      },
+      program: tree,
+      width: {
+        f64: 0x0000000000407f40,
       },
     },
     random_scale: {
@@ -1851,14 +1854,24 @@
       name: "y1",
     },
   },
-  "root": [
-    picture,
-    tree,
-    scene,
-    mountain,
-    branches,
-    blossoms,
-    tween,
-    lerp,
-  ],
+  "root": {
+    grap: [
+      picture,
+      tree,
+      scene,
+      mountain,
+      branches,
+      blossoms,
+      tween,
+      lerp,
+    ],
+    panes: {
+      pane_left: [
+        {
+          projection_value: picture,
+          projection: drawing,
+        },
+      ],
+    },
+  },
 }

@@ -67,6 +67,20 @@ provenance has no editable document location and may attribute interaction to
 the stored expression which produced it. Source/editability and
 projection choice remain separate inputs.
 
+A GID projection function has one consistent interface:
+
+```text
+projection({value: source}) -> projected-value
+```
+
+The callable may be Grap-defined or registered in Rust. Its result re-enters
+the same normal projection at a transient, read-only root; returning an
+absent-classified value declines and leaves the stored source under the normal
+editable projection. Raw never invokes the function. Document-declared panes
+use this interface rather than defining a second presentation protocol. The
+built-in `drawing` function is one implementation: it wraps its argument in
+the ordinary drawing data form consumed by the layout library.
+
 A partial returns a `Layout<World, Hover>`: boxes, paint-parametric Puri
 leaves (`Text` and `Drawing`), the stock host `LineEdit` control, generic hover
 claims, and event wrappers. A generic event wrapper holds a Grap

@@ -234,7 +234,7 @@ fn place_with_annotations(
     width: f64,
     pointer: Option<Point>,
     viewport: Option<Rect>,
-    root: Option<(&[Step], Option<&Value>)>,
+    root: Option<(&[Step], Option<&Value>, Option<&Value>)>,
 ) -> (Bench, Extent) {
     let stack = crate::stack::load::<World>();
     let sources = Sources {
@@ -267,7 +267,8 @@ fn place_with_annotations(
     // widths are where accidental exponentials have surfaced twice.
     // Numbers only, no assert (user call).
     let start = std::time::Instant::now();
-    let (root_path, root) = root.unwrap_or((&[], sources.root()));
+    let (root_path, root, root_projection) =
+        root.unwrap_or((&[], sources.root(), None));
     let node = project::<World, Bench>(
         ProjectDescription {
             sources,
@@ -278,6 +279,7 @@ fn place_with_annotations(
             raw: false,
             styles: &styles,
             width: width - 48.0,
+            root_projection,
             projection: Some(&stack.projection),
             foreign: &stack.foreign,
         },
@@ -348,19 +350,13 @@ fn svg_bench_renders_the_sample_projection() {
 fn iop_tree_projects_through_grap_into_puri_ink() {
     let (doc, _) = crate::gid_text::parse(include_str!("../../../examples/iop-tree.gid"))
         .expect("the IoP tree demo parses");
-    let picture = CellId::from_u128(0x69500824d5b442523ec3fbad07d3ec06);
-    let position = doc
-        .root
-        .as_ref()
-        .and_then(Value::as_list)
-        .and_then(|items| {
-            items
-                .iter()
-                .find(|(_, value)| value.as_cell() == Some(picture))
-                .map(|(position, _)| position.clone())
-        })
-        .expect("picture is reachable from root");
-    let path = vec![Step::Element(position), Step::Follow];
+    let declaration = crate::workspace::declarations(doc.root.as_ref())
+        .into_iter()
+        .next()
+        .expect("the picture is declared as a pane");
+    let root = doc.root.as_ref().unwrap();
+    let value = crate::spine::get(root, &declaration.value_path);
+    let projection = crate::spine::get(root, &declaration.projection_path);
     let (bench, extent) = place_with_annotations(
         &doc,
         None,
@@ -368,7 +364,11 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
         1400.0,
         None,
         None,
-        Some((&path, doc.cells.value(picture))),
+        Some((
+            &declaration.value_path,
+            value,
+            projection,
+        )),
     );
     assert!(extent.width >= 500.0);
     assert!(bench.list.0.iter().any(|command| matches!(
@@ -469,6 +469,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             raw: false,
             styles: &styles,
             width: 852.0,
+            root_projection: None,
             projection: Some(&stack.projection),
             foreign: &stack.foreign,
         },
@@ -570,6 +571,7 @@ fn sample_text_line_click_mounts_its_own_editor() {
             raw: false,
             styles: &styles,
             width: 852.0,
+            root_projection: None,
             projection: Some(&stack.projection),
             foreign: &stack.foreign,
         },

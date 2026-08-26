@@ -2,6 +2,7 @@
 
 use crate::hover::Hover;
 use crate::projection::Projection;
+use crate::workspace;
 use gid::Cells;
 use progred_libraries::{
     Library, absent, color, control, f64, geometry, grap as grap_library, isa, layout, line_edit,
@@ -29,7 +30,7 @@ pub fn load<World>() -> Stack<World> {
     let foreign = library.functions.clone();
     let projection = Projection::new(library.projections);
     Stack {
-        library: library.cells,
+        library: library.cells.merged(workspace::cells()),
         foreign,
         projection,
     }

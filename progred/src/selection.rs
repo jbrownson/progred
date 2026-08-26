@@ -676,6 +676,7 @@ pub(crate) fn collapse_default(sources: &Sources, path: &[Step]) -> Option<bool>
             .any(|ancestor| ancestor == cell)
     });
     collapse_default_for_value(sources, value, in_cycle)
+        .map(|default| default || workspace::is_declaration_path(path))
 }
 
 /// The collapse class of an already-resolved value. Projection has

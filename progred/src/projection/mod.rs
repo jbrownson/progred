@@ -27,7 +27,9 @@ use crate::selection::{
 };
 use crate::sources::Sources;
 use crate::styles::Styles;
-use progred_libraries::{f64 as f64_convention, layout as layout_data, text};
+use progred_libraries::{
+    absent, f64 as f64_convention, layout as layout_data, presentation, text,
+};
 mod location;
 mod drawing;
 use gid::{CellId, Path, Step, Value};
@@ -2131,8 +2133,30 @@ pub struct ProjectDescription<'a, World> {
     pub raw: bool,
     pub styles: &'a Styles,
     pub width: f64,
+    /// An ordinary Grap callable placed in front of the normal
+    /// projection for this root. It receives the root under the
+    /// conventional `value` argument; an absent result falls through.
+    pub root_projection: Option<&'a Value>,
     pub projection: Option<&'a Projection<World>>,
     pub foreign: &'a grap::ForeignFunctions,
+}
+
+fn projection_is_absent(sources: &Sources<'_>, value: &Value) -> bool {
+    if absent::is_absent(value) {
+        return true;
+    }
+    let mut cell = value.as_cell();
+    let mut seen = HashSet::new();
+    while let Some(current) = cell.filter(|current| seen.insert(*current)) {
+        let Some(value) = sources.value(current) else {
+            return false;
+        };
+        if absent::is_absent(value) {
+            return true;
+        }
+        cell = value.as_cell();
+    }
+    false
 }
 
 pub fn project<
@@ -2152,6 +2176,7 @@ pub fn project<
         raw,
         styles,
         width,
+        root_projection,
         projection,
         foreign,
     } = description;
@@ -2179,16 +2204,39 @@ pub fn project<
         traversal.cells.insert(cell);
         traversal.enclosing = Some((cell, root_path.len()));
     }
-    let layout = prepare_location(
-        &cx,
-        projection,
-        tcx,
-        root_path,
-        &traversal,
-        Location::Root(root),
-        &hooks,
-        &mut build,
-    );
+    let projected = root_projection.zip(root).map(|(function, root)| {
+        grap::apply(
+            function,
+            [(presentation::vocabulary::VALUE, root.clone())],
+            |cell| sources.value(cell).cloned(),
+            foreign,
+            grap::DEFAULT_FUEL,
+        )
+    });
+    let layout = match projected
+        .filter(|evaluation| !projection_is_absent(&sources, &evaluation.result))
+    {
+        Some(evaluation) => prepare_transient_root(
+            &cx,
+            projection,
+            tcx,
+            root_path,
+            evaluation.result,
+            evaluation.remaining_fuel,
+            &hooks,
+            &mut build,
+        ),
+        None => prepare_location(
+            &cx,
+            projection,
+            tcx,
+            root_path,
+            &traversal,
+            Location::Root(root),
+            &hooks,
+            &mut build,
+        ),
+    };
     resolve_choices(
         ChoiceGraph {
             root: layout,
@@ -2572,6 +2620,7 @@ fn present_layout<C: 'static>(
         .as_cell()
         .is_some_and(|cell| ancestors.cells.contains(&cell));
     if crate::selection::collapse_default_for_value(&cx.sources, value, in_cycle)
+        .map(|default| default || crate::workspace::is_declaration_path(path))
         .is_some_and(|default| crate::annotations::collapsed(cx.annotations, path, default))
         && let Some(collapsed) = structure::collapsed_layout(cx, path, value, hooks)
     {

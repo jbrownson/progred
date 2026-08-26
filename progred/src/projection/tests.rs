@@ -3,7 +3,7 @@ use crate::annotations::Annotations;
 use crate::selection::payload as selection_payload;
 use crate::hover::hover_secondary;
 use gid::Position;
-use progred_libraries::{f64, name, text};
+use progred_libraries::{absent, f64, name, text};
 use ui_events::keyboard::{KeyState, Modifiers};
 use ui_events::pointer::{
     PointerButton, PointerButtonEvent, PointerId, PointerInfo, PointerScrollEvent, PointerState,
@@ -46,6 +46,21 @@ fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
     Sources { doc, library }
 }
 
+#[test]
+fn a_projection_absence_may_be_returned_through_a_cell() {
+    let absent_cell = gid::new_cell_id();
+    let mut library = Cells::new();
+    library.set_value(absent_cell, absent::value());
+    let doc = Document {
+        root: None,
+        cells: Cells::new(),
+    };
+    assert!(projection_is_absent(
+        &src(&doc, &library),
+        &Value::from(absent_cell),
+    ));
+}
+
 fn make_selection(doc: &Document, library: &Cells, path: Path) -> Selection {
     Selection::edge(&src(doc, library), path)
 }
@@ -81,6 +96,7 @@ fn make_projected_selection(doc: &Document, library: &Cells, path: Path) -> Sele
             raw: false,
             styles: &styles,
             width: 500.0,
+            root_projection: None,
             projection: Some(&stack.projection),
             foreign: &stack.foreign,
         },
@@ -1296,6 +1312,7 @@ fn partials_receive_selection_and_annotations_positionally() {
                 raw: false,
                 styles: &styles,
                 width: 500.0,
+                root_projection: None,
                 projection: Some(&projection),
                 foreign: &foreign,
             },
@@ -1403,6 +1420,7 @@ fn a_projection_defined_as_data_realizes() {
             raw: false,
             styles: &styles,
             width: 500.0,
+            root_projection: None,
             projection: Some(&projection),
             foreign: &foreign,
         },
@@ -1477,6 +1495,7 @@ fn a_data_event_realizes_the_apply_hook() {
             raw: false,
             styles: &styles,
             width: 500.0,
+            root_projection: None,
             projection: Some(&projection),
             foreign: &foreign,
         },

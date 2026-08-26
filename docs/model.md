@@ -2,6 +2,32 @@
 
 Date: 2026-07-03
 
+## Document-Declared Panes (2026-08-26)
+
+A document may declare auxiliary views through a direct root convention:
+
+```text
+{
+  panes: {
+    left:  [{value: ..., projection: ...}],
+    right: [{value: ..., projection: ...}],
+  },
+  ...domain roots...
+}
+```
+
+Only this direct, coherent shape affects the workspace; a `panes` field with
+another shape and identical records elsewhere remain ordinary data. The lists
+determine side and order. Their `value` fields remain visible, editable source
+and default closed in the document view. Deleting one closes its pane. The
+document still has one arbitrary GID root and no required `program`, `main`, or
+`body` field.
+
+Pane identity, projection mode, folds, scroll, and requested sizes remain
+editor-session state. A surviving declaration retains that state across
+frames. Manually opened panes remain session-only and follow declared panes in
+their columns.
+
 ## UI State As Data (Direction, 2026-08-19)
 
 Editor state migrates into GID Values so projections read and write it

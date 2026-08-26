@@ -11,6 +11,15 @@ use progred_display::{
     dim, faced, hug, record, row, shared, transient,
 };
 
+pub mod vocabulary {
+    use gid::CellId;
+
+    /// Root-level source whose contents belong to the Grap domain.
+    /// Unlike the evaluator-adjacent `GRAP` projection request, this
+    /// field is library vocabulary and requests no evaluation.
+    pub const SOURCE: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
+}
+
 fn short_id(cell: CellId) -> String {
     let hex = cell.simple().to_string();
     format!("…{}", &hex[hex.len() - 5..])
@@ -38,7 +47,7 @@ fn shallow_cell<World, Hover: Clone>(
     ))
 }
 
-pub(crate) fn shallow_at<World, Hover: Clone>(
+pub fn shallow_at<World, Hover: Clone>(
     steps: impl Into<Vec<Step>>,
     value: &Value,
 ) -> Layout<World, Hover> {
@@ -245,6 +254,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (grap_runtime::vocabulary::EVALUATE, "evaluate"),
         (grap_runtime::vocabulary::EXPRESSION, "expression"),
         (grap_runtime::vocabulary::GRAP, "grap"),
+        (vocabulary::SOURCE, "grap"),
     ] {
         cells.set_value(cell, name::record(value, []));
     }

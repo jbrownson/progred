@@ -68,13 +68,39 @@ pub(super) fn collapsed_layout<World: 'static>(
         }
         _ => return None,
     };
+    let summary = pane_declaration_summary(cx, path, value).unwrap_or_else(|| dim("…"));
     Some(selectable(
-        bracket(delim, toggle(dim("…"), path, hooks)),
+        bracket(delim, toggle(summary, path, hooks)),
         path,
         value,
         hooks,
         true,
     ))
+}
+
+fn pane_declaration_summary<World>(
+    cx: &Cx,
+    path: &[Step],
+    value: &Value,
+) -> Option<View<World>> {
+    let side = match crate::workspace::declaration_side(path)? {
+        crate::workspace::Side::Left => "left pane",
+        crate::workspace::Side::Right => "right pane",
+    };
+    let fields = value.as_record()?;
+    let subject = fields.get(&progred_libraries::presentation::vocabulary::VALUE)?;
+    let subject = subject
+        .as_cell()
+        .and_then(|cell| cx.name(cell))
+        .map(|name| format!(" {name}"))
+        .unwrap_or_default();
+    let projection = fields
+        .get(&crate::workspace::vocabulary::PROJECTION)
+        .and_then(Value::as_cell)
+        .and_then(|cell| cx.name(cell))
+        .map(|name| format!(" as {name}"))
+        .unwrap_or_default();
+    Some(dim(format!("{side}{subject}{projection}")))
 }
 
 fn cell_layout<World: 'static>(
@@ -203,9 +229,27 @@ fn record_layout<World: 'static>(
             false,
         );
     }
+    let pane_declaration = !cx.raw && crate::workspace::is_declaration_path(path);
     let children: Vec<View<World>> = items
         .iter()
-        .map(|(key, _)| shared(descend(Step::Key(*key))))
+        .map(|(key, _)| {
+            let child = if pane_declaration
+                && *key == crate::workspace::vocabulary::PROJECTION
+            {
+                fields.get(key).map_or_else(
+                    || descend(Step::Key(*key)),
+                    |value| {
+                        progred_libraries::grap::shallow_at(
+                            [Step::Key(*key)],
+                            value,
+                        )
+                    },
+                )
+            } else {
+                descend(Step::Key(*key))
+            };
+            shared(child)
+        })
         .collect();
     let mut flat = Vec::new();
     for (index, (key, present)) in items.iter().enumerate() {

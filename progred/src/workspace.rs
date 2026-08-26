@@ -1,14 +1,42 @@
 //! Editor-owned views over one document. The document stays in the
-//! center; cell panes form independently sized columns on either side.
-//! Everything here is process state, never GID or document history.
+//! center; panes form independently sized columns on either side.
+//! A root convention may declare pane membership, side, order, and a
+//! presentation function; view mode, annotations, scroll, and live
+//! sizing remain process state.
 
 use crate::annotations::Annotations;
-use gid::{CellId, Path};
+use gid::{CellId, Cells, Path, Step, Value};
+use progred_libraries::{name, presentation};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use kurbo::{Rect, Size, Vec2};
 
 const DEFAULT_SIDE_WIDTH: f64 = 1.0 / 3.0;
+
+pub mod vocabulary {
+    use gid::CellId;
+
+    pub const PANES: CellId = CellId::from_u128(0xf30d400a4321a4d44d1628a8adc5a84d);
+    pub const LEFT: CellId = CellId::from_u128(0xdc3a1b9a7fb4bc348760160e3b365bca);
+    pub const RIGHT: CellId = CellId::from_u128(0xf13a5c1c4471c00178575a0e876768f8);
+    pub const PROJECTION: CellId = CellId::from_u128(0x873503e2e37a1722a0dd21399be9ee7f);
+}
+
+/// The editor-owned vocabulary contributed to the ordinary source
+/// environment. Pane behavior remains root-sensitive host behavior;
+/// these cells only give its document fields readable names.
+pub fn cells() -> Cells {
+    let mut cells = Cells::new();
+    for (cell, spelling) in [
+        (vocabulary::PANES, "panes"),
+        (vocabulary::LEFT, "left"),
+        (vocabulary::RIGHT, "right"),
+        (vocabulary::PROJECTION, "projection"),
+    ] {
+        cells.set_value(cell, name::record(spelling, []));
+    }
+    cells
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Projection {
@@ -29,6 +57,14 @@ pub enum Target {
     /// editing reaches this cell. The Rc root distinguishes duplicate
     /// views of that occurrence.
     Cell { cell: CellId, anchor: Path },
+    /// A pane declared by an occurrence beneath the document root.
+    /// Its source path is both its editable root and its durable
+    /// identity within this document; the surrounding [`Root`] keeps
+    /// the view's process-local identity stable while it remains.
+    Declared {
+        value_path: Path,
+        projection_path: Path,
+    },
 }
 
 /// A view's transient identity and immutable data root. Equality is
@@ -43,6 +79,13 @@ impl Root {
 
     pub fn cell(cell: CellId, anchor: Path) -> Self {
         Self(Rc::new(Target::Cell { cell, anchor }))
+    }
+
+    fn declared(value_path: Path, projection_path: Path) -> Self {
+        Self(Rc::new(Target::Declared {
+            value_path,
+            projection_path,
+        }))
     }
 
     pub fn target(&self) -> &Target {
@@ -145,6 +188,87 @@ pub struct Workspace {
     dragging: Option<Drag>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Declaration {
+    pub side: Side,
+    pub value_path: Path,
+    /// Resolves to an optional ordinary Grap callable applied to the
+    /// pane's source value. An absent result falls through to the
+    /// ordinary projection of that source.
+    pub projection_path: Path,
+}
+
+/// Read pane declarations only from the document root. No recursive
+/// search means an identical record deeper in user data stays data.
+pub fn declarations(root: Option<&Value>) -> Vec<Declaration> {
+    let Some(panes) = root
+        .and_then(Value::as_record)
+        .and_then(|fields| fields.get(&vocabulary::PANES))
+        .and_then(Value::as_record)
+    else {
+        return Vec::new();
+    };
+    [
+        (vocabulary::LEFT, Side::Left),
+        (vocabulary::RIGHT, Side::Right),
+    ]
+    .into_iter()
+    .flat_map(|(field, side)| {
+        panes
+            .get(&field)
+            .and_then(Value::as_list)
+            .into_iter()
+            .flat_map(move |declarations| {
+                declarations.iter().filter_map(move |(position, value)| {
+                    value
+                        .as_record()?
+                        .get(&presentation::vocabulary::VALUE)?;
+                    let parent = vec![
+                        Step::Key(vocabulary::PANES),
+                        Step::Key(field),
+                        Step::Element(position.clone()),
+                    ];
+                    Some(Declaration {
+                        side,
+                        value_path: parent
+                            .iter()
+                            .cloned()
+                            .chain([Step::Key(presentation::vocabulary::VALUE)])
+                            .collect(),
+                        projection_path: parent
+                            .into_iter()
+                            .chain([Step::Key(vocabulary::PROJECTION)])
+                            .collect(),
+                    })
+                })
+            })
+    })
+    .collect()
+}
+
+pub fn declaration_side(path: &[Step]) -> Option<Side> {
+    match path {
+        [Step::Key(panes), Step::Key(side), Step::Element(_)]
+            if *panes == vocabulary::PANES && *side == vocabulary::LEFT =>
+        {
+            Some(Side::Left)
+        }
+        [Step::Key(panes), Step::Key(side), Step::Element(_)]
+            if *panes == vocabulary::PANES && *side == vocabulary::RIGHT =>
+        {
+            Some(Side::Right)
+        }
+        _ => None,
+    }
+}
+
+/// Pane declaration records are the direct elements of the root's
+/// left and right `panes` lists. Their source projection defaults
+/// closed, while the ordinary annotation override can open them.
+pub fn is_declaration_path(path: &[Step]) -> bool {
+    declaration_side(path).is_some()
+}
+
 #[derive(Clone)]
 struct Drag {
     divider: Divider,
@@ -228,6 +352,71 @@ impl Workspace {
         root
     }
 
+    /// Reconcile the document-declared panes with the live workspace.
+    /// Declaration paths determine side and order; surviving panes
+    /// retain their process identity, annotations, scroll, projection,
+    /// and requested height. Manually opened session panes remain after
+    /// the declared panes in their respective columns.
+    pub fn sync_declared(&mut self, declarations: &[Declaration]) {
+        let mut declared = Vec::new();
+        let mut session_left = Vec::new();
+        let mut session_right = Vec::new();
+        for (side, pane) in std::mem::take(&mut self.left.panes)
+            .into_iter()
+            .map(|pane| (Side::Left, pane))
+            .chain(
+                std::mem::take(&mut self.right.panes)
+                    .into_iter()
+                    .map(|pane| (Side::Right, pane)),
+            )
+        {
+            if matches!(pane.view.root.target(), Target::Declared { .. }) {
+                declared.push(pane);
+            } else {
+                match side {
+                    Side::Left => session_left.push(pane),
+                    Side::Right => session_right.push(pane),
+                }
+            }
+        }
+
+        let mut left = Vec::new();
+        let mut right = Vec::new();
+        for declaration in declarations {
+            let existing = declared.iter().position(|pane| {
+                matches!(
+                    pane.view.root.target(),
+                    Target::Declared { value_path, .. }
+                        if *value_path == declaration.value_path
+                )
+            });
+            let pane = existing
+                .map(|index| declared.remove(index))
+                .unwrap_or_else(|| Pane {
+                    view: View::new(Root::declared(
+                        declaration.value_path.clone(),
+                        declaration.projection_path.clone(),
+                    )),
+                    height: 1.0,
+                });
+            match declaration.side {
+                Side::Left => left.push(pane),
+                Side::Right => right.push(pane),
+            }
+        }
+        left.extend(session_left);
+        right.extend(session_right);
+        normalize(&mut left);
+        normalize(&mut right);
+        self.left.panes = left;
+        self.right.panes = right;
+        if self.dragging.as_ref().is_some_and(|drag| {
+            !self.divider_is_live(&drag.divider)
+        }) {
+            self.dragging = None;
+        }
+    }
+
     pub fn side(&self, root: &Root) -> Option<Side> {
         self.left
             .panes
@@ -244,6 +433,9 @@ impl Workspace {
     }
 
     pub fn close(&mut self, root: &Root) -> bool {
+        if matches!(root.target(), Target::Declared { .. }) {
+            return false;
+        }
         let Some(side) = self.side(root) else {
             return false;
         };
@@ -265,6 +457,9 @@ impl Workspace {
     }
 
     pub fn can_move(&self, root: &Root, direction: Move) -> bool {
+        if matches!(root.target(), Target::Declared { .. }) {
+            return false;
+        }
         let Some(side) = self.side(root) else {
             return false;
         };
@@ -514,6 +709,23 @@ impl Workspace {
             Side::Right => &mut self.right,
         }
     }
+
+    fn divider_is_live(&self, divider: &Divider) -> bool {
+        match divider {
+            Divider::Columns(Side::Left) => !self.left.panes.is_empty(),
+            Divider::Columns(Side::Right) => !self.right.panes.is_empty(),
+            Divider::Panes {
+                side,
+                before,
+                after,
+            } => {
+                let panes = &self.column(*side).panes;
+                panes
+                    .windows(2)
+                    .any(|pair| pair[0].view.root == *before && pair[1].view.root == *after)
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -695,6 +907,82 @@ mod tests {
         assert!(!workspace.close(&document));
         assert!(workspace.close(&one));
         assert!(workspace.view(&document).is_some());
+    }
+
+    #[test]
+    fn root_pane_declarations_are_paths_to_their_contents() {
+        let root = Value::record([(
+            vocabulary::PANES,
+            Value::record([
+                (
+                    vocabulary::LEFT,
+                    Value::list([Value::record([
+                        (
+                            presentation::vocabulary::VALUE,
+                            Value::from(CellId::from_u128(1)),
+                        ),
+                        (
+                            vocabulary::PROJECTION,
+                            Value::from(CellId::from_u128(9)),
+                        ),
+                    ])]),
+                ),
+                (
+                    vocabulary::RIGHT,
+                    Value::list([Value::record([(
+                        presentation::vocabulary::VALUE,
+                        Value::from(CellId::from_u128(2)),
+                    )])]),
+                ),
+            ]),
+        )]);
+        let declarations = declarations(Some(&root));
+        assert_eq!(declarations.len(), 2);
+        assert_eq!(declarations[0].side, Side::Left);
+        assert_eq!(declarations[1].side, Side::Right);
+        assert_eq!(
+            declarations[0].projection_path.last(),
+            Some(&Step::Key(vocabulary::PROJECTION))
+        );
+        assert_eq!(
+            declarations[0].value_path.first(),
+            Some(&Step::Key(vocabulary::PANES))
+        );
+        assert_eq!(
+            declarations[0].value_path.last(),
+            Some(&Step::Key(presentation::vocabulary::VALUE))
+        );
+        assert!(is_declaration_path(&declarations[0].value_path[..3]));
+    }
+
+    #[test]
+    fn declared_panes_reconcile_without_losing_view_state() {
+        let one = Declaration {
+            side: Side::Left,
+            value_path: vec![Step::Key(CellId::from_u128(1))],
+            projection_path: vec![Step::Key(CellId::from_u128(9))],
+        };
+        let two = Declaration {
+            side: Side::Left,
+            value_path: vec![Step::Key(CellId::from_u128(2))],
+            projection_path: vec![Step::Key(CellId::from_u128(9))],
+        };
+        let mut workspace = Workspace::default();
+        workspace.sync_declared(&[one.clone(), two.clone()]);
+        let root = workspace.left.panes[0].view.root.clone();
+        workspace.left.panes[0].view.scroll = Vec2::new(4.0, 9.0);
+        workspace.left.panes[0].view.projection = Projection::Raw;
+
+        workspace.sync_declared(&[two, one]);
+        let moved = &workspace.left.panes[1].view;
+        assert_eq!(moved.root, root);
+        assert_eq!(moved.scroll, Vec2::new(4.0, 9.0));
+        assert_eq!(moved.projection, Projection::Raw);
+        assert!(!workspace.can_move(&root, Move::Up));
+        assert!(!workspace.close(&root));
+
+        workspace.sync_declared(&[]);
+        assert!(workspace.left.panes.is_empty());
     }
 
     #[test]

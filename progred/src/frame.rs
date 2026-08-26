@@ -433,6 +433,13 @@ impl App {
     /// the settled geometry, resolve hover, mint dispatch. Ink comes
     /// back deferred; the caller renders it or drops it.
     pub(crate) fn build_frame(&mut self, scale: f64, viewport: Size) -> Frame {
+        let declarations = workspace::declarations(self.model.doc.root.as_ref());
+        self.model.workspace.sync_declared(&declarations);
+        if self.model.selection.as_ref().is_some_and(|selection| {
+            self.model.workspace.view(selection.root()).is_none()
+        }) {
+            self.model.selection = None;
+        }
         let view = self.view_flags();
         let debug_geometry = view.debug_geometry;
         let availability = self.menu_availability();
@@ -647,15 +654,26 @@ fn project_workspace_view(
     let body_width = (size.width - 2.0 * margin).max(0.0);
     let cell_root;
     let root_path;
+    let root_projection;
     let root = match view.root.target() {
         workspace::Target::Document => {
             root_path = Vec::new();
+            root_projection = None;
             sources.root()
         }
         workspace::Target::Cell { cell, anchor } => {
             root_path = anchor.clone();
+            root_projection = None;
             cell_root = gid::Value::Cell(*cell);
             Some(&cell_root)
+        }
+        workspace::Target::Declared {
+            value_path,
+            projection_path,
+        } => {
+            root_path = value_path.clone();
+            root_projection = sources.resolve(projection_path);
+            sources.resolve(value_path)
         }
     };
     let raw = view.projection == workspace::Projection::Raw;
@@ -672,6 +690,7 @@ fn project_workspace_view(
             raw,
             styles,
             width: body_width,
+            root_projection: if raw { None } else { root_projection },
             projection: (!raw).then_some(&stack.projection),
             foreign: &stack.foreign,
         },

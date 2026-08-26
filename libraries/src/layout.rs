@@ -8,8 +8,9 @@
 //! Decoding is resilient the projection way: any junk node decodes to
 //! `None`, and the whole layout falls through to the next partial.
 //!
-use crate::{Library, color, f64 as f64_convention, name, text};
+use crate::{Library, color, f64 as f64_convention, name, presentation, text};
 use gid::{CellId, Step, Value};
+use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment,
     alternatives, block_hover, bracket, leaf, on_activate, on_event, on_hover,
@@ -156,6 +157,23 @@ pub mod vocabulary {
 
 fn node(key: CellId, content: Value) -> Value {
     Value::record([(key, content)])
+}
+
+/// `drawing` is both the display-language marker and its ordinary
+/// unary constructor/projection function. Calling it with `value`
+/// produces the same data form that can also be written literally.
+fn drawing_projection(
+    context: &mut grap_runtime::Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    let Some(value) = context.field(call, presentation::vocabulary::VALUE) else {
+        return Ok(context.missing_argument(presentation::vocabulary::VALUE));
+    };
+    Ok(node(
+        vocabulary::DRAWING,
+        context.eval(value, environment)?,
+    ))
 }
 
 fn number(value: f64) -> Value {
@@ -979,8 +997,11 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     }
     Library {
         cells,
+        functions: ForeignFunctions::default().register(
+            vocabulary::DRAWING,
+            ForeignFunction::new(drawing_projection),
+        ),
         projections: vec![display::<World, Hover>],
-        ..Library::default()
     }
 }
 
@@ -992,6 +1013,23 @@ mod tests {
     fn decoded(value: &Value) -> Option<Layout<(), ()>> {
         let select: ActionHandler<()> = Rc::new(|_| false);
         decode(value, &select, &())
+    }
+
+    #[test]
+    fn drawing_is_an_ordinary_projection_function() {
+        let library = library::<(), ()>();
+        let configuration = Value::record([(vocabulary::WIDTH, number(12.0))]);
+        let evaluation = grap_runtime::apply(
+            &Value::from(vocabulary::DRAWING),
+            [(presentation::vocabulary::VALUE, configuration.clone())],
+            |cell| library.cells.value(cell).cloned(),
+            &library.functions,
+            20,
+        );
+        assert_eq!(
+            evaluation.result,
+            Value::record([(vocabulary::DRAWING, configuration)])
+        );
     }
 
     #[test]
