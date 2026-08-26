@@ -88,6 +88,17 @@ bundle identity gives macOS one stable app container, but the ad-hoc signature
 is for local development only; distribution needs a Developer ID or App Store
 signature and the usual notarization or review workflow.
 
+As of August 2026, Winit 0.30.13 is the latest non-beta release and Progred's
+current version. A sandbox-authorized shell open would need Launch Services to
+deliver `application:openURLs:` rather than passing the path in `argv`, but
+Winit 0.30 owns the application delegate and panics if it is replaced. This is
+tracked in [#4015](https://github.com/rust-windowing/winit/issues/4015) and the
+still-open documentation bug
+[#4458](https://github.com/rust-windowing/winit/issues/4458). Winit 0.31 beta
+removes its custom macOS delegate so applications can install their own. Revisit
+shell document opening when 0.31 is stable or an upgrade is otherwise useful;
+do not patch the Objective-C runtime around 0.30 for this convenience.
+
 `sandbox-exec` is a deprecated macOS facility, so this is a useful additional
 build-time boundary rather than a permanent security architecture. The signed
 app adds the supported runtime boundary; a VM remains stronger isolation for
