@@ -99,7 +99,6 @@
     "path_elements": fd52747f31d0a82f9926e99331c69368,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
-    "picture": 69500824d5b442523ec3fbad07d3ec06,
     "prepend": 06f34b889ba63141b4b62f02d8d49aa9,
     "program": bdf607810b274ad5b02bd409aef34b6a,
     "projection": 873503e2e37a1722a0dd21399be9ee7f,
@@ -117,7 +116,6 @@
     "right_angle": 74d076eff44a24482f9f06b433664388,
     "rotate": 2500213d415930c6b40f15d633cc04a4,
     "scaled_length": b6de540458c5b666fee2f2f8d5eaaacd,
-    "scene": a9779ccfb039a7197dadae4d8115a971,
     "segment": 816321c945094d7839a8754d191b1ce1,
     "segment_count": 19a4df8c5983adbf4fdb3b206d6fdf69,
     "segment_index": e1cdb8af848f7be1babc5eb79af4e21e,
@@ -136,7 +134,8 @@
     "tip_y": d843ffc3a66afaa9d8b21bd7597e6007,
     "transform": 0c69b749e5d076609a6642a20b736fb4,
     "translate": b9c300206cc1c193cc801f4f058f2647,
-    "tree": 7efda3670f4d2b402d5b02216f2a03d4,
+    "tree": a9779ccfb039a7197dadae4d8115a971,
+    "tree_scene": 7e4d12b4f6c05a79ee734b4441972149,
     "true": 04831f9b704935059231eb111770e62e,
     "trunk_length": 2d32fc785aae627f3f5c34f601e9f03c,
     "turn_left": 039dae8299938bd45e7bd27629aae539,
@@ -1558,22 +1557,6 @@
     path_elements: {
       name: "path elements",
     },
-    picture: {
-      name: "picture",
-      descent: {
-        f64: 0x0000000000002440,
-      },
-      fuel: {
-        f64: 0x0000000080843e41,
-      },
-      ascent: {
-        f64: 0x0000000000a07e40,
-      },
-      program: tree,
-      width: {
-        f64: 0x0000000000407f40,
-      },
-    },
     random_scale: {
       name: "random scale",
     },
@@ -1586,8 +1569,86 @@
     scaled_length: {
       name: "scaled length",
     },
-    scene: {
-      name: "scene",
+    segment: {
+      name: "segment",
+    },
+    segment_count: {
+      name: "segment count",
+    },
+    segment_index: {
+      name: "segment index",
+    },
+    sky_bottom: {
+      name: "sky bottom",
+    },
+    sky_top: {
+      name: "sky top",
+    },
+    start: {
+      name: "start",
+    },
+    start_value: {
+      name: "start value",
+    },
+    tip_distance: {
+      name: "tip distance",
+    },
+    tip_x: {
+      name: "tip x",
+    },
+    tip_y: {
+      name: "tip y",
+    },
+    tree: {
+      name: "tree",
+      params: [],
+      body: {
+        blossoms_per_branch: {
+          f64: 0x0000000000003040,
+        },
+        sky_top: {
+          color: "#b4e0fe",
+        },
+        canvas_height: {
+          f64: 0x0000000000407f40,
+        },
+        blossom_colors: [
+          {
+            color: "#f5ceea99",
+          },
+          {
+            color: "#e8d9e499",
+          },
+          {
+            color: "#f7c9f399",
+          },
+          {
+            color: "#ebb4cc99",
+          },
+        ],
+        trunk_length: {
+          f64: 0x0000000000405840,
+        },
+        mountain_back: {
+          color: "#8bb2bb",
+        },
+        mountain_front: {
+          color: "#618087",
+        },
+        function: tree_scene,
+        canvas_width: {
+          f64: 0x0000000000407f40,
+        },
+        branch_length: {
+          f64: 0x0000000000004e40,
+        },
+        sky_bottom: {
+          color: "#d3f8ff",
+        },
+      },
+    },
+    tree_scene: {
+      name: "tree scene",
       params: [
         canvas_width,
         canvas_height,
@@ -1717,81 +1778,6 @@
         ],
       },
     },
-    segment: {
-      name: "segment",
-    },
-    segment_count: {
-      name: "segment count",
-    },
-    segment_index: {
-      name: "segment index",
-    },
-    sky_bottom: {
-      name: "sky bottom",
-    },
-    sky_top: {
-      name: "sky top",
-    },
-    start: {
-      name: "start",
-    },
-    start_value: {
-      name: "start value",
-    },
-    tip_distance: {
-      name: "tip distance",
-    },
-    tip_x: {
-      name: "tip x",
-    },
-    tip_y: {
-      name: "tip y",
-    },
-    tree: {
-      blossoms_per_branch: {
-        f64: 0x0000000000003040,
-      },
-      name: "tree",
-      sky_top: {
-        color: "#b4e0fe",
-      },
-      canvas_height: {
-        f64: 0x0000000000407f40,
-      },
-      blossom_colors: [
-        {
-          color: "#f5ceea99",
-        },
-        {
-          color: "#e8d9e499",
-        },
-        {
-          color: "#f7c9f399",
-        },
-        {
-          color: "#ebb4cc99",
-        },
-      ],
-      trunk_length: {
-        f64: 0x0000000000405840,
-      },
-      mountain_back: {
-        color: "#8bb2bb",
-      },
-      mountain_front: {
-        color: "#618087",
-      },
-      function: scene,
-      canvas_width: {
-        f64: 0x0000000000407f40,
-      },
-      branch_length: {
-        f64: 0x0000000000004e40,
-      },
-      sky_bottom: {
-        color: "#d3f8ff",
-      },
-    },
     trunk_length: {
       name: "trunk length",
     },
@@ -1856,9 +1842,8 @@
   },
   "root": {
     grap: [
-      picture,
       tree,
-      scene,
+      tree_scene,
       mountain,
       branches,
       blossoms,
@@ -1868,7 +1853,23 @@
     panes: {
       pane_left: [
         {
-          projection_value: picture,
+          projection_value: {
+            descent: {
+              f64: 0x0000000000002440,
+            },
+            fuel: {
+              f64: 0x0000000080843e41,
+            },
+            ascent: {
+              f64: 0x0000000000a07e40,
+            },
+            program: {
+              function: tree,
+            },
+            width: {
+              f64: 0x0000000000407f40,
+            },
+          },
           projection: drawing,
         },
       ],

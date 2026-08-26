@@ -73,6 +73,9 @@ fn accelerator(shortcut: menu::Shortcut) -> Accelerator {
             Modifiers::META
         }),
         match shortcut.key {
+            ShortcutKey::Digit1 => Code::Digit1,
+            ShortcutKey::Digit2 => Code::Digit2,
+            ShortcutKey::Digit3 => Code::Digit3,
             ShortcutKey::D => Code::KeyD,
             ShortcutKey::N => Code::KeyN,
             ShortcutKey::O => Code::KeyO,

@@ -1,7 +1,16 @@
-.PHONY: run sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web web serve-web
+.PHONY: run dev sandbox-fetch sandbox-check sandbox-build sandbox-test sandbox-app sandbox-web web serve-web
 
 run: sandbox-app
 	/usr/bin/open -W -n target/sandbox/app/Progred.app
+
+dev:
+	@trap ':' INT; \
+	trap 'exit 0' QUIT TERM HUP; \
+	trap 'pkill -x progred >/dev/null 2>&1 || true' EXIT; \
+	while true; do \
+		pkill -x progred >/dev/null 2>&1 || true; \
+		$(MAKE) run || true; \
+	done
 
 sandbox-fetch:
 	./tools/sandbox-cargo fetch

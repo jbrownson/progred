@@ -72,6 +72,9 @@ impl Shortcut {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShortcutKey {
+    Digit1,
+    Digit2,
+    Digit3,
     D,
     N,
     #[cfg(not(target_arch = "wasm32"))]
@@ -87,6 +90,9 @@ pub enum ShortcutKey {
 impl ShortcutKey {
     pub const fn label(self) -> &'static str {
         match self {
+            Self::Digit1 => "1",
+            Self::Digit2 => "2",
+            Self::Digit3 => "3",
             Self::D => "D",
             Self::N => "N",
             #[cfg(not(target_arch = "wasm32"))]
@@ -166,19 +172,19 @@ const QUIT: Item = Item {
 const EXAMPLE_SAMPLE: Item = Item {
     selection: Selection::ExampleSample,
     label: "Sample",
-    shortcut: None,
+    shortcut: Some(Shortcut::plain(ShortcutKey::Digit1)),
     kind: Kind::Command,
 };
 const EXAMPLE_GRAP: Item = Item {
     selection: Selection::ExampleGrap,
     label: "Grap Demo",
-    shortcut: None,
+    shortcut: Some(Shortcut::plain(ShortcutKey::Digit2)),
     kind: Kind::Command,
 };
 const EXAMPLE_IOP_TREE: Item = Item {
     selection: Selection::ExampleIopTree,
     label: "Inventing on Principle Tree",
-    shortcut: None,
+    shortcut: Some(Shortcut::plain(ShortcutKey::Digit3)),
     kind: Kind::Command,
 };
 const UNDO: Item = Item {
@@ -739,6 +745,22 @@ mod tests {
         assert_eq!(
             shortcut(&key("s", Modifiers::CONTROL | Modifiers::ALT)),
             None
+        );
+    }
+
+    #[test]
+    fn number_shortcuts_open_examples_in_menu_order() {
+        assert_eq!(
+            shortcut(&key("1", Modifiers::CONTROL)),
+            Some(Selection::ExampleSample)
+        );
+        assert_eq!(
+            shortcut(&key("2", Modifiers::CONTROL)),
+            Some(Selection::ExampleGrap)
+        );
+        assert_eq!(
+            shortcut(&key("3", Modifiers::CONTROL)),
+            Some(Selection::ExampleIopTree)
         );
     }
 
