@@ -16,18 +16,23 @@ make sandbox-app
 make sandbox-web
 ```
 
-The usual interactive development command is:
+The usual native development command is:
 
 ```sh
 make run
 ```
 
-It replaces `cargo run --release`: it performs the isolated release build,
-packages and ad-hoc signs `Progred.app`, launches a fresh instance through
-Launch Services with the App Sandbox entitlement, and waits for the app to
-exit. Launch Services does not safely attach the sandboxed GUI process to the
-invoking terminal's standard streams; use macOS logging when diagnostics are
-needed.
+On macOS it replaces `cargo run --release`: it performs the isolated release
+build, packages and ad-hoc signs `Progred.app`, launches a fresh instance
+through Launch Services with the App Sandbox entitlement, and waits for the app
+to exit. Launch Services does not safely attach the sandboxed GUI process to
+the invoking terminal's standard streams; use macOS logging when diagnostics
+are needed.
+
+On Linux, the same target delegates to `tools/run-linux`, which performs an
+ordinary locked Cargo run in `target/native`. This is not sandboxed. The
+checked-in launcher is the deliberate Linux exception to the Cargo tripwire;
+do not reproduce its `RUSTC_WRAPPER` override in ad-hoc commands.
 
 The repository also contains `.cargo/config.toml` as an accidental-use
 tripwire. Ordinary `cargo build`, `check`, `test`, and `run` commands stop at a
@@ -58,14 +63,16 @@ commands run Cargo under `sandbox-exec` with:
   configuration, and a root `.env` file; and
 - write access only beneath `target/sandbox`.
 
-The isolated target directory is deliberate. A compromised native artifact
-must not be left in the ordinary `target` directory for a later unsandboxed
-`cargo run` to execute.
+The isolated macOS target directory is deliberate. A compromised native
+artifact must not be left in the ordinary Cargo target directory for a later
+unsandboxed command to execute. The explicitly unsandboxed Linux launcher uses
+the separate `target/native` directory.
 
 The checked-in Cargo tripwire is defense against mistakes, not a security
 boundary: a process running as the repository owner can override Cargo config
-or edit the repository. Seatbelt (or a VM) is the boundary. In particular, do
-not bypass the tripwire with `RUSTC_WRAPPER=` and then reuse those artifacts.
+or edit the repository. Seatbelt (or a VM) is the boundary. Outside the
+checked-in Linux launcher, do not bypass the tripwire with `RUSTC_WRAPPER=` and
+then reuse those artifacts.
 
 Cargo configuration cannot redirect `cargo run` itself because aliases may not
 replace Cargo's built-in commands. Doing that transparently would require a

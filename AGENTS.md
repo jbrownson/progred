@@ -6,11 +6,11 @@ editor model decisions, and `docs/projections.md` for Grap's GID-
 embedded evaluator and the retained, superseded wasm spike isolated in
 `experiments/rust-wasm-projection`.
 
-## Sandboxed Cargo
+## Cargo
 
 Cargo build scripts and procedural macros execute dependency code. The
 checked-in `.cargo/config.toml` refuses ordinary Cargo builds and updates as an
-accidental-use tripwire. Do not bypass it by clearing `RUSTC_WRAPPER`.
+accidental-use tripwire. Do not bypass it by clearing `RUSTC_WRAPPER` manually.
 
 Use the repository's macOS Seatbelt wrapper, which has its own Cargo home and
 target directory under `target/sandbox`:
@@ -22,11 +22,13 @@ make sandbox-build
 ./tools/sandbox-cargo <cargo command> [arguments...]
 ```
 
-Use `make run` in place of `cargo run --release`. It builds under Seatbelt,
-packages and ad-hoc signs the app with its App Sandbox entitlements, launches a
-fresh instance, and waits for it to exit. Agents still must not launch it; the
-user runs and visually tests the app. See `docs/build-security.md` for the
-boundary and the separate fetch/update commands.
+Use `make run` in place of `cargo run --release`. On macOS it builds under
+Seatbelt, packages and ad-hoc signs the app with its App Sandbox entitlements,
+launches a fresh instance, and waits for it to exit. On Linux the checked-in
+`tools/run-linux` launcher intentionally performs an ordinary locked Cargo run;
+there is no repository-provided Linux sandbox yet. Agents still must not launch
+the app; the user runs and visually tests it. See `docs/build-security.md` for
+the boundary and the separate fetch/update commands.
 
 ## Workflow
 

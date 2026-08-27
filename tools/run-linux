@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -eu
+
+tool_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(dirname "$tool_dir")
+
+if [ "$(uname -s)" != Linux ]; then
+    echo "run-linux requires Linux" >&2
+    exit 1
+fi
+
+cargo_path=$(rustup which cargo --toolchain stable)
+
+exec env \
+    CARGO_NET_OFFLINE=false \
+    CARGO_TARGET_DIR="$project_root/target/native" \
+    RUSTC_WRAPPER= \
+    "$cargo_path" run --release --locked -p progred -- "$@"
