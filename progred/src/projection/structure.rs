@@ -8,10 +8,9 @@ use crate::selection::writable_at;
 use gid::{CellId, Step, Value, hex_string};
 use crate::identity::short_id;
 use progred_display::{
-    Delim, Face, Layout, activatable, alternatives, at, block_hover, bracket, col, descend, dim,
-    faced, hug, id, on_activate, on_click, on_hover, pickable, query, row, shared, slot,
+    Delim, Face, Layout, activatable, alternatives, block_hover, bracket, col, descend, dim, faced,
+    hug, id, on_activate, on_click, on_hover, pickable, query, row, shared, slot,
 };
-use progred_libraries::{name, text};
 use std::rc::Rc;
 
 type View<World> = Layout<World, Hover>;
@@ -24,7 +23,7 @@ pub fn of<World: 'static>(
 ) -> View<World> {
     match value {
         Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
-        Value::Cell(cell) => cell_layout(cx, path, *cell, hooks),
+        Value::Cell(cell) => cell_layout(path, *cell, hooks),
         Value::List(elements) => list_layout(cx, path, elements, hooks),
         Value::Record(fields) => record_layout(cx, path, fields, hooks),
     }
@@ -78,33 +77,17 @@ pub(super) fn collapsed_layout<World: 'static>(
 }
 
 fn cell_layout<World: 'static>(
-    cx: &Cx,
     path: &[Step],
     cell: CellId,
     hooks: &Hooks<World>,
 ) -> View<World> {
-    let value = cx.sources.value(cell);
-    let head = selectable(cell_head(cx, cell), path, &Value::from(cell), hooks, true);
-    let inner = match value {
-        None if !cx.sources.writable(cell) => head,
-        None | Some(_) => hug(head, descend(Step::Follow), 4.0, 20.0),
-    };
-    bracket(Delim::Paren, inner)
-}
-
-fn cell_head<World>(cx: &Cx, cell: CellId) -> View<World> {
-    match cx
-        .sources
-        .value(cell)
-        .and_then(Value::as_record)
-        .and_then(|fields| fields.get(&name::vocabulary::NAME))
-    {
-        Some(name) => at(
-            [Step::Follow, Step::Key(name::vocabulary::NAME)],
-            name,
-        ),
-        None => id(short_id(cell)),
-    }
+    selectable(
+        bracket(Delim::Paren, descend(Step::Follow, None, None)),
+        path,
+        &Value::from(cell),
+        hooks,
+        true,
+    )
 }
 
 fn list_layout<World: 'static>(
@@ -133,7 +116,9 @@ fn list_layout<World: 'static>(
     let writable = writable_at(&cx.sources, path);
     let children: Vec<View<World>> = items
         .iter()
-        .map(|(position, _)| shared(descend(Step::Element(position.clone()))))
+        .map(|(position, _)| {
+            shared(descend(Step::Element(position.clone()), None, None))
+        })
         .collect();
     let mut flat = Vec::new();
     for (index, _) in items.iter().enumerate() {
@@ -165,21 +150,8 @@ fn record_layout<World: 'static>(
     fields: &gid::Record,
     hooks: &Hooks<World>,
 ) -> View<World> {
-    let consumes_simple_name = !cx.raw
-        && path
-            .split_last()
-            .filter(|(step, _)| matches!(step, Step::Follow))
-            .and_then(|(_, parent)| cx.sources.resolve(parent))
-            .and_then(Value::as_cell)
-            .and_then(|cell| cx.name(cell))
-            .is_some()
-        && fields
-            .get(&name::vocabulary::NAME)
-            .and_then(text::read)
-            .is_some_and(|name| !name.is_empty());
     let mut items: Vec<(CellId, bool)> = fields
         .iter()
-        .filter(|(key, _)| !consumes_simple_name || *key != name::vocabulary::NAME)
         .map(|(key, _)| (*key, true))
         .collect();
     if let Some(Step::Key(key)) = cx.pending_child_of(path) {
@@ -205,7 +177,7 @@ fn record_layout<World: 'static>(
     }
     let children: Vec<View<World>> = items
         .iter()
-        .map(|(key, _)| shared(descend(Step::Key(*key))))
+        .map(|(key, _)| shared(descend(Step::Key(*key), None, None)))
         .collect();
     let mut flat = Vec::new();
     for (index, (key, present)) in items.iter().enumerate() {

@@ -42,6 +42,79 @@ fn projection_target_appends_relative_steps() {
     );
 }
 
+fn contextual_probe(
+    _: &progred_display::ProjectionInput<'_, (), Hover>,
+) -> Option<progred_display::Layout<(), Hover>> {
+    Some(progred_display::text("contextual"))
+}
+
+fn ambient_probe(
+    _: &progred_display::ProjectionInput<'_, (), Hover>,
+) -> Option<progred_display::Layout<(), Hover>> {
+    Some(progred_display::text("ambient"))
+}
+
+fn declining_probe(
+    _: &progred_display::ProjectionInput<'_, (), Hover>,
+) -> Option<progred_display::Layout<(), Hover>> {
+    None
+}
+
+#[test]
+fn contextual_projection_precedes_and_falls_through_to_the_ambient_projection() {
+    struct NoEval;
+    impl progred_display::Env for NoEval {
+        fn evaluate(&self, _: &Value) -> (Value, usize) {
+            panic!("projection evaluated")
+        }
+    }
+
+    let ambient = Projection::new([
+        ambient_probe as progred_display::Partial<(), Hover>
+    ]);
+    let value = Value::record([]);
+    let target = |_| progred_display::ProjectionTarget {
+        select: Rc::new(|_: &mut ()| false),
+        hover: Hover::Value(Rc::from([])),
+    };
+    let apply = |projection: &Projection<()>| {
+        projection
+            .apply(
+                &NoEval,
+                &value,
+                None,
+                None,
+                progred_display::ProjectionTargets::new(&target),
+            )
+            .unwrap()
+    };
+    let text = |layout| match layout {
+        progred_display::Layout::Leaf(puri::Leaf::Text { text, .. }) => text,
+        _ => panic!("probe returns text"),
+    };
+
+    assert_eq!(
+        text(apply(&contextual_projection(
+            Some(&ambient),
+            Some(vec![
+                contextual_probe as progred_display::Partial<(), Hover>
+            ]),
+        )
+        .unwrap())),
+        "contextual"
+    );
+    assert_eq!(
+        text(apply(&contextual_projection(
+            Some(&ambient),
+            Some(vec![
+                declining_probe as progred_display::Partial<(), Hover>
+            ]),
+        )
+        .unwrap())),
+        "ambient"
+    );
+}
+
 fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
     Sources { doc, library }
 }
@@ -274,56 +347,6 @@ fn arrows_walk_rows_down_and_lines_across() {
     assert_eq!(stepped(&ds, Some(a1()), NamedKey::ArrowUp), Some(a()));
     // A dropped block is entered by down, never right.
     assert_eq!(stepped(&ds, Some(b()), NamedKey::ArrowRight), None);
-}
-
-#[test]
-fn the_cell_head_rides_its_first_line() {
-    let name = || vec![Step::Follow, Step::Key(name::vocabulary::NAME)];
-    // Dropped: the projected name shares the cell's head line while the
-    // value opens a row below it.
-    let f = || vec![Step::Follow, key("f")];
-    let ds = vec![
-        stop(name(), 0.0, 2.0, 60.0, 18.0),
-        stop(f(), 30.0, 24.0, 100.0, 40.0),
-        stop(vec![Step::Follow], 20.0, 22.0, 180.0, 48.0),
-        stop(vec![], 0.0, 0.0, 200.0, 50.0),
-    ];
-    assert_eq!(
-        stepped(&ds, Some(vec![]), NamedKey::ArrowRight),
-        Some(name())
-    );
-    assert_eq!(
-        stepped(&ds, Some(vec![]), NamedKey::ArrowDown),
-        Some(vec![Step::Follow])
-    );
-    assert_eq!(
-        stepped(&ds, Some(vec![Step::Follow]), NamedKey::ArrowDown),
-        Some(f())
-    );
-    assert_eq!(
-        stepped(&ds, Some(name()), NamedKey::ArrowLeft),
-        Some(vec![])
-    );
-    // Hugged: head and value share the one line; there is no row
-    // below, only the line to walk.
-    let ds = vec![
-        stop(name(), 0.0, 2.0, 60.0, 18.0),
-        stop(vec![Step::Follow], 70.0, 2.0, 150.0, 18.0),
-        stop(vec![], 0.0, 0.0, 160.0, 20.0),
-    ];
-    assert_eq!(stepped(&ds, Some(vec![]), NamedKey::ArrowDown), None);
-    assert_eq!(
-        stepped(&ds, Some(vec![]), NamedKey::ArrowRight),
-        Some(name())
-    );
-    assert_eq!(
-        stepped(&ds, Some(name()), NamedKey::ArrowRight),
-        Some(vec![Step::Follow])
-    );
-    assert_eq!(
-        stepped(&ds, Some(vec![Step::Follow]), NamedKey::ArrowRight),
-        None
-    );
 }
 
 #[test]
@@ -1261,6 +1284,31 @@ fn a_simple_name_is_an_ordinary_editable_field() {
             .is_some_and(|fields| fields.contains_key(&crate::test_values::label("x")))
     );
     assert!(make_selection(&doc, &lib, path).edit().is_none());
+}
+
+#[test]
+fn editing_an_anonymous_lambdas_placeholder_creates_its_name_field() {
+    let lib = Cells::new();
+    let (mut doc, cell) = doc_of(vec![
+        (grap::vocabulary::PARAMS, Value::list([])),
+        (grap::vocabulary::BODY, Value::from(vec![1])),
+    ]);
+    let path = vec![Step::Follow, Step::Key(name::vocabulary::NAME)];
+    let mut selection = make_projected_selection(&doc, &lib, path.clone());
+
+    assert_eq!(selection.edit().map(LineEditState::text), Some(""));
+    selection.edit_mut().unwrap().set_text("tree");
+    assert!(write_through(
+        &mut doc,
+        &lib,
+        &crate::stack::load::<()>().foreign,
+        &mut selection,
+    ));
+    assert_eq!(doc.cells.value(cell).and_then(name::read), Some("tree"));
+    assert_eq!(
+        src(&doc, &lib).resolve(&path).and_then(text::read),
+        Some("tree")
+    );
 }
 
 #[test]

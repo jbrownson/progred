@@ -41,9 +41,11 @@ projection — text, f64, and the `evaluate` value partial — above the structu
 fallback alone. This composed projection is passed explicitly through
 recursion; it is not hidden in display context.
 `descend` receives the parent `Value` and an ordinary GID `Step`, extends
-stored source provenance, and invokes the supplied projection on that
-unresolved location. The projection performs lookup, which lets its total
-fallback project a missing field or element as the ordinary pending state.
+stored source provenance, and resolves that location. It may prepend
+contextual partials to the current projection for a present child and may
+supply a concrete layout for a missing child. Omitting either specialization
+uses the current projection or the ordinary pending state respectively. A
+missing layout receives the real missing location but no fabricated `Value`.
 A contextual `at` may prepend another composition of partials for one
 subtree while retaining its real source path; the current projection remains
 behind it. Grap uses this to keep code-shaped descendants in the Grap

@@ -13,7 +13,7 @@ use gid::{CellId, Step, Value};
 use grap_runtime::{Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     ActionHandler, Delim, Face, Layout, Paint, ProjectionInput, ProjectionTarget, RowAlignment,
-    alternatives, block_hover, bracket, leaf, on_activate, on_event, on_hover,
+    alternatives, block_hover, bracket, descend, leaf, on_activate, on_event, on_hover,
     overlay as layout_overlay, pickable, slot,
 };
 use puri::{
@@ -530,7 +530,7 @@ fn decode_with<World, Hover: Clone>(
     }
     if let Some(content) = fields.get(&vocabulary::DESCEND) {
         let step = read_step(content.as_record()?.get(&vocabulary::STEP)?)?;
-        return Some(Layout::Descend { step });
+        return Some(descend(step, None, None));
     }
     if let Some(content) = fields.get(&vocabulary::AT) {
         let content = content.as_record()?;
@@ -1072,7 +1072,7 @@ mod tests {
         ));
         assert!(matches!(
             &children[1],
-            Layout::Descend { step: Step::Key(key) } if *key == vocabulary::GAP
+            Layout::Descend { step: Step::Key(key), .. } if *key == vocabulary::GAP
         ));
         let Layout::Surround {
             left:
@@ -1095,7 +1095,7 @@ mod tests {
         };
         assert!(matches!(
             &children[0],
-            Layout::Descend { step: Step::Follow }
+            Layout::Descend { step: Step::Follow, .. }
         ));
     }
 

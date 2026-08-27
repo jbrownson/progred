@@ -42,7 +42,10 @@ pub enum Paint {
 #[derive(Clone)]
 pub struct LineEdit {
     pub text: String,
-    /// The Grap write-back rule applied to CURRENT and typed INPUT.
+    /// Ghost text shown only while the editable text is empty.
+    pub placeholder: Option<String>,
+    /// The Grap write-back rule applied to typed INPUT and, when the
+    /// location already exists, its live CURRENT value.
     pub update: Value,
     pub prefix: String,
     pub suffix: String,
@@ -192,9 +195,13 @@ pub enum Layout<World, Hover> {
         child: Box<Layout<World, Hover>>,
         right: Ink,
     },
-    /// Look up this step on the value being projected.
+    /// Look up this step on the value being projected. Contextual
+    /// partials compose before the ambient projection when it exists;
+    /// `missing` replaces the ordinary pending layout when it does not.
     Descend {
         step: Step,
+        projection: Option<Vec<Partial<World, Hover>>>,
+        missing: Option<Box<Layout<World, Hover>>>,
     },
     /// Project `value` at this path extended by `steps`.
     At {
@@ -320,7 +327,15 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 child: child.clone(),
                 right: right.clone(),
             },
-            Self::Descend { step } => Self::Descend { step: step.clone() },
+            Self::Descend {
+                step,
+                projection,
+                missing,
+            } => Self::Descend {
+                step: step.clone(),
+                projection: projection.clone(),
+                missing: missing.clone(),
+            },
             Self::At {
                 steps,
                 value,
@@ -673,8 +688,16 @@ pub fn nest<World, Hover>(step: Step, value: &Value) -> Layout<World, Hover> {
     at([step], value)
 }
 
-pub fn descend<World, Hover>(step: Step) -> Layout<World, Hover> {
-    Layout::Descend { step }
+pub fn descend<World, Hover>(
+    step: Step,
+    projection: Option<Vec<Partial<World, Hover>>>,
+    missing: Option<Layout<World, Hover>>,
+) -> Layout<World, Hover> {
+    Layout::Descend {
+        step,
+        projection,
+        missing: missing.map(Box::new),
+    }
 }
 
 pub fn at<World, Hover>(steps: impl Into<Vec<Step>>, value: &Value) -> Layout<World, Hover> {
@@ -760,6 +783,55 @@ mod tests {
         let mut world = World::default();
         assert!(handler(&mut world));
         assert_eq!(world.clicks, 1);
+    }
+
+    fn probe(_: &ProjectionInput<'_, (), ()>) -> Option<Layout<(), ()>> {
+        None
+    }
+
+    #[test]
+    fn descend_may_specialize_present_and_missing_children_independently() {
+        let step = Step::Key(CellId::from_u128(1));
+        assert!(matches!(
+            descend::<(), ()>(step.clone(), None, None),
+            Layout::Descend {
+                projection: None,
+                missing: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            descend(
+                step.clone(),
+                Some(vec![probe as Partial<(), ()>]),
+                None,
+            ),
+            Layout::Descend {
+                projection: Some(projection),
+                missing: None,
+                ..
+            } if projection.len() == 1
+        ));
+        assert!(matches!(
+            descend::<(), ()>(step.clone(), None, Some(text("missing"))),
+            Layout::Descend {
+                projection: None,
+                missing: Some(_),
+                ..
+            }
+        ));
+        assert!(matches!(
+            descend(
+                step,
+                Some(vec![probe as Partial<(), ()>]),
+                Some(text("missing")),
+            ),
+            Layout::Descend {
+                projection: Some(projection),
+                missing: Some(_),
+                ..
+            } if projection.len() == 1
+        ));
     }
 
     #[test]

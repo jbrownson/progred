@@ -729,15 +729,22 @@ pub fn write_through(
                 library,
             };
             let current = sources.resolve(path).cloned();
-            let next = current.as_ref().and_then(|current| {
+            let next = {
+                let arguments = std::iter::once((
+                    progred_libraries::line_edit::vocabulary::INPUT,
+                    text::value(&typed),
+                ))
+                .chain(current.clone().map(|current| {
+                    (
+                        progred_libraries::line_edit::vocabulary::CURRENT,
+                        current,
+                    )
+                }));
                 // `apply`, not `call` + `evaluate`: the current value
                 // is data even when it is code-shaped.
                 let evaluation = grap::apply(
                     &update,
-                    [
-                        (progred_libraries::line_edit::vocabulary::CURRENT, current.clone()),
-                        (progred_libraries::line_edit::vocabulary::INPUT, text::value(&typed)),
-                    ],
+                    arguments,
                     |cell| sources.value(cell).cloned(),
                     foreign,
                     grap::DEFAULT_FUEL,
@@ -747,7 +754,7 @@ pub fn write_through(
                 (evaluation.diagnostics.is_empty()
                     && isa::read(&evaluation.result) != Some(absent::vocabulary::ABSENT))
                 .then_some(evaluation.result)
-            });
+            };
             (current, next)
         };
         match next {

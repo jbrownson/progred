@@ -31,16 +31,19 @@ pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::UPDATE,
         ForeignFunction::new(|context, call, environment| {
-            let Some(current) = context.field(call, line_edit::vocabulary::CURRENT) else {
-                return Ok(context.missing_argument(line_edit::vocabulary::CURRENT));
-            };
             let Some(input) = context.field(call, line_edit::vocabulary::INPUT) else {
                 return Ok(context.missing_argument(line_edit::vocabulary::INPUT));
             };
-            let current = context.eval(current, environment)?;
+            let current = context
+                .field(call, line_edit::vocabulary::CURRENT)
+                .map(|current| context.eval(current, environment))
+                .transpose()?;
             let input = context.eval(input, environment)?;
             Ok(match read(&input) {
-                Some(text) => overlay_value(&current, value(text)),
+                Some(text) => current
+                    .as_ref()
+                    .map(|current| overlay_value(current, value(text)))
+                    .unwrap_or_else(|| value(text)),
                 None => crate::absent::value(),
             })
         }),

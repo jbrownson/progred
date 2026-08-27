@@ -787,7 +787,7 @@ fn prepare<
     path: &[Step],
     ancestors: &Traversal,
     hooks: &Hooks<C>,
-    value: &Value,
+    value: Option<&Value>,
     layout: progred_display::Layout<C, Hover>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
@@ -980,7 +980,7 @@ fn prepare<
                 build,
             );
             let path = path.to_vec();
-            let target = value.clone();
+            let target = value.cloned();
             let dim = cx.styles.dim.brush.clone();
             let select = hooks.select.clone();
             let pick = hooks.pick.clone();
@@ -990,7 +990,11 @@ fn prepare<
                 )
             })
         }
-        progred_display::Layout::Descend { step } => prepare_descend(
+        progred_display::Layout::Descend {
+            step,
+            projection: contextual_partials,
+            missing,
+        } => prepare_descend(
             cx,
             projection,
             tcx,
@@ -998,6 +1002,8 @@ fn prepare<
             ancestors,
             value,
             step,
+            contextual_partials,
+            missing.map(|missing| *missing),
             hooks,
             build,
         ),
@@ -1116,15 +1122,7 @@ fn prepare_at<
         }
         path.push(step.clone());
     }
-    let override_projection = override_partials.map(|partials| {
-        Projection::new(
-            partials.into_iter().chain(
-                projection
-                    .into_iter()
-                    .flat_map(|projection| projection.partials.iter().copied()),
-            ),
-        )
-    });
+    let override_projection = contextual_projection(projection, override_partials);
     prepare_present_value(
         cx,
         override_projection.as_ref().or(projection),
@@ -1135,6 +1133,19 @@ fn prepare_at<
         hooks,
         build,
     )
+}
+
+fn contextual_projection<C>(
+    ambient: Option<&Projection<C>>,
+    contextual: Option<Vec<progred_display::Partial<C, Hover>>>,
+) -> Option<Projection<C>> {
+    contextual.map(|partials| {
+        Projection::new(partials.into_iter().chain(
+            ambient
+                .into_iter()
+                .flat_map(|projection| projection.partials.iter().copied()),
+        ))
+    })
 }
 
 fn realize_click<C: 'static, Cv: Canvas + 'static>(
@@ -1924,7 +1935,7 @@ fn surround_sides<C: 'static, Cv: Canvas + 'static>(
     scale: f64,
     brush: Brush,
     path: Path,
-    target: Value,
+    target: Option<Value>,
     select: Rc<dyn Fn(&mut C, Path)>,
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     left: progred_display::Ink,
@@ -2233,6 +2244,8 @@ pub fn project<
             root_path,
             &traversal,
             Location::Root(root),
+            projection,
+            None,
             &hooks,
             &mut build,
         ),
@@ -2437,6 +2450,8 @@ fn prepare_transient_root<
         path,
         &Traversal::default(),
         Location::Root(Some(&result)),
+        projection,
+        None,
         &result_hooks,
         build,
     );
@@ -2448,10 +2463,10 @@ fn prepare_transient_root<
     })
 }
 
-/// Adds one GID step to the active source and invokes the supplied
-/// projection. The projection, not the caller, resolves the child;
-/// a missing child therefore reaches the same total fallback as an
-/// empty root.
+/// Adds one GID step to the active source and resolves that location.
+/// Contextual partials precede the ambient projection for a present
+/// child. A concrete missing layout replaces the ordinary pending
+/// view without inventing a value at that location.
 #[allow(clippy::too_many_arguments)]
 fn prepare_descend<
     C: 'static,
@@ -2462,14 +2477,18 @@ fn prepare_descend<
     tcx: &mut TextCtx,
     parent_path: &[Step],
     ancestors: &Traversal,
-    parent: &Value,
+    parent: Option<&Value>,
     step: Step,
+    contextual_partials: Option<Vec<progred_display::Partial<C, Hover>>>,
+    missing: Option<progred_display::Layout<C, Hover>>,
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
     let mut path = parent_path.to_vec();
     path.push(step.clone());
-    if step == Step::Follow {
+    let contextual_projection = contextual_projection(projection, contextual_partials);
+    let child_projection = contextual_projection.as_ref().or(projection);
+    if step == Step::Follow && let Some(parent) = parent {
         let mut ancestors = ancestors.clone();
         if let Some(cell) = parent.as_cell() {
             ancestors.cells.insert(cell);
@@ -2477,22 +2496,29 @@ fn prepare_descend<
         }
         prepare_location(
             cx,
-            projection,
+            child_projection,
             tcx,
             &path,
             &ancestors,
             Location::Child { parent, step },
+            projection,
+            missing,
             hooks,
             build,
         )
     } else {
         prepare_location(
             cx,
-            projection,
+            child_projection,
             tcx,
             &path,
             ancestors,
-            Location::Child { parent, step },
+            match parent {
+                Some(parent) => Location::Child { parent, step },
+                None => Location::Root(None),
+            },
+            projection,
+            missing,
             hooks,
             build,
         )
@@ -2505,18 +2531,20 @@ fn prepare_location<
     Cv: Canvas + 'static,
 >(
     cx: &Cx,
-    projection: Option<&Projection<C>>,
+    present_projection: Option<&Projection<C>>,
     tcx: &mut TextCtx,
     path: &[Step],
     ancestors: &Traversal,
     location: Location<'_>,
+    missing_projection: Option<&Projection<C>>,
+    missing: Option<progred_display::Layout<C, Hover>>,
     hooks: &Hooks<C>,
     build: &mut ChoiceBuild<Placed<C, Cv>>,
 ) -> ChoiceLayout<Placed<C, Cv>> {
     match location.value(|cell| cx.sources.value(cell)) {
         Some(value) => prepare_present_value(
             cx,
-            projection,
+            present_projection,
             tcx,
             path,
             ancestors,
@@ -2524,8 +2552,64 @@ fn prepare_location<
             hooks,
             build,
         ),
-        None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), hooks)),
+        None => match missing {
+            Some(layout) => prepare_missing_layout(
+                cx,
+                missing_projection,
+                tcx,
+                path,
+                ancestors,
+                hooks,
+                layout,
+                build,
+            ),
+            None => ChoiceLayout::fixed(pending_view(cx, tcx, path.to_vec(), hooks)),
+        },
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_missing_layout<
+    C: 'static,
+    Cv: Canvas + 'static,
+>(
+    cx: &Cx,
+    projection: Option<&Projection<C>>,
+    tcx: &mut TextCtx,
+    path: &[Step],
+    ancestors: &Traversal,
+    hooks: &Hooks<C>,
+    layout: progred_display::Layout<C, Hover>,
+    build: &mut ChoiceBuild<Placed<C, Cv>>,
+) -> ChoiceLayout<Placed<C, Cv>> {
+    let inner = prepare(
+        cx,
+        projection,
+        tcx,
+        path,
+        ancestors,
+        hooks,
+        None,
+        layout,
+        build,
+    );
+    let landmark: SharedPath = Rc::from(path);
+    let transient = cx.source.transient();
+    let selected = cx.selected(path);
+    let scale = cx.styles.scale;
+    let select = select_handler(landmark.clone(), hooks);
+    let delete = hooks.delete.clone();
+    ChoiceLayout::map(inner, 0.0, move |inner| {
+        descend_landmark_with(
+            transient,
+            selected,
+            scale,
+            landmark,
+            select,
+            delete,
+            inner,
+        )
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2550,7 +2634,7 @@ fn prepare_present_value<
         path,
         ancestors,
         hooks,
-        value,
+        Some(value),
         layout,
         build,
     );
@@ -2997,11 +3081,11 @@ fn label_query<
 }
 
 /// An Activate-to-select target for `path` — for parts like labels
-/// and the cell star. Its Pick action offers `value`, the identity the
-/// part displays, to an open pending instead.
+/// and the cell star. When present, `value` is also offered to an open
+/// pending by Pick.
 fn select_target_with<C: 'static, Cv: Canvas + 'static>(
     path: SharedPath,
-    value: Value,
+    value: Option<Value>,
     select: Rc<dyn Fn(&mut C, Path)>,
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     content: Measured<Placed<C, Cv>>,
@@ -3028,7 +3112,7 @@ fn hover_target<C: 'static, Cv: Canvas + 'static>(
 /// [`hover_target`].
 fn quiet_select_target_with<C: 'static, Cv: Canvas + 'static>(
     path: SharedPath,
-    value: Value,
+    value: Option<Value>,
     select: Rc<dyn Fn(&mut C, Path)>,
     pick: Rc<dyn Fn(&mut C, Value) -> bool>,
     content: Measured<Placed<C, Cv>>,
@@ -3037,13 +3121,14 @@ fn quiet_select_target_with<C: 'static, Cv: Canvas + 'static>(
         let select = select.clone();
         let pick = pick.clone();
         let target = path.clone();
-        let value = value.clone();
         let action_target = Hovered::Tree(Hover::Value(target.clone()));
         p.activate(action_target.clone(), move |ctx| {
             select(ctx, target.to_vec());
             true
         });
-        p.pick(action_target, move |ctx| pick(ctx, value.clone()));
+        if let Some(value) = value.clone() {
+            p.pick(action_target, move |ctx| pick(ctx, value.clone()));
+        }
     })
 }
 

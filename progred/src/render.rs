@@ -43,15 +43,25 @@ pub fn line_edit<C: 'static, Cv: Canvas + 'static>(
                 focused: true,
                 presentation: styles.line_presentation(&line.prefix, &line.suffix),
                 style: &styles.edit,
-                placeholder: None,
+                placeholder: line
+                    .placeholder
+                    .as_deref()
+                    .map(|placeholder| (placeholder, &styles.dim)),
             },
             tcx,
             edit,
         ),
-        None => text(
-            tcx,
-            &format!("{}{}{}", line.prefix, line.text, line.suffix),
-            &styles.string,
-        ),
+        None => match line.placeholder.as_deref().filter(|_| line.text.is_empty()) {
+            Some(placeholder) => text(
+                tcx,
+                &format!("{}{}{}", line.prefix, placeholder, line.suffix),
+                &styles.dim,
+            ),
+            None => text(
+                tcx,
+                &format!("{}{}{}", line.prefix, line.text, line.suffix),
+                &styles.string,
+            ),
+        },
     }
 }

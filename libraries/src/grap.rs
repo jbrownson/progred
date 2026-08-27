@@ -8,7 +8,7 @@ use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Face, Layout, ProjectionInput, RecordField, activatable, alternatives, at_with_projection, col,
-    dim, faced, hug, record, row, shared, transient,
+    descend, dim, faced, hug, record, row, shared, transient,
 };
 
 pub mod vocabulary {
@@ -43,6 +43,17 @@ fn shallow_cell<World, Hover: Clone>(
         faced(spelling, face),
         target.hover,
         target.select,
+    ))
+}
+
+fn lambda_name<World, Hover>(
+    input: &ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    Some(crate::line_edit::layout(
+        crate::text::read(input.value)?,
+        grap_runtime::ffi(crate::text::vocabulary::UPDATE),
+        "\"",
+        "\"",
     ))
 }
 
@@ -180,8 +191,19 @@ pub fn lambda_display<World, Hover: Clone>(
         [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
     );
     let body_target = input.targets.at([Step::Key(BODY)]);
-    let lambda_target = input.targets.current();
-    let lambda = activatable(dim("λ"), lambda_target.hover, lambda_target.select);
+    let lambda = descend(
+        Step::Key(name::vocabulary::NAME),
+        Some(vec![
+            lambda_name::<World, Hover> as progred_display::Partial<World, Hover>,
+        ]),
+        Some(crate::line_edit::layout_with_placeholder(
+            "",
+            Some("λ"),
+            grap_runtime::ffi(crate::text::vocabulary::UPDATE),
+            "",
+            "",
+        )),
+    );
     let arrow = activatable(
         dim("→"),
         body_target.hover,
@@ -626,11 +648,15 @@ mod tests {
         else {
             panic!("lambda has a syntax head");
         };
-        let Layout::OnHover { child, hover } = &head[0] else {
-            panic!("lambda marker targets the whole function");
-        };
-        assert_eq!(hover.as_deref(), Some(&[][..]));
-        assert!(matches!(child.as_ref(), Layout::OnActivate { .. }));
+        assert!(matches!(
+            &head[0],
+            Layout::Descend {
+                step: Step::Key(key),
+                projection: Some(projection),
+                missing: Some(_),
+                ..
+            } if *key == name::vocabulary::NAME && projection.len() == 1
+        ));
         assert!(matches!(
             &head[1],
             Layout::At {
@@ -654,6 +680,118 @@ mod tests {
                 && *value == Value::from(parameter)
                 && projection.len() == 1
         ));
+    }
+
+    #[test]
+    fn a_named_lambda_projects_its_editable_name_in_place_of_the_marker() {
+        let definition = name::record(
+            "tree",
+            [
+                (PARAMS, Value::list([])),
+                (BODY, Value::from(vec![1])),
+            ],
+        );
+        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
+        let Layout::Alternatives(options) = layout else {
+            panic!("lambda has responsive forms");
+        };
+        let Layout::Row { children, .. } = &options[0] else {
+            panic!("flat lambda first");
+        };
+        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+            panic!("lambda has a syntax head");
+        };
+        let Layout::Descend {
+            step: Step::Key(key),
+            projection: Some(projection),
+            missing: Some(_),
+            ..
+        } = &head[0]
+        else {
+            panic!("lambda name is projected contextually");
+        };
+        assert_eq!(*key, name::vocabulary::NAME);
+        let value = definition
+            .as_record()
+            .unwrap()
+            .get(&name::vocabulary::NAME)
+            .unwrap();
+        let Layout::LineEdit(line) = projection[0](&relative_input(&env(), value)).unwrap() else {
+            panic!("lambda name uses the stock line editor");
+        };
+        assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("\"", "\""));
+    }
+
+    #[test]
+    fn an_anonymous_lambda_projects_an_empty_name_with_a_lambda_placeholder() {
+        let definition = Value::record([
+            (PARAMS, Value::list([])),
+            (BODY, Value::from(vec![1])),
+        ]);
+        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
+        let Layout::Alternatives(options) = layout else {
+            panic!("lambda has responsive forms");
+        };
+        let Layout::Row { children, .. } = &options[0] else {
+            panic!("flat lambda first");
+        };
+        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+            panic!("lambda has a syntax head");
+        };
+        let Layout::Descend {
+            step: Step::Key(key),
+            projection: Some(projection),
+            missing: Some(missing),
+            ..
+        } = &head[0]
+        else {
+            panic!("lambda name is projected contextually");
+        };
+        assert_eq!(*key, name::vocabulary::NAME);
+        assert_eq!(projection.len(), 1);
+        let Layout::LineEdit(line) = missing.as_ref() else {
+            panic!("an absent name uses the stock line editor");
+        };
+        assert_eq!(line.placeholder.as_deref(), Some("λ"));
+    }
+
+    #[test]
+    fn an_explicit_empty_lambda_name_projects_as_an_empty_string() {
+        let definition = name::record(
+            "",
+            [
+                (PARAMS, Value::list([])),
+                (BODY, Value::from(vec![1])),
+            ],
+        );
+        let layout = lambda_display(&relative_input(&env(), &definition)).unwrap();
+        let Layout::Alternatives(options) = layout else {
+            panic!("lambda has responsive forms");
+        };
+        let Layout::Row { children, .. } = &options[0] else {
+            panic!("flat lambda first");
+        };
+        let Layout::Row { children: head, .. } = unshared(&children[0]) else {
+            panic!("lambda has a syntax head");
+        };
+        let Layout::Descend {
+            projection: Some(projection),
+            ..
+        } = &head[0]
+        else {
+            panic!("lambda name is projected contextually");
+        };
+        let value = definition
+            .as_record()
+            .unwrap()
+            .get(&name::vocabulary::NAME)
+            .unwrap();
+        let Layout::LineEdit(line) = projection[0](&relative_input(&env(), value)).unwrap() else {
+            panic!("lambda name uses the stock line editor");
+        };
+        assert_eq!(line.text, "");
+        assert_eq!(line.placeholder, None);
+        assert_eq!((line.prefix.as_str(), line.suffix.as_str()), ("\"", "\""));
     }
 
     #[test]

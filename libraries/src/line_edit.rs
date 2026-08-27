@@ -20,8 +20,19 @@ pub fn layout<World, Hover>(
     prefix: impl Into<String>,
     suffix: impl Into<String>,
 ) -> Layout<World, Hover> {
+    layout_with_placeholder(text, None::<String>, update, prefix, suffix)
+}
+
+pub fn layout_with_placeholder<World, Hover>(
+    text: impl Into<String>,
+    placeholder: Option<impl Into<String>>,
+    update: Value,
+    prefix: impl Into<String>,
+    suffix: impl Into<String>,
+) -> Layout<World, Hover> {
     line_edit(LineEdit {
         text: text.into(),
+        placeholder: placeholder.map(Into::into),
         update,
         prefix: prefix.into(),
         suffix: suffix.into(),
@@ -50,8 +61,23 @@ mod tests {
             panic!("stock line-edit layout")
         };
         assert_eq!(line.text, "42");
+        assert_eq!(line.placeholder, None);
         assert_eq!(line.update, update);
         assert_eq!(line.prefix, "(");
         assert_eq!(line.suffix, ")");
+    }
+
+    #[test]
+    fn layout_exposes_a_placeholder() {
+        let Layout::LineEdit(line) = layout_with_placeholder::<(), ()>(
+            "",
+            Some("λ"),
+            Value::from(gid::new_cell_id()),
+            "",
+            "",
+        ) else {
+            panic!("stock line-edit layout")
+        };
+        assert_eq!(line.placeholder.as_deref(), Some("λ"));
     }
 }
