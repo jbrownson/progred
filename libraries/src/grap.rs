@@ -7,8 +7,8 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
-    Face, Layout, ProjectionInput, RecordField, activatable, alternatives, at_with_projection, col,
-    descend, dim, faced, hug, record, row, shared, transient,
+    Delim, Face, Layout, ProjectionInput, RecordField, activatable, alternatives,
+    at_with_projection, bracket, col, descend, dim, faced, hug, record, row, shared, transient,
 };
 
 pub mod vocabulary {
@@ -32,7 +32,7 @@ fn spelling(env: &dyn progred_display::Env, cell: CellId) -> (String, Face) {
 }
 
 /// A cell as a reference, not as an invitation to inspect its value.
-/// Contextual projections use this for binders and callable names.
+/// Contextual projections use this for expression and callable references.
 fn shallow_cell<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
@@ -43,6 +43,19 @@ fn shallow_cell<World, Hover: Clone>(
         faced(spelling, face),
         target.hover,
         target.select,
+    ))
+}
+
+/// A cell as its definition. This is the structural cell form repeated
+/// as a partial so a declaration can override an enclosing shallow
+/// expression context.
+fn deep_cell<World, Hover>(
+    input: &ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    input.value.as_cell()?;
+    Some(bracket(
+        Delim::Paren,
+        descend(Step::Follow, None, None),
     ))
 }
 
@@ -68,6 +81,27 @@ pub fn shallow_at<World, Hover: Clone>(
     )
 }
 
+/// Project an expression subtree at a real location. Cells in that
+/// subtree are references until a nested construct explicitly enters
+/// a declaration or data subtree.
+pub(crate) fn expression_at<World, Hover: Clone>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+) -> Layout<World, Hover> {
+    shallow_at(steps, value)
+}
+
+pub(crate) fn deep_at<World, Hover>(
+    steps: impl Into<Vec<Step>>,
+    value: &Value,
+) -> Layout<World, Hover> {
+    at_with_projection(
+        steps,
+        value,
+        [deep_cell::<World, Hover> as progred_display::Partial<World, Hover>],
+    )
+}
+
 pub(crate) fn shallow_descend<World, Hover: Clone>(step: Step) -> Layout<World, Hover> {
     descend(
         step,
@@ -78,15 +112,8 @@ pub(crate) fn shallow_descend<World, Hover: Clone>(step: Step) -> Layout<World, 
     )
 }
 
-pub(crate) fn at<World, Hover: Clone>(
-    steps: impl Into<Vec<Step>>,
-    value: &Value,
-) -> Layout<World, Hover> {
-    at_with_projection(
-        steps,
-        value,
-        [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
-    )
+pub(crate) fn expression_descend<World, Hover: Clone>(step: Step) -> Layout<World, Hover> {
+    shallow_descend(step)
 }
 
 fn field_spelling(env: &dyn progred_display::Env, field: CellId) -> (String, Face) {
@@ -155,10 +182,7 @@ pub fn call_display<World, Hover: Clone>(
     for (position, parameter) in parameters.iter().flatten().enumerate() {
         parameter_positions.entry(*parameter).or_insert(position);
     }
-    let function = match function {
-        Value::Cell(_) => shallow_at([Step::Key(FUNCTION)], function),
-        _ => at([Step::Key(FUNCTION)], function),
-    };
+    let function = expression_at([Step::Key(FUNCTION)], function);
     let arguments = record(
         fields
             .iter()
@@ -175,15 +199,15 @@ pub fn call_display<World, Hover: Clone>(
             let target = input.targets.at([Step::Key(field)]);
             RecordField {
                 label: activatable(faced(spelling, face), target.hover, target.select),
-                value: at([Step::Key(field)], value),
+                value: expression_at([Step::Key(field)], value),
             }
         },
     );
     Some(hug(function, arguments, 0.0, 20.0))
 }
 
-/// A stored lambda exposes its parameter references shallowly and
-/// continues Grap's contextual projection through its body.
+/// A stored lambda exposes its parameter declarations deeply and
+/// projects its body as an expression.
 pub fn lambda_display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
@@ -195,11 +219,7 @@ pub fn lambda_display<World, Hover: Clone>(
         .all(|param| param.as_cell().is_some())
         .then_some(())?;
     let body = fields.get(&BODY)?;
-    let params = at_with_projection(
-        [Step::Key(PARAMS)],
-        params,
-        [shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>],
-    );
+    let params = deep_at([Step::Key(PARAMS)], params);
     let body_target = input.targets.at([Step::Key(BODY)]);
     let lambda = descend(
         Step::Key(name::vocabulary::NAME),
@@ -220,7 +240,12 @@ pub fn lambda_display<World, Hover: Clone>(
         body_target.select,
     );
     let head = row(3.0, [lambda, params, arrow]);
-    Some(hug(head, at([Step::Key(BODY)], body), 6.0, 20.0))
+    Some(hug(
+        head,
+        expression_at([Step::Key(BODY)], body),
+        6.0,
+        20.0,
+    ))
 }
 
 /// Foreignness is an evaluator implementation detail. In source, an
@@ -238,7 +263,7 @@ pub fn evaluate_display<World, Hover: Clone>(
 ) -> Option<Layout<World, Hover>> {
     let expression = input.value.as_record()?.get(&EVALUATE)?;
     let (result, fuel) = input.env.evaluate(expression);
-    let expression = shared(at([Step::Key(EVALUATE)], expression));
+    let expression = shared(expression_at([Step::Key(EVALUATE)], expression));
     let shaft_target = input.targets.current();
     let shaft = shared(activatable(dim("→"), shaft_target.hover, shaft_target.select));
     let result = shared(transient(&result, fuel));

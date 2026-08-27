@@ -128,7 +128,6 @@
     "tip_y": d843ffc3a66afaa9d8b21bd7597e6007,
     "transform": 0c69b749e5d076609a6642a20b736fb4,
     "translate": b9c300206cc1c193cc801f4f058f2647,
-    "tree": a9779ccfb039a7197dadae4d8115a971,
     "tree_scene": 7e4d12b4f6c05a79ee734b4441972149,
     "true": 04831f9b704935059231eb111770e62e,
     "trunk_length": 2d32fc785aae627f3f5c34f601e9f03c,
@@ -1077,12 +1076,6 @@
         ],
       },
     },
-    canvas_height: {
-      name: "canvas height",
-    },
-    canvas_width: {
-      name: "canvas width",
-    },
     child_depth: {
       name: "child depth",
     },
@@ -1142,6 +1135,9 @@
     },
     half_width: {
       name: "half width",
+    },
+    canvas_height: {
+      name: "height",
     },
     initial_y: {
       name: "initial y",
@@ -1535,19 +1531,6 @@
     tip_y: {
       name: "tip y",
     },
-    tree: {
-      name: "tree",
-      params: [],
-      body: {
-        canvas_height: {
-          f64: 0x0000000000407f40,
-        },
-        function: tree_scene,
-        canvas_width: {
-          f64: 0x0000000000407f40,
-        },
-      },
-    },
     tree_scene: {
       name: "tree scene",
       params: [
@@ -1612,6 +1595,9 @@
         function: lerp,
       },
     },
+    canvas_width: {
+      name: "width",
+    },
     x_amount: {
       name: "x amount",
     },
@@ -1639,7 +1625,6 @@
   },
   "root": {
     grap: [
-      tree,
       tree_scene,
       sky,
       mountains,
@@ -1664,7 +1649,13 @@
               f64: 0x0000000000a07e40,
             },
             program: {
-              function: tree,
+              canvas_height: {
+                f64: 0x0000000000407f40,
+              },
+              function: tree_scene,
+              canvas_width: {
+                f64: 0x0000000000407f40,
+              },
             },
             width: {
               f64: 0x0000000000407f40,

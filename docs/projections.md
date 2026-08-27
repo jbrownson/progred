@@ -143,12 +143,16 @@ geometry type and no arithmetic or geometry operation.
 The built-in Grap library offers an `evaluate` value partial alongside the
 runtime evaluator. Its separate `grap` field is ordinary domain vocabulary:
 it says its contents are Grap source but requests no evaluation and currently
-changes no editor behavior. The library also projects calls and lambdas as code: function,
-parameter, and bare binding cells are shallow named references rather than
-requests to recursively inspect their definitions; call arguments and lambda
-bodies recursively retain the Grap projection. FFI values use the same
-reference presentation, because foreignness is not caller syntax. Argument
-labels retain the normal named-first alphabetical order.
+changes no editor behavior. The library also projects calls and lambdas as
+code. The structural default follows cells into their definitions. Grap
+expression and callable subtrees prepend a shallow named-cell projection, so
+bindings are compact references at their use sites. Nested declaration and
+inert-data positions prepend the deep cell form again: parameters, binders,
+and patterns expose editable definitions, while quote exposes its template as
+data. These contextual projections can alternate as constructs nest. FFI
+values use the same reference presentation, because
+foreignness is not caller syntax. Argument labels retain the normal
+named-first alphabetical order.
 The control library composes ahead of that general call projection: a
 well-formed `match` call displays its subject followed by ordered
 `pattern → expression` cases; binding patterns remain

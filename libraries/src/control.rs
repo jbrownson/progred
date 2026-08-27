@@ -411,7 +411,7 @@ pub fn match_display<World, Hover: Clone>(
         4.0,
         [
             crate::grap::shallow_at([Step::Key(grap_runtime::vocabulary::FUNCTION)], function),
-            crate::grap::at([Step::Key(vocabulary::VALUE)], subject),
+            crate::grap::expression_at([Step::Key(vocabulary::VALUE)], subject),
         ],
     );
     Some(hug(
@@ -438,11 +438,11 @@ fn case_display<World, Hover: Clone>(
         centered_row(
             6.0,
             [
-                crate::grap::at([Step::Key(vocabulary::PATTERN)], pattern),
+                crate::grap::deep_at([Step::Key(vocabulary::PATTERN)], pattern),
                 arrow,
             ],
         ),
-        crate::grap::at(
+        crate::grap::expression_at(
             [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
             expression,
         ),
@@ -490,7 +490,7 @@ pub fn bindings_display<World, Hover: Clone>(
         [Step::Key(grap_runtime::vocabulary::FUNCTION)],
         function,
     ));
-    let expression = shared(crate::grap::at(
+    let expression = shared(crate::grap::expression_at(
         [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
         expression,
     ));
@@ -544,9 +544,9 @@ fn binding_display<World, Hover: Clone>(
     ) {
         (Some(binder), None) => {
             binder.as_cell()?;
-            crate::grap::shallow_at([Step::Key(vocabulary::BIND)], binder)
+            crate::grap::deep_at([Step::Key(vocabulary::BIND)], binder)
         }
-        (None, Some(pattern)) => crate::grap::at([Step::Key(vocabulary::PATTERN)], pattern),
+        (None, Some(pattern)) => crate::grap::deep_at([Step::Key(vocabulary::PATTERN)], pattern),
         _ => return None,
     };
     let value = fields.get(&vocabulary::VALUE)?;
@@ -554,7 +554,7 @@ fn binding_display<World, Hover: Clone>(
     let equals = activatable(dim("="), value_target.hover, value_target.select);
     Some(hug(
         centered_row(6.0, [left, equals]),
-        crate::grap::at([Step::Key(vocabulary::VALUE)], value),
+        crate::grap::expression_at([Step::Key(vocabulary::VALUE)], value),
         6.0,
         20.0,
     ))
@@ -589,7 +589,7 @@ pub fn quote_display<World, Hover: Clone>(
         2.0,
         [
             marker,
-            crate::grap::at(
+            crate::grap::deep_at(
                 [Step::Key(grap_runtime::vocabulary::EXPRESSION)],
                 expression,
             ),
@@ -612,7 +612,7 @@ pub fn do_display<World, Hover: Clone>(
         4.0,
         [
             crate::grap::shallow_at([Step::Key(grap_runtime::vocabulary::FUNCTION)], function),
-            crate::grap::at([Step::Key(vocabulary::EXPRESSIONS)], expressions),
+            crate::grap::shallow_at([Step::Key(vocabulary::EXPRESSIONS)], expressions),
         ],
     ))
 }
@@ -1148,7 +1148,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_binding_is_shallow_and_centered_beside_its_equals() {
+    fn direct_binding_is_deep_and_centered_beside_its_equals() {
         let binder = new_cell_id();
         let binding = bind_clause(binder, blob("value"));
         let layout = binding_display(&relative_projection_input(&binding)).unwrap();
@@ -1171,7 +1171,11 @@ mod tests {
         };
         assert!(matches!(
             &children[0],
-            Layout::At { steps, .. } if *steps == [Step::Key(vocabulary::BIND)]
+            Layout::At {
+                steps,
+                projection: Some(projection),
+                ..
+            } if *steps == [Step::Key(vocabulary::BIND)] && projection.len() == 1
         ));
     }
 

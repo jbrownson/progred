@@ -92,7 +92,7 @@ fn operand<World, Hover: Clone>(
     value: &Value,
     parent: Precedence,
 ) -> Layout<World, Hover> {
-    let child = crate::grap::shallow_descend(Step::Key(field));
+    let child = crate::grap::expression_descend(Step::Key(field));
     match expression_precedence(value) {
         Some(child_precedence)
             if child_precedence < parent
