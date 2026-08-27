@@ -24,10 +24,10 @@ run: run-native
 run-native: $(NATIVE_RUN_TARGET)
 
 run-macos: sandbox-app
-	/usr/bin/open -W -n target/sandbox/app/Progred.app
+	@/usr/bin/open -W -n target/sandbox/app/Progred.app
 
 run-linux:
-	./tools/run-linux $(ARGS)
+	@./tools/run-linux $(ARGS)
 
 unsupported-native-platform:
 	@echo "native Progred is not supported on $(UNAME_S)" >&2
@@ -68,7 +68,7 @@ sandbox-test:
 	./tools/sandbox-cargo test --workspace
 
 sandbox-app:
-	./tools/build-macos-app
+	@./tools/build-macos-app
 
 sandbox-web:
 	./tools/sandbox-cargo build --release -p progred --target wasm32-unknown-unknown
