@@ -62,7 +62,7 @@ use winit::dpi::LogicalSize;
 use winit::dpi::PhysicalPosition;
 use winit::event::{Ime, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::window::{CursorIcon, Window, WindowId};
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys, WindowExtWebSys};
 #[cfg(target_arch = "wasm32")]
@@ -246,6 +246,7 @@ pub(crate) struct App {
     pub(crate) menu: menu::State,
     /// Last pointer position, for anchoring pinch zoom.
     pub(crate) cursor: Point,
+    cursor_icon: CursorIcon,
     /// The pointer position while it is inside the window. It is an
     /// input to placement's internal hover resolution.
     pub(crate) pointer: Option<Point>,
@@ -360,6 +361,14 @@ fn pointer_position(event: &PointerEvent) -> Option<Point> {
         PointerEvent::Move(u) => Some(Point::new(u.current.position.x, u.current.position.y)),
         PointerEvent::Scroll(e) => Some(Point::new(e.state.position.x, e.state.position.y)),
         _ => None,
+    }
+}
+
+fn cursor_icon(hover: Option<&Hovered>) -> CursorIcon {
+    match hover {
+        Some(Hovered::Divider(workspace::Divider::Columns(_))) => CursorIcon::ColResize,
+        Some(Hovered::Divider(workspace::Divider::Panes { .. })) => CursorIcon::RowResize,
+        _ => CursorIcon::Default,
     }
 }
 
@@ -884,6 +893,7 @@ fn main() {
         native_menu,
         menu: menu::State::default(),
         cursor: Point::ZERO,
+        cursor_icon: CursorIcon::Default,
         pointer: None,
         hover: None,
         pressed: false,
@@ -1026,6 +1036,14 @@ impl App {
     pub(crate) fn refresh_title(&self) {
         if let RenderState::Active { window, .. } = &self.state {
             window.set_title(&self.title());
+        }
+    }
+
+    fn sync_cursor(&mut self, window: &Window) {
+        let next = cursor_icon(self.hover.as_ref());
+        if next != self.cursor_icon {
+            window.set_cursor(next);
+            self.cursor_icon = next;
         }
     }
 
@@ -1461,6 +1479,7 @@ impl App {
                 (renders, hovered_secondary)
             }
         };
+        self.sync_cursor(&window);
         let ink = placed::Ink {
             hovered: self.hover.as_ref(),
             hovered_secondary: hovered_secondary.as_ref(),
@@ -1586,6 +1605,7 @@ impl App {
                 (renders, hovered_secondary)
             }
         };
+        self.sync_cursor(&window);
         let ink = placed::Ink {
             hovered: self.hover.as_ref(),
             hovered_secondary: hovered_secondary.as_ref(),
@@ -1652,6 +1672,25 @@ mod shell_tests {
             accumulated
                 .merge(pending(ScrollDelta::LineDelta(0.0, 1.0), 20.0))
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn divider_hover_uses_the_cursor_for_its_resize_axis() {
+        assert_eq!(cursor_icon(None), CursorIcon::Default);
+        assert_eq!(
+            cursor_icon(Some(&Hovered::Divider(workspace::Divider::Columns(
+                workspace::Side::Left,
+            )))),
+            CursorIcon::ColResize
+        );
+        assert_eq!(
+            cursor_icon(Some(&Hovered::Divider(workspace::Divider::Panes {
+                side: workspace::Side::Left,
+                before: workspace::Root::document(),
+                after: workspace::Root::document(),
+            }))),
+            CursorIcon::RowResize
         );
     }
 }

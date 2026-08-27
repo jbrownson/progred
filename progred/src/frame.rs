@@ -59,11 +59,12 @@ pub(crate) struct Frame {
 }
 
 /// What the resting pointer claims in the document or application
-/// menu.
+/// chrome.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Hovered {
     Tree(hover::Hover),
     Menu(menu::Hover),
+    Divider(workspace::Divider),
     /// Pointer-occupied chrome with no editor action. Keeping this
     /// distinct from air prevents the shell's empty-space fallback
     /// without inventing a clickable identity for the chrome.
@@ -490,6 +491,7 @@ impl App {
                 hover,
             ),
             Some(Hovered::Menu(_)) => None,
+            Some(Hovered::Divider(_)) => None,
             Some(Hovered::Blocked) => None,
             None => None,
         };
@@ -781,6 +783,7 @@ fn project_workspace(
         let rect = placed_divider.rect;
         let divider = placed_divider.divider;
         let vertical = matches!(divider, workspace::Divider::Columns(_));
+        let hover_divider = divider.clone();
         let down_divider = divider.clone();
         let move_divider = divider.clone();
         let up_divider = divider;
@@ -802,7 +805,10 @@ fn project_workspace(
                     Color::new([0.82, 0.83, 0.86, 1.0]),
                     Affine::IDENTITY,
                 );
-                p.occlude(Placement::new(hit, placement.clip_rect));
+                p.claim_exact(
+                    Placement::new(hit, placement.clip_rect),
+                    Hovered::Divider(hover_divider),
+                );
                 p.handler().on_pointer_down(move |app: &mut App, event| {
                     is_primary_contact(event)
                         && hit.contains(Point::new(
@@ -1193,14 +1199,14 @@ mod frame_tests {
         let target = |index| Hovered::Tree(hover::Hover::Entry(index));
         let viewport = Rect::new(-100.0, -100.0, 100.0, 100.0);
         let mut placed: Placed<App, Paint> = Placed::empty();
-        placed.probes.push(placed::Probe::direct(
+        placed.probes.push(placed::Probe::retaining(
             Placement::new(
                 Rect::new(0.0, 0.0, 10.0, 10.0),
                 viewport,
             ),
             target(0),
         ));
-        placed.probes.push(placed::Probe::direct(
+        placed.probes.push(placed::Probe::retaining(
             Placement::new(
                 Rect::new(14.0, 0.0, 24.0, 10.0),
                 viewport,
@@ -1301,6 +1307,50 @@ mod frame_tests {
                 8.0,
             ),
             Some(Hovered::Blocked)
+        );
+    }
+
+    #[test]
+    fn exact_hover_claims_do_not_retain_outside_their_hit_geometry() {
+        let target = Hovered::Divider(workspace::Divider::Columns(workspace::Side::Left));
+        let mut placed: Placed<App, Paint> = Placed::empty();
+        placed.probes.push(placed::Probe::exact(
+            Placement::new(
+                Rect::new(0.0, 0.0, 10.0, 10.0),
+                Rect::new(-100.0, -100.0, 100.0, 100.0),
+            ),
+            target.clone(),
+        ));
+
+        assert_eq!(
+            derive_hover(
+                &placed,
+                None,
+                Some(Point::new(5.0, 5.0)),
+                false,
+                8.0,
+            ),
+            Some(target.clone())
+        );
+        assert_eq!(
+            derive_hover(
+                &placed,
+                Some(target.clone()),
+                Some(Point::new(11.0, 5.0)),
+                false,
+                8.0,
+            ),
+            None
+        );
+        assert_eq!(
+            derive_hover(
+                &placed,
+                Some(target.clone()),
+                Some(Point::new(11.0, 5.0)),
+                true,
+                8.0,
+            ),
+            Some(target)
         );
     }
 }

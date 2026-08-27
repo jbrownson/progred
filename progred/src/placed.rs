@@ -25,22 +25,31 @@ pub type Render<Cv> = Box<dyn for<'a> FnOnce(&mut Cv, Ink<'a>)>;
 pub type EditorAction<C> = Box<dyn Fn(&mut C) -> bool>;
 
 enum ProbeTarget {
-    Names(Hovered),
+    Retains(Hovered),
+    Exact(Hovered),
     Occludes,
 }
 
 /// One settled hover region. Its real placement can establish hover;
-/// its expanded visible rectangle can only retain the same target.
+/// ordinary named probes may also retain the same target through their
+/// expanded visible rectangle.
 pub struct Probe {
     placement: Placement,
     target: ProbeTarget,
 }
 
 impl Probe {
-    pub fn direct(placement: Placement, target: Hovered) -> Self {
+    pub fn retaining(placement: Placement, target: Hovered) -> Self {
         Self {
             placement,
-            target: ProbeTarget::Names(target),
+            target: ProbeTarget::Retains(target),
+        }
+    }
+
+    pub fn exact(placement: Placement, target: Hovered) -> Self {
+        Self {
+            placement,
+            target: ProbeTarget::Exact(target),
         }
     }
 
@@ -71,12 +80,14 @@ impl Probe {
     ) -> Option<Claim<Hovered>> {
         if self.placement.contains(point) {
             return Some(match &self.target {
-                ProbeTarget::Names(target) => Claim::Direct(target.clone()),
+                ProbeTarget::Retains(target) | ProbeTarget::Exact(target) => {
+                    Claim::Direct(target.clone())
+                }
                 ProbeTarget::Occludes => Claim::Occludes,
             });
         }
         match &self.target {
-            ProbeTarget::Names(target) if prior == Some(target) => self
+            ProbeTarget::Retains(target) if prior == Some(target) => self
                 .extended_rect(reach)
                 .filter(|rect| rect.contains(point))
                 .map(|_| Claim::Extended(target.clone())),
@@ -222,7 +233,9 @@ impl<C: 'static, Cv> Placed<C, Cv> {
         self.probes
             .iter()
             .filter_map(|probe| match &probe.target {
-                ProbeTarget::Names(candidate) if candidate == target => probe.extended_rect(reach),
+                ProbeTarget::Retains(candidate) if candidate == target => {
+                    probe.extended_rect(reach)
+                }
                 _ => None,
             })
             .collect()
@@ -306,7 +319,18 @@ impl<'builder, C: 'static, Cv> Builder<'builder, C, Cv> {
     /// Contribute a named hover region.
     pub fn claim(&mut self, placement: Placement, target: Hovered) {
         if !placement.clipped_out() {
-            self.placed.probes.push(Probe::direct(placement, target));
+            self.placed
+                .probes
+                .push(Probe::retaining(placement, target));
+        }
+    }
+
+    /// Contribute a named hover region without the ordinary air-gap
+    /// retention. Useful for chrome whose pointer feedback should track
+    /// its hit geometry exactly.
+    pub fn claim_exact(&mut self, placement: Placement, target: Hovered) {
+        if !placement.clipped_out() {
+            self.placed.probes.push(Probe::exact(placement, target));
         }
     }
 
