@@ -8,7 +8,6 @@
     "bind": 5e46d12705690e8a377eb0f16ad9dba6,
     "bindings": f6fb0062e8a14f808e416a9edece2a9d,
     "blossom_colors": 2a5109ec22acf09a33b63836c01ea058,
-    "blossom_command": 2ddf1fcb694303921182f35459218aee,
     "blossom_index": 3000d79cfc62262635d95ceaad339453,
     "blossom_points": 242e77282d28e5266df1da8bc40ea4cb,
     "blossoms": 8e6f78c4ab9b8bef8a26643b2a6203b2,
@@ -32,7 +31,6 @@
     "color_pick": 982d9a84180c604b1a60fbfffb59da03,
     "concat": 6f2613d22b4690ed5bac39776e51b775,
     "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
-    "current": 2680dedea78f6efb6866a9e537f09aa4,
     "depth": 180339357267d28e55bf88ce1b27b5d8,
     "descent": 2ed0b9294782093c08695dd5137df21a,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
@@ -48,6 +46,7 @@
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "fill": 1624dc973ec7790203eb8fd22c9d6d05,
     "floor": d007814c5f6a6c38b025605b399473d4,
+    "flowering_tree": 4818a5401ad0728e42e374df991bad2e,
     "fold": 1df93e0aeb8cbeda81a7d513320dd4f0,
     "frontier": 7c6d509824ee4861ccafb0a34f5adba6,
     "fuel": 4a0f68c1d3952b7ec5d7f2a1806e3b49,
@@ -79,8 +78,7 @@
     "maximum": 4be40301b427aeed939ef079ab63cf92,
     "minimum": 61213005b01abca2d4fb351cc4fe4d98,
     "mountain": f86efd38203717f07eef5524419a0412,
-    "mountain_back": 3275c316dc6d5a3112c268d3e95aebad,
-    "mountain_front": 3acbe4a32d86db11b227a8bb24c8e533,
+    "mountains": 7646a74dd035962c22da0bd676b02f24,
     "move_to": 1f6ae3a0b82fb63f233f4713cd0c8e30,
     "multiply": d6f384c439d9d69996d545df422efd79,
     "name": 02e562654d6d0828d3a7559e6f75fffe,
@@ -113,13 +111,12 @@
     "right_angle": 74d076eff44a24482f9f06b433664388,
     "rotate": 2500213d415930c6b40f15d633cc04a4,
     "scaled_length": b6de540458c5b666fee2f2f8d5eaaacd,
-    "segment": 816321c945094d7839a8754d191b1ce1,
+    "seed": 208c3026e79e44fdbe405992c6cdea79,
     "segment_count": 19a4df8c5983adbf4fdb3b206d6fdf69,
     "segment_index": e1cdb8af848f7be1babc5eb79af4e21e,
     "shape": fcaaadef14980397cce95363fc5a54f9,
     "sin": 9f62e0f56d92be74f6ae36378d889262,
-    "sky_bottom": eeea7678df2543fd269591cc5b8e0fbd,
-    "sky_top": 043d453da9551469f4d2838478dc4ec9,
+    "sky": b3a0b18dbf3876ac6b9b9622bd36b9bb,
     "start": 4b4fb6349d2fd798e7aafca85a2deca8,
     "start_value": 5afff5ae637f50cadd813f2c213c306e,
     "state": 3775735ae4c156144c110ba819cb1e39,
@@ -138,9 +135,11 @@
     "turn_left": 039dae8299938bd45e7bd27629aae539,
     "turn_right": dea4f4b45c15610e60582a12d967f7e8,
     "tween": e874f74bb9986467e02c5e1d0091fcbd,
+    "u64": fc77282178c2fa31b80aed2b8b6f7888,
     "unfold": b71c173bae05b26bfdca3b5bc79b2b09,
     "unquote": da48703c290e3b35d7353c38110bc953,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
+    "where": 2a3432e9c5ce4c62b8261a6b248f13c2,
     "width": f33c672fef9d0d4561102410fd64129f,
     "with_random": f47ef735130ecf7a72105ac58f30075a,
     "x": 415def0fa0a9ac40dfba5fca4d0f8876,
@@ -164,9 +163,6 @@
     blossom_colors: {
       name: "blossom colors",
     },
-    blossom_command: {
-      name: "blossom command",
-    },
     blossom_index: {
       name: "blossom index",
     },
@@ -177,298 +173,322 @@
       name: "blossoms",
       params: [
         blossom_points,
-        blossom_colors,
-        blossoms_per_branch,
       ],
       body: {
-        initial: {
-          function: quote,
-          expression: {
-            blossom_index: {
-              f64: 0x0000000000000000,
-            },
-            segment_index: {
-              f64: 0x0000000000000000,
+        function: where,
+        expression: {
+          initial: {
+            function: quote,
+            expression: {
+              blossom_index: {
+                f64: 0x0000000000000000,
+              },
+              segment_index: {
+                f64: 0x0000000000000000,
+              },
             },
           },
-        },
-        step: {
-          params: [
-            state,
-          ],
-          body: {
-            function: let,
-            expression: {
-              value: {
-                right: segment_count,
-                function: less,
-                left: segment_index,
-              },
-              function: match,
-              cases: [
-                {
-                  pattern: true,
-                  expression: {
-                    function: let,
+          step: {
+            params: [
+              state,
+            ],
+            body: {
+              function: where,
+              expression: {
+                value: {
+                  right: segment_count,
+                  function: less,
+                  left: segment_index,
+                },
+                function: match,
+                cases: [
+                  {
+                    pattern: true,
                     expression: {
-                      function: quote,
+                      function: let,
                       expression: {
-                        blossom_index: {
-                          unquote: next_blossom,
-                        },
-                        segment_index: {
-                          unquote: next_segment,
-                        },
-                      },
-                    },
-                    bindings: [
-                      {
-                        value: {
-                          index: segment_index,
-                          list: blossom_points,
-                          function: list_at,
-                        },
-                        bind: segment,
-                      },
-                      {
-                        value: segment,
-                        pattern: [
+                        expressions: [
                           {
-                            bind: x0,
+                            function: fill,
+                            paint: paint,
+                            shape: {
+                              circle: {
+                                x: x,
+                                y: y,
+                                radius: radius,
+                              },
+                            },
                           },
                           {
-                            bind: y0,
-                          },
-                          {
-                            bind: x1,
-                          },
-                          {
-                            bind: y1,
+                            function: quote,
+                            expression: {
+                              blossom_index: {
+                                unquote: next_blossom,
+                              },
+                              segment_index: {
+                                unquote: next_segment,
+                              },
+                            },
                           },
                         ],
+                        function: do,
                       },
-                      {
-                        value: {
-                          maximum: {
-                            f64: 0x000000000000f03f,
-                          },
-                          minimum: {
-                            f64: 0x0000000000000000,
-                          },
-                          function: random_between,
-                        },
-                        bind: x_amount,
-                      },
-                      {
-                        value: {
-                          maximum: {
-                            f64: 0x0000000000002440,
-                          },
-                          minimum: {
-                            f64: 0x00000000000024c0,
-                          },
-                          function: random_between,
-                        },
-                        bind: x_jitter,
-                      },
-                      {
-                        value: {
-                          maximum: {
-                            f64: 0x000000000000f03f,
-                          },
-                          minimum: {
-                            f64: 0x0000000000000000,
-                          },
-                          function: random_between,
-                        },
-                        bind: y_amount,
-                      },
-                      {
-                        value: {
-                          maximum: {
-                            f64: 0x0000000000002440,
-                          },
-                          minimum: {
-                            f64: 0x00000000000024c0,
-                          },
-                          function: random_between,
-                        },
-                        bind: y_jitter,
-                      },
-                      {
-                        value: {
-                          maximum: {
-                            list: blossom_colors,
-                            function: list_length,
-                          },
-                          minimum: {
-                            f64: 0x0000000000000000,
-                          },
-                          function: random_between,
-                        },
-                        bind: color_pick,
-                      },
-                      {
-                        value: {
-                          maximum: {
-                            f64: 0x0000000000001440,
-                          },
-                          minimum: {
-                            f64: 0x0000000000000040,
-                          },
-                          function: random_between,
-                        },
-                        bind: radius,
-                      },
-                      {
-                        value: {
-                          right: x_jitter,
-                          function: add,
-                          left: {
-                            end: x1,
-                            start: x0,
-                            amount: x_amount,
-                            function: lerp,
-                          },
-                        },
-                        bind: x,
-                      },
-                      {
-                        value: {
-                          right: y_jitter,
-                          function: add,
-                          left: {
-                            end: y1,
-                            start: y0,
-                            amount: y_amount,
-                            function: lerp,
-                          },
-                        },
-                        bind: y,
-                      },
-                      {
-                        value: {
-                          operand: color_pick,
-                          function: floor,
-                        },
-                        bind: color_index,
-                      },
-                      {
-                        value: {
-                          index: color_index,
-                          list: blossom_colors,
-                          function: list_at,
-                        },
-                        bind: paint,
-                      },
-                      {
-                        value: {
-                          function: fill,
-                          paint: paint,
-                          shape: {
-                            circle: {
-                              x: x,
-                              y: y,
-                              radius: radius,
-                            },
-                          },
-                        },
-                        bind: blossom_command,
-                      },
-                      {
-                        value: {
-                          right: {
-                            f64: 0x000000000000f03f,
-                          },
-                          function: add,
-                          left: blossom_index,
-                        },
-                        bind: next_blossom,
-                      },
-                      {
-                        value: {
+                      bindings: [
+                        {
                           value: {
-                            right: blossoms_per_branch,
-                            function: less,
-                            left: next_blossom,
+                            index: segment_index,
+                            list: blossom_points,
+                            function: list_at,
                           },
-                          function: match,
-                          cases: [
+                          pattern: [
                             {
-                              pattern: true,
-                              expression: {
-                                function: quote,
-                                expression: {
-                                  blossom_index: {
-                                    unquote: next_blossom,
-                                  },
-                                  segment_index: {
-                                    unquote: segment_index,
-                                  },
-                                },
-                              },
+                              bind: x0,
                             },
                             {
-                              pattern: {
-                                bind: value,
-                              },
-                              expression: {
-                                function: quote,
+                              bind: y0,
+                            },
+                            {
+                              bind: x1,
+                            },
+                            {
+                              bind: y1,
+                            },
+                          ],
+                        },
+                        {
+                          value: {
+                            maximum: {
+                              f64: 0x000000000000f03f,
+                            },
+                            minimum: {
+                              f64: 0x0000000000000000,
+                            },
+                            function: random_between,
+                          },
+                          bind: x_amount,
+                        },
+                        {
+                          value: {
+                            maximum: {
+                              f64: 0x0000000000002440,
+                            },
+                            minimum: {
+                              f64: 0x00000000000024c0,
+                            },
+                            function: random_between,
+                          },
+                          bind: x_jitter,
+                        },
+                        {
+                          value: {
+                            maximum: {
+                              f64: 0x000000000000f03f,
+                            },
+                            minimum: {
+                              f64: 0x0000000000000000,
+                            },
+                            function: random_between,
+                          },
+                          bind: y_amount,
+                        },
+                        {
+                          value: {
+                            maximum: {
+                              f64: 0x0000000000002440,
+                            },
+                            minimum: {
+                              f64: 0x00000000000024c0,
+                            },
+                            function: random_between,
+                          },
+                          bind: y_jitter,
+                        },
+                        {
+                          value: {
+                            maximum: {
+                              list: blossom_colors,
+                              function: list_length,
+                            },
+                            minimum: {
+                              f64: 0x0000000000000000,
+                            },
+                            function: random_between,
+                          },
+                          bind: color_pick,
+                        },
+                        {
+                          value: {
+                            maximum: {
+                              f64: 0x0000000000001440,
+                            },
+                            minimum: {
+                              f64: 0x0000000000000040,
+                            },
+                            function: random_between,
+                          },
+                          bind: radius,
+                        },
+                        {
+                          value: {
+                            right: x_jitter,
+                            function: add,
+                            left: {
+                              end: x1,
+                              start: x0,
+                              amount: x_amount,
+                              function: lerp,
+                            },
+                          },
+                          bind: x,
+                        },
+                        {
+                          value: {
+                            right: y_jitter,
+                            function: add,
+                            left: {
+                              end: y1,
+                              start: y0,
+                              amount: y_amount,
+                              function: lerp,
+                            },
+                          },
+                          bind: y,
+                        },
+                        {
+                          value: {
+                            operand: color_pick,
+                            function: floor,
+                          },
+                          bind: color_index,
+                        },
+                        {
+                          value: {
+                            index: color_index,
+                            list: blossom_colors,
+                            function: list_at,
+                          },
+                          bind: paint,
+                        },
+                        {
+                          value: {
+                            right: {
+                              f64: 0x000000000000f03f,
+                            },
+                            function: add,
+                            left: blossom_index,
+                          },
+                          bind: next_blossom,
+                        },
+                        {
+                          value: {
+                            value: {
+                              right: blossoms_per_branch,
+                              function: less,
+                              left: next_blossom,
+                            },
+                            function: match,
+                            cases: [
+                              {
+                                pattern: true,
                                 expression: {
-                                  blossom_index: {
-                                    f64: 0x0000000000000000,
-                                  },
-                                  segment_index: {
-                                    unquote: {
-                                      right: {
-                                        f64: 0x000000000000f03f,
-                                      },
-                                      function: add,
-                                      left: segment_index,
+                                  function: quote,
+                                  expression: {
+                                    blossom_index: {
+                                      unquote: next_blossom,
+                                    },
+                                    segment_index: {
+                                      unquote: segment_index,
                                     },
                                   },
                                 },
                               },
+                              {
+                                pattern: {
+                                  bind: value,
+                                },
+                                expression: {
+                                  function: quote,
+                                  expression: {
+                                    blossom_index: {
+                                      f64: 0x0000000000000000,
+                                    },
+                                    segment_index: {
+                                      unquote: {
+                                        right: {
+                                          f64: 0x000000000000f03f,
+                                        },
+                                        function: add,
+                                        left: segment_index,
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                            ],
+                          },
+                          pattern: {
+                            blossom_index: {
+                              bind: next_blossom,
                             },
-                          ],
-                        },
-                        pattern: {
-                          blossom_index: {
-                            bind: next_blossom,
-                          },
-                          segment_index: {
-                            bind: next_segment,
+                            segment_index: {
+                              bind: next_segment,
+                            },
                           },
                         },
-                      },
-                    ],
+                      ],
+                    },
                   },
+                ],
+              },
+              bindings: [
+                {
+                  value: state,
+                  pattern: {
+                    blossom_index: {
+                      bind: blossom_index,
+                    },
+                    segment_index: {
+                      bind: segment_index,
+                    },
+                  },
+                },
+                {
+                  value: {
+                    list: blossom_points,
+                    function: list_length,
+                  },
+                  bind: segment_count,
                 },
               ],
             },
-            bindings: [
+          },
+          function: iterate,
+        },
+        bindings: [
+          {
+            value: [
               {
-                value: state,
-                pattern: {
-                  blossom_index: {
-                    bind: blossom_index,
-                  },
-                  segment_index: {
-                    bind: segment_index,
-                  },
-                },
+                color: "#f5ceea99",
               },
               {
-                value: {
-                  list: blossom_points,
-                  function: list_length,
-                },
-                bind: segment_count,
+                color: "#e8d9e499",
+              },
+              {
+                color: "#f7c9f399",
+              },
+              {
+                color: "#ebb4cc99",
               },
             ],
+            bind: blossom_colors,
           },
-        },
-        function: iterate,
+          {
+            value: {
+              f64: 0x0000000000003040,
+            },
+            bind: blossoms_per_branch,
+          },
+        ],
       },
     },
     blossoms_per_branch: {
@@ -494,13 +514,38 @@
       params: [
         canvas_width,
         canvas_height,
-        branch_length,
-        trunk_length,
       ],
       body: {
-        function: let,
-        expression: blossom_points,
+        function: where,
+        expression: {
+          list: branch_items,
+          initial: [],
+          step: {
+            params: [
+              accumulator,
+              item,
+            ],
+            body: {
+              right: item,
+              function: concat,
+              left: accumulator,
+            },
+          },
+          function: fold,
+        },
         bindings: [
+          {
+            value: {
+              f64: 0x0000000000004e40,
+            },
+            bind: branch_length,
+          },
+          {
+            value: {
+              f64: 0x0000000000405840,
+            },
+            bind: trunk_length,
+          },
           {
             value: {
               initial: {
@@ -581,17 +626,6 @@
                         list: frontier,
                         function: list_at,
                       },
-                      bind: current,
-                    },
-                    {
-                      value: {
-                        list: frontier,
-                        function: list_tail,
-                      },
-                      bind: rest,
-                    },
-                    {
-                      value: current,
                       pattern: [
                         {
                           bind: depth,
@@ -609,6 +643,13 @@
                           bind: branch_width,
                         },
                       ],
+                    },
+                    {
+                      value: {
+                        list: frontier,
+                        function: list_tail,
+                      },
+                      bind: rest,
                     },
                     {
                       value: {
@@ -751,14 +792,7 @@
                             pattern: true,
                             expression: {
                               function: let,
-                              expression: {
-                                function: quote,
-                                expression: {
-                                  new_frontier: {
-                                    unquote: new_frontier,
-                                  },
-                                },
-                              },
+                              expression: new_frontier,
                               bindings: [
                                 {
                                   value: {
@@ -875,14 +909,7 @@
                                   pattern: true,
                                   expression: {
                                     function: let,
-                                    expression: {
-                                      function: quote,
-                                      expression: {
-                                        new_frontier: {
-                                          unquote: new_frontier,
-                                        },
-                                      },
-                                    },
+                                    expression: new_frontier,
                                     bindings: [
                                       {
                                         value: {
@@ -942,25 +969,14 @@
                                   pattern: {
                                     bind: value,
                                   },
-                                  expression: {
-                                    function: quote,
-                                    expression: {
-                                      new_frontier: {
-                                        unquote: rest,
-                                      },
-                                    },
-                                  },
+                                  expression: rest,
                                 },
                               ],
                             },
                           },
                         ],
                       },
-                      pattern: {
-                        new_frontier: {
-                          bind: new_frontier,
-                        },
-                      },
+                      bind: new_frontier,
                     },
                     {
                       value: {
@@ -1058,25 +1074,6 @@
               },
             },
           },
-          {
-            value: {
-              list: branch_items,
-              initial: [],
-              step: {
-                params: [
-                  accumulator,
-                  item,
-                ],
-                body: {
-                  right: item,
-                  function: concat,
-                  left: accumulator,
-                },
-              },
-              function: fold,
-            },
-            bind: blossom_points,
-          },
         ],
       },
     },
@@ -1098,9 +1095,6 @@
     color_pick: {
       name: "color pick",
     },
-    current: {
-      name: "current",
-    },
     depth: {
       name: "depth",
     },
@@ -1115,6 +1109,33 @@
     },
     end_value: {
       name: "end value",
+    },
+    flowering_tree: {
+      name: "flowering tree",
+      params: [
+        canvas_width,
+        canvas_height,
+      ],
+      body: {
+        seed: {
+          u64: 0x0000000000000000,
+        },
+        function: with_random,
+        expression: {
+          blossom_points: {
+            seed: {
+              u64: 0x0000000000000000,
+            },
+            function: with_random,
+            expression: {
+              canvas_height: canvas_height,
+              function: branches,
+              canvas_width: canvas_width,
+            },
+          },
+          function: blossoms,
+        },
+      },
     },
     frontier: {
       name: "frontier",
@@ -1161,7 +1182,7 @@
         paint,
       ],
       body: {
-        function: let,
+        function: where,
         expression: {
           function: fill,
           paint: paint,
@@ -1196,7 +1217,7 @@
                   state,
                 ],
                 body: {
-                  function: let,
+                  function: where,
                   expression: {
                     value: {
                       right: canvas_width,
@@ -1299,14 +1320,6 @@
               list: {
                 bind: path_elements,
               },
-              state: {
-                x: {
-                  bind: next_x,
-                },
-                y: {
-                  bind: next_y,
-                },
-              },
             },
           },
           {
@@ -1365,11 +1378,45 @@
         ],
       },
     },
-    mountain_back: {
-      name: "mountain back",
-    },
-    mountain_front: {
-      name: "mountain front",
+    mountains: {
+      name: "mountains",
+      params: [
+        canvas_width,
+        canvas_height,
+      ],
+      body: {
+        seed: {
+          u64: 0x0000000000000000,
+        },
+        function: with_random,
+        expression: {
+          expressions: [
+            {
+              canvas_height: canvas_height,
+              function: mountain,
+              canvas_width: canvas_width,
+              paint: {
+                color: "#8bb2bb",
+              },
+              offset: {
+                f64: 0x0000000000406040,
+              },
+            },
+            {
+              canvas_height: canvas_height,
+              function: mountain,
+              canvas_width: canvas_width,
+              paint: {
+                color: "#618087",
+              },
+              offset: {
+                f64: 0x0000000000004940,
+              },
+            },
+          ],
+          function: do,
+        },
+      },
     },
     new_frontier: {
       name: "new frontier",
@@ -1404,20 +1451,74 @@
     scaled_length: {
       name: "scaled length",
     },
-    segment: {
-      name: "segment",
-    },
     segment_count: {
       name: "segment count",
     },
     segment_index: {
       name: "segment index",
     },
-    sky_bottom: {
-      name: "sky bottom",
-    },
-    sky_top: {
-      name: "sky top",
+    sky: {
+      name: "sky",
+      params: [
+        canvas_width,
+        canvas_height,
+      ],
+      body: {
+        function: fill,
+        paint: {
+          function: quote,
+          expression: {
+            linear_gradient: {
+              stops: [
+                {
+                  paint: {
+                    color: "#b4e0fe",
+                  },
+                  gradient_offset: {
+                    f64: 0x0000000000000000,
+                  },
+                },
+                {
+                  paint: {
+                    color: "#d3f8ff",
+                  },
+                  gradient_offset: {
+                    f64: 0x000000000000f03f,
+                  },
+                },
+              ],
+              gradient_end: {
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                y: {
+                  unquote: canvas_height,
+                },
+              },
+              gradient_start: {
+                x: {
+                  f64: 0x0000000000000000,
+                },
+                y: {
+                  f64: 0x0000000000000000,
+                },
+              },
+            },
+          },
+        },
+        shape: {
+          rect: {
+            x: {
+              f64: 0x0000000000000000,
+            },
+            y: {
+              f64: 0x0000000000000000,
+            },
+            height: canvas_height,
+            width: canvas_width,
+          },
+        },
+      },
     },
     start: {
       name: "start",
@@ -1438,47 +1539,12 @@
       name: "tree",
       params: [],
       body: {
-        blossoms_per_branch: {
-          f64: 0x0000000000003040,
-        },
-        sky_top: {
-          color: "#b4e0fe",
-        },
         canvas_height: {
           f64: 0x0000000000407f40,
-        },
-        blossom_colors: [
-          {
-            color: "#f5ceea99",
-          },
-          {
-            color: "#e8d9e499",
-          },
-          {
-            color: "#f7c9f399",
-          },
-          {
-            color: "#ebb4cc99",
-          },
-        ],
-        trunk_length: {
-          f64: 0x0000000000405840,
-        },
-        mountain_back: {
-          color: "#8bb2bb",
-        },
-        mountain_front: {
-          color: "#618087",
         },
         function: tree_scene,
         canvas_width: {
           f64: 0x0000000000407f40,
-        },
-        branch_length: {
-          f64: 0x0000000000004e40,
-        },
-        sky_bottom: {
-          color: "#d3f8ff",
         },
       },
     },
@@ -1487,117 +1553,26 @@
       params: [
         canvas_width,
         canvas_height,
-        branch_length,
-        trunk_length,
-        blossoms_per_branch,
-        sky_top,
-        sky_bottom,
-        mountain_back,
-        mountain_front,
-        blossom_colors,
       ],
       body: {
-        function: with_random,
-        expression: {
-          function: let,
-          expression: {
-            blossoms_per_branch: blossoms_per_branch,
-            blossom_points: blossom_points,
-            blossom_colors: blossom_colors,
-            function: blossoms,
+        expressions: [
+          {
+            canvas_height: canvas_height,
+            function: sky,
+            canvas_width: canvas_width,
           },
-          bindings: [
-            {
-              value: {
-                expressions: [
-                  {
-                    function: fill,
-                    paint: {
-                      function: quote,
-                      expression: {
-                        linear_gradient: {
-                          stops: [
-                            {
-                              paint: {
-                                unquote: sky_top,
-                              },
-                              gradient_offset: {
-                                f64: 0x0000000000000000,
-                              },
-                            },
-                            {
-                              paint: {
-                                unquote: sky_bottom,
-                              },
-                              gradient_offset: {
-                                f64: 0x000000000000f03f,
-                              },
-                            },
-                          ],
-                          gradient_end: {
-                            x: {
-                              f64: 0x0000000000000000,
-                            },
-                            y: {
-                              unquote: canvas_height,
-                            },
-                          },
-                          gradient_start: {
-                            x: {
-                              f64: 0x0000000000000000,
-                            },
-                            y: {
-                              f64: 0x0000000000000000,
-                            },
-                          },
-                        },
-                      },
-                    },
-                    shape: {
-                      rect: {
-                        x: {
-                          f64: 0x0000000000000000,
-                        },
-                        y: {
-                          f64: 0x0000000000000000,
-                        },
-                        height: canvas_height,
-                        width: canvas_width,
-                      },
-                    },
-                  },
-                  {
-                    canvas_height: canvas_height,
-                    function: mountain,
-                    canvas_width: canvas_width,
-                    paint: mountain_back,
-                    offset: {
-                      f64: 0x0000000000406040,
-                    },
-                  },
-                  {
-                    canvas_height: canvas_height,
-                    function: mountain,
-                    canvas_width: canvas_width,
-                    paint: mountain_front,
-                    offset: {
-                      f64: 0x0000000000004940,
-                    },
-                  },
-                  {
-                    canvas_height: canvas_height,
-                    trunk_length: trunk_length,
-                    function: branches,
-                    canvas_width: canvas_width,
-                    branch_length: branch_length,
-                  },
-                ],
-                function: do,
-              },
-              bind: blossom_points,
-            },
-          ],
-        },
+          {
+            canvas_height: canvas_height,
+            function: mountains,
+            canvas_width: canvas_width,
+          },
+          {
+            canvas_height: canvas_height,
+            function: flowering_tree,
+            canvas_width: canvas_width,
+          },
+        ],
+        function: do,
       },
     },
     trunk_length: {
@@ -1666,7 +1641,10 @@
     grap: [
       tree,
       tree_scene,
+      sky,
+      mountains,
       mountain,
+      flowering_tree,
       branches,
       blossoms,
       tween,
