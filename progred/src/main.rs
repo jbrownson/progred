@@ -40,6 +40,7 @@ use crate::frame::{Dispatch, FrameDisposition, Frame, Hovered, Paint, frame_disp
 use crate::model::{Model, ViewFlags};
 use kurbo::{Point, Rect, Size};
 use peniko::{Brush, Color};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -230,6 +231,7 @@ pub(crate) struct App {
     pub(crate) layout_cx: LayoutContext<Brush>,
     pub(crate) text_clipboard: SystemTextClipboard,
     pub(crate) text_cache: puri::text::TextCache,
+    pub(crate) drawing_memos: HashMap<workspace::Root, projection::DrawingMemo>,
     /// Editor configuration shared by every document loaded into the
     /// app: library cells, Rust functions, and composed projection.
     pub(crate) stack: stack::Stack<App>,
@@ -879,6 +881,7 @@ fn main() {
         #[cfg(target_arch = "wasm32")]
         text_clipboard: SystemTextClipboard::default(),
         text_cache: puri::text::TextCache::default(),
+        drawing_memos: HashMap::new(),
         stack: stack::load(),
         model: Model {
             doc,

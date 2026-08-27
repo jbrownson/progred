@@ -298,30 +298,44 @@ impl Canvas for DrawList {
 
 /// Play a recording back into any canvas.
 pub fn replay(list: &DrawList, canvas: &mut impl Canvas) {
-    replay_cmds(&list.0, canvas);
+    replay_at(list, canvas, Affine::IDENTITY);
 }
 
-fn replay_cmds<C: Canvas>(cmds: &[DrawCmd], canvas: &mut C) {
+/// Play a leaf-local recording at `outer` into any canvas.
+pub fn replay_at(list: &DrawList, canvas: &mut impl Canvas, outer: Affine) {
+    replay_cmds(&list.0, canvas, outer);
+}
+
+fn replay_cmds<C: Canvas>(cmds: &[DrawCmd], canvas: &mut C, outer: Affine) {
     for cmd in cmds {
         match cmd {
             DrawCmd::Fill {
                 shape,
                 brush,
                 transform,
-            } => canvas.fill(shape.clone(), brush.clone(), *transform),
+            } => canvas.fill(shape.clone(), brush.clone(), outer * *transform),
             DrawCmd::Stroke {
                 shape,
                 style,
                 brush,
                 transform,
-            } => canvas.stroke(shape.clone(), style.clone(), brush.clone(), *transform),
-            DrawCmd::GlyphRun(run) => canvas.glyph_run(run.clone()),
+            } => canvas.stroke(
+                shape.clone(),
+                style.clone(),
+                brush.clone(),
+                outer * *transform,
+            ),
+            DrawCmd::GlyphRun(run) => {
+                let mut run = run.clone();
+                run.transform = outer * run.transform;
+                canvas.glyph_run(run);
+            }
             DrawCmd::Clip {
                 shape,
                 transform,
                 children,
-            } => canvas.clip(shape.clone(), *transform, |inner| {
-                replay_cmds(children, inner);
+            } => canvas.clip(shape.clone(), outer * *transform, |inner| {
+                replay_cmds(children, inner, outer);
             }),
         }
     }
@@ -391,6 +405,30 @@ mod tests {
         let mut replayed = DrawList::new();
         replay(&original, &mut replayed);
         assert_eq!(format!("{original:?}"), format!("{replayed:?}"));
+    }
+
+    #[test]
+    fn replay_at_places_every_recorded_command() {
+        let outer = Affine::translate((20.0, 30.0));
+        let mut replayed = DrawList::new();
+        replay_at(&sample(), &mut replayed, outer);
+        assert!(matches!(
+            &replayed.0[..],
+            [
+                DrawCmd::Fill { transform, .. },
+                DrawCmd::Clip {
+                    transform: clip_transform,
+                    children,
+                    ..
+                },
+            ] if *transform == outer
+                && *clip_transform == outer
+                && matches!(
+                    &children[..],
+                    [DrawCmd::Stroke { transform, .. }]
+                        if *transform == outer * Affine::translate((5.0, 0.0))
+                )
+        ));
     }
 
     #[test]

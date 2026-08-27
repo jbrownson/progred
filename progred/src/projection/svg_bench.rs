@@ -19,6 +19,7 @@ struct Bench {
     descends: Vec<Descend<World>>,
     /// What the probe answered for the pass's pointer input.
     hit: Option<Claim<Hovered>>,
+    frame_elapsed: std::time::Duration,
 }
 
 /// Probe with the pointer, then render and unpack the placed frame.
@@ -37,6 +38,7 @@ fn settle(placed: Placed<World, Bench>, pointer: Option<Point>) -> Bench {
         list: DrawList::new(),
         descends,
         hit,
+        frame_elapsed: std::time::Duration::ZERO,
     };
     let ink = crate::placed::Ink {
         hovered: hovered.as_ref(),
@@ -236,6 +238,29 @@ fn place_with_annotations(
     viewport: Option<Rect>,
     root: Option<(&[Step], Option<&Value>, Option<&Value>)>,
 ) -> (Bench, Extent) {
+    place_with_annotations_using(
+        doc,
+        selection,
+        annotations,
+        width,
+        pointer,
+        viewport,
+        root,
+        &DrawingMemo::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn place_with_annotations_using(
+    doc: &Document,
+    selection: Option<&Selection>,
+    annotations: &Annotations,
+    width: f64,
+    pointer: Option<Point>,
+    viewport: Option<Rect>,
+    root: Option<(&[Step], Option<&Value>, Option<&Value>)>,
+    drawing_memo: &DrawingMemo,
+) -> (Bench, Extent) {
     let stack = crate::stack::load::<World>();
     let sources = Sources {
         doc,
@@ -269,7 +294,7 @@ fn place_with_annotations(
     let start = std::time::Instant::now();
     let (root_path, root, root_projection) =
         root.unwrap_or((&[], sources.root(), None));
-    let node = project::<World, Bench>(
+    let node = project_with_drawing_memo::<World, Bench>(
         ProjectDescription {
             sources,
             root,
@@ -285,6 +310,7 @@ fn place_with_annotations(
         },
         &mut tcx,
         hooks,
+        drawing_memo,
     );
     let project_elapsed = start.elapsed();
     let extent = node.extent;
@@ -296,10 +322,11 @@ fn place_with_annotations(
             None => Placement::root(rect),
         },
     );
-    let settled = settle(placed, pointer);
+    let mut settled = settle(placed, pointer);
+    settled.frame_elapsed = start.elapsed();
     eprintln!(
         "frame at {width:.0}px: {:.1?} (project {:.1?})",
-        start.elapsed(),
+        settled.frame_elapsed,
         project_elapsed,
     );
     (settled, extent)
@@ -357,20 +384,68 @@ fn iop_tree_projects_through_grap_into_puri_ink() {
     let root = doc.root.as_ref().unwrap();
     let value = crate::spine::get(root, &declaration.value_path);
     let projection = crate::spine::get(root, &declaration.projection_path);
-    let (bench, extent) = place_with_annotations(
+    let drawing_memo = DrawingMemo::default();
+    let source = Some((
+        declaration.value_path.as_slice(),
+        value,
+        projection,
+    ));
+    let (bench, extent) = place_with_annotations_using(
         &doc,
         None,
         &Annotations::default(),
         1400.0,
         None,
         None,
-        Some((
-            &declaration.value_path,
-            value,
-            projection,
-        )),
+        source,
+        &drawing_memo,
+    );
+    let (reused, _) = place_with_annotations_using(
+        &doc,
+        None,
+        &Annotations::default(),
+        1400.0,
+        None,
+        None,
+        source,
+        &drawing_memo,
+    );
+    eprintln!("IoP tree reused frame: {:.1?}", reused.frame_elapsed);
+    assert_eq!(reused.list.0.len(), bench.list.0.len());
+    let outer = match bench.list.0.first() {
+        Some(DrawCmd::Fill { transform, .. }) => *transform,
+        _ => panic!("the scene starts with the sky fill"),
+    };
+    let native_iterations = 16;
+    let native_start = std::time::Instant::now();
+    let (native, native_stats) = (1..native_iterations).fold(
+        {
+            let mut frame = DrawList::new();
+            let stats = super::iop_tree_native::draw(&mut frame, 500.0, 500.0, outer);
+            (frame, stats)
+        },
+        |_, _| {
+            let mut frame = DrawList::new();
+            let stats = super::iop_tree_native::draw(&mut frame, 500.0, 500.0, outer);
+            std::hint::black_box(&frame);
+            (frame, stats)
+        },
+    );
+    let native_elapsed = native_start.elapsed() / native_iterations;
+    let grap_elapsed = bench.frame_elapsed;
+    eprintln!(
+        "IoP tree: Grap {grap_elapsed:.1?}, native {native_elapsed:.1?}, {:.0}x",
+        grap_elapsed.as_secs_f64() / native_elapsed.as_secs_f64(),
     );
     assert!(extent.width >= 500.0);
+    assert_eq!(native_stats.branches, 511);
+    assert_eq!(native_stats.blossoms, 7_680);
+    assert_eq!(native.0.len(), bench.list.0.len());
+    let mut grap_svg = String::new();
+    let mut native_svg = String::new();
+    write_cmds(&mut grap_svg, &bench.list.0);
+    write_cmds(&mut native_svg, &native.0);
+    assert_eq!(native_svg, grap_svg);
     assert!(bench.list.0.iter().any(|command| matches!(
         command,
         DrawCmd::Fill {

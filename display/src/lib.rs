@@ -119,9 +119,8 @@ impl<'a, World, Hover> ProjectionTargets<'a, World, Hover> {
 /// Progred's measured boxes (those have extents and place closures).
 pub enum Layout<World, Hover> {
     Leaf(Leaf<Paint>),
-    /// A Grap program interpreted against the host's live Puri canvas
-    /// during rendering. Production streams through canvas FFIs;
-    /// tests may install a recording canvas instead.
+    /// A Grap program rendered into a fixed leaf-local canvas. The
+    /// consumer chooses its evaluation and replay strategy.
     DrawingProgram {
         width: f64,
         ascent: f64,

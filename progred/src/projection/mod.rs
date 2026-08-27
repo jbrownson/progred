@@ -32,6 +32,9 @@ use progred_libraries::{
 };
 mod location;
 mod drawing;
+#[cfg(test)]
+mod iop_tree_native;
+pub(crate) use drawing::Memo as DrawingMemo;
 use gid::{CellId, Path, Step, Value};
 #[cfg(test)]
 use gid::{Cells, Document, new_cell_id};
@@ -126,6 +129,7 @@ struct Cx<'a> {
     secondary: Option<Secondary>,
     source: Source<'a>,
     fuel: std::cell::Cell<usize>,
+    drawing_memo: &'a DrawingMemo,
 }
 
 #[derive(Clone, Default)]
@@ -2156,6 +2160,7 @@ fn projection_is_absent(value: &Value) -> bool {
     absent::is_absent(value)
 }
 
+#[cfg(test)]
 pub fn project<
     C: 'static,
     Cv: Canvas + 'static,
@@ -2164,6 +2169,19 @@ pub fn project<
     tcx: &mut TextCtx,
     hooks: Hooks<C>,
 ) -> Measured<Placed<C, Cv>> {
+    project_with_drawing_memo(description, tcx, hooks, &DrawingMemo::default())
+}
+
+pub(crate) fn project_with_drawing_memo<
+    C: 'static,
+    Cv: Canvas + 'static,
+>(
+    description: ProjectDescription<'_, C>,
+    tcx: &mut TextCtx,
+    hooks: Hooks<C>,
+    drawing_memo: &DrawingMemo,
+) -> Measured<Placed<C, Cv>> {
+    drawing_memo.begin();
     let ProjectDescription {
         sources,
         root,
@@ -2186,6 +2204,7 @@ pub fn project<
         selection,
         source: Source::Stored,
         fuel: std::cell::Cell::new(grap::DEFAULT_FUEL),
+        drawing_memo,
         // Other projections of the selected cell are secondary. The
         // HOVERED value's faint marks come from the render pass's Ink.
         secondary: secondary_of(&sources, selection),
@@ -2236,14 +2255,16 @@ pub fn project<
             &mut build,
         ),
     };
-    resolve_choices(
+    let resolved = resolve_choices(
         ChoiceGraph {
             root: layout,
             shared: build.shared,
             choice_count: build.next_choice,
         },
         width,
-    )
+    );
+    drawing_memo.finish();
+    resolved
 }
 
 /// Marks `child` as the projection of `path` WITHOUT claiming any
@@ -2428,6 +2449,7 @@ fn prepare_transient_root<
         secondary: None,
         source: Source::Transient { owner: path },
         fuel: std::cell::Cell::new(fuel),
+        drawing_memo: cx.drawing_memo,
     };
     let projected = prepare_location(
         &result_cx,

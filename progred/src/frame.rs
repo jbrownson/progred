@@ -26,6 +26,7 @@ use puri::text::TextCtx;
 use puri_vello::VelloCanvas;
 #[cfg(target_arch = "wasm32")]
 use puri_web::WebCanvas;
+use std::collections::HashMap;
 use std::rc::Rc;
 use ui_events::ScrollDelta;
 #[cfg(not(target_arch = "wasm32"))]
@@ -304,6 +305,7 @@ pub(crate) struct FrameResources<'a> {
     fonts: &'a mut FontContext,
     layouts: &'a mut LayoutContext<Brush>,
     text_cache: &'a mut puri::text::TextCache,
+    drawing_memos: &'a mut HashMap<Root, projection::DrawingMemo>,
 }
 
 /// The frame as one measured value, plus the scroll maxima its
@@ -457,6 +459,7 @@ impl App {
             fonts: &mut self.font_cx,
             layouts: &mut self.layout_cx,
             text_cache: &mut self.text_cache,
+            drawing_memos: &mut self.drawing_memos,
         };
         let AppView { view } = app_view(description, resources);
         let placed = measured::place(
@@ -649,6 +652,7 @@ fn project_workspace_view(
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
     view: &workspace::View,
+    drawing_memo: &projection::DrawingMemo,
     size: Size,
     scale: f64,
 ) -> measured::Measured<Placed<App, Paint>> {
@@ -679,7 +683,7 @@ fn project_workspace_view(
         }
     };
     let raw = view.projection == workspace::Projection::Raw;
-    let projected = projection::project(
+    let projected = projection::project_with_drawing_memo(
         projection::ProjectDescription {
             sources,
             root,
@@ -698,6 +702,7 @@ fn project_workspace_view(
         },
         tcx,
         projection_hooks(view.root.clone()),
+        drawing_memo,
     );
     let content = measured::pad(Insets::uniform(margin), projected);
     let maximum = Vec2::new(
@@ -746,9 +751,11 @@ fn project_workspace(
     styles: &crate::styles::Styles,
     tcx: &mut TextCtx,
     sources: sources::Sources<'_>,
+    drawing_memos: &mut HashMap<Root, projection::DrawingMemo>,
     size: Size,
     scale: f64,
 ) -> measured::Measured<Placed<App, Paint>> {
+    drawing_memos.retain(|root, _| model.workspace.view(root).is_some());
     let geometry = model.workspace.geometry(size, scale);
     let mut body = placed::leaf(
         measured::Extent {
@@ -764,6 +771,7 @@ fn project_workspace(
             .view(&placed_view.root)
             .expect("workspace geometry only names live views");
         let rect = placed_view.rect;
+        let drawing_memo = drawing_memos.entry(placed_view.root.clone()).or_default();
         let child = project_workspace_view(
             model,
             stack,
@@ -771,6 +779,7 @@ fn project_workspace(
             tcx,
             sources,
             view,
+            drawing_memo,
             rect.size(),
             scale,
         );
@@ -866,6 +875,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         fonts: font_cx,
         layouts: layout_cx,
         text_cache,
+        drawing_memos,
     } = resources;
     let viewport_width = viewport.width;
     // Mark-and-sweep by pass: entries the previous pass never used
@@ -915,6 +925,7 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         &styles,
         &mut tcx,
         sources,
+        drawing_memos,
         content_viewport.size(),
         scale,
     );
@@ -1149,6 +1160,7 @@ mod frame_tests {
             cache: &mut cache,
         };
         let size = Size::new(801.0, 600.0);
+        let mut drawing_memos = HashMap::new();
         let placed = measured::place(
             project_workspace(
                 &model,
@@ -1159,6 +1171,7 @@ mod frame_tests {
                     doc: &model.doc,
                     library: &stack.library,
                 },
+                &mut drawing_memos,
                 size,
                 1.0,
             ),
