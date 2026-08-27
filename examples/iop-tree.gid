@@ -94,7 +94,6 @@
     "panes": f30d400a4321a4d44d1628a8adc5a84d,
     "params": 195b378d0d31d90ab0d7366c15346b70,
     "path": fbcf1931c6e050d62c4caf5cccba2ce8,
-    "path_elements": fd52747f31d0a82f9926e99331c69368,
     "pattern": b9dc97198709bc6f7bae4c7afc7d424f,
     "pi": 9cd591f37312e563f52b7374a6cef5c0,
     "prepend": 06f34b889ba63141b4b62f02d8d49aa9,
@@ -1180,23 +1179,18 @@
       body: {
         function: where,
         expression: {
-          function: fill,
-          paint: paint,
-          shape: {
-            path: path_elements,
-          },
-        },
-        bindings: [
-          {
-            value: {
-              right: offset,
-              function: subtract,
-              left: canvas_height,
+          expressions: [
+            {
+              function: path,
             },
-            bind: initial_y,
-          },
-          {
-            value: {
+            {
+              x: {
+                f64: 0x0000000000000000,
+              },
+              y: initial_y,
+              function: move_to,
+            },
+            {
               initial: {
                 function: quote,
                 expression: {
@@ -1227,18 +1221,15 @@
                         expression: {
                           function: let,
                           expression: {
-                            function: quote,
-                            expression: {
-                              state: {
-                                x: {
-                                  unquote: next_x,
-                                },
-                                y: {
-                                  unquote: next_y,
-                                },
+                            expressions: [
+                              {
+                                x: next_x,
+                                y: next_y,
+                                function: line_to,
                               },
-                              item: {
-                                line_to: {
+                              {
+                                function: quote,
+                                expression: {
                                   x: {
                                     unquote: next_x,
                                   },
@@ -1247,7 +1238,8 @@
                                   },
                                 },
                               },
-                            },
+                            ],
+                            function: do,
                           },
                           bindings: [
                             {
@@ -1310,66 +1302,38 @@
                   ],
                 },
               },
-              function: unfold,
+              function: iterate,
             },
-            pattern: {
-              list: {
-                bind: path_elements,
+            {
+              x: canvas_width,
+              y: canvas_height,
+              function: line_to,
+            },
+            {
+              x: {
+                f64: 0x0000000000000000,
               },
+              y: canvas_height,
+              function: line_to,
             },
-          },
+            {
+              function: close,
+            },
+            {
+              function: fill,
+              paint: paint,
+            },
+          ],
+          function: do,
+        },
+        bindings: [
           {
             value: {
-              right: {
-                right: {
-                  function: quote,
-                  expression: [
-                    {
-                      line_to: {
-                        x: {
-                          unquote: canvas_width,
-                        },
-                        y: {
-                          unquote: canvas_height,
-                        },
-                      },
-                    },
-                    {
-                      line_to: {
-                        x: {
-                          f64: 0x0000000000000000,
-                        },
-                        y: {
-                          unquote: canvas_height,
-                        },
-                      },
-                    },
-                    {
-                      close: {},
-                    },
-                  ],
-                },
-                function: concat,
-                left: path_elements,
-              },
-              function: concat,
-              left: {
-                function: quote,
-                expression: [
-                  {
-                    move_to: {
-                      x: {
-                        f64: 0x0000000000000000,
-                      },
-                      y: {
-                        unquote: initial_y,
-                      },
-                    },
-                  },
-                ],
-              },
+              right: offset,
+              function: subtract,
+              left: canvas_height,
             },
-            bind: path_elements,
+            bind: initial_y,
           },
         ],
       },
@@ -1431,9 +1395,6 @@
     },
     offset: {
       name: "offset",
-    },
-    path_elements: {
-      name: "path elements",
     },
     random_scale: {
       name: "random scale",

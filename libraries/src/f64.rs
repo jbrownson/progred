@@ -7,7 +7,9 @@ use gid::{CellId, Cells, Step, Value};
 #[cfg(test)]
 use grap_runtime as grap;
 use grap_runtime::vocabulary::FUNCTION;
-use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use grap_runtime::{
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+};
 use progred_display::{Delim, Layout, ProjectionInput, bracket, overlay_value, row};
 
 pub mod vocabulary {
@@ -125,6 +127,7 @@ pub fn binary_display<World, Hover: Clone>(
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
+        .with_f64_representation(read, value)
         .register(
             vocabulary::UPDATE,
             ForeignFunction::new(|context, call, environment| {
@@ -144,59 +147,59 @@ pub fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::ADD,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left + right)
             }),
         )
         .register(
             vocabulary::MULTIPLY,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left * right)
             }),
         )
         .register(
             vocabulary::SUBTRACT,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left - right)
             }),
         )
         .register(
             vocabulary::DIVIDE,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 binary(context, call, environment, |left, right| left / right)
             }),
         )
         .register(
             vocabulary::SIN,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 unary(context, call, environment, f64::sin)
             }),
         )
         .register(
             vocabulary::COS,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 unary(context, call, environment, f64::cos)
             }),
         )
         .register(
             vocabulary::FLOOR,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 unary(context, call, environment, f64::floor)
             }),
         )
         .register(
             vocabulary::LESS,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 binary_value(context, call, environment, |left, right| {
-                    logic::value(left < right)
+                    RuntimeValue::from_value(logic::value(left < right))
                 })
             }),
         )
         .register(
             vocabulary::EQUAL,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 binary_value(context, call, environment, |left, right| {
-                    logic::value(left == right)
+                    RuntimeValue::from_value(logic::value(left == right))
                 })
             }),
         )
@@ -207,9 +210,9 @@ fn binary(
     call: Expression,
     environment: &Environment,
     operation: impl FnOnce(f64, f64) -> f64,
-) -> Result<Value, Halt> {
+) -> Result<RuntimeValue, Halt> {
     binary_value(context, call, environment, |left, right| {
-        value(operation(left, right))
+        RuntimeValue::f64(operation(left, right), value)
     })
 }
 
@@ -217,20 +220,20 @@ fn binary_value(
     context: &mut Context,
     call: Expression,
     environment: &Environment,
-    operation: impl FnOnce(f64, f64) -> Value,
-) -> Result<Value, Halt> {
+    operation: impl FnOnce(f64, f64) -> RuntimeValue,
+) -> Result<RuntimeValue, Halt> {
     let Some(left) = context.field(call, vocabulary::LEFT) else {
-        return Ok(context.missing_argument(vocabulary::LEFT));
+        return Ok(context.missing_runtime_argument(vocabulary::LEFT));
     };
     let Some(right) = context.field(call, vocabulary::RIGHT) else {
-        return Ok(context.missing_argument(vocabulary::RIGHT));
+        return Ok(context.missing_runtime_argument(vocabulary::RIGHT));
     };
-    let left = context.eval(left, environment)?;
-    let right = context.eval(right, environment)?;
-    Ok(match (read(&left), read(&right)) {
+    let left = context.eval_runtime(left, environment)?;
+    let right = context.eval_runtime(right, environment)?;
+    Ok(match (left.as_f64(read), right.as_f64(read)) {
         (Some(left), Some(right)) => operation(left, right),
-        (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F64),
-        (_, None) => absent::with_reason(vocabulary::RIGHT_NOT_F64),
+        (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F64).into(),
+        (_, None) => absent::with_reason(vocabulary::RIGHT_NOT_F64).into(),
     })
 }
 
@@ -239,14 +242,15 @@ fn unary(
     call: Expression,
     environment: &Environment,
     operation: impl FnOnce(f64) -> f64,
-) -> Result<Value, Halt> {
+) -> Result<RuntimeValue, Halt> {
     let Some(operand) = context.field(call, vocabulary::OPERAND) else {
-        return Ok(context.missing_argument(vocabulary::OPERAND));
+        return Ok(context.missing_runtime_argument(vocabulary::OPERAND));
     };
-    let operand = context.eval(operand, environment)?;
-    Ok(read(&operand)
-        .map(|operand| value(operation(operand)))
-        .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64)))
+    let operand = context.eval_runtime(operand, environment)?;
+    Ok(operand
+        .as_f64(read)
+        .map(|operand| RuntimeValue::f64(operation(operand), value))
+        .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64).into()))
 }
 
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
@@ -378,6 +382,28 @@ mod tests {
         assert_eq!(
             grap::evaluate(&multiply, |_| None, &functions(), 20).result,
             value(20.0)
+        );
+    }
+
+    #[test]
+    fn runtime_lowering_preserves_an_enriched_value_through_a_binding() {
+        let parameter = new_cell_id();
+        let metadata = new_cell_id();
+        let enriched = Value::Record(
+            value(2.5)
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(metadata, Value::from(b"kept".to_vec())),
+        );
+        let expression = grap::call(
+            grap::lambda([parameter], Value::from(parameter)),
+            [(parameter, enriched.clone())],
+        );
+
+        assert_eq!(
+            grap::evaluate(&expression, |_| None, &functions(), 20).result,
+            enriched
         );
     }
 

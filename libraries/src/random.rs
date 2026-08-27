@@ -2,7 +2,9 @@
 
 use crate::{Library, absent, f64, name, u64};
 use gid::{Cells, Value};
-use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use grap_runtime::{
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -34,15 +36,17 @@ fn evaluated(
 fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
     ForeignFunctions::default().register(
         vocabulary::BETWEEN,
-        ForeignFunction::new(move |context, call, environment| {
-            let Some(min) = evaluated(context, call, environment, vocabulary::MIN)? else {
-                return Ok(context.missing_argument(vocabulary::MIN));
+        ForeignFunction::runtime(move |context, call, environment| {
+            let Some(min) = context.field(call, vocabulary::MIN) else {
+                return Ok(context.missing_runtime_argument(vocabulary::MIN));
             };
-            let Some(max) = evaluated(context, call, environment, vocabulary::MAX)? else {
-                return Ok(context.missing_argument(vocabulary::MAX));
+            let Some(max) = context.field(call, vocabulary::MAX) else {
+                return Ok(context.missing_runtime_argument(vocabulary::MAX));
             };
-            let (Some(min), Some(max)) = (f64::read(&min), f64::read(&max)) else {
-                return Ok(absent::with_reason(vocabulary::INVALID_BOUNDS));
+            let min = context.eval_runtime(min, environment)?;
+            let max = context.eval_runtime(max, environment)?;
+            let (Some(min), Some(max)) = (min.as_f64(f64::read), max.as_f64(f64::read)) else {
+                return Ok(absent::with_reason(vocabulary::INVALID_BOUNDS).into());
             };
             let next = state
                 .get()
@@ -50,7 +54,7 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
                 .wrapping_add(1_442_695_040_888_963_407);
             state.set(next);
             let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
-            Ok(f64::value(min + (max - min) * unit))
+            Ok(RuntimeValue::f64(min + (max - min) * unit, f64::value))
         }),
     )
 }
@@ -65,20 +69,23 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::WITH_RANDOM,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let seed = match evaluated(context, call, environment, vocabulary::SEED)? {
                     Some(seed) => match u64::read(&seed) {
                         Some(seed) => seed,
-                        None => return Ok(absent::with_reason(vocabulary::INVALID_SEED)),
+                        None => {
+                            return Ok(absent::with_reason(vocabulary::INVALID_SEED).into());
+                        }
                     },
                     None => 0,
                 };
                 let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION)
                 else {
-                    return Ok(context.missing_argument(grap_runtime::vocabulary::EXPRESSION));
+                    return Ok(context
+                        .missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION));
                 };
                 context.with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
-                    context.eval(expression, environment)
+                    context.eval_runtime(expression, environment)
                 })
             }),
         )

@@ -3,8 +3,12 @@
 //! structural matching alone.
 
 use crate::{Library, absent, f64, name};
-use gid::{Cells, Value};
-use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use gid::Cells;
+#[cfg(test)]
+use gid::Value;
+use grap_runtime::{
+    Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -34,10 +38,10 @@ fn evaluated(
     call: Expression,
     environment: &Environment,
     field: gid::CellId,
-) -> Result<Option<Value>, Halt> {
+) -> Result<Option<RuntimeValue>, Halt> {
     context
         .field(call, field)
-        .map(|value| context.eval(value, environment))
+        .map(|value| context.eval_runtime(value, environment))
         .transpose()
 }
 
@@ -45,149 +49,146 @@ fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
             vocabulary::PREPEND,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(context.missing_argument(vocabulary::LIST));
+                    return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
                 let Some(item) = evaluated(context, call, environment, vocabulary::ITEM)? else {
-                    return Ok(context.missing_argument(vocabulary::ITEM));
+                    return Ok(context.missing_runtime_argument(vocabulary::ITEM));
                 };
-                Ok(list
-                    .as_list()
-                    .map(|list| Value::list(std::iter::once(item).chain(list.values().cloned())))
-                    .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST)))
+                let Some(values) = list.list_values() else {
+                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                };
+                Ok(RuntimeValue::list(std::iter::once(item).chain(values)))
             }),
         )
         .register(
             vocabulary::CONCAT,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(left) = evaluated(context, call, environment, f64::vocabulary::LEFT)?
                 else {
-                    return Ok(context.missing_argument(f64::vocabulary::LEFT));
+                    return Ok(context.missing_runtime_argument(f64::vocabulary::LEFT));
                 };
                 let Some(right) = evaluated(context, call, environment, f64::vocabulary::RIGHT)?
                 else {
-                    return Ok(context.missing_argument(f64::vocabulary::RIGHT));
+                    return Ok(context.missing_runtime_argument(f64::vocabulary::RIGHT));
                 };
-                Ok(match (left.as_list(), right.as_list()) {
-                    (Some(left), Some(right)) => {
-                        Value::list(left.values().chain(right.values()).cloned())
-                    }
-                    _ => absent::with_reason(vocabulary::NOT_LIST),
-                })
+                let (Some(left), Some(right)) = (left.list_values(), right.list_values()) else {
+                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                };
+                Ok(RuntimeValue::list(left.chain(right)))
             }),
         )
         .register(
             vocabulary::LENGTH,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(context.missing_argument(vocabulary::LIST));
+                    return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
                 Ok(list
-                    .as_list()
-                    .map(|list| f64::value(list.len() as f64))
-                    .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST)))
+                    .list_len()
+                    .map(|length| RuntimeValue::f64(length as f64, f64::value))
+                    .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST).into()))
             }),
         )
         .register(
             vocabulary::AT,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(context.missing_argument(vocabulary::LIST));
+                    return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
-                let Some(index) = evaluated(context, call, environment, vocabulary::INDEX)? else {
-                    return Ok(context.missing_argument(vocabulary::INDEX));
+                let Some(index) = context.field(call, vocabulary::INDEX) else {
+                    return Ok(context.missing_runtime_argument(vocabulary::INDEX));
                 };
-                let Some(list) = list.as_list() else {
-                    return Ok(absent::with_reason(vocabulary::NOT_LIST));
-                };
-                let Some(index) = f64::read(&index)
+                let index = context.eval_runtime(index, environment)?;
+                if list.list_len().is_none() {
+                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                }
+                let Some(index) = index
+                    .as_f64(f64::read)
                     .filter(|index| *index >= 0.0 && index.fract() == 0.0)
                     .map(|index| index as usize)
                 else {
-                    return Ok(absent::with_reason(vocabulary::OUT_OF_BOUNDS));
+                    return Ok(absent::with_reason(vocabulary::OUT_OF_BOUNDS).into());
                 };
                 Ok(list
-                    .values()
-                    .nth(index)
-                    .cloned()
-                    .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS)))
+                    .list_get(index)
+                    .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS).into()))
             }),
         )
         .register(
             vocabulary::TAIL,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(context.missing_argument(vocabulary::LIST));
+                    return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
-                Ok(list
-                    .as_list()
-                    .and_then(|list| {
-                        list.values().next()?;
-                        Some(Value::list(list.values().skip(1).cloned()))
-                    })
-                    .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS)))
+                let Some(mut values) = list.list_values() else {
+                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
+                };
+                if values.next().is_none() {
+                    return Ok(absent::with_reason(vocabulary::OUT_OF_BOUNDS).into());
+                }
+                Ok(RuntimeValue::list(values))
             }),
         )
         .register(
             vocabulary::UNFOLD,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(mut state) = evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_argument(vocabulary::INITIAL));
+                    return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
                 };
                 let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_argument(vocabulary::STEP));
+                    return Ok(context.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 let mut items = Vec::new();
                 loop {
-                    let result =
-                        context.call_prepared(&step, [(vocabulary::STATE, state.clone())])?;
-                    if absent::is_absent(&result) {
-                        break Ok(Value::record([
-                            (vocabulary::LIST, Value::list(items)),
+                    let result = context.call_prepared_runtime(
+                        &step,
+                        [(vocabulary::STATE, state.clone())],
+                    )?;
+                    if result.is_absent() {
+                        break Ok(RuntimeValue::record([
+                            (vocabulary::LIST, RuntimeValue::list(items)),
                             (vocabulary::STATE, state),
                         ]));
                     }
-                    let Some(fields) = result.as_record() else {
-                        break Ok(absent::with_reason(vocabulary::INVALID_STEP));
-                    };
                     let (Some(item), Some(next)) = (
-                        fields.get(&vocabulary::ITEM),
-                        fields.get(&vocabulary::STATE),
+                        result.field(vocabulary::ITEM),
+                        result.field(vocabulary::STATE),
                     ) else {
-                        break Ok(absent::with_reason(vocabulary::INVALID_STEP));
+                        break Ok(absent::with_reason(vocabulary::INVALID_STEP).into());
                     };
-                    items.push(item.clone());
-                    state = next.clone();
+                    items.push(item);
+                    state = next;
                 }
             }),
         )
         .register(
             vocabulary::FOLD,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(list) = evaluated(context, call, environment, vocabulary::LIST)? else {
-                    return Ok(context.missing_argument(vocabulary::LIST));
+                    return Ok(context.missing_runtime_argument(vocabulary::LIST));
                 };
                 let Some(mut accumulator) =
                     evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_argument(vocabulary::INITIAL));
+                    return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
                 };
                 let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_argument(vocabulary::STEP));
+                    return Ok(context.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
-                let Some(list) = list.as_list() else {
-                    return Ok(absent::with_reason(vocabulary::NOT_LIST));
+                let Some(values) = list.list_values() else {
+                    return Ok(absent::with_reason(vocabulary::NOT_LIST).into());
                 };
-                for item in list.values() {
-                    accumulator = context.call_prepared(
+                for item in values {
+                    accumulator = context.call_prepared_runtime(
                         &step,
                         [
                             (vocabulary::ACCUMULATOR, accumulator),
-                            (vocabulary::ITEM, item.clone()),
+                            (vocabulary::ITEM, item),
                         ],
                     )?;
                 }
@@ -196,22 +197,22 @@ fn functions() -> ForeignFunctions {
         )
         .register(
             vocabulary::ITERATE,
-            ForeignFunction::new(|context, call, environment| {
+            ForeignFunction::runtime(|context, call, environment| {
                 let Some(mut state) =
                     evaluated(context, call, environment, vocabulary::INITIAL)?
                 else {
-                    return Ok(context.missing_argument(vocabulary::INITIAL));
+                    return Ok(context.missing_runtime_argument(vocabulary::INITIAL));
                 };
                 let Some(step) = context.field(call, vocabulary::STEP) else {
-                    return Ok(context.missing_argument(vocabulary::STEP));
+                    return Ok(context.missing_runtime_argument(vocabulary::STEP));
                 };
                 let step = context.prepare_callable(step, environment)?;
                 loop {
-                    let next = context.call_prepared(
+                    let next = context.call_prepared_runtime(
                         &step,
                         [(vocabulary::STATE, state.clone())],
                     )?;
-                    if absent::is_absent(&next) {
+                    if next.is_absent() {
                         break Ok(state);
                     }
                     state = next;

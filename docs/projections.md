@@ -82,6 +82,11 @@ editable projection. Raw never invokes the function. Document-declared panes
 use this interface rather than defining a second presentation protocol. The
 built-in `drawing` function is one implementation: it wraps its argument in
 the ordinary drawing data form consumed by the layout library.
+When that leaf renders, its scoped drawing functions send fills directly to
+the caller's canvas. `path`, `move to`, `line to`, and `close` mutate only the
+path builder in that synchronous scope; a `fill` without an explicit shape
+fills the current path. Paths therefore need not become temporary GID
+lists merely to cross back into the host.
 
 A partial returns a `Layout<World, Hover>`: boxes, paint-parametric Puri
 leaves (`Text` and `Drawing`), the stock host `LineEdit` control, generic hover
@@ -240,6 +245,22 @@ geometry library applies the same rule to `circle` and `radius`; its
 Rust-backed circle constructor consumes the f64 library's
 representation. Neither library changes Grap or `Value`.
 
+The Rust evaluator may lower a recognized f64 facet to an unboxed host
+number while an evaluation is running. The f64 library registers the
+open decoder and canonical encoder; Grap syntax does not recognize a
+numeric form. A lowered source number retains its complete original
+`Value`, so passing `{f64: bits, metadata: value}` through a binding
+returns that exact enriched value. A computed number is encoded back to
+ordinary GID only when a generic operation or the evaluation result asks
+for a `Value`. Environments carry these runtime values directly, and
+optimized Rust functions may accept and return them; ordinary foreign
+functions continue to receive and return GID values through adapters.
+Records and lists constructed during evaluation likewise retain runtime
+children. `quote`, destructuring, and the list iteration functions can
+therefore route an unquoted number through nested containers without first
+encoding it as GID and decoding it again. Materialization remains recursive
+and exact at the public result boundary.
+
 ## Evaluation
 
 Ordinary projection does not implicitly run call-shaped records. It
@@ -313,9 +334,8 @@ returns an ordinary absent without a diagnostic. A final binder pattern
 is the uniform catch-all when one is wanted. An absent returned by the
 selected expression is still its result and does not fall through to
 another case.
-`match` keeps the subject as an ordinary host value while matching; it
-does not create a hidden graph binding or make patterns depend on an
-enclosing match.
+`match` destructures the evaluator's runtime values directly; it does not
+create a hidden graph binding or make patterns depend on an enclosing match.
 
 There is no evaluator-level quote or literal form. At the Rust boundary
 an operand is already an inert expression; returning its expression
@@ -363,8 +383,12 @@ the same expression cell is projected outside an `evaluate` field.
 
 The evaluator runtime lives in its own `grap` crate and depends only on
 GID plus its persistent-map implementation. It knows the tagged
-`{absent: reason-cell}` result convention and its own stable reasons, but
-no names, projection, f64, geometry, UI, file, or Linebender concepts.
+`{absent: reason-cell}` result convention and its own stable reasons. It
+also provides implementation-level runtime records, lists, and an f64
+carrier, but the f64 library supplies the GID recognition and encoding
+functions; the evaluator assigns the carrier no surface syntax or numeric
+semantics.
+It knows no names, projection, geometry, UI, file, or Linebender concepts.
 The `progred-libraries` package contains one module per
 built-in conceptual library: Grap, name, text, absent, control,
 f64, and geometry. Each module exports its complete `Library` value.
@@ -375,8 +399,10 @@ its loaded `Stack`; a later foreign table overrides a shared cell.
 A registered Rust implementation receives the call record, the calling
 environment, and the live evaluation context. It looks up the fields it
 consumes as raw argument expressions and may recursively evaluate any
-of them through that context. Its semantic result is still an
-ordinary `Value`; the host `Result` only propagates evaluator halting
+of them through that context. Its semantic result is still an ordinary
+`Value`, although an optimized implementation may retain an equivalent
+`RuntimeValue` until the host boundary; the host `Result` only propagates
+evaluator halting
 such as exhausted fuel. Rust environments remain validated evaluator
 values and become GID records only through an explicit conversion.
 The registered `evaluate` implementation evaluates its environment

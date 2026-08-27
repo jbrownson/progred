@@ -9,13 +9,9 @@ use super::Cx;
 use crate::placed::{Placed, leaf};
 use gid::{CellId, Value};
 use measured::{Extent, Measured};
-use progred_libraries::{
-    absent,
-    f64 as f64_convention,
-    layout as layout_data,
-};
+use progred_libraries::{absent, layout as layout_data};
 use puri::draw::Canvas;
-use kurbo::{Affine, Circle, Rect};
+use kurbo::{Affine, BezPath, Circle, Rect};
 use peniko::Brush;
 
 #[derive(Clone)]
@@ -75,7 +71,9 @@ fn number(
     expression: grap::Expression,
     environment: &grap::Environment,
 ) -> Result<Option<f64>, grap::Halt> {
-    Ok(f64_convention::read(&context.eval(expression, environment)?)
+    Ok(context
+        .eval_runtime(expression, environment)?
+        .as_f64(progred_libraries::f64::read)
         .filter(|number| number.is_finite()))
 }
 
@@ -204,51 +202,90 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
             canvas.clip(
                 Rect::new(0.0, 0.0, width, ascent + descent),
                 outer,
-                |canvas| {
+                    |canvas| {
                     let canvas = std::cell::RefCell::new(canvas);
-                    let functions = [layout_data::vocabulary::FILL];
+                    let path = std::cell::RefCell::new(BezPath::new());
+                    let unit = Value::record([]);
+                    let functions = [
+                        layout_data::vocabulary::FILL,
+                        layout_data::vocabulary::PATH,
+                        layout_data::vocabulary::MOVE_TO,
+                        layout_data::vocabulary::LINE_TO,
+                        layout_data::vocabulary::CLOSE,
+                    ];
                     let draw = |function,
                                 context: &mut grap::Context<'_>,
                                 call,
                                 environment: &grap::Environment| {
-                        debug_assert_eq!(function, layout_data::vocabulary::FILL);
-                        let Some(shape_expression) =
-                            context.field(call, layout_data::vocabulary::SHAPE)
-                        else {
-                            return Ok(context
-                                .missing_argument(layout_data::vocabulary::SHAPE));
-                        };
-                        let Some(paint) = evaluated_field(
-                            context,
-                            call,
-                            environment,
-                            layout_data::vocabulary::PAINT,
-                        )?
-                        else {
-                            return Ok(context
-                                .missing_argument(layout_data::vocabulary::PAINT));
-                        };
-                        let transform = match context
-                            .field(call, layout_data::vocabulary::TRANSFORM)
-                        {
-                            Some(expression) => {
-                                transform(context, expression, environment)?
+                        match function {
+                            layout_data::vocabulary::PATH => {
+                                *path.borrow_mut() = BezPath::new();
+                                Ok(unit.clone())
                             }
-                            None => Some(Affine::IDENTITY),
-                        };
-                        let (Some(shape), Some(paint), Some(transform)) = (
-                            shape(context, shape_expression, environment)?,
-                            layout_data::read_paint(&paint),
-                            transform,
-                        ) else {
-                            return Ok(absent::value());
-                        };
-                        canvas.borrow_mut().fill(
-                            shape,
-                            faces.resolve(paint),
-                            outer * transform,
-                        );
-                        Ok(Value::record([]))
+                            layout_data::vocabulary::MOVE_TO
+                            | layout_data::vocabulary::LINE_TO => {
+                                let (Some(x), Some(y)) = (
+                                    context.field(call, layout_data::vocabulary::X),
+                                    context.field(call, layout_data::vocabulary::Y),
+                                ) else {
+                                    return Ok(absent::value());
+                                };
+                                let (Some(x), Some(y)) = (
+                                    number(context, x, environment)?,
+                                    number(context, y, environment)?,
+                                ) else {
+                                    return Ok(absent::value());
+                                };
+                                if function == layout_data::vocabulary::MOVE_TO {
+                                    path.borrow_mut().move_to((x, y));
+                                } else {
+                                    path.borrow_mut().line_to((x, y));
+                                }
+                                Ok(unit.clone())
+                            }
+                            layout_data::vocabulary::CLOSE => {
+                                path.borrow_mut().close_path();
+                                Ok(unit.clone())
+                            }
+                            layout_data::vocabulary::FILL => {
+                                let Some(paint) = evaluated_field(
+                                    context,
+                                    call,
+                                    environment,
+                                    layout_data::vocabulary::PAINT,
+                                )?
+                                else {
+                                    return Ok(context
+                                        .missing_argument(layout_data::vocabulary::PAINT));
+                                };
+                                let shape = match context
+                                    .field(call, layout_data::vocabulary::SHAPE)
+                                {
+                                    Some(expression) => shape(context, expression, environment)?,
+                                    None => Some(puri::Shape::Path(path.borrow().clone())),
+                                };
+                                let transform = match context
+                                    .field(call, layout_data::vocabulary::TRANSFORM)
+                                {
+                                    Some(expression) => {
+                                        transform(context, expression, environment)?
+                                    }
+                                    None => Some(Affine::IDENTITY),
+                                };
+                                let (Some(shape), Some(paint), Some(transform)) =
+                                    (shape, layout_data::read_paint(&paint), transform)
+                                else {
+                                    return Ok(absent::value());
+                                };
+                                canvas.borrow_mut().fill(
+                                    shape,
+                                    faces.resolve(paint),
+                                    outer * transform,
+                                );
+                                Ok(unit.clone())
+                            }
+                            _ => unreachable!("the overlay only advertises drawing functions"),
+                        }
                     };
                     let overlay = grap::ForeignOverlay::new(&functions, &draw);
                     let evaluation = grap::evaluate_scoped(
