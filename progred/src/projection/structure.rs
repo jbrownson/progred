@@ -23,7 +23,7 @@ pub fn of<World: 'static>(
 ) -> View<World> {
     match value {
         Value::Blob(bytes) => selectable(id(blob_text(bytes)), path, value, hooks, true),
-        Value::Cell(cell) => cell_layout(path, *cell, hooks),
+        Value::Cell(_) => cell_layout(),
         Value::List(elements) => list_layout(cx, path, elements, hooks),
         Value::Record(fields) => record_layout(cx, path, fields, hooks),
     }
@@ -76,18 +76,8 @@ pub(super) fn collapsed_layout<World: 'static>(
     ))
 }
 
-fn cell_layout<World: 'static>(
-    path: &[Step],
-    cell: CellId,
-    hooks: &Hooks<World>,
-) -> View<World> {
-    selectable(
-        bracket(Delim::Paren, descend(Step::Follow, None, None)),
-        path,
-        &Value::from(cell),
-        hooks,
-        true,
-    )
+fn cell_layout<World>() -> View<World> {
+    bracket(Delim::Paren, descend(Step::Follow, None, None))
 }
 
 fn list_layout<World: 'static>(

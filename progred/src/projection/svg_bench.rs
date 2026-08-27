@@ -1045,6 +1045,84 @@ fn block_gaps_are_unclaimed_air_and_brackets_widen() {
 }
 
 #[test]
+fn cell_interiors_are_air_and_parentheses_are_handles() {
+    let upper_key = crate::test_values::label("a");
+    let lower_key = crate::test_values::label("b");
+    let cell = gid::new_cell_id();
+    let mut cells = Cells::new();
+    cells.set_value(upper_key, name::record("a", []));
+    cells.set_value(lower_key, name::record("b", []));
+    cells.set_value(
+        cell,
+        Value::record([
+            (upper_key, crate::test_values::text("one")),
+            (lower_key, crate::test_values::text("two")),
+        ]),
+    );
+    let doc = Document {
+        root: Some(Value::Cell(cell)),
+        cells,
+    };
+    let width = 100.0;
+    let (bench, _) = place(&doc, None, width);
+    let field = |key| {
+        bench
+            .descends
+            .iter()
+            .find(|descend| {
+                descend.path.as_ref() == [Step::Follow, Step::Key(key)]
+            })
+            .expect("the cell's record field has a landmark")
+    };
+    let mut fields = [field(upper_key), field(lower_key)];
+    fields.sort_by(|left, right| left.rect.y0.total_cmp(&right.rect.y0));
+    let [upper, lower] = fields;
+    assert!(
+        upper.rect.y1 < lower.rect.y0,
+        "upper {:?}, lower {:?}",
+        upper.rect,
+        lower.rect,
+    );
+    let label_x = upper.rect.x0 - 7.0;
+    let (label, _) = place_with_pointer(
+        &doc,
+        None,
+        width,
+        Some(Point::new(label_x, upper.rect.center().y)),
+    );
+    assert!(matches!(
+        &label.hit,
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path))))
+            if path.as_ref() == upper.path.as_ref()
+    ));
+    let gap_y = (upper.rect.y1 + lower.rect.y0) / 2.0;
+    let (air, _) = place_with_pointer(
+        &doc,
+        None,
+        width,
+        Some(Point::new(label_x, gap_y)),
+    );
+    assert!(air.hit.is_none());
+
+    let cell_rect = bench
+        .descends
+        .iter()
+        .find(|descend| descend.path.is_empty())
+        .expect("the root cell has a landmark")
+        .rect;
+    let (paren, _) = place_with_pointer(
+        &doc,
+        None,
+        width,
+        Some(Point::new(cell_rect.x0 + 1.0, gap_y)),
+    );
+    assert!(matches!(
+        &paren.hit,
+        Some(Claim::Direct(Hovered::Tree(Hover::Value(path)))) if path.is_empty()
+    ));
+}
+
+#[test]
 fn popup_rows_claim_their_entries_and_the_card_occludes() {
     let popup = Popup {
         anchor: Rect::new(0.0, 0.0, 10.0, 10.0),
