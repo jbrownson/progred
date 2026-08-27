@@ -3,11 +3,12 @@
 //! functions.
 
 use crate::{Library, absent, line_edit, logic, name};
-use gid::{Cells, Value};
+use gid::{CellId, Cells, Step, Value};
 #[cfg(test)]
 use grap_runtime as grap;
+use grap_runtime::vocabulary::FUNCTION;
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
-use progred_display::{Layout, ProjectionInput, overlay_value};
+use progred_display::{Delim, Layout, ProjectionInput, bracket, overlay_value, row};
 
 pub mod vocabulary {
     use gid::CellId;
@@ -56,6 +57,69 @@ pub fn display<World, Hover: Clone>(
         grap_runtime::ffi(vocabulary::UPDATE),
         "",
         "",
+    ))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Precedence {
+    Comparison,
+    Sum,
+    Product,
+}
+
+fn precedence(function: CellId) -> Option<Precedence> {
+    match function {
+        vocabulary::ADD | vocabulary::SUBTRACT => Some(Precedence::Sum),
+        vocabulary::MULTIPLY | vocabulary::DIVIDE => Some(Precedence::Product),
+        vocabulary::LESS | vocabulary::EQUAL => Some(Precedence::Comparison),
+        _ => None,
+    }
+}
+
+fn expression_precedence(value: &Value) -> Option<Precedence> {
+    let fields = value.as_record()?;
+    (fields.len() == 3).then_some(())?;
+    fields.get(&vocabulary::LEFT)?;
+    fields.get(&vocabulary::RIGHT)?;
+    fields
+        .get(&FUNCTION)?
+        .as_cell()
+        .and_then(precedence)
+}
+
+fn operand<World, Hover: Clone>(
+    field: CellId,
+    value: &Value,
+    parent: Precedence,
+) -> Layout<World, Hover> {
+    let child = crate::grap::shallow_descend(Step::Key(field));
+    match expression_precedence(value) {
+        Some(child_precedence)
+            if child_precedence < parent
+                || (child_precedence == parent
+                    && (field == vocabulary::RIGHT || parent == Precedence::Comparison)) =>
+        {
+            bracket(Delim::Paren, child)
+        }
+        _ => child,
+    }
+}
+
+pub fn binary_display<World, Hover: Clone>(
+    input: &ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let fields = input.value.as_record()?;
+    let function = fields.get(&FUNCTION)?;
+    let precedence = precedence(function.as_cell()?)?;
+    let left = fields.get(&vocabulary::LEFT)?;
+    let right = fields.get(&vocabulary::RIGHT)?;
+    (fields.len() == 3).then_some(row(
+        6.0,
+        [
+            operand(vocabulary::LEFT, left, precedence),
+            crate::grap::shallow_descend(Step::Key(FUNCTION)),
+            operand(vocabulary::RIGHT, right, precedence),
+        ],
     ))
 }
 
@@ -190,14 +254,14 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     for (cell, name) in [
         (vocabulary::F64, "f64"),
         (vocabulary::UPDATE, "f64 update"),
-        (vocabulary::ADD, "add"),
-        (vocabulary::MULTIPLY, "multiply"),
-        (vocabulary::SUBTRACT, "subtract"),
-        (vocabulary::DIVIDE, "divide"),
+        (vocabulary::ADD, "+"),
+        (vocabulary::MULTIPLY, "*"),
+        (vocabulary::SUBTRACT, "-"),
+        (vocabulary::DIVIDE, "/"),
         (vocabulary::SIN, "sin"),
         (vocabulary::COS, "cos"),
-        (vocabulary::LESS, "less than"),
-        (vocabulary::EQUAL, "equal"),
+        (vocabulary::LESS, "<"),
+        (vocabulary::EQUAL, "=="),
         (vocabulary::FLOOR, "floor"),
         (vocabulary::OPERAND, "operand"),
         (vocabulary::LEFT, "left"),
@@ -216,14 +280,39 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     Library {
         cells,
         functions: functions(),
-        projections: vec![display::<World, Hover>],
+        projections: vec![binary_display::<World, Hover>, display::<World, Hover>],
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gid::{CellId, new_cell_id};
+    use gid::new_cell_id;
+
+    struct TestEnv;
+
+    impl progred_display::Env for TestEnv {
+        fn evaluate(&self, _: &Value) -> (Value, usize) {
+            unreachable!()
+        }
+    }
+
+    fn target(_: Vec<Step>) -> progred_display::ProjectionTarget<(), ()> {
+        progred_display::ProjectionTarget {
+            select: std::rc::Rc::new(|_| false),
+            hover: (),
+        }
+    }
+
+    fn projection_input(value: &Value) -> ProjectionInput<'_, (), ()> {
+        ProjectionInput {
+            env: &TestEnv,
+            value,
+            selection: None,
+            state: None,
+            targets: progred_display::ProjectionTargets::new(&target),
+        }
+    }
 
     fn call(function: CellId, left: Value, right: Value) -> Value {
         grap::call(
@@ -287,6 +376,63 @@ mod tests {
     }
 
     #[test]
+    fn binary_notation_descends_through_source_fields_and_preserves_precedence() {
+        let product = call(vocabulary::MULTIPLY, value(2.0), value(3.0));
+        let sum = call(vocabulary::ADD, value(1.0), product);
+        let layout = binary_display(&projection_input(&sum)).unwrap();
+        let Layout::Row { children, .. } = layout else {
+            panic!("binary notation is a row");
+        };
+        assert!(matches!(
+            &children[0],
+            Layout::Descend {
+                step: Step::Key(field),
+                ..
+            } if *field == vocabulary::LEFT
+        ));
+        assert!(matches!(
+            &children[1],
+            Layout::Descend {
+                step: Step::Key(field),
+                projection: Some(projection),
+                ..
+            } if *field == FUNCTION && projection.len() == 1
+        ));
+        assert!(matches!(
+            &children[2],
+            Layout::Descend {
+                step: Step::Key(field),
+                ..
+            } if *field == vocabulary::RIGHT
+        ));
+
+        let product = call(
+            vocabulary::MULTIPLY,
+            call(vocabulary::ADD, value(1.0), value(2.0)),
+            value(3.0),
+        );
+        let layout = binary_display(&projection_input(&product)).unwrap();
+        let Layout::Row { children, .. } = layout else {
+            panic!("binary notation is a row");
+        };
+        assert!(matches!(&children[0], Layout::Surround { .. }));
+    }
+
+    #[test]
+    fn binary_notation_declines_calls_with_unshown_fields() {
+        let extra = new_cell_id();
+        let call = grap::call(
+            Value::from(vocabulary::ADD),
+            [
+                (vocabulary::LEFT, value(1.0)),
+                (vocabulary::RIGHT, value(2.0)),
+                (extra, value(3.0)),
+            ],
+        );
+        assert!(binary_display(&projection_input(&call)).is_none());
+    }
+
+    #[test]
     fn type_absences_are_library_values() {
         let left = call(vocabulary::ADD, Value::from(b"two".to_vec()), value(3.0));
         let right = call(vocabulary::ADD, value(2.0), Value::from(b"three".to_vec()));
@@ -309,7 +455,7 @@ mod tests {
         );
         assert_eq!(
             library.cells.value(vocabulary::ADD).and_then(name::read),
-            Some("add")
+            Some("+")
         );
         assert_eq!(
             library

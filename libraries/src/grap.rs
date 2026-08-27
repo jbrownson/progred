@@ -68,6 +68,16 @@ pub fn shallow_at<World, Hover: Clone>(
     )
 }
 
+pub(crate) fn shallow_descend<World, Hover: Clone>(step: Step) -> Layout<World, Hover> {
+    descend(
+        step,
+        Some(vec![
+            shallow_cell::<World, Hover> as progred_display::Partial<World, Hover>,
+        ]),
+        None,
+    )
+}
+
 pub(crate) fn at<World, Hover: Clone>(
     steps: impl Into<Vec<Step>>,
     value: &Value,

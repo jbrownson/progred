@@ -996,7 +996,7 @@ fn completion_offers_follow_the_stage() {
         &roof[0].action,
         EntryAction::Value(value) if value.as_cell() == Some(cell)
     ));
-    let add = completion_entries(&sources, false, false, "add");
+    let add = completion_entries(&sources, false, false, "+");
     assert!(matches!(
         &add[0].action,
         EntryAction::Value(value)
