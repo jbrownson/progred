@@ -1,10 +1,10 @@
-//! A live projection for a record with a `grap` field. The evaluator
+//! A live projection for a record with an `evaluate` field. The evaluator
 //! does not observe this field; a host that never loads this
 //! projection never sees it.
 
 use crate::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
-use grap_runtime::vocabulary::{BODY, FFI, FUNCTION, GRAP, PARAMS};
+use grap_runtime::vocabulary::{BODY, EVALUATE, FFI, FUNCTION, PARAMS};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
 use progred_display::{
     Face, Layout, ProjectionInput, RecordField, activatable, alternatives, at_with_projection, col,
@@ -14,10 +14,9 @@ use progred_display::{
 pub mod vocabulary {
     use gid::CellId;
 
-    /// Root-level source whose contents belong to the Grap domain.
-    /// Unlike the evaluator-adjacent `GRAP` projection request, this
-    /// field is library vocabulary and requests no evaluation.
-    pub const SOURCE: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
+    /// Source whose contents belong to the Grap domain. This is an
+    /// ordinary field and requests no evaluation.
+    pub const GRAP: CellId = CellId::from_u128(0x315ca8459cfc64a210d518da1cad79b9);
 }
 
 fn short_id(cell: CellId) -> String {
@@ -202,12 +201,12 @@ pub fn ffi_display<World, Hover: Clone>(
     Some(shallow_at([Step::Key(FFI)], ffi))
 }
 
-pub fn display<World, Hover: Clone>(
+pub fn evaluate_display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    let expression = input.value.as_record()?.get(&GRAP)?;
+    let expression = input.value.as_record()?.get(&EVALUATE)?;
     let (result, fuel) = input.env.evaluate(expression);
-    let expression = shared(at([Step::Key(GRAP)], expression));
+    let expression = shared(at([Step::Key(EVALUATE)], expression));
     let shaft_target = input.targets.current();
     let shaft = shared(activatable(dim("→"), shaft_target.hover, shaft_target.select));
     let result = shared(transient(&result, fuel));
@@ -253,8 +252,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (grap_runtime::vocabulary::FFI, "ffi"),
         (grap_runtime::vocabulary::EVALUATE, "evaluate"),
         (grap_runtime::vocabulary::EXPRESSION, "expression"),
-        (grap_runtime::vocabulary::GRAP, "grap"),
-        (vocabulary::SOURCE, "grap"),
+        (vocabulary::GRAP, "grap"),
     ] {
         cells.set_value(cell, name::record(value, []));
     }
@@ -279,7 +277,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         // Projection order mirrors evaluator precedence: the explicit
         // Grap-result wrapper, calls, lambdas, then FFI values.
         projections: vec![
-            display::<World, Hover>,
+            evaluate_display::<World, Hover>,
             call_display::<World, Hover>,
             lambda_display::<World, Hover>,
             ffi_display::<World, Hover>,
@@ -304,7 +302,7 @@ mod tests {
     }
 
     fn wrapper(expression: Value, extra: impl IntoIterator<Item = (gid::CellId, Value)>) -> Value {
-        Value::record(std::iter::once((GRAP, expression)).chain(extra))
+        Value::record(std::iter::once((EVALUATE, expression)).chain(extra))
     }
 
     fn env() -> TestEnv {
@@ -351,7 +349,7 @@ mod tests {
     }
 
     fn projected(env: &dyn Env, value: &Value) -> Option<Layout<(), ()>> {
-        display(&input(env, value))
+        evaluate_display(&input(env, value))
     }
 
     fn unshared<World, Hover>(mut layout: &Layout<World, Hover>) -> &Layout<World, Hover> {
@@ -414,7 +412,7 @@ mod tests {
         assert!(matches!(
             shown,
             Layout::At { steps, value, .. }
-                if *steps == [Step::Key(GRAP)] && *value == expression
+                if *steps == [Step::Key(EVALUATE)] && *value == expression
         ));
         assert!(matches!(
             result,
@@ -437,7 +435,7 @@ mod tests {
     }
 
     #[test]
-    fn a_grap_shaped_result_is_another_projection() {
+    fn an_evaluate_shaped_result_is_another_projection() {
         let inner = Value::from(vec![2]);
         let result = wrapper(inner.clone(), []);
         let layout = projected(
@@ -457,7 +455,7 @@ mod tests {
         assert!(matches!(
             nested,
             Layout::At { steps, value, .. }
-                if *steps == [Step::Key(GRAP)] && *value == inner
+                if *steps == [Step::Key(EVALUATE)] && *value == inner
         ));
     }
 

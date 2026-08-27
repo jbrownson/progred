@@ -282,7 +282,7 @@ pub fn sample_document() -> Document {
     cells.set_value(pitch, f64::value(2.5));
 
     let double_pitch = || grap::call(Value::from(double), [(amount, Value::from(pitch))]);
-    let grap_projection = |expression| Value::record([(grap::vocabulary::GRAP, expression)]);
+    let evaluation = |expression| Value::record([(grap::vocabulary::EVALUATE, expression)]);
 
     cells.set_value(
         roof,
@@ -303,11 +303,11 @@ pub fn sample_document() -> Document {
                 (sample_vocabulary::PITCH, Value::from(pitch)),
                 (
                     sample_vocabulary::DOUBLE_PITCH,
-                    grap_projection(double_pitch()),
+                    evaluation(double_pitch()),
                 ),
                 (
                     sample_vocabulary::PROFILE,
-                    grap_projection(grap::call(
+                    evaluation(grap::call(
                         Value::from(geometry::vocabulary::CIRCLE),
                         [(
                             geometry::vocabulary::RADIUS,

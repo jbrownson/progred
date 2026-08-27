@@ -6,11 +6,11 @@ use crate::gid_text::{Binders, parse};
 use gid::{Document, Value};
 use progred_libraries::{f64, geometry};
 
-fn grap_expression(value: &Value) -> &Value {
+fn evaluated_expression(value: &Value) -> &Value {
     value
         .as_record()
-        .and_then(|fields| fields.get(&grap::vocabulary::GRAP))
-        .expect("Grap projection boundary")
+        .and_then(|fields| fields.get(&grap::vocabulary::EVALUATE))
+        .expect("evaluation projection")
 }
 
 fn evaluate(doc: &Document, expression: &Value) -> grap::Evaluation {
@@ -35,13 +35,13 @@ fn the_sample_contains_a_projectable_grap_computation() {
         .and_then(|roof| doc.cells.value(roof))
         .and_then(Value::as_record)
         .expect("roof record");
-    let expression = grap_expression(
+    let expression = evaluated_expression(
         roof.get(&crate::test_values::label("double pitch"))
             .expect("Grap expression"),
     );
     assert_eq!(evaluate(&doc, expression).result, f64::value(5.0));
 
-    let profile = grap_expression(
+    let profile = evaluated_expression(
         roof.get(&crate::test_values::label("profile"))
             .expect("profile call"),
     );
@@ -86,17 +86,17 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
         ("metadata_call", f64::value(7.0)),
     ] {
         assert_eq!(
-            evaluate(&doc, grap_expression(demo_entry(&doc, &binders, label)),).result,
+            evaluate(&doc, evaluated_expression(demo_entry(&doc, &binders, label)),).result,
             expected
         );
     }
 
-    let inert = grap_expression(demo_entry(&doc, &binders, "inert_data"));
+    let inert = evaluated_expression(demo_entry(&doc, &binders, "inert_data"));
     assert_eq!(evaluate(&doc, inert).result, *inert);
     assert_eq!(
         evaluate(
             &doc,
-            grap_expression(demo_entry(&doc, &binders, "type_absent")),
+            evaluated_expression(demo_entry(&doc, &binders, "type_absent")),
         )
         .result,
         Value::from(f64::vocabulary::LEFT_NOT_F64)
@@ -104,7 +104,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
     assert_eq!(
         evaluate(
             &doc,
-            grap_expression(demo_entry(&doc, &binders, "missing_argument")),
+            evaluated_expression(demo_entry(&doc, &binders, "missing_argument")),
         )
         .result,
         Value::from(grap::absent::MISSING_ARGUMENT)
@@ -112,7 +112,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
     assert_eq!(
         evaluate(
             &doc,
-            grap_expression(demo_entry(&doc, &binders, "not_callable")),
+            evaluated_expression(demo_entry(&doc, &binders, "not_callable")),
         )
         .result,
         Value::from(grap::absent::NOT_CALLABLE)
@@ -122,7 +122,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
     assert_eq!(
         evaluate(
             &doc,
-            grap_expression(demo_entry(&doc, &binders, "add_result")),
+            evaluated_expression(demo_entry(&doc, &binders, "add_result")),
         )
         .result,
         f64::value(9.0)
@@ -130,7 +130,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
     assert_eq!(
         evaluate(
             &doc,
-            grap_expression(demo_entry(&doc, &binders, "graph_function_result")),
+            evaluated_expression(demo_entry(&doc, &binders, "graph_function_result")),
         )
         .result,
         f64::value(54.0)
@@ -138,7 +138,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
     assert_eq!(
         evaluate(
             &doc,
-            grap_expression(demo_entry(&doc, &binders, "circle_result")),
+            evaluated_expression(demo_entry(&doc, &binders, "circle_result")),
         )
         .result,
         geometry::value(54.0)
@@ -146,7 +146,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
     assert_eq!(
         evaluate(
             &doc,
-            grap_expression(demo_entry(&doc, &binders, "quoted_match_result")),
+            evaluated_expression(demo_entry(&doc, &binders, "quoted_match_result")),
         )
         .result,
         f64::value(5.0)

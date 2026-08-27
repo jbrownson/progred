@@ -37,7 +37,7 @@ partial is a function that checks its own preconditions. Each built-in
 library module exports one `Library` value containing its cells, foreign
 functions, and ordered partial projections; `stack::load` folds those
 values and builds one reusable
-projection — text, f64, and the `grap` value partial — above the structural fallback. Raw is that
+projection — text, f64, and the `evaluate` value partial — above the structural fallback. Raw is that
 fallback alone. This composed projection is passed explicitly through
 recursion; it is not hidden in display context.
 `descend` receives the parent `Value` and an ordinary GID `Step`, extends
@@ -93,7 +93,7 @@ without diagnostics. Text and f64 request the stock Rust line control
 with their spelling, affixes, and Grap write-back rule. Progred lowers
 that control through Puri. Puri itself is the leaf language: text plus
 fill/stroke/clip canvas programs over its ordinary shape vocabulary, with no
-editor metadata on either. `grap` is grouping (`at`, `descend`,
+editor metadata on either. The layout language owns grouping (`at`, `descend`,
 `alternatives`, `surround`, `hug`). The live interpreter measures that layout;
 callbacks become Puri handlers. There is no projection-action enum or
 central reducer: a callback receives `&mut World` when it fires. The
@@ -138,8 +138,10 @@ uses three more identities in explicit callable values: `closure`,
 registered call rather than evaluator syntax. Core Grap has no number or
 geometry type and no arithmetic or geometry operation.
 
-The built-in Grap library offers a `grap` value partial alongside the
-runtime evaluator. It also projects calls and lambdas as code: function,
+The built-in Grap library offers an `evaluate` value partial alongside the
+runtime evaluator. Its separate `grap` field is ordinary domain vocabulary:
+it says its contents are Grap source but requests no evaluation and currently
+changes no editor behavior. The library also projects calls and lambdas as code: function,
 parameter, and bare binding cells are shallow named references rather than
 requests to recursively inspect their definitions; call arguments and lambda
 bodies recursively retain the Grap projection. FFI values use the same
@@ -152,16 +154,16 @@ visibly distinct as `bind name`. Malformed match-shaped data declines this
 projection whole and falls through to the ordinary call or structural view.
 The synthesized arrow targets the case's expression, like a field head
 targets its value; the whole case remains a structural navigation landmark.
-A record with a `grap` field is replaced by the stored
+A record with an `evaluate` field is replaced by the stored
 expression (nested under that field so editing stays on
-`…+Key(grap)`), then `→`, then the returned `Value` recursively
+`…+Key(evaluate)`), then `→`, then the returned `Value` recursively
 projected from a transient, read-only root. If that result has a
-`grap` field, the same partial matches and evaluates it, continuing
+`evaluate` field, the same partial matches and evaluates it, continuing
 the same fuel allowance. Recognition
 is open: other fields do not block it. The default
 projection therefore shows `expression → result`, while Raw shows
 the stored record. The `→` is a dim leaf, not graph
-data. `grap` is not an evaluator form: `evaluate` does not observe the
+data. The field is not an evaluator form: the evaluator does not observe the
 field, and a host that never loads the projection never sees it.
 
 A lambda is a record requiring two semantic fields:
@@ -217,8 +219,8 @@ by cell identity. Renaming a parameter changes no program reference,
 and there is no parallel symbol-ID system. Additional top-level call
 fields are valid GID data and do not prevent the selected function
 from being called.
-The result arm under `grap` is transient and read-only; the expression
-arm remains an ordinary visible projection at the `grap` field path.
+The result arm under `evaluate` is transient and read-only; the expression
+arm remains an ordinary visible projection at the `evaluate` field path.
 Raw exposes only the stored wrapper and any such metadata.
 
 Numbers remain a library convention rather than a data-model variant.
@@ -236,12 +238,12 @@ representation. Neither library changes Grap or `Value`.
 
 Ordinary projection does not implicitly run call-shaped records. It
 can therefore show a lambda or expression as editable
-structure in one part of a document while a `grap` field elsewhere
+structure in one part of a document while an `evaluate` field elsewhere
 references that same cell and shows both that ordinary cell projection
 and its result. Because the expression arm is ordinary, hovering it can
 highlight the cell's other projections. The returned value goes through
 the same text, number, geometry, cell, list, and record projections as
-stored data, including `grap` if the result carries that field.
+stored data, including `evaluate` if the result carries that field.
 Transient children are
 currently read-only and map
 selection back to the stored wrapper rather than pretending
@@ -351,7 +353,7 @@ precise invalidation. Every evaluation also has explicit fuel, and cell
 cycles produce a stable absent. Invalid Grap never damages the
 underlying document: its absent is projected like any other normal
 form, and the stored expression remains editable in Raw or wherever
-the same expression cell is projected outside a `grap` field.
+the same expression cell is projected outside an `evaluate` field.
 
 The evaluator runtime lives in its own `grap` crate and depends only on
 GID plus its persistent-map implementation. It knows no names, absent
@@ -405,7 +407,7 @@ library data rather than an evaluator feature.
 
 ## First Vertical Slice
 
-For a record with a `grap` field, the default projection shows
+For a record with an `evaluate` field, the default projection shows
 the stored expression, an arrow, and its recursively projected
 result—an f64 as text, and arbitrary GID data structurally.
 [`examples/grap-demo.gid`](../examples/grap-demo.gid) is
@@ -418,7 +420,7 @@ match; it also keeps extra call metadata in Raw, demonstrates inert
 returned data, and shows stable type,
 missing-argument, and not-callable absents as ordinary projected
 results. The demo projects one Grap expression cell both directly and
-by reference under `grap`, making their shared identity visible through
+by reference under `evaluate`, making their shared identity visible through
 hover while the latter also carries its computed result.
 
 The broader checked-in [`examples/sample.gid`](../examples/sample.gid) carries the same evaluation path
@@ -434,7 +436,7 @@ inside the raw editor's structural examples:
   as the radius of `circle`, and projects the resulting radius-40
   circle as ordinary GID structure.
 
-The `grap` field belongs to projection rather than evaluation. The
+The `evaluate` field belongs to projection rather than evaluation. The
 default projection replaces such a record with `expression → result`;
 Raw projects the stored record.
 Compact f64 source values edit as decimal text while continuing to store

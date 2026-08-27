@@ -18,7 +18,6 @@
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "function": 751fca4373debdd0b7e6eb73e08d684b,
     "generated_value": 52d9a658f31a5cf25cba67442686f9f6,
-    "grap": ac807d20d964e141d44c1b2eb98e5ca9,
     "graph_expression": abbe2ebb6e77fd640835e864eacc2456,
     "graph_function_result": 856c0b3c6eb8e393abcb2ef030ce5977,
     "inert_data": 8a852d6431ce568a4ed5ae8c896e9902,
@@ -187,7 +186,7 @@
   },
   "root": [
     {
-      demo: "Edit the inputs; normal view shows {grap: expression → result}, while Raw shows the stored expression.",
+      demo: "Edit the inputs; normal view shows {evaluate: expression → result}, while Raw shows the stored expression.",
     },
     {
       input_a: a_value,
@@ -200,7 +199,7 @@
     },
     {
       add_result: {
-        grap: {
+        evaluate: {
           right: b_value,
           function: add,
           left: a_value,
@@ -209,7 +208,7 @@
     },
     {
       nested_result: {
-        grap: {
+        evaluate: {
           right: scale_value,
           function: multiply,
           left: {
@@ -222,7 +221,7 @@
     },
     {
       evaluate_result: {
-        grap: {
+        evaluate: {
           function: evaluate,
           expression: {
             right: b_value,
@@ -244,12 +243,12 @@
     },
     {
       graph_function_result: {
-        grap: scale_and_add_expression,
+        evaluate: scale_and_add_expression,
       },
     },
     {
       circle_result: {
-        grap: {
+        evaluate: {
           function: circle,
           radius: {
             x_parameter: a_value,
@@ -262,7 +261,7 @@
     },
     {
       match_result: {
-        grap: {
+        evaluate: {
           value: {
             function: circle,
             radius: a_value,
@@ -285,7 +284,7 @@
     },
     {
       quoted_match_result: {
-        grap: {
+        evaluate: {
           value: "subject",
           function: match,
           cases: {
@@ -297,7 +296,7 @@
     },
     {
       metadata_call: {
-        grap: {
+        evaluate: {
           right: b_value,
           function: add,
           left: a_value,
@@ -307,7 +306,7 @@
     },
     {
       inert_data: {
-        grap: {
+        evaluate: {
           contains_call: {
             right: b_value,
             function: add,
@@ -319,7 +318,7 @@
     },
     {
       type_absent: {
-        grap: {
+        evaluate: {
           right: b_value,
           function: add,
           left: "three",
@@ -328,7 +327,7 @@
     },
     {
       missing_argument: {
-        grap: {
+        evaluate: {
           function: add,
           left: a_value,
         },
@@ -336,7 +335,7 @@
     },
     {
       not_callable: {
-        grap: {
+        evaluate: {
           function: a_value,
         },
       },

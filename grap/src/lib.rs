@@ -20,8 +20,6 @@ pub mod vocabulary {
     pub const FFI: CellId = CellId::from_u128(0x912adb7252d689659b6de9eeeb827658);
     pub const EVALUATE: CellId = CellId::from_u128(0xacfc5e50881292518dab3cec77cf43ee);
     pub const EXPRESSION: CellId = CellId::from_u128(0xccc55b0eb63b9f564ea74436094d4014);
-    /// Projection request, not an evaluator form.
-    pub const GRAP: CellId = CellId::from_u128(0xac807d20d964e141d44c1b2eb98e5ca9);
 }
 
 pub mod absent {
