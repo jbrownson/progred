@@ -276,7 +276,13 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     ] {
         cells.set_value(cell, absent::named_reason(name));
     }
-    cells.set_value(vocabulary::PI, value(std::f64::consts::PI));
+    cells.set_value(
+        vocabulary::PI,
+        overlay_value(
+            &value(std::f64::consts::PI),
+            name::record("π", []),
+        ),
+    );
     Library {
         cells,
         functions: functions(),
@@ -456,6 +462,14 @@ mod tests {
         assert_eq!(
             library.cells.value(vocabulary::ADD).and_then(name::read),
             Some("+")
+        );
+        assert_eq!(
+            library.cells.value(vocabulary::PI).and_then(name::read),
+            Some("π")
+        );
+        assert_eq!(
+            library.cells.value(vocabulary::PI).and_then(read),
+            Some(std::f64::consts::PI)
         );
         assert_eq!(
             library
