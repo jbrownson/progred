@@ -11,7 +11,6 @@ pub mod control;
 pub mod f64;
 pub mod geometry;
 pub mod grap;
-pub mod isa;
 pub mod layout;
 pub mod line_edit;
 pub mod list;
@@ -22,6 +21,7 @@ pub mod random;
 pub mod selection;
 pub mod site;
 pub mod text;
+pub mod u64;
 
 pub struct Library<World, Hover> {
     pub cells: Cells,

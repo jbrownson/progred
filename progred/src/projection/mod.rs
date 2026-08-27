@@ -2152,22 +2152,8 @@ pub struct ProjectDescription<'a, World> {
     pub foreign: &'a grap::ForeignFunctions,
 }
 
-fn projection_is_absent(sources: &Sources<'_>, value: &Value) -> bool {
-    if absent::is_absent(value) {
-        return true;
-    }
-    let mut cell = value.as_cell();
-    let mut seen = HashSet::new();
-    while let Some(current) = cell.filter(|current| seen.insert(*current)) {
-        let Some(value) = sources.value(current) else {
-            return false;
-        };
-        if absent::is_absent(value) {
-            return true;
-        }
-        cell = value.as_cell();
-    }
-    false
+fn projection_is_absent(value: &Value) -> bool {
+    absent::is_absent(value)
 }
 
 pub fn project<
@@ -2225,7 +2211,7 @@ pub fn project<
         )
     });
     let layout = match projected
-        .filter(|evaluation| !projection_is_absent(&sources, &evaluation.result))
+        .filter(|evaluation| !projection_is_absent(&evaluation.result))
     {
         Some(evaluation) => prepare_transient_root(
             &cx,

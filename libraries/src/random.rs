@@ -1,34 +1,22 @@
-//! A deterministic, explicitly-threaded random stream for Grap. The
-//! state is an opaque blob; sampling returns both the value and the
-//! successor state, so evaluation itself remains deterministic.
+//! Deterministic random sampling inside an explicit Grap evaluation scope.
 
-use crate::{Library, absent, f64, name};
+use crate::{Library, absent, f64, name, u64};
 use gid::{Cells, Value};
 use grap_runtime::{Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt};
+use std::cell::Cell;
+use std::rc::Rc;
 
 pub mod vocabulary {
     use gid::CellId;
 
-    pub const RESET: CellId = CellId::from_u128(0xbced0768fa647daf95a663b3e626b4ae);
     pub const BETWEEN: CellId = CellId::from_u128(0xe8a99ada91800bca33709da0db80c29f);
-    pub const STATE: CellId = CellId::from_u128(0x1c80fb9f0035b66347ae1529e42af98b);
     pub const MIN: CellId = CellId::from_u128(0x61213005b01abca2d4fb351cc4fe4d98);
     pub const MAX: CellId = CellId::from_u128(0x4be40301b427aeed939ef079ab63cf92);
-    pub const VALUE: CellId = CellId::from_u128(0x725980a1344dbdce099fcdf189f77ba9);
-    pub const INVALID_STATE: CellId = CellId::from_u128(0x8780e75d0f3b5e561e29a2dfa648ec44);
-}
-
-const INITIAL_STATE: u64 = 0x4d595df4d0f33173;
-
-fn state(value: u64) -> Value {
-    Value::from(value.to_le_bytes().to_vec())
-}
-
-fn read_state(value: &Value) -> Option<u64> {
-    value
-        .as_blob()
-        .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
-        .map(u64::from_le_bytes)
+    pub const WITH_RANDOM: CellId = CellId::from_u128(0xf47ef735130ecf7a72105ac58f30075a);
+    pub const SEED: CellId = CellId::from_u128(0x208c3026e79e44fdbe405992c6cdea79);
+    pub const OUTSIDE_SCOPE: CellId = CellId::from_u128(0x7b590515407fafa2d520ed1bd0fc6b18);
+    pub const INVALID_SEED: CellId = CellId::from_u128(0xc188207adaefeee3f95d567476bd2d16);
+    pub const INVALID_BOUNDS: CellId = CellId::from_u128(0xdd466492d252f6c5100386cb7d6d9f63);
 }
 
 fn evaluated(
@@ -43,38 +31,55 @@ fn evaluated(
         .transpose()
 }
 
+fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
+    ForeignFunctions::default().register(
+        vocabulary::BETWEEN,
+        ForeignFunction::new(move |context, call, environment| {
+            let Some(min) = evaluated(context, call, environment, vocabulary::MIN)? else {
+                return Ok(context.missing_argument(vocabulary::MIN));
+            };
+            let Some(max) = evaluated(context, call, environment, vocabulary::MAX)? else {
+                return Ok(context.missing_argument(vocabulary::MAX));
+            };
+            let (Some(min), Some(max)) = (f64::read(&min), f64::read(&max)) else {
+                return Ok(absent::with_reason(vocabulary::INVALID_BOUNDS));
+            };
+            let next = state
+                .get()
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            state.set(next);
+            let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
+            Ok(f64::value(min + (max - min) * unit))
+        }),
+    )
+}
+
 fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
         .register(
-            vocabulary::RESET,
-            ForeignFunction::new(|_, _, _| Ok(state(INITIAL_STATE))),
+            vocabulary::BETWEEN,
+            ForeignFunction::new(|_, _, _| {
+                Ok(absent::with_reason(vocabulary::OUTSIDE_SCOPE))
+            }),
         )
         .register(
-            vocabulary::BETWEEN,
+            vocabulary::WITH_RANDOM,
             ForeignFunction::new(|context, call, environment| {
-                let Some(current) = evaluated(context, call, environment, vocabulary::STATE)?
+                let seed = match evaluated(context, call, environment, vocabulary::SEED)? {
+                    Some(seed) => match u64::read(&seed) {
+                        Some(seed) => seed,
+                        None => return Ok(absent::with_reason(vocabulary::INVALID_SEED)),
+                    },
+                    None => 0,
+                };
+                let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION)
                 else {
-                    return Ok(context.missing_argument(vocabulary::STATE));
+                    return Ok(context.missing_argument(grap_runtime::vocabulary::EXPRESSION));
                 };
-                let Some(min) = evaluated(context, call, environment, vocabulary::MIN)? else {
-                    return Ok(context.missing_argument(vocabulary::MIN));
-                };
-                let Some(max) = evaluated(context, call, environment, vocabulary::MAX)? else {
-                    return Ok(context.missing_argument(vocabulary::MAX));
-                };
-                let (Some(current), Some(min), Some(max)) =
-                    (read_state(&current), f64::read(&min), f64::read(&max))
-                else {
-                    return Ok(Value::from(vocabulary::INVALID_STATE));
-                };
-                let next = current
-                    .wrapping_mul(6_364_136_223_846_793_005)
-                    .wrapping_add(1_442_695_040_888_963_407);
-                let unit = ((next >> 11) as f64) / ((1_u64 << 53) as f64);
-                Ok(Value::record([
-                    (vocabulary::STATE, state(next)),
-                    (vocabulary::VALUE, f64::value(min + (max - min) * unit)),
-                ]))
+                context.with_foreign_functions(stream(Rc::new(Cell::new(seed))), |context| {
+                    context.eval(expression, environment)
+                })
             }),
         )
 }
@@ -82,19 +87,21 @@ fn functions() -> ForeignFunctions {
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, spelling) in [
-        (vocabulary::RESET, "reset random"),
         (vocabulary::BETWEEN, "random between"),
-        (vocabulary::STATE, "random state"),
         (vocabulary::MIN, "minimum"),
         (vocabulary::MAX, "maximum"),
-        (vocabulary::VALUE, "random value"),
+        (vocabulary::WITH_RANDOM, "with random"),
+        (vocabulary::SEED, "seed"),
     ] {
         cells.set_value(cell, name::record(spelling, []));
     }
-    cells.set_value(
-        vocabulary::INVALID_STATE,
-        absent::named("invalid random state"),
-    );
+    for (cell, spelling) in [
+        (vocabulary::OUTSIDE_SCOPE, "random outside scope"),
+        (vocabulary::INVALID_SEED, "invalid random seed"),
+        (vocabulary::INVALID_BOUNDS, "invalid random bounds"),
+    ] {
+        cells.set_value(cell, absent::named_reason(spelling));
+    }
     Library {
         cells,
         functions: functions(),
@@ -105,29 +112,114 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gid::new_cell_id;
     use grap_runtime as grap;
 
-    #[test]
-    fn reset_streams_repeat() {
-        let sample = || {
-            grap::evaluate(
-                &grap::call(
+    fn sample(seed: Option<Value>) -> Value {
+        let arguments = [
+            Some((
+                grap::vocabulary::EXPRESSION,
+                grap::call(
                     Value::from(vocabulary::BETWEEN),
                     [
-                        (
-                            vocabulary::STATE,
-                            grap::call(Value::from(vocabulary::RESET), []),
-                        ),
                         (vocabulary::MIN, f64::value(-2.0)),
                         (vocabulary::MAX, f64::value(3.0)),
                     ],
                 ),
-                |_| None,
-                &functions(),
-                20,
+            )),
+            seed.map(|seed| (vocabulary::SEED, seed)),
+        ];
+        grap::evaluate(
+            &grap::call(
+                Value::from(vocabulary::WITH_RANDOM),
+                arguments.into_iter().flatten(),
+            ),
+            |_| None,
+            &functions(),
+            30,
+        )
+        .result
+    }
+
+    #[test]
+    fn a_seeded_scope_repeats_and_zero_is_the_default() {
+        assert_eq!(sample(None), sample(Some(u64::value(0))));
+        assert_eq!(sample(Some(u64::value(42))), sample(Some(u64::value(42))));
+        assert_ne!(sample(Some(u64::value(0))), sample(Some(u64::value(42))));
+    }
+
+    #[test]
+    fn successive_samples_advance_the_scoped_stream() {
+        let pair = new_cell_id();
+        let first_field = new_cell_id();
+        let second_field = new_cell_id();
+        let functions = functions().register(
+            pair,
+            ForeignFunction::new(move |context, call, environment| {
+                let first = context
+                    .field(call, first_field)
+                    .map(|expression| context.eval(expression, environment))
+                    .transpose()?
+                    .unwrap_or_else(|| context.missing_argument(first_field));
+                let second = context
+                    .field(call, second_field)
+                    .map(|expression| context.eval(expression, environment))
+                    .transpose()?
+                    .unwrap_or_else(|| context.missing_argument(second_field));
+                Ok(Value::list([first, second]))
+            }),
+        );
+        let between = || {
+            grap::call(
+                Value::from(vocabulary::BETWEEN),
+                [
+                    (vocabulary::MIN, f64::value(0.0)),
+                    (vocabulary::MAX, f64::value(1.0)),
+                ],
             )
-            .result
         };
-        assert_eq!(sample(), sample());
+        let expression = grap::call(
+            Value::from(vocabulary::WITH_RANDOM),
+            [
+                (vocabulary::SEED, u64::value(42)),
+                (
+                    grap::vocabulary::EXPRESSION,
+                    grap::call(
+                        Value::from(pair),
+                        [(first_field, between()), (second_field, between())],
+                    ),
+                ),
+            ],
+        );
+        let evaluate = || grap::evaluate(&expression, |_| None, &functions, 60).result;
+        let result = evaluate();
+
+        assert!(result.as_list().is_some_and(|values| {
+            let mut values = values.values();
+            matches!(
+                (values.next(), values.next(), values.next()),
+                (Some(first), Some(second), None) if first != second
+            )
+        }));
+        assert_eq!(result, evaluate());
+    }
+
+    #[test]
+    fn sampling_outside_a_scope_returns_a_stable_absent() {
+        let result = grap::evaluate(
+            &grap::call(
+                Value::from(vocabulary::BETWEEN),
+                [
+                    (vocabulary::MIN, f64::value(0.0)),
+                    (vocabulary::MAX, f64::value(1.0)),
+                ],
+            ),
+            |_| None,
+            &functions(),
+            20,
+        )
+        .result;
+
+        assert_eq!(result, absent::with_reason(vocabulary::OUTSIDE_SCOPE));
     }
 }

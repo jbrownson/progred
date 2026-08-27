@@ -175,7 +175,7 @@ bare. There is no `Cell` sum, metadata half, `set_name`, or `Step::Name`.
 The bootstrap simple-name convention is an ordinary record field whose
 label is the randomly minted built-in `name` library cell. A record such
 as `{name: "roof", ...}` therefore contains one value, not a special
-name plus a wrapped value. `isa` works the same way. This keeps the core
+name plus a wrapped value. This keeps the core
 honest for multiple languages and naming systems: names may later be
 scoped relations, multilingual structures, or computed projections
 without changing the data model.
@@ -190,8 +190,8 @@ cell is simply an alias.
 
 Conventions recognize the positive facts they require rather than
 rejecting records for having additional fields. Thus `{f64: bits,
-created-at: time}` still has an f64 facet, and `{isa: absent, name:
-"missing cell"}` still has both classifications. A projection that
+created-at: time}` still has an f64 facet, and `{absent: missing-cell,
+created-at: time}` is still an absence with a stable reason. A projection that
 replaces the whole record has a stricter obligation: it may do so only
 when it accounts for every field it would hide; enriched values remain
 structurally visible.

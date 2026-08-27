@@ -165,8 +165,8 @@ fn binary_value(
     let right = context.eval(right, environment)?;
     Ok(match (read(&left), read(&right)) {
         (Some(left), Some(right)) => operation(left, right),
-        (None, _) => Value::from(vocabulary::LEFT_NOT_F64),
-        (_, None) => Value::from(vocabulary::RIGHT_NOT_F64),
+        (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F64),
+        (_, None) => absent::with_reason(vocabulary::RIGHT_NOT_F64),
     })
 }
 
@@ -182,7 +182,7 @@ fn unary(
     let operand = context.eval(operand, environment)?;
     Ok(read(&operand)
         .map(|operand| value(operation(operand)))
-        .unwrap_or_else(|| Value::from(vocabulary::OPERAND_NOT_F64)))
+        .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64)))
 }
 
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
@@ -210,7 +210,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::RIGHT_NOT_F64, "right is not f64"),
         (vocabulary::OPERAND_NOT_F64, "operand is not f64"),
     ] {
-        cells.set_value(cell, absent::named(name));
+        cells.set_value(cell, absent::named_reason(name));
     }
     cells.set_value(vocabulary::PI, value(std::f64::consts::PI));
     Library {
@@ -263,10 +263,7 @@ mod tests {
         };
         // Unparseable input declines as an absent — the editor drops
         // the write whole.
-        assert_eq!(
-            crate::isa::read(&update("junk")),
-            Some(crate::absent::vocabulary::ABSENT)
-        );
+        assert!(crate::absent::is_absent(&update("junk")));
         assert_eq!(
             update("3"),
             Value::record(
@@ -295,11 +292,11 @@ mod tests {
         let right = call(vocabulary::ADD, value(2.0), Value::from(b"three".to_vec()));
         assert_eq!(
             grap::evaluate(&left, |_| None, &functions(), 10).result,
-            Value::from(vocabulary::LEFT_NOT_F64)
+            absent::with_reason(vocabulary::LEFT_NOT_F64)
         );
         assert_eq!(
             grap::evaluate(&right, |_| None, &functions(), 10).result,
-            Value::from(vocabulary::RIGHT_NOT_F64)
+            absent::with_reason(vocabulary::RIGHT_NOT_F64)
         );
     }
 
@@ -328,12 +325,14 @@ mod tests {
                 .and_then(name::read),
             Some("right is not f64")
         );
-        assert!(absent::is_absent(
-            library.cells.value(vocabulary::LEFT_NOT_F64).unwrap()
-        ));
-        assert!(absent::is_absent(
-            library.cells.value(vocabulary::RIGHT_NOT_F64).unwrap()
-        ));
+        assert_eq!(
+            absent::reason(&absent::with_reason(vocabulary::LEFT_NOT_F64)),
+            Some(vocabulary::LEFT_NOT_F64)
+        );
+        assert_eq!(
+            absent::reason(&absent::with_reason(vocabulary::RIGHT_NOT_F64)),
+            Some(vocabulary::RIGHT_NOT_F64)
+        );
         assert!(library.cells.value(vocabulary::ADD).is_some());
     }
 }

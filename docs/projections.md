@@ -358,10 +358,11 @@ form, and the stored expression remains editable in Raw or wherever
 the same expression cell is projected outside an `evaluate` field.
 
 The evaluator runtime lives in its own `grap` crate and depends only on
-GID plus its persistent-map implementation. It knows no names, absent
-classification, projection, f64, geometry, UI, file, or Linebender
-concepts. The `progred-libraries` package contains one module per
-built-in conceptual library: Grap, name, text, isa, absent, control,
+GID plus its persistent-map implementation. It knows the tagged
+`{absent: reason-cell}` result convention and its own stable reasons, but
+no names, projection, f64, geometry, UI, file, or Linebender concepts.
+The `progred-libraries` package contains one module per
+built-in conceptual library: Grap, name, text, absent, control,
 f64, and geometry. Each module exports its complete `Library` value.
 `Library` is the product of the cells, foreign-function table, and
 ordered-partial-list monoids. The editor folds those values once into
@@ -388,24 +389,21 @@ concrete need justifies it; every Grap function does not need to become
 an operative in advance.
 
 Every evaluation returns a `Value`, including malformed programs,
-missing cells, cycles, and exhausted fuel. Core evaluator and library
-absences are stable absent-cell values. Host-facing diagnostics
-accompany core absences with occurrence-specific detail,
+missing cells, cycles, and exhausted fuel. An absence is the open tagged
+value `{absent: reason-cell}`. Host-facing diagnostics accompany core
+absences with occurrence-specific detail,
 such as which cell was missing, without introducing a separate host
 result channel into Grap or changing Grap control flow. When an
-evaluated call returns one of those cells, the projection shows its
-ordinary name as the result.
+evaluated call returns an absence, the result retains both the explicit
+tag and the stable reason identity.
 
 The bootstrap f64 and geometry libraries define stable library cells
-for their absent cases and return those identities as values: several
-semantically distinct custom nulls, not freshly allocated occurrences.
-Each absent's library value is a record containing `isa: absent`. The
-general `isa` relation lives in the independent
-`isa` library: it is a convention over GID data, not part of
-Grap or `gid`. The absent library owns only the `absent`
-classification and uses that relation. Additional static facts can be
-added as fields on each absent's record. Absent meaning remains
-library data rather than an evaluator feature.
+for their absent reasons and return tagged values containing those
+identities: several semantically distinct custom nulls, not names or
+freshly allocated reason identities. Each reason cell may contain names,
+documentation, translations, or other static metadata. Recognition and
+control flow inspect the tag and CellId payload directly, never those
+human-facing facts.
 
 ## First Vertical Slice
 

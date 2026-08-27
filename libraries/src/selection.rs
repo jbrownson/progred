@@ -99,7 +99,7 @@ mod tests {
                 10,
             )
             .result,
-            Value::from(grap_runtime::absent::NOT_CALLABLE)
+            grap_runtime::absent::value(grap_runtime::absent::NOT_CALLABLE)
         );
     }
 }

@@ -1,7 +1,8 @@
 //! Grap evaluation control supplied by Rust functions. `match`
 //! selects one case through structural matching, `let` and `where`
-//! extend an environment through sequential bindings, and `quote`
-//! constructs data while evaluating explicit unquotes.
+//! extend an environment through sequential bindings, `do` evaluates
+//! expressions in order, and `quote` constructs data while evaluating
+//! explicit unquotes.
 
 use crate::{Library, absent, name};
 use gid::{CellId, Cells, Step, Value};
@@ -26,12 +27,16 @@ pub mod vocabulary {
     pub const LET: CellId = CellId::from_u128(0xf4f93c70910c4d8a8eeb8e049cc64c14);
     pub const WHERE: CellId = CellId::from_u128(0x2a3432e9c5ce4c62b8261a6b248f13c2);
     pub const BINDINGS: CellId = CellId::from_u128(0xf6fb0062e8a14f808e416a9edece2a9d);
+    pub const DO: CellId = CellId::from_u128(0xb1fc4cb45c58b1a662c431feef5bd140);
+    pub const EXPRESSIONS: CellId = CellId::from_u128(0x5fab151c006ae1487c28837f2003f43c);
 
     pub const INVALID_CASES: CellId = CellId::from_u128(0x1b94a59ed759da212fa72d7094796c6e);
     pub const INVALID_CASE: CellId = CellId::from_u128(0xaa627ebeb1091e8359f7a8eea45a6ccd);
     pub const INVALID_BINDER: CellId = CellId::from_u128(0x59ad0fb67728f245dce57b0cee360969);
     pub const INVALID_BINDINGS: CellId = CellId::from_u128(0x480ae287377249459a3438cb4b05229f);
     pub const INVALID_BINDING: CellId = CellId::from_u128(0x4ecae0db406e426aba1c02f2f04570ad);
+    pub const INVALID_EXPRESSIONS: CellId =
+        CellId::from_u128(0xa41a40f12691414971dbd9f788c291d6);
 }
 
 pub fn functions() -> ForeignFunctions {
@@ -39,7 +44,26 @@ pub fn functions() -> ForeignFunctions {
         .register(vocabulary::MATCH, ForeignFunction::new(match_foreign))
         .register(vocabulary::LET, ForeignFunction::new(bindings_foreign))
         .register(vocabulary::WHERE, ForeignFunction::new(bindings_foreign))
+        .register(vocabulary::DO, ForeignFunction::new(do_foreign))
         .register(vocabulary::QUOTE, ForeignFunction::new(quote_foreign))
+}
+
+fn do_foreign(
+    context: &mut Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<Value, Halt> {
+    let Some(expressions) = context.field(call, vocabulary::EXPRESSIONS) else {
+        return Ok(context.missing_argument(vocabulary::EXPRESSIONS));
+    };
+    let Some(expressions) = context.elements(expressions).map(<[_]>::to_vec) else {
+        return Ok(absent::with_reason(vocabulary::INVALID_EXPRESSIONS));
+    };
+    expressions
+        .into_iter()
+        .try_fold(absent::value(), |_, expression| {
+            context.eval(expression, environment)
+        })
 }
 
 fn quote_foreign(
@@ -139,7 +163,7 @@ fn match_foreign(
                 bindings,
             } => context.eval(expression, &environment.extended(bindings)),
             LoweredSelection::NoMatch => Ok(absent::value()),
-            LoweredSelection::Invalid(cell) => Ok(Value::from(cell)),
+            LoweredSelection::Invalid(cell) => Ok(absent::with_reason(cell)),
         };
     }
     match select(&value, &cases_value) {
@@ -148,7 +172,7 @@ fn match_foreign(
             bindings,
         } => context.eval_value(expression, &environment.extended(bindings)),
         Selection::NoMatch => Ok(absent::value()),
-        Selection::Invalid(cell) => Ok(Value::from(cell)),
+        Selection::Invalid(cell) => Ok(absent::with_reason(cell)),
     }
 }
 
@@ -169,17 +193,17 @@ fn bindings_foreign(
         for index in 0..binding_count {
             let binding = context.elements(bindings).unwrap()[index];
             let Some(value) = context.field(binding, vocabulary::VALUE) else {
-                return Ok(Value::from(vocabulary::INVALID_BINDING));
+                return Ok(absent::with_reason(vocabulary::INVALID_BINDING));
             };
             let binder = context.field(binding, vocabulary::BIND);
             let pattern = context.field(binding, vocabulary::PATTERN);
             let (binder, pattern) = match (binder, pattern) {
                 (Some(binder), None) => match context.value(binder).as_cell() {
                     Some(binder) => (Some(binder), None),
-                    None => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+                    None => return Ok(absent::with_reason(vocabulary::INVALID_BINDER)),
                 },
                 (None, Some(pattern)) => (None, Some(context.value(pattern).clone())),
-                _ => return Ok(Value::from(vocabulary::INVALID_BINDING)),
+                _ => return Ok(absent::with_reason(vocabulary::INVALID_BINDING)),
             };
             let value = context.eval(value, &environment)?;
             if let Some(binder) = binder {
@@ -188,22 +212,24 @@ fn bindings_foreign(
                 match destructure(&pattern, &value) {
                     Ok(Some(bindings)) => environment = environment.extended(bindings),
                     Ok(None) => return Ok(absent::value()),
-                    Err(InvalidBinder) => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+                    Err(InvalidBinder) => {
+                        return Ok(absent::with_reason(vocabulary::INVALID_BINDER));
+                    }
                 }
             }
         }
         return context.eval(expression, &environment);
     }
     let Some(bindings) = bindings_value.as_list() else {
-        return Ok(Value::from(vocabulary::INVALID_BINDINGS));
+        return Ok(absent::with_reason(vocabulary::INVALID_BINDINGS));
     };
     let mut environment = environment.clone();
     for binding in bindings.values() {
         let Some(fields) = binding.as_record() else {
-            return Ok(Value::from(vocabulary::INVALID_BINDING));
+            return Ok(absent::with_reason(vocabulary::INVALID_BINDING));
         };
         let Some(value) = fields.get(&vocabulary::VALUE) else {
-            return Ok(Value::from(vocabulary::INVALID_BINDING));
+            return Ok(absent::with_reason(vocabulary::INVALID_BINDING));
         };
         let (binder, pattern) = match (
             fields.get(&vocabulary::BIND),
@@ -211,10 +237,10 @@ fn bindings_foreign(
         ) {
             (Some(binder), None) => match binder.as_cell() {
                 Some(binder) => (Some(binder), None),
-                None => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+                None => return Ok(absent::with_reason(vocabulary::INVALID_BINDER)),
             },
             (None, Some(pattern)) => (None, Some(pattern)),
-            _ => return Ok(Value::from(vocabulary::INVALID_BINDING)),
+            _ => return Ok(absent::with_reason(vocabulary::INVALID_BINDING)),
         };
         let value = context.eval_value(value, &environment)?;
         if let Some(binder) = binder {
@@ -223,7 +249,9 @@ fn bindings_foreign(
             match destructure(pattern, &value) {
                 Ok(Some(bindings)) => environment = environment.extended(bindings),
                 Ok(None) => return Ok(absent::value()),
-                Err(InvalidBinder) => return Ok(Value::from(vocabulary::INVALID_BINDER)),
+                Err(InvalidBinder) => {
+                    return Ok(absent::with_reason(vocabulary::INVALID_BINDER));
+                }
             }
         }
     }
@@ -569,6 +597,26 @@ pub fn quote_display<World, Hover: Clone>(
     ))
 }
 
+/// `do [a, b, c]` evaluates as a control form while retaining the
+/// ordinary list projection for its ordered expressions.
+pub fn do_display<World, Hover: Clone>(
+    input: &ProjectionInput<'_, World, Hover>,
+) -> Option<Layout<World, Hover>> {
+    let fields = input.value.as_record()?;
+    (fields.len() == 2).then_some(())?;
+    let function = fields.get(&grap_runtime::vocabulary::FUNCTION)?;
+    (function.as_cell()? == vocabulary::DO).then_some(())?;
+    let expressions = fields.get(&vocabulary::EXPRESSIONS)?;
+    expressions.as_list()?;
+    Some(row(
+        4.0,
+        [
+            crate::grap::shallow_at([Step::Key(grap_runtime::vocabulary::FUNCTION)], function),
+            crate::grap::at([Step::Key(vocabulary::EXPRESSIONS)], expressions),
+        ],
+    ))
+}
+
 pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     for (cell, name) in [
@@ -582,6 +630,8 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::LET, "let"),
         (vocabulary::WHERE, "where"),
         (vocabulary::BINDINGS, "bindings"),
+        (vocabulary::DO, "do"),
+        (vocabulary::EXPRESSIONS, "expressions"),
     ] {
         cells.set_value(cell, name::record(name, []));
     }
@@ -591,8 +641,9 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::INVALID_BINDER, "invalid binder"),
         (vocabulary::INVALID_BINDINGS, "invalid bindings"),
         (vocabulary::INVALID_BINDING, "invalid binding"),
+        (vocabulary::INVALID_EXPRESSIONS, "invalid expressions"),
     ] {
-        cells.set_value(cell, absent::named(name));
+        cells.set_value(cell, absent::named_reason(name));
     }
     Library {
         cells,
@@ -600,6 +651,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         projections: vec![
             match_display::<World, Hover>,
             bindings_display::<World, Hover>,
+            do_display::<World, Hover>,
             quote_display::<World, Hover>,
         ],
     }
@@ -711,8 +763,65 @@ mod tests {
         )
     }
 
+    fn do_call(expressions: impl IntoIterator<Item = Value>) -> Value {
+        grap::call(
+            Value::from(vocabulary::DO),
+            [(vocabulary::EXPRESSIONS, Value::list(expressions))],
+        )
+    }
+
     fn evaluate(expression: &Value) -> grap::Evaluation {
         grap::evaluate(expression, |_| None, &functions(), 100)
+    }
+
+    #[test]
+    fn do_evaluates_in_order_and_returns_the_last_result() {
+        let first = new_cell_id();
+        let second = new_cell_id();
+        let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let first_calls = calls.clone();
+        let second_calls = calls.clone();
+        let functions = functions()
+            .register(
+                first,
+                ForeignFunction::new(move |_, _, _| {
+                    first_calls.borrow_mut().push(first);
+                    Ok(blob("first"))
+                }),
+            )
+            .register(
+                second,
+                ForeignFunction::new(move |_, _, _| {
+                    second_calls.borrow_mut().push(second);
+                    Ok(blob("second"))
+                }),
+            );
+        let expression = do_call([
+            grap::call(Value::from(first), []),
+            grap::call(Value::from(second), []),
+        ]);
+        let result = grap::evaluate(&expression, |_| None, &functions, 100).result;
+
+        assert_eq!(&*calls.borrow(), &[first, second]);
+        assert_eq!(result, blob("second"));
+        assert!(absent::is_absent(&evaluate(&do_call([])).result));
+    }
+
+    #[test]
+    fn do_projects_its_expression_list_without_hiding_extra_data() {
+        let expression = do_call([blob("first"), blob("second")]);
+        let Layout::Row { children, .. } = do_display(&relative_projection_input(&expression))
+            .expect("coherent do projection")
+        else {
+            panic!("do is its marker followed by a list")
+        };
+        assert_eq!(children.len(), 2);
+
+        let decorated = expression
+            .as_record()
+            .unwrap()
+            .update(new_cell_id(), blob("extra"));
+        assert!(do_display(&relative_projection_input(&Value::record(decorated))).is_none());
     }
 
     #[test]
@@ -929,7 +1038,7 @@ mod tests {
         );
         assert_eq!(
             evaluate(&expression).result,
-            Value::from(grap::absent::MISSING_CELL)
+            grap::absent::value(grap::absent::MISSING_CELL)
         );
     }
 
@@ -1151,13 +1260,13 @@ mod tests {
         );
         assert_eq!(
             evaluate(&invalid_cases).result,
-            Value::from(vocabulary::INVALID_CASES)
+            absent::with_reason(vocabulary::INVALID_CASES)
         );
 
         let invalid_case = match_call(blob("subject"), [blob("not a case")]);
         assert_eq!(
             evaluate(&invalid_case).result,
-            Value::from(vocabulary::INVALID_CASE)
+            absent::with_reason(vocabulary::INVALID_CASE)
         );
 
         let invalid_binder = match_call(
@@ -1169,7 +1278,7 @@ mod tests {
         );
         assert_eq!(
             evaluate(&invalid_binder).result,
-            Value::from(vocabulary::INVALID_BINDER)
+            absent::with_reason(vocabulary::INVALID_BINDER)
         );
     }
 
@@ -1184,13 +1293,13 @@ mod tests {
         );
         assert_eq!(
             evaluate(&invalid_bindings).result,
-            Value::from(vocabulary::INVALID_BINDINGS)
+            absent::with_reason(vocabulary::INVALID_BINDINGS)
         );
 
         let invalid_binding = bindings_call(vocabulary::LET, [blob("not a binding")], blob("body"));
         assert_eq!(
             evaluate(&invalid_binding).result,
-            Value::from(vocabulary::INVALID_BINDING)
+            absent::with_reason(vocabulary::INVALID_BINDING)
         );
 
         let ambiguous = bindings_call(
@@ -1204,7 +1313,7 @@ mod tests {
         );
         assert_eq!(
             evaluate(&ambiguous).result,
-            Value::from(vocabulary::INVALID_BINDING)
+            absent::with_reason(vocabulary::INVALID_BINDING)
         );
 
         let invalid_binder = bindings_call(
@@ -1217,14 +1326,14 @@ mod tests {
         );
         assert_eq!(
             evaluate(&invalid_binder).result,
-            Value::from(vocabulary::INVALID_BINDER)
+            absent::with_reason(vocabulary::INVALID_BINDER)
         );
     }
 
     #[test]
-    fn library_describes_quote_and_classifies_absences() {
+    fn library_describes_control_forms_and_absence_reasons() {
         let library = library::<(), ()>();
-        assert_eq!(library.projections.len(), 3);
+        assert_eq!(library.projections.len(), 4);
         assert_eq!(
             library.cells.value(vocabulary::QUOTE).and_then(name::read),
             Some("quote")
@@ -1236,14 +1345,20 @@ mod tests {
                 .and_then(name::read),
             Some("unquote")
         );
+        assert_eq!(
+            library.cells.value(vocabulary::DO).and_then(name::read),
+            Some("do")
+        );
         for cell in [
             vocabulary::INVALID_CASES,
             vocabulary::INVALID_CASE,
             vocabulary::INVALID_BINDER,
             vocabulary::INVALID_BINDINGS,
             vocabulary::INVALID_BINDING,
+            vocabulary::INVALID_EXPRESSIONS,
         ] {
-            assert!(absent::is_absent(library.cells.value(cell).unwrap()));
+            assert!(name::read(library.cells.value(cell).unwrap()).is_some());
+            assert_eq!(absent::reason(&absent::with_reason(cell)), Some(cell));
         }
     }
 }

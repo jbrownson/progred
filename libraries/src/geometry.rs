@@ -43,7 +43,7 @@ pub fn functions() -> ForeignFunctions {
             Ok(f64::read(&radius)
                 .filter(|radius| radius.is_finite() && *radius >= 0.0)
                 .map(value)
-                .unwrap_or_else(|| Value::from(vocabulary::INVALID_RADIUS)))
+                .unwrap_or_else(|| absent::with_reason(vocabulary::INVALID_RADIUS)))
         }),
     )
 }
@@ -52,7 +52,10 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::CIRCLE, name::record("circle", []));
     cells.set_value(vocabulary::RADIUS, name::record("radius", []));
-    cells.set_value(vocabulary::INVALID_RADIUS, absent::named("invalid radius"));
+    cells.set_value(
+        vocabulary::INVALID_RADIUS,
+        absent::named_reason("invalid radius"),
+    );
     Library {
         cells,
         functions: functions(),
@@ -104,12 +107,9 @@ mod tests {
             [(vocabulary::RADIUS, f64::value(-1.0))],
         );
         let evaluation = grap::evaluate(&expression, |_| None, &foreign, 10);
-        assert_eq!(evaluation.result, Value::from(vocabulary::INVALID_RADIUS));
-        assert!(absent::is_absent(
-            library::<(), ()>()
-                .cells
-                .value(vocabulary::INVALID_RADIUS)
-                .unwrap()
-        ));
+        assert_eq!(
+            evaluation.result,
+            absent::with_reason(vocabulary::INVALID_RADIUS)
+        );
     }
 }

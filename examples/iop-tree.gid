@@ -30,13 +30,13 @@
     "color": 6c8a17cbe463186cc8b07e536ccffa6b,
     "color_index": 59f21ccbee8a91496c84e22532df9ca9,
     "color_pick": 982d9a84180c604b1a60fbfffb59da03,
-    "command": 570cfe675e206018960714f79933f25e,
     "concat": 6f2613d22b4690ed5bac39776e51b775,
     "cos": fb05b6c9b1565ca4add3732e8ddbe2b4,
     "current": 2680dedea78f6efb6866a9e537f09aa4,
     "depth": 180339357267d28e55bf88ce1b27b5d8,
     "descent": 2ed0b9294782093c08695dd5137df21a,
     "divide": b08dd4c44eeea43ab3c7593ddeedd742,
+    "do": b1fc4cb45c58b1a662c431feef5bd140,
     "drawing": 6889fa235b002be4c8b106d5f31dafbf,
     "dx": c96dfbe500e6a701033d92bc6c527398,
     "dy": 89d9b403fe0eba053af7048e29bf2f16,
@@ -44,6 +44,7 @@
     "end_value": 8bb963a6909a802401353a81fe0d2b03,
     "equal": 22ab9aa3e7ce4f4f79a7039e1cc23773,
     "expression": ccc55b0eb63b9f564ea74436094d4014,
+    "expressions": 5fab151c006ae1487c28837f2003f43c,
     "f64": ed11fde03b7c2c1ba2fccc3cdba5d561,
     "fill": 1624dc973ec7790203eb8fd22c9d6d05,
     "floor": d007814c5f6a6c38b025605b399473d4,
@@ -86,7 +87,6 @@
     "new_frontier": 350dc49c31dfef1386aa6e4237ebccc6,
     "next_blossom": 111340de338c3926a7d571cb2b99a04c,
     "next_segment": d166e4b370043426839169095751b129,
-    "next_state": 32787ea4c1eeb8a881df39ec6e0a2032,
     "next_x": 50c48e66179603824fc6e10b41b5504e,
     "next_y": 962188a9877f14bd02d819d68c9c7fef,
     "offset": dfd07a562aafe45ae556fea89958a59e,
@@ -107,10 +107,7 @@
     "radius": 6423c35e07d7a4ff536127d1f1d8eb53,
     "random_between": e8a99ada91800bca33709da0db80c29f,
     "random_scale": 1bc6faa0c835d0636606db22ffdfa935,
-    "random_state": 1c80fb9f0035b66347ae1529e42af98b,
-    "random_value": 725980a1344dbdce099fcdf189f77ba9,
     "rect": bb5e62c1b300b1e8c2484a0f4879a1fe,
-    "reset_random": bced0768fa647daf95a663b3e626b4ae,
     "rest": 27866faf05bcd734dcd453d70a16b581,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "right_angle": 74d076eff44a24482f9f06b433664388,
@@ -145,6 +142,7 @@
     "unquote": da48703c290e3b35d7353c38110bc953,
     "value": 00dafdc01c7e014edd857e174c6c8b6f,
     "width": f33c672fef9d0d4561102410fd64129f,
+    "with_random": f47ef735130ecf7a72105ac58f30075a,
     "x": 415def0fa0a9ac40dfba5fca4d0f8876,
     "x0": 882baf61dc20dc2b3b6e66a4944ee3f9,
     "x1": ff0eee8dd1b9f0f3ef1124f88040ff6c,
@@ -183,362 +181,294 @@
         blossoms_per_branch,
       ],
       body: {
-        function: let,
-        expression: next_state,
-        bindings: [
-          {
-            value: {
-              initial: {
-                function: quote,
-                expression: {
-                  random_state: {
-                    unquote: {
-                      function: reset_random,
-                    },
-                  },
-                  blossom_index: {
-                    f64: 0x0000000000000000,
-                  },
-                  segment_index: {
-                    f64: 0x0000000000000000,
-                  },
-                },
+        initial: {
+          function: quote,
+          expression: {
+            blossom_index: {
+              f64: 0x0000000000000000,
+            },
+            segment_index: {
+              f64: 0x0000000000000000,
+            },
+          },
+        },
+        step: {
+          params: [
+            state,
+          ],
+          body: {
+            function: let,
+            expression: {
+              value: {
+                right: segment_count,
+                function: less,
+                left: segment_index,
               },
-              step: {
-                params: [
-                  state,
-                ],
-                body: {
-                  function: let,
+              function: match,
+              cases: [
+                {
+                  pattern: true,
                   expression: {
-                    value: {
-                      right: segment_count,
-                      function: less,
-                      left: segment_index,
+                    function: let,
+                    expression: {
+                      function: quote,
+                      expression: {
+                        blossom_index: {
+                          unquote: next_blossom,
+                        },
+                        segment_index: {
+                          unquote: next_segment,
+                        },
+                      },
                     },
-                    function: match,
-                    cases: [
+                    bindings: [
                       {
-                        pattern: true,
-                        expression: {
-                          function: let,
-                          expression: {
-                            function: quote,
-                            expression: {
-                              random_state: {
-                                unquote: random_state,
-                              },
-                              blossom_index: {
-                                unquote: next_blossom,
-                              },
-                              segment_index: {
-                                unquote: next_segment,
-                              },
+                        value: {
+                          index: segment_index,
+                          list: blossom_points,
+                          function: list_at,
+                        },
+                        bind: segment,
+                      },
+                      {
+                        value: segment,
+                        pattern: [
+                          {
+                            bind: x0,
+                          },
+                          {
+                            bind: y0,
+                          },
+                          {
+                            bind: x1,
+                          },
+                          {
+                            bind: y1,
+                          },
+                        ],
+                      },
+                      {
+                        value: {
+                          maximum: {
+                            f64: 0x000000000000f03f,
+                          },
+                          minimum: {
+                            f64: 0x0000000000000000,
+                          },
+                          function: random_between,
+                        },
+                        bind: x_amount,
+                      },
+                      {
+                        value: {
+                          maximum: {
+                            f64: 0x0000000000002440,
+                          },
+                          minimum: {
+                            f64: 0x00000000000024c0,
+                          },
+                          function: random_between,
+                        },
+                        bind: x_jitter,
+                      },
+                      {
+                        value: {
+                          maximum: {
+                            f64: 0x000000000000f03f,
+                          },
+                          minimum: {
+                            f64: 0x0000000000000000,
+                          },
+                          function: random_between,
+                        },
+                        bind: y_amount,
+                      },
+                      {
+                        value: {
+                          maximum: {
+                            f64: 0x0000000000002440,
+                          },
+                          minimum: {
+                            f64: 0x00000000000024c0,
+                          },
+                          function: random_between,
+                        },
+                        bind: y_jitter,
+                      },
+                      {
+                        value: {
+                          maximum: {
+                            list: blossom_colors,
+                            function: list_length,
+                          },
+                          minimum: {
+                            f64: 0x0000000000000000,
+                          },
+                          function: random_between,
+                        },
+                        bind: color_pick,
+                      },
+                      {
+                        value: {
+                          maximum: {
+                            f64: 0x0000000000001440,
+                          },
+                          minimum: {
+                            f64: 0x0000000000000040,
+                          },
+                          function: random_between,
+                        },
+                        bind: radius,
+                      },
+                      {
+                        value: {
+                          right: x_jitter,
+                          function: add,
+                          left: {
+                            end: x1,
+                            start: x0,
+                            amount: x_amount,
+                            function: lerp,
+                          },
+                        },
+                        bind: x,
+                      },
+                      {
+                        value: {
+                          right: y_jitter,
+                          function: add,
+                          left: {
+                            end: y1,
+                            start: y0,
+                            amount: y_amount,
+                            function: lerp,
+                          },
+                        },
+                        bind: y,
+                      },
+                      {
+                        value: {
+                          operand: color_pick,
+                          function: floor,
+                        },
+                        bind: color_index,
+                      },
+                      {
+                        value: {
+                          index: color_index,
+                          list: blossom_colors,
+                          function: list_at,
+                        },
+                        bind: paint,
+                      },
+                      {
+                        value: {
+                          function: fill,
+                          paint: paint,
+                          shape: {
+                            circle: {
+                              x: x,
+                              y: y,
+                              radius: radius,
                             },
                           },
-                          bindings: [
+                        },
+                        bind: blossom_command,
+                      },
+                      {
+                        value: {
+                          right: {
+                            f64: 0x000000000000f03f,
+                          },
+                          function: add,
+                          left: blossom_index,
+                        },
+                        bind: next_blossom,
+                      },
+                      {
+                        value: {
+                          value: {
+                            right: blossoms_per_branch,
+                            function: less,
+                            left: next_blossom,
+                          },
+                          function: match,
+                          cases: [
                             {
-                              value: {
-                                index: segment_index,
-                                list: blossom_points,
-                                function: list_at,
-                              },
-                              bind: segment,
-                            },
-                            {
-                              value: segment,
-                              pattern: [
-                                {
-                                  bind: x0,
-                                },
-                                {
-                                  bind: y0,
-                                },
-                                {
-                                  bind: x1,
-                                },
-                                {
-                                  bind: y1,
-                                },
-                              ],
-                            },
-                            {
-                              value: {
-                                random_state: random_state,
-                                maximum: {
-                                  f64: 0x000000000000f03f,
-                                },
-                                minimum: {
-                                  f64: 0x0000000000000000,
-                                },
-                                function: random_between,
-                              },
-                              pattern: {
-                                random_state: {
-                                  bind: next_state,
-                                },
-                                random_value: {
-                                  bind: x_amount,
-                                },
-                              },
-                            },
-                            {
-                              value: {
-                                random_state: next_state,
-                                maximum: {
-                                  f64: 0x0000000000002440,
-                                },
-                                minimum: {
-                                  f64: 0x00000000000024c0,
-                                },
-                                function: random_between,
-                              },
-                              pattern: {
-                                random_state: {
-                                  bind: random_state,
-                                },
-                                random_value: {
-                                  bind: x_jitter,
-                                },
-                              },
-                            },
-                            {
-                              value: {
-                                random_state: random_state,
-                                maximum: {
-                                  f64: 0x000000000000f03f,
-                                },
-                                minimum: {
-                                  f64: 0x0000000000000000,
-                                },
-                                function: random_between,
-                              },
-                              pattern: {
-                                random_state: {
-                                  bind: next_state,
-                                },
-                                random_value: {
-                                  bind: y_amount,
-                                },
-                              },
-                            },
-                            {
-                              value: {
-                                random_state: next_state,
-                                maximum: {
-                                  f64: 0x0000000000002440,
-                                },
-                                minimum: {
-                                  f64: 0x00000000000024c0,
-                                },
-                                function: random_between,
-                              },
-                              pattern: {
-                                random_state: {
-                                  bind: random_state,
-                                },
-                                random_value: {
-                                  bind: y_jitter,
-                                },
-                              },
-                            },
-                            {
-                              value: {
-                                random_state: random_state,
-                                maximum: {
-                                  list: blossom_colors,
-                                  function: list_length,
-                                },
-                                minimum: {
-                                  f64: 0x0000000000000000,
-                                },
-                                function: random_between,
-                              },
-                              pattern: {
-                                random_state: {
-                                  bind: next_state,
-                                },
-                                random_value: {
-                                  bind: color_pick,
-                                },
-                              },
-                            },
-                            {
-                              value: {
-                                random_state: next_state,
-                                maximum: {
-                                  f64: 0x0000000000001440,
-                                },
-                                minimum: {
-                                  f64: 0x0000000000000040,
-                                },
-                                function: random_between,
-                              },
-                              pattern: {
-                                random_state: {
-                                  bind: random_state,
-                                },
-                                random_value: {
-                                  bind: radius,
-                                },
-                              },
-                            },
-                            {
-                              value: {
-                                right: x_jitter,
-                                function: add,
-                                left: {
-                                  end: x1,
-                                  start: x0,
-                                  amount: x_amount,
-                                  function: lerp,
-                                },
-                              },
-                              bind: x,
-                            },
-                            {
-                              value: {
-                                right: y_jitter,
-                                function: add,
-                                left: {
-                                  end: y1,
-                                  start: y0,
-                                  amount: y_amount,
-                                  function: lerp,
-                                },
-                              },
-                              bind: y,
-                            },
-                            {
-                              value: {
-                                operand: color_pick,
-                                function: floor,
-                              },
-                              bind: color_index,
-                            },
-                            {
-                              value: {
-                                index: color_index,
-                                list: blossom_colors,
-                                function: list_at,
-                              },
-                              bind: paint,
-                            },
-                            {
-                              value: {
-                                function: fill,
-                                paint: paint,
-                                shape: {
-                                  circle: {
-                                    x: x,
-                                    y: y,
-                                    radius: radius,
+                              pattern: true,
+                              expression: {
+                                function: quote,
+                                expression: {
+                                  blossom_index: {
+                                    unquote: next_blossom,
+                                  },
+                                  segment_index: {
+                                    unquote: segment_index,
                                   },
                                 },
                               },
-                              bind: blossom_command,
                             },
                             {
-                              value: {
-                                right: {
-                                  f64: 0x000000000000f03f,
-                                },
-                                function: add,
-                                left: blossom_index,
+                              pattern: {
+                                bind: value,
                               },
-                              bind: next_blossom,
-                            },
-                            {
-                              value: {
-                                value: {
-                                  right: blossoms_per_branch,
-                                  function: less,
-                                  left: next_blossom,
-                                },
-                                function: match,
-                                cases: [
-                                  {
-                                    pattern: true,
-                                    expression: {
-                                      function: quote,
-                                      expression: {
-                                        blossom_index: {
-                                          unquote: next_blossom,
-                                        },
-                                        segment_index: {
-                                          unquote: segment_index,
-                                        },
+                              expression: {
+                                function: quote,
+                                expression: {
+                                  blossom_index: {
+                                    f64: 0x0000000000000000,
+                                  },
+                                  segment_index: {
+                                    unquote: {
+                                      right: {
+                                        f64: 0x000000000000f03f,
                                       },
+                                      function: add,
+                                      left: segment_index,
                                     },
                                   },
-                                  {
-                                    pattern: {
-                                      bind: value,
-                                    },
-                                    expression: {
-                                      function: quote,
-                                      expression: {
-                                        blossom_index: {
-                                          f64: 0x0000000000000000,
-                                        },
-                                        segment_index: {
-                                          unquote: {
-                                            right: {
-                                              f64: 0x000000000000f03f,
-                                            },
-                                            function: add,
-                                            left: segment_index,
-                                          },
-                                        },
-                                      },
-                                    },
-                                  },
-                                ],
-                              },
-                              pattern: {
-                                blossom_index: {
-                                  bind: next_blossom,
-                                },
-                                segment_index: {
-                                  bind: next_segment,
                                 },
                               },
                             },
                           ],
                         },
+                        pattern: {
+                          blossom_index: {
+                            bind: next_blossom,
+                          },
+                          segment_index: {
+                            bind: next_segment,
+                          },
+                        },
                       },
                     ],
                   },
-                  bindings: [
-                    {
-                      value: state,
-                      pattern: {
-                        random_state: {
-                          bind: random_state,
-                        },
-                        blossom_index: {
-                          bind: blossom_index,
-                        },
-                        segment_index: {
-                          bind: segment_index,
-                        },
-                      },
-                    },
-                    {
-                      value: {
-                        list: blossom_points,
-                        function: list_length,
-                      },
-                      bind: segment_count,
-                    },
-                  ],
+                },
+              ],
+            },
+            bindings: [
+              {
+                value: state,
+                pattern: {
+                  blossom_index: {
+                    bind: blossom_index,
+                  },
+                  segment_index: {
+                    bind: segment_index,
+                  },
                 },
               },
-              function: iterate,
-            },
-            bind: next_state,
+              {
+                value: {
+                  list: blossom_points,
+                  function: list_length,
+                },
+                bind: segment_count,
+              },
+            ],
           },
-        ],
+        },
+        function: iterate,
       },
     },
     blossoms_per_branch: {
@@ -576,11 +506,6 @@
               initial: {
                 function: quote,
                 expression: {
-                  random_state: {
-                    unquote: {
-                      function: reset_random,
-                    },
-                  },
                   frontier: [
                     [
                       {
@@ -630,9 +555,6 @@
                     function: quote,
                     expression: {
                       state: {
-                        random_state: {
-                          unquote: random_state,
-                        },
                         frontier: {
                           unquote: new_frontier,
                         },
@@ -646,9 +568,6 @@
                     {
                       value: state,
                       pattern: {
-                        random_state: {
-                          bind: random_state,
-                        },
                         frontier: {
                           bind: frontier,
                         },
@@ -693,7 +612,6 @@
                     },
                     {
                       value: {
-                        random_state: random_state,
                         maximum: {
                           f64: 0xcdccccccccccf43f,
                         },
@@ -702,14 +620,7 @@
                         },
                         function: random_between,
                       },
-                      pattern: {
-                        random_state: {
-                          bind: next_state,
-                        },
-                        random_value: {
-                          bind: random_scale,
-                        },
-                      },
+                      bind: random_scale,
                     },
                     {
                       value: {
@@ -843,9 +754,6 @@
                               expression: {
                                 function: quote,
                                 expression: {
-                                  random_state: {
-                                    unquote: next_state,
-                                  },
                                   new_frontier: {
                                     unquote: new_frontier,
                                   },
@@ -854,7 +762,6 @@
                               bindings: [
                                 {
                                   value: {
-                                    random_state: next_state,
                                     maximum: {
                                       f64: 0x9a9999999999a9bf,
                                     },
@@ -863,18 +770,10 @@
                                     },
                                     function: random_between,
                                   },
-                                  pattern: {
-                                    random_state: {
-                                      bind: random_state,
-                                    },
-                                    random_value: {
-                                      bind: turn_left,
-                                    },
-                                  },
+                                  bind: turn_left,
                                 },
                                 {
                                   value: {
-                                    random_state: random_state,
                                     maximum: {
                                       f64: 0x9a9999999999a93f,
                                     },
@@ -883,14 +782,7 @@
                                     },
                                     function: random_between,
                                   },
-                                  pattern: {
-                                    random_state: {
-                                      bind: next_state,
-                                    },
-                                    random_value: {
-                                      bind: turn_right,
-                                    },
-                                  },
+                                  bind: turn_right,
                                 },
                                 {
                                   value: {
@@ -986,9 +878,6 @@
                                     expression: {
                                       function: quote,
                                       expression: {
-                                        random_state: {
-                                          unquote: random_state,
-                                        },
                                         new_frontier: {
                                           unquote: new_frontier,
                                         },
@@ -997,7 +886,6 @@
                                     bindings: [
                                       {
                                         value: {
-                                          random_state: next_state,
                                           maximum: {
                                             f64: 0x9a9999999999a9bf,
                                           },
@@ -1006,14 +894,7 @@
                                           },
                                           function: random_between,
                                         },
-                                        pattern: {
-                                          random_state: {
-                                            bind: random_state,
-                                          },
-                                          random_value: {
-                                            bind: turn_left,
-                                          },
-                                        },
+                                        bind: turn_left,
                                       },
                                       {
                                         value: {
@@ -1064,9 +945,6 @@
                                   expression: {
                                     function: quote,
                                     expression: {
-                                      random_state: {
-                                        unquote: next_state,
-                                      },
                                       new_frontier: {
                                         unquote: rest,
                                       },
@@ -1079,9 +957,6 @@
                         ],
                       },
                       pattern: {
-                        random_state: {
-                          bind: random_state,
-                        },
                         new_frontier: {
                           bind: new_frontier,
                         },
@@ -1132,42 +1007,44 @@
                     },
                     {
                       value: {
-                        transform: [
+                        expressions: [
                           {
-                            translate: {
-                              x: x,
-                              y: y,
+                            transform: [
+                              {
+                                translate: {
+                                  x: x,
+                                  y: y,
+                                },
+                              },
+                              {
+                                rotate: angle,
+                              },
+                            ],
+                            function: fill,
+                            paint: {
+                              color: "#000000",
                             },
-                          },
-                          {
-                            rotate: angle,
-                          },
-                        ],
-                        function: fill,
-                        paint: {
-                          color: "#000000",
-                        },
-                        shape: {
-                          rect: {
-                            x: {
-                              f64: 0x0000000000000000,
-                            },
-                            y: {
-                              right: half_width,
-                              function: subtract,
-                              left: {
-                                f64: 0x0000000000000000,
+                            shape: {
+                              rect: {
+                                x: {
+                                  f64: 0x0000000000000000,
+                                },
+                                y: {
+                                  right: half_width,
+                                  function: subtract,
+                                  left: {
+                                    f64: 0x0000000000000000,
+                                  },
+                                },
+                                height: branch_width,
+                                width: length,
                               },
                             },
-                            height: branch_width,
-                            width: length,
                           },
-                        },
+                          branch_points,
+                        ],
+                        function: do,
                       },
-                      bind: command,
-                    },
-                    {
-                      value: branch_points,
                       bind: branch_item,
                     },
                   ],
@@ -1178,9 +1055,6 @@
             pattern: {
               list: {
                 bind: branch_items,
-              },
-              state: {
-                bind: next_state,
               },
             },
           },
@@ -1223,9 +1097,6 @@
     },
     color_pick: {
       name: "color pick",
-    },
-    command: {
-      name: "command",
     },
     current: {
       name: "current",
@@ -1288,11 +1159,16 @@
         canvas_height,
         offset,
         paint,
-        random_state,
       ],
       body: {
         function: let,
-        expression: next_state,
+        expression: {
+          function: fill,
+          paint: paint,
+          shape: {
+            path: path_elements,
+          },
+        },
         bindings: [
           {
             value: {
@@ -1307,9 +1183,6 @@
               initial: {
                 function: quote,
                 expression: {
-                  random_state: {
-                    unquote: random_state,
-                  },
                   x: {
                     f64: 0x0000000000000000,
                   },
@@ -1340,9 +1213,6 @@
                             function: quote,
                             expression: {
                               state: {
-                                random_state: {
-                                  unquote: random_state,
-                                },
                                 x: {
                                   unquote: next_x,
                                 },
@@ -1365,7 +1235,6 @@
                           bindings: [
                             {
                               value: {
-                                random_state: random_state,
                                 maximum: {
                                   f64: 0x0000000000002440,
                                 },
@@ -1374,18 +1243,10 @@
                                 },
                                 function: random_between,
                               },
-                              pattern: {
-                                random_state: {
-                                  bind: next_state,
-                                },
-                                random_value: {
-                                  bind: dx,
-                                },
-                              },
+                              bind: dx,
                             },
                             {
                               value: {
-                                random_state: next_state,
                                 maximum: {
                                   f64: 0x0000000000000840,
                                 },
@@ -1394,14 +1255,7 @@
                                 },
                                 function: random_between,
                               },
-                              pattern: {
-                                random_state: {
-                                  bind: random_state,
-                                },
-                                random_value: {
-                                  bind: dy,
-                                },
-                              },
+                              bind: dy,
                             },
                             {
                               value: {
@@ -1428,9 +1282,6 @@
                     {
                       value: state,
                       pattern: {
-                        random_state: {
-                          bind: random_state,
-                        },
                         x: {
                           bind: x,
                         },
@@ -1449,9 +1300,6 @@
                 bind: path_elements,
               },
               state: {
-                random_state: {
-                  bind: next_state,
-                },
                 x: {
                   bind: next_x,
                 },
@@ -1514,16 +1362,6 @@
             },
             bind: path_elements,
           },
-          {
-            value: {
-              function: fill,
-              paint: paint,
-              shape: {
-                path: path_elements,
-              },
-            },
-            bind: command,
-          },
         ],
       },
     },
@@ -1541,9 +1379,6 @@
     },
     next_segment: {
       name: "next segment",
-    },
-    next_state: {
-      name: "next state",
     },
     next_x: {
       name: "next x",
@@ -1662,120 +1497,107 @@
         blossom_colors,
       ],
       body: {
-        function: let,
-        expression: next_state,
-        bindings: [
-          {
-            value: {
-              function: reset_random,
-            },
-            bind: random_state,
+        function: with_random,
+        expression: {
+          function: let,
+          expression: {
+            blossoms_per_branch: blossoms_per_branch,
+            blossom_points: blossom_points,
+            blossom_colors: blossom_colors,
+            function: blossoms,
           },
-          {
-            value: {
-              function: fill,
-              paint: {
-                function: quote,
-                expression: {
-                  linear_gradient: {
-                    stops: [
-                      {
-                        paint: {
-                          unquote: sky_top,
+          bindings: [
+            {
+              value: {
+                expressions: [
+                  {
+                    function: fill,
+                    paint: {
+                      function: quote,
+                      expression: {
+                        linear_gradient: {
+                          stops: [
+                            {
+                              paint: {
+                                unquote: sky_top,
+                              },
+                              gradient_offset: {
+                                f64: 0x0000000000000000,
+                              },
+                            },
+                            {
+                              paint: {
+                                unquote: sky_bottom,
+                              },
+                              gradient_offset: {
+                                f64: 0x000000000000f03f,
+                              },
+                            },
+                          ],
+                          gradient_end: {
+                            x: {
+                              f64: 0x0000000000000000,
+                            },
+                            y: {
+                              unquote: canvas_height,
+                            },
+                          },
+                          gradient_start: {
+                            x: {
+                              f64: 0x0000000000000000,
+                            },
+                            y: {
+                              f64: 0x0000000000000000,
+                            },
+                          },
                         },
-                        gradient_offset: {
+                      },
+                    },
+                    shape: {
+                      rect: {
+                        x: {
                           f64: 0x0000000000000000,
                         },
-                      },
-                      {
-                        paint: {
-                          unquote: sky_bottom,
+                        y: {
+                          f64: 0x0000000000000000,
                         },
-                        gradient_offset: {
-                          f64: 0x000000000000f03f,
-                        },
-                      },
-                    ],
-                    gradient_end: {
-                      x: {
-                        f64: 0x0000000000000000,
-                      },
-                      y: {
-                        unquote: canvas_height,
-                      },
-                    },
-                    gradient_start: {
-                      x: {
-                        f64: 0x0000000000000000,
-                      },
-                      y: {
-                        f64: 0x0000000000000000,
+                        height: canvas_height,
+                        width: canvas_width,
                       },
                     },
                   },
-                },
-              },
-              shape: {
-                rect: {
-                  x: {
-                    f64: 0x0000000000000000,
+                  {
+                    canvas_height: canvas_height,
+                    function: mountain,
+                    canvas_width: canvas_width,
+                    paint: mountain_back,
+                    offset: {
+                      f64: 0x0000000000406040,
+                    },
                   },
-                  y: {
-                    f64: 0x0000000000000000,
+                  {
+                    canvas_height: canvas_height,
+                    function: mountain,
+                    canvas_width: canvas_width,
+                    paint: mountain_front,
+                    offset: {
+                      f64: 0x0000000000004940,
+                    },
                   },
-                  height: canvas_height,
-                  width: canvas_width,
-                },
+                  {
+                    canvas_height: canvas_height,
+                    trunk_length: trunk_length,
+                    function: branches,
+                    canvas_width: canvas_width,
+                    branch_length: branch_length,
+                  },
+                ],
+                function: do,
               },
+              bind: blossom_points,
             },
-            bind: command,
-          },
-          {
-            value: {
-              random_state: random_state,
-              canvas_height: canvas_height,
-              function: mountain,
-              canvas_width: canvas_width,
-              paint: mountain_back,
-              offset: {
-                f64: 0x0000000000406040,
-              },
-            },
-            bind: next_state,
-          },
-          {
-            value: {
-              random_state: next_state,
-              canvas_height: canvas_height,
-              function: mountain,
-              canvas_width: canvas_width,
-              paint: mountain_front,
-              offset: {
-                f64: 0x0000000000004940,
-              },
-            },
-            bind: random_state,
-          },
-          {
-            value: {
-              canvas_height: canvas_height,
-              trunk_length: trunk_length,
-              function: branches,
-              canvas_width: canvas_width,
-              branch_length: branch_length,
-            },
-            bind: blossom_points,
-          },
-          {
-            value: {
-              blossoms_per_branch: blossoms_per_branch,
-              blossom_points: blossom_points,
-              blossom_colors: blossom_colors,
-              function: blossoms,
-            },
-            bind: next_state,
-          },
-        ],
+          ],
+        },
       },
     },
     trunk_length: {

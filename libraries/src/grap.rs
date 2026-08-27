@@ -252,7 +252,9 @@ fn evaluate_foreign(
     let environment = context.eval(environment, calling_environment)?;
     match context.environment(&environment) {
         Some(environment) => context.eval(expression, &environment),
-        None => Ok(Value::from(grap_runtime::absent::INVALID_ENVIRONMENT)),
+        None => Ok(absent::with_reason(
+            grap_runtime::absent::INVALID_ENVIRONMENT,
+        )),
     }
 }
 
@@ -291,7 +293,7 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
             "invalid environment",
         ),
     ] {
-        cells.set_value(cell, absent::named(value));
+        cells.set_value(cell, absent::named_reason(value));
     }
     Library {
         cells,
@@ -804,12 +806,17 @@ mod tests {
                 .and_then(name::read),
             Some("function")
         );
-        assert!(absent::is_absent(
+        assert_eq!(
             library
                 .cells
                 .value(grap_runtime::absent::MISSING_CELL)
-                .unwrap()
-        ));
+                .and_then(name::read),
+            Some("missing cell")
+        );
+        assert_eq!(
+            absent::reason(&absent::with_reason(grap_runtime::absent::MISSING_CELL)),
+            Some(grap_runtime::absent::MISSING_CELL)
+        );
         assert_eq!(library.projections.len(), 4);
 
         let input = gid::new_cell_id();

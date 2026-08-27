@@ -120,18 +120,10 @@ fn src<'a>(doc: &'a Document, library: &'a Cells) -> Sources<'a> {
 }
 
 #[test]
-fn a_projection_absence_may_be_returned_through_a_cell() {
-    let absent_cell = gid::new_cell_id();
-    let mut library = Cells::new();
-    library.set_value(absent_cell, absent::value());
-    let doc = Document {
-        root: None,
-        cells: Cells::new(),
-    };
-    assert!(projection_is_absent(
-        &src(&doc, &library),
-        &Value::from(absent_cell),
-    ));
+fn a_projection_absence_carries_its_reason_explicitly() {
+    let reason = gid::new_cell_id();
+    assert!(projection_is_absent(&absent::with_reason(reason)));
+    assert!(!projection_is_absent(&Value::from(reason)));
 }
 
 fn make_selection(doc: &Document, library: &Cells, path: Path) -> Selection {

@@ -1,32 +1,44 @@
-//! The shared Grap absent classification. Particular libraries own
-//! their absent identities; their values classify those identities as
-//! absents through the independent `isa` convention.
+//! Tagged Grap absence values. The tag identifies the result as absent;
+//! its cell payload is the stable, language-independent reason identity.
 
-use crate::{Library, isa, name};
-use gid::{Cells, Value};
-use isa::Isa as _;
+use crate::{Library, name};
+use gid::{CellId, Cells, Value};
 
 pub mod vocabulary {
     use gid::CellId;
 
-    pub const ABSENT: CellId = CellId::from_u128(0xd9c0a7145a38859a245640d3469cbcd4);
+    pub const ABSENT: CellId = grap_runtime::absent::ABSENT;
+    pub const UNSPECIFIED: CellId =
+        CellId::from_u128(0x017c4e09bedca389122e5da48156b229);
 }
 
 pub fn value() -> Value {
-    Value::record([isa::field(vocabulary::ABSENT)])
+    with_reason(vocabulary::UNSPECIFIED)
 }
 
-pub fn named(value: impl Into<String>) -> Value {
-    name::record(value, [isa::field(vocabulary::ABSENT)])
+pub fn with_reason(reason: CellId) -> Value {
+    grap_runtime::absent::value(reason)
+}
+
+pub fn reason(value: &Value) -> Option<CellId> {
+    grap_runtime::absent::reason(value)
 }
 
 pub fn is_absent(value: &Value) -> bool {
-    value.isa(vocabulary::ABSENT)
+    grap_runtime::absent::is_absent(value)
+}
+
+pub fn named_reason(value: impl Into<String>) -> Value {
+    name::record(value, [])
 }
 
 pub fn library<World, Hover>() -> Library<World, Hover> {
     let mut cells = Cells::new();
     cells.set_value(vocabulary::ABSENT, name::record("absent", []));
+    cells.set_value(
+        vocabulary::UNSPECIFIED,
+        named_reason("unspecified absence"),
+    );
     Library {
         cells,
         ..Library::default()
@@ -39,15 +51,24 @@ mod tests {
     use gid::new_cell_id;
 
     #[test]
-    fn absent_is_an_extensible_structural_classification() {
-        let mut fields = value().as_record().unwrap().clone();
-        fields.insert(new_cell_id(), Value::from(vec![1]));
-        assert!(is_absent(&Value::Record(fields)));
-        assert!(is_absent(&named("specific absence")));
-        assert_eq!(
-            name::read(&named("specific absence")),
-            Some("specific absence")
+    fn absence_is_an_open_tag_with_a_stable_reason() {
+        let reason = new_cell_id();
+        let extra = new_cell_id();
+        let absent = Value::record(
+            with_reason(reason)
+                .as_record()
+                .unwrap()
+                .clone()
+                .update(extra, Value::from(vec![1])),
         );
-        assert!(!is_absent(&Value::from(vocabulary::ABSENT)));
+
+        assert!(is_absent(&absent));
+        assert_eq!(super::reason(&absent), Some(reason));
+        assert_eq!(super::reason(&value()), Some(vocabulary::UNSPECIFIED));
+        assert!(!is_absent(&named_reason("specific absence")));
+        assert!(!is_absent(&Value::record([(
+            vocabulary::ABSENT,
+            Value::from(vec![1]),
+        )])));
     }
 }

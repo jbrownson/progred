@@ -164,7 +164,7 @@ mod tests {
                 10,
             )
             .result,
-            Value::from(grap::absent::NOT_CALLABLE)
+            grap::absent::value(grap::absent::NOT_CALLABLE)
         );
     }
 }

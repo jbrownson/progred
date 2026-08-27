@@ -23,8 +23,9 @@ pub mod vocabulary {
 }
 
 pub mod absent {
-    use gid::CellId;
+    use gid::{CellId, Value};
 
+    pub const ABSENT: CellId = CellId::from_u128(0xd9c0a7145a38859a245640d3469cbcd4);
     pub const FUEL_EXHAUSTED: CellId = CellId::from_u128(0x513628d759c04b3e7088b575e555a80e);
     pub const MISSING_CELL: CellId = CellId::from_u128(0xa5a1b4e3d0df96bd11af00f0780136ff);
     pub const CELL_CYCLE: CellId = CellId::from_u128(0x150e0fc7e38d1670f41283c3d23a9b8d);
@@ -33,6 +34,21 @@ pub mod absent {
     pub const NOT_CALLABLE: CellId = CellId::from_u128(0x8624488c2d10d2a4b84560dfa99a38e6);
     pub const MISSING_ARGUMENT: CellId = CellId::from_u128(0x8b2f0db36e5c3d35595eb5666cc89c78);
     pub const INVALID_ENVIRONMENT: CellId = CellId::from_u128(0x152f2cac01f072317ab5746c5befdf9c);
+
+    pub fn value(reason: CellId) -> Value {
+        Value::record([(ABSENT, Value::from(reason))])
+    }
+
+    pub fn reason(value: &Value) -> Option<CellId> {
+        value
+            .as_record()?
+            .get(&ABSENT)
+            .and_then(Value::as_cell)
+    }
+
+    pub fn is_absent(value: &Value) -> bool {
+        reason(value).is_some()
+    }
 }
 
 pub const DEFAULT_FUEL: usize = 1_024;
@@ -396,6 +412,7 @@ pub struct Context<'a> {
     resolve: &'a dyn Fn(CellId) -> Option<Value>,
     foreign: &'a ForeignFunctions,
     overlay: Option<&'a ForeignOverlay<'a>>,
+    foreign_scopes: Vec<ForeignFunctions>,
     remaining_fuel: usize,
     diagnostics: Vec<Diagnostic>,
     dependencies: BTreeSet<CellId>,
@@ -647,7 +664,7 @@ impl<'a> Context<'a> {
 
     fn absent(&mut self, diagnostic: Diagnostic, cell: CellId) -> Value {
         self.diagnostics.push(diagnostic);
-        Value::from(cell)
+        absent::value(cell)
     }
 
     fn eval_cell(
@@ -768,7 +785,15 @@ impl<'a> Context<'a> {
     }
 
     fn foreign_target_cell(&self, cell: CellId) -> Option<ResolvedForeign> {
-        if self.overlay.is_some_and(|overlay| overlay.handles(cell)) {
+        if let Some(function) = self
+            .foreign_scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(cell))
+            .cloned()
+        {
+            Some(ResolvedForeign::Permanent { cell, function })
+        } else if self.overlay.is_some_and(|overlay| overlay.handles(cell)) {
             Some(ResolvedForeign::Scoped(cell))
         } else {
             self.foreign
@@ -809,6 +834,20 @@ impl<'a> Context<'a> {
         arguments: impl IntoIterator<Item = (CellId, Value)>,
     ) -> Result<Value, Halt> {
         self.apply_values(function, arguments.into_iter().collect())
+    }
+
+    /// Run synchronously with an additional foreign-function layer.
+    /// Its owned closures may carry state local to this evaluation;
+    /// the layer shadows host and permanent functions.
+    pub fn with_foreign_functions<T>(
+        &mut self,
+        functions: ForeignFunctions,
+        run: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        self.foreign_scopes.push(functions);
+        let result = run(self);
+        self.foreign_scopes.pop();
+        result
     }
 
     pub fn prepare_callable(
@@ -1019,6 +1058,7 @@ pub fn evaluate(
         resolve: &resolve,
         foreign,
         overlay: None,
+        foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1043,6 +1083,7 @@ pub fn evaluate_scoped<'a>(
         resolve: &resolve,
         foreign,
         overlay: Some(overlay),
+        foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1071,6 +1112,7 @@ pub fn apply(
         resolve: &resolve,
         foreign,
         overlay: None,
+        foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1096,6 +1138,7 @@ pub fn apply_scoped<'a>(
         resolve: &resolve,
         foreign,
         overlay: Some(overlay),
+        foreign_scopes: Vec::new(),
         remaining_fuel: fuel,
         diagnostics: Vec::new(),
         dependencies: BTreeSet::new(),
@@ -1135,7 +1178,7 @@ mod tests {
     fn consuming_the_entire_fuel_allowance_is_exhaustion() {
         let value = blob("one step");
         let exhausted = evaluate(&value, |_| None, &ForeignFunctions::default(), 1);
-        assert_eq!(exhausted.result, Value::from(absent::FUEL_EXHAUSTED));
+        assert_eq!(exhausted.result, absent::value(absent::FUEL_EXHAUSTED));
         assert_eq!(exhausted.diagnostics, [Diagnostic::FuelExhausted]);
         assert_eq!(exhausted.remaining_fuel, 0);
         let completed = evaluate(&value, |_| None, &ForeignFunctions::default(), 2);
@@ -1470,7 +1513,7 @@ mod tests {
             &ForeignFunctions::default(),
             10,
         );
-        assert_eq!(evaluation.result, Value::from(absent::MISSING_CELL));
+        assert_eq!(evaluation.result, absent::value(absent::MISSING_CELL));
         assert_eq!(evaluation.diagnostics, [Diagnostic::MissingCell(missing)]);
 
         let malformed = Value::record([
@@ -1478,7 +1521,7 @@ mod tests {
             (vocabulary::BODY, blob("body")),
         ]);
         let evaluation = evaluate(&malformed, |_| None, &ForeignFunctions::default(), 10);
-        assert_eq!(evaluation.result, Value::from(absent::MALFORMED_LAMBDA));
+        assert_eq!(evaluation.result, absent::value(absent::MALFORMED_LAMBDA));
     }
 
     #[test]
@@ -1507,7 +1550,7 @@ mod tests {
             &ForeignFunctions::default(),
             30,
         );
-        assert_eq!(evaluation.result, Value::from(absent::FUEL_EXHAUSTED));
+        assert_eq!(evaluation.result, absent::value(absent::FUEL_EXHAUSTED));
 
         let a = new_cell_id();
         let b = new_cell_id();
@@ -1521,7 +1564,7 @@ mod tests {
             &ForeignFunctions::default(),
             20,
         );
-        assert_eq!(evaluation.result, Value::from(absent::CELL_CYCLE));
+        assert_eq!(evaluation.result, absent::value(absent::CELL_CYCLE));
     }
 
     #[test]
@@ -1777,7 +1820,7 @@ mod tests {
             &ForeignFunctions::default(),
             20,
         );
-        assert_eq!(missing.result, Value::from(absent::MISSING_ARGUMENT));
+        assert_eq!(missing.result, absent::value(absent::MISSING_ARGUMENT));
         assert!(!missing.diagnostics.is_empty());
 
         let uncallable = apply(
@@ -1787,6 +1830,6 @@ mod tests {
             &ForeignFunctions::default(),
             20,
         );
-        assert_eq!(uncallable.result, Value::from(absent::NOT_CALLABLE));
+        assert_eq!(uncallable.result, absent::value(absent::NOT_CALLABLE));
     }
 }

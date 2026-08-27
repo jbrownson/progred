@@ -4,7 +4,7 @@
 
 use crate::gid_text::{Binders, parse};
 use gid::{Document, Value};
-use progred_libraries::{f64, geometry};
+use progred_libraries::{absent, f64, geometry};
 
 fn evaluated_expression(value: &Value) -> &Value {
     value
@@ -99,7 +99,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             evaluated_expression(demo_entry(&doc, &binders, "type_absent")),
         )
         .result,
-        Value::from(f64::vocabulary::LEFT_NOT_F64)
+        absent::with_reason(f64::vocabulary::LEFT_NOT_F64)
     );
     assert_eq!(
         evaluate(
@@ -107,7 +107,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             evaluated_expression(demo_entry(&doc, &binders, "missing_argument")),
         )
         .result,
-        Value::from(grap::absent::MISSING_ARGUMENT)
+        grap::absent::value(grap::absent::MISSING_ARGUMENT)
     );
     assert_eq!(
         evaluate(
@@ -115,7 +115,7 @@ fn the_grap_demo_exercises_live_functions_data_and_absents() {
             evaluated_expression(demo_entry(&doc, &binders, "not_callable")),
         )
         .result,
-        Value::from(grap::absent::NOT_CALLABLE)
+        grap::absent::value(grap::absent::NOT_CALLABLE)
     );
 
     doc.cells.set_value(binders["a_value"], f64::value(5.0));

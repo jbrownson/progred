@@ -7,7 +7,7 @@ use crate::sources::Sources;
 use crate::spine;
 use crate::workspace;
 use gid::{Cells, Document, Path, Position, Step, Value, position};
-use progred_libraries::{absent, f64 as f64_convention, isa, text};
+use progred_libraries::{absent, f64 as f64_convention, text};
 use puri::edit::LineEditState;
 use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
 
@@ -749,11 +749,10 @@ pub fn write_through(
                     foreign,
                     grap::DEFAULT_FUEL,
                 );
-                // Any diagnostic or an absent-classified result
+                // Any diagnostic or a tagged absent result
                 // declines the write whole — the update's "no".
-                (evaluation.diagnostics.is_empty()
-                    && isa::read(&evaluation.result) != Some(absent::vocabulary::ABSENT))
-                .then_some(evaluation.result)
+                (evaluation.diagnostics.is_empty() && !absent::is_absent(&evaluation.result))
+                    .then_some(evaluation.result)
             };
             (current, next)
         };

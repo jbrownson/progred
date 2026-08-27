@@ -55,7 +55,7 @@ fn functions() -> ForeignFunctions {
                 Ok(list
                     .as_list()
                     .map(|list| Value::list(std::iter::once(item).chain(list.values().cloned())))
-                    .unwrap_or_else(|| Value::from(vocabulary::NOT_LIST)))
+                    .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST)))
             }),
         )
         .register(
@@ -73,7 +73,7 @@ fn functions() -> ForeignFunctions {
                     (Some(left), Some(right)) => {
                         Value::list(left.values().chain(right.values()).cloned())
                     }
-                    _ => Value::from(vocabulary::NOT_LIST),
+                    _ => absent::with_reason(vocabulary::NOT_LIST),
                 })
             }),
         )
@@ -86,7 +86,7 @@ fn functions() -> ForeignFunctions {
                 Ok(list
                     .as_list()
                     .map(|list| f64::value(list.len() as f64))
-                    .unwrap_or_else(|| Value::from(vocabulary::NOT_LIST)))
+                    .unwrap_or_else(|| absent::with_reason(vocabulary::NOT_LIST)))
             }),
         )
         .register(
@@ -99,19 +99,19 @@ fn functions() -> ForeignFunctions {
                     return Ok(context.missing_argument(vocabulary::INDEX));
                 };
                 let Some(list) = list.as_list() else {
-                    return Ok(Value::from(vocabulary::NOT_LIST));
+                    return Ok(absent::with_reason(vocabulary::NOT_LIST));
                 };
                 let Some(index) = f64::read(&index)
                     .filter(|index| *index >= 0.0 && index.fract() == 0.0)
                     .map(|index| index as usize)
                 else {
-                    return Ok(Value::from(vocabulary::OUT_OF_BOUNDS));
+                    return Ok(absent::with_reason(vocabulary::OUT_OF_BOUNDS));
                 };
                 Ok(list
                     .values()
                     .nth(index)
                     .cloned()
-                    .unwrap_or_else(|| Value::from(vocabulary::OUT_OF_BOUNDS)))
+                    .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS)))
             }),
         )
         .register(
@@ -126,7 +126,7 @@ fn functions() -> ForeignFunctions {
                         list.values().next()?;
                         Some(Value::list(list.values().skip(1).cloned()))
                     })
-                    .unwrap_or_else(|| Value::from(vocabulary::OUT_OF_BOUNDS)))
+                    .unwrap_or_else(|| absent::with_reason(vocabulary::OUT_OF_BOUNDS)))
             }),
         )
         .register(
@@ -151,13 +151,13 @@ fn functions() -> ForeignFunctions {
                         ]));
                     }
                     let Some(fields) = result.as_record() else {
-                        break Ok(Value::from(vocabulary::INVALID_STEP));
+                        break Ok(absent::with_reason(vocabulary::INVALID_STEP));
                     };
                     let (Some(item), Some(next)) = (
                         fields.get(&vocabulary::ITEM),
                         fields.get(&vocabulary::STATE),
                     ) else {
-                        break Ok(Value::from(vocabulary::INVALID_STEP));
+                        break Ok(absent::with_reason(vocabulary::INVALID_STEP));
                     };
                     items.push(item.clone());
                     state = next.clone();
@@ -180,7 +180,7 @@ fn functions() -> ForeignFunctions {
                 };
                 let step = context.prepare_callable(step, environment)?;
                 let Some(list) = list.as_list() else {
-                    return Ok(Value::from(vocabulary::NOT_LIST));
+                    return Ok(absent::with_reason(vocabulary::NOT_LIST));
                 };
                 for item in list.values() {
                     accumulator = context.call_prepared(
@@ -246,7 +246,7 @@ pub fn library<World, Hover>() -> Library<World, Hover> {
         (vocabulary::OUT_OF_BOUNDS, "list index out of bounds"),
         (vocabulary::INVALID_STEP, "invalid unfold step"),
     ] {
-        cells.set_value(cell, absent::named(spelling));
+        cells.set_value(cell, absent::named_reason(spelling));
     }
     Library {
         cells,

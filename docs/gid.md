@@ -13,7 +13,7 @@ The logical model currently consists of:
 - documents containing one optional root value and their cell table;
 - stable list positions and traversal steps used while manipulating a document.
 
-Names, UTF-8 text, `isa`, numbers, Grap, and CAD concepts are open
+Names, UTF-8 text, numbers, Grap, and CAD concepts are open
 conventions or libraries embedded in GID values. They are not primitive
 GID forms.
 
