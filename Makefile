@@ -48,7 +48,8 @@ dev-native:
 build-web: sandbox-web
 
 run-web: build-web
-	python3 -m http.server 8080 --bind 0.0.0.0 --directory web
+	@echo "Open Progred: http://localhost:8080"
+	@python3 -m http.server 8080 --bind 0.0.0.0 --directory web
 
 # Compatibility aliases.
 web: build-web
