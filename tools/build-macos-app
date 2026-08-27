@@ -24,7 +24,7 @@ quiet() {
     fi
 }
 
-"$tool_dir/sandbox-cargo" build --quiet --release -p progred
+"$tool_dir/sandbox-cargo" build --release -p progred
 
 quiet /usr/bin/plutil -lint "$project_root/macos/Info.plist" "$project_root/macos/Progred.entitlements"
 /bin/mkdir -p "$app_root"
