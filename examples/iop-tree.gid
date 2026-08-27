@@ -152,9 +152,6 @@
     "y_jitter": 29d8f49e530e8052669d487fbb0c8036,
   },
   "cells": {
-    amount: {
-      name: "amount",
-    },
     angle: {
       name: "angle",
     },
@@ -1096,9 +1093,6 @@
     dy: {
       name: "dy",
     },
-    end: {
-      name: "end",
-    },
     end_value: {
       name: "end value",
     },
@@ -1146,27 +1140,6 @@
     },
     length: {
       name: "length",
-    },
-    lerp: {
-      name: "lerp",
-      params: [
-        start,
-        end,
-        amount,
-      ],
-      body: {
-        right: {
-          right: amount,
-          function: multiply,
-          left: {
-            right: start,
-            function: subtract,
-            left: end,
-          },
-        },
-        function: add,
-        left: start,
-      },
     },
     mountain: {
       name: "mountain",
@@ -1477,9 +1450,6 @@
         },
       },
     },
-    start: {
-      name: "start",
-    },
     start_value: {
       name: "start value",
     },
@@ -1594,7 +1564,6 @@
       branches,
       blossoms,
       tween,
-      lerp,
     ],
     panes: {
       pane_left: [

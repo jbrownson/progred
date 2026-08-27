@@ -25,16 +25,23 @@ pub mod vocabulary {
     pub const LESS: CellId = CellId::from_u128(0xed44dbf5b4cdf5c952e1ef00f219b655);
     pub const EQUAL: CellId = CellId::from_u128(0x22ab9aa3e7ce4f4f79a7039e1cc23773);
     pub const FLOOR: CellId = CellId::from_u128(0xd007814c5f6a6c38b025605b399473d4);
+    pub const LERP: CellId = CellId::from_u128(0x432ad7a31ef129e353e251419e690ca1);
     pub const OPERAND: CellId = CellId::from_u128(0x50a20d15e4ae56be51b882de9d58c676);
     pub const PI: CellId = CellId::from_u128(0x9cd591f37312e563f52b7374a6cef5c0);
     pub const LEFT: CellId = CellId::from_u128(0x764f6afe17ba14e81f5ab61204be0bec);
     pub const RIGHT: CellId = CellId::from_u128(0x4f53ff25390f58472d31a6142644dec2);
+    pub const START: CellId = CellId::from_u128(0x4b4fb6349d2fd798e7aafca85a2deca8);
+    pub const END: CellId = CellId::from_u128(0x3a816b0af0160bc77ba1948b122b3f29);
+    pub const AMOUNT: CellId = CellId::from_u128(0x55e66fc5eb91699cf12833fb0a15d4b6);
     /// The f64 line's write-back rule: parse the typed spelling,
     /// other fields carried; unparseable input declines.
     pub const UPDATE: CellId = CellId::from_u128(0x6b95d2e04c7a1f38b1a08e57d24c96fb);
     pub const LEFT_NOT_F64: CellId = CellId::from_u128(0x50c0d2fd8fe0325a8e0e41f79ce86eff);
     pub const RIGHT_NOT_F64: CellId = CellId::from_u128(0xcab77cffe8c38745dd8e748ece331409);
     pub const OPERAND_NOT_F64: CellId = CellId::from_u128(0x9c2a4845e1c67df6dd43ac1116e76441);
+    pub const START_NOT_F64: CellId = CellId::from_u128(0x809d7bba33afaf8a673846f0c44cd2e6);
+    pub const END_NOT_F64: CellId = CellId::from_u128(0x17081dd43c4af46c54408cd125eaf3e2);
+    pub const AMOUNT_NOT_F64: CellId = CellId::from_u128(0xe1977104f3574cd37a99ef9083dde01f);
 }
 
 pub fn value(value: f64) -> Value {
@@ -187,6 +194,7 @@ pub fn functions() -> ForeignFunctions {
                 unary(context, call, environment, f64::floor)
             }),
         )
+        .register(vocabulary::LERP, ForeignFunction::runtime(lerp))
         .register(
             vocabulary::LESS,
             ForeignFunction::runtime(|context, call, environment| {
@@ -203,6 +211,37 @@ pub fn functions() -> ForeignFunctions {
                 })
             }),
         )
+}
+
+fn lerp(
+    context: &mut Context,
+    call: Expression,
+    environment: &Environment,
+) -> Result<RuntimeValue, Halt> {
+    let Some(start) = context.field(call, vocabulary::START) else {
+        return Ok(context.missing_runtime_argument(vocabulary::START));
+    };
+    let Some(end) = context.field(call, vocabulary::END) else {
+        return Ok(context.missing_runtime_argument(vocabulary::END));
+    };
+    let Some(amount) = context.field(call, vocabulary::AMOUNT) else {
+        return Ok(context.missing_runtime_argument(vocabulary::AMOUNT));
+    };
+    let start = context.eval_runtime(start, environment)?;
+    let end = context.eval_runtime(end, environment)?;
+    let amount = context.eval_runtime(amount, environment)?;
+    Ok(match (
+        start.as_f64(read),
+        end.as_f64(read),
+        amount.as_f64(read),
+    ) {
+        (Some(start), Some(end), Some(amount)) => {
+            RuntimeValue::f64(start + (end - start) * amount, value)
+        }
+        (None, _, _) => absent::with_reason(vocabulary::START_NOT_F64).into(),
+        (_, None, _) => absent::with_reason(vocabulary::END_NOT_F64).into(),
+        (_, _, None) => absent::with_reason(vocabulary::AMOUNT_NOT_F64).into(),
+    })
 }
 
 fn binary(
@@ -267,9 +306,13 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::LESS, "<"),
         (vocabulary::EQUAL, "=="),
         (vocabulary::FLOOR, "floor"),
+        (vocabulary::LERP, "lerp"),
         (vocabulary::OPERAND, "operand"),
         (vocabulary::LEFT, "left"),
         (vocabulary::RIGHT, "right"),
+        (vocabulary::START, "start"),
+        (vocabulary::END, "end"),
+        (vocabulary::AMOUNT, "amount"),
     ] {
         cells.set_value(cell, name::record(name, []));
     }
@@ -277,6 +320,9 @@ pub fn library<World, Hover: Clone>() -> Library<World, Hover> {
         (vocabulary::LEFT_NOT_F64, "left is not f64"),
         (vocabulary::RIGHT_NOT_F64, "right is not f64"),
         (vocabulary::OPERAND_NOT_F64, "operand is not f64"),
+        (vocabulary::START_NOT_F64, "start is not f64"),
+        (vocabulary::END_NOT_F64, "end is not f64"),
+        (vocabulary::AMOUNT_NOT_F64, "amount is not f64"),
     ] {
         cells.set_value(cell, absent::named_reason(name));
     }
@@ -382,6 +428,22 @@ mod tests {
         assert_eq!(
             grap::evaluate(&multiply, |_| None, &functions(), 20).result,
             value(20.0)
+        );
+    }
+
+    #[test]
+    fn rust_supplies_lerp_to_grap() {
+        let expression = grap::call(
+            Value::from(vocabulary::LERP),
+            [
+                (vocabulary::START, value(10.0)),
+                (vocabulary::END, value(20.0)),
+                (vocabulary::AMOUNT, value(0.25)),
+            ],
+        );
+        assert_eq!(
+            grap::evaluate(&expression, |_| None, &functions(), 20).result,
+            value(12.5)
         );
     }
 
