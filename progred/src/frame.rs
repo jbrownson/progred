@@ -1321,6 +1321,7 @@ mod frame_tests {
                     doc: &model.doc,
                     library: &stack.library,
                 },
+                None,
                 &mut drawing_memos,
                 size,
                 1.0,

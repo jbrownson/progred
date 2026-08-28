@@ -221,6 +221,12 @@ fn make_editing_selection(doc: &Document, library: &Cells, path: Path) -> Select
         )
     }
     .expect("value projection");
+    // A scrubbable number wraps its line in the scrub claim; the
+    // line itself remains the editable value.
+    let layout = match layout {
+        progred_display::Layout::OnScrub { child, .. } => *child,
+        layout => layout,
+    };
     let progred_display::Layout::LineEdit(line) = layout else {
         panic!("value is not line editable")
     };
