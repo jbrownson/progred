@@ -549,6 +549,8 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
         )
     });
     let highlight = cx.styles.accent_wash.brush.clone();
+    let selected_highlight = cx.styles.selection_wash.clone();
+    let selected = cx.selected_trace.clone();
     leaf(extent, move |builder, placement| {
         let outer = Affine::translate((placement.rect.x0, placement.rect.y0))
             * Affine::scale(scale);
@@ -563,6 +565,9 @@ pub(super) fn program_leaf<C: 'static, Cv: Canvas + 'static>(
                 outer,
                 |canvas| {
                     puri::draw::replay_at(&drawing.commands, canvas, outer);
+                    if let Some(source) = &selected {
+                        drawing.highlight(canvas, outer, source, &selected_highlight);
+                    }
                     if let Some(source) = ink.hovered_trace {
                         drawing.highlight(canvas, outer, source, &highlight);
                     }

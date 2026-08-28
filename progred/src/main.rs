@@ -694,7 +694,11 @@ impl ApplicationHandler<UserEvent> for App {
                                     self,
                                     event_root.as_ref(),
                                     &target,
-                                )
+                                ) || match &target {
+                                    Hovered::Tree(hover::Hover::Drawing(source)) => self
+                                        .select_drawing_source(&dispatch.descends, source),
+                                    _ => false,
+                                }
                             } else {
                                 placed::dispatch_target(
                                     &dispatch.activations,
