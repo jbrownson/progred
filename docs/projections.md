@@ -246,9 +246,12 @@ Rust-backed circle constructor consumes the f64 library's
 representation. Neither library changes Grap or `Value`.
 
 The Rust evaluator may lower a recognized f64 facet to an unboxed host
-number while an evaluation is running. The f64 library registers the
-open decoder and canonical encoder; Grap syntax does not recognize a
-numeric form. A lowered source number retains its complete original
+number while an evaluation is running. The evaluator holds the
+convention's open decoder and canonical encoder directly and the f64
+library re-exports them — privileged knowledge is an accelerator only,
+and the convention must remain expressible as an ordinary external
+library at reduced speed; Grap syntax does not recognize a numeric
+form. A lowered source number retains its complete original
 `Value`, so passing `{f64: bits, metadata: value}` through a binding
 returns that exact enriched value. A computed number is encoded back to
 ordinary GID only when a generic operation or the evaluation result asks
