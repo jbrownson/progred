@@ -50,7 +50,7 @@ use std::sync::Arc;
 use parley::{FontContext, LayoutContext};
 use puri::edit::TextClipboard;
 use puri::handler::ImeEvent;
-use ui_events::keyboard::{Key, KeyboardEvent, NamedKey};
+use ui_events::keyboard::{Key, KeyboardEvent, Modifiers, NamedKey};
 use ui_events::pointer::{PointerEvent, PointerScrollEvent, PointerType, PointerUpdate};
 use ui_events::ScrollDelta;
 use ui_events_winit::{WindowEventReducer, WindowEventTranslation};
@@ -260,9 +260,8 @@ pub(crate) struct App {
     /// the model for air hysteresis, pressed-gesture freezing, and the
     /// event-to-redraw handoff.
     pub(crate) hover: Option<Hovered>,
-    /// Pointer-driven traversal of nonlocal graph links. Keyboard
-    /// shortcuts using the same modifier do not enter this mode.
-    pub(crate) linking: bool,
+    /// Current platform modifier state, an ordinary frame input.
+    pub(crate) modifiers: Modifiers,
     /// A button is down: gestures keep the hover they began with, so
     /// hover resolution stands down until release.
     pub(crate) pressed: bool,
@@ -541,13 +540,9 @@ impl ApplicationHandler<UserEvent> for App {
             window.request_redraw();
         }
 
-        if let WindowEvent::ModifiersChanged(state) = &event
-            && self.linking
-            && !modifiers::link(
-                &ui_events_winit::keyboard::from_winit_modifier_state(state.state()),
-            )
-        {
-            self.linking = false;
+        if let WindowEvent::ModifiersChanged(state) = &event {
+            self.modifiers =
+                ui_events_winit::keyboard::from_winit_modifier_state(state.state());
             let size = window.inner_size();
             self.retain_dispatch(
                 scale,
@@ -624,7 +619,7 @@ impl ApplicationHandler<UserEvent> for App {
                     update.current.position.y,
                 );
                 self.pointer = Some(position);
-                self.linking = modifiers::link(&update.current.modifiers);
+                self.modifiers = update.current.modifiers;
                 self.pending_pointer = Some(PendingPointer {
                     event: update.clone(),
                     scale,
@@ -682,6 +677,7 @@ impl ApplicationHandler<UserEvent> for App {
                             Point::new(button.state.position.x, button.state.position.y);
                         self.pointer = Some(position);
                         self.pressed = true;
+                        frame_input_changed = true;
                         let event_root = dispatch
                             .view_regions
                             .iter()
@@ -712,16 +708,14 @@ impl ApplicationHandler<UserEvent> for App {
                         }
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Move(update)))) => {
-                        // Pointer position is frame input. Unpressed
-                        // motion remints even when no event handler
-                        // consumes it; pressed gestures freeze hover
-                        // while their ordinary drag handlers run.
+                        // Pointer position is frame input, whether or
+                        // not an event handler consumes the motion.
                         let position = Point::new(
                             update.current.position.x,
                             update.current.position.y,
                         );
                         self.pointer = Some(position);
-                        frame_input_changed = !self.pressed;
+                        frame_input_changed = true;
                         let moved = dispatch.handler.dispatch_pointer_move(self, &update);
                         if moved || update.pointer.pointer_type != PointerType::Touch {
                             moved
@@ -752,7 +746,6 @@ impl ApplicationHandler<UserEvent> for App {
                     }
                     (None, Some(WindowEventTranslation::Pointer(PointerEvent::Leave(_)))) => {
                         self.pointer = None;
-                        self.linking = false;
                         self.pressed = false;
                         frame_input_changed = true;
                         self.model.workspace.cancel_resize()
@@ -773,14 +766,12 @@ impl ApplicationHandler<UserEvent> for App {
                 match frame_disposition(handled, frame_input_changed) {
                     FrameDisposition::Retain => self.dispatch = Some(dispatch),
                     FrameDisposition::Remint { reveal_selection } => {
-                        let hover_changed = self.retain_dispatch(
+                        self.retain_dispatch(
                             scale,
                             Size::new(size.width as f64, viewport),
                             reveal_selection,
                         );
-                        if handled || hover_changed {
-                            window.request_redraw();
-                        }
+                        window.request_redraw();
                     }
                 }
             }
@@ -829,14 +820,12 @@ impl ApplicationHandler<UserEvent> for App {
                 };
                 if changed && let Some(window) = window {
                     let size = window.inner_size();
-                    let hover_changed = self.retain_dispatch(
+                    self.retain_dispatch(
                         window.scale_factor(),
                         Size::new(size.width as f64, size.height as f64),
                         false,
                     );
-                    if hover_changed {
-                        window.request_redraw();
-                    }
+                    window.request_redraw();
                 }
             }
 
@@ -921,7 +910,7 @@ fn main() {
         cursor_icon: CursorIcon::Default,
         pointer: None,
         hover: None,
-        linking: false,
+        modifiers: Modifiers::empty(),
         pressed: false,
         revealed: None,
         dispatch: None,

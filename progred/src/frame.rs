@@ -405,7 +405,7 @@ impl App {
     }
 
     fn reveal_drawing_source(&mut self, dispatch: &Dispatch, scale: f64) -> bool {
-        if !self.linking {
+        if !crate::modifiers::link(&self.modifiers) {
             return false;
         }
         let Some(Hovered::Tree(hover::Hover::Drawing(source))) = &self.hover else {
@@ -518,7 +518,11 @@ impl App {
             library: &self.stack.library,
         };
         let hovered_secondary = match &self.hover {
-            Some(Hovered::Tree(hover::Hover::Drawing(_))) if !self.linking => None,
+            Some(Hovered::Tree(hover::Hover::Drawing(_)))
+                if !crate::modifiers::link(&self.modifiers) =>
+            {
+                None
+            }
             Some(Hovered::Tree(hover)) => hover::hover_secondary(
                 &sources,
                 self.model
@@ -536,7 +540,7 @@ impl App {
             Some(Hovered::Blocked) => None,
             None => None,
         };
-        let hovered_trace = if self.linking {
+        let hovered_trace = if crate::modifiers::link(&self.modifiers) {
             match &self.hover {
                 Some(Hovered::Tree(hover::Hover::Value(path))) => {
                     Some(hover::SourceTrace::from_path(&sources, path.clone()))
@@ -602,8 +606,7 @@ impl App {
         scale: f64,
         viewport: Size,
         reveal_selection: bool,
-    ) -> bool {
-        let before = self.hover.clone();
+    ) {
         let mut frame = self.build_frame(scale, viewport);
         let revealed_selection =
             reveal_selection && self.reveal_selection(&frame.dispatch, scale);
@@ -617,7 +620,6 @@ impl App {
             hovered_secondary,
             hovered_trace,
         } = frame;
-        let hover_changed = self.hover != before;
         self.last_descends = dispatch.descends.clone();
         self.dispatch = Some(dispatch);
         self.pending_paint = Some(PendingPaint {
@@ -627,7 +629,6 @@ impl App {
             hovered_secondary,
             hovered_trace,
         });
-        hover_changed
     }
 }
 
