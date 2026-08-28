@@ -70,9 +70,21 @@ pub enum SourceOrigin {
     },
 }
 
+/// A staged foreign function's per-visit form, returned by its
+/// prepare stage with the once-parsed call structure in its captures.
+pub type Stage = Rc<dyn Fn(&mut Context, &Environment) -> Result<RuntimeValue, Halt>>;
+
+type Prepare = Rc<dyn Fn(&Context, Expression) -> Stage>;
+
+#[derive(Clone)]
+enum ForeignImplementation {
+    Direct(Rc<dyn Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt>>),
+    Staged(Prepare),
+}
+
 #[derive(Clone)]
 pub struct ForeignFunction {
-    call: Rc<dyn Fn(&mut Context, Expression, &Environment) -> Result<RuntimeValue, Halt>>,
+    implementation: ForeignImplementation,
 }
 
 impl ForeignFunction {
@@ -80,9 +92,11 @@ impl ForeignFunction {
         call: impl Fn(&mut Context, Expression, &Environment) -> Result<Value, Halt> + 'static,
     ) -> Self {
         Self {
-            call: Rc::new(move |context, expression, environment| {
-                call(context, expression, environment).map(RuntimeValue::from_value)
-            }),
+            implementation: ForeignImplementation::Direct(Rc::new(
+                move |context, expression, environment| {
+                    call(context, expression, environment).map(RuntimeValue::from_value)
+                },
+            )),
         }
     }
 
@@ -91,7 +105,20 @@ impl ForeignFunction {
         + 'static,
     ) -> Self {
         Self {
-            call: Rc::new(call),
+            implementation: ForeignImplementation::Direct(Rc::new(call)),
+        }
+    }
+
+    /// The two-stage form: `prepare` runs when a call site first meets
+    /// this function, reads only the call's lowered structure, and
+    /// returns the closure that runs per visit — call sites cache that
+    /// closure, so prepare must be observation-free (no evaluation,
+    /// diagnostics, or fuel) and re-runnable. The returned stage owns
+    /// every observable, including the fuel the straightforward shape
+    /// would burn.
+    pub fn staged(prepare: impl Fn(&Context, Expression) -> Stage + 'static) -> Self {
+        Self {
+            implementation: ForeignImplementation::Staged(Rc::new(prepare)),
         }
     }
 }
@@ -1227,6 +1254,7 @@ impl<'a> Context<'a> {
             _ => None,
         };
         let plan: RefCell<Option<CallPlan>> = RefCell::new(None);
+        let stages: RefCell<Option<(Prepare, Stage)>> = RefCell::new(None);
         thunk(move |context, environment| {
             let callable = match function_cell {
                 Some(index) => {
@@ -1240,7 +1268,12 @@ impl<'a> Context<'a> {
                     return context.eval_grap_call(closure, call, environment, Some(&plan));
                 }
                 RuntimeValueKind::Foreign(foreign) => {
-                    return context.call_foreign(&foreign, call, environment);
+                    return context.call_foreign_staged(
+                        &foreign,
+                        call,
+                        environment,
+                        Some(&stages),
+                    );
                 }
                 other => RuntimeValue(other),
             };
@@ -1445,8 +1478,40 @@ impl<'a> Context<'a> {
         call: Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
+        self.call_foreign_staged(foreign, call, environment, None)
+    }
+
+    fn call_foreign_staged(
+        &mut self,
+        foreign: &ResolvedForeign,
+        call: Expression,
+        environment: &Environment,
+        stages: Option<&RefCell<Option<(Prepare, Stage)>>>,
+    ) -> Result<RuntimeValue, Halt> {
         let value = match foreign {
-            ResolvedForeign::Permanent { function, .. } => (function.call)(self, call, environment),
+            ResolvedForeign::Permanent { function, .. } => match &function.implementation {
+                ForeignImplementation::Direct(call_direct) => {
+                    call_direct(self, call, environment)
+                }
+                ForeignImplementation::Staged(prepare) => {
+                    let cached = stages.and_then(|slot| {
+                        slot.borrow().as_ref().and_then(|(cached_prepare, stage)| {
+                            Rc::ptr_eq(cached_prepare, prepare).then(|| stage.clone())
+                        })
+                    });
+                    let stage = match cached {
+                        Some(stage) => stage,
+                        None => {
+                            let stage = prepare(self, call);
+                            if let Some(slot) = stages {
+                                *slot.borrow_mut() = Some((prepare.clone(), stage.clone()));
+                            }
+                            stage
+                        }
+                    };
+                    stage(self, environment)
+                }
+            },
             ResolvedForeign::Scoped(cell) => {
                 let function = self
                     .overlay
