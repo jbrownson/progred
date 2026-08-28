@@ -77,6 +77,7 @@ pub struct EditStyle {
 pub struct LineEditPresentation {
     pub font_size: f32,
     pub brush: Brush,
+    pub family: GenericFamily,
     pub prefix: String,
     pub suffix: String,
 }
@@ -86,9 +87,15 @@ impl LineEditPresentation {
         Self {
             font_size,
             brush,
+            family: GenericFamily::SystemUi,
             prefix: String::new(),
             suffix: String::new(),
         }
+    }
+
+    pub fn with_family(mut self, family: GenericFamily) -> Self {
+        self.family = family;
+        self
     }
 
     pub fn with_affixes(mut self, prefix: &str, suffix: &str) -> Self {
@@ -263,7 +270,7 @@ impl LineEditState {
         editor
             .edit_styles()
             .insert(StyleProperty::Brush(presentation.brush.clone()));
-        editor.edit_styles().insert(GenericFamily::SystemUi.into());
+        editor.edit_styles().insert(presentation.family.into());
         let mut driver = editor.driver(fonts, layouts);
         let p = presentation.prefix.len();
         driver.select_byte_range(p + self.anchor, p + self.focus);

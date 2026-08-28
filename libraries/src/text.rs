@@ -128,11 +128,13 @@ mod tests {
     fn display_is_an_editable_line() {
         let target = |_| progred_display::ProjectionTarget {
             select: std::rc::Rc::new(|_| false),
+            select_with: std::rc::Rc::new(|_, _| false),
             hover: (),
         };
         let display = display::<(), ()>(&ProjectionInput {
             env: &NoEval,
             value: &value("hi"),
+            writable: true,
             selection: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&target),

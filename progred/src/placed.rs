@@ -1,11 +1,11 @@
 //! Progred's placement output: the frame with its pixels still
 //! latent. Placement folds every leaf's contribution into one
 //! [`Placed`] — hover probes, the composed handler, keyboard
-//! geometry, the popup stash, and deferred ink — combined in
-//! placement order, so the later contribution is on top: painted
-//! last, asked first.
+//! geometry, completion offers, floating subtrees, and deferred ink
+//! — combined in placement order, so the later contribution is on
+//! top: painted last, asked first.
 
-use crate::completion::{HasPopup, Popup};
+use crate::completion::{HasCompletion, Offers};
 use crate::frame::Hovered;
 use crate::hover::Secondary;
 use crate::navigate::{Descend, HasDescends};
@@ -203,7 +203,10 @@ pub struct Placed<C, Cv> {
     /// navigation landmark is selected. The landmark consumes this
     /// while placing, so it never leaks into an ancestor.
     pub landmark_select: Option<progred_display::ActionHandler<C>>,
-    pub popup: Option<Popup>,
+    pub completion: Option<Offers>,
+    /// Out-of-flow subtrees gathered during placement and raised over
+    /// the completed frame before hover resolution.
+    pub floaters: Vec<Box<Placed<C, Cv>>>,
     pub renders: Vec<Render<Cv>>,
 }
 
@@ -232,7 +235,8 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
             descends: Vec::new(),
             view_regions: Vec::new(),
             landmark_select: None,
-            popup: None,
+            completion: None,
+            floaters: Vec::new(),
             renders: Vec::new(),
         }
     }
@@ -250,13 +254,36 @@ impl<C: 'static, Cv> Output for Placed<C, Cv> {
         append(&mut self.descends, above.descends);
         append(&mut self.view_regions, above.view_regions);
         self.landmark_select = above.landmark_select.or(self.landmark_select);
-        self.popup = above.popup.or(self.popup);
+        self.completion = above.completion.or(self.completion);
+        append(&mut self.floaters, above.floaters);
         append(&mut self.renders, above.renders);
         self
     }
 }
 
 impl<C: 'static, Cv> Placed<C, Cv> {
+    pub fn raise_floaters(mut self) -> Self {
+        for floater in std::mem::take(&mut self.floaters) {
+            self = self.over(floater.raise_floaters());
+        }
+        self
+    }
+
+    fn root_navigation(&mut self, root: &Root) {
+        for descend in &mut self.descends {
+            descend.root = Some(root.clone());
+        }
+        for action in self.activations.iter_mut().chain(&mut self.picks) {
+            action.root = Some(root.clone());
+        }
+        for scrub in &mut self.scrubs {
+            scrub.root = Some(root.clone());
+        }
+        for floater in &mut self.floaters {
+            floater.root_navigation(root);
+        }
+    }
+
     /// What the pointer at `point` rests on. A direct answer or
     /// occluder wins immediately in placement order; an extension of
     /// `prior` is remembered only in case every real region is air.
@@ -519,9 +546,9 @@ impl<C: 'static, Cv> HasDescends<C> for Builder<'_, C, Cv> {
     }
 }
 
-impl<C: 'static, Cv> HasPopup for Builder<'_, C, Cv> {
-    fn popup(&mut self) -> &mut Option<Popup> {
-        &mut self.placed.popup
+impl<C: 'static, Cv> HasCompletion for Builder<'_, C, Cv> {
+    fn completion(&mut self) -> &mut Option<Offers> {
+        &mut self.placed.completion
     }
 }
 
@@ -558,6 +585,50 @@ pub fn before<C: 'static, Cv: 'static>(
     place_before: impl FnOnce(&mut Builder<'_, C, Cv>, Placement) + 'static,
 ) -> Measured<Placed<C, Cv>> {
     measured::before_into(child, built_into(place_before))
+}
+
+/// Add `content` as an out-of-flow subtree without contributing its
+/// extent to `base`. The completed frame raises all such subtrees
+/// together.
+pub fn floating<C: 'static, Cv: 'static>(
+    base: Measured<Placed<C, Cv>>,
+    content: Measured<Placed<C, Cv>>,
+    place: impl FnOnce(Placement, Extent) -> Option<Placement> + 'static,
+) -> Measured<Placed<C, Cv>> {
+    let extent = content.extent;
+    measured::around(base, move |placement, base| {
+        let mut placed = base.place();
+        if let Some(placement) = place(placement, extent) {
+            placed.floaters.push(Box::new(measured::place(content, placement)));
+        }
+        placed
+    })
+}
+
+/// Float `content` next to `trigger`. Placement's clip rectangle
+/// supplies the popup bounds.
+pub fn popover<C: 'static, Cv: 'static>(
+    trigger: Measured<Placed<C, Cv>>,
+    content: Measured<Placed<C, Cv>>,
+    gap: f64,
+) -> Measured<Placed<C, Cv>> {
+    floating(trigger, content, move |placement, extent| {
+        (!placement.clipped_out()).then(|| {
+            let bounds = placement.clip_rect;
+            let below = placement.rect.y1 + gap;
+            let above = placement.rect.y0 - gap - extent.height();
+            let y = if below + extent.height() <= bounds.y1 || above < bounds.y0 {
+                below.min((bounds.y1 - extent.height()).max(bounds.y0))
+            } else {
+                above
+            };
+            let x = placement
+                .rect
+                .x0
+                .clamp(bounds.x0, (bounds.x1 - extent.width).max(bounds.x0));
+            Placement::new(extent.rect_at(Point::new(x, y)), bounds)
+        })
+    })
 }
 
 pub fn decorate<C: 'static, Cv: 'static>(
@@ -639,19 +710,7 @@ pub fn in_view<C: 'static, Cv: 'static>(
 ) -> Measured<Placed<C, Cv>> {
     measured::around(child, move |placement, inner| {
         let mut placed = inner.place_at(placement);
-        for descend in &mut placed.descends {
-            descend.root = Some(root.clone());
-        }
-        for action in placed
-            .activations
-            .iter_mut()
-            .chain(&mut placed.picks)
-        {
-            action.root = Some(root.clone());
-        }
-        for scrub in &mut placed.scrubs {
-            scrub.root = Some(root.clone());
-        }
+        placed.root_navigation(&root);
         placed
     })
 }
@@ -860,6 +919,64 @@ mod tests {
 
         assert!(handler.dispatch_pointer_down(&mut log, &down_at(5.0, 5.0)));
         assert_eq!(log, ["upper", "lower"]);
+    }
+
+    #[test]
+    fn popover_content_is_out_of_flow_and_raised_over_the_frame() {
+        let trigger = leaf(
+            Extent {
+                width: 10.0,
+                ascent: 0.0,
+                descent: 10.0,
+            },
+            |p: &mut Builder<'_, (), TestCanvas>, placement| {
+                p.fill(placement.rect, Color::BLACK, Affine::IDENTITY);
+            },
+        );
+        let content = leaf(
+            Extent {
+                width: 20.0,
+                ascent: 0.0,
+                descent: 20.0,
+            },
+            |p: &mut Builder<'_, (), TestCanvas>, placement| {
+                p.fill(placement.rect, Color::WHITE, Affine::IDENTITY);
+            },
+        );
+        let popup = popover(trigger, content, 2.0);
+
+        assert_eq!(popup.extent.width, 10.0);
+        assert_eq!(popup.extent.height(), 10.0);
+
+        let placed = measured::place(
+            popup,
+            Placement::new(
+                Rect::new(5.0, 5.0, 15.0, 15.0),
+                Rect::new(0.0, 0.0, 100.0, 100.0),
+            ),
+        );
+        assert_eq!(placed.floaters.len(), 1);
+
+        let mut canvas = TestCanvas(DrawList::new());
+        Placed::<(), TestCanvas>::render(
+            placed.raise_floaters().renders,
+            &mut canvas,
+            no_ink(),
+        );
+        assert!(matches!(
+            &canvas.0.0[..],
+            [
+                DrawCmd::Fill {
+                    shape: Shape::Rect(trigger),
+                    ..
+                },
+                DrawCmd::Fill {
+                    shape: Shape::Rect(content),
+                    ..
+                }
+            ] if *trigger == Rect::new(5.0, 5.0, 15.0, 15.0)
+                && *content == Rect::new(5.0, 17.0, 25.0, 37.0)
+        ));
     }
 
     #[test]

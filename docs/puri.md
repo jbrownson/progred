@@ -99,6 +99,10 @@ management.
 Deliberately out of scope: state management, reactivity, identity,
 layout engines, styling opinions, widget catalogs.
 
+Reusable catalogs can be separate pure consumers of Puri. The workspace's
+`puri-widgets` package is one such catalog; it does not expand Puri's runtime
+contract or own application state, layout policy, or popover policy.
+
 The thesis is layered rather than a prescription for one application state.
 Stable identity is history between evaluations, not a property of an output
 value. Reconciliation and retained identity stores are ways to supply that

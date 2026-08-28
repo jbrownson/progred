@@ -61,6 +61,7 @@ EOF
 - Progred's layout is the baseline box algebra plus ordered layout alternatives (Wadler-flavored: first natural form that fits wins, the last accommodates); no general layout engine. Keep measurement and placement separate. Use `around` when a Progred wrapper must control whether or when its subtree places; derive ordinary leading work with `before` rather than adding special cases.
 - Every placement callback receives an explicit `Placement`: the widget's full `rect` and the effective enclosing `clip_rect` (the intersection of ancestor axis-aligned layout clips, not pre-intersected with the widget). Ordinary children inherit it unchanged; an actual clipping container intersects its bounds into it. Never thread clipping as mutable context. Hover and gesture starts must be inside both rects; motion and release for an active gesture stay unbounded. Canvas clips remain a separate, arbitrary-shape drawing concern.
 - Masonry is a quarry, not a foundation: vendor high-value files (text input first) with attribution and purify in place; rewrite trivial widgets; never inherit its tree, pods, or ctx protocol.
+- Keep the Puri runtime separate from widget catalogs. Reusable composed widgets belong in the sibling `puri-widgets` package and remain pure consumers of Puri; Progred owns document adaptation, layout, and popup policy.
 - Extend Puri only as Progred needs it.
 
 ## Key Design Rules

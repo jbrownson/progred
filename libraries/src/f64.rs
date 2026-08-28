@@ -369,6 +369,7 @@ mod tests {
     fn target(_: Vec<Step>) -> progred_display::ProjectionTarget<(), ()> {
         progred_display::ProjectionTarget {
             select: std::rc::Rc::new(|_| false),
+            select_with: std::rc::Rc::new(|_, _| false),
             hover: (),
         }
     }
@@ -377,6 +378,7 @@ mod tests {
         ProjectionInput {
             env: &TestEnv,
             value,
+            writable: true,
             selection: None,
             state: None,
             targets: progred_display::ProjectionTargets::new(&target),

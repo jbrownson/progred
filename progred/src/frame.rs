@@ -47,7 +47,7 @@ pub(crate) struct Dispatch {
     /// One nominal line height at the frame's scale — the quantum
     /// keyboard navigation reads rows with.
     pub(crate) line: f64,
-    pub(crate) popup: Option<completion::Popup>,
+    pub(crate) completion: Option<completion::Offers>,
 }
 
 /// One minted frame: the dispatch the shell retains, and the ink the
@@ -396,8 +396,8 @@ impl App {
     /// presented frame with no corrective flash. Fires once per
     /// selection-identity change (path AND variant — Enter keeps the
     /// path while opening a pending), so it never fights manual
-    /// scrolling. The target is the popup anchor while pending — it
-    /// marks the authoring row — else the selection's rect.
+    /// scrolling. A pending's ordinary descend is its authoring row,
+    /// not the out-of-flow completion card.
     pub(crate) fn reveal_selection(
         &mut self,
         dispatch: &Dispatch,
@@ -414,19 +414,13 @@ impl App {
             self.revealed = reveal.clone();
             let target = reveal.as_ref().and_then(|(root, path, _)| {
                 dispatch
-                    .popup
-                    .as_ref()
-                    .map(|popup| popup.anchor)
-                    .or_else(|| {
-                        dispatch
-                            .descends
-                            .iter()
-                            .find(|descend| {
-                                descend.root.as_ref() == Some(root)
-                                    && descend.path.as_ref() == path
-                            })
-                            .map(|descend| descend.rect)
+                    .descends
+                    .iter()
+                    .find(|descend| {
+                        descend.root.as_ref() == Some(root)
+                            && descend.path.as_ref() == path
                     })
+                    .map(|descend| descend.rect)
                     .map(|rect| (root.clone(), rect))
             });
             target.is_some_and(|(view, rect)| {
@@ -542,7 +536,8 @@ impl App {
                 Point::ZERO,
                 viewport,
             )),
-        );
+        )
+        .raise_floaters();
         let hover_reach = HOVER_REACH * scale;
         self.hover = derive_hover(
             &placed,
@@ -603,7 +598,8 @@ impl App {
             descends,
             view_regions,
             landmark_select,
-            popup,
+            completion,
+            floaters: _,
             mut renders,
         } = placed;
         debug_assert!(
@@ -627,7 +623,7 @@ impl App {
                 descends,
                 view_regions,
                 line: 14.0 * scale,
-                popup,
+                completion,
             },
             renders,
             hovered_secondary,
@@ -672,9 +668,11 @@ impl App {
 fn projection_hooks(root: Root) -> projection::Hooks<App> {
     let select_root = root.clone();
     let edit_root = root.clone();
+    let payload_root = root.clone();
     let toggle_root = root.clone();
     let insert_root = root.clone();
-    let apply_root = root;
+    let apply_root = root.clone();
+    let point_root = root;
     projection::Hooks {
         // The host's ordinary structural selection transition.
         // Editable text handles its coordinate-sensitive pointer
@@ -700,6 +698,12 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
             {
                 line.cursor_to_end();
             }
+        }),
+        select_payload: Rc::new(move |app: &mut App, path, payload| {
+            app.model.selection = Some(
+                selection::Selection::from_payload(&app.sources(), path, payload)
+                    .with_root(payload_root.clone()),
+            );
         }),
         start_edit: Rc::new(move |app: &mut App, path, line| {
             app.model.selection = Some(
@@ -733,6 +737,21 @@ fn projection_hooks(root: Root) -> projection::Hooks<App> {
         }),
         apply: Rc::new(move |app, path, function, event| {
             crate::site::apply_event(app, apply_root.clone(), path, function, event)
+        }),
+        point: Rc::new(move |app, path, placement, handler, point| {
+            app.start_point(point_root.clone(), path, placement, handler, point)
+        }),
+        commit_offer: Rc::new(|app: &mut App, action| match app.model.selection.take() {
+            Some(current) => match current.stage() {
+                selection::Stage::Pending => {
+                    app.commit_value(current.root().clone(), current.path().to_vec(), action);
+                }
+                selection::Stage::Label => {
+                    app.commit_label(current.root().clone(), current.path().to_vec(), action);
+                }
+                selection::Stage::Edge => app.model.selection = Some(current),
+            },
+            selection => app.model.selection = selection,
         }),
     }
 }
@@ -1052,62 +1071,6 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
         Some(Placement::new(content_viewport, content_viewport))
     });
 
-    // The pending row's popup floats above everything the body
-    // placed, its click targets winning. The card is built while a
-    // pending is engaged; its anchor is discovered at place time in
-    // the stage's output, where the pending row stashed it.
-    let engaged = model.selection.as_ref().and_then(|current| match current.stage() {
-        selection::Stage::Pending => Some((current.edit()?, current.choice(), false)),
-        selection::Stage::Label => Some((current.edit()?, current.choice(), true)),
-        selection::Stage::Edge => None,
-    });
-    if let Some((query, choice, labels)) = engaged {
-        // The same inputs the pending row's stash reads: the drawn
-        // rows and the keyboard commit must answer from one list.
-        let active_raw = model
-            .workspace
-            .selected_or_document(model.selection.as_ref().map(selection::Selection::root))
-            .projection
-            == workspace::Projection::Raw;
-        let entries = completion::completion_entries(&sources, active_raw, labels, query.text());
-        let commit =
-            |app: &mut App, action: &completion::EntryAction| match app.model.selection.take() {
-                Some(current) => match current.stage() {
-                    selection::Stage::Pending => {
-                        app.commit_value(current.root().clone(), current.path().to_vec(), action);
-                    }
-                    selection::Stage::Label => {
-                        app.commit_label(current.root().clone(), current.path().to_vec(), action);
-                    }
-                    selection::Stage::Edge => {
-                        app.model.selection = Some(current);
-                    }
-                },
-                selection => app.model.selection = selection,
-            };
-        let card = projection::popup_view(&mut tcx, &styles, &entries, choice, commit);
-        stage = measured::overlay(stage, card, move |_, extent, out: &Placed<App, Paint>| {
-            out.popup.as_ref().map(|popup| {
-                // Below the anchor, unless it would run off the
-                // bottom and fits above — then flip on top, as the
-                // TypeScript prototype did.
-                let below = popup.anchor.y1 + 4.0 * scale;
-                let above = popup.anchor.y0 - 4.0 * scale - extent.height();
-                let y = if below + extent.height() > content_viewport.y1
-                    && above >= content_viewport.y0
-                {
-                    above
-                } else {
-                    below
-                };
-                Placement::new(
-                    extent.rect_at(Point::new(popup.anchor.x0, y)),
-                    content_viewport,
-                )
-            })
-        });
-    }
-
     if let Some((x, popup)) = menu_popup {
         let heading_width = menu_heading_width;
         // Outside presses close the popup. Its own Occludes claim
@@ -1133,10 +1096,10 @@ fn app_view(description: FrameDescription<'_>, resources: FrameResources<'_>) ->
                 }
             });
         });
-        stage = measured::overlay(stage, popup, move |_, extent, _| {
+        stage = placed::floating(stage, popup, move |placement, extent| {
             Some(Placement::new(
                 extent.rect_at(Point::new(x, content_viewport.y0)),
-                Rect::new(0.0, 0.0, viewport_width, viewport.height),
+                placement.clip_rect,
             ))
         });
     }

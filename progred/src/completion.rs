@@ -6,7 +6,6 @@ use crate::selection::{parse_blob, set_value};
 use crate::sources::Sources;
 use gid::{CellId, Cells, Document, Step, Value, new_cell_id};
 use progred_libraries::{name, text};
-use kurbo::Rect;
 
 /// A completion offer on a pending. The display styles itself by the
 /// action's kind at draw time.
@@ -37,17 +36,16 @@ pub enum EntryAction {
     NewRecord,
 }
 
-/// The completion popup a pending row emits during placement; the
-/// shell draws it after the body and commits from it. Recomputed
-/// every frame like everything else.
-pub struct Popup {
-    pub anchor: Rect,
+/// The completion offers a pending row emits during placement. The
+/// card itself is an ordinary floater; this semantic copy keeps
+/// keyboard choice and the visible rows on exactly the same list.
+pub struct Offers {
     pub entries: Vec<Entry>,
 }
 
-/// Placement contexts that carry the frame's popup.
-pub trait HasPopup {
-    fn popup(&mut self) -> &mut Option<Popup>;
+/// Placement contexts that carry the frame's completion offers.
+pub trait HasCompletion {
+    fn completion(&mut self) -> &mut Option<Offers>;
 }
 
 /// The universal completion layer for `query`: the inferred value,

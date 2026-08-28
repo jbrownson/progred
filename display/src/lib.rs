@@ -27,6 +27,13 @@ pub enum Face {
     Ink,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextFamily {
+    #[default]
+    SystemUi,
+    Monospace,
+}
+
 /// The paint a Progred projection supplies to Puri. Faces defer to
 /// the editor theme; a literal brush belongs to the projected
 /// content itself.
@@ -49,6 +56,7 @@ pub struct LineEdit {
     pub update: Value,
     pub prefix: String,
     pub suffix: String,
+    pub family: TextFamily,
 }
 
 /// A layout-owned decoration whose geometry depends on the box it
@@ -101,11 +109,32 @@ pub struct ScrubUpdate {
 pub type ScrubGesture = Box<dyn FnMut(ScrubEvent) -> ScrubUpdate>;
 pub type ScrubHandler = Rc<dyn Fn() -> ScrubGesture>;
 
+/// A position inside a continuous two-dimensional control, normalized
+/// to its settled rectangle. The host owns pointer capture and writes
+/// the returned value through the projected location.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointEvent {
+    pub x: f64,
+    pub y: f64,
+}
+
+pub struct PointUpdate {
+    pub value: Value,
+    /// Optional replacement for the selected location's transient
+    /// payload. This is control state, not document data.
+    pub selection: Option<Value>,
+}
+
+pub type PointHandler = Rc<dyn Fn(PointEvent) -> PointUpdate>;
+
 /// Selection and hover behavior for a location relative to the value
 /// currently being projected. The host resolves the relative steps;
 /// libraries never receive its absolute document path.
 pub struct ProjectionTarget<World, Hover> {
     pub select: ActionHandler<World>,
+    /// Select this location with an explicit data payload. Controls use
+    /// it for transient modes without exposing the host's path.
+    pub select_with: Rc<dyn Fn(&mut World, Value) -> bool>,
     pub hover: Hover,
 }
 
@@ -183,6 +212,10 @@ pub enum Layout<World, Hover> {
         target: Hover,
         handler: ScrubHandler,
     },
+    OnPoint {
+        child: Box<Layout<World, Hover>>,
+        handler: PointHandler,
+    },
     OnHover {
         child: Box<Layout<World, Hover>>,
         hover: Option<Hover>,
@@ -201,6 +234,12 @@ pub enum Layout<World, Hover> {
     /// order. Its extent is the component-wise maximum.
     Overlay {
         children: Vec<Layout<World, Hover>>,
+    },
+    /// Float `content` above the ordinary layout, anchored to
+    /// `trigger`. The trigger alone contributes to surrounding layout.
+    Popover {
+        trigger: Box<Layout<World, Hover>>,
+        content: Box<Layout<World, Hover>>,
     },
     Pad {
         left: f64,
@@ -311,6 +350,10 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
                 target: target.clone(),
                 handler: handler.clone(),
             },
+            Self::OnPoint { child, handler } => Self::OnPoint {
+                child: child.clone(),
+                handler: handler.clone(),
+            },
             Self::OnHover { child, hover } => Self::OnHover {
                 child: child.clone(),
                 hover: hover.clone(),
@@ -335,6 +378,10 @@ impl<World, Hover: Clone> Clone for Layout<World, Hover> {
             },
             Self::Overlay { children } => Self::Overlay {
                 children: children.clone(),
+            },
+            Self::Popover { trigger, content } => Self::Popover {
+                trigger: trigger.clone(),
+                content: content.clone(),
             },
             Self::Pad {
                 left,
@@ -425,6 +472,9 @@ pub trait Env {
 pub struct ProjectionInput<'a, World, Hover> {
     pub env: &'a dyn Env,
     pub value: &'a Value,
+    /// Whether this projected location can accept a document write.
+    /// This exposes capability without exposing its host-owned path.
+    pub writable: bool,
     /// The selection payload — stage, query, choice — iff this
     /// value's path is the selected one.
     pub selection: Option<&'a Value>,
@@ -560,6 +610,16 @@ pub fn on_scrub<World, Hover>(
     }
 }
 
+pub fn on_point<World, Hover>(
+    child: Layout<World, Hover>,
+    handler: PointHandler,
+) -> Layout<World, Hover> {
+    Layout::OnPoint {
+        child: Box::new(child),
+        handler,
+    }
+}
+
 pub fn on_hover<World, Hover>(child: Layout<World, Hover>, hover: Hover) -> Layout<World, Hover> {
     Layout::OnHover {
         child: Box::new(child),
@@ -613,6 +673,16 @@ pub fn overlay<World, Hover>(
 ) -> Layout<World, Hover> {
     Layout::Overlay {
         children: children.into_iter().collect(),
+    }
+}
+
+pub fn popover<World, Hover>(
+    trigger: Layout<World, Hover>,
+    content: Layout<World, Hover>,
+) -> Layout<World, Hover> {
+    Layout::Popover {
+        trigger: Box::new(trigger),
+        content: Box::new(content),
     }
 }
 
