@@ -1,5 +1,12 @@
 //! A UTF-8 text convention over ordinary GID data. Text is a
 //! positively recognized record facet, not a GID-core atom.
+//!
+//! When a real string-function library lands here, funnel argument
+//! reads and result construction through shared helpers, the way f64
+//! routes through `binary`/`unary` — then revisit a construction-side
+//! `Rc<str>` runtime representation (reads already borrow cheaply, so
+//! unlike f64 no literal decoding or registration is needed) once
+//! string construction runs in loops and a profile can weigh it.
 
 use crate::{Library, line_edit, name};
 use gid::{Cells, Value};
