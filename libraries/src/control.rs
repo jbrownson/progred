@@ -10,7 +10,9 @@ use gid::{CellId, Cells, Step, Value};
 use grap_runtime as grap;
 use grap_runtime::{
     Context, Environment, Expression, ForeignFunction, ForeignFunctions, Halt, RuntimeValue,
+    Stage,
 };
+use std::rc::Rc;
 use progred_display::{
     Layout, ProjectionInput, activatable, alternatives, at_with_projection, centered_row, col, dim,
     hug, row, shared,
@@ -43,9 +45,9 @@ pub mod vocabulary {
 
 pub fn functions() -> ForeignFunctions {
     ForeignFunctions::default()
-        .register(vocabulary::MATCH, ForeignFunction::runtime(match_foreign))
-        .register(vocabulary::LET, ForeignFunction::runtime(bindings_foreign))
-        .register(vocabulary::WHERE, ForeignFunction::runtime(bindings_foreign))
+        .register(vocabulary::MATCH, ForeignFunction::staged(match_prepare))
+        .register(vocabulary::LET, ForeignFunction::staged(bindings_prepare))
+        .register(vocabulary::WHERE, ForeignFunction::staged(bindings_prepare))
         .register(vocabulary::DO, ForeignFunction::runtime(do_foreign))
         .register(vocabulary::QUOTE, ForeignFunction::runtime(quote_foreign))
 }
@@ -141,171 +143,225 @@ fn replace_unquotes_value(
     }
 }
 
-fn match_foreign(
-    context: &mut Context,
-    call: Expression,
-    environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    let Some(value) = context.field(call, vocabulary::VALUE) else {
-        return Ok(context.missing_runtime_argument(vocabulary::VALUE));
-    };
-    let Some(cases) = context.field(call, vocabulary::CASES) else {
-        return Ok(context.missing_runtime_argument(vocabulary::CASES));
-    };
-    let value = context.eval_runtime(value, environment)?;
-    if context.elements(cases).is_some() {
-        // Selecting over lowered cases skips evaluating the list
-        // expression; burn its fuel so the shortcut stays invisible.
-        context.burn()?;
-        let cases = context.elements(cases).unwrap();
-        return match select_lowered(context, &value, cases) {
-            LoweredSelection::Expression {
-                expression,
-                bindings,
-            } => context.eval_runtime(expression, &environment.extended_runtime(bindings)),
-            LoweredSelection::NoMatch => Ok(absent::value().into()),
-            LoweredSelection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
-        };
-    }
-    let cases_value = context.eval(cases, environment)?;
-    match select(&value.to_value(), &cases_value) {
-        Selection::Expression {
-            expression,
-            bindings,
-        } => context.eval_value_runtime(expression, &environment.extended(bindings)),
-        Selection::NoMatch => Ok(absent::value().into()),
-        Selection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
-    }
+/// A case parsed once at prepare: its position is kept so a malformed
+/// case still declines at the moment selection reaches it.
+enum CompiledCase {
+    Case { pattern: Value, expression: Expression },
+    Malformed,
 }
 
-fn bindings_foreign(
-    context: &mut Context,
-    call: Expression,
-    environment: &Environment,
-) -> Result<RuntimeValue, Halt> {
-    let Some(bindings) = context.field(call, vocabulary::BINDINGS) else {
-        return Ok(context.missing_runtime_argument(vocabulary::BINDINGS));
-    };
-    let Some(expression) = context.field(call, grap_runtime::vocabulary::EXPRESSION) else {
-        return Ok(context.missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION));
-    };
-    if let Some(binding_count) = context.elements(bindings).map(<[_]>::len) {
-        // The lowered walk skips evaluating the bindings list
-        // expression; burn its fuel so the shortcut stays invisible.
-        context.burn()?;
-        let mut environment = environment.clone();
-        for index in 0..binding_count {
-            let binding = context.elements(bindings).unwrap()[index];
-            let Some(value) = context.field(binding, vocabulary::VALUE) else {
-                return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
-            };
-            let binder = context.field(binding, vocabulary::BIND);
-            let pattern = context.field(binding, vocabulary::PATTERN);
-            let (binder, pattern) = match (binder, pattern) {
-                (Some(binder), None) => match context.value(binder).as_cell() {
-                    Some(binder) => (Some(binder), None),
-                    None => {
-                        return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
+enum CompiledCases {
+    Cases(Vec<CompiledCase>),
+    /// Cases behind a reference are still evaluated per visit.
+    Deferred(Expression),
+}
+
+fn match_prepare(context: &Context, call: Expression) -> Stage {
+    let subject = context.field(call, vocabulary::VALUE);
+    let compiled = context.field(call, vocabulary::CASES).map(|cases| {
+        match context.elements(cases) {
+            None => CompiledCases::Deferred(cases),
+            Some(elements) => CompiledCases::Cases(
+                elements
+                    .iter()
+                    .map(|case| {
+                        match (
+                            context.field(*case, vocabulary::PATTERN),
+                            context.field(*case, grap_runtime::vocabulary::EXPRESSION),
+                        ) {
+                            (Some(pattern), Some(expression)) => CompiledCase::Case {
+                                pattern: context.value(pattern).clone(),
+                                expression,
+                            },
+                            _ => CompiledCase::Malformed,
+                        }
+                    })
+                    .collect(),
+            ),
+        }
+    });
+    Rc::new(move |context, environment| {
+        let Some(subject) = subject else {
+            return Ok(context.missing_runtime_argument(vocabulary::VALUE));
+        };
+        let Some(compiled) = &compiled else {
+            return Ok(context.missing_runtime_argument(vocabulary::CASES));
+        };
+        let value = context.eval_runtime(subject, environment)?;
+        match compiled {
+            CompiledCases::Cases(cases) => {
+                // Selecting over prepared cases skips evaluating the
+                // list expression; burn its fuel so the stage stays
+                // burn-invisible.
+                context.burn()?;
+                for case in cases {
+                    let CompiledCase::Case {
+                        pattern,
+                        expression,
+                    } = case
+                    else {
+                        return Ok(absent::with_reason(vocabulary::INVALID_CASE).into());
+                    };
+                    match destructure_runtime(pattern, &value) {
+                        Ok(Some(bindings)) => {
+                            return context.eval_runtime(
+                                *expression,
+                                &environment.extended_runtime(bindings),
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(InvalidBinder) => {
+                            return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
+                        }
                     }
-                },
-                (None, Some(pattern)) => (None, Some(context.value(pattern).clone())),
-                _ => {
-                    return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
                 }
-            };
-            let value = context.eval_runtime(value, &environment)?;
-            if let Some(binder) = binder {
-                environment.push_runtime([(binder, value)]);
-            } else if let Some(pattern) = pattern {
-                match destructure_runtime(&pattern, &value) {
-                    Ok(Some(bindings)) => environment.push_runtime(bindings),
-                    Ok(None) => return Ok(absent::value().into()),
-                    Err(InvalidBinder) => {
-                        return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
-                    }
+                Ok(absent::value().into())
+            }
+            CompiledCases::Deferred(cases) => {
+                let cases_value = context.eval(*cases, environment)?;
+                match select(&value.to_value(), &cases_value) {
+                    Selection::Expression {
+                        expression,
+                        bindings,
+                    } => context.eval_value_runtime(expression, &environment.extended(bindings)),
+                    Selection::NoMatch => Ok(absent::value().into()),
+                    Selection::Invalid(cell) => Ok(absent::with_reason(cell).into()),
                 }
             }
         }
-        return context.eval_runtime(expression, &environment);
-    }
-    let bindings_value = context.eval(bindings, environment)?;
-    let Some(bindings) = bindings_value.as_list() else {
-        return Ok(absent::with_reason(vocabulary::INVALID_BINDINGS).into());
-    };
-    let mut environment = environment.clone();
-    for binding in bindings.values() {
-        let Some(fields) = binding.as_record() else {
-            return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
-        };
-        let Some(value) = fields.get(&vocabulary::VALUE) else {
-            return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
-        };
-        let (binder, pattern) = match (
-            fields.get(&vocabulary::BIND),
-            fields.get(&vocabulary::PATTERN),
-        ) {
-            (Some(binder), None) => match binder.as_cell() {
-                Some(binder) => (Some(binder), None),
-                None => {
-                    return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
-                }
-            },
-            (None, Some(pattern)) => (None, Some(pattern)),
-            _ => {
-                return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
-            }
-        };
-        let value = context.eval_value(value, &environment)?;
-        if let Some(binder) = binder {
-            environment = environment.extended([(binder, value)]);
-        } else if let Some(pattern) = pattern {
-            match destructure(pattern, &value) {
-                Ok(Some(bindings)) => environment = environment.extended(bindings),
-                Ok(None) => return Ok(absent::value().into()),
-                Err(InvalidBinder) => {
-                    return Ok(absent::with_reason(vocabulary::INVALID_BINDER).into());
-                }
-            }
+    })
+}
+
+/// A binding clause parsed once at prepare; a malformed clause keeps
+/// its position and reason so earlier bindings still evaluate first.
+enum CompiledBinding {
+    Bind { binder: CellId, value: Expression },
+    Pattern { pattern: Value, value: Expression },
+    Malformed(CellId),
+}
+
+enum CompiledBindings {
+    Bindings(Vec<CompiledBinding>),
+    /// Bindings behind a reference are still evaluated per visit.
+    Deferred(Expression),
+}
+
+fn bindings_prepare(context: &Context, call: Expression) -> Stage {
+    let compiled = context.field(call, vocabulary::BINDINGS).map(|bindings| {
+        match context.elements(bindings) {
+            None => CompiledBindings::Deferred(bindings),
+            Some(elements) => CompiledBindings::Bindings(
+                elements
+                    .iter()
+                    .map(|binding| {
+                        let Some(value) = context.field(*binding, vocabulary::VALUE) else {
+                            return CompiledBinding::Malformed(vocabulary::INVALID_BINDING);
+                        };
+                        match (
+                            context.field(*binding, vocabulary::BIND),
+                            context.field(*binding, vocabulary::PATTERN),
+                        ) {
+                            (Some(binder), None) => match context.value(binder).as_cell() {
+                                Some(binder) => CompiledBinding::Bind { binder, value },
+                                None => CompiledBinding::Malformed(vocabulary::INVALID_BINDER),
+                            },
+                            (None, Some(pattern)) => CompiledBinding::Pattern {
+                                pattern: context.value(pattern).clone(),
+                                value,
+                            },
+                            _ => CompiledBinding::Malformed(vocabulary::INVALID_BINDING),
+                        }
+                    })
+                    .collect(),
+            ),
         }
-    }
-    context.eval_runtime(expression, &environment)
-}
-
-enum LoweredSelection {
-    Expression {
-        expression: Expression,
-        bindings: Vec<(CellId, RuntimeValue)>,
-    },
-    NoMatch,
-    Invalid(CellId),
-}
-
-fn select_lowered(
-    context: &Context,
-    value: &RuntimeValue,
-    cases: &[Expression],
-) -> LoweredSelection {
-    for case in cases {
-        let (Some(pattern), Some(expression)) = (
-            context.field(*case, vocabulary::PATTERN),
-            context.field(*case, grap_runtime::vocabulary::EXPRESSION),
-        ) else {
-            return LoweredSelection::Invalid(vocabulary::INVALID_CASE);
+    });
+    let expression = context.field(call, grap_runtime::vocabulary::EXPRESSION);
+    Rc::new(move |context, environment| {
+        let Some(compiled) = &compiled else {
+            return Ok(context.missing_runtime_argument(vocabulary::BINDINGS));
         };
-        match destructure_runtime(context.value(pattern), value) {
-            Ok(Some(bindings)) => {
-                return LoweredSelection::Expression {
-                    expression,
-                    bindings,
+        let Some(expression) = expression else {
+            return Ok(context.missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION));
+        };
+        match compiled {
+            CompiledBindings::Bindings(bindings) => {
+                // The prepared walk skips evaluating the bindings list
+                // expression; burn its fuel so the stage stays
+                // burn-invisible.
+                context.burn()?;
+                let mut environment = environment.clone();
+                for binding in bindings {
+                    match binding {
+                        CompiledBinding::Malformed(reason) => {
+                            return Ok(absent::with_reason(*reason).into());
+                        }
+                        CompiledBinding::Bind { binder, value } => {
+                            let value = context.eval_runtime(*value, &environment)?;
+                            environment.push_runtime([(*binder, value)]);
+                        }
+                        CompiledBinding::Pattern { pattern, value } => {
+                            let value = context.eval_runtime(*value, &environment)?;
+                            match destructure_runtime(pattern, &value) {
+                                Ok(Some(bindings)) => environment.push_runtime(bindings),
+                                Ok(None) => return Ok(absent::value().into()),
+                                Err(InvalidBinder) => {
+                                    return Ok(absent::with_reason(vocabulary::INVALID_BINDER)
+                                        .into());
+                                }
+                            }
+                        }
+                    }
+                }
+                context.eval_runtime(expression, &environment)
+            }
+            CompiledBindings::Deferred(bindings) => {
+                let bindings_value = context.eval(*bindings, environment)?;
+                let Some(bindings) = bindings_value.as_list() else {
+                    return Ok(absent::with_reason(vocabulary::INVALID_BINDINGS).into());
                 };
-            }
-            Ok(None) => {}
-            Err(InvalidBinder) => {
-                return LoweredSelection::Invalid(vocabulary::INVALID_BINDER);
+                let mut environment = environment.clone();
+                for binding in bindings.values() {
+                    let Some(fields) = binding.as_record() else {
+                        return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
+                    };
+                    let Some(value) = fields.get(&vocabulary::VALUE) else {
+                        return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
+                    };
+                    let (binder, pattern) = match (
+                        fields.get(&vocabulary::BIND),
+                        fields.get(&vocabulary::PATTERN),
+                    ) {
+                        (Some(binder), None) => match binder.as_cell() {
+                            Some(binder) => (Some(binder), None),
+                            None => {
+                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER)
+                                    .into());
+                            }
+                        },
+                        (None, Some(pattern)) => (None, Some(pattern)),
+                        _ => {
+                            return Ok(absent::with_reason(vocabulary::INVALID_BINDING).into());
+                        }
+                    };
+                    let value = context.eval_value(value, &environment)?;
+                    if let Some(binder) = binder {
+                        environment = environment.extended([(binder, value)]);
+                    } else if let Some(pattern) = pattern {
+                        match destructure(pattern, &value) {
+                            Ok(Some(bindings)) => environment = environment.extended(bindings),
+                            Ok(None) => return Ok(absent::value().into()),
+                            Err(InvalidBinder) => {
+                                return Ok(absent::with_reason(vocabulary::INVALID_BINDER)
+                                    .into());
+                            }
+                        }
+                    }
+                }
+                context.eval_runtime(expression, &environment)
             }
         }
-    }
-    LoweredSelection::NoMatch
+    })
 }
 
 enum Selection<'a> {
