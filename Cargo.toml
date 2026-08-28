@@ -1,10 +1,9 @@
-# Whole-program optimization; ~0-1% on the Grap interpreter bench
-# (2026-08) for ~2x release link time. Re-evaluate if release builds
-# drag — the fallback is scoping it to a shipping profile. Profile-
-# guided optimization is deliberately unset: trained on today's few
-# examples it would overfit them; set it up for shipping builds once
-# the example set diversifies.
-[profile.release]
+# Whole-program optimization is reserved for distributed builds: it
+# measured ~0-1% on the Grap interpreter bench (2026-08) while roughly
+# doubling link time. Profile-guided optimization remains unset until
+# the example set is broad enough to provide representative training.
+[profile.shipping]
+inherits = "release"
 lto = true
 codegen-units = 1
 
