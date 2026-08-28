@@ -1912,6 +1912,7 @@ pub fn apply_scoped<'a>(
 mod tests {
     use super::*;
     use gid::new_cell_id;
+    use std::cell::Cell;
 
     fn blob(text: &str) -> Value {
         Value::from(text.as_bytes().to_vec())
@@ -1942,6 +1943,94 @@ mod tests {
         let completed = evaluate(&value, |_| None, &ForeignFunctions::default(), 2);
         assert_eq!(completed.result, value);
         assert_eq!(completed.remaining_fuel, 1);
+    }
+
+    #[test]
+    fn a_staged_foreign_prepares_once_per_compiled_call_site() {
+        let staged = new_cell_id();
+        let repeat = new_cell_id();
+        let argument = new_cell_id();
+        let preparations = Rc::new(Cell::new(0));
+        let count = preparations.clone();
+        let foreign = ForeignFunctions::default()
+            .register(
+                staged,
+                ForeignFunction::staged(move |_, _| {
+                    count.set(count.get() + 1);
+                    Rc::new(|_, _| Ok(RuntimeValue::from_value(blob("staged"))))
+                }),
+            )
+            .register(
+                repeat,
+                ForeignFunction::runtime(move |context, call, environment| {
+                    let Some(argument) = context.field(call, argument) else {
+                        return Ok(context.missing_runtime_argument(argument));
+                    };
+                    context.eval_runtime(argument, environment)?;
+                    context.eval_runtime(argument, environment)
+                }),
+            );
+        let expression = call(
+            Value::from(repeat),
+            [(argument, call(Value::from(staged), []))],
+        );
+
+        assert_eq!(
+            evaluate(&expression, |_| None, &foreign, 20).result,
+            blob("staged"),
+        );
+        assert_eq!(preparations.get(), 1);
+    }
+
+    #[test]
+    fn a_staged_call_reprepares_when_a_scoped_function_changes() {
+        let staged = new_cell_id();
+        let run_scoped = new_cell_id();
+        let argument = new_cell_id();
+        let base_preparations = Rc::new(Cell::new(0));
+        let scoped_preparations = Rc::new(Cell::new(0));
+        let base_count = base_preparations.clone();
+        let scoped_count = scoped_preparations.clone();
+        let scoped = ForeignFunctions::default().register(
+            staged,
+            ForeignFunction::staged(move |_, _| {
+                scoped_count.set(scoped_count.get() + 1);
+                Rc::new(|_, _| Ok(RuntimeValue::from_value(blob("scoped"))))
+            }),
+        );
+        let foreign = ForeignFunctions::default()
+            .register(
+                staged,
+                ForeignFunction::staged(move |_, _| {
+                    base_count.set(base_count.get() + 1);
+                    Rc::new(|_, _| Ok(RuntimeValue::from_value(blob("base"))))
+                }),
+            )
+            .register(
+                run_scoped,
+                ForeignFunction::runtime(move |context, call, environment| {
+                    let Some(argument) = context.field(call, argument) else {
+                        return Ok(context.missing_runtime_argument(argument));
+                    };
+                    let before = context.eval_runtime(argument, environment)?;
+                    let during = context.with_foreign_functions(scoped.clone(), |context| {
+                        context.eval_runtime(argument, environment)
+                    })?;
+                    let after = context.eval_runtime(argument, environment)?;
+                    Ok(RuntimeValue::list([before, during, after]))
+                }),
+            );
+        let expression = call(
+            Value::from(run_scoped),
+            [(argument, call(Value::from(staged), []))],
+        );
+
+        assert_eq!(
+            evaluate(&expression, |_| None, &foreign, 30).result,
+            Value::list([blob("base"), blob("scoped"), blob("base")]),
+        );
+        assert_eq!(base_preparations.get(), 2);
+        assert_eq!(scoped_preparations.get(), 1);
     }
 
     #[test]
