@@ -101,6 +101,17 @@ pub struct Halt(Value);
 /// Values remain Grap's source and result language. During one
 /// evaluation, callables stay parsed and bundled library values may
 /// use equivalent host representations such as an unboxed f64.
+///
+/// This enum is several words wide and moves through every argument,
+/// binding, and list slot; profiles of drawing-program evaluation put
+/// a low-double-digit share of interpreter time in those moves, drop
+/// glue, and slot sizes. The known next representation, once the model
+/// settles, is a NaN-boxed word: bare f64s, cells, and small
+/// immediates inline in 8 bytes, everything else behind a pointer.
+/// Two current designs stand in the way and would need rethinking:
+/// enriched f64 records (the open representation keeps metadata beside
+/// the number, so only bare numbers can inline) and the context-free
+/// `into_value`, which forces every runtime f64 to carry its encoder.
 #[derive(Clone)]
 pub struct RuntimeValue(RuntimeValueKind);
 
