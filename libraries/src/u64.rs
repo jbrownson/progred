@@ -1,6 +1,6 @@
 //! An open u64 record convention with the stock editable projection.
 
-use crate::{Library, line_edit, name};
+use crate::{Library, line_edit, name, number};
 use gid::{Cells, Value};
 use grap_runtime::{ForeignFunction, ForeignFunctions};
 use progred_display::{Layout, ProjectionInput, overlay_value};
@@ -25,14 +25,41 @@ pub fn read(value: &Value) -> Option<u64> {
         .map(u64::from_le_bytes)
 }
 
+impl number::Scrubbable for u64 {
+    fn magnitude(self) -> f64 {
+        self as f64
+    }
+
+    fn minimum_precision() -> f64 {
+        1.0
+    }
+
+    fn scrubbable(self) -> bool {
+        true
+    }
+
+    fn from_offset(start: Self, offset: f64, precision: f64) -> Self {
+        let step = (precision.round() as u64).max(1);
+        let lower = start / step * step;
+        let steps = ((start % step) as f64 + offset) / step as f64;
+        (lower as i128)
+            .saturating_add((steps.round() as i128).saturating_mul(step as i128))
+            .clamp(0, u64::MAX as i128) as u64
+    }
+
+    fn spelling(self, _: f64) -> String {
+        self.to_string()
+    }
+}
+
 pub fn display<World, Hover: Clone>(
     input: &ProjectionInput<'_, World, Hover>,
 ) -> Option<Layout<World, Hover>> {
-    Some(line_edit::layout(
-        read(input.value)?.to_string(),
-        grap_runtime::ffi(vocabulary::UPDATE),
-        "",
-        "",
+    Some(number::layout(
+        input,
+        read(input.value)?,
+        vocabulary::UPDATE,
+        value,
     ))
 }
 
@@ -111,5 +138,21 @@ mod tests {
             )
         );
         assert!(crate::absent::is_absent(&update("-1")));
+    }
+
+    #[test]
+    fn scrubbing_is_exact_at_the_unsigned_bounds() {
+        assert_eq!(
+            <u64 as number::Scrubbable>::from_offset(0, -100.0, 1.0),
+            0,
+        );
+        assert_eq!(
+            <u64 as number::Scrubbable>::from_offset(u64::MAX, 100.0, 1.0),
+            u64::MAX,
+        );
+        assert_eq!(
+            <u64 as number::Scrubbable>::from_offset(u64::MAX, -1.0, 1.0),
+            u64::MAX - 1,
+        );
     }
 }
