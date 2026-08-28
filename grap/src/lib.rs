@@ -808,6 +808,29 @@ struct Lowered {
     /// Data lowered through the base f64 representation, reused across
     /// evaluations of the same expression while no scope overrides f64.
     data_runtime: Option<RuntimeValue>,
+    /// The node generated into a host closure on first evaluation; the
+    /// arena stays the authoritative representation the closure runs.
+    compiled: Option<Thunk>,
+}
+
+/// A lowered node's generated form: per-node decisions — dispatch,
+/// argument lookup, lambda plumbing — made once at generation, then
+/// execution is one call. Fuel, diagnostics, and results match the
+/// per-visit interpretation these closures replaced.
+type Thunk = Rc<dyn Fn(&mut Context, &Environment) -> Result<RuntimeValue, Halt>>;
+
+fn thunk(
+    body: impl Fn(&mut Context, &Environment) -> Result<RuntimeValue, Halt> + 'static,
+) -> Thunk {
+    Rc::new(body)
+}
+
+/// A call node's memory of its last callee: the parameters slice (held
+/// so its identity stays valid) and the argument expression this call
+/// supplies for each parameter, in declaration order.
+struct CallPlan {
+    params: Rc<[Parameter]>,
+    arguments: Rc<[Option<Expression>]>,
 }
 
 #[derive(Clone, Copy)]
@@ -1014,6 +1037,7 @@ impl<'a> Context<'a> {
             fields: lowered_fields,
             elements: lowered_elements,
             data_runtime: None,
+            compiled: None,
         });
         expression
     }
@@ -1131,27 +1155,103 @@ impl<'a> Context<'a> {
         expression: Expression,
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
+        let compiled = match &self.expressions[expression.0].compiled {
+            Some(compiled) => compiled.clone(),
+            None => {
+                let compiled = self.compile(expression);
+                self.expressions[expression.0].compiled = Some(compiled.clone());
+                compiled
+            }
+        };
+        compiled(self, environment)
+    }
+
+    fn compile(&mut self, expression: Expression) -> Thunk {
         match self.expressions[expression.0].form.clone() {
-            Form::Data => {
-                if self.scoped_f64 == 0 {
-                    if let Some(cached) = &self.expressions[expression.0].data_runtime {
+            Form::Data => thunk(move |context, _| {
+                if context.scoped_f64 == 0 {
+                    if let Some(cached) = &context.expressions[expression.0].data_runtime {
                         return Ok(cached.clone());
                     }
                 }
-                let value = self.lower_runtime(RuntimeValue::from_value(
-                    self.value(expression).clone(),
+                let value = context.lower_runtime(RuntimeValue::from_value(
+                    context.value(expression).clone(),
                 ));
-                if self.scoped_f64 == 0 {
-                    self.expressions[expression.0].data_runtime = Some(value.clone());
+                if context.scoped_f64 == 0 {
+                    context.expressions[expression.0].data_runtime = Some(value.clone());
                 }
                 Ok(value)
+            }),
+            Form::Cell(index) => {
+                thunk(move |context, environment| context.eval_cell(index, environment))
             }
-            Form::Cell(index) => self.eval_cell(index, environment),
-            Form::Call { function } => self.eval_call(expression, function, environment),
+            Form::Call { function } => self.compile_call(expression, function),
             Form::Lambda { parameters, body } => {
-                Ok(self.eval_lambda(expression, parameters, body, environment))
+                let fields = self.value(expression).as_record().unwrap().clone();
+                match parameters {
+                    LambdaParameters::Valid(params) => thunk(move |_, environment| {
+                        Ok(RuntimeValue(RuntimeValueKind::Closure(Closure {
+                            fields: fields.clone(),
+                            params: params.clone(),
+                            body,
+                            environment: environment.clone(),
+                        })))
+                    }),
+                    LambdaParameters::Malformed => thunk(move |context, _| {
+                        Ok(RuntimeValue::from_value(context.absent(
+                            Diagnostic::MalformedLambda,
+                            absent::MALFORMED_LAMBDA,
+                        )))
+                    }),
+                    LambdaParameters::Invalid(parameter) => thunk(move |context, _| {
+                        Ok(RuntimeValue::from_value(context.absent(
+                            Diagnostic::InvalidParameter(parameter.clone()),
+                            absent::INVALID_PARAMETER,
+                        )))
+                    }),
+                }
             }
         }
+    }
+
+    fn compile_call(&mut self, call: Expression, function: Expression) -> Thunk {
+        let function_cell = match &self.expressions[function.0].form {
+            Form::Cell(index) => Some(*index),
+            _ => None,
+        };
+        let plan: RefCell<Option<CallPlan>> = RefCell::new(None);
+        thunk(move |context, environment| {
+            let callable = match function_cell {
+                Some(index) => {
+                    context.burn()?;
+                    context.eval_cell(index, environment)?
+                }
+                None => context.eval_runtime(function, environment)?,
+            };
+            let callable = match callable.0 {
+                RuntimeValueKind::Closure(closure) => {
+                    return context.eval_grap_call(closure, call, environment, Some(&plan));
+                }
+                RuntimeValueKind::Foreign(foreign) => {
+                    return context.call_foreign(&foreign, call, environment);
+                }
+                other => RuntimeValue(other),
+            };
+            if let Some(closure) = context.runtime_closure(&callable) {
+                return context.eval_grap_call(closure, call, environment, Some(&plan));
+            }
+            let foreign = match &callable.0 {
+                RuntimeValueKind::Data(value) => context.foreign_target(value),
+                _ => None,
+            };
+            match foreign {
+                Some(foreign) => context.call_foreign(&foreign, call, environment),
+                None => Ok(RuntimeValue::from_value(context.absent(
+                    Diagnostic::NotCallable(callable.into_value()),
+                    absent::NOT_CALLABLE,
+                ))),
+            }
+        })
     }
 
     fn f64_representation(&self) -> Option<F64Representation> {
@@ -1275,68 +1375,6 @@ impl<'a> Context<'a> {
         self.resolving.pop();
         self.cell_states[index.0] = CellState::Ready(expression);
         result
-    }
-
-    fn eval_lambda(
-        &mut self,
-        expression: Expression,
-        parameters: LambdaParameters,
-        body: Expression,
-        environment: &Environment,
-    ) -> RuntimeValue {
-        let fields = self.value(expression).as_record().unwrap().clone();
-        let parameters = match parameters {
-            LambdaParameters::Valid(parameters) => parameters,
-            LambdaParameters::Malformed => {
-                return RuntimeValue::from_value(
-                    self.absent(Diagnostic::MalformedLambda, absent::MALFORMED_LAMBDA),
-                );
-            }
-            LambdaParameters::Invalid(parameter) => {
-                return RuntimeValue::from_value(self.absent(
-                    Diagnostic::InvalidParameter(parameter),
-                    absent::INVALID_PARAMETER,
-                ));
-            }
-        };
-        RuntimeValue(RuntimeValueKind::Closure(Closure {
-            fields,
-            params: parameters,
-            body,
-            environment: environment.clone(),
-        }))
-    }
-
-    fn eval_call(
-        &mut self,
-        call: Expression,
-        function: Expression,
-        environment: &Environment,
-    ) -> Result<RuntimeValue, Halt> {
-        let callable = self.eval_runtime(function, environment)?;
-        let callable = match callable.0 {
-            RuntimeValueKind::Closure(closure) => {
-                return self.eval_grap_call(closure, call, environment);
-            }
-            RuntimeValueKind::Foreign(foreign) => {
-                return self.call_foreign(&foreign, call, environment);
-            }
-            other => RuntimeValue(other),
-        };
-        if let Some(closure) = self.runtime_closure(&callable) {
-            return self.eval_grap_call(closure, call, environment);
-        }
-        let foreign = match &callable.0 {
-            RuntimeValueKind::Data(value) => self.foreign_target(value),
-            _ => None,
-        };
-        match foreign {
-            Some(foreign) => self.call_foreign(&foreign, call, environment),
-            None => Ok(RuntimeValue::from_value(self.absent(
-                Diagnostic::NotCallable(callable.into_value()),
-                absent::NOT_CALLABLE,
-            ))),
-        }
     }
 
     fn cached_foreign_target(&mut self, index: CellIndex, cell: CellId) -> Option<ResolvedForeign> {
@@ -1599,15 +1637,42 @@ impl<'a> Context<'a> {
         closure: Closure,
         call: Expression,
         calling_environment: &Environment,
+        plan: Option<&RefCell<Option<CallPlan>>>,
     ) -> Result<RuntimeValue, Halt> {
+        let arguments_plan = plan.and_then(|slot| {
+            slot.borrow().as_ref().and_then(|cached| {
+                Rc::ptr_eq(&cached.params, &closure.params)
+                    .then(|| cached.arguments.clone())
+            })
+        });
+        let arguments_plan = match arguments_plan {
+            Some(arguments) => arguments,
+            None => {
+                let arguments: Rc<[Option<Expression>]> = closure
+                    .params
+                    .iter()
+                    .map(|parameter| self.field(call, parameter.cell))
+                    .collect();
+                if let Some(slot) = plan {
+                    *slot.borrow_mut() = Some(CallPlan {
+                        params: closure.params.clone(),
+                        arguments: arguments.clone(),
+                    });
+                }
+                arguments
+            }
+        };
         let mut arguments = Vec::with_capacity(closure.params.len());
-        for parameter in closure.params.iter() {
-            let Some(expression) = self.field(call, parameter.cell) else {
+        for (parameter, argument) in closure.params.iter().zip(arguments_plan.iter()) {
+            let Some(expression) = argument else {
                 return Ok(RuntimeValue::from_value(
                     self.missing_argument(parameter.cell),
                 ));
             };
-            arguments.push((parameter.index, self.eval_runtime(expression, calling_environment)?));
+            arguments.push((
+                parameter.index,
+                self.eval_runtime(*expression, calling_environment)?,
+            ));
         }
         let body_environment = closure.environment.extended_indexed(arguments);
         self.eval_runtime(closure.body, &body_environment)
