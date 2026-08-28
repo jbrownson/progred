@@ -300,8 +300,15 @@ impl RuntimeValue {
                 .binary_search_by_key(&field, |(label, _)| *label)
                 .ok()
                 .map(|index| fields[index].1.clone()),
-            RuntimeValueKind::F64(_)
-            | RuntimeValueKind::List(_)
+            // An unboxed number answers like its record form would:
+            // the acceleration must not change what a value is.
+            RuntimeValueKind::F64(value) => match &value.original {
+                Some(original) => original.as_record()?.get(&field).cloned().map(Self::from),
+                None => (field == crate::f64::F64).then(|| {
+                    Self::from_value(Value::from(value.number.to_le_bytes().to_vec()))
+                }),
+            },
+            RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
         }
@@ -328,8 +335,11 @@ impl RuntimeValue {
         match &self.0 {
             RuntimeValueKind::Data(value) => Some(value.as_record()?.len()),
             RuntimeValueKind::Record(fields) => Some(fields.len()),
-            RuntimeValueKind::F64(_)
-            | RuntimeValueKind::List(_)
+            RuntimeValueKind::F64(value) => Some(match &value.original {
+                Some(original) => original.as_record()?.len(),
+                None => 1,
+            }),
+            RuntimeValueKind::List(_)
             | RuntimeValueKind::Foreign(_)
             | RuntimeValueKind::Closure(_) => None,
         }

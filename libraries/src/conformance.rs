@@ -149,6 +149,42 @@ fn a_quote_burns_only_its_unquotes() {
     assert_eq!(evaluation.remaining_fuel, 7);
 }
 
+/// An enriched number — extra fields beside the f64 — answers record
+/// patterns exactly as its stored form would, however the
+/// implementation carries it: call(1) + function(1) + subject(1) +
+/// cases(1) + arm(1) = 5.
+#[test]
+fn an_enriched_number_matches_record_patterns_like_its_data() {
+    let note = new_cell_id();
+    let binder = new_cell_id();
+    let subject = Value::record([
+        (f64::vocabulary::F64, Value::from(1.0f64.to_le_bytes().to_vec())),
+        (note, blob("annotated")),
+    ]);
+    let expression = grap::call(
+        Value::from(control::vocabulary::MATCH),
+        [
+            (control::vocabulary::VALUE, subject),
+            (
+                control::vocabulary::CASES,
+                Value::list([Value::record([
+                    (
+                        control::vocabulary::PATTERN,
+                        Value::record([(
+                            note,
+                            Value::record([(control::vocabulary::BIND, Value::from(binder))]),
+                        )]),
+                    ),
+                    (grap::vocabulary::EXPRESSION, Value::from(binder)),
+                ])]),
+            ),
+        ],
+    );
+    let evaluation = evaluate(&expression, 10);
+    assert_eq!(evaluation.result, blob("annotated"));
+    assert_eq!(evaluation.remaining_fuel, 5);
+}
+
 /// Arithmetic burns like any strict call: call(1) + function(1) +
 /// left(1) + right(1) = 4, whatever numeric fast path the
 /// implementation takes.
