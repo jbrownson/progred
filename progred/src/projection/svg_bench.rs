@@ -313,6 +313,7 @@ fn place_with_annotations_using(
         &mut tcx,
         hooks,
         drawing_memo,
+        None,
     );
     let project_elapsed = start.elapsed();
     let extent = node.extent;

@@ -26,7 +26,6 @@
     "child_width": aaa4e1f70b7edac5317b9fbbd23c7e55,
     "circle": e06a6d094c4f75cd6c1d59ed6ed64e05,
     "close": adf2742dbde1b09b03e1fc649f5e1f58,
-    "color": 6c8a17cbe463186cc8b07e536ccffa6b,
     "color_index": 59f21ccbee8a91496c84e22532df9ca9,
     "color_pick": 982d9a84180c604b1a60fbfffb59da03,
     "concat": 6f2613d22b4690ed5bac39776e51b775,
@@ -106,6 +105,8 @@
     "random_scale": 1bc6faa0c835d0636606db22ffdfa935,
     "rect": bb5e62c1b300b1e8c2484a0f4879a1fe,
     "rest": 27866faf05bcd734dcd453d70a16b581,
+    "rgb": 6c8a17cbe463186cc8b07e536ccffa6b,
+    "rgba": f77aef58bcc71dd838f089adc650e2d4,
     "right": 4f53ff25390f58472d31a6142644dec2,
     "right_angle": 74d076eff44a24482f9f06b433664388,
     "rotate": 2500213d415930c6b40f15d633cc04a4,
@@ -463,16 +464,16 @@
           {
             value: [
               {
-                color: "#f5ceea99",
+                rgba: 0xf5ceea99,
               },
               {
-                color: "#e8d9e499",
+                rgba: 0xe8d9e499,
               },
               {
-                color: "#f7c9f399",
+                rgba: 0xf7c9f399,
               },
               {
-                color: "#ebb4cc99",
+                rgba: 0xebb4cc99,
               },
             ],
             bind: blossom_colors,
@@ -1033,7 +1034,7 @@
                             ],
                             function: fill,
                             paint: {
-                              color: "#000000",
+                              rgb: 0x000000,
                             },
                             shape: {
                               rect: {
@@ -1329,7 +1330,7 @@
               function: mountain,
               canvas_width: canvas_width,
               paint: {
-                color: "#8bb2bb",
+                rgb: 0x8bb2bb,
               },
               offset: {
                 f64: 0x0000000000406040,
@@ -1340,7 +1341,7 @@
               function: mountain,
               canvas_width: canvas_width,
               paint: {
-                color: "#618087",
+                rgb: 0x618087,
               },
               offset: {
                 f64: 0x0000000000004940,
@@ -1402,7 +1403,7 @@
               stops: [
                 {
                   paint: {
-                    color: "#b4e0fe",
+                    rgb: 0xb4e0fe,
                   },
                   gradient_offset: {
                     f64: 0x0000000000000000,
@@ -1410,7 +1411,7 @@
                 },
                 {
                   paint: {
-                    color: "#d3f8ff",
+                    rgb: 0xd3f8ff,
                   },
                   gradient_offset: {
                     f64: 0x000000000000f03f,
