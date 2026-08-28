@@ -1285,7 +1285,12 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn burn(&mut self) -> Result<(), Halt> {
+    /// Fuel is part of Grap's contract, not this implementation's: one
+    /// burn per expression evaluation that the plain evaluator and each
+    /// function's documented argument consumption would perform. An
+    /// implementation shortcut that skips an evaluation must burn its
+    /// fuel anyway, as the prepared-call path already does.
+    pub fn burn(&mut self) -> Result<(), Halt> {
         self.remaining_fuel = self.remaining_fuel.saturating_sub(1);
         if self.remaining_fuel == 0 {
             Err(Halt(

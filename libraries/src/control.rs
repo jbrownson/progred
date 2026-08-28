@@ -153,7 +153,11 @@ fn match_foreign(
         return Ok(context.missing_runtime_argument(vocabulary::CASES));
     };
     let value = context.eval_runtime(value, environment)?;
-    if let Some(cases) = context.elements(cases) {
+    if context.elements(cases).is_some() {
+        // Selecting over lowered cases skips evaluating the list
+        // expression; burn its fuel so the shortcut stays invisible.
+        context.burn()?;
+        let cases = context.elements(cases).unwrap();
         return match select_lowered(context, &value, cases) {
             LoweredSelection::Expression {
                 expression,
@@ -186,6 +190,9 @@ fn bindings_foreign(
         return Ok(context.missing_runtime_argument(grap_runtime::vocabulary::EXPRESSION));
     };
     if let Some(binding_count) = context.elements(bindings).map(<[_]>::len) {
+        // The lowered walk skips evaluating the bindings list
+        // expression; burn its fuel so the shortcut stays invisible.
+        context.burn()?;
         let mut environment = environment.clone();
         for index in 0..binding_count {
             let binding = context.elements(bindings).unwrap()[index];
