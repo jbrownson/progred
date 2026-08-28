@@ -227,14 +227,10 @@ fn lerp(
     let Some(amount) = context.field(call, vocabulary::AMOUNT) else {
         return Ok(context.missing_runtime_argument(vocabulary::AMOUNT));
     };
-    let start = context.eval_runtime(start, environment)?;
-    let end = context.eval_runtime(end, environment)?;
-    let amount = context.eval_runtime(amount, environment)?;
-    Ok(match (
-        start.as_f64(read),
-        end.as_f64(read),
-        amount.as_f64(read),
-    ) {
+    let start = context.eval_f64(start, environment, read)?;
+    let end = context.eval_f64(end, environment, read)?;
+    let amount = context.eval_f64(amount, environment, read)?;
+    Ok(match (start, end, amount) {
         (Some(start), Some(end), Some(amount)) => {
             RuntimeValue::f64(start + (end - start) * amount, value)
         }
@@ -267,9 +263,9 @@ fn binary_value(
     let Some(right) = context.field(call, vocabulary::RIGHT) else {
         return Ok(context.missing_runtime_argument(vocabulary::RIGHT));
     };
-    let left = context.eval_runtime(left, environment)?;
-    let right = context.eval_runtime(right, environment)?;
-    Ok(match (left.as_f64(read), right.as_f64(read)) {
+    let left = context.eval_f64(left, environment, read)?;
+    let right = context.eval_f64(right, environment, read)?;
+    Ok(match (left, right) {
         (Some(left), Some(right)) => operation(left, right),
         (None, _) => absent::with_reason(vocabulary::LEFT_NOT_F64).into(),
         (_, None) => absent::with_reason(vocabulary::RIGHT_NOT_F64).into(),
@@ -285,9 +281,8 @@ fn unary(
     let Some(operand) = context.field(call, vocabulary::OPERAND) else {
         return Ok(context.missing_runtime_argument(vocabulary::OPERAND));
     };
-    let operand = context.eval_runtime(operand, environment)?;
-    Ok(operand
-        .as_f64(read)
+    Ok(context
+        .eval_f64(operand, environment, read)?
         .map(|operand| RuntimeValue::f64(operation(operand), value))
         .unwrap_or_else(|| absent::with_reason(vocabulary::OPERAND_NOT_F64).into()))
 }

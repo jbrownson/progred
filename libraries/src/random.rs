@@ -43,9 +43,9 @@ fn stream(state: Rc<Cell<u64>>) -> ForeignFunctions {
             let Some(max) = context.field(call, vocabulary::MAX) else {
                 return Ok(context.missing_runtime_argument(vocabulary::MAX));
             };
-            let min = context.eval_runtime(min, environment)?;
-            let max = context.eval_runtime(max, environment)?;
-            let (Some(min), Some(max)) = (min.as_f64(f64::read), max.as_f64(f64::read)) else {
+            let min = context.eval_f64(min, environment, f64::read)?;
+            let max = context.eval_f64(max, environment, f64::read)?;
+            let (Some(min), Some(max)) = (min, max) else {
                 return Ok(absent::with_reason(vocabulary::INVALID_BOUNDS).into());
             };
             let next = state

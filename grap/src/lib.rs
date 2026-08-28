@@ -1091,6 +1091,46 @@ impl<'a> Context<'a> {
         environment: &Environment,
     ) -> Result<RuntimeValue, Halt> {
         self.burn()?;
+        self.eval_burned(expression, environment)
+    }
+
+    /// Evaluate an expression a caller will read as a number, skipping
+    /// the owned `RuntimeValue` round trip when the answer is already
+    /// an unboxed f64. Fuel, diagnostics, and results match
+    /// `eval_runtime` followed by [`RuntimeValue::as_f64`] exactly.
+    pub fn eval_f64(
+        &mut self,
+        expression: Expression,
+        environment: &Environment,
+        decode: fn(&Value) -> Option<f64>,
+    ) -> Result<Option<f64>, Halt> {
+        self.burn()?;
+        match &self.expressions[expression.0].form {
+            Form::Data if self.scoped_f64 == 0 => {
+                if let Some(RuntimeValue(RuntimeValueKind::F64(cached))) =
+                    self.expressions[expression.0].data_runtime.as_ref()
+                {
+                    return Ok(Some(cached.number));
+                }
+            }
+            Form::Cell(index) => {
+                if self.indices.borrow().is_bound(*index)
+                    && let Some(RuntimeValue(RuntimeValueKind::F64(value))) =
+                        environment.get_index(*index)
+                {
+                    return Ok(Some(value.number));
+                }
+            }
+            _ => {}
+        }
+        Ok(self.eval_burned(expression, environment)?.as_f64(decode))
+    }
+
+    fn eval_burned(
+        &mut self,
+        expression: Expression,
+        environment: &Environment,
+    ) -> Result<RuntimeValue, Halt> {
         match self.expressions[expression.0].form.clone() {
             Form::Data => {
                 if self.scoped_f64 == 0 {
